@@ -72,6 +72,7 @@ import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchUI
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.domain.entries.anime.interactor.GetAnime
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.items.episode.interactor.GetEpisode
@@ -141,6 +142,7 @@ class EpisodeOptionsDialogScreenModel(
     sourceId: Long,
 ) : ScreenModel {
     private val sourceManager: AnimeSourceManager = Injekt.get()
+    private val preferenceStore: PreferenceStore = Injekt.get()
 
     private val _hosterState = MutableStateFlow<Result<List<HosterState>>?>(null)
     val hosterState = _hosterState.asStateFlow()
@@ -361,6 +363,10 @@ class EpisodeOptionsDialogScreenModel(
             ?.videoList
             ?.getOrNull(videoIndex)
             ?: return
+
+        _anime.value?.let { anime ->
+            preferenceStore.getString("anime_video_pref_${anime.id}", "").set(video.videoTitle)
+        }
 
         screenModelScope.launchIO {
             val success = loadVideo(_source.value!!, video, hosterIndex, videoIndex)

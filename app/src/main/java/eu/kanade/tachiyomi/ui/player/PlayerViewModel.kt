@@ -74,6 +74,7 @@ import eu.kanade.tachiyomi.ui.player.loader.EpisodeLoader
 import eu.kanade.tachiyomi.ui.player.loader.HosterLoader
 import eu.kanade.tachiyomi.ui.player.settings.GesturePreferences
 import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences
+import tachiyomi.core.common.preference.PreferenceStore
 import eu.kanade.tachiyomi.ui.player.utils.AniSkipApi
 import eu.kanade.tachiyomi.ui.player.utils.ChapterUtils.Companion.getStringRes
 import eu.kanade.tachiyomi.ui.player.utils.TrackSelect
@@ -169,6 +170,7 @@ class PlayerViewModel @JvmOverloads constructor(
     private val trackSelect: TrackSelect = Injekt.get(),
     private val getIncognitoState: GetAnimeIncognitoState = Injekt.get(),
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
+    private val preferenceStore: PreferenceStore = Injekt.get(),
     uiPreferences: UiPreferences = Injekt.get(),
 ) : ViewModel() {
 
@@ -1354,7 +1356,30 @@ class PlayerViewModel @JvmOverloads constructor(
                     }.awaitAll()
 
                     if (hasFoundPreferredVideo.compareAndSet(false, true)) {
-                        val (hosterIdx, videoIdx) = HosterLoader.selectBestVideo(hosterState.value)
+                        val preferredVideoTitle = _currentAnime.value?.let { anime ->
+                            preferenceStore.getString("anime_video_pref_${anime.id}", "").get()
+                        } ?: ""
+
+                        var (hosterIdx, videoIdx) = Pair(-1, -1)
+                        if (preferredVideoTitle.isNotEmpty()) {
+                            hosterState.value.forEachIndexed { hIdx, hState ->
+                                if (hState is HosterState.Ready) {
+                                    val vIdx = hState.videoList.indexOfFirst { it.videoTitle == preferredVideoTitle }
+                                    if (vIdx != -1) {
+                                        hosterIdx = hIdx
+                                        videoIdx = vIdx
+                                        return@forEachIndexed
+                                    }
+                                }
+                            }
+                        }
+
+                        if (hosterIdx == -1) {
+                            val best = HosterLoader.selectBestVideo(hosterState.value)
+                            hosterIdx = best.first
+                            videoIdx = best.second
+                        }
+
                         if (hosterIdx == -1) {
                             throw ExceptionWithStringResource("No available videos", AYMR.strings.no_available_videos)
                         }
