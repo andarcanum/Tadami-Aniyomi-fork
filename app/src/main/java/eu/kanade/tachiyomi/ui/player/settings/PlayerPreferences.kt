@@ -32,6 +32,7 @@ class PlayerPreferences(
 
     fun showFailedHosters() = preferenceStore.getBoolean("pref_show_failed_hosters", false)
     fun showEmptyHosters() = preferenceStore.getBoolean("pref_show_empty_hosters", false)
+    fun hosterSourceFilter() = preferenceStore.getString("pref_hoster_source_filter", "all")
 
     // Display
 

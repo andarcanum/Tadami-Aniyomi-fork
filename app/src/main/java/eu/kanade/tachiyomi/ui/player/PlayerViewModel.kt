@@ -1349,21 +1349,28 @@ class PlayerViewModel @JvmOverloads constructor(
      * Set the video list for hosters.
      */
     fun loadHosters(source: AnimeSource, hosterList: List<Hoster>, hosterIndex: Int, videoIndex: Int) {
-        logcat(LogPriority.DEBUG) { "loadHosters: hosterIndex=$hosterIndex, videoIndex=$videoIndex, hosterListSize=${hosterList.size}" }
-        hosterList.forEachIndexed { idx, h ->
+        val sourceFilter = playerPreferences.hosterSourceFilter().get()
+        val filteredHosterList = when (sourceFilter) {
+            "cdn_only" -> hosterList.filter { it.hosterName.startsWith("[C]") || !it.hosterName.startsWith("[") }
+            "kodik_only" -> hosterList.filter { it.hosterName.startsWith("[K]") }
+            else -> hosterList
+        }
+
+        logcat(LogPriority.DEBUG) { "loadHosters: hosterIndex=$hosterIndex, videoIndex=$videoIndex, hosterListSize=${filteredHosterList.size}" }
+        filteredHosterList.forEachIndexed { idx, h ->
             logcat(LogPriority.DEBUG) { "loadHosters hoster[$idx]: name=${h.hosterName}, videoListSize=${h.videoList?.size}" }
         }
         val hasFoundPreferredVideo = AtomicBoolean(false)
 
-        _hosterList.update { _ -> hosterList }
+        _hosterList.update { _ -> filteredHosterList }
         _hosterExpandedList.update { _ ->
-            List(hosterList.size) { true }
+            List(filteredHosterList.size) { true }
         }
 
         getHosterVideoLinksJob?.cancel()
         getHosterVideoLinksJob = viewModelScope.launchIO {
             _hosterState.update { _ ->
-                hosterList.map { hoster ->
+                filteredHosterList.map { hoster ->
                     if (hoster.lazy) {
                         HosterState.Idle(hoster.hosterName)
                     } else if (hoster.videoList == null) {
@@ -1380,7 +1387,7 @@ class PlayerViewModel @JvmOverloads constructor(
             }
 
             if (hosterIndex >= 0 && videoIndex >= 0) {
-                val preselectedHoster = hosterList.getOrNull(hosterIndex)
+                val preselectedHoster = filteredHosterList.getOrNull(hosterIndex)
                 val preselectedVideo = preselectedHoster?.videoList?.getOrNull(videoIndex)
                 if (preselectedVideo != null) {
                     logcat(LogPriority.DEBUG) { "loadHosters: Using preselected video: ${preselectedVideo.videoTitle}" }
@@ -1391,7 +1398,7 @@ class PlayerViewModel @JvmOverloads constructor(
 
             try {
                 coroutineScope {
-                    hosterList.mapIndexed { hosterIdx, hoster ->
+                    filteredHosterList.mapIndexed { hosterIdx, hoster ->
                         async {
                             val hosterState = EpisodeLoader.loadHosterVideos(source, hoster)
 
@@ -1456,7 +1463,7 @@ class PlayerViewModel @JvmOverloads constructor(
                 }
             } catch (e: CancellationException) {
                 _hosterState.update { _ ->
-                    hosterList.map { HosterState.Idle(it.hosterName) }
+                    filteredHosterList.map { HosterState.Idle(it.hosterName) }
                 }
 
                 throw e

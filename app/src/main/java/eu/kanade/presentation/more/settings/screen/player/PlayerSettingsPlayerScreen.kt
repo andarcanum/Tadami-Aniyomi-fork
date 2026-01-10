@@ -138,6 +138,15 @@ object PlayerSettingsPlayerScreen : SearchableSettings {
                     preference = showEmpty,
                     title = stringResource(AYMR.strings.pref_hosters_show_empty),
                 ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = playerPreferences.hosterSourceFilter(),
+                    entries = persistentMapOf(
+                        "all" to stringResource(AYMR.strings.pref_hoster_source_all),
+                        "cdn_only" to stringResource(AYMR.strings.pref_hoster_source_cdn_only),
+                        "kodik_only" to stringResource(AYMR.strings.pref_hoster_source_kodik_only),
+                    ),
+                    title = stringResource(AYMR.strings.pref_hoster_source_filter),
+                ),
             ),
         )
     }

@@ -237,7 +237,22 @@ class EpisodeOptionsDialogScreenModel(
 
                 if (hasFoundPreferredVideo.compareAndSet(false, true)) {
                     val hosterStateList = hosterState.value!!.getOrThrow()
-                    val (hosterIdx, videoIdx) = HosterLoader.selectBestVideo(hosterStateList)
+
+                    val preferredDubbing = preferenceStore.getString("anime_dubbing_pref_${animeId}", "").get()
+                    val preferredQuality = preferenceStore.getString("anime_quality_pref_${animeId}", "").get()
+
+                    var (hosterIdx, videoIdx) = findVideoByDubbingAndQuality(
+                        hosterStateList,
+                        preferredDubbing,
+                        preferredQuality,
+                    )
+
+                    if (hosterIdx == -1) {
+                        val best = HosterLoader.selectBestVideo(hosterStateList)
+                        hosterIdx = best.first
+                        videoIdx = best.second
+                    }
+
                     if (hosterIdx == -1) {
                         _hosterState.update { _ ->
                             Result.failure(NoSuchElementException("No available videos"))
@@ -393,6 +408,55 @@ class EpisodeOptionsDialogScreenModel(
                 )
             }
         }
+    }
+
+    private fun findVideoByDubbingAndQuality(
+        hosterStates: List<HosterState>,
+        preferredDubbing: String,
+        preferredQuality: String,
+    ): Pair<Int, Int> {
+        if (preferredDubbing.isBlank()) {
+            return Pair(-1, -1)
+        }
+
+        val qualityOrder = listOf("1080p", "720p", "480p", "360p")
+
+        data class VideoCandidate(
+            val hosterIdx: Int,
+            val videoIdx: Int,
+            val qualityRank: Int,
+        )
+
+        val candidates = mutableListOf<VideoCandidate>()
+
+        hosterStates.forEachIndexed { hIdx, hState ->
+            if (hState is HosterState.Ready) {
+                val hosterName = hState.name
+
+                if (hosterName.equals(preferredDubbing, ignoreCase = true)) {
+                    hState.videoList.forEachIndexed { vIdx, video ->
+                        val title = video.videoTitle.lowercase()
+                        val qualityRank = when {
+                            preferredQuality == "best" -> {
+                                qualityOrder.indexOfFirst { title.contains(it.lowercase()) }
+                                    .let { if (it == -1) 999 else it }
+                            }
+                            title.contains(preferredQuality.lowercase()) -> 0
+                            else -> {
+                                qualityOrder.indexOfFirst { title.contains(it.lowercase()) }
+                                    .let { if (it == -1) 999 else it + 1 }
+                            }
+                        }
+                        candidates.add(VideoCandidate(hIdx, vIdx, qualityRank))
+                    }
+                }
+            }
+        }
+
+        if (candidates.isEmpty()) return Pair(-1, -1)
+
+        val best = candidates.minByOrNull { it.qualityRank }
+        return best?.let { Pair(it.hosterIdx, it.videoIdx) } ?: Pair(-1, -1)
     }
 }
 

@@ -450,8 +450,9 @@ private fun EpisodeInformation(
                 if (scanlator != null) DotSeparatorText()
             }
             if (scanlator != null) {
+                val displayText = formatScanlatorForDisplay(scanlator)
                 Text(
-                    text = scanlator,
+                    text = displayText,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -517,4 +518,12 @@ fun AnimeEpisodeListItemPreview() {
         onDownloadClick = {},
         onEpisodeSwipe = {},
     )
+}
+
+private fun formatScanlatorForDisplay(scanlator: String): String {
+    val items = scanlator.split(",").map { it.trim() }
+    return when {
+        items.size <= 2 -> scanlator
+        else -> "${items.size} озвучек"
+    }
 }

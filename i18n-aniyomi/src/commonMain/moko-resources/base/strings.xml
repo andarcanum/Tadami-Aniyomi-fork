@@ -70,6 +70,10 @@
     <string name="pref_hosters">Hosters</string>
     <string name="pref_hosters_show_failure">Display failed hosters</string>
     <string name="pref_hosters_show_empty">Display empty hosters</string>
+    <string name="pref_hoster_source_filter">Source filter</string>
+    <string name="pref_hoster_source_all">All sources</string>
+    <string name="pref_hoster_source_cdn_only">CDN only ([C] prefix)</string>
+    <string name="pref_hoster_source_kodik_only">Kodik only ([K] prefix)</string>
     <string name="pref_player_fullscreen">Show content in display cutout</string>
     <string name="pref_player_hide_controls">Hide player controls when opening the player</string>
     <string name="pref_show_system_bar">Show system status bar with controls</string>
