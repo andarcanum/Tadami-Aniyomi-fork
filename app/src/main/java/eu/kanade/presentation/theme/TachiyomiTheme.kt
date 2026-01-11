@@ -6,6 +6,7 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RippleConfiguration
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -62,10 +63,15 @@ private fun BaseTachiyomiTheme(
     isAmoled: Boolean,
     content: @Composable () -> Unit,
 ) {
-    MaterialTheme(
-        colorScheme = getThemeColorScheme(appTheme, isAmoled),
-        content = content,
-    )
+    val isDark = isSystemInDarkTheme()
+    val auroraColors = if (isDark) AuroraColors.Dark else AuroraColors.Light
+    
+    CompositionLocalProvider(LocalAuroraColors provides auroraColors) {
+        MaterialTheme(
+            colorScheme = getThemeColorScheme(appTheme, isAmoled),
+            content = content,
+        )
+    }
 }
 
 @Composable
