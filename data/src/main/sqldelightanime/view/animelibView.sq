@@ -40,3 +40,9 @@ WHERE M.favorite = 1;
 animelib:
 SELECT *
 FROM animelibView;
+
+getRecentLibraryAnime:
+SELECT *
+FROM animelibView
+ORDER BY last_update DESC
+LIMIT :limit;

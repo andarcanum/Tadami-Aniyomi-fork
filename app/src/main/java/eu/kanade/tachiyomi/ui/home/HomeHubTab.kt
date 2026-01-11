@@ -78,6 +78,8 @@ import eu.kanade.tachiyomi.ui.main.MainActivity
 import tachiyomi.domain.history.anime.model.AnimeHistoryWithRelations
 import tachiyomi.domain.library.anime.LibraryAnime
 
+import androidx.compose.animation.Crossfade
+
 object HomeHubTab : Tab {
 
     override val options: TabOptions
@@ -123,26 +125,32 @@ object HomeHubTab : Tab {
 
         val tabNavigator = LocalTabNavigator.current
 
-        HomeHubContent(
-            state = state,
-            onAnimeClick = { navigator.push(eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen(it)) },
-            onPlayHero = { screenModel.playHeroEpisode(context) },
-            onAvatarClick = { photoPickerLauncher.launch("image/*") },
-            onNameClick = { showNameDialog = true },
-            onSearchClick = {
-                val lastSourceId = screenModel.getLastUsedAnimeSourceId()
-                if (lastSourceId != -1L) {
-                    navigator.push(BrowseAnimeSourceScreen(lastSourceId, null))
-                } else {
-                    navigator.push(GlobalAnimeSearchScreen(""))
-                }
-            },
-            onBrowseSourcesClick = { tabNavigator.current = BrowseTab },
-            onAddExtensionClick = { 
-                tabNavigator.current = BrowseTab
-                BrowseTab.showAnimeExtension()
+        Crossfade(targetState = state.isLoading, label = "HomeHubLoading") { isLoading ->
+            if (isLoading) {
+                HomeHubSkeleton()
+            } else {
+                HomeHubContent(
+                    state = state,
+                    onAnimeClick = { navigator.push(eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen(it)) },
+                    onPlayHero = { screenModel.playHeroEpisode(context) },
+                    onAvatarClick = { photoPickerLauncher.launch("image/*") },
+                    onNameClick = { showNameDialog = true },
+                    onSearchClick = {
+                        val lastSourceId = screenModel.getLastUsedAnimeSourceId()
+                        if (lastSourceId != -1L) {
+                            navigator.push(BrowseAnimeSourceScreen(lastSourceId, null))
+                        } else {
+                            navigator.push(GlobalAnimeSearchScreen(""))
+                        }
+                    },
+                    onBrowseSourcesClick = { tabNavigator.current = BrowseTab },
+                    onAddExtensionClick = {
+                        tabNavigator.current = BrowseTab
+                        BrowseTab.showAnimeExtension()
+                    }
+                )
             }
-        )
+        }
     }
 }
 

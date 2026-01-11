@@ -64,6 +64,12 @@ class AnimeRepositoryImpl(
         return handler.subscribeToList { animelibViewQueries.animelib(AnimeMapper::mapLibraryAnime) }
     }
 
+    override fun getRecentLibraryAnime(limit: Long): Flow<List<LibraryAnime>> {
+        return handler.subscribeToList {
+            animelibViewQueries.getRecentLibraryAnime(limit, AnimeMapper::mapLibraryAnime)
+        }
+    }
+
     override fun getAnimeFavoritesBySourceId(sourceId: Long): Flow<List<Anime>> {
         return handler.subscribeToList { animesQueries.getFavoriteBySourceId(sourceId, AnimeMapper::mapAnime) }
     }

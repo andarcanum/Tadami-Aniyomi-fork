@@ -25,6 +25,8 @@ interface AnimeRepository {
 
     fun getLibraryAnimeAsFlow(): Flow<List<LibraryAnime>>
 
+    fun getRecentLibraryAnime(limit: Long): Flow<List<LibraryAnime>>
+
     fun getAnimeFavoritesBySourceId(sourceId: Long): Flow<List<Anime>>
 
     suspend fun getDuplicateLibraryAnime(id: Long, title: String): List<Anime>

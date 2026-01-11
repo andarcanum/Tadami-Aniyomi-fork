@@ -41,7 +41,11 @@ class HomeHubScreenModel(
         val recommendations: List<LibraryAnime> = emptyList(),
         val userName: String = "Guest",
         val userAvatar: String = "",
-    )
+        val isHistoryLoading: Boolean = true,
+        val isRecommendationsLoading: Boolean = true,
+    ) {
+        val isLoading: Boolean get() = isHistoryLoading || isRecommendationsLoading
+    }
 
     init {
         screenModelScope.launchIO {
@@ -60,11 +64,12 @@ class HomeHubScreenModel(
                 .collectLatest { historyList ->
                     val hero = historyList.firstOrNull()
                     val history = if (historyList.size > 1) historyList.drop(1) else emptyList()
-                    
-                    mutableState.update { 
+
+                    mutableState.update {
                         it.copy(
                             history = history,
                             heroItem = hero,
+                            isHistoryLoading = false,
                         )
                     }
 
@@ -75,12 +80,14 @@ class HomeHubScreenModel(
         }
 
         screenModelScope.launchIO {
-            getLibraryAnime.subscribe()
-                .collectLatest { libraryList ->
-                    val recommendations = libraryList
-                        .sortedByDescending { it.anime.lastUpdate }
-                        .take(10)
-                    mutableState.update { it.copy(recommendations = recommendations) }
+            getLibraryAnime.subscribeRecent(10)
+                .collectLatest { recommendations ->
+                    mutableState.update {
+                        it.copy(
+                            recommendations = recommendations,
+                            isRecommendationsLoading = false,
+                        )
+                    }
                 }
         }
     }

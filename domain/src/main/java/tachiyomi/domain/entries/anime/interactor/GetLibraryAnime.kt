@@ -31,4 +31,18 @@ class GetLibraryAnime(
                 this@GetLibraryAnime.logcat(LogPriority.ERROR, it)
             }
     }
+
+    fun subscribeRecent(limit: Long): Flow<List<LibraryAnime>> {
+        return animeRepository.getRecentLibraryAnime(limit)
+            .retry {
+                if (it is NullPointerException) {
+                    delay(0.5.seconds)
+                    true
+                } else {
+                    false
+                }
+            }.catch {
+                this@GetLibraryAnime.logcat(LogPriority.ERROR, it)
+            }
+    }
 }
