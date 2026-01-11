@@ -29,6 +29,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
+import eu.kanade.presentation.theme.AuroraTheme
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.util.fastForEach
@@ -114,8 +115,9 @@ object HomeScreen : Screen() {
                                 enter = expandVertically(),
                                 exit = shrinkVertically(),
                             ) {
+                                val auroraColors = if (isAurora) AuroraTheme.colors else null
                                 NavigationBar(
-                                    containerColor = if (isAurora) Color(0xFF101b22).copy(alpha = 0.95f) else MaterialTheme.colorScheme.surfaceContainer,
+                                    containerColor = if (isAurora) auroraColors!!.surface else MaterialTheme.colorScheme.surfaceContainer,
                                 ) {
                                     navStyle.tabs.fastForEach {
                                         NavigationBarItem(it, isAurora)
@@ -218,12 +220,13 @@ object HomeScreen : Screen() {
         val selected = tabNavigator.current::class == tab::class
         
         val colors = if (isAurora) {
+            val auroraColors = AuroraTheme.colors
             NavigationBarItemDefaults.colors(
-                selectedIconColor = Color(0xFF279df1),
-                selectedTextColor = Color(0xFF279df1),
-                indicatorColor = Color(0xFF279df1).copy(alpha = 0.1f),
-                unselectedIconColor = Color.White.copy(alpha = 0.6f),
-                unselectedTextColor = Color.White.copy(alpha = 0.6f)
+                selectedIconColor = auroraColors.accent,
+                selectedTextColor = auroraColors.accent,
+                indicatorColor = auroraColors.accent.copy(alpha = 0.1f),
+                unselectedIconColor = auroraColors.textSecondary,
+                unselectedTextColor = auroraColors.textSecondary
             )
         } else {
             NavigationBarItemDefaults.colors()
@@ -258,6 +261,22 @@ object HomeScreen : Screen() {
         val navigator = LocalNavigator.currentOrThrow
         val scope = rememberCoroutineScope()
         val selected = tabNavigator.current::class == tab::class
+        val theme by uiPreferences.appTheme().collectAsState()
+        val isAurora = theme == AppTheme.AURORA
+        
+        val colors = if (isAurora) {
+            val auroraColors = AuroraTheme.colors
+            androidx.compose.material3.NavigationRailItemDefaults.colors(
+                selectedIconColor = auroraColors.accent,
+                selectedTextColor = auroraColors.accent,
+                indicatorColor = auroraColors.accent.copy(alpha = 0.1f),
+                unselectedIconColor = auroraColors.textSecondary,
+                unselectedTextColor = auroraColors.textSecondary
+            )
+        } else {
+            androidx.compose.material3.NavigationRailItemDefaults.colors()
+        }
+        
         NavigationRailItem(
             selected = selected,
             onClick = {
@@ -277,6 +296,7 @@ object HomeScreen : Screen() {
                 )
             },
             alwaysShowLabel = true,
+            colors = colors,
         )
     }
 
