@@ -40,13 +40,7 @@ class AppUpdateChecker {
     }
 }
 
-val GITHUB_REPO: String by lazy {
-    if (isPreviewBuildType) {
-        "aniyomiorg/aniyomi-preview"
-    } else {
-        "aniyomiorg/aniyomi"
-    }
-}
+val GITHUB_REPO = "andreykolesnikov/Tadami-Aniyomi-fork"
 
 val RELEASE_TAG: String by lazy {
     if (isPreviewBuildType) {
@@ -56,4 +50,4 @@ val RELEASE_TAG: String by lazy {
     }
 }
 
-val RELEASE_URL = "https://github.com/$GITHUB_REPO/releases/tag/$RELEASE_TAG"
+val RELEASE_URL = "https://github.com/$GITHUB_REPO/releases"
