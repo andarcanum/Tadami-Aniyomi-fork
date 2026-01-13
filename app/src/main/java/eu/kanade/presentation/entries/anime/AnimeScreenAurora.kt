@@ -30,13 +30,20 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -57,6 +64,7 @@ import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreenModel
 import eu.kanade.tachiyomi.ui.entries.anime.EpisodeList
 import tachiyomi.domain.items.episode.model.Episode
 import tachiyomi.domain.library.service.LibraryPreferences
+import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 import java.time.Instant
@@ -112,6 +120,9 @@ fun AnimeScreenAuroraImpl(
     val anime = state.anime
     val episodes = state.episodeListItems
     val colors = AuroraTheme.colors
+    
+    var descriptionExpanded by rememberSaveable { mutableStateOf(false) }
+    var descriptionOverflows by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize().background(colors.background)) {
         AsyncImage(
@@ -158,6 +169,20 @@ fun AnimeScreenAuroraImpl(
                             contentDescription = null,
                             tint = if (anime.favorite) Color.Red else colors.textPrimary
                         )
+                    }
+                    if (onWebViewClicked != null) {
+                        IconButton(
+                            onClick = onWebViewClicked,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .background(colors.glass, CircleShape)
+                        ) {
+                            Icon(
+                                Icons.Outlined.Public,
+                                contentDescription = stringResource(MR.strings.action_open_in_web_view),
+                                tint = colors.textPrimary
+                            )
+                        }
                     }
                     if (onShareClicked != null) {
                         IconButton(
@@ -269,9 +294,25 @@ fun AnimeScreenAuroraImpl(
                             color = colors.textPrimary,
                             fontSize = 14.sp,
                             lineHeight = 20.sp,
-                            maxLines = 4,
-                            overflow = TextOverflow.Ellipsis
+                            maxLines = if (descriptionExpanded) Int.MAX_VALUE else 4,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.clickable { descriptionExpanded = !descriptionExpanded },
+                            onTextLayout = { result ->
+                                descriptionOverflows = result.hasVisualOverflow || descriptionExpanded
+                            },
                         )
+                        
+                        if (descriptionOverflows || descriptionExpanded) {
+                            Icon(
+                                imageVector = if (descriptionExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                contentDescription = null,
+                                tint = colors.textSecondary,
+                                modifier = Modifier
+                                    .align(Alignment.CenterHorizontally)
+                                    .clickable { descriptionExpanded = !descriptionExpanded }
+                                    .padding(top = 4.dp),
+                            )
+                        }
 
                         // Dubbing Button
                         if (onDubbingClicked != null) {
@@ -304,7 +345,13 @@ fun AnimeScreenAuroraImpl(
                                 .clickable(onClick = onContinueWatching),
                             contentAlignment = Alignment.Center
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(end = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
                                 Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = colors.textOnAccent, modifier = Modifier.size(28.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(stringResource(AYMR.strings.aurora_continue), color = colors.textOnAccent, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
@@ -334,7 +381,24 @@ fun AnimeScreenAuroraImpl(
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp, vertical = 6.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(colors.glass.copy(alpha = 0.5f))
+                                .background(
+                                    brush = if (colors.isDark) {
+                                        Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color.Black.copy(alpha = 0.2f),
+                                                Color.Black.copy(alpha = 0.4f),
+                                            )
+                                        )
+                                    } else {
+                                        Brush.linearGradient(
+                                            colors = listOf(
+                                                colors.glass.copy(alpha = 0.5f),
+                                                colors.glass.copy(alpha = 0.5f),
+                                            )
+                                        )
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                )
                                 .clickable { onEpisodeClicked(episode, false) }
                                 .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically

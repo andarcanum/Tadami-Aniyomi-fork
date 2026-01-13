@@ -628,6 +628,34 @@
     <string name="aurora_greeting_youre_back">You\'re back!</string>
     <string name="aurora_greeting_back_for_more">Back for more?</string>
 
+    <!-- Morning Greetings -->
+    <string name="aurora_greeting_morning_rise">Rise and anime!</string>
+    <string name="aurora_greeting_morning_binge">Morning binge?</string>
+    <string name="aurora_greeting_morning_coffee">Coffee + anime = perfect</string>
+    
+    <!-- Afternoon Greetings -->
+    <string name="aurora_greeting_afternoon_lunch">Lunch break anime?</string>
+    <string name="aurora_greeting_afternoon_ara">Ara ara~</string>
+    <string name="aurora_greeting_afternoon_sugoi">Sugoi time!</string>
+    
+    <!-- Evening Greetings -->
+    <string name="aurora_greeting_evening_vibes">Evening vibes~</string>
+    <string name="aurora_greeting_evening_chill">Time to chill</string>
+    <string name="aurora_greeting_evening_cozy">Cozy anime time</string>
+    
+    <!-- Night Greetings -->
+    <string name="aurora_greeting_night_one_more">One more episode?</string>
+    <string name="aurora_greeting_night_sleep">Sleep is overrated</string>
+    <string name="aurora_greeting_night_senpai">Night owl senpai</string>
+    <string name="aurora_greeting_night_just_one">Just one more...</string>
+    
+    <!-- Random Fun Greetings -->
+    <string name="aurora_greeting_nani">Nani?!</string>
+    <string name="aurora_greeting_yare">Yare yare~</string>
+    <string name="aurora_greeting_lets_go">Let\'s gooo!</string>
+    <string name="aurora_greeting_anime_time">Anime time!</string>
+    <string name="aurora_greeting_main_character">Main character moment</string>
+
     <!-- Browse Screen -->
     <string name="aurora_browse">Browse</string>
     <string name="aurora_discover_sources">Discover anime sources</string>
@@ -695,7 +723,7 @@
     <!-- Welcome Screen -->
     <string name="aurora_welcome_title">Start watching</string>
     <string name="aurora_welcome_subtitle">Add sources and find something interesting</string>
-    <string name="aurora_browse_sources">Browse Sources</string>
+    <string name="aurora_browse_sources">Add Source</string>
     <string name="aurora_add_extension">Add Extension</string>
     <string name="aurora_tap_to_change">Tap to change</string>
     <string name="aurora_episode_progress">Episode %d</string>

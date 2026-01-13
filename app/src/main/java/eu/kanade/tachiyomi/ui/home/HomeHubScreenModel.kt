@@ -43,7 +43,7 @@ class HomeHubScreenModel(
         val history: List<HistoryData> = emptyList(),
         val recommendations: List<RecommendationData> = emptyList(),
         val heroEpisode: Episode? = null,
-        val userName: String = "User",
+        val userName: String = "Зритель",
         val userAvatar: String = "",
         val greeting: StringResource = AYMR.strings.aurora_welcome_back,
         val isInitialized: Boolean = false,

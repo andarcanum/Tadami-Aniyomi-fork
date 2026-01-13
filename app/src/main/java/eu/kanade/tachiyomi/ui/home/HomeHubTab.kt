@@ -69,6 +69,7 @@ import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.more.settings.screen.browse.AnimeExtensionReposScreen
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.ui.browse.BrowseTab
 import eu.kanade.tachiyomi.ui.browse.anime.source.browse.BrowseAnimeSourceScreen
@@ -134,7 +135,7 @@ object HomeHubTab : Tab {
                 if (sourceId != -1L) navigator.push(BrowseAnimeSourceScreen(sourceId, null))
                 else tabNavigator.current = BrowseTab
             },
-            onBrowseClick = { tabNavigator.current = BrowseTab },
+            onBrowseClick = { navigator.push(AnimeExtensionReposScreen()) },
             onExtensionClick = { tabNavigator.current = BrowseTab; BrowseTab.showAnimeExtension() },
             onHistoryClick = { tabNavigator.current = HistoriesTab },
             onLibraryClick = { tabNavigator.current = AnimeLibraryTab }

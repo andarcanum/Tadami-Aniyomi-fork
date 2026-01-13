@@ -566,6 +566,34 @@
     <string name="aurora_greeting_youre_back">С возвращением!</string>
     <string name="aurora_greeting_back_for_more">За добавкой?</string>
 
+    <!-- Morning Greetings -->
+    <string name="aurora_greeting_morning_rise">Подъём и аниме!</string>
+    <string name="aurora_greeting_morning_binge">Утренний марафон?</string>
+    <string name="aurora_greeting_morning_coffee">Кофе + аниме = идеально</string>
+    
+    <!-- Afternoon Greetings -->
+    <string name="aurora_greeting_afternoon_lunch">Аниме на обед?</string>
+    <string name="aurora_greeting_afternoon_ara">Ара-ара~</string>
+    <string name="aurora_greeting_afternoon_sugoi">Сугой тайм!</string>
+    
+    <!-- Evening Greetings -->
+    <string name="aurora_greeting_evening_vibes">Вечерний вайб~</string>
+    <string name="aurora_greeting_evening_chill">Время чилла</string>
+    <string name="aurora_greeting_evening_cozy">Уютный аниме-вечер</string>
+    
+    <!-- Night Greetings -->
+    <string name="aurora_greeting_night_one_more">Ещё одну серию?</string>
+    <string name="aurora_greeting_night_sleep">Сон переоценён</string>
+    <string name="aurora_greeting_night_senpai">Сенпай-сова</string>
+    <string name="aurora_greeting_night_just_one">Ну ещё чуть-чуть...</string>
+    
+    <!-- Random Fun Greetings -->
+    <string name="aurora_greeting_nani">Нани?!</string>
+    <string name="aurora_greeting_yare">Яре-яре~</string>
+    <string name="aurora_greeting_lets_go">Погнали!</string>
+    <string name="aurora_greeting_anime_time">Время аниме!</string>
+    <string name="aurora_greeting_main_character">Момент главного героя</string>
+
     <!-- Browse Screen -->
     <string name="aurora_browse">Обзор</string>
     <string name="aurora_discover_sources">Найти источники аниме</string>
@@ -628,7 +656,7 @@
     <!-- Welcome Screen -->
     <string name="aurora_welcome_title">Начните смотреть</string>
     <string name="aurora_welcome_subtitle">Добавьте источники и найдите что-нибудь интересное</string>
-    <string name="aurora_browse_sources">Обзор источников</string>
+    <string name="aurora_browse_sources">Включить репозиторий</string>
     <string name="aurora_add_extension">Добавить расширение</string>
     <string name="aurora_tap_to_change">Нажмите, чтобы изменить</string>
     <string name="aurora_episode_progress">Эпизод %d</string>
@@ -636,7 +664,7 @@
     <!-- Anime Detail Screen -->
     <string name="aurora_rating">РЕЙТИНГ</string>
     <string name="aurora_status">СТАТУС</string>
-    <string name="aurora_continue">ПРОДОЛЖИТЬ</string>
+    <string name="aurora_continue">ЗАПУСК</string>
     <string name="aurora_episodes_header">Эпизоды</string>
     <string name="aurora_episode_count">%d эп.</string>
     <string name="aurora_select_dubbing">Выбрать озвучку</string>
