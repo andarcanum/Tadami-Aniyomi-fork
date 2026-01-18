@@ -53,13 +53,17 @@ private fun AnimeExtensionFilterContent(
     onClickLang: (String) -> Unit,
 ) {
     val context = LocalContext.current
+    val languages = state.languages.mapNotNull { language ->
+        val displayName = LocaleHelper.getSourceDisplayName(language, context)
+        if (displayName.isBlank()) null else language to displayName
+    }
     LazyColumn(
         contentPadding = contentPadding,
     ) {
-        items(state.languages) { language ->
+        items(languages) { (language, displayName) ->
             SwitchPreferenceWidget(
                 modifier = Modifier.animateItem(),
-                title = LocaleHelper.getSourceDisplayName(language, context),
+                title = displayName,
                 checked = language in state.enabledLanguages,
                 onCheckedChanged = { onClickLang(language) },
             )
