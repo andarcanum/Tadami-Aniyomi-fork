@@ -122,6 +122,7 @@ fun AnimeInfoBox(
                 .data(anime)
                 .useBackground(true)
                 .crossfade(true)
+                .placeholderMemoryCacheKey(anime.thumbnailUrl)
                 .build(),
             contentDescription = null,
             contentScale = ContentScale.Crop,
@@ -373,6 +374,7 @@ private fun AnimeAndSourceTitlesLarge(
             data = ImageRequest.Builder(LocalContext.current)
                 .data(anime)
                 .crossfade(true)
+                .placeholderMemoryCacheKey(anime.thumbnailUrl)
                 .build(),
             contentDescription = stringResource(MR.strings.manga_cover),
             onClick = onCoverClick,
@@ -414,6 +416,7 @@ private fun AnimeAndSourceTitlesSmall(
             data = ImageRequest.Builder(LocalContext.current)
                 .data(anime)
                 .crossfade(true)
+                .placeholderMemoryCacheKey(anime.thumbnailUrl)
                 .build(),
             contentDescription = stringResource(MR.strings.manga_cover),
             onClick = onCoverClick,
