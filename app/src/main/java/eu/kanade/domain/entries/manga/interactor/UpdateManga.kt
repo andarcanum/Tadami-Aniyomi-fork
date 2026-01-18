@@ -41,11 +41,16 @@ class UpdateManga(
         // if the manga isn't a favorite, set its title from source and update in db
         val title = if (remoteTitle.isEmpty() || localManga.favorite) null else remoteTitle
 
+        // Only update cover if manual fetch OR we don't have a valid thumbnail yet
+        // This prevents flickering when extension returns different URLs (thumbnail vs full-size)
+        val shouldUpdateCover = manualFetch || localManga.thumbnailUrl.isNullOrEmpty()
+
         val coverLastModified =
             when {
                 // Never refresh covers if the url is empty to avoid "losing" existing covers
                 remoteManga.thumbnail_url.isNullOrEmpty() -> null
-                !manualFetch && localManga.thumbnailUrl == remoteManga.thumbnail_url -> null
+                // Don't update cover during automatic refresh if we already have one
+                !shouldUpdateCover -> null
                 localManga.isLocal() -> Instant.now().toEpochMilli()
                 localManga.hasCustomCover(coverCache) -> {
                     coverCache.deleteFromCache(localManga, false)
@@ -57,7 +62,12 @@ class UpdateManga(
                 }
             }
 
-        val thumbnailUrl = remoteManga.thumbnail_url?.takeIf { it.isNotEmpty() }
+        // Only update thumbnailUrl if we're updating the cover (null = don't update field)
+        val thumbnailUrl = if (shouldUpdateCover) {
+            remoteManga.thumbnail_url?.takeIf { it.isNotEmpty() }
+        } else {
+            null
+        }
 
         return mangaRepository.updateManga(
             MangaUpdate(
