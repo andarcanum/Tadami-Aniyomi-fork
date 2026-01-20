@@ -20,10 +20,7 @@ import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.flow.collectLatest
 import tachiyomi.presentation.core.screens.LoadingScreen
 
-private val OFFICIAL_ANIME_REPOS = mapOf(
-    "https://raw.githubusercontent.com/yuzono/anime-repo/repo/index.min.json" to "Yuzono's Anime Repo",
-    "https://kohiden.xyz/Kohi-den/extensions/raw/branch/main/index.min.json" to "Kohi-den's Extensions",
-)
+private val OFFICIAL_ANIME_REPOS = emptyMap<String, String>()
 
 class AnimeExtensionReposScreen(
     private val url: String? = null,

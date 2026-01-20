@@ -25,8 +25,8 @@ fun LogoHeader() {
             contentDescription = null,
             tint = androidx.compose.ui.graphics.Color.Unspecified,
             modifier = Modifier
-                .padding(vertical = 24.dp)
-                .size(256.dp),
+                .padding(vertical = 12.dp)
+                .size(128.dp),
         )
 
         HorizontalDivider()
