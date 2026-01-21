@@ -137,6 +137,11 @@ fun MangaScreen(
     onAllChapterSelected: (Boolean) -> Unit,
     onInvertSelection: () -> Unit,
 ) {
+    val navigator = LocalNavigator.currentOrThrow
+    val onSettingsClicked: (() -> Unit)? = {
+        navigator.push(MangaSourcePreferencesScreen(state.source.id))
+    }.takeIf { state.source is ConfigurableSource }
+
     val uiPreferences = Injekt.get<eu.kanade.domain.ui.UiPreferences>()
     val theme by uiPreferences.appTheme().collectAsState()
 
@@ -174,6 +179,7 @@ fun MangaScreen(
             onChapterSelected = onChapterSelected,
             onAllChapterSelected = onAllChapterSelected,
             onInvertSelection = onInvertSelection,
+            onSettingsClicked = onSettingsClicked,
         )
         return
     }
@@ -184,11 +190,6 @@ fun MangaScreen(
             context.copyToClipboard(it, it)
         }
     }
-
-    val navigator = LocalNavigator.currentOrThrow
-    val onSettingsClicked: (() -> Unit)? = {
-        navigator.push(MangaSourcePreferencesScreen(state.source.id))
-    }.takeIf { state.source is ConfigurableSource }
 
     if (!isTabletUi) {
         MangaScreenSmallImpl(

@@ -31,7 +31,13 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -57,8 +63,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
+import eu.kanade.presentation.components.EntryDownloadDropdownMenu
 import eu.kanade.presentation.entries.DownloadAction
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadAction
+import eu.kanade.presentation.entries.manga.components.ChapterDownloadIndicator
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreenModel
 import eu.kanade.tachiyomi.ui.entries.manga.ChapterList
@@ -67,8 +75,10 @@ import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.presentation.core.i18n.pluralStringResource
 import tachiyomi.presentation.core.i18n.stringResource
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -108,12 +118,21 @@ fun MangaScreenAuroraImpl(
     onChapterSelected: (ChapterList.Item, Boolean, Boolean, Boolean) -> Unit,
     onAllChapterSelected: (Boolean) -> Unit,
     onInvertSelection: () -> Unit,
+    onSettingsClicked: (() -> Unit)?,
 ) {
     val manga = state.manga
     val chapters = state.chapterListItems
     val colors = AuroraTheme.colors
     val context = LocalContext.current
     
+    val nextUpdateDays = remember(nextUpdate) {
+        if (nextUpdate != null) {
+            val now = Instant.now()
+            now.until(nextUpdate, ChronoUnit.DAYS).toInt().coerceAtLeast(0)
+        } else {
+            null
+        }
+    }
     var descriptionExpanded by rememberSaveable { mutableStateOf(false) }
     var descriptionOverflows by remember { mutableStateOf(false) }
 
@@ -149,47 +168,91 @@ fun MangaScreenAuroraImpl(
                 IconButton(
                     onClick = navigateUp,
                     modifier = Modifier
-                        .size(48.dp)
-                        .background(colors.glass, CircleShape)
+                        .size(44.dp)
+                        .background(colors.accent.copy(alpha = 0.2f), CircleShape)
                 ) {
-                    Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = colors.textPrimary)
+                    Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = colors.accent)
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    var downloadExpanded by remember { mutableStateOf(false) }
+                    var showMenu by remember { mutableStateOf(false) }
+
+                    // Filter Button
                     IconButton(
-                        onClick = onAddToLibraryClicked,
+                        onClick = onFilterButtonClicked,
                         modifier = Modifier
-                            .size(48.dp)
-                            .background(colors.glass, CircleShape)
+                            .size(44.dp)
+                            .background(colors.accent.copy(alpha = 0.2f), CircleShape)
                     ) {
-                        Icon(
-                            if (manga.favorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                            contentDescription = null,
-                            tint = if (manga.favorite) Color.Red else colors.textPrimary
-                        )
+                        val filterTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f)
+                        Icon(Icons.Default.FilterList, contentDescription = null, tint = filterTint)
                     }
-                    if (onWebViewClicked != null) {
-                        IconButton(
-                            onClick = onWebViewClicked,
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(colors.glass, CircleShape)
-                        ) {
-                            Icon(
-                                Icons.Outlined.Public,
-                                contentDescription = stringResource(MR.strings.action_open_in_web_view),
-                                tint = colors.textPrimary
-                            )
+
+                    // Download Button + Menu
+                    if (onDownloadActionClicked != null) {
+                        Box {
+                            IconButton(
+                                onClick = { downloadExpanded = !downloadExpanded },
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .background(colors.accent.copy(alpha = 0.2f), CircleShape)
+                            ) {
+                                Icon(Icons.Filled.Download, contentDescription = null, tint = colors.accent)
+                            }
+                            eu.kanade.presentation.components.DropdownMenu(
+                                expanded = downloadExpanded,
+                                onDismissRequest = { downloadExpanded = false }
+                            ) {
+                                EntryDownloadDropdownMenu(
+                                    expanded = true,
+                                    onDismissRequest = { downloadExpanded = false },
+                                    onDownloadClicked = { onDownloadActionClicked.invoke(it) },
+                                    isManga = true
+                                )
+                            }
                         }
                     }
-                    if (onShareClicked != null) {
+
+                    // Overflow Menu
+                    Box {
                         IconButton(
-                            onClick = onShareClicked,
+                            onClick = { showMenu = !showMenu },
                             modifier = Modifier
-                                .size(48.dp)
-                                .background(colors.glass, CircleShape)
+                                .size(44.dp)
+                                .background(colors.accent.copy(alpha = 0.2f), CircleShape)
                         ) {
-                            Icon(Icons.Filled.Share, contentDescription = null, tint = colors.textPrimary)
+                            Icon(Icons.Default.MoreVert, contentDescription = null, tint = colors.accent)
+                        }
+                        eu.kanade.presentation.components.DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text(text = stringResource(MR.strings.action_webview_refresh)) },
+                                onClick = {
+                                    onRefresh()
+                                    showMenu = false
+                                },
+                            )
+                            if (onShareClicked != null) {
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text(text = stringResource(MR.strings.action_share)) },
+                                    onClick = {
+                                        onShareClicked()
+                                        showMenu = false
+                                    },
+                                )
+                            }
+                            if (onSettingsClicked != null) {
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text(text = stringResource(AYMR.strings.settings)) },
+                                    onClick = {
+                                        onSettingsClicked()
+                                        showMenu = false
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -228,6 +291,140 @@ fun MangaScreenAuroraImpl(
                                     )
                                 )
                         )
+                    }
+                }
+
+                // Action Block
+                item {
+                    Row(
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(colors.glass)
+                            .padding(horizontal = 12.dp, vertical = 16.dp)
+                            .fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        // Favorite
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onAddToLibraryClicked() }
+                                .padding(horizontal = 4.dp)
+                        ) {
+                            Box(modifier = Modifier.height(28.dp), contentAlignment = Alignment.Center) {
+                                Icon(
+                                    if (manga.favorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                                    contentDescription = null,
+                                    tint = colors.accent,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = if (manga.favorite) stringResource(MR.strings.in_library) else stringResource(MR.strings.add_to_library),
+                                color = colors.accent,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                maxLines = 2,
+                                lineHeight = 12.sp
+                            )
+                        }
+                        
+                        // Webview
+                        if (onWebViewClicked != null) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { onWebViewClicked() }
+                                    .padding(horizontal = 4.dp)
+                            ) {
+                                Box(modifier = Modifier.height(28.dp), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Outlined.Public, contentDescription = null, tint = colors.accent, modifier = Modifier.size(24.dp))
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Webview",
+                                    color = colors.accent,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    maxLines = 2,
+                                    lineHeight = 12.sp
+                                )
+                            }
+                        }
+
+                        // Next Update
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onEditFetchIntervalClicked?.invoke() }
+                                .padding(horizontal = 4.dp)
+                        ) {
+                            Box(modifier = Modifier.height(28.dp), contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.HourglassEmpty,
+                                    contentDescription = null,
+                                    tint = colors.accent,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = when (nextUpdateDays) {
+                                    null -> stringResource(MR.strings.not_applicable)
+                                    0 -> stringResource(MR.strings.manga_interval_expected_update_soon)
+                                    else -> pluralStringResource(
+                                        MR.plurals.day,
+                                        count = nextUpdateDays,
+                                        nextUpdateDays,
+                                    )
+                                },
+                                color = colors.accent,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                maxLines = 2,
+                                lineHeight = 12.sp
+                            )
+                        }
+
+                        // Tracking
+                        if (onTrackingClicked != null) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { onTrackingClicked() }
+                                    .padding(horizontal = 4.dp)
+                            ) {
+                                val trackingCount = state.trackingCount
+                                Box(modifier = Modifier.height(28.dp), contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        if (trackingCount == 0) Icons.Outlined.Sync else Icons.Outlined.Done,
+                                        contentDescription = null,
+                                        tint = colors.accent,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = if (trackingCount == 0) stringResource(MR.strings.manga_tracking_tab) else pluralStringResource(MR.plurals.num_trackers, count = trackingCount, trackingCount),
+                                    color = colors.accent,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    maxLines = 2,
+                                    lineHeight = 12.sp
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -439,15 +636,12 @@ fun MangaScreenAuroraImpl(
 
                             // Download Button
                             if (onDownloadChapter != null) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .clip(CircleShape)
-                                        .clickable { onDownloadChapter(listOf(item), ChapterDownloadAction.START) },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Filled.Download, contentDescription = null, tint = colors.textSecondary)
-                                }
+                                ChapterDownloadIndicator(
+                                    enabled = true,
+                                    downloadStateProvider = { item.downloadState },
+                                    downloadProgressProvider = { item.downloadProgress },
+                                    onClick = { onDownloadChapter(listOf(item), it) },
+                                )
                             }
                         }
                     }
