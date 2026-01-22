@@ -1,6 +1,7 @@
 package eu.kanade.presentation.entries.manga
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -34,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.components.DropdownMenu
@@ -164,18 +166,25 @@ fun MangaScreenAuroraImpl(
             }
         }
 
-        // Hero content (fixed at bottom of first screen)
+        // Hero content (fixed at bottom of first screen) - fades out on scroll
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(bottom = 0.dp),
             contentAlignment = Alignment.BottomStart
         ) {
-            MangaHeroContent(
-                manga = manga,
-                chapterCount = chapters.size,
-                onContinueReading = onContinueReading
-            )
+            // Calculate fade out alpha based on scroll (0-200dp range)
+            val heroAlpha = (1f - (scrollOffset / 200f)).coerceIn(0f, 1f)
+
+            if (heroAlpha > 0f) {
+                Box(modifier = Modifier.graphicsLayer { alpha = heroAlpha }) {
+                    MangaHeroContent(
+                        manga = manga,
+                        chapterCount = chapters.size,
+                        onContinueReading = onContinueReading
+                    )
+                }
+            }
         }
 
         // Top header bar
@@ -191,6 +200,7 @@ fun MangaScreenAuroraImpl(
                 onClick = navigateUp,
                 modifier = Modifier
                     .size(44.dp)
+                    .background(colors.accent.copy(alpha = 0.2f), CircleShape)
             ) {
                 Icon(
                     Icons.Filled.ArrowBack,
@@ -204,7 +214,9 @@ fun MangaScreenAuroraImpl(
             // Filter button
             IconButton(
                 onClick = onFilterButtonClicked,
-                modifier = Modifier.size(44.dp)
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(colors.accent.copy(alpha = 0.2f), CircleShape)
             ) {
                 val filterTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f)
                 Icon(
@@ -220,7 +232,9 @@ fun MangaScreenAuroraImpl(
                 Box {
                     IconButton(
                         onClick = { downloadExpanded = !downloadExpanded },
-                        modifier = Modifier.size(44.dp)
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(colors.accent.copy(alpha = 0.2f), CircleShape)
                     ) {
                         Icon(
                             Icons.Filled.Download,
@@ -247,7 +261,9 @@ fun MangaScreenAuroraImpl(
             Box {
                 IconButton(
                     onClick = { showMenu = !showMenu },
-                    modifier = Modifier.size(44.dp)
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(colors.accent.copy(alpha = 0.2f), CircleShape)
                 ) {
                     Icon(
                         Icons.Default.MoreVert,
