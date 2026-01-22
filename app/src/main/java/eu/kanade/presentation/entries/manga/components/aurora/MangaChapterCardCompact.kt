@@ -9,9 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Done
@@ -40,6 +38,9 @@ import eu.kanade.tachiyomi.ui.entries.manga.ChapterList
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.entries.manga.model.asMangaCover
 import tachiyomi.domain.items.chapter.model.Chapter
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Compact chapter card with 40x40 thumbnail and minimal design.
@@ -63,21 +64,21 @@ fun MangaChapterCardCompact(
         modifier = modifier,
         cornerRadius = 16.dp,
         verticalPadding = 4.dp,
-        innerPadding = 12.dp
+        innerPadding = 12.dp,
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable { onChapterClicked(chapter) },
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // 40x40 thumbnail
             Box(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color.Black.copy(alpha = 0.3f))
+                    .background(Color.Black.copy(alpha = 0.3f)),
             ) {
                 AsyncImage(
                     model = remember(manga.id, manga.thumbnailUrl, manga.coverLastModified) {
@@ -91,7 +92,7 @@ fun MangaChapterCardCompact(
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.size(40.dp),
-                    alpha = contentAlpha
+                    alpha = contentAlpha,
                 )
 
                 // Dark overlay for read chapters
@@ -99,7 +100,7 @@ fun MangaChapterCardCompact(
                     Box(
                         modifier = Modifier
                             .size(40.dp)
-                            .background(Color.Black.copy(alpha = 0.5f))
+                            .background(Color.Black.copy(alpha = 0.5f)),
                     )
                 }
             }
@@ -107,7 +108,7 @@ fun MangaChapterCardCompact(
             // Chapter info
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
                     text = chapter.name,
@@ -115,24 +116,45 @@ fun MangaChapterCardCompact(
                     fontWeight = FontWeight.SemiBold,
                     color = colors.textPrimary.copy(alpha = contentAlpha),
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
                 )
 
                 // Meta info row
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Icon(
                         Icons.Outlined.Schedule,
                         contentDescription = null,
                         tint = colors.textSecondary.copy(alpha = contentAlpha),
-                        modifier = Modifier.size(12.dp)
+                        modifier = Modifier.size(12.dp),
                     )
+
+                    // Format upload date
+                    val uploadDateText = remember(chapter.dateUpload) {
+                        if (chapter.dateUpload > 0) {
+                            val date = Date(chapter.dateUpload)
+                            val now = System.currentTimeMillis()
+                            val diff = now - chapter.dateUpload
+                            val days = diff / (1000 * 60 * 60 * 24)
+
+                            when {
+                                days < 1 -> "Сегодня"
+                                days < 2 -> "Вчера"
+                                days < 7 -> "$days дней назад"
+                                days < 30 -> "${days / 7} недель назад"
+                                else -> SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(date)
+                            }
+                        } else {
+                            "Дата неизвестна"
+                        }
+                    }
+
                     Text(
-                        text = "Chapter ${chapter.chapterNumber.toInt()}",
+                        text = uploadDateText,
                         fontSize = 12.sp,
-                        color = colors.textSecondary.copy(alpha = contentAlpha)
+                        color = colors.textSecondary.copy(alpha = contentAlpha),
                     )
                 }
 
@@ -144,13 +166,13 @@ fun MangaChapterCardCompact(
                             .fillMaxWidth()
                             .height(3.dp)
                             .clip(RoundedCornerShape(50))
-                            .background(colors.divider)
+                            .background(colors.divider),
                     ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(3.dp)
-                                .background(colors.accent)
+                                .background(colors.accent),
                         )
                     }
                 }
@@ -159,7 +181,7 @@ fun MangaChapterCardCompact(
             // Actions column
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 // Download indicator
                 if (onDownloadChapter != null) {
@@ -168,7 +190,7 @@ fun MangaChapterCardCompact(
                         downloadStateProvider = { item.downloadState },
                         downloadProgressProvider = { item.downloadProgress },
                         onClick = { onDownloadChapter(listOf(item), it) },
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(20.dp),
                     )
                 }
 
@@ -178,7 +200,7 @@ fun MangaChapterCardCompact(
                         Icons.Outlined.Done,
                         contentDescription = null,
                         tint = colors.accent,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(18.dp),
                     )
                 }
             }

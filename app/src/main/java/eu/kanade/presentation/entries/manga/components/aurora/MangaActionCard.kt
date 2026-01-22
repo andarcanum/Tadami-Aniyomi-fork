@@ -36,6 +36,7 @@ import tachiyomi.presentation.core.i18n.stringResource
 
 /**
  * Action buttons card with favorite, webview, tracking, and share options.
+ * Compact design to avoid drawing too much attention.
  */
 @Composable
 fun MangaActionCard(
@@ -51,13 +52,14 @@ fun MangaActionCard(
 
     GlassmorphismCard(
         modifier = modifier,
-        verticalPadding = 8.dp,
-        innerPadding = 16.dp
+        verticalPadding = 6.dp,
+        innerPadding = 12.dp,
+        cornerRadius = 16.dp,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.Top
+            verticalAlignment = Alignment.Top,
         ) {
             // Favorite button
             ActionButton(
@@ -66,17 +68,19 @@ fun MangaActionCard(
                         if (manga.favorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                         contentDescription = null,
                         tint = colors.accent,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(24.dp),
                     )
                 },
-                label = if (manga.favorite)
+                label = if (manga.favorite) {
                     stringResource(MR.strings.in_library)
-                    else stringResource(MR.strings.add_to_library),
+                } else {
+                    stringResource(MR.strings.add_to_library)
+                },
                 onClick = onAddToLibraryClicked,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
             )
 
-            // Webview button
+            // Webview button (renamed from Source)
             if (onWebViewClicked != null) {
                 ActionButton(
                     icon = {
@@ -84,12 +88,12 @@ fun MangaActionCard(
                             Icons.Outlined.Public,
                             contentDescription = null,
                             tint = colors.accent,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(24.dp),
                         )
                     },
-                    label = "Source",
+                    label = "Webview",
                     onClick = onWebViewClicked,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 )
             }
 
@@ -101,14 +105,16 @@ fun MangaActionCard(
                             if (trackingCount == 0) Icons.Outlined.Sync else Icons.Outlined.Done,
                             contentDescription = null,
                             tint = colors.accent,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(24.dp),
                         )
                     },
-                    label = if (trackingCount == 0)
+                    label = if (trackingCount == 0) {
                         stringResource(MR.strings.manga_tracking_tab)
-                        else pluralStringResource(MR.plurals.num_trackers, count = trackingCount, trackingCount),
+                    } else {
+                        pluralStringResource(MR.plurals.num_trackers, count = trackingCount, trackingCount)
+                    },
                     onClick = onTrackingClicked,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 )
             }
 
@@ -120,12 +126,12 @@ fun MangaActionCard(
                             Icons.Filled.Share,
                             contentDescription = null,
                             tint = colors.accent,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(24.dp),
                         )
                     },
                     label = stringResource(MR.strings.action_share),
                     onClick = onShareClicked,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 )
             }
         }
@@ -145,25 +151,25 @@ private fun ActionButton(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
             .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp)
+            .padding(horizontal = 2.dp, vertical = 4.dp),
     ) {
         Box(
             modifier = Modifier
-                .size(48.dp)
-                .background(colors.accent.copy(alpha = 0.15f), CircleShape),
-            contentAlignment = Alignment.Center
+                .size(36.dp)
+                .background(colors.accent.copy(alpha = 0.12f), CircleShape),
+            contentAlignment = Alignment.Center,
         ) {
             icon()
         }
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = label,
-            color = colors.textPrimary,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
+            color = colors.textPrimary.copy(alpha = 0.8f),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Normal,
             textAlign = TextAlign.Center,
             maxLines = 2,
-            lineHeight = 13.sp
+            lineHeight = 12.sp,
         )
     }
 }

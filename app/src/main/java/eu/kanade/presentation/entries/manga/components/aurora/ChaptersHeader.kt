@@ -35,26 +35,26 @@ fun ChaptersHeader(
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = stringResource(AYMR.strings.aurora_chapters_header),
             color = Color.White,
             fontSize = 24.sp,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
         )
 
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
                 .background(colors.accent.copy(alpha = 0.2f))
-                .padding(horizontal = 6.dp, vertical = 4.dp)
+                .padding(horizontal = 6.dp, vertical = 4.dp),
         ) {
             Text(
                 text = chapterCount.toString(),
                 color = colors.accent,
                 fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
             )
         }
     }

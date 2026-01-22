@@ -3,8 +3,10 @@ package eu.kanade.presentation.entries.manga.components.aurora
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -13,27 +15,26 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.SuggestionChip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.tachiyomi.source.model.SManga
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
-import tachiyomi.presentation.core.i18n.pluralStringResource
 import tachiyomi.presentation.core.i18n.stringResource
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -48,11 +49,13 @@ fun MangaInfoCard(
     chapterCount: Int,
     nextUpdate: Instant?,
     onTagSearch: (String) -> Unit,
+    descriptionExpanded: Boolean,
+    genresExpanded: Boolean,
+    onToggleDescription: () -> Unit,
+    onToggleGenres: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
-    var descriptionExpanded by rememberSaveable { mutableStateOf(false) }
-    var genresExpanded by rememberSaveable { mutableStateOf(false) }
 
     val nextUpdateDays = remember(nextUpdate) {
         if (nextUpdate != null) {
@@ -63,81 +66,104 @@ fun MangaInfoCard(
         }
     }
 
+    // Parse rating from description
+    val parsedRating = remember(manga.description) {
+        RatingParser.parseRating(manga.description)
+    }
+
     GlassmorphismCard(
         modifier = modifier,
         verticalPadding = 8.dp,
-        innerPadding = 20.dp
+        innerPadding = 20.dp,
     ) {
         Column(
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            // Stats grid (2x2)
+            // Stats grid - Rating and Status, optionally Next Update
+            // If manga is completed/finished, show only Rating (left) and Status (right)
+            val isCompleted = manga.status.toInt() in listOf(
+                SManga.COMPLETED,
+                SManga.PUBLISHING_FINISHED,
+                SManga.CANCELLED,
+            )
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                horizontalArrangement = if (isCompleted) Arrangement.SpaceBetween else Arrangement.SpaceEvenly,
             ) {
-                // Rating
+                // Rating (parsed from description or N/A)
                 StatItem(
-                    value = "4.9",
+                    value = if (parsedRating != null) {
+                        RatingParser.formatRating(parsedRating.rating)
+                    } else {
+                        stringResource(MR.strings.not_applicable)
+                    },
                     label = stringResource(AYMR.strings.aurora_rating),
-                    modifier = Modifier.weight(1f)
+                    modifier = if (isCompleted) Modifier else Modifier.weight(1f),
                 )
 
                 // Status
                 StatItem(
-                    value = manga.status.toString(),
+                    value = MangaStatusFormatter.formatStatus(manga.status),
                     label = stringResource(AYMR.strings.aurora_status),
-                    modifier = Modifier.weight(1f)
+                    modifier = if (isCompleted) Modifier else Modifier.weight(1f),
                 )
 
-                // Chapters
-                StatItem(
-                    value = chapterCount.toString(),
-                    label = pluralStringResource(MR.plurals.manga_num_chapters, count = chapterCount, chapterCount),
-                    modifier = Modifier.weight(1f)
-                )
-
-                // Next Update
-                StatItem(
-                    value = when (nextUpdateDays) {
-                        null -> stringResource(MR.strings.not_applicable)
-                        0 -> stringResource(MR.strings.manga_interval_expected_update_soon)
-                        else -> "$nextUpdateDays"
-                    },
-                    label = "Next Update",
-                    modifier = Modifier.weight(1f)
-                )
+                // Next Update (Обновление) - only show if not completed
+                if (!isCompleted) {
+                    StatItem(
+                        value = when (nextUpdateDays) {
+                            null -> stringResource(MR.strings.not_applicable)
+                            0 -> stringResource(MR.strings.manga_interval_expected_update_soon)
+                            else -> "$nextUpdateDays д"
+                        },
+                        label = "Обновление",
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
 
             // Description
             Column(
-                modifier = Modifier.animateContentSize(
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessLow
-                    )
-                )
+                verticalArrangement = Arrangement.Top,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessLow,
+                        ),
+                        alignment = Alignment.TopStart,
+                    ),
             ) {
-                Text(
-                    text = manga.description ?: stringResource(AYMR.strings.aurora_no_description),
-                    color = colors.textPrimary.copy(alpha = 0.9f),
-                    fontSize = 14.sp,
-                    lineHeight = 22.sp,
-                    maxLines = if (descriptionExpanded) Int.MAX_VALUE else 5,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Text(
+                        text = manga.description ?: stringResource(AYMR.strings.aurora_no_description),
+                        color = colors.textPrimary.copy(alpha = 0.9f),
+                        fontSize = 14.sp,
+                        lineHeight = 22.sp,
+                        maxLines = if (descriptionExpanded) Int.MAX_VALUE else 5,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
 
-                if ((manga.description?.length ?: 0) > 200) {
-                    TextButton(
-                        onClick = { descriptionExpanded = !descriptionExpanded }
-                    ) {
-                        Text(
-                            text = if (descriptionExpanded)
-                                stringResource(MR.strings.manga_info_collapse)
-                                else stringResource(MR.strings.manga_info_expand),
-                            color = colors.accent,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
+                    if ((manga.description?.length ?: 0) > 200) {
+                        Icon(
+                            imageVector = if (descriptionExpanded) {
+                                Icons.Filled.KeyboardArrowUp
+                            } else {
+                                Icons.Filled.KeyboardArrowDown
+                            },
+                            contentDescription = null,
+                            tint = colors.accent,
+                            modifier = Modifier
+                                .padding(start = 8.dp)
+                                .clickable { onToggleDescription() },
                         )
                     }
                 }
@@ -146,40 +172,59 @@ fun MangaInfoCard(
             // Genre tags - collapsible
             if (!manga.genre.isNullOrEmpty()) {
                 Column(
-                    modifier = Modifier.animateContentSize(
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessLow
-                        )
-                    )
+                    verticalArrangement = Arrangement.Top,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .animateContentSize(
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessLow,
+                            ),
+                            alignment = Alignment.TopStart,
+                        ),
                 ) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top,
                     ) {
-                        val genresToShow = if (genresExpanded) manga.genre!! else manga.genre!!.take(3)
-                        genresToShow.forEach { genre ->
-                            SuggestionChip(
-                                onClick = { onTagSearch(genre) },
-                                label = {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            val genresToShow = if (genresExpanded) manga.genre!! else manga.genre!!.take(3)
+                            genresToShow.forEach { genre ->
+                                // Compact genre chip
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(colors.accent.copy(alpha = 0.15f))
+                                        .clickable { onTagSearch(genre) }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                ) {
                                     Text(
                                         text = genre,
-                                        fontSize = 12.sp
+                                        fontSize = 11.sp,
+                                        color = colors.accent,
+                                        fontWeight = FontWeight.Medium,
                                     )
                                 }
-                            )
+                            }
                         }
-                    }
 
-                    if (manga.genre!!.size > 3) {
-                        TextButton(
-                            onClick = { genresExpanded = !genresExpanded }
-                        ) {
-                            Text(
-                                text = if (genresExpanded) "Show less genres" else "Show all ${manga.genre!!.size} genres",
-                                color = colors.accent,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
+                        if (manga.genre!!.size > 3) {
+                            Icon(
+                                imageVector = if (genresExpanded) {
+                                    Icons.Filled.KeyboardArrowUp
+                                } else {
+                                    Icons.Filled.KeyboardArrowDown
+                                },
+                                contentDescription = null,
+                                tint = colors.accent,
+                                modifier = Modifier
+                                    .padding(start = 8.dp)
+                                    .clickable { onToggleGenres() },
                             )
                         }
                     }
@@ -199,13 +244,13 @@ private fun StatItem(
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier
+        modifier = modifier,
     ) {
         Text(
             text = value,
-            fontSize = 20.sp,
+            fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
-            color = colors.textPrimary
+            color = colors.textPrimary,
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
@@ -214,7 +259,7 @@ private fun StatItem(
             letterSpacing = 1.sp,
             color = colors.textSecondary,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

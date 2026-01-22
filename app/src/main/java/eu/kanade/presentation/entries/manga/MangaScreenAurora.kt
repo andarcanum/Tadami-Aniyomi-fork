@@ -3,7 +3,6 @@ package eu.kanade.presentation.entries.manga
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -27,6 +26,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.SnackbarHostState
@@ -36,6 +36,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -111,16 +112,23 @@ fun MangaScreenAuroraImpl(
 
     val lazyListState = rememberLazyListState()
     val scrollOffset by remember { derivedStateOf { lazyListState.firstVisibleItemScrollOffset } }
+    val firstVisibleItemIndex by remember { derivedStateOf { lazyListState.firstVisibleItemIndex } }
+    val scope = rememberCoroutineScope()
 
     // State for chapters expansion
     var chaptersExpanded by remember { mutableStateOf(false) }
     val chaptersToShow = if (chaptersExpanded) chapters else chapters.take(5)
 
+    // State for description and genres expansion
+    var descriptionExpanded by remember { mutableStateOf(false) }
+    var genresExpanded by remember { mutableStateOf(false) }
+
     Box(modifier = Modifier.fillMaxSize()) {
         // Fixed background poster
         FullscreenPosterBackground(
             manga = manga,
-            scrollOffset = scrollOffset
+            scrollOffset = scrollOffset,
+            firstVisibleItemIndex = firstVisibleItemIndex,
         )
 
         // Scrollable content
@@ -128,31 +136,35 @@ fun MangaScreenAuroraImpl(
             state = lazyListState,
             contentPadding = PaddingValues(
                 top = screenHeight,
-                bottom = 100.dp
+                bottom = 100.dp,
             ),
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
         ) {
-            // Action buttons card
+            // Info card (description and stats)
             item {
                 Spacer(modifier = Modifier.height(16.dp))
+                MangaInfoCard(
+                    manga = manga,
+                    chapterCount = chapters.size,
+                    nextUpdate = nextUpdate,
+                    onTagSearch = onTagSearch,
+                    descriptionExpanded = descriptionExpanded,
+                    genresExpanded = genresExpanded,
+                    onToggleDescription = { descriptionExpanded = !descriptionExpanded },
+                    onToggleGenres = { genresExpanded = !genresExpanded },
+                )
+            }
+
+            // Action buttons card (after description)
+            item {
+                Spacer(modifier = Modifier.height(12.dp))
                 MangaActionCard(
                     manga = manga,
                     trackingCount = state.trackingCount,
                     onAddToLibraryClicked = onAddToLibraryClicked,
                     onWebViewClicked = onWebViewClicked,
                     onTrackingClicked = onTrackingClicked,
-                    onShareClicked = onShareClicked
-                )
-            }
-
-            // Info card
-            item {
-                Spacer(modifier = Modifier.height(12.dp))
-                MangaInfoCard(
-                    manga = manga,
-                    chapterCount = chapters.size,
-                    nextUpdate = nextUpdate,
-                    onTagSearch = onTagSearch
+                    onShareClicked = onShareClicked,
                 )
             }
 
@@ -162,18 +174,36 @@ fun MangaScreenAuroraImpl(
                 ChaptersHeader(chapterCount = chapters.size)
             }
 
+            // Empty state for chapters
+            if (chapters.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = stringResource(MR.strings.no_chapters_error),
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontSize = 14.sp,
+                        )
+                    }
+                }
+            }
+
             // Chapter list
             items(
                 items = chaptersToShow,
                 key = { (it as? ChapterList.Item)?.chapter?.id ?: it.hashCode() },
-                contentType = { "chapter" }
+                contentType = { "chapter" },
             ) { item ->
                 if (item is ChapterList.Item) {
                     MangaChapterCardCompact(
                         manga = manga,
                         item = item,
                         onChapterClicked = onChapterClicked,
-                        onDownloadChapter = onDownloadChapter
+                        onDownloadChapter = onDownloadChapter,
                     )
                 }
             }
@@ -185,7 +215,7 @@ fun MangaScreenAuroraImpl(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(16.dp),
-                        contentAlignment = Alignment.Center
+                        contentAlignment = Alignment.Center,
                     ) {
                         Box(
                             modifier = Modifier
@@ -194,18 +224,22 @@ fun MangaScreenAuroraImpl(
                                     brush = Brush.linearGradient(
                                         colors = listOf(
                                             Color.White.copy(alpha = 0.12f),
-                                            Color.White.copy(alpha = 0.08f)
-                                        )
-                                    )
+                                            Color.White.copy(alpha = 0.08f),
+                                        ),
+                                    ),
                                 )
                                 .clickable { chaptersExpanded = !chaptersExpanded }
-                                .padding(horizontal = 24.dp, vertical = 12.dp)
+                                .padding(horizontal = 24.dp, vertical = 12.dp),
                         ) {
                             Text(
-                                text = if (chaptersExpanded) "Show less" else "Show all ${chapters.size} chapters",
+                                text = if (chaptersExpanded) {
+                                    "Показать меньше"
+                                } else {
+                                    "Показать все ${chapters.size} глав"
+                                },
                                 color = colors.accent,
                                 fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
                             )
                         }
                     }
@@ -214,22 +248,47 @@ fun MangaScreenAuroraImpl(
         }
 
         // Hero content (fixed at bottom of first screen) - fades out on scroll
-        // Only show when scroll offset is less than 100dp
-        if (scrollOffset < 100) {
+        // Show when we haven't scrolled much (index 0 with scroll less than 70% of screen height)
+        val heroThreshold = (screenHeight.value * 0.7f).toInt()
+        if (firstVisibleItemIndex == 0 && scrollOffset < heroThreshold) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(bottom = 0.dp),
-                contentAlignment = Alignment.BottomStart
+                contentAlignment = Alignment.BottomStart,
             ) {
-                // Calculate fade out alpha based on scroll (0-100dp range)
-                val heroAlpha = (1f - (scrollOffset / 100f)).coerceIn(0f, 1f)
+                // Calculate fade out alpha based on scroll (0-70% range)
+                val heroAlpha = (1f - (scrollOffset / heroThreshold.toFloat())).coerceIn(0f, 1f)
 
                 Box(modifier = Modifier.graphicsLayer { alpha = heroAlpha }) {
                     MangaHeroContent(
                         manga = manga,
                         chapterCount = chapters.size,
-                        onContinueReading = onContinueReading
+                        onContinueReading = onContinueReading,
+                    )
+                }
+            }
+        }
+
+        // Floating Play button (shows after Hero Content is hidden)
+        val showFab = firstVisibleItemIndex > 0 || scrollOffset > heroThreshold
+        if (showFab) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(end = 20.dp, bottom = 20.dp),
+                contentAlignment = Alignment.BottomEnd,
+            ) {
+                androidx.compose.material3.FloatingActionButton(
+                    onClick = onContinueReading,
+                    containerColor = colors.accent,
+                    contentColor = colors.textOnAccent,
+                    modifier = Modifier.size(64.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(32.dp),
                     )
                 }
             }
@@ -242,19 +301,19 @@ fun MangaScreenAuroraImpl(
                 .padding(WindowInsets.statusBars.asPaddingValues())
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             // Back button
             IconButton(
                 onClick = navigateUp,
                 modifier = Modifier
                     .size(44.dp)
-                    .background(colors.accent.copy(alpha = 0.2f), CircleShape)
+                    .background(colors.accent.copy(alpha = 0.2f), CircleShape),
             ) {
                 Icon(
                     Icons.Filled.ArrowBack,
                     contentDescription = null,
-                    tint = colors.accent
+                    tint = colors.accent,
                 )
             }
 
@@ -265,13 +324,13 @@ fun MangaScreenAuroraImpl(
                 onClick = onFilterButtonClicked,
                 modifier = Modifier
                     .size(44.dp)
-                    .background(colors.accent.copy(alpha = 0.2f), CircleShape)
+                    .background(colors.accent.copy(alpha = 0.2f), CircleShape),
             ) {
                 val filterTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f)
                 Icon(
                     Icons.Default.FilterList,
                     contentDescription = null,
-                    tint = filterTint
+                    tint = filterTint,
                 )
             }
 
@@ -283,23 +342,23 @@ fun MangaScreenAuroraImpl(
                         onClick = { downloadExpanded = !downloadExpanded },
                         modifier = Modifier
                             .size(44.dp)
-                            .background(colors.accent.copy(alpha = 0.2f), CircleShape)
+                            .background(colors.accent.copy(alpha = 0.2f), CircleShape),
                     ) {
                         Icon(
                             Icons.Filled.Download,
                             contentDescription = null,
-                            tint = colors.accent
+                            tint = colors.accent,
                         )
                     }
                     DropdownMenu(
                         expanded = downloadExpanded,
-                        onDismissRequest = { downloadExpanded = false }
+                        onDismissRequest = { downloadExpanded = false },
                     ) {
                         EntryDownloadDropdownMenu(
                             expanded = true,
                             onDismissRequest = { downloadExpanded = false },
                             onDownloadClicked = { onDownloadActionClicked.invoke(it) },
-                            isManga = true
+                            isManga = true,
                         )
                     }
                 }
@@ -312,20 +371,22 @@ fun MangaScreenAuroraImpl(
                     onClick = { showMenu = !showMenu },
                     modifier = Modifier
                         .size(44.dp)
-                        .background(colors.accent.copy(alpha = 0.2f), CircleShape)
+                        .background(colors.accent.copy(alpha = 0.2f), CircleShape),
                 ) {
                     Icon(
                         Icons.Default.MoreVert,
                         contentDescription = null,
-                        tint = colors.accent
+                        tint = colors.accent,
                     )
                 }
                 DropdownMenu(
                     expanded = showMenu,
-                    onDismissRequest = { showMenu = false }
+                    onDismissRequest = { showMenu = false },
                 ) {
                     androidx.compose.material3.DropdownMenuItem(
-                        text = { androidx.compose.material3.Text(text = stringResource(MR.strings.action_webview_refresh)) },
+                        text = {
+                            androidx.compose.material3.Text(text = stringResource(MR.strings.action_webview_refresh))
+                        },
                         onClick = {
                             onRefresh()
                             showMenu = false

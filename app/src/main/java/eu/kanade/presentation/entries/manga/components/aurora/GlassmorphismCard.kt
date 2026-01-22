@@ -36,21 +36,21 @@ fun GlassmorphismCard(
                 brush = Brush.linearGradient(
                     colors = listOf(
                         Color.White.copy(alpha = 0.12f),
-                        Color.White.copy(alpha = 0.08f)
-                    )
-                )
+                        Color.White.copy(alpha = 0.08f),
+                    ),
+                ),
             )
             .border(
                 width = 1.dp,
                 brush = Brush.linearGradient(
                     colors = listOf(
                         Color.White.copy(alpha = 0.25f),
-                        Color.White.copy(alpha = 0.1f)
-                    )
+                        Color.White.copy(alpha = 0.1f),
+                    ),
                 ),
-                shape = RoundedCornerShape(cornerRadius)
+                shape = RoundedCornerShape(cornerRadius),
             )
-            .padding(innerPadding)
+            .padding(innerPadding),
     ) {
         content()
     }
