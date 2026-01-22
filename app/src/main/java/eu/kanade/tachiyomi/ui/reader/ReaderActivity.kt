@@ -380,6 +380,16 @@ class ReaderActivity : BaseActivity() {
             val isPagerType = ReadingMode.isPagerType(viewModel.getMangaReadingMode())
             val cropEnabled = if (isPagerType) cropBorderPaged else cropBorderWebtoon
 
+            // Navigator customization preferences
+            val showNavigator by readerPreferences.showNavigator().collectAsState()
+            val navigatorShowPageNumbers by readerPreferences.navigatorShowPageNumbers().collectAsState()
+            val navigatorShowChapterButtons by readerPreferences.navigatorShowChapterButtons().collectAsState()
+            val navigatorSliderColor by readerPreferences.navigatorSliderColor().collectAsState()
+            val navigatorBackgroundAlpha by readerPreferences.navigatorBackgroundAlpha().collectAsState()
+            val navigatorHeight by readerPreferences.navigatorHeight().collectAsState()
+            val navigatorCornerRadius by readerPreferences.navigatorCornerRadius().collectAsState()
+            val navigatorShowTickMarks by readerPreferences.navigatorShowTickMarks().collectAsState()
+
             ReaderContentOverlay(
                 brightness = state.brightnessOverlayValue,
                 color = colorOverlay.takeIf { colorOverlayEnabled },
@@ -428,6 +438,16 @@ class ReaderActivity : BaseActivity() {
                     menuToggleToast = toast(if (enabled) MR.strings.on else MR.strings.off)
                 },
                 onClickSettings = viewModel::openSettingsDialog,
+
+                // Navigator customization options
+                showNavigator = showNavigator,
+                navigatorShowPageNumbers = navigatorShowPageNumbers,
+                navigatorShowChapterButtons = navigatorShowChapterButtons,
+                navigatorSliderColor = navigatorSliderColor,
+                navigatorBackgroundAlpha = navigatorBackgroundAlpha,
+                navigatorHeight = navigatorHeight,
+                navigatorCornerRadius = navigatorCornerRadius,
+                navigatorShowTickMarks = navigatorShowTickMarks,
             )
 
             if (flashOnPageChange) {

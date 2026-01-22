@@ -12,10 +12,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.AppTheme
+import eu.kanade.presentation.theme.colorscheme.AuroraColorScheme
 import eu.kanade.presentation.theme.colorscheme.BaseColorScheme
 import eu.kanade.presentation.theme.colorscheme.CloudflareColorScheme
 import eu.kanade.presentation.theme.colorscheme.CottoncandyColorScheme
-import eu.kanade.presentation.theme.colorscheme.AuroraColorScheme
 import eu.kanade.presentation.theme.colorscheme.DoomColorScheme
 import eu.kanade.presentation.theme.colorscheme.GreenAppleColorScheme
 import eu.kanade.presentation.theme.colorscheme.LavenderColorScheme
@@ -65,13 +65,13 @@ private fun BaseTachiyomiTheme(
 ) {
     val isDark = isSystemInDarkTheme()
     val colorScheme = getThemeColorScheme(appTheme, isAmoled)
-    
+
     val auroraColors = AuroraColors.fromColorScheme(
         colorScheme = colorScheme,
         isDark = isDark,
         isAmoled = isAmoled,
     )
-    
+
     CompositionLocalProvider(LocalAuroraColors provides auroraColors) {
         MaterialTheme(
             colorScheme = colorScheme,

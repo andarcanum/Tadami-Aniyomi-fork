@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -117,25 +116,9 @@ data object BrowseTab : Tab {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(colors.backgroundGradient)
+                .background(colors.backgroundGradient),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                Spacer(modifier = Modifier.statusBarsPadding())
-                Spacer(modifier = Modifier.height(12.dp))
-
-                if (showMangaSection) {
-                    AuroraTabRow(
-                        tabs = kotlinx.collections.immutable.persistentListOf(
-                            TabContent(AYMR.strings.label_anime, content = { _, _ -> }),
-                            TabContent(AYMR.strings.label_manga, content = { _, _ -> })
-                        ),
-                        selectedIndex = if (isAnimeTab) 0 else 1,
-                        onTabSelected = { isAnimeTab = it == 0 },
-                        scrollable = false
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-
                 TabbedScreenAurora(
                     titleRes = MR.strings.browse,
                     tabs = currentTabs,
@@ -146,7 +129,22 @@ data object BrowseTab : Tab {
                     onChangeAnimeSearchQuery = animeExtensionsScreenModel::search,
                     isMangaTab = { !isAnimeTab },
                     scrollable = true,
-                    applyStatusBarsPadding = false
+                    applyStatusBarsPadding = true,
+                    extraHeaderContent = {
+                        if (showMangaSection) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            AuroraTabRow(
+                                tabs = kotlinx.collections.immutable.persistentListOf(
+                                    TabContent(AYMR.strings.label_anime, content = { _, _ -> }),
+                                    TabContent(AYMR.strings.label_manga, content = { _, _ -> }),
+                                ),
+                                selectedIndex = if (isAnimeTab) 0 else 1,
+                                onTabSelected = { isAnimeTab = it == 0 },
+                                scrollable = false,
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+                    },
                 )
             }
         }

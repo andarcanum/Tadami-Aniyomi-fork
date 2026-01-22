@@ -1,7 +1,5 @@
 package eu.kanade.presentation.components
 
-import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -26,8 +24,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.MoreVert
@@ -35,13 +31,14 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,17 +48,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.zIndex
-import coil3.compose.AsyncImage
-import eu.kanade.presentation.theme.AuroraTheme
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.Hyphens
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.icerock.moko.resources.StringResource
+import eu.kanade.presentation.theme.AuroraTheme
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
@@ -70,7 +63,7 @@ import tachiyomi.presentation.core.i18n.stringResource
 data class TabState(
     val tabs: ImmutableList<TabContent>,
     val selectedIndex: Int,
-    val onTabSelected: (Int) -> Unit
+    val onTabSelected: (Int) -> Unit,
 )
 val LocalTabState = compositionLocalOf<TabState?> { null }
 
@@ -93,6 +86,7 @@ fun TabbedScreenAurora(
     onNameClick: (() -> Unit)? = null,
     applyStatusBarsPadding: Boolean = true,
     showTabs: Boolean = true,
+    extraHeaderContent: @Composable () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -107,7 +101,7 @@ fun TabbedScreenAurora(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(colors.backgroundGradient)
+            .background(colors.backgroundGradient),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             if (applyStatusBarsPadding) {
@@ -124,9 +118,11 @@ fun TabbedScreenAurora(
                     onSearchQueryChange = { onChangeSearchQuery(it) },
                     tabs = tabs,
                     currentPage = state.currentPage,
-                    navigateUp = null // Top-level tabs generally don't have up navigation in this context
+                    navigateUp = null, // Top-level tabs generally don't have up navigation in this context
                 )
             }
+
+            extraHeaderContent()
 
             // Add tabs for Browse
             if (showTabs) {
@@ -134,7 +130,7 @@ fun TabbedScreenAurora(
                     tabs = tabs,
                     selectedIndex = state.currentPage,
                     onTabSelected = { index -> scope.launch { state.animateScrollToPage(index) } },
-                    scrollable = scrollable
+                    scrollable = scrollable,
                 )
             }
 
@@ -146,7 +142,7 @@ fun TabbedScreenAurora(
                 val tabState = TabState(
                     tabs = tabs,
                     selectedIndex = state.currentPage,
-                    onTabSelected = { index -> scope.launch { state.animateScrollToPage(index) } }
+                    onTabSelected = { index -> scope.launch { state.animateScrollToPage(index) } },
                 )
                 CompositionLocalProvider(LocalTabState provides tabState) {
                     tabs[page].content(
@@ -159,7 +155,7 @@ fun TabbedScreenAurora(
 
         SnackbarHost(
             hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter)
+            modifier = Modifier.align(Alignment.BottomCenter),
         )
     }
 }
@@ -187,19 +183,19 @@ private fun AuroraTabHeader(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         if (navigateUp != null) {
             IconButton(
                 onClick = navigateUp,
                 modifier = Modifier
                     .background(colors.glass, CircleShape)
-                    .size(44.dp)
+                    .size(44.dp),
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                     contentDescription = stringResource(MR.strings.action_bar_up_description),
-                    tint = colors.textPrimary
+                    tint = colors.textPrimary,
                 )
             }
             Spacer(modifier = Modifier.width(12.dp))
@@ -215,7 +211,7 @@ private fun AuroraTabHeader(
                 placeholder = {
                     Text(
                         text = stringResource(MR.strings.action_search),
-                        color = colors.textSecondary
+                        color = colors.textSecondary,
                     )
                 },
                 colors = TextFieldDefaults.colors(
@@ -225,7 +221,7 @@ private fun AuroraTabHeader(
                     unfocusedTextColor = colors.textPrimary,
                     cursorColor = colors.accent,
                     focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent
+                    unfocusedIndicatorColor = Color.Transparent,
                 ),
                 shape = RoundedCornerShape(16.dp),
                 singleLine = true,
@@ -233,7 +229,7 @@ private fun AuroraTabHeader(
                     Icon(
                         imageVector = Icons.Filled.Search,
                         contentDescription = null,
-                        tint = colors.textSecondary
+                        tint = colors.textSecondary,
                     )
                 },
                 trailingIcon = {
@@ -241,20 +237,20 @@ private fun AuroraTabHeader(
                         Icon(
                             imageVector = Icons.Filled.Close,
                             contentDescription = null,
-                            tint = colors.textSecondary
+                            tint = colors.textSecondary,
                         )
                     }
-                }
+                },
             )
         } else {
             Column(
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
             ) {
                 Text(
                     text = title,
                     fontSize = 22.sp,
                     color = colors.textPrimary,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
                 )
             }
 
@@ -264,12 +260,12 @@ private fun AuroraTabHeader(
                         onClick = onSearchClick,
                         modifier = Modifier
                             .background(colors.glass, CircleShape)
-                            .size(44.dp)
+                            .size(44.dp),
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Search,
                             contentDescription = stringResource(MR.strings.action_search),
-                            tint = colors.textPrimary
+                            tint = colors.textPrimary,
                         )
                     }
                 }
@@ -279,12 +275,12 @@ private fun AuroraTabHeader(
                         onClick = appBarAction.onClick,
                         modifier = Modifier
                             .background(colors.glass, CircleShape)
-                            .size(44.dp)
+                            .size(44.dp),
                     ) {
                         Icon(
                             imageVector = appBarAction.icon,
                             contentDescription = appBarAction.title,
-                            tint = colors.textPrimary
+                            tint = colors.textPrimary,
                         )
                     }
                 }
@@ -295,14 +291,14 @@ private fun AuroraTabHeader(
                             onClick = { showOverflowMenu = true },
                             modifier = Modifier
                                 .background(colors.glass, CircleShape)
-                                .size(44.dp)
+                                .size(44.dp),
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.MoreVert,
                                 contentDescription = stringResource(
                                     MR.strings.action_menu_overflow_description,
                                 ),
-                                tint = colors.textPrimary
+                                tint = colors.textPrimary,
                             )
                         }
 
@@ -332,7 +328,7 @@ internal fun AuroraTabRow(
     tabs: ImmutableList<TabContent>,
     selectedIndex: Int,
     onTabSelected: (Int) -> Unit,
-    scrollable: Boolean
+    scrollable: Boolean,
 ) {
     val colors = AuroraTheme.colors
     val scrollState = rememberScrollState()
@@ -344,15 +340,15 @@ internal fun AuroraTabRow(
             .padding(horizontal = 16.dp)
             .background(
                 colors.glass,
-                RoundedCornerShape(28.dp)
+                RoundedCornerShape(28.dp),
             )
-            .padding(horizontal = 4.dp, vertical = 4.dp)
+            .padding(horizontal = 4.dp, vertical = 4.dp),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(if (scrollable) Modifier.horizontalScroll(scrollState) else Modifier),
-            horizontalArrangement = if (scrollable) Arrangement.Start else Arrangement.SpaceEvenly
+            horizontalArrangement = if (scrollable) Arrangement.Start else Arrangement.SpaceEvenly,
         ) {
             tabs.forEachIndexed { index, tab ->
                 val isSelected = index == selectedIndex
@@ -361,7 +357,7 @@ internal fun AuroraTabRow(
                     isSelected = isSelected,
                     badgeCount = tab.badgeNumber,
                     onClick = { onTabSelected(index) },
-                    modifier = if (scrollable) Modifier.padding(horizontal = 4.dp) else Modifier.weight(1f)
+                    modifier = if (scrollable) Modifier.padding(horizontal = 4.dp) else Modifier.weight(1f),
                 )
             }
         }
@@ -374,31 +370,31 @@ internal fun AuroraTab(
     isSelected: Boolean,
     badgeCount: Int?,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
-    
+
     // Segmented tab style: lighter filled background for active tab (good contrast on dark mode)
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(20.dp))
             .background(
-                if (isSelected) Color.White.copy(alpha = 0.15f) else Color.Transparent
+                if (isSelected) Color.White.copy(alpha = 0.15f) else Color.Transparent,
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.Center,
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+            horizontalArrangement = Arrangement.Center,
         ) {
             Text(
                 text = text,
                 color = if (isSelected) colors.textPrimary else colors.textSecondary,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                 fontSize = 14.sp,
-                style = TextStyle(hyphens = Hyphens.None)
+                style = TextStyle(hyphens = Hyphens.None),
             )
 
             if (badgeCount != null && badgeCount > 0) {
@@ -407,13 +403,13 @@ internal fun AuroraTab(
                     modifier = Modifier
                         .size(18.dp)
                         .background(colors.accent, CircleShape),
-                    contentAlignment = Alignment.Center
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = if (badgeCount > 99) "99+" else badgeCount.toString(),
                         color = colors.textOnAccent,
                         fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
                     )
                 }
             }

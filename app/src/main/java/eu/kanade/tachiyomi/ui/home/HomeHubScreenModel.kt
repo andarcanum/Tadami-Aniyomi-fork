@@ -12,19 +12,17 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.entries.anime.interactor.GetLibraryAnime
-import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.entries.anime.model.AnimeCover
 import tachiyomi.domain.history.anime.interactor.GetAnimeHistory
 import tachiyomi.domain.history.anime.interactor.GetNextEpisodes
 import tachiyomi.domain.history.anime.model.AnimeHistoryWithRelations
 import tachiyomi.domain.items.episode.model.Episode
+import tachiyomi.domain.library.anime.LibraryAnime
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import tachiyomi.i18n.aniyomi.AYMR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
-
-import tachiyomi.domain.library.anime.LibraryAnime
 
 class HomeHubScreenModel(
     private val getAnimeHistory: GetAnimeHistory = Injekt.get(),
@@ -49,7 +47,7 @@ class HomeHubScreenModel(
         val userAvatar: String = "",
         val greeting: StringResource = AYMR.strings.aurora_welcome_back,
         val isInitialized: Boolean = false,
-        val isLoading: Boolean = true
+        val isLoading: Boolean = true,
     ) {
         val isEmpty: Boolean
             get() = hero == null && history.isEmpty() && recommendations.isEmpty()
@@ -63,14 +61,14 @@ class HomeHubScreenModel(
         val title: String,
         val episodeNumber: Double,
         val coverData: AnimeCover,
-        val episodeId: Long
+        val episodeId: Long,
     )
 
     data class HistoryData(
         val animeId: Long,
         val title: String,
         val episodeNumber: Double,
-        val coverData: AnimeCover
+        val coverData: AnimeCover,
     )
 
     data class RecommendationData(
@@ -79,16 +77,16 @@ class HomeHubScreenModel(
         val coverUrl: String?,
         val coverLastModified: Long,
         val totalCount: Long,
-        val seenCount: Long
+        val seenCount: Long,
     )
 
     init {
         val cached = fastCache.load()
         val lastOpened = userProfilePreferences.lastOpenedTime().get()
         val greeting = GreetingProvider.getGreeting(lastOpened)
-        
+
         userProfilePreferences.lastOpenedTime().set(System.currentTimeMillis())
-        
+
         mutableState.update {
             it.copy(
                 hero = cached.hero?.toHeroData(),
@@ -98,7 +96,7 @@ class HomeHubScreenModel(
                 userAvatar = cached.userAvatar,
                 greeting = greeting,
                 isInitialized = cached.isInitialized,
-                isLoading = false
+                isLoading = false,
             )
         }
 
@@ -140,7 +138,7 @@ class HomeHubScreenModel(
                         userName = data.name,
                         userAvatar = data.avatar,
                         isInitialized = hasData || it.isInitialized,
-                        isLoading = false
+                        isLoading = false,
                     )
                 }
 
@@ -169,8 +167,8 @@ class HomeHubScreenModel(
                 recommendations = currentState.recommendations.map { it.toCached() },
                 userName = currentState.userName,
                 userAvatar = currentState.userAvatar,
-                isInitialized = currentState.isInitialized
-            )
+                isInitialized = currentState.isInitialized,
+            ),
         )
     }
 
@@ -217,7 +215,7 @@ class HomeHubScreenModel(
         val name: String,
         val avatar: String,
         val historyList: List<AnimeHistoryWithRelations>,
-        val animeList: List<LibraryAnime>
+        val animeList: List<LibraryAnime>,
     )
 
     private fun CachedHeroItem.toHeroData() = HeroData(
@@ -225,14 +223,14 @@ class HomeHubScreenModel(
         title = title,
         episodeNumber = episodeNumber,
         coverData = AnimeCover(animeId, -1, true, coverUrl, coverLastModified),
-        episodeId = episodeId
+        episodeId = episodeId,
     )
 
     private fun CachedHistoryItem.toHistoryData() = HistoryData(
         animeId = animeId,
         title = title,
         episodeNumber = episodeNumber,
-        coverData = AnimeCover(animeId, -1, true, coverUrl, coverLastModified)
+        coverData = AnimeCover(animeId, -1, true, coverUrl, coverLastModified),
     )
 
     private fun CachedRecommendationItem.toRecommendationData() = RecommendationData(
@@ -241,7 +239,7 @@ class HomeHubScreenModel(
         coverUrl = coverUrl,
         coverLastModified = coverLastModified,
         totalCount = totalCount,
-        seenCount = seenCount
+        seenCount = seenCount,
     )
 
     private fun AnimeHistoryWithRelations.toHeroData() = HeroData(
@@ -249,14 +247,14 @@ class HomeHubScreenModel(
         title = title,
         episodeNumber = episodeNumber,
         coverData = coverData,
-        episodeId = episodeId
+        episodeId = episodeId,
     )
 
     private fun AnimeHistoryWithRelations.toHistoryData() = HistoryData(
         animeId = animeId,
         title = title,
         episodeNumber = episodeNumber,
-        coverData = coverData
+        coverData = coverData,
     )
 
     private fun LibraryAnime.toRecommendationData() = RecommendationData(
@@ -265,7 +263,7 @@ class HomeHubScreenModel(
         coverUrl = anime.thumbnailUrl,
         coverLastModified = anime.coverLastModified,
         totalCount = totalCount,
-        seenCount = seenCount
+        seenCount = seenCount,
     )
 
     private fun HeroData.toCached() = CachedHeroItem(
@@ -274,7 +272,7 @@ class HomeHubScreenModel(
         episodeNumber = episodeNumber,
         coverUrl = coverData.url,
         coverLastModified = coverData.lastModified,
-        episodeId = episodeId
+        episodeId = episodeId,
     )
 
     private fun HistoryData.toCached() = CachedHistoryItem(
@@ -282,7 +280,7 @@ class HomeHubScreenModel(
         title = title,
         episodeNumber = episodeNumber,
         coverUrl = coverData.url,
-        coverLastModified = coverData.lastModified
+        coverLastModified = coverData.lastModified,
     )
 
     private fun RecommendationData.toCached() = CachedRecommendationItem(
@@ -291,7 +289,7 @@ class HomeHubScreenModel(
         coverUrl = coverUrl,
         coverLastModified = coverLastModified,
         totalCount = totalCount,
-        seenCount = seenCount
+        seenCount = seenCount,
     )
 
     companion object {

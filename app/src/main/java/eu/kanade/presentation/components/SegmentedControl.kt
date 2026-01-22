@@ -1,7 +1,6 @@
 package eu.kanade.presentation.components
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -38,21 +37,21 @@ fun AniviewSegmentedControl(
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
-    
+
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(48.dp)
             .background(
                 color = Color.White.copy(alpha = 0.05f),
-                shape = RoundedCornerShape(24.dp)
+                shape = RoundedCornerShape(24.dp),
             )
             .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(0.dp)
+        horizontalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         items.forEachIndexed { index, item ->
             val isSelected = selectedIndex == index
-            
+
             val backgroundColor by animateColorAsState(
                 targetValue = if (isSelected) {
                     Color(0xFF1E3A5F) // Dark blue background for selected
@@ -60,9 +59,9 @@ fun AniviewSegmentedControl(
                     Color.Transparent
                 },
                 animationSpec = tween(durationMillis = 200),
-                label = "segmentBackgroundColor"
+                label = "segmentBackgroundColor",
             )
-            
+
             val textColor by animateColorAsState(
                 targetValue = if (isSelected) {
                     colors.accent // Electric blue for selected text
@@ -70,9 +69,9 @@ fun AniviewSegmentedControl(
                     colors.textSecondary
                 },
                 animationSpec = tween(durationMillis = 200),
-                label = "segmentTextColor"
+                label = "segmentTextColor",
             )
-            
+
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -80,13 +79,13 @@ fun AniviewSegmentedControl(
                     .clip(RoundedCornerShape(20.dp))
                     .background(backgroundColor)
                     .clickable { onItemSelected(index) },
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = item,
                     color = textColor,
                     fontSize = 15.sp,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                 )
             }
         }
@@ -104,36 +103,36 @@ fun AniviewSegmentedControlCompact(
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
-    
+
     Row(
         modifier = modifier
             .height(36.dp)
             .background(
                 color = Color.White.copy(alpha = 0.05f),
-                shape = RoundedCornerShape(18.dp)
+                shape = RoundedCornerShape(18.dp),
             )
             .padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(0.dp)
+        horizontalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         items.forEachIndexed { index, item ->
             val isSelected = selectedIndex == index
-            
+
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
                     .clip(RoundedCornerShape(15.dp))
                     .background(
-                        if (isSelected) Color(0xFF1E3A5F) else Color.Transparent
+                        if (isSelected) Color(0xFF1E3A5F) else Color.Transparent,
                     )
                     .clickable { onItemSelected(index) },
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = item,
                     color = if (isSelected) colors.accent else colors.textSecondary,
                     fontSize = 13.sp,
-                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                 )
             }
         }

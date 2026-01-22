@@ -120,5 +120,5 @@ data class CachedMangaRecommendationItem(
     val coverUrl: String?,
     val coverLastModified: Long,
     val totalCount: Long = 0,
-    val unreadCount: Long = 0
+    val unreadCount: Long = 0,
 )

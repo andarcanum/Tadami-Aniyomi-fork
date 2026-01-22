@@ -11,8 +11,8 @@
       "type": "UNIVERSAL",
       "filters": [],
       "attributes": [],
-      "versionCode": 133,
-      "versionName": "0.20",
+      "versionCode": 134,
+      "versionName": "0.21",
       "outputFile": "app-universal-release.apk"
     },
     {
@@ -24,22 +24,9 @@
         }
       ],
       "attributes": [],
-      "versionCode": 133,
-      "versionName": "0.20",
+      "versionCode": 134,
+      "versionName": "0.21",
       "outputFile": "app-arm64-v8a-release.apk"
-    },
-    {
-      "type": "ONE_OF_MANY",
-      "filters": [
-        {
-          "filterType": "ABI",
-          "value": "x86"
-        }
-      ],
-      "attributes": [],
-      "versionCode": 133,
-      "versionName": "0.20",
-      "outputFile": "app-x86-release.apk"
     },
     {
       "type": "ONE_OF_MANY",
@@ -50,9 +37,22 @@
         }
       ],
       "attributes": [],
-      "versionCode": 133,
-      "versionName": "0.20",
+      "versionCode": 134,
+      "versionName": "0.21",
       "outputFile": "app-armeabi-v7a-release.apk"
+    },
+    {
+      "type": "ONE_OF_MANY",
+      "filters": [
+        {
+          "filterType": "ABI",
+          "value": "x86"
+        }
+      ],
+      "attributes": [],
+      "versionCode": 134,
+      "versionName": "0.21",
+      "outputFile": "app-x86-release.apk"
     },
     {
       "type": "ONE_OF_MANY",
@@ -63,8 +63,8 @@
         }
       ],
       "attributes": [],
-      "versionCode": 133,
-      "versionName": "0.20",
+      "versionCode": 134,
+      "versionName": "0.21",
       "outputFile": "app-x86_64-release.apk"
     }
   ],
@@ -76,8 +76,8 @@
       "baselineProfiles": [
         "baselineProfiles/1/app-universal-release.dm",
         "baselineProfiles/1/app-arm64-v8a-release.dm",
-        "baselineProfiles/1/app-x86-release.dm",
         "baselineProfiles/1/app-armeabi-v7a-release.dm",
+        "baselineProfiles/1/app-x86-release.dm",
         "baselineProfiles/1/app-x86_64-release.dm"
       ]
     },
@@ -87,8 +87,8 @@
       "baselineProfiles": [
         "baselineProfiles/0/app-universal-release.dm",
         "baselineProfiles/0/app-arm64-v8a-release.dm",
-        "baselineProfiles/0/app-x86-release.dm",
         "baselineProfiles/0/app-armeabi-v7a-release.dm",
+        "baselineProfiles/0/app-x86-release.dm",
         "baselineProfiles/0/app-x86_64-release.dm"
       ]
     }

@@ -1,11 +1,25 @@
 package eu.kanade.presentation.reader.settings
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsScreenModel
 import tachiyomi.i18n.MR
@@ -44,6 +58,15 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
     val flashColorPref = screenModel.preferences.flashColor()
     val flashColor by flashColorPref.collectAsState()
 
+    var showNavigatorSettings by remember { mutableStateOf(false) }
+
+    if (showNavigatorSettings) {
+        NavigatorSettingsDialog(
+            onDismissRequest = { showNavigatorSettings = false },
+            screenModel = screenModel,
+        )
+    }
+
     SettingsChipRow(MR.strings.pref_reader_theme) {
         themes.map { (labelRes, value) ->
             FilterChip(
@@ -58,6 +81,26 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
         label = stringResource(MR.strings.pref_show_page_number),
         pref = screenModel.preferences.showPageNumber(),
     )
+
+    // Navigator settings button
+    Row(
+        modifier = Modifier
+            .clickable { showNavigatorSettings = true }
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = stringResource(MR.strings.pref_navigator_settings),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.ArrowForwardIos,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 
     CheckboxItem(
         label = stringResource(MR.strings.pref_fullscreen),

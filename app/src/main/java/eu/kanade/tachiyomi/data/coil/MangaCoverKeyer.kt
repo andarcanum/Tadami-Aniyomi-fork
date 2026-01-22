@@ -24,9 +24,9 @@ class MangaCoverKeyer(
 ) : Keyer<MangaCover> {
     override fun key(data: MangaCover, options: Options): String {
         return if (coverCache.getCustomCoverFile(data.mangaId).exists()) {
-            "manga;${data.mangaId}"
+            "manga;${data.mangaId};${data.lastModified}"
         } else {
-            "manga;${data.url}"
+            "manga;${data.url};${data.lastModified}"
         }
     }
 }

@@ -172,6 +172,38 @@ class ReaderPreferences(
         false,
     )
 
+    // region Navigator (Chapter progress bar) settings
+
+    fun showNavigator() = preferenceStore.getBoolean("pref_show_navigator", true)
+
+    fun navigatorShowPageNumbers() = preferenceStore.getBoolean(
+        "pref_navigator_show_page_numbers",
+        true,
+    )
+
+    fun navigatorShowChapterButtons() = preferenceStore.getBoolean(
+        "pref_navigator_show_chapter_buttons",
+        true,
+    )
+
+    fun navigatorSliderColor() = preferenceStore.getInt("pref_navigator_slider_color", 0)
+
+    fun navigatorBackgroundAlpha() = preferenceStore.getInt("pref_navigator_background_alpha", 90)
+
+    fun navigatorHeight() = preferenceStore.getEnum(
+        "pref_navigator_height",
+        NavigatorHeight.NORMAL,
+    )
+
+    fun navigatorCornerRadius() = preferenceStore.getInt("pref_navigator_corner_radius", 24)
+
+    fun navigatorShowTickMarks() = preferenceStore.getBoolean(
+        "pref_navigator_show_tick_marks",
+        true,
+    )
+
+    // endregion
+
     // endregion
 
     enum class FlashColor {
@@ -200,6 +232,12 @@ class ReaderPreferences(
         HIGH(13),
         LOW(31),
         LOWEST(47),
+    }
+
+    enum class NavigatorHeight(val titleRes: StringResource, val heightDp: Int) {
+        COMPACT(MR.strings.navigator_height_compact, 40),
+        NORMAL(MR.strings.navigator_height_normal, 48),
+        LARGE(MR.strings.navigator_height_large, 56),
     }
 
     companion object {

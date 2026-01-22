@@ -496,6 +496,21 @@
     <string name="pref_lowest">Lowest</string>
     <string name="pref_webtoon_disable_zoom_out">Disable zoom out</string>
 
+    <!-- Navigator (Page slider) settings -->
+    <string name="pref_navigator_settings">Page slider</string>
+    <string name="pref_show_navigator">Show page slider</string>
+    <string name="pref_navigator_show_page_numbers">Show page numbers</string>
+    <string name="pref_navigator_show_chapter_buttons">Show chapter buttons</string>
+    <string name="pref_navigator_slider_color">Slider color</string>
+    <string name="pref_navigator_background_alpha">Background opacity</string>
+    <string name="pref_navigator_height">Navigator height</string>
+    <string name="pref_navigator_corner_radius">Corner radius</string>
+    <string name="navigator_height_compact">Compact</string>
+    <string name="navigator_height_normal">Normal</string>
+    <string name="navigator_height_large">Large</string>
+    <string name="pref_use_theme_color">Use theme color</string>
+    <string name="pref_navigator_show_tick_marks">Show page markers</string>
+
       <!-- Downloads section -->
     <string name="pref_category_delete_chapters">Delete chapters</string>
     <string name="pref_remove_after_marked_as_read">After manually marked as read</string>

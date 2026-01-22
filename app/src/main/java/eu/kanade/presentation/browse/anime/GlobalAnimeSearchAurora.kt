@@ -19,37 +19,36 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import eu.kanade.presentation.theme.AuroraTheme
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.entries.anime.model.Anime
 
 @Composable
 fun GlobalAnimeSearchAuroraContent(
     items: List<List<Anime>>,
     onAnimeClicked: (Long) -> Unit,
-    contentPadding: PaddingValues
+    contentPadding: PaddingValues,
 ) {
     val colors = AuroraTheme.colors
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.backgroundGradient)
+            .background(colors.backgroundGradient),
     ) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             contentPadding = contentPadding,
             verticalArrangement = Arrangement.spacedBy(16.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier.padding(horizontal = 16.dp),
         ) {
             item(span = { GridItemSpan(2) }) {
                 androidx.compose.foundation.layout.Column {
@@ -59,31 +58,31 @@ fun GlobalAnimeSearchAuroraContent(
                         style = MaterialTheme.typography.headlineMedium,
                         color = colors.textPrimary,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 16.dp)
+                        modifier = Modifier.padding(bottom = 16.dp),
                     )
                 }
             }
-            
+
             val allAnime = items.flatten()
-            
+
             items(allAnime) { anime ->
                 androidx.compose.foundation.layout.Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onAnimeClicked(anime.id) }
+                        .clickable { onAnimeClicked(anime.id) },
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .aspectRatio(0.7f)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(colors.cardBackground)
+                            .background(colors.cardBackground),
                     ) {
                         AsyncImage(
                             model = anime.thumbnailUrl,
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier.fillMaxSize(),
                         )
                     }
                     Text(
@@ -93,7 +92,7 @@ fun GlobalAnimeSearchAuroraContent(
                         fontSize = 14.sp,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 8.dp)
+                        modifier = Modifier.padding(top = 8.dp),
                     )
                 }
             }

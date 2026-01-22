@@ -2,7 +2,6 @@ package eu.kanade.tachiyomi.di
 
 import android.app.Application
 import android.os.Build
-import androidx.core.content.ContextCompat
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver

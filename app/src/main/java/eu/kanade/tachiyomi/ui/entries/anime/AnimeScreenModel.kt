@@ -252,7 +252,7 @@ class AnimeScreenModel(
                 setAnimeDefaultSeasonFlags.await(anime)
             }
 
-            val needRefreshInfo = !anime.initialized
+            val needRefreshInfo = !anime.initialized || isFromSource
             val needRefreshEpisode = episodes.isEmpty() && anime.fetchType == FetchType.Episodes
             val needRefreshSeason = seasons.isEmpty() && anime.fetchType == FetchType.Seasons
 
@@ -1550,7 +1550,11 @@ class AnimeScreenModel(
         data object SeasonSettingsSheet : Dialog
         data object TrackSheet : Dialog
         data object FullImages : Dialog
-        data class SelectDubbing(val availableDubbings: List<String>, val currentDubbing: String, val currentQuality: String) : Dialog
+        data class SelectDubbing(
+            val availableDubbings: List<String>,
+            val currentDubbing: String,
+            val currentQuality: String,
+        ) : Dialog
     }
 
     fun dismissDialog() {

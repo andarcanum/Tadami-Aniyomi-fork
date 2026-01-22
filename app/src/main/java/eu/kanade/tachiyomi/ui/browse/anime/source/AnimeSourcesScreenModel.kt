@@ -10,7 +10,6 @@ import eu.kanade.domain.source.anime.interactor.ToggleAnimeSourcePin
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.presentation.browse.anime.AnimeSourceUiModel
 import eu.kanade.tachiyomi.util.system.LAST_USED_KEY
-import eu.kanade.tachiyomi.util.system.PINNED_KEY
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
@@ -72,7 +71,7 @@ class AnimeSourcesScreenModel(
         }
 
         // 2. Filter by query
-        val filtered = others.filter { 
+        val filtered = others.filter {
             query.isBlank() || it.name.contains(query, ignoreCase = true) || it.lang.contains(query, ignoreCase = true)
         }
 
@@ -98,17 +97,17 @@ class AnimeSourcesScreenModel(
             if (lang in collapsed && query.isBlank()) {
                 listOf(AnimeSourceUiModel.Header(lang, isCollapsed = true))
             } else {
-                listOf(AnimeSourceUiModel.Header(lang, isCollapsed = false)) + 
-                sources.map { AnimeSourceUiModel.Item(it) }
+                listOf(AnimeSourceUiModel.Header(lang, isCollapsed = false)) +
+                    sources.map { AnimeSourceUiModel.Item(it) }
             }
         }
 
-        mutableState.update { 
+        mutableState.update {
             it.copy(
                 isLoading = false,
                 items = uiItems.toImmutableList(),
-                pinnedItems = pinned.toImmutableList()
-            ) 
+                pinnedItems = pinned.toImmutableList(),
+            )
         }
     }
 

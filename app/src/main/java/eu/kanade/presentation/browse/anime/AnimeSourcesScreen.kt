@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -43,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.browse.anime.components.BaseAnimeSourceItem
+import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.ui.browse.anime.source.AnimeSourcesScreenModel
 import eu.kanade.tachiyomi.ui.browse.anime.source.browse.BrowseAnimeSourceScreenModel.Listing
 import eu.kanade.tachiyomi.util.system.LocaleHelper
@@ -71,6 +73,12 @@ fun AnimeSourcesScreen(
     onChangeSearchQuery: ((String) -> Unit)? = null,
     onToggleLanguage: ((String) -> Unit)? = null,
 ) {
+    val colors = AuroraTheme.colors
+    val searchBackground = if (colors.isDark) {
+        colors.glass.copy(alpha = 0.12f)
+    } else {
+        colors.glass.copy(alpha = 0.03f)
+    }
     when {
         state.isLoading -> LoadingScreen(Modifier.padding(contentPadding))
         state.isEmpty -> EmptyScreen(
@@ -85,36 +93,27 @@ fun AnimeSourcesScreen(
                 if (searchQuery != null && onChangeSearchQuery != null) {
                     item(key = "search") {
                         var isSearchActive by rememberSaveable { mutableStateOf(false) }
-                        // Keep active if there is text
                         val active = isSearchActive || searchQuery.isNotEmpty()
 
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
                         ) {
                             if (!active) {
-                                // Collapsed - Beautiful Button
-                                Row(
+                                // Collapsed - Icon Button
+                                Box(
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(48.dp)
+                                        .size(44.dp)
                                         .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                                        .clickable { isSearchActive = true }
-                                        .padding(horizontal = 16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .background(searchBackground)
+                                        .clickable { isSearchActive = true },
+                                    contentAlignment = Alignment.Center,
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.Search,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text(
-                                        text = stringResource(MR.strings.action_search),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        tint = colors.accent,
                                     )
                                 }
                             } else {
@@ -122,12 +121,14 @@ fun AnimeSourcesScreen(
                                 TextField(
                                     value = searchQuery,
                                     onValueChange = onChangeSearchQuery,
-                                    placeholder = { Text(stringResource(MR.strings.action_search)) },
+                                    placeholder = {
+                                        Text(stringResource(MR.strings.action_search), color = colors.textSecondary)
+                                    },
                                     leadingIcon = {
                                         Icon(
                                             Icons.Filled.Search,
                                             null,
-                                            tint = MaterialTheme.colorScheme.primary
+                                            tint = colors.accent,
                                         )
                                     },
                                     trailingIcon = {
@@ -135,7 +136,7 @@ fun AnimeSourcesScreen(
                                             onChangeSearchQuery("")
                                             isSearchActive = false
                                         }) {
-                                            Icon(Icons.Filled.Close, null)
+                                            Icon(Icons.Filled.Close, null, tint = colors.textSecondary)
                                         }
                                     },
                                     modifier = Modifier
@@ -143,13 +144,16 @@ fun AnimeSourcesScreen(
                                         .height(56.dp),
                                     shape = CircleShape,
                                     colors = TextFieldDefaults.colors(
-                                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                        focusedContainerColor = searchBackground,
+                                        unfocusedContainerColor = searchBackground,
+                                        focusedTextColor = colors.textPrimary,
+                                        unfocusedTextColor = colors.textPrimary,
+                                        cursorColor = colors.accent,
                                         focusedIndicatorColor = Color.Transparent,
                                         unfocusedIndicatorColor = Color.Transparent,
-                                        disabledIndicatorColor = Color.Transparent
+                                        disabledIndicatorColor = Color.Transparent,
                                     ),
-                                    singleLine = true
+                                    singleLine = true,
                                 )
                             }
                         }
@@ -163,11 +167,11 @@ fun AnimeSourcesScreen(
                             Text(
                                 text = stringResource(MR.strings.pinned_sources),
                                 style = MaterialTheme.typography.header,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                             )
                             LazyRow(
                                 contentPadding = PaddingValues(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 items(state.pinnedItems, key = { "pinned-${it.key()}" }) { source ->
                                     AnimeSourceItem(
@@ -205,7 +209,7 @@ fun AnimeSourcesScreen(
                                 modifier = Modifier.animateItem(),
                                 language = model.language,
                                 isCollapsed = model.isCollapsed,
-                                onToggle = { onToggleLanguage?.invoke(model.language) }
+                                onToggle = { onToggleLanguage?.invoke(model.language) },
                             )
                         }
                         is AnimeSourceUiModel.Item -> AnimeSourceItem(
@@ -239,7 +243,7 @@ private fun AnimeSourceHeader(
                 vertical = MaterialTheme.padding.small,
             ),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(
             text = LocaleHelper.getSourceDisplayName(language, context),
@@ -248,7 +252,7 @@ private fun AnimeSourceHeader(
         Icon(
             imageVector = if (isCollapsed) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

@@ -28,7 +28,7 @@ class AppUpdateJob(private val context: Context, workerParams: WorkerParameters)
         return withIOContext {
             try {
                 logcat(LogPriority.INFO) { "Checking for app updates..." }
-                
+
                 val result = AppUpdateChecker().checkForUpdate(context, forceCheck = true)
 
                 when (result) {
@@ -57,7 +57,7 @@ class AppUpdateJob(private val context: Context, workerParams: WorkerParameters)
          * Sets up the periodic app update check task.
          *
          * @param context Application context
-         * @param intervalHours Update check interval in hours. 
+         * @param intervalHours Update check interval in hours.
          *                      If null, reads from preferences.
          *                      -1 = on startup only (no periodic work)
          *                      0 = disabled

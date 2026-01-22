@@ -29,7 +29,7 @@ fun Modifier.glowEffect(
                 .createBlurEffect(
                     blurRadius.toPx(),
                     blurRadius.toPx(),
-                    android.graphics.Shader.TileMode.CLAMP
+                    android.graphics.Shader.TileMode.CLAMP,
                 )
                 .asComposeRenderEffect()
         }
@@ -39,7 +39,7 @@ fun Modifier.glowEffect(
             elevation = blurRadius,
             shape = shape ?: androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
             ambientColor = color.copy(alpha = alpha),
-            spotColor = color.copy(alpha = alpha)
+            spotColor = color.copy(alpha = alpha),
         )
     }
 }
@@ -53,7 +53,7 @@ fun Modifier.cyanGlow(
 ): Modifier = glowEffect(
     color = Color(0xFF00E5FF),
     blurRadius = blurRadius,
-    alpha = alpha
+    alpha = alpha,
 )
 
 /**
@@ -65,7 +65,7 @@ fun Modifier.electricBlueGlow(
 ): Modifier = glowEffect(
     color = Color(0xFF0095FF),
     blurRadius = blurRadius,
-    alpha = alpha
+    alpha = alpha,
 )
 
 /**
@@ -77,7 +77,7 @@ fun Modifier.purpleGlow(
 ): Modifier = glowEffect(
     color = Color(0xFF7C4DFF),
     blurRadius = blurRadius,
-    alpha = alpha
+    alpha = alpha,
 )
 
 /**
@@ -91,9 +91,9 @@ fun Modifier.gradientBorderGlow(
     alpha: Float = 0.7f,
 ): Modifier = this.drawBehind {
     val stroke = androidx.compose.ui.graphics.drawscope.Stroke(
-        width = borderWidth.toPx()
+        width = borderWidth.toPx(),
     )
-    
+
     // Draw outer glow layers
     for (i in 1..3) {
         val glowAlpha = alpha / (i * 1.5f)
@@ -103,22 +103,22 @@ fun Modifier.gradientBorderGlow(
                 style = stroke,
                 size = size.copy(
                     width = size.width + (glowRadius.toPx() * i / 3),
-                    height = size.height + (glowRadius.toPx() * i / 3)
+                    height = size.height + (glowRadius.toPx() * i / 3),
                 ),
                 topLeft = androidx.compose.ui.geometry.Offset(
                     x = -(glowRadius.toPx() * i / 6),
-                    y = -(glowRadius.toPx() * i / 6)
+                    y = -(glowRadius.toPx() * i / 6),
                 ),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(24.dp.toPx())
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(24.dp.toPx()),
             )
         }
     }
-    
+
     // Draw main gradient border
     val brush = androidx.compose.ui.graphics.Brush.horizontalGradient(colors)
     drawRoundRect(
         brush = brush,
         style = stroke,
-        cornerRadius = androidx.compose.ui.geometry.CornerRadius(24.dp.toPx())
+        cornerRadius = androidx.compose.ui.geometry.CornerRadius(24.dp.toPx()),
     )
 }

@@ -120,7 +120,7 @@ fun AnimeScreenAuroraImpl(
     val anime = state.anime
     val episodes = state.episodeListItems
     val colors = AuroraTheme.colors
-    
+
     var descriptionExpanded by rememberSaveable { mutableStateOf(false) }
     var descriptionOverflows by remember { mutableStateOf(false) }
 
@@ -244,7 +244,7 @@ fun AnimeScreenAuroraImpl(
                             color = colors.textPrimary,
                             lineHeight = 36.sp
                         )
-                        
+
                         // Genre
                         if (anime.genre.isNullOrEmpty().not()) {
                             Row(
@@ -301,7 +301,7 @@ fun AnimeScreenAuroraImpl(
                                 descriptionOverflows = result.hasVisualOverflow || descriptionExpanded
                             },
                         )
-                        
+
                         if (descriptionOverflows || descriptionExpanded) {
                             Icon(
                                 imageVector = if (descriptionExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
@@ -401,7 +401,7 @@ fun AnimeScreenAuroraImpl(
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize()
                                 )
-                                
+
                                 if (episode.seen) {
                                     Box(
                                         modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)),
@@ -411,9 +411,9 @@ fun AnimeScreenAuroraImpl(
                                     }
                                 }
                             }
-                            
+
                             Spacer(modifier = Modifier.width(16.dp))
-                            
+
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = episode.name,

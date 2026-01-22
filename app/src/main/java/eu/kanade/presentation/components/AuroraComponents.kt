@@ -3,24 +3,20 @@ package eu.kanade.presentation.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import eu.kanade.presentation.theme.AuroraTheme
 
 @Composable
 fun AuroraBackground(
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     val colors = AuroraTheme.colors
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(colors.backgroundGradient)
+            .background(colors.backgroundGradient),
     ) {
         content()
     }
@@ -29,7 +25,7 @@ fun AuroraBackground(
 @Composable
 fun AuroraHeader(
     title: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     // Reusable header component if needed, currently TopBars are custom per screen
 }

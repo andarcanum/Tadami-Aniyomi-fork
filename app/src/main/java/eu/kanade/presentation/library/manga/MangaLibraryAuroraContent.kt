@@ -1,7 +1,6 @@
 package eu.kanade.presentation.library.manga
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +20,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MoreVert
@@ -45,12 +43,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalContext
-import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import eu.kanade.presentation.components.AuroraCard
 import eu.kanade.presentation.components.AuroraTabRow
@@ -74,10 +70,10 @@ fun MangaLibraryAuroraContent(
 ) {
     val colors = AuroraTheme.colors
     val gridState = rememberLazyGridState()
-    
+
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
-    
+
     val filteredItems = if (searchQuery.isBlank()) {
         items
     } else {
@@ -87,7 +83,7 @@ fun MangaLibraryAuroraContent(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.backgroundGradient)
+            .background(colors.backgroundGradient),
     ) {
         LazyVerticalGrid(
             state = gridState,
@@ -95,7 +91,7 @@ fun MangaLibraryAuroraContent(
             contentPadding = contentPadding,
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier.padding(horizontal = 16.dp),
         ) {
             item(span = { GridItemSpan(3) }) {
                 InlineLibraryHeader(
@@ -103,15 +99,18 @@ fun MangaLibraryAuroraContent(
                     searchQuery = searchQuery,
                     onSearchQueryChange = { searchQuery = it },
                     onSearchClick = { isSearchActive = true },
-                    onSearchClose = { searchQuery = ""; isSearchActive = false },
+                    onSearchClose = {
+                        searchQuery = ""
+                        isSearchActive = false
+                    },
                     onFilterClick = onFilterClicked,
                     onRefresh = onRefresh,
                     onGlobalUpdate = onGlobalUpdate,
-                    onOpenRandomEntry = onOpenRandomEntry
+                    onOpenRandomEntry = onOpenRandomEntry,
                 )
             }
 
-                                                items(filteredItems, key = { it.manga.id }) { item ->
+            items(filteredItems, key = { it.manga.id }) { item ->
                 val context = LocalContext.current
                 AuroraCard(
 
@@ -126,9 +125,9 @@ fun MangaLibraryAuroraContent(
                     },
                     subtitle = "${item.totalChapters - item.unreadCount}/${item.totalChapters} гл.",
 
-                                                        coverHeightFraction = 0.6f,
+                    coverHeightFraction = 0.6f,
 
-                                                        badge = if (item.unreadCount > 0) {
+                    badge = if (item.unreadCount > 0) {
                         {
                             Text(
                                 text = item.unreadCount.toString(),
@@ -137,11 +136,13 @@ fun MangaLibraryAuroraContent(
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier
                                     .background(colors.accent, RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
                             )
                         }
-                    } else null,
-                    onClick = { onMangaClicked(item.manga.id) }
+                    } else {
+                        null
+                    },
+                    onClick = { onMangaClicked(item.manga.id) },
                 )
             }
         }
@@ -158,21 +159,21 @@ private fun InlineLibraryHeader(
     onFilterClick: () -> Unit,
     onRefresh: () -> Unit,
     onGlobalUpdate: () -> Unit,
-    onOpenRandomEntry: () -> Unit
+    onOpenRandomEntry: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
     val tabState = LocalTabState.current
     var showMenu by remember { mutableStateOf(false) }
-    
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 16.dp)
+            .padding(vertical = 16.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             if (isSearchActive) {
                 // Search TextField
@@ -193,11 +194,11 @@ private fun InlineLibraryHeader(
                         focusedTextColor = colors.textPrimary,
                         unfocusedTextColor = colors.textPrimary,
                         focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent
+                        unfocusedIndicatorColor = Color.Transparent,
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(12.dp)),
                 )
             } else {
                 // Title
@@ -205,9 +206,9 @@ private fun InlineLibraryHeader(
                     text = stringResource(AYMR.strings.aurora_library),
                     style = MaterialTheme.typography.headlineMedium,
                     color = colors.textPrimary,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
                 )
-                
+
                 // Icons row
                 Row {
                     IconButton(onClick = onSearchClick) {
@@ -222,7 +223,7 @@ private fun InlineLibraryHeader(
                         }
                         DropdownMenu(
                             expanded = showMenu,
-                            onDismissRequest = { showMenu = false }
+                            onDismissRequest = { showMenu = false },
                         ) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(MR.strings.action_update_library)) },
@@ -232,7 +233,7 @@ private fun InlineLibraryHeader(
                                 },
                                 leadingIcon = {
                                     Icon(Icons.Filled.Refresh, null)
-                                }
+                                },
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(MR.strings.pref_category_library_update)) },
@@ -242,7 +243,7 @@ private fun InlineLibraryHeader(
                                 },
                                 leadingIcon = {
                                     Icon(Icons.Filled.Refresh, null)
-                                }
+                                },
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(MR.strings.action_open_random_manga)) },
@@ -252,14 +253,14 @@ private fun InlineLibraryHeader(
                                 },
                                 leadingIcon = {
                                     Icon(Icons.Filled.Shuffle, null)
-                                }
+                                },
                             )
                         }
                     }
                 }
             }
         }
-        
+
         // Tab Switcher (only if more than 1 tab)
         if (tabState != null && tabState.tabs.size > 1) {
             Spacer(Modifier.height(12.dp))
@@ -267,7 +268,7 @@ private fun InlineLibraryHeader(
                 tabs = tabState.tabs,
                 selectedIndex = tabState.selectedIndex,
                 onTabSelected = tabState.onTabSelected,
-                scrollable = false
+                scrollable = false,
             )
         }
     }

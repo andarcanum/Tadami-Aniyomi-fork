@@ -26,11 +26,17 @@ class HomeHubFastCache(context: Context) {
 
         val state = CachedHomeState(
             hero = heroJson?.let { runCatching { json.decodeFromString<CachedHeroItem>(it) }.getOrNull() },
-            history = historyJson?.let { runCatching { json.decodeFromString<List<CachedHistoryItem>>(it) }.getOrNull() } ?: emptyList(),
-            recommendations = recommendationsJson?.let { runCatching { json.decodeFromString<List<CachedRecommendationItem>>(it) }.getOrNull() } ?: emptyList(),
+            history =
+            historyJson?.let { runCatching { json.decodeFromString<List<CachedHistoryItem>>(it) }.getOrNull() }
+                ?: emptyList(),
+            recommendations =
+            recommendationsJson?.let {
+                runCatching { json.decodeFromString<List<CachedRecommendationItem>>(it) }.getOrNull()
+            }
+                ?: emptyList(),
             userName = userName,
             userAvatar = userAvatar,
-            isInitialized = initialized
+            isInitialized = initialized,
         )
 
         memoryCache = state
@@ -84,7 +90,7 @@ data class CachedHomeState(
     val recommendations: List<CachedRecommendationItem> = emptyList(),
     val userName: String = "Зритель",
     val userAvatar: String = "",
-    val isInitialized: Boolean = false
+    val isInitialized: Boolean = false,
 ) {
     val isEmpty: Boolean
         get() = hero == null && history.isEmpty() && recommendations.isEmpty()
@@ -97,7 +103,7 @@ data class CachedHeroItem(
     val episodeNumber: Double,
     val coverUrl: String?,
     val coverLastModified: Long,
-    val episodeId: Long
+    val episodeId: Long,
 )
 
 @Serializable
@@ -106,7 +112,7 @@ data class CachedHistoryItem(
     val title: String,
     val episodeNumber: Double,
     val coverUrl: String?,
-    val coverLastModified: Long
+    val coverLastModified: Long,
 )
 
 @Serializable
@@ -116,5 +122,5 @@ data class CachedRecommendationItem(
     val coverUrl: String?,
     val coverLastModified: Long,
     val totalCount: Long = 0,
-    val seenCount: Long = 0
+    val seenCount: Long = 0,
 )

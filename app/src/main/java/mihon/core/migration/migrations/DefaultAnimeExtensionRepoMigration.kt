@@ -1,11 +1,8 @@
 package mihon.core.migration.migrations
 
-import logcat.LogPriority
 import mihon.core.migration.Migration
 import mihon.core.migration.MigrationContext
-import mihon.domain.extensionrepo.anime.interactor.CreateAnimeExtensionRepo
 import tachiyomi.core.common.util.lang.withIOContext
-import tachiyomi.core.common.util.system.logcat
 
 class DefaultAnimeExtensionRepoMigration : Migration {
     override val version = Migration.ALWAYS

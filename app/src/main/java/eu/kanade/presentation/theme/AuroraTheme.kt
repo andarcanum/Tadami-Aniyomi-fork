@@ -32,23 +32,23 @@ data class AuroraColors(
 ) {
     val backgroundGradient: Brush
         get() = Brush.verticalGradient(listOf(gradientStart, gradientEnd))
-    
+
     val cardGradient: Brush
         get() = Brush.verticalGradient(
             listOf(
                 gradientStart.copy(alpha = 0.85f),
                 gradientEnd.copy(alpha = 0.95f),
-                gradientEnd
-            )
+                gradientEnd,
+            ),
         )
-    
+
     // Aniview gradient: electric blue to purple
     val aniviewGradient: Brush
         get() = Brush.horizontalGradient(
             listOf(
                 glowEffect,
-                gradientPurple
-            )
+                gradientPurple,
+            ),
         )
 
     companion object {
@@ -61,7 +61,7 @@ data class AuroraColors(
         fun fromColorScheme(
             colorScheme: ColorScheme,
             isDark: Boolean,
-            isAmoled: Boolean = false
+            isAmoled: Boolean = false,
         ): AuroraColors {
             // For AMOLED mode in dark theme, use pure black
             val effectiveBackground = if (isDark && isAmoled) {
@@ -69,13 +69,13 @@ data class AuroraColors(
             } else {
                 colorScheme.background
             }
-            
+
             val effectiveSurface = if (isDark && isAmoled) {
                 Color(0xFF0C0C0C)
             } else {
                 colorScheme.surface
             }
-            
+
             // Generate gradient colors based on theme's primary color
             val gradientStart = if (isDark) {
                 if (isAmoled) {
@@ -89,9 +89,9 @@ data class AuroraColors(
                 // Light: gentle tint on light background
                 colorScheme.primary.copy(alpha = 0.12f).compositeOver(effectiveBackground)
             }
-            
+
             val gradientEnd = effectiveBackground
-            
+
             return AuroraColors(
                 accent = colorScheme.primary,
                 accentVariant = colorScheme.primaryContainer,
@@ -120,7 +120,7 @@ data class AuroraColors(
                 gradientPurple = colorScheme.tertiary,
             )
         }
-        
+
         // Legacy static instances for backwards compatibility and previews
         val Dark = AuroraColors(
             accent = AuroraColorScheme.aniviewElectricBlue,
@@ -168,7 +168,7 @@ object AuroraTheme {
     val colors: AuroraColors
         @Composable
         get() = LocalAuroraColors.current
-    
+
     @Composable
     fun colorsForCurrentTheme(): AuroraColors {
         return if (isSystemInDarkTheme()) AuroraColors.Dark else AuroraColors.Light

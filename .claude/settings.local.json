@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew tasks:*)",
+      "Skill(superpowers:brainstorming)",
+      "Bash(./gradlew assembleDebug:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}

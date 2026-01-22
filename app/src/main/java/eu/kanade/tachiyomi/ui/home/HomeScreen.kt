@@ -27,11 +27,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.contentDescription
-import eu.kanade.presentation.theme.AuroraTheme
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.util.fastForEach
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -40,7 +39,7 @@ import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabNavigator
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
-import eu.kanade.domain.ui.model.AppTheme
+import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.Screen
 import eu.kanade.presentation.util.isTabletUi
 import eu.kanade.tachiyomi.ui.browse.BrowseTab
@@ -131,7 +130,7 @@ object HomeScreen : Screen() {
                                         }
                                     } else {
                                         Modifier
-                                    }
+                                    },
                                 ) {
                                     navStyle.tabs.fastForEach {
                                         NavigationBarItem(it, isAurora)
@@ -232,15 +231,15 @@ object HomeScreen : Screen() {
         val navigator = LocalNavigator.currentOrThrow
         val scope = rememberCoroutineScope()
         val selected = tabNavigator.current::class == tab::class
-        
+
         val colors = if (isAurora) {
             val auroraColors = AuroraTheme.colors
             NavigationBarItemDefaults.colors(
                 selectedIconColor = auroraColors.accent,
                 selectedTextColor = auroraColors.accent,
-                indicatorColor = auroraColors.accent.copy(alpha = 0.1f),
-                unselectedIconColor = auroraColors.textSecondary,
-                unselectedTextColor = auroraColors.textSecondary
+                indicatorColor = auroraColors.accent.copy(alpha = 0.18f),
+                unselectedIconColor = auroraColors.textSecondary.copy(alpha = 0.5f),
+                unselectedTextColor = auroraColors.textSecondary.copy(alpha = 0.5f),
             )
         } else {
             NavigationBarItemDefaults.colors()
@@ -260,12 +259,13 @@ object HomeScreen : Screen() {
                 Text(
                     text = tab.options.title,
                     style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             },
             alwaysShowLabel = true,
-            colors = colors
+            colors = colors,
         )
     }
 
@@ -277,7 +277,7 @@ object HomeScreen : Screen() {
         val selected = tabNavigator.current::class == tab::class
         val theme by uiPreferences.appTheme().collectAsState()
         val isAurora = theme.isAuroraStyle
-        
+
         val colors = if (isAurora) {
             val auroraColors = AuroraTheme.colors
             androidx.compose.material3.NavigationRailItemDefaults.colors(
@@ -285,12 +285,12 @@ object HomeScreen : Screen() {
                 selectedTextColor = auroraColors.accent,
                 indicatorColor = auroraColors.accent.copy(alpha = 0.1f),
                 unselectedIconColor = auroraColors.textSecondary,
-                unselectedTextColor = auroraColors.textSecondary
+                unselectedTextColor = auroraColors.textSecondary,
             )
         } else {
             androidx.compose.material3.NavigationRailItemDefaults.colors()
         }
-        
+
         NavigationRailItem(
             selected = selected,
             onClick = {

@@ -27,20 +27,22 @@ import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.VideoSettings
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
-import eu.kanade.presentation.theme.AuroraTheme
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.ui.more.DownloadQueueState
-import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
 fun MoreScreenAurora(
@@ -56,19 +58,19 @@ fun MoreScreenAurora(
     onSettingsClick: () -> Unit,
     onAboutClick: () -> Unit,
     onStatsClick: () -> Unit,
-    onHelpClick: () -> Unit
+    onHelpClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.backgroundGradient)
+            .background(colors.backgroundGradient),
     ) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 16.dp),
         ) {
             item {
                 Spacer(modifier = Modifier.height(80.dp))
@@ -77,28 +79,34 @@ fun MoreScreenAurora(
                     style = MaterialTheme.typography.headlineMedium,
                     color = colors.textPrimary,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 24.dp)
+                    modifier = Modifier.padding(bottom = 24.dp),
                 )
             }
 
             item {
-                AuroraToggleItem(
-                    title = stringResource(AYMR.strings.aurora_downloaded_only),
-                    icon = Icons.Filled.CloudOff,
-                    checked = downloadedOnly,
-                    onCheckedChange = onDownloadedOnlyChange
+                AuroraSettingItem(
+                    title = stringResource(AYMR.strings.aurora_settings),
+                    icon = Icons.Filled.Settings,
+                    onClick = onSettingsClick,
                 )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                AuroraToggleItem(
-                    title = stringResource(AYMR.strings.aurora_incognito_mode),
-                    icon = Icons.Outlined.VisibilityOff,
-                    checked = incognitoMode,
-                    onCheckedChange = onIncognitoModeChange
+
+                AuroraSettingItem(
+                    title = stringResource(AYMR.strings.aurora_player_settings),
+                    icon = Icons.Outlined.VideoSettings,
+                    onClick = onPlayerSettingsClick,
                 )
-                
-                Spacer(modifier = Modifier.height(16.dp))
+
+                AuroraSettingItem(
+                    title = stringResource(AYMR.strings.aurora_statistics),
+                    icon = Icons.Filled.QueryStats,
+                    onClick = onStatsClick,
+                )
+
+                AuroraSettingItem(
+                    title = stringResource(AYMR.strings.aurora_data_storage),
+                    icon = Icons.Outlined.Storage,
+                    onClick = onDataStorageClick,
+                )
 
                 val downloadQueueState = downloadQueueStateProvider()
                 val downloadSubtitle = when (downloadQueueState) {
@@ -108,7 +116,9 @@ fun MoreScreenAurora(
                         if (pending == 0) {
                             stringResource(AYMR.strings.aurora_download_paused)
                         } else {
-                            "${stringResource(AYMR.strings.aurora_download_paused)} • ${stringResource(AYMR.strings.aurora_download_pending, pending)}"
+                            "${stringResource(
+                                AYMR.strings.aurora_download_paused,
+                            )} • ${stringResource(AYMR.strings.aurora_download_pending, pending)}"
                         }
                     }
                     is DownloadQueueState.Downloading -> {
@@ -119,51 +129,39 @@ fun MoreScreenAurora(
                     title = stringResource(AYMR.strings.aurora_downloads),
                     subtitle = downloadSubtitle,
                     icon = Icons.Filled.Download,
-                    onClick = onDownloadClick
+                    onClick = onDownloadClick,
                 )
-                
+
                 AuroraSettingItem(
                     title = stringResource(AYMR.strings.aurora_categories),
                     icon = Icons.AutoMirrored.Outlined.Label,
-                    onClick = onCategoriesClick
+                    onClick = onCategoriesClick,
                 )
-                
-                AuroraSettingItem(
-                    title = stringResource(AYMR.strings.aurora_statistics),
-                    icon = Icons.Filled.QueryStats,
-                    onClick = onStatsClick
+
+                AuroraToggleItem(
+                    title = stringResource(AYMR.strings.aurora_downloaded_only),
+                    icon = Icons.Filled.CloudOff,
+                    checked = downloadedOnly,
+                    onCheckedChange = onDownloadedOnlyChange,
                 )
-                
-                AuroraSettingItem(
-                    title = stringResource(AYMR.strings.aurora_data_storage),
-                    icon = Icons.Outlined.Storage,
-                    onClick = onDataStorageClick
+
+                AuroraToggleItem(
+                    title = stringResource(AYMR.strings.aurora_incognito_mode),
+                    icon = Icons.Outlined.VisibilityOff,
+                    checked = incognitoMode,
+                    onCheckedChange = onIncognitoModeChange,
                 )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                AuroraSettingItem(
-                    title = stringResource(AYMR.strings.aurora_settings),
-                    icon = Icons.Filled.Settings,
-                    onClick = onSettingsClick
-                )
-                
-                AuroraSettingItem(
-                    title = stringResource(AYMR.strings.aurora_player_settings),
-                    icon = Icons.Outlined.VideoSettings,
-                    onClick = onPlayerSettingsClick
-                )
-                
+
                 AuroraSettingItem(
                     title = stringResource(AYMR.strings.aurora_about),
                     icon = Icons.Filled.Info,
-                    onClick = onAboutClick
+                    onClick = onAboutClick,
                 )
-                
+
                 AuroraSettingItem(
                     title = stringResource(AYMR.strings.aurora_help),
                     icon = Icons.Filled.Help,
-                    onClick = onHelpClick
+                    onClick = onHelpClick,
                 )
             }
         }
@@ -175,10 +173,10 @@ fun AuroraSettingItem(
     title: String,
     icon: ImageVector,
     onClick: () -> Unit,
-    subtitle: String? = null
+    subtitle: String? = null,
 ) {
     val colors = AuroraTheme.colors
-    
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -187,13 +185,13 @@ fun AuroraSettingItem(
             .background(colors.glass)
             .clickable(onClick = onClick)
             .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
             tint = colors.accent,
-            modifier = Modifier.size(24.dp)
+            modifier = Modifier.size(24.dp),
         )
         Spacer(modifier = Modifier.width(16.dp))
         Column {
@@ -201,13 +199,13 @@ fun AuroraSettingItem(
                 text = title,
                 color = colors.textPrimary,
                 fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
             )
             if (subtitle != null) {
                 Text(
                     text = subtitle,
                     color = colors.textSecondary,
-                    fontSize = 13.sp
+                    fontSize = 13.sp,
                 )
             }
         }
@@ -219,10 +217,10 @@ fun AuroraToggleItem(
     title: String,
     icon: ImageVector,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
 ) {
     val colors = AuroraTheme.colors
-    
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -230,33 +228,35 @@ fun AuroraToggleItem(
             .clip(RoundedCornerShape(16.dp))
             .background(colors.glass)
             .clickable { onCheckedChange(!checked) }
-            .padding(16.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = colors.accent,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(24.dp),
             )
             Spacer(modifier = Modifier.width(16.dp))
             Text(
                 text = title,
                 color = colors.textPrimary,
                 fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
             )
         }
-        
-        androidx.compose.material3.Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = androidx.compose.material3.SwitchDefaults.colors(
-                checkedThumbColor = colors.accent,
-                checkedTrackColor = colors.accent.copy(alpha = 0.5f)
+
+        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+            androidx.compose.material3.Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                colors = androidx.compose.material3.SwitchDefaults.colors(
+                    checkedThumbColor = colors.accent,
+                    checkedTrackColor = colors.accent.copy(alpha = 0.5f),
+                ),
             )
-        )
+        }
     }
 }

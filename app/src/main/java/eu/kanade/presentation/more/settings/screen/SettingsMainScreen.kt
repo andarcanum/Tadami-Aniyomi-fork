@@ -41,7 +41,6 @@ import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.ui.UiPreferences
-import eu.kanade.domain.ui.model.AppTheme
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.more.settings.screen.about.AboutScreen
@@ -87,15 +86,15 @@ object SettingsMainScreen : Screen() {
         val backPress = LocalBackPress.currentOrThrow
         val uiPreferences = Injekt.get<UiPreferences>()
         val theme by uiPreferences.appTheme().collectAsState()
-        
+
         if (theme.isAuroraStyle && !twoPane) {
             SettingsAuroraContent(
                 navigator = navigator,
-                onBackClick = backPress::invoke
+                onBackClick = backPress::invoke,
             )
             return
         }
-        
+
         val containerColor = if (twoPane) getPalerSurface() else MaterialTheme.colorScheme.surface
         val topBarState = rememberTopAppBarState()
 

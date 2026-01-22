@@ -152,7 +152,6 @@ private fun OfficialRepoListItem(
     }
 }
 
-
 @Composable
 private fun ExtensionRepoListItem(
     repo: ExtensionRepo,

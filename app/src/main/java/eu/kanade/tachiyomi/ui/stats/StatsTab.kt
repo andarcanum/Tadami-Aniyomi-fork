@@ -6,10 +6,14 @@ import androidx.compose.animation.graphics.vector.AnimatedImageVector
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.TabbedScreen
+import eu.kanade.presentation.components.TabbedScreenAurora
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.main.MainActivity
@@ -18,11 +22,6 @@ import eu.kanade.tachiyomi.ui.stats.manga.mangaStatsTab
 import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
-
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import eu.kanade.domain.ui.UiPreferences
-import eu.kanade.presentation.components.TabbedScreenAurora
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -59,7 +58,7 @@ data object StatsTab : Tab {
                 tabs = tabs,
                 state = state,
                 isMangaTab = { it == 1 },
-                scrollable = false
+                scrollable = false,
             )
         } else {
             TabbedScreen(

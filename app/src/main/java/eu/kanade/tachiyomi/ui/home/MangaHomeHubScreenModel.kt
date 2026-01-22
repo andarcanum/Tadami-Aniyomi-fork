@@ -13,19 +13,17 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.entries.manga.interactor.GetLibraryManga
-import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.entries.manga.model.MangaCover
 import tachiyomi.domain.history.manga.interactor.GetMangaHistory
 import tachiyomi.domain.history.manga.interactor.GetNextChapters
 import tachiyomi.domain.history.manga.model.MangaHistoryWithRelations
 import tachiyomi.domain.items.chapter.model.Chapter
+import tachiyomi.domain.library.manga.LibraryManga
 import tachiyomi.domain.source.manga.service.MangaSourceManager
 import tachiyomi.i18n.aniyomi.AYMR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
-
-import tachiyomi.domain.library.manga.LibraryManga
 
 class MangaHomeHubScreenModel(
     private val getMangaHistory: GetMangaHistory = Injekt.get(),
@@ -244,7 +242,7 @@ class MangaHomeHubScreenModel(
         coverUrl = coverUrl,
         coverLastModified = coverLastModified,
         totalCount = totalCount,
-        unreadCount = unreadCount
+        unreadCount = unreadCount,
     )
 
     private fun MangaHistoryWithRelations.toHeroData() = HeroData(
@@ -268,7 +266,7 @@ class MangaHomeHubScreenModel(
         coverUrl = manga.thumbnailUrl,
         coverLastModified = manga.coverLastModified,
         totalCount = totalChapters,
-        unreadCount = unreadCount
+        unreadCount = unreadCount,
     )
 
     private fun HeroData.toCached() = CachedMangaHeroItem(
@@ -294,7 +292,7 @@ class MangaHomeHubScreenModel(
         coverUrl = coverUrl,
         coverLastModified = coverLastModified,
         totalCount = totalCount,
-        unreadCount = unreadCount
+        unreadCount = unreadCount,
     )
 
     companion object {

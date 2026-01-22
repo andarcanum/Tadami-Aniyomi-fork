@@ -2,7 +2,6 @@ package eu.kanade.tachiyomi.ui.home
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,29 +16,26 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -83,7 +79,6 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.ui.browse.BrowseTab
 import eu.kanade.tachiyomi.ui.browse.anime.source.browse.BrowseAnimeSourceScreen
-import eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch.GlobalAnimeSearchScreen
 import eu.kanade.tachiyomi.ui.browse.manga.source.browse.BrowseMangaSourceScreen
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreen
@@ -130,7 +125,7 @@ private data class HomeHubRecommendation(
     val entryId: Long,
     val title: String,
     val coverUrl: String?,
-    val subtitle: String? = null
+    val subtitle: String? = null,
 )
 
 object HomeHubTab : Tab {
@@ -166,13 +161,13 @@ object HomeHubTab : Tab {
 
         var animeSearchQuery by rememberSaveable { mutableStateOf<String?>(null) }
         var mangaSearchQuery by rememberSaveable { mutableStateOf<String?>(null) }
-        
+
         // Get screen models to access user data
         val animeScreenModel = HomeHubTab.rememberScreenModel { HomeHubScreenModel() }
         val mangaScreenModel = HomeHubTab.rememberScreenModel { MangaHomeHubScreenModel() }
         val animeState by animeScreenModel.state.collectAsState()
         val mangaState by mangaScreenModel.state.collectAsState()
-        
+
         // Use current section's state for user info
         val currentUserName = when (selectedSection) {
             HomeHubSection.Anime -> animeState.userName
@@ -182,19 +177,19 @@ object HomeHubTab : Tab {
             HomeHubSection.Anime -> animeState.userAvatar
             HomeHubSection.Manga -> mangaState.userAvatar
         }
-        
+
         // Photo picker for avatar
         val photoPickerLauncher = rememberLauncherForActivityResult(
-            ActivityResultContracts.GetContent()
-        ) { uri -> 
-            uri?.let { 
+            ActivityResultContracts.GetContent(),
+        ) { uri ->
+            uri?.let {
                 when (selectedSection) {
                     HomeHubSection.Anime -> animeScreenModel.updateUserAvatar(it.toString())
                     HomeHubSection.Manga -> mangaScreenModel.updateUserAvatar(it.toString())
                 }
             }
         }
-        
+
         // Name dialog
         var showNameDialog by remember { mutableStateOf(false) }
         if (showNameDialog) {
@@ -211,7 +206,7 @@ object HomeHubTab : Tab {
                         HomeHubSection.Manga -> mangaScreenModel.updateUserName(newName)
                     }
                     showNameDialog = false
-                }
+                },
             )
         }
 
@@ -296,7 +291,7 @@ private fun HomeHubScreenModel.State.toUiState(): HomeHubUiState {
                 entryId = it.animeId,
                 title = it.title,
                 coverUrl = it.coverUrl,
-                subtitle = "${it.seenCount}/${it.totalCount} эп."
+                subtitle = "${it.seenCount}/${it.totalCount} эп.",
             )
         },
         userName = userName,
@@ -330,7 +325,7 @@ private fun MangaHomeHubScreenModel.State.toUiState(): HomeHubUiState {
                 entryId = it.mangaId,
                 title = it.title,
                 coverUrl = it.coverUrl,
-                subtitle = "$readCount/${it.totalCount} гл."
+                subtitle = "$readCount/${it.totalCount} гл.",
             )
         },
         userName = userName,
@@ -357,7 +352,7 @@ private fun AnimeHomeHub(
     }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
+        ActivityResultContracts.GetContent(),
     ) { uri -> uri?.let { screenModel.updateUserAvatar(it.toString()) } }
 
     var showNameDialog by remember { mutableStateOf(false) }
@@ -365,7 +360,10 @@ private fun AnimeHomeHub(
         NameDialog(
             currentName = state.userName,
             onDismiss = { showNameDialog = false },
-            onConfirm = { screenModel.updateUserName(it); showNameDialog = false }
+            onConfirm = {
+                screenModel.updateUserName(it)
+                showNameDialog = false
+            },
         )
     }
 
@@ -383,11 +381,17 @@ private fun AnimeHomeHub(
         onNameClick = { showNameDialog = true },
         onSourceClick = {
             val sourceId = screenModel.getLastUsedAnimeSourceId()
-            if (sourceId != -1L) navigator.push(BrowseAnimeSourceScreen(sourceId, null))
-            else tabNavigator.current = BrowseTab
+            if (sourceId != -1L) {
+                navigator.push(BrowseAnimeSourceScreen(sourceId, null))
+            } else {
+                tabNavigator.current = BrowseTab
+            }
         },
         onBrowseClick = { navigator.push(AnimeExtensionReposScreen()) },
-        onExtensionClick = { tabNavigator.current = BrowseTab; BrowseTab.showAnimeExtension() },
+        onExtensionClick = {
+            tabNavigator.current = BrowseTab
+            BrowseTab.showAnimeExtension()
+        },
         onHistoryClick = { tabNavigator.current = HistoriesTab },
         onLibraryClick = { tabNavigator.current = AnimeLibraryTab },
     )
@@ -410,7 +414,7 @@ private fun MangaHomeHub(
     }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
+        ActivityResultContracts.GetContent(),
     ) { uri -> uri?.let { screenModel.updateUserAvatar(it.toString()) } }
 
     var showNameDialog by remember { mutableStateOf(false) }
@@ -418,7 +422,10 @@ private fun MangaHomeHub(
         NameDialog(
             currentName = state.userName,
             onDismiss = { showNameDialog = false },
-            onConfirm = { screenModel.updateUserName(it); showNameDialog = false }
+            onConfirm = {
+                screenModel.updateUserName(it)
+                showNameDialog = false
+            },
         )
     }
 
@@ -436,11 +443,17 @@ private fun MangaHomeHub(
         onNameClick = { showNameDialog = true },
         onSourceClick = {
             val sourceId = screenModel.getLastUsedMangaSourceId()
-            if (sourceId != -1L) navigator.push(BrowseMangaSourceScreen(sourceId, null))
-            else tabNavigator.current = BrowseTab
+            if (sourceId != -1L) {
+                navigator.push(BrowseMangaSourceScreen(sourceId, null))
+            } else {
+                tabNavigator.current = BrowseTab
+            }
         },
         onBrowseClick = { navigator.push(MangaExtensionReposScreen()) },
-        onExtensionClick = { tabNavigator.current = BrowseTab; BrowseTab.showExtension() },
+        onExtensionClick = {
+            tabNavigator.current = BrowseTab
+            BrowseTab.showExtension()
+        },
         onHistoryClick = { tabNavigator.current = HistoriesTab },
         onLibraryClick = { tabNavigator.current = MangaLibraryTab },
     )
@@ -469,170 +482,213 @@ private fun HomeHubScreen(
     val matchesQuery: (String) -> Boolean = { title ->
         !isFiltering || title.contains(trimmedQuery, ignoreCase = true)
     }
-    
+
     val listState = rememberLazyListState()
 
     val hero = state.hero?.takeIf { matchesQuery(it.title) }
     val history = state.history.filter { matchesQuery(it.title) }
     val recommendations = state.recommendations.filter { matchesQuery(it.title) }
     val showWelcome = state.showWelcome && !isFiltering
-    
+
     LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = contentPadding,
-        ) {
-            // Inline Header with avatar, username, and tabs
-            item(key = "inline_header") {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = contentPadding,
+    ) {
+        // Inline Header with avatar, username, and tabs
+        item(key = "inline_header") {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+            ) {
+                Spacer(Modifier.height(20.dp))
+
+                // Row with Username (Left) + Avatar (Right)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Spacer(Modifier.height(20.dp))
-
-                    // Row with Username (Left) + Avatar (Right)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                    // Greeting + Name
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(onClick = onNameClick)
+                            .padding(end = 16.dp),
                     ) {
-                        // Greeting + Name
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable(onClick = onNameClick)
-                                .padding(end = 16.dp)
+                        Text(
+                            text = stringResource(state.greeting),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = colors.textSecondary,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = state.userName,
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = colors.textPrimary,
+                            fontWeight = FontWeight.Black,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+
+                    // Avatar
+                    Box(Modifier.size(48.dp).clickable(onClick = onAvatarClick)) {
+                        if (state.userAvatar.isNotEmpty()) {
+                            AsyncImage(
+                                model = state.userAvatar,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize().clip(CircleShape),
+                            )
+                        } else {
+                            Icon(
+                                Icons.Filled.AccountCircle,
+                                null,
+                                tint = colors.accent,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                        Box(
+                            modifier = Modifier.align(
+                                Alignment.BottomEnd,
+                            ).size(16.dp).background(colors.accent, CircleShape),
+                            contentAlignment = Alignment.Center,
                         ) {
-                            Text(
-                                text = stringResource(state.greeting),
-                                style = MaterialTheme.typography.titleSmall,
-                                color = colors.textSecondary,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                text = state.userName,
-                                style = MaterialTheme.typography.headlineSmall,
-                                color = colors.textPrimary,
-                                fontWeight = FontWeight.Black,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                            Icon(
+                                Icons.Filled.CameraAlt,
+                                null,
+                                tint = colors.textOnAccent,
+                                modifier = Modifier.size(10.dp),
                             )
                         }
-
-                        // Avatar
-                        Box(Modifier.size(48.dp).clickable(onClick = onAvatarClick)) {
-                            if (state.userAvatar.isNotEmpty()) {
-                                AsyncImage(
-                                    model = state.userAvatar,
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize().clip(CircleShape)
-                                )
-                            } else {
-                                Icon(Icons.Filled.AccountCircle, null, tint = colors.accent, modifier = Modifier.fillMaxSize())
-                            }
-                            Box(
-                                modifier = Modifier.align(Alignment.BottomEnd).size(16.dp).background(colors.accent, CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Filled.CameraAlt, null, tint = colors.textOnAccent, modifier = Modifier.size(10.dp))
-                            }
-                        }
                     }
-                    
-                    Spacer(Modifier.height(16.dp))
-                    
-                    // Tab Switcher (only if more than 1 tab)
-                    val tabState = LocalTabState.current
-                    if (tabState != null && tabState.tabs.size > 1) {
-                        AuroraTabRow(
-                            tabs = tabState.tabs,
-                            selectedIndex = tabState.selectedIndex,
-                            onTabSelected = tabState.onTabSelected,
-                            scrollable = false
-                        )
-                    }
-                    
-                    Spacer(Modifier.height(16.dp))
                 }
+
+                Spacer(Modifier.height(16.dp))
+
+                // Tab Switcher (only if more than 1 tab)
+                val tabState = LocalTabState.current
+                if (tabState != null && tabState.tabs.size > 1) {
+                    AuroraTabRow(
+                        tabs = tabState.tabs,
+                        selectedIndex = tabState.selectedIndex,
+                        onTabSelected = tabState.onTabSelected,
+                        scrollable = false,
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
             }
-
-            if (showWelcome) {
-                item(key = "welcome") {
-                    WelcomeSection(onBrowseClick = onBrowseClick, onExtensionClick = onExtensionClick)
-                }
-            } else {
-                hero?.let { heroData ->
-                    item(key = "hero") {
-                        HeroSection(
-                            hero = heroData,
-                            actionLabelRes = heroActionLabelRes,
-                            onPlayClick = onPlayHero,
-                            onEntryClick = { onEntryClick(heroData.entryId) }
-                        )
-                    }
-                }
-
-                item(key = "quick_source") {
-                    QuickSourceButton(sourceName = lastSourceName, onClick = onSourceClick)
-                }
-
-                if (history.isNotEmpty()) {
-                    item(key = "history") {
-                        HistoryRow(
-                            history = history,
-                            onEntryClick = onEntryClick,
-                            onViewAllClick = onHistoryClick
-                        )
-                    }
-                }
-
-                if (recommendations.isNotEmpty()) {
-                    item(key = "recommendations") {
-                        RecommendationsGrid(
-                            recommendations = recommendations,
-                            onEntryClick = onEntryClick,
-                            onMoreClick = onLibraryClick
-                        )
-                    }
-                }
-            }
-
-            item { Spacer(Modifier.height(24.dp)) }
         }
+
+        if (showWelcome) {
+            item(key = "welcome") {
+                WelcomeSection(onBrowseClick = onBrowseClick, onExtensionClick = onExtensionClick)
+            }
+        } else {
+            hero?.let { heroData ->
+                item(key = "hero") {
+                    HeroSection(
+                        hero = heroData,
+                        actionLabelRes = heroActionLabelRes,
+                        onPlayClick = onPlayHero,
+                        onEntryClick = { onEntryClick(heroData.entryId) },
+                    )
+                }
+            }
+
+            item(key = "quick_source") {
+                QuickSourceButton(sourceName = lastSourceName, onClick = onSourceClick)
+            }
+
+            if (history.isNotEmpty()) {
+                item(key = "history") {
+                    HistoryRow(
+                        history = history,
+                        onEntryClick = onEntryClick,
+                        onViewAllClick = onHistoryClick,
+                    )
+                }
+            }
+
+            if (recommendations.isNotEmpty()) {
+                item(key = "recommendations") {
+                    RecommendationsGrid(
+                        recommendations = recommendations,
+                        onEntryClick = onEntryClick,
+                        onMoreClick = onLibraryClick,
+                    )
+                }
+            }
+        }
+
+        item { Spacer(Modifier.height(24.dp)) }
+    }
 }
 
 @Composable
 private fun WelcomeSection(onBrowseClick: () -> Unit, onExtensionClick: () -> Unit) {
     val colors = AuroraTheme.colors
-    
+
     Box(
         modifier = Modifier.fillMaxWidth().padding(16.dp).clip(RoundedCornerShape(24.dp))
             .background(colors.cardBackground).padding(32.dp),
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Outlined.VideoLibrary, null, tint = colors.accent, modifier = Modifier.size(80.dp))
             Spacer(Modifier.height(24.dp))
-            Text(stringResource(AYMR.strings.aurora_welcome_title), color = colors.textPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text(
+                stringResource(AYMR.strings.aurora_welcome_title),
+                color = colors.textPrimary,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+            )
             Spacer(Modifier.height(8.dp))
-            Text(stringResource(AYMR.strings.aurora_welcome_subtitle), color = colors.textSecondary, fontSize = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 16.dp))
+            Text(
+                stringResource(AYMR.strings.aurora_welcome_subtitle),
+                color = colors.textSecondary,
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
             Spacer(Modifier.height(32.dp))
 
-            Button(onClick = onBrowseClick, colors = ButtonDefaults.buttonColors(containerColor = colors.accent), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().height(52.dp)) {
+            Button(
+                onClick = onBrowseClick,
+                colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+            ) {
                 Icon(Icons.Filled.Search, null, tint = colors.textOnAccent, modifier = Modifier.size(22.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(stringResource(AYMR.strings.aurora_browse_sources), color = colors.textOnAccent, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    stringResource(AYMR.strings.aurora_browse_sources),
+                    color = colors.textOnAccent,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                )
             }
 
             Spacer(Modifier.height(12.dp))
 
-            Button(onClick = onExtensionClick, colors = ButtonDefaults.buttonColors(containerColor = colors.glass), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().height(52.dp)) {
+            Button(
+                onClick = onExtensionClick,
+                colors = ButtonDefaults.buttonColors(containerColor = colors.glass),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+            ) {
                 Icon(Icons.Filled.Extension, null, tint = colors.textPrimary, modifier = Modifier.size(22.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(stringResource(AYMR.strings.aurora_add_extension), color = colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    stringResource(AYMR.strings.aurora_add_extension),
+                    color = colors.textPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                )
             }
         }
     }
@@ -646,38 +702,78 @@ private fun HeroSection(
     onEntryClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
-    val overlayGradient = remember(colors) { 
-        Brush.verticalGradient(listOf(Color.Transparent, colors.gradientEnd), startY = 0f, endY = 1000f) 
+    val overlayGradient = remember(colors) {
+        Brush.verticalGradient(listOf(Color.Transparent, colors.gradientEnd), startY = 0f, endY = 1000f)
     }
 
     Box(
-        modifier = Modifier.fillMaxWidth().height(500.dp).padding(16.dp).clip(RoundedCornerShape(24.dp)).clickable(onClick = onEntryClick)
+        modifier = Modifier.fillMaxWidth().height(
+            500.dp,
+        ).padding(16.dp).clip(RoundedCornerShape(24.dp)).clickable(onClick = onEntryClick),
     ) {
-        AsyncImage(model = hero.coverData, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        AsyncImage(
+            model = hero.coverData,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
         Box(Modifier.fillMaxSize().background(overlayGradient))
 
-        Column(modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
             Text(
                 stringResource(AYMR.strings.aurora_continue_watching_header),
-                color = colors.accent, fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.background(colors.accent.copy(alpha = 0.2f), RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 4.dp)
+                color = colors.accent,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.background(
+                    colors.accent.copy(alpha = 0.2f),
+                    RoundedCornerShape(50),
+                ).padding(horizontal = 12.dp, vertical = 4.dp),
             )
             Spacer(Modifier.height(12.dp))
-            Text(hero.title, color = colors.textPrimary, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 34.sp, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(
+                hero.title,
+                color = colors.textPrimary,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.ExtraBold,
+                lineHeight = 34.sp,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
             Spacer(Modifier.height(12.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                 Box(Modifier.size(6.dp).background(colors.accent, CircleShape))
                 Spacer(Modifier.width(8.dp))
-                Text(stringResource(AYMR.strings.aurora_episode_progress, (hero.progressNumber % 1000).toInt()), color = colors.textSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(
+                    stringResource(AYMR.strings.aurora_episode_progress, (hero.progressNumber % 1000).toInt()),
+                    color = colors.textSecondary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                )
             }
 
             Spacer(Modifier.height(20.dp))
 
-            Button(onClick = onPlayClick, colors = ButtonDefaults.buttonColors(containerColor = colors.accent), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp), modifier = Modifier.height(52.dp)) {
+            Button(
+                onClick = onPlayClick,
+                colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
+                shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp),
+                modifier = Modifier.height(52.dp),
+            ) {
                 Icon(Icons.Filled.PlayArrow, null, tint = colors.textOnAccent, modifier = Modifier.size(22.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(stringResource(actionLabelRes), color = colors.textOnAccent, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    stringResource(actionLabelRes),
+                    color = colors.textOnAccent,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                )
             }
         }
     }
@@ -686,17 +782,17 @@ private fun HeroSection(
 @Composable
 private fun QuickSourceButton(sourceName: String?, onClick: () -> Unit) {
     val colors = AuroraTheme.colors
-    
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 16.dp)
+            .padding(horizontal = 24.dp, vertical = 16.dp),
     ) {
         Button(
             onClick = onClick,
             colors = ButtonDefaults.buttonColors(containerColor = colors.glass),
             shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth().height(56.dp)
+            modifier = Modifier.fillMaxWidth().height(56.dp),
         ) {
             Icon(Icons.Filled.Search, null, tint = colors.accent, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(10.dp))
@@ -706,7 +802,7 @@ private fun QuickSourceButton(sourceName: String?, onClick: () -> Unit) {
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -716,25 +812,46 @@ private fun QuickSourceButton(sourceName: String?, onClick: () -> Unit) {
 private fun HistoryRow(
     history: List<HomeHubHistory>,
     onEntryClick: (Long) -> Unit,
-    onViewAllClick: () -> Unit
+    onViewAllClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
-    
+
     Column(modifier = Modifier.padding(top = 24.dp)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(AYMR.strings.aurora_recently_watched), color = colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Text(stringResource(AYMR.strings.aurora_more), color = colors.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable(onClick = onViewAllClick))
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                stringResource(AYMR.strings.aurora_recently_watched),
+                color = colors.textPrimary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+            )
+            Text(
+                stringResource(AYMR.strings.aurora_more),
+                color = colors.accent,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.clickable(onClick = onViewAllClick),
+            )
         }
         Spacer(Modifier.height(16.dp))
-        LazyRow(contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
             items(history, key = { it.entryId }) { item ->
                 AuroraCard(
                     modifier = Modifier.width(128.dp).aspectRatio(0.68f),
                     title = item.title,
                     coverData = item.coverData,
-                    subtitle = stringResource(AYMR.strings.aurora_episode_number, (item.progressNumber % 1000).toInt().toString()),
+                    subtitle = stringResource(
+                        AYMR.strings.aurora_episode_number,
+                        (item.progressNumber % 1000).toInt().toString(),
+                    ),
                     onClick = { onEntryClick(item.entryId) },
-                    imagePadding = 6.dp
+                    imagePadding = 6.dp,
                 )
             }
         }
@@ -748,17 +865,32 @@ private fun RecommendationsGrid(
     onMoreClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
-    
+
     Column(modifier = Modifier.padding(top = 32.dp, start = 24.dp, end = 24.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(AYMR.strings.aurora_recently_added), color = colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Text(stringResource(AYMR.strings.aurora_more), color = colors.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable(onClick = onMoreClick))
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                stringResource(AYMR.strings.aurora_recently_added),
+                color = colors.textPrimary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+            )
+            Text(
+                stringResource(AYMR.strings.aurora_more),
+                color = colors.accent,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.clickable(onClick = onMoreClick),
+            )
         }
         Spacer(Modifier.height(16.dp))
 
         // Horizontal scrollable row instead of grid
         LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             items(recommendations, key = { it.entryId }) { item ->
                 AuroraCard(
@@ -767,7 +899,7 @@ private fun RecommendationsGrid(
                     coverData = item.coverUrl,
                     subtitle = item.subtitle,
                     onClick = { onEntryClick(item.entryId) },
-                    imagePadding = 6.dp
+                    imagePadding = 6.dp,
                 )
             }
         }
@@ -782,6 +914,6 @@ private fun NameDialog(currentName: String, onDismiss: () -> Unit, onConfirm: (S
         title = { Text(stringResource(AYMR.strings.aurora_change_nickname)) },
         text = { OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true) },
         confirmButton = { TextButton(onClick = { onConfirm(text) }) { Text("OK") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }

@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -24,11 +23,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,25 +41,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import eu.kanade.presentation.theme.AuroraTheme
 import androidx.compose.ui.layout.ContentScale
-import tachiyomi.presentation.core.i18n.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import tachiyomi.i18n.aniyomi.AYMR
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import eu.kanade.presentation.components.AuroraTabRow
+import eu.kanade.presentation.components.LocalTabState
 import eu.kanade.presentation.components.relativeDateText
+import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.ui.updates.manga.MangaUpdatesItem
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.PullRefresh
-import kotlin.time.Duration.Companion.seconds
-import eu.kanade.presentation.components.LocalTabState
-import eu.kanade.presentation.components.AuroraTabRow
+import tachiyomi.presentation.core.i18n.stringResource
 import java.time.LocalDate
+import kotlin.time.Duration.Companion.seconds
 
 @Composable
 fun MangaUpdatesAuroraContent(
@@ -68,7 +67,7 @@ fun MangaUpdatesAuroraContent(
     onMangaClicked: (Long) -> Unit,
     onDownloadClicked: (MangaUpdatesItem) -> Unit,
     onRefresh: () -> Unit,
-    contentPadding: PaddingValues
+    contentPadding: PaddingValues,
 ) {
     val colors = AuroraTheme.colors
     val scope = rememberCoroutineScope()
@@ -78,7 +77,7 @@ fun MangaUpdatesAuroraContent(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.backgroundGradient)
+            .background(colors.backgroundGradient),
     ) {
         PullRefresh(
             refreshing = isRefreshing,
@@ -91,13 +90,13 @@ fun MangaUpdatesAuroraContent(
                 }
             },
             enabled = true,
-            indicatorPadding = contentPadding
+            indicatorPadding = contentPadding,
         ) {
             LazyColumn(
                 state = listState,
                 contentPadding = contentPadding,
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxSize(),
             ) {
                 item {
                     UpdatesHeader(onRefresh = onRefresh)
@@ -121,7 +120,7 @@ fun MangaUpdatesAuroraContent(
                                 is MangaUpdatesUiModel.Header -> "header"
                                 is MangaUpdatesUiModel.Item -> "item"
                             }
-                        }
+                        },
                     ) { uiModel ->
                         when (uiModel) {
                             is MangaUpdatesUiModel.Header -> {
@@ -131,7 +130,7 @@ fun MangaUpdatesAuroraContent(
                                 AniviewMangaUpdateCard(
                                     item = uiModel.item,
                                     onClick = onMangaClicked,
-                                    modifier = Modifier.padding(bottom = 12.dp)
+                                    modifier = Modifier.padding(bottom = 12.dp),
                                 )
                             }
                         }
@@ -146,21 +145,21 @@ fun MangaUpdatesAuroraContent(
 
 @Composable
 private fun UpdatesHeader(
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
     val tabState = LocalTabState.current
-    
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 16.dp)
+            .padding(horizontal = 24.dp, vertical = 16.dp),
     ) {
         // Title row with refresh button
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             // Title and subtitle
             Column {
@@ -168,30 +167,30 @@ private fun UpdatesHeader(
                     text = stringResource(AYMR.strings.aurora_updates),
                     fontSize = 22.sp,
                     color = colors.textPrimary,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
                 )
                 Text(
                     text = stringResource(AYMR.strings.aurora_new_chapters_subtitle),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = colors.textSecondary
+                    color = colors.textSecondary,
                 )
             }
-            
+
             // Refresh button with glow
             IconButton(
                 onClick = onRefresh,
                 modifier = Modifier
                     .background(colors.glass, CircleShape)
-                    .size(48.dp)
+                    .size(48.dp),
             ) {
                 Icon(
                     imageVector = Icons.Filled.Refresh,
                     contentDescription = "Refresh",
-                    tint = colors.textPrimary
+                    tint = colors.textPrimary,
                 )
             }
         }
-        
+
         // Tab Switcher (only if more than 1 tab)
         if (tabState != null && tabState.tabs.size > 1) {
             Spacer(Modifier.height(16.dp))
@@ -199,7 +198,7 @@ private fun UpdatesHeader(
                 tabs = tabState.tabs,
                 selectedIndex = tabState.selectedIndex,
                 onTabSelected = tabState.onTabSelected,
-                scrollable = false
+                scrollable = false,
             )
         }
     }
@@ -215,19 +214,19 @@ private fun DateHeader(date: LocalDate) {
         fontWeight = FontWeight.Bold,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 8.dp)
+            .padding(horizontal = 24.dp, vertical = 8.dp),
     )
 }
 
 @Composable
 private fun EmptyUpdatesState(onRefresh: () -> Unit) {
     val colors = AuroraTheme.colors
-    
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(modifier = Modifier.height(48.dp))
 
@@ -239,24 +238,24 @@ private fun EmptyUpdatesState(onRefresh: () -> Unit) {
                         colors = listOf(
                             colors.accent.copy(alpha = 0.3f),
                             colors.accent.copy(alpha = 0.1f),
-                            Color.Transparent
-                        )
+                            Color.Transparent,
+                        ),
                     ),
-                    CircleShape
+                    CircleShape,
                 ),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.Center,
         ) {
             Box(
                 modifier = Modifier
                     .size(80.dp)
                     .background(colors.accent.copy(alpha = 0.2f), CircleShape),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Notifications,
                     contentDescription = null,
                     tint = colors.accent,
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(40.dp),
                 )
             }
         }
@@ -268,7 +267,7 @@ private fun EmptyUpdatesState(onRefresh: () -> Unit) {
             color = colors.textPrimary,
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -278,7 +277,7 @@ private fun EmptyUpdatesState(onRefresh: () -> Unit) {
             color = colors.textSecondary,
             fontSize = 14.sp,
             textAlign = TextAlign.Center,
-            lineHeight = 22.sp
+            lineHeight = 22.sp,
         )
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -289,29 +288,29 @@ private fun EmptyUpdatesState(onRefresh: () -> Unit) {
                 .clickable(onClick = onRefresh),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
-                containerColor = colors.accent.copy(alpha = 0.15f)
+                containerColor = colors.accent.copy(alpha = 0.15f),
             ),
-            border = BorderStroke(1.dp, colors.accent.copy(alpha = 0.3f))
+            border = BorderStroke(1.dp, colors.accent.copy(alpha = 0.3f)),
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
                 horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
                     imageVector = Icons.Filled.Refresh,
                     contentDescription = null,
                     tint = colors.accent,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(20.dp),
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = stringResource(AYMR.strings.aurora_update_library),
                     color = colors.accent,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
+                    fontSize = 16.sp,
                 )
             }
         }
@@ -322,17 +321,17 @@ private fun EmptyUpdatesState(onRefresh: () -> Unit) {
 fun AniviewMangaUpdateCard(
     item: MangaUpdatesItem,
     onClick: (Long) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
-    
+
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clickable { onClick(item.update.mangaId) }
             .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         // Left: Thumbnail (60x90dp portrait)
         Box(
@@ -340,18 +339,18 @@ fun AniviewMangaUpdateCard(
                 .width(60.dp)
                 .height(90.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(Color.Gray.copy(alpha = 0.3f))
+                .background(Color.Gray.copy(alpha = 0.3f)),
         ) {
             AsyncImage(
                 model = item.update.coverData,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
             )
         }
-        
+
         Spacer(modifier = Modifier.width(16.dp))
-        
+
         // Center: Content (title + chapter + badge)
         Column(modifier = Modifier.weight(1f)) {
             // Title
@@ -362,52 +361,52 @@ fun AniviewMangaUpdateCard(
                 fontSize = 16.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                lineHeight = 20.sp
+                lineHeight = 20.sp,
             )
-            
+
             Spacer(modifier = Modifier.height(6.dp))
-            
+
             // Chapter name
             Text(
                 text = item.update.chapterName,
                 color = colors.textSecondary,
                 fontSize = 14.sp,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
-            
+
             // "NEW" Badge - ONLY if unread
             if (!item.update.read) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Box(
                     modifier = Modifier
                         .background(colors.accent, RoundedCornerShape(12.dp))
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
                 ) {
                     Text(
                         text = "NEW",
                         color = colors.textOnAccent,
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
                     )
                 }
             }
         }
-        
+
         Spacer(modifier = Modifier.width(12.dp))
-        
+
         // Right: Play button
         Box(
             modifier = Modifier
                 .size(36.dp)
                 .background(colors.accent, CircleShape),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = Icons.Filled.PlayArrow,
                 contentDescription = null,
                 tint = colors.textOnAccent,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(20.dp),
             )
         }
     }
@@ -418,5 +417,5 @@ fun AniviewMangaUpdateCard(
 fun AuroraMangaUpdateCard(
     item: MangaUpdatesItem,
     onClick: (Long) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) = AniviewMangaUpdateCard(item, onClick, modifier)

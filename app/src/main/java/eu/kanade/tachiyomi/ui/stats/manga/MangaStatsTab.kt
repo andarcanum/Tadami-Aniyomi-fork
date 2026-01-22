@@ -7,14 +7,13 @@ import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.TabContent
+import eu.kanade.presentation.more.stats.MangaStatsAuroraContent
 import eu.kanade.presentation.more.stats.MangaStatsScreenContent
 import eu.kanade.presentation.more.stats.StatsScreenState
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.screens.LoadingScreen
-
-import eu.kanade.domain.ui.UiPreferences
-import eu.kanade.presentation.more.stats.MangaStatsAuroraContent
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get

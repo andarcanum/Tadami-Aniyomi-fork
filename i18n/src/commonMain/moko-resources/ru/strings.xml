@@ -859,4 +859,19 @@
     <string name="pref_behavior">Поведение</string>
     <string name="pref_mark_duplicate_read_chapter_read_existing">После прочтения главы</string>
     <string name="pref_mark_duplicate_read_chapter_read_new">После получения новой главы</string>
+    
+    <!-- Navigator (Page slider) settings -->
+    <string name="pref_navigator_settings">Полоса прокрутки</string>
+    <string name="pref_show_navigator">Показывать полосу прокрутки</string>
+    <string name="pref_navigator_show_page_numbers">Показывать номера страниц</string>
+    <string name="pref_navigator_show_chapter_buttons">Показывать кнопки глав</string>
+    <string name="pref_navigator_slider_color">Цвет слайдера</string>
+    <string name="pref_navigator_background_alpha">Прозрачность фона</string>
+    <string name="pref_navigator_height">Высота навигатора</string>
+    <string name="pref_navigator_corner_radius">Скругление углов</string>
+    <string name="navigator_height_compact">Компактный</string>
+    <string name="navigator_height_normal">Обычный</string>
+    <string name="navigator_height_large">Большой</string>
+    <string name="pref_use_theme_color">Использовать цвет темы</string>
+    <string name="pref_navigator_show_tick_marks">Показывать маркеры страниц</string>
 </resources>

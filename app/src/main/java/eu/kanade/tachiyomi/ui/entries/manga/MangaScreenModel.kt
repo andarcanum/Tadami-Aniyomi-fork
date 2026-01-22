@@ -29,7 +29,6 @@ import eu.kanade.domain.track.manga.interactor.TrackChapter
 import eu.kanade.domain.track.model.AutoTrackState
 import eu.kanade.domain.track.service.TrackPreferences
 import eu.kanade.presentation.entries.DownloadAction
-import eu.kanade.tachiyomi.source.ConfigurableSource
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadAction
 import eu.kanade.presentation.util.formattedMessage
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadCache
@@ -38,6 +37,7 @@ import eu.kanade.tachiyomi.data.download.manga.model.MangaDownload
 import eu.kanade.tachiyomi.data.track.EnhancedMangaTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.network.HttpException
+import eu.kanade.tachiyomi.source.ConfigurableSource
 import eu.kanade.tachiyomi.source.MangaSource
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.chapter.getNextUnread
@@ -222,7 +222,7 @@ class MangaScreenModel(
                 setMangaDefaultChapterFlags.await(manga)
             }
 
-            val needRefreshInfo = !manga.initialized
+            val needRefreshInfo = !manga.initialized || isFromSource
             val needRefreshChapter = chapters.isEmpty()
 
             // Show what we have earlier

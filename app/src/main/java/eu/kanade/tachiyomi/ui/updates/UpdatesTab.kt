@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.updates
 
+import android.widget.Toast
 import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
@@ -14,8 +15,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
-import android.widget.Toast
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
@@ -119,7 +118,7 @@ data object UpdatesTab : Tab {
                                     ),
                                 )
                             },
-                        )
+                        ),
                     )
                 }
                 if (showMangaSection) {
@@ -139,7 +138,7 @@ data object UpdatesTab : Tab {
                                     ),
                                 )
                             },
-                        )
+                        ),
                     )
                 }
             }.build()

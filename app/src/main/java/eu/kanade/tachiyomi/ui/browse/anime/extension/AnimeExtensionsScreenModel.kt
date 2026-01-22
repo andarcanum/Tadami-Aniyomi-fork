@@ -148,7 +148,7 @@ class AnimeExtensionsScreenModel(
                         state.copy(
                             isLoading = false,
                             items = it,
-                            collapsedLanguages = collapsedLanguages.value
+                            collapsedLanguages = collapsedLanguages.value,
                         )
                     }
                 }

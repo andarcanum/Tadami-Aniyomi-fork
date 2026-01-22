@@ -68,11 +68,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import logcat.LogPriority
+import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchUI
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.system.logcat
-import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.domain.entries.anime.interactor.GetAnime
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.items.episode.interactor.GetEpisode
@@ -238,8 +238,8 @@ class EpisodeOptionsDialogScreenModel(
                 if (hasFoundPreferredVideo.compareAndSet(false, true)) {
                     val hosterStateList = hosterState.value!!.getOrThrow()
 
-                    val preferredDubbing = preferenceStore.getString("anime_dubbing_pref_${animeId}", "").get()
-                    val preferredQuality = preferenceStore.getString("anime_quality_pref_${animeId}", "").get()
+                    val preferredDubbing = preferenceStore.getString("anime_dubbing_pref_$animeId", "").get()
+                    val preferredQuality = preferenceStore.getString("anime_quality_pref_$animeId", "").get()
 
                     var (hosterIdx, videoIdx) = findVideoByDubbingAndQuality(
                         hosterStateList,

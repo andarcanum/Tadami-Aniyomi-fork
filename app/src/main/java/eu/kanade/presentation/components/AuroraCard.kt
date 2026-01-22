@@ -6,7 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,7 +14,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -41,7 +39,7 @@ fun AuroraCard(
     onClick: () -> Unit,
     aspectRatio: Float = 2f / 3f, // Default to portrait
     coverHeightFraction: Float = 0.65f, // Image takes 65% of height
-    imagePadding: Dp = 0.dp
+    imagePadding: Dp = 0.dp,
 ) {
     val colors = AuroraTheme.colors
 
@@ -50,16 +48,16 @@ fun AuroraCard(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = colors.glass
+            containerColor = colors.glass,
         ),
         border = BorderStroke(
             width = 1.dp,
-            color = if (colors.isDark) Color.Transparent else Color.LightGray.copy(alpha = 0.4f)
+            color = if (colors.isDark) Color.Transparent else Color.LightGray.copy(alpha = 0.4f),
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
         ) {
             // Cover Image
             Box(
@@ -67,7 +65,7 @@ fun AuroraCard(
                     .fillMaxWidth()
                     .weight(coverHeightFraction) // Image takes proportional height
                     .background(Color.Black.copy(alpha = 0.1f)) // Placeholder bg
-                    .padding(imagePadding)
+                    .padding(imagePadding),
             ) {
                 AsyncImage(
                     model = coverData,
@@ -75,15 +73,23 @@ fun AuroraCard(
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .fillMaxSize()
-                        .clip(if (imagePadding > 0.dp) RoundedCornerShape(8.dp) else RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                        .clip(
+                            if (imagePadding >
+                                0.dp
+                            ) {
+                                RoundedCornerShape(8.dp)
+                            } else {
+                                RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
+                            },
+                        ),
                 )
-                
+
                 // Badge overlay (e.g. Unread count)
                 if (badge != null) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopStart)
-                            .padding(6.dp)
+                            .padding(6.dp),
                     ) {
                         badge()
                     }
@@ -95,7 +101,7 @@ fun AuroraCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f - coverHeightFraction)
-                    .padding(horizontal = 8.dp, vertical = 8.dp)
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
             ) {
                 Text(
                     text = title,
@@ -104,9 +110,9 @@ fun AuroraCard(
                     fontWeight = FontWeight.Bold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    lineHeight = 16.sp
+                    lineHeight = 16.sp,
                 )
-                
+
                 if (subtitle != null) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
@@ -114,7 +120,7 @@ fun AuroraCard(
                         color = colors.textSecondary,
                         fontSize = 11.sp,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }

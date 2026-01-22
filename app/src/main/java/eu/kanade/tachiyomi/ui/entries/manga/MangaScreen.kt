@@ -235,7 +235,9 @@ class MangaScreen(
             is MangaScreenModel.Dialog.AuthRequiredDialog -> {
                 AuthRequiredDialog(
                     onDismissRequest = onDismissRequest,
-                    onSettingsClicked = { navigator.push(MangaSourcePreferencesScreen(dialog.sourceId)) }.takeIf { dialog.isConfigurable },
+                    onSettingsClicked = {
+                        navigator.push(MangaSourcePreferencesScreen(dialog.sourceId))
+                    }.takeIf { dialog.isConfigurable },
                     errorMessage = dialog.errorMessage,
                     sourceName = dialog.sourceName,
                     isConfigurable = dialog.isConfigurable,

@@ -24,6 +24,7 @@ import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.reader.components.ChapterNavigator
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderOrientation
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
 import eu.kanade.tachiyomi.ui.reader.viewer.Viewer
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.R2LPagerViewer
@@ -65,6 +66,16 @@ fun ReaderAppBars(
     cropEnabled: Boolean,
     onClickCropBorder: () -> Unit,
     onClickSettings: () -> Unit,
+
+    // Navigator customization options
+    showNavigator: Boolean = true,
+    navigatorShowPageNumbers: Boolean = true,
+    navigatorShowChapterButtons: Boolean = true,
+    navigatorSliderColor: Int = 0,
+    navigatorBackgroundAlpha: Int = 90,
+    navigatorHeight: ReaderPreferences.NavigatorHeight = ReaderPreferences.NavigatorHeight.NORMAL,
+    navigatorCornerRadius: Int = 24,
+    navigatorShowTickMarks: Boolean = false,
 ) {
     val isRtl = viewer is R2LPagerViewer
     val backgroundColor = MaterialTheme.colorScheme
@@ -168,16 +179,25 @@ fun ReaderAppBars(
                 modifier = modifierWithInsetsPadding,
                 verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
             ) {
-                ChapterNavigator(
-                    isRtl = isRtl,
-                    onNextChapter = onNextChapter,
-                    enabledNext = enabledNext,
-                    onPreviousChapter = onPreviousChapter,
-                    enabledPrevious = enabledPrevious,
-                    currentPage = currentPage,
-                    totalPages = totalPages,
-                    onPageIndexChange = onPageIndexChange,
-                )
+                if (showNavigator) {
+                    ChapterNavigator(
+                        isRtl = isRtl,
+                        onNextChapter = onNextChapter,
+                        enabledNext = enabledNext,
+                        onPreviousChapter = onPreviousChapter,
+                        enabledPrevious = enabledPrevious,
+                        currentPage = currentPage,
+                        totalPages = totalPages,
+                        onPageIndexChange = onPageIndexChange,
+                        showPageNumbers = navigatorShowPageNumbers,
+                        showChapterButtons = navigatorShowChapterButtons,
+                        sliderColor = navigatorSliderColor,
+                        backgroundAlpha = navigatorBackgroundAlpha,
+                        navigatorHeight = navigatorHeight,
+                        cornerRadius = navigatorCornerRadius,
+                        showTickMarks = navigatorShowTickMarks,
+                    )
+                }
                 BottomReaderBar(
                     backgroundColor = backgroundColor,
                     readingMode = readingMode,

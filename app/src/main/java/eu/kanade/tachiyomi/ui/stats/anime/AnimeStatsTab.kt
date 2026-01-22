@@ -8,7 +8,6 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.ui.UiPreferences
-import eu.kanade.domain.ui.model.AppTheme
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.more.stats.AnimeStatsAuroraContent
 import eu.kanade.presentation.more.stats.AnimeStatsScreenContent

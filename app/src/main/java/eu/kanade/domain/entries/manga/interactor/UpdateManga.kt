@@ -43,7 +43,7 @@ class UpdateManga(
 
         // Only update cover if manual fetch OR we don't have a valid thumbnail yet
         // This prevents flickering when extension returns different URLs (thumbnail vs full-size)
-        val shouldUpdateCover = manualFetch || localManga.thumbnailUrl.isNullOrEmpty()
+        val shouldUpdateCover = manualFetch || localManga.thumbnailUrl.isNullOrEmpty() || !localManga.initialized
 
         val coverLastModified =
             when {

@@ -1,6 +1,5 @@
 package eu.kanade.presentation.more.stats
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,13 +19,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CollectionsBookmark
-import androidx.compose.material.icons.outlined.LocalLibrary
-import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material.icons.outlined.Tv
-import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.LocalLibrary
+import androidx.compose.material.icons.outlined.PlayCircle
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.Tv
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -37,15 +36,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import eu.kanade.presentation.theme.AuroraTheme
 import androidx.compose.ui.platform.LocalContext
-import tachiyomi.presentation.core.i18n.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import tachiyomi.i18n.aniyomi.AYMR
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.toDurationString
+import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.presentation.core.i18n.stringResource
 import java.util.Locale
 import kotlin.time.DurationUnit
 import kotlin.time.toDuration
@@ -53,7 +52,7 @@ import kotlin.time.toDuration
 @Composable
 fun AnimeStatsAuroraContent(
     state: StatsScreenState.SuccessAnime,
-    paddingValues: PaddingValues
+    paddingValues: PaddingValues,
 ) {
     val colors = AuroraTheme.colors
 
@@ -68,14 +67,14 @@ fun AnimeStatsAuroraContent(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.backgroundGradient)
+            .background(colors.backgroundGradient),
     ) {
         LazyColumn(
             contentPadding = paddingValues,
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 16.dp),
         ) {
             item {
                 Spacer(modifier = Modifier.height(16.dp))
@@ -84,7 +83,7 @@ fun AnimeStatsAuroraContent(
                     style = MaterialTheme.typography.headlineMedium,
                     color = colors.textPrimary,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp)
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
                 )
             }
 
@@ -92,7 +91,7 @@ fun AnimeStatsAuroraContent(
                 OverviewCardsSection(
                     libraryCount = state.overview.libraryAnimeCount,
                     watchDuration = watchDurationString,
-                    completedCount = state.overview.completedAnimeCount
+                    completedCount = state.overview.completedAnimeCount,
                 )
             }
 
@@ -101,10 +100,22 @@ fun AnimeStatsAuroraContent(
                 StatsSectionCard(
                     title = stringResource(AYMR.strings.aurora_titles),
                     items = listOf(
-                        StatItem(Icons.Outlined.Sync, stringResource(AYMR.strings.aurora_in_global_update), state.titles.globalUpdateItemCount.toString()),
-                        StatItem(Icons.Outlined.PlayCircle, stringResource(AYMR.strings.aurora_started), state.titles.startedAnimeCount.toString()),
-                        StatItem(Icons.Outlined.Tv, stringResource(AYMR.strings.aurora_local), state.titles.localAnimeCount.toString())
-                    )
+                        StatItem(
+                            Icons.Outlined.Sync,
+                            stringResource(AYMR.strings.aurora_in_global_update),
+                            state.titles.globalUpdateItemCount.toString(),
+                        ),
+                        StatItem(
+                            Icons.Outlined.PlayCircle,
+                            stringResource(AYMR.strings.aurora_started),
+                            state.titles.startedAnimeCount.toString(),
+                        ),
+                        StatItem(
+                            Icons.Outlined.Tv,
+                            stringResource(AYMR.strings.aurora_local),
+                            state.titles.localAnimeCount.toString(),
+                        ),
+                    ),
                 )
             }
 
@@ -113,10 +124,22 @@ fun AnimeStatsAuroraContent(
                 StatsSectionCard(
                     title = stringResource(AYMR.strings.aurora_episodes),
                     items = listOf(
-                        StatItem(Icons.Outlined.PlayCircle, stringResource(AYMR.strings.aurora_total), state.episodes.totalEpisodeCount.toString()),
-                        StatItem(Icons.Outlined.Schedule, stringResource(AYMR.strings.aurora_watched), state.episodes.readEpisodeCount.toString()),
-                        StatItem(Icons.Outlined.Download, stringResource(AYMR.strings.aurora_downloaded), state.episodes.downloadCount.toString())
-                    )
+                        StatItem(
+                            Icons.Outlined.PlayCircle,
+                            stringResource(AYMR.strings.aurora_total),
+                            state.episodes.totalEpisodeCount.toString(),
+                        ),
+                        StatItem(
+                            Icons.Outlined.Schedule,
+                            stringResource(AYMR.strings.aurora_watched),
+                            state.episodes.readEpisodeCount.toString(),
+                        ),
+                        StatItem(
+                            Icons.Outlined.Download,
+                            stringResource(AYMR.strings.aurora_downloaded),
+                            state.episodes.downloadCount.toString(),
+                        ),
+                    ),
                 )
             }
 
@@ -132,10 +155,18 @@ fun AnimeStatsAuroraContent(
                 StatsSectionCard(
                     title = stringResource(AYMR.strings.aurora_trackers),
                     items = listOf(
-                        StatItem(Icons.Outlined.CollectionsBookmark, stringResource(AYMR.strings.aurora_tracked_titles), state.trackers.trackedTitleCount.toString()),
+                        StatItem(
+                            Icons.Outlined.CollectionsBookmark,
+                            stringResource(AYMR.strings.aurora_tracked_titles),
+                            state.trackers.trackedTitleCount.toString(),
+                        ),
                         StatItem(Icons.Outlined.Star, stringResource(AYMR.strings.aurora_mean_score), meanScoreStr),
-                        StatItem(Icons.Outlined.Sync, stringResource(AYMR.strings.aurora_trackers_used), state.trackers.trackerCount.toString())
-                    )
+                        StatItem(
+                            Icons.Outlined.Sync,
+                            stringResource(AYMR.strings.aurora_trackers_used),
+                            state.trackers.trackerCount.toString(),
+                        ),
+                    ),
                 )
             }
 
@@ -148,29 +179,29 @@ fun AnimeStatsAuroraContent(
 private fun OverviewCardsSection(
     libraryCount: Int,
     watchDuration: String,
-    completedCount: Int
+    completedCount: Int,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         OverviewCard(
             icon = Icons.Outlined.CollectionsBookmark,
             value = libraryCount.toString(),
             label = stringResource(AYMR.strings.aurora_in_library),
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
         )
         OverviewCard(
             icon = Icons.Outlined.Schedule,
             value = watchDuration,
             label = stringResource(AYMR.strings.aurora_watch_time),
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
         )
         OverviewCard(
             icon = Icons.Outlined.LocalLibrary,
             value = completedCount.toString(),
             label = stringResource(AYMR.strings.aurora_completed),
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
         )
     }
 }
@@ -180,36 +211,35 @@ private fun OverviewCard(
     icon: ImageVector,
     value: String,
     label: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
-    
+
     Card(
         modifier = modifier.height(120.dp),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = colors.accent.copy(alpha = 0.15f)
+            containerColor = colors.accent.copy(alpha = 0.15f),
         ),
-        border = BorderStroke(1.dp, colors.accent.copy(alpha = 0.3f))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.Center,
         ) {
             Box(
                 modifier = Modifier
                     .size(36.dp)
                     .background(colors.accent.copy(alpha = 0.2f), CircleShape),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
                     tint = colors.accent,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(20.dp),
                 )
             }
             Spacer(modifier = Modifier.height(8.dp))
@@ -219,14 +249,14 @@ private fun OverviewCard(
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp,
                 textAlign = TextAlign.Center,
-                maxLines = 1
+                maxLines = 1,
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = label,
                 color = colors.textSecondary,
                 fontSize = 11.sp,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
             )
         }
     }
@@ -235,59 +265,58 @@ private fun OverviewCard(
 private data class StatItem(
     val icon: ImageVector,
     val label: String,
-    val value: String
+    val value: String,
 )
 
 @Composable
 private fun StatsSectionCard(
     title: String,
-    items: List<StatItem>
+    items: List<StatItem>,
 ) {
     val colors = AuroraTheme.colors
-    
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = colors.glass
+            containerColor = colors.glass,
         ),
-        border = BorderStroke(1.dp, colors.divider)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
                     modifier = Modifier
                         .width(4.dp)
                         .height(20.dp)
-                        .background(colors.accent, RoundedCornerShape(2.dp))
+                        .background(colors.accent, RoundedCornerShape(2.dp)),
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = title,
                     color = colors.textPrimary,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
+                    fontSize = 16.sp,
                 )
             }
-            
+
             Spacer(modifier = Modifier.height(16.dp))
-            
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
                 items.forEach { item ->
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     ) {
                         Icon(
                             imageVector = item.icon,
                             contentDescription = null,
                             tint = colors.accent.copy(alpha = 0.8f),
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(24.dp),
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
@@ -295,14 +324,14 @@ private fun StatsSectionCard(
                             color = colors.textPrimary,
                             fontWeight = FontWeight.Bold,
                             fontSize = 18.sp,
-                            textAlign = TextAlign.Center
+                            textAlign = TextAlign.Center,
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = item.label,
                             color = colors.textSecondary,
                             fontSize = 11.sp,
-                            textAlign = TextAlign.Center
+                            textAlign = TextAlign.Center,
                         )
                     }
                 }

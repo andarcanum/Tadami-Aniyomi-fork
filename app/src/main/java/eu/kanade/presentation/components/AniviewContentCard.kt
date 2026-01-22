@@ -45,12 +45,12 @@ fun AniviewContentCard(
     progress: Float? = null,
     badge: String? = null,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
-    
+
     Column(
-        modifier = modifier.clickable { onClick() }
+        modifier = modifier.clickable { onClick() },
     ) {
         Box {
             AsyncImage(
@@ -61,9 +61,9 @@ fun AniviewContentCard(
                     .aspectRatio(2f / 3f)
                     .clip(RoundedCornerShape(12.dp))
                     .cyanGlow(blurRadius = 12.dp, alpha = 0.4f),
-                contentScale = ContentScale.Crop
+                contentScale = ContentScale.Crop,
             )
-            
+
             // Badge (top-left)
             badge?.let {
                 Box(
@@ -71,17 +71,17 @@ fun AniviewContentCard(
                         .align(Alignment.TopStart)
                         .padding(8.dp)
                         .background(colors.accent, RoundedCornerShape(12.dp))
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
                 ) {
                     Text(
                         text = it,
                         color = colors.textOnAccent,
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
                     )
                 }
             }
-            
+
             // Progress bar (bottom)
             progress?.let {
                 LinearProgressIndicator(
@@ -91,29 +91,29 @@ fun AniviewContentCard(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .height(3.dp)
+                        .height(3.dp),
                 )
             }
         }
-        
+
         Spacer(Modifier.height(8.dp))
-        
+
         Text(
             text = title,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
             color = colors.textPrimary,
             maxLines = 2,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
         )
-        
+
         Text(
             text = subtitle,
             fontSize = 12.sp,
             color = colors.textSecondary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 2.dp)
+            modifier = Modifier.padding(top = 2.dp),
         )
     }
 }
@@ -129,10 +129,10 @@ fun AniviewHeroCard(
     episode: String,
     progress: Float,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
-    
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -142,18 +142,18 @@ fun AniviewHeroCard(
                 colors = listOf(colors.glowEffect, colors.gradientPurple),
                 borderWidth = 2.dp,
                 glowRadius = 16.dp,
-                alpha = 0.8f
+                alpha = 0.8f,
             )
-            .clickable { onClick() }
+            .clickable { onClick() },
     ) {
         // Background image
         AsyncImage(
             model = imageUrl,
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
+            contentScale = ContentScale.Crop,
         )
-        
+
         // Gradient overlay (dark at bottom for text readability)
         Box(
             modifier = Modifier
@@ -162,36 +162,36 @@ fun AniviewHeroCard(
                     androidx.compose.ui.graphics.Brush.verticalGradient(
                         colors = listOf(
                             Color.Transparent,
-                            Color.Black.copy(alpha = 0.7f)
+                            Color.Black.copy(alpha = 0.7f),
                         ),
                         startY = 0f,
-                        endY = Float.POSITIVE_INFINITY
-                    )
-                )
+                        endY = Float.POSITIVE_INFINITY,
+                    ),
+                ),
         )
-        
+
         // Content (bottom-left)
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(20.dp)
+                .padding(20.dp),
         ) {
             // "CONTINUE WATCHING" badge
             Box(
                 modifier = Modifier
                     .background(colors.accent, RoundedCornerShape(16.dp))
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
             ) {
                 Text(
                     text = "ПРОДОЛЖИТЬ ПРОСМОТР",
                     color = colors.textOnAccent,
                     fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
                 )
             }
-            
+
             Spacer(Modifier.height(12.dp))
-            
+
             // Title
             Text(
                 text = title,
@@ -199,44 +199,44 @@ fun AniviewHeroCard(
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 2,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
-            
+
             Spacer(Modifier.height(6.dp))
-            
+
             // Episode info
             Text(
                 text = episode,
                 color = Color.White.copy(alpha = 0.8f),
-                fontSize = 14.sp
+                fontSize = 14.sp,
             )
-            
+
             Spacer(Modifier.height(12.dp))
-            
+
             // Watch button
             Row(
                 modifier = Modifier
                     .background(colors.accent, RoundedCornerShape(24.dp))
                     .padding(horizontal = 20.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+                horizontalArrangement = Arrangement.Center,
             ) {
                 Icon(
                     imageVector = Icons.Filled.PlayArrow,
                     contentDescription = null,
                     tint = colors.textOnAccent,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(20.dp),
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = "Смотреть",
                     color = colors.textOnAccent,
                     fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
                 )
             }
         }
-        
+
         // Progress bar at bottom
         LinearProgressIndicator(
             progress = progress,
@@ -245,7 +245,7 @@ fun AniviewHeroCard(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .height(4.dp)
+                .height(4.dp),
         )
     }
 }

@@ -74,7 +74,6 @@ import eu.kanade.tachiyomi.ui.player.loader.EpisodeLoader
 import eu.kanade.tachiyomi.ui.player.loader.HosterLoader
 import eu.kanade.tachiyomi.ui.player.settings.GesturePreferences
 import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences
-import tachiyomi.core.common.preference.PreferenceStore
 import eu.kanade.tachiyomi.ui.player.utils.AniSkipApi
 import eu.kanade.tachiyomi.ui.player.utils.ChapterUtils.Companion.getStringRes
 import eu.kanade.tachiyomi.ui.player.utils.TrackSelect
@@ -106,6 +105,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
+import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
 import tachiyomi.core.common.util.lang.withIOContext
@@ -1290,7 +1290,9 @@ class PlayerViewModel @JvmOverloads constructor(
         preferredDubbing: String,
         preferredQuality: String,
     ): Pair<Int, Int> {
-        logcat(LogPriority.DEBUG) { "findVideoByDubbingAndQuality: preferredDubbing='$preferredDubbing', preferredQuality='$preferredQuality'" }
+        logcat(LogPriority.DEBUG) {
+            "findVideoByDubbingAndQuality: preferredDubbing='$preferredDubbing', preferredQuality='$preferredQuality'"
+        }
 
         if (preferredDubbing.isBlank()) {
             logcat(LogPriority.DEBUG) { "findVideoByDubbingAndQuality: preferredDubbing is blank, returning (-1, -1)" }
@@ -1329,7 +1331,9 @@ class PlayerViewModel @JvmOverloads constructor(
                                     .let { if (it == -1) 999 else it + 1 }
                             }
                         }
-                        logcat(LogPriority.DEBUG) { "findVideoByDubbingAndQuality: video[$vIdx] title='${video.videoTitle}', qualityRank=$qualityRank" }
+                        logcat(LogPriority.DEBUG) {
+                            "findVideoByDubbingAndQuality: video[$vIdx] title='${video.videoTitle}', qualityRank=$qualityRank"
+                        }
                         candidates.add(VideoCandidate(hIdx, vIdx, title, qualityRank))
                     }
                 }
@@ -1341,7 +1345,9 @@ class PlayerViewModel @JvmOverloads constructor(
         if (candidates.isEmpty()) return Pair(-1, -1)
 
         val best = candidates.minByOrNull { it.qualityRank }
-        logcat(LogPriority.DEBUG) { "findVideoByDubbingAndQuality: best candidate hosterIdx=${best?.hosterIdx}, videoIdx=${best?.videoIdx}" }
+        logcat(LogPriority.DEBUG) {
+            "findVideoByDubbingAndQuality: best candidate hosterIdx=${best?.hosterIdx}, videoIdx=${best?.videoIdx}"
+        }
         return best?.let { Pair(it.hosterIdx, it.videoIdx) } ?: Pair(-1, -1)
     }
 
@@ -1356,9 +1362,13 @@ class PlayerViewModel @JvmOverloads constructor(
             else -> hosterList
         }
 
-        logcat(LogPriority.DEBUG) { "loadHosters: hosterIndex=$hosterIndex, videoIndex=$videoIndex, hosterListSize=${filteredHosterList.size}" }
+        logcat(LogPriority.DEBUG) {
+            "loadHosters: hosterIndex=$hosterIndex, videoIndex=$videoIndex, hosterListSize=${filteredHosterList.size}"
+        }
         filteredHosterList.forEachIndexed { idx, h ->
-            logcat(LogPriority.DEBUG) { "loadHosters hoster[$idx]: name=${h.hosterName}, videoListSize=${h.videoList?.size}" }
+            logcat(LogPriority.DEBUG) {
+                "loadHosters hoster[$idx]: name=${h.hosterName}, videoListSize=${h.videoList?.size}"
+            }
         }
         val hasFoundPreferredVideo = AtomicBoolean(false)
 
@@ -1435,7 +1445,9 @@ class PlayerViewModel @JvmOverloads constructor(
                             preferenceStore.getString("anime_quality_pref_${it.id}", "").get()
                         } ?: ""
 
-                        logcat(LogPriority.DEBUG) { "loadHosters: animeId=${anime?.id}, preferredDubbing='$preferredDubbing', preferredQuality='$preferredQuality'" }
+                        logcat(LogPriority.DEBUG) {
+                            "loadHosters: animeId=${anime?.id}, preferredDubbing='$preferredDubbing', preferredQuality='$preferredQuality'"
+                        }
 
                         var (hosterIdx, videoIdx) = findVideoByDubbingAndQuality(
                             hosterState.value,
@@ -1443,13 +1455,17 @@ class PlayerViewModel @JvmOverloads constructor(
                             preferredQuality,
                         )
 
-                        logcat(LogPriority.DEBUG) { "loadHosters: findVideoByDubbingAndQuality returned hosterIdx=$hosterIdx, videoIdx=$videoIdx" }
+                        logcat(LogPriority.DEBUG) {
+                            "loadHosters: findVideoByDubbingAndQuality returned hosterIdx=$hosterIdx, videoIdx=$videoIdx"
+                        }
 
                         if (hosterIdx == -1) {
                             val best = HosterLoader.selectBestVideo(hosterState.value)
                             hosterIdx = best.first
                             videoIdx = best.second
-                            logcat(LogPriority.DEBUG) { "loadHosters: Using selectBestVideo fallback: hosterIdx=$hosterIdx, videoIdx=$videoIdx" }
+                            logcat(LogPriority.DEBUG) {
+                                "loadHosters: Using selectBestVideo fallback: hosterIdx=$hosterIdx, videoIdx=$videoIdx"
+                            }
                         }
 
                         if (hosterIdx == -1) {

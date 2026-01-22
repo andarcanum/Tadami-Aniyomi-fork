@@ -33,7 +33,6 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import eu.kanade.domain.ui.UiPreferences
-import eu.kanade.domain.ui.model.AppTheme
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.components.TabbedScreenAurora
@@ -44,6 +43,7 @@ import eu.kanade.presentation.library.anime.AnimeLibraryContent
 import eu.kanade.presentation.library.anime.AnimeLibrarySettingsDialog
 import eu.kanade.presentation.library.components.LibraryToolbar
 import eu.kanade.presentation.library.manga.MangaLibraryAuroraContent
+import eu.kanade.presentation.library.manga.MangaLibrarySettingsDialog
 import eu.kanade.presentation.more.onboarding.GETTING_STARTED_URL
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.R
@@ -54,9 +54,10 @@ import eu.kanade.tachiyomi.ui.category.CategoriesTab
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreen
 import eu.kanade.tachiyomi.ui.home.HomeScreen
+import eu.kanade.tachiyomi.ui.library.manga.MangaLibraryScreenModel
+import eu.kanade.tachiyomi.ui.library.manga.MangaLibrarySettingsScreenModel
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences
-import eu.kanade.tachiyomi.ui.library.manga.MangaLibraryScreenModel
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.channels.Channel
@@ -67,6 +68,7 @@ import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.entries.anime.model.Anime
+import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.items.episode.model.Episode
 import tachiyomi.domain.library.anime.LibraryAnime
 import tachiyomi.i18n.MR
@@ -76,8 +78,9 @@ import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
 import tachiyomi.presentation.core.screens.EmptyScreenAction
 import tachiyomi.presentation.core.screens.LoadingScreen
-import tachiyomi.source.local.entries.anime.isLocal
 import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.source.local.entries.anime.isLocal
+import tachiyomi.source.local.entries.manga.isLocal
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
@@ -115,6 +118,7 @@ data object AnimeLibraryTab : Tab {
         val screenModel = rememberScreenModel { AnimeLibraryScreenModel() }
         val mangaScreenModel = rememberScreenModel { MangaLibraryScreenModel() }
         val settingsScreenModel = rememberScreenModel { AnimeLibrarySettingsScreenModel() }
+        val mangaSettingsScreenModel = rememberScreenModel { MangaLibrarySettingsScreenModel() }
         val state by screenModel.state.collectAsState()
         val mangaState by mangaScreenModel.state.collectAsState()
 
@@ -176,7 +180,7 @@ data object AnimeLibraryTab : Tab {
                                 )
                             }
                         }
-                    }
+                    },
                 )
             },
         )
@@ -191,7 +195,9 @@ data object AnimeLibraryTab : Tab {
                     onMangaClicked = { navigator.push(MangaScreen(it)) },
                     contentPadding = contentPadding,
                     onFilterClicked = mangaScreenModel::showSettingsDialog,
-                    onRefresh = { onClickRefreshManga(state.categories.getOrNull(mangaScreenModel.activeCategoryIndex)) },
+                    onRefresh = {
+                        onClickRefreshManga(state.categories.getOrNull(mangaScreenModel.activeCategoryIndex))
+                    },
                     onGlobalUpdate = { onClickRefreshManga(null) },
                     onOpenRandomEntry = {
                         scope.launch {
@@ -204,7 +210,7 @@ data object AnimeLibraryTab : Tab {
                                 )
                             }
                         }
-                    }
+                    },
                 )
             },
         )
@@ -237,7 +243,8 @@ data object AnimeLibraryTab : Tab {
         }
 
         val isAnimeLibraryEmpty = state.searchQuery.isNullOrEmpty() && !state.hasActiveFilters && state.isLibraryEmpty
-        val isMangaLibraryEmpty = mangaState.searchQuery.isNullOrEmpty() && !mangaState.hasActiveFilters && mangaState.isLibraryEmpty
+        val isMangaLibraryEmpty =
+            mangaState.searchQuery.isNullOrEmpty() && !mangaState.hasActiveFilters && mangaState.isLibraryEmpty
         val isLibraryEmpty = if (isAurora) {
             when {
                 showAnimeSection && showMangaSection -> isAnimeLibraryEmpty && isMangaLibraryEmpty
@@ -426,6 +433,49 @@ data object AnimeLibraryTab : Tab {
                         screenModel.clearSelection()
                     },
                     isManga = false,
+                )
+            }
+            null -> {}
+        }
+
+        val onDismissMangaRequest = mangaScreenModel::closeDialog
+        when (val dialog = mangaState.dialog) {
+            is MangaLibraryScreenModel.Dialog.SettingsSheet -> run {
+                val category = mangaState.categories.getOrNull(mangaScreenModel.activeCategoryIndex)
+                if (category == null) {
+                    onDismissMangaRequest()
+                    return@run
+                }
+                MangaLibrarySettingsDialog(
+                    onDismissRequest = onDismissMangaRequest,
+                    screenModel = mangaSettingsScreenModel,
+                    category = category,
+                )
+            }
+            is MangaLibraryScreenModel.Dialog.ChangeCategory -> {
+                ChangeCategoryDialog(
+                    initialSelection = dialog.initialSelection,
+                    onDismissRequest = onDismissMangaRequest,
+                    onEditCategories = {
+                        mangaScreenModel.clearSelection()
+                        navigator.push(CategoriesTab)
+                        CategoriesTab.showMangaCategory()
+                    },
+                    onConfirm = { include, exclude ->
+                        mangaScreenModel.clearSelection()
+                        mangaScreenModel.setMangaCategories(dialog.manga, include, exclude)
+                    },
+                )
+            }
+            is MangaLibraryScreenModel.Dialog.DeleteManga -> {
+                DeleteLibraryEntryDialog(
+                    containsLocalEntry = dialog.manga.any(Manga::isLocal),
+                    onDismissRequest = onDismissMangaRequest,
+                    onConfirm = { deleteManga, deleteChapter ->
+                        mangaScreenModel.removeMangas(dialog.manga, deleteManga, deleteChapter)
+                        mangaScreenModel.clearSelection()
+                    },
+                    isManga = true,
                 )
             }
             null -> {}
