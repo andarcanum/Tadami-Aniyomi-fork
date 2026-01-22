@@ -52,6 +52,7 @@ fun MangaInfoCard(
 ) {
     val colors = AuroraTheme.colors
     var descriptionExpanded by rememberSaveable { mutableStateOf(false) }
+    var genresExpanded by rememberSaveable { mutableStateOf(false) }
 
     val nextUpdateDays = remember(nextUpdate) {
         if (nextUpdate != null) {
@@ -142,22 +143,45 @@ fun MangaInfoCard(
                 }
             }
 
-            // Genre tags
+            // Genre tags - collapsible
             if (!manga.genre.isNullOrEmpty()) {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    manga.genre!!.forEach { genre ->
-                        SuggestionChip(
-                            onClick = { onTagSearch(genre) },
-                            label = {
-                                Text(
-                                    text = genre,
-                                    fontSize = 12.sp
-                                )
-                            }
+                Column(
+                    modifier = Modifier.animateContentSize(
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessLow
                         )
+                    )
+                ) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val genresToShow = if (genresExpanded) manga.genre!! else manga.genre!!.take(3)
+                        genresToShow.forEach { genre ->
+                            SuggestionChip(
+                                onClick = { onTagSearch(genre) },
+                                label = {
+                                    Text(
+                                        text = genre,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            )
+                        }
+                    }
+
+                    if (manga.genre!!.size > 3) {
+                        TextButton(
+                            onClick = { genresExpanded = !genresExpanded }
+                        ) {
+                            Text(
+                                text = if (genresExpanded) "Show less genres" else "Show all ${manga.genre!!.size} genres",
+                                color = colors.accent,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
             }
