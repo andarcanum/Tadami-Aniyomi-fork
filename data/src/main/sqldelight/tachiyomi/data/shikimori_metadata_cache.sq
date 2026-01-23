@@ -1,0 +1,47 @@
+CREATE TABLE shikimori_metadata_cache (
+    _id INTEGER PRIMARY KEY AUTOINCREMENT,
+    anime_id INTEGER NOT NULL UNIQUE,
+    shikimori_id INTEGER,
+    score REAL,
+    kind TEXT,
+    cover_url TEXT,
+    search_query TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    is_manual_match INTEGER AS Boolean DEFAULT 0,
+    FOREIGN KEY(anime_id) REFERENCES mangas(_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_shikimori_cache_anime_id ON shikimori_metadata_cache(anime_id);
+CREATE INDEX idx_shikimori_cache_updated_at ON shikimori_metadata_cache(updated_at);
+
+getByAnimeId:
+SELECT * FROM shikimori_metadata_cache
+WHERE anime_id = :animeId;
+
+upsert:
+INSERT INTO shikimori_metadata_cache(
+    anime_id, shikimori_id, score, kind, cover_url,
+    search_query, updated_at, is_manual_match
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(anime_id)
+DO UPDATE SET
+    shikimori_id = excluded.shikimori_id,
+    score = excluded.score,
+    kind = excluded.kind,
+    cover_url = excluded.cover_url,
+    search_query = excluded.search_query,
+    updated_at = excluded.updated_at,
+    is_manual_match = excluded.is_manual_match
+WHERE is_manual_match = 0;
+
+deleteStaleEntries:
+DELETE FROM shikimori_metadata_cache
+WHERE updated_at < :threshold AND is_manual_match = 0;
+
+deleteByAnimeId:
+DELETE FROM shikimori_metadata_cache
+WHERE anime_id = :animeId;
+
+clearAll:
+DELETE FROM shikimori_metadata_cache;
