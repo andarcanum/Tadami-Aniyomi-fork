@@ -1,0 +1,17 @@
+import kotlin.Boolean;
+
+CREATE TABLE IF NOT EXISTS shikimori_metadata_cache (
+    _id INTEGER PRIMARY KEY AUTOINCREMENT,
+    anime_id INTEGER NOT NULL UNIQUE,
+    shikimori_id INTEGER,
+    score REAL,
+    kind TEXT,
+    cover_url TEXT,
+    search_query TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    is_manual_match INTEGER AS Boolean DEFAULT 0,
+    FOREIGN KEY(anime_id) REFERENCES animes(_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_shikimori_cache_anime_id ON shikimori_metadata_cache(anime_id);
+CREATE INDEX IF NOT EXISTS idx_shikimori_cache_updated_at ON shikimori_metadata_cache(updated_at);
