@@ -92,21 +92,21 @@ fun AnimeInfoCard(
                 // Rating (placeholder for Shikimori integration)
                 StatItem(
                     value = stringResource(MR.strings.not_applicable),
-                    label = stringResource(AYMR.strings.aurora_rating),
+                    label = "РЕЙТИНГ",
                     modifier = if (isCompleted) Modifier else Modifier.weight(1f),
                 )
 
                 // Type (placeholder for Shikimori integration)
                 StatItem(
                     value = stringResource(MR.strings.not_applicable),
-                    label = stringResource(AYMR.strings.aurora_type),
+                    label = "ТИП",
                     modifier = if (isCompleted) Modifier else Modifier.weight(1f),
                 )
 
                 // Status
                 StatItem(
                     value = AnimeStatusFormatter.formatStatus(anime.status),
-                    label = stringResource(AYMR.strings.aurora_status),
+                    label = "СТАТУС",
                     modifier = if (isCompleted) Modifier else Modifier.weight(1f),
                 )
 
@@ -143,7 +143,7 @@ fun AnimeInfoCard(
                     verticalAlignment = Alignment.Top,
                 ) {
                     Text(
-                        text = anime.description ?: stringResource(AYMR.strings.aurora_no_description),
+                        text = anime.description ?: "Описание отсутствует",
                         color = colors.textPrimary.copy(alpha = 0.9f),
                         fontSize = 14.sp,
                         lineHeight = 22.sp,

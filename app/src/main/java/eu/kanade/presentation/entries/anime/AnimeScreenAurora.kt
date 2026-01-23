@@ -340,11 +340,10 @@ fun AnimeScreenAuroraImpl(
                     .size(44.dp)
                     .background(colors.accent.copy(alpha = 0.2f), CircleShape),
             ) {
-                val filterTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f)
                 Icon(
                     Icons.Default.FilterList,
                     contentDescription = null,
-                    tint = filterTint,
+                    tint = colors.accent,
                 )
             }
 
