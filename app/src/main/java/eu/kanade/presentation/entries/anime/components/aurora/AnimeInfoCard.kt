@@ -134,7 +134,6 @@ fun AnimeInfoCard(
                             dampingRatio = Spring.DampingRatioMediumBouncy,
                             stiffness = Spring.StiffnessLow,
                         ),
-                        alignment = Alignment.TopStart,
                     ),
             ) {
                 Row(
@@ -180,7 +179,6 @@ fun AnimeInfoCard(
                                 dampingRatio = Spring.DampingRatioMediumBouncy,
                                 stiffness = Spring.StiffnessLow,
                             ),
-                            alignment = Alignment.TopStart,
                         ),
                 ) {
                     Row(

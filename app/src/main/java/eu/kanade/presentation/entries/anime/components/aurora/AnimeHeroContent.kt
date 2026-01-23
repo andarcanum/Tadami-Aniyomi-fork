@@ -71,6 +71,7 @@ fun AnimeHeroContent(
             color = Color.White,
             fontSize = 26.sp,
             fontWeight = FontWeight.Bold,
+            lineHeight = 32.sp,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
