@@ -681,4 +681,14 @@
     <string name="aurora_chapter_progress">Глава %d</string>
     <string name="aurora_select_dubbing">Выбрать озвучку</string>
     <string name="aurora_no_description">Нет описания</string>
+
+    <!-- Original Title -->
+    <string name="pref_show_original_title">Показывать оригинальное название</string>
+    <string name="pref_show_original_title_summary">Отображать оригинальное название из описания в скобках</string>
+
+    <!-- Shikimori Integration -->
+    <string name="pref_use_shikimori_rating">Использовать рейтинг и тип из Shikimori</string>
+    <string name="pref_use_shikimori_rating_summary">Отображать рейтинг и тип аниме из базы данных Shikimori.one</string>
+    <string name="pref_use_shikimori_covers">Использовать постеры Shikimori</string>
+    <string name="pref_use_shikimori_covers_summary">Заменять постеры аниме на высококачественные версии из Shikimori.one</string>
 </resources>

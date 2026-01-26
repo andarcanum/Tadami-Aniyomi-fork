@@ -45,6 +45,7 @@ object SettingsAppearanceScreen : SearchableSettings {
         return listOf(
             getThemeGroup(uiPreferences = uiPreferences),
             getDisplayGroup(uiPreferences = uiPreferences),
+            getShikimoriGroup(uiPreferences = uiPreferences),
         )
     }
 
@@ -196,6 +197,32 @@ object SettingsAppearanceScreen : SearchableSettings {
                         stringResource(MR.strings.relative_time_today),
                         formattedNow,
                     ),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = uiPreferences.showOriginalTitle(),
+                    title = stringResource(AYMR.strings.pref_show_original_title),
+                    subtitle = stringResource(AYMR.strings.pref_show_original_title_summary),
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getShikimoriGroup(
+        uiPreferences: UiPreferences,
+    ): Preference.PreferenceGroup {
+        return Preference.PreferenceGroup(
+            title = stringResource(AYMR.strings.pref_category_shikimori),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = uiPreferences.useShikimoriRating(),
+                    title = stringResource(AYMR.strings.pref_use_shikimori_rating),
+                    subtitle = stringResource(AYMR.strings.pref_use_shikimori_rating_summary),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = uiPreferences.useShikimoriCovers(),
+                    title = stringResource(AYMR.strings.pref_use_shikimori_covers),
+                    subtitle = stringResource(AYMR.strings.pref_use_shikimori_covers_summary),
                 ),
             ),
         )

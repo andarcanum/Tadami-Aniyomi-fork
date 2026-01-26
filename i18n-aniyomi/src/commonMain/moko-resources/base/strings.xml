@@ -747,4 +747,13 @@
     <string name="aurora_chapter_progress">Chapter %d</string>
     <string name="aurora_select_dubbing">Select Dubbing</string>
     <string name="aurora_no_description">No description</string>
+
+    <!-- Shikimori Integration -->
+    <string name="pref_category_shikimori">Shikimori Integration</string>
+    <string name="pref_use_shikimori_rating">Use Shikimori ratings and types</string>
+    <string name="pref_use_shikimori_rating_summary">Display anime ratings and types from Shikimori.one</string>
+    <string name="pref_use_shikimori_covers">Use Shikimori covers</string>
+    <string name="pref_use_shikimori_covers_summary">Replace anime covers with high-quality images from Shikimori.one</string>
+    <string name="pref_show_original_title">Show original title</string>
+    <string name="pref_show_original_title_summary">Display original title from description in parentheses</string>
 </resources>

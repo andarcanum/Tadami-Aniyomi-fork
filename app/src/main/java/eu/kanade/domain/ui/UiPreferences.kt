@@ -42,6 +42,8 @@ class UiPreferences(
 
     fun useShikimoriCovers() = preferenceStore.getBoolean("use_shikimori_covers", true)
 
+    fun showOriginalTitle() = preferenceStore.getBoolean("show_original_title", true)
+
     companion object {
         fun dateFormat(format: String): DateTimeFormatter = when (format) {
             "" -> DateTimeFormatter.ofLocalizedDate(FormatStyle.SHORT)
