@@ -1,0 +1,66 @@
+CREATE TABLE achievement_progress (
+    achievement_id TEXT NOT NULL PRIMARY KEY,
+    progress INTEGER NOT NULL DEFAULT 0,
+    max_progress INTEGER NOT NULL DEFAULT 100,
+    is_unlocked INTEGER NOT NULL DEFAULT 0,
+    unlocked_at INTEGER,
+    last_updated INTEGER NOT NULL,
+    FOREIGN KEY(achievement_id) REFERENCES achievements(id) ON DELETE CASCADE
+);
+
+CREATE INDEX progress_unlocked_idx ON achievement_progress(is_unlocked);
+CREATE INDEX progress_updated_idx ON achievement_progress(last_updated);
+
+selectAll:
+SELECT * FROM achievement_progress;
+
+getById:
+SELECT * FROM achievement_progress
+WHERE achievement_id = :achievement_id;
+
+getUnlocked:
+SELECT * FROM achievement_progress
+WHERE is_unlocked = 1;
+
+insert:
+INSERT INTO achievement_progress(
+    achievement_id, progress, max_progress,
+    is_unlocked, unlocked_at, last_updated
+) VALUES (
+    :achievement_id, :progress, :max_progress,
+    :is_unlocked, :unlocked_at, :last_updated
+);
+
+update:
+UPDATE achievement_progress
+SET
+    progress = :progress,
+    max_progress = :max_progress,
+    is_unlocked = :is_unlocked,
+    unlocked_at = :unlocked_at,
+    last_updated = :last_updated
+WHERE achievement_id = :achievement_id;
+
+upsert:
+INSERT INTO achievement_progress(
+    achievement_id, progress, max_progress,
+    is_unlocked, unlocked_at, last_updated
+) VALUES (
+    :achievement_id, :progress, :max_progress,
+    :is_unlocked, :unlocked_at, :last_updated
+)
+ON CONFLICT(achievement_id)
+DO UPDATE SET
+    progress = :progress,
+    max_progress = :max_progress,
+    is_unlocked = :is_unlocked,
+    unlocked_at = :unlocked_at,
+    last_updated = :last_updated
+WHERE achievement_id = :achievement_id;
+
+deleteById:
+DELETE FROM achievement_progress
+WHERE achievement_id = :achievement_id;
+
+deleteAll:
+DELETE FROM achievement_progress;

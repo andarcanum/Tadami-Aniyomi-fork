@@ -3,6 +3,8 @@ package tachiyomi.data.history.manga
 import kotlinx.coroutines.flow.Flow
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.data.achievement.handler.AchievementEventBus
+import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.data.handlers.manga.MangaDatabaseHandler
 import tachiyomi.domain.history.manga.model.MangaHistory
 import tachiyomi.domain.history.manga.model.MangaHistoryUpdate
@@ -11,6 +13,7 @@ import tachiyomi.domain.history.manga.repository.MangaHistoryRepository
 
 class MangaHistoryRepositoryImpl(
     private val handler: MangaDatabaseHandler,
+    private val eventBus: AchievementEventBus,
 ) : MangaHistoryRepository {
 
     override fun getMangaHistory(query: String): Flow<List<MangaHistoryWithRelations>> {
@@ -67,6 +70,31 @@ class MangaHistoryRepositoryImpl(
                     historyUpdate.readAt,
                     historyUpdate.sessionReadDuration,
                 )
+            }
+
+            // Publish achievement event after successful upsert
+            // Only publish if this is an actual read operation (has a valid readAt date)
+            if (historyUpdate.readAt.time > 0) {
+                try {
+                    val chapterInfo = handler.awaitOneOrNull {
+                        historyQueries.getChapterInfo(historyUpdate.chapterId) { mangaId, chapterNumber ->
+                            Pair(mangaId, chapterNumber)
+                        }
+                    }
+
+                    if (chapterInfo != null) {
+                        eventBus.tryEmit(
+                            AchievementEvent.ChapterRead(
+                                mangaId = chapterInfo.first,
+                                chapterNumber = chapterInfo.second.toInt(),
+                                timestamp = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                } catch (e: Exception) {
+                    // Don't let event publishing errors affect history operations
+                    logcat(LogPriority.WARN, throwable = e)
+                }
             }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, throwable = e)

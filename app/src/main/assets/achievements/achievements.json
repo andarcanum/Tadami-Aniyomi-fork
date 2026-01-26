@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "achievements": [
+    {
+      "id": "first_chapter",
+      "type": "event",
+      "category": "manga",
+      "threshold": 1,
+      "points": 10,
+      "title": "Первые шаги",
+      "description": "Прочитайте свою первую главу",
+      "badge_icon": "ic_badge_first_chapter",
+      "is_hidden": false,
+      "is_secret": false
+    },
+    {
+      "id": "read_10_chapters",
+      "type": "quantity",
+      "category": "manga",
+      "threshold": 10,
+      "points": 25,
+      "title": "Новичок",
+      "description": "Прочитайте 10 глав",
+      "badge_icon": "ic_badge_10_chapters",
+      "is_hidden": false,
+      "is_secret": false
+    },
+    {
+      "id": "read_100_chapters",
+      "type": "quantity",
+      "category": "manga",
+      "threshold": 100,
+      "points": 100,
+      "title": "Любитель манги",
+      "description": "Прочитайте 100 глав",
+      "badge_icon": "ic_badge_100_chapters",
+      "is_hidden": false,
+      "is_secret": false
+    },
+    {
+      "id": "genre_explorer",
+      "type": "diversity",
+      "category": "both",
+      "threshold": 5,
+      "points": 150,
+      "title": "Исследователь жанров",
+      "description": "Читайте 5 разных жанров",
+      "badge_icon": "ic_badge_genres",
+      "is_hidden": false,
+      "is_secret": false
+    },
+    {
+      "id": "first_episode",
+      "type": "event",
+      "category": "anime",
+      "threshold": 1,
+      "points": 10,
+      "title": "Первый взгляд",
+      "description": "Посмотрите свою первую серию",
+      "badge_icon": "ic_badge_first_episode",
+      "is_hidden": false,
+      "is_secret": false
+    },
+    {
+      "id": "watch_100_episodes",
+      "type": "quantity",
+      "category": "anime",
+      "threshold": 100,
+      "points": 100,
+      "title": "Любитель аниме",
+      "description": "Посмотрите 100 серий",
+      "badge_icon": "ic_badge_100_episodes",
+      "is_hidden": false,
+      "is_secret": false
+    },
+    {
+      "id": "content_master",
+      "type": "quantity",
+      "category": "both",
+      "threshold": 1000,
+      "points": 500,
+      "title": "Мастер контента",
+      "description": "Прочитайте/посмотрите 1000 единиц контента",
+      "badge_icon": "ic_badge_master",
+      "unlockable_id": "theme_master",
+      "is_hidden": false,
+      "is_secret": false
+    }
+  ]
+}

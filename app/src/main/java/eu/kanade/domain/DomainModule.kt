@@ -89,6 +89,10 @@ import tachiyomi.data.track.anime.AnimeTrackRepositoryImpl
 import tachiyomi.data.track.manga.MangaTrackRepositoryImpl
 import tachiyomi.data.updates.anime.AnimeUpdatesRepositoryImpl
 import tachiyomi.data.updates.manga.MangaUpdatesRepositoryImpl
+import tachiyomi.data.achievement.repository.AchievementRepositoryImpl
+import tachiyomi.data.achievement.loader.AchievementLoader
+import tachiyomi.data.achievement.handler.AchievementEventBus
+import tachiyomi.data.achievement.handler.AchievementHandler
 import tachiyomi.domain.category.anime.interactor.CreateAnimeCategoryWithName
 import tachiyomi.domain.category.anime.interactor.DeleteAnimeCategory
 import tachiyomi.domain.category.anime.interactor.GetAnimeCategories
@@ -198,6 +202,7 @@ import tachiyomi.domain.updates.anime.interactor.GetAnimeUpdates
 import tachiyomi.domain.updates.anime.repository.AnimeUpdatesRepository
 import tachiyomi.domain.updates.manga.interactor.GetMangaUpdates
 import tachiyomi.domain.updates.manga.repository.MangaUpdatesRepository
+import tachiyomi.domain.achievement.repository.AchievementRepository
 import uy.kohesive.injekt.api.InjektModule
 import uy.kohesive.injekt.api.InjektRegistrar
 import uy.kohesive.injekt.api.addFactory
@@ -327,7 +332,7 @@ class DomainModule : InjektModule {
         addFactory { GetAvailableScanlators(get()) }
         addFactory { FilterChaptersForDownload(get(), get(), get()) }
 
-        addSingletonFactory<AnimeHistoryRepository> { AnimeHistoryRepositoryImpl(get()) }
+        addSingletonFactory<AnimeHistoryRepository> { AnimeHistoryRepositoryImpl(get(), get()) }
         addFactory { GetAnimeHistory(get()) }
         addFactory { UpsertAnimeHistory(get()) }
         addFactory { RemoveAnimeHistory(get()) }
@@ -338,7 +343,7 @@ class DomainModule : InjektModule {
         addFactory { GetAnimeExtensionSources(get()) }
         addFactory { GetAnimeExtensionLanguages(get(), get()) }
 
-        addSingletonFactory<MangaHistoryRepository> { MangaHistoryRepositoryImpl(get()) }
+        addSingletonFactory<MangaHistoryRepository> { MangaHistoryRepositoryImpl(get(), get()) }
         addFactory { GetMangaHistory(get()) }
         addFactory { UpsertMangaHistory(get()) }
         addFactory { RemoveMangaHistory(get()) }
@@ -415,5 +420,10 @@ class DomainModule : InjektModule {
         addFactory { SourcePreferences(get()) }
 
         addFactory { TrackSelect(get(), get()) }
+
+        addSingletonFactory<AchievementRepository> { AchievementRepositoryImpl(get()) }
+        addSingletonFactory { AchievementLoader(get(), get(), get()) }
+        addSingletonFactory { AchievementEventBus() }
+        addSingletonFactory { AchievementHandler(get(), get()) }
     }
 }

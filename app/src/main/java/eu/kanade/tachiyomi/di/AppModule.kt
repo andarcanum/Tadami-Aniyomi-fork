@@ -44,6 +44,7 @@ import tachiyomi.data.DateColumnAdapter
 import tachiyomi.data.FetchTypeColumnAdapter
 import tachiyomi.data.MangaUpdateStrategyColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
+import tachiyomi.data.achievement.database.AchievementsDatabase
 import tachiyomi.data.handlers.anime.AndroidAnimeDatabaseHandler
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
 import tachiyomi.data.handlers.manga.AndroidMangaDatabaseHandler
@@ -120,6 +121,31 @@ class AppModule(val app: Application) : InjektModule {
             },
         )
 
+        val sqlDriverAchievements = AndroidSqliteDriver(
+            schema = tachiyomi.data.achievement.AchievementsDatabase.Schema,
+            context = app,
+            name = AchievementsDatabase.NAME,
+            factory = if (BuildConfig.DEBUG && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                // Support database inspector in Android Studio
+                FrameworkSQLiteOpenHelperFactory()
+            } else {
+                RequerySQLiteOpenHelperFactory()
+            },
+            callback = object : AndroidSqliteDriver.Callback(tachiyomi.data.achievement.AchievementsDatabase.Schema) {
+                override fun onOpen(db: SupportSQLiteDatabase) {
+                    super.onOpen(db)
+                    setPragma(db, "foreign_keys = ON")
+                    setPragma(db, "journal_mode = WAL")
+                    setPragma(db, "synchronous = NORMAL")
+                }
+                private fun setPragma(db: SupportSQLiteDatabase, pragma: String) {
+                    val cursor = db.query("PRAGMA $pragma")
+                    cursor.moveToFirst()
+                    cursor.close()
+                }
+            },
+        )
+
         addSingletonFactory {
             Database(
                 driver = sqlDriverManga,
@@ -144,6 +170,12 @@ class AppModule(val app: Application) : InjektModule {
                     update_strategyAdapter = AnimeUpdateStrategyColumnAdapter,
                     fetch_typeAdapter = FetchTypeColumnAdapter,
                 ),
+            )
+        }
+
+        addSingletonFactory {
+            AchievementsDatabase(
+                driver = sqlDriverAchievements,
             )
         }
 
@@ -250,6 +282,7 @@ class AppModule(val app: Application) : InjektModule {
 
             get<Database>()
             get<AnimeDatabase>()
+            get<AchievementsDatabase>()
 
             get<MangaDownloadManager>()
             get<AnimeDownloadManager>()

@@ -63,3 +63,10 @@ DO UPDATE
 SET
     last_seen = :seenAt
 WHERE episode_id = :episodeId;
+
+getEpisodeInfo:
+SELECT
+    EP.anime_id,
+    EP.episode_number
+FROM episodes EP
+WHERE EP._id = :episodeId;

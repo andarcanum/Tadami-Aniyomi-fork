@@ -39,6 +39,7 @@ import eu.kanade.tachiyomi.data.coil.MangaCoverKeyer
 import eu.kanade.tachiyomi.data.coil.MangaKeyer
 import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
 import eu.kanade.tachiyomi.data.notification.Notifications
+import tachiyomi.data.achievement.loader.AchievementLoader
 import eu.kanade.tachiyomi.di.AppModule
 import eu.kanade.tachiyomi.di.PreferenceModule
 import eu.kanade.tachiyomi.network.NetworkHelper
@@ -156,6 +157,34 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
 
         with(AnimeWidgetManager(Injekt.get(), Injekt.get())) {
             init(ProcessLifecycleOwner.get().lifecycleScope)
+        }
+
+        // Initialize achievements from JSON
+        scope.launch {
+            try {
+                val loader = Injekt.get<AchievementLoader>()
+                val result = loader.loadAchievements()
+                result.onSuccess { count ->
+                    if (count > 0) {
+                        logcat { "Loaded $count achievement definitions from JSON" }
+                    }
+                }.onFailure { e ->
+                    logcat(LogPriority.ERROR, e) { "Failed to load achievement definitions" }
+                }
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Error loading achievements" }
+            }
+        }
+
+        // Start achievement handler
+        scope.launch {
+            try {
+                val achievementHandler = Injekt.get<tachiyomi.data.achievement.handler.AchievementHandler>()
+                achievementHandler.start()
+                logcat { "Achievement handler started" }
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to start achievement handler" }
+            }
         }
 
         if (!LogcatLogger.isInstalled && networkPreferences.verboseLogging().get()) {

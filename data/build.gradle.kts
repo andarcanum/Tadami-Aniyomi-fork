@@ -26,6 +26,12 @@ android {
                 schemaOutputDirectory.set(project.file("./src/main/sqldelightanime"))
                 srcDirs.from(project.file("./src/main/sqldelightanime"))
             }
+            create("AchievementsDatabase") {
+                packageName.set("tachiyomi.data.achievement")
+                dialect(libs.sqldelight.dialects.sql)
+                schemaOutputDirectory.set(project.file("./src/main/sqldelightachievements"))
+                srcDirs.from(project.file("./src/main/sqldelightachievements"))
+            }
         }
     }
 }
