@@ -1,6 +1,30 @@
 package tachiyomi.data.achievement.handler
 
+/**
+ * Калькулятор прогресса достижений.
+ *
+ * Агрегирует данные из различных источников для вычисления прогресса достижений.
+ * Используется при первичной инициализации системы и для пересчета прогресса.
+ *
+ * Поддерживаемые типы расчетов:
+ * - Quantity: Количество прочитанных глав/просмотренных серий
+ * - Event: Одноразовые события (первые действия)
+ * - Diversity: Разнообразие (жанры, источники)
+ * - Streak: Серии активности (дни подряд)
+ *
+ * @param repository Репозиторий достижений для сохранения прогресса
+ * @param mangaHandler Обработчик БД манги для получения статистики
+ * @param animeHandler Обработчик БД аниме для получения статистики
+ * @param diversityChecker Проверщик разнообразия для вычисления diversity-достижений
+ * @param streakChecker Проверщик серий для вычисления streak-достижений
+ *
+ * @see Achievement
+ * @see AchievementProgress
+ */
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import logcat.LogPriority
+import logcat.logcat
 import tachiyomi.data.achievement.handler.checkers.DiversityAchievementChecker
 import tachiyomi.data.achievement.handler.checkers.StreakAchievementChecker
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
@@ -10,8 +34,6 @@ import tachiyomi.domain.achievement.model.AchievementCategory
 import tachiyomi.domain.achievement.model.AchievementProgress
 import tachiyomi.domain.achievement.model.AchievementType
 import tachiyomi.domain.achievement.repository.AchievementRepository
-import logcat.LogPriority
-import logcat.logcat
 
 class AchievementCalculator(
     private val repository: AchievementRepository,
@@ -20,6 +42,13 @@ class AchievementCalculator(
     private val diversityChecker: DiversityAchievementChecker,
     private val streakChecker: StreakAchievementChecker,
 ) {
+    companion object {
+        // Batch size for progress updates to avoid memory issues
+        private const val BATCH_SIZE = 50
+
+        // Query limit for large library operations
+        private const val QUERY_LIMIT = 1000
+    }
 
     suspend fun calculateInitialProgress(): CalculationResult {
         val startTime = System.currentTimeMillis()
@@ -39,7 +68,7 @@ class AchievementCalculator(
             // 2. Event achievements (first actions)
             val firstAction = if (mangaChapters > 0 || animeEpisodes > 0) 1 else 0
 
-            // 3. Diversity achievements
+            // 3. Diversity achievements (now with caching)
             val genreCount = diversityChecker.getGenreDiversity()
             val sourceCount = diversityChecker.getSourceDiversity()
             logcat(LogPriority.INFO) { "Unique genres: $genreCount, sources: $sourceCount" }
@@ -48,8 +77,8 @@ class AchievementCalculator(
             val streak = streakChecker.getCurrentStreak()
             logcat(LogPriority.INFO) { "Current streak: $streak days" }
 
-            // Update progress for all achievements
-            allAchievements.forEach { achievement ->
+            // Calculate all progress updates first
+            val progressUpdates = allAchievements.map { achievement ->
                 val progress = when (achievement.type) {
                     AchievementType.QUANTITY -> calculateQuantityProgress(achievement, mangaChapters, animeEpisodes)
                     AchievementType.EVENT -> calculateEventProgress(achievement, firstAction)
@@ -60,39 +89,44 @@ class AchievementCalculator(
                 val threshold = achievement.threshold ?: 1
                 val isUnlocked = progress >= threshold
 
-                repository.insertOrUpdateProgress(
-                    AchievementProgress(
-                        achievementId = achievement.id,
-                        progress = progress,
-                        maxProgress = threshold,
-                        isUnlocked = isUnlocked,
-                        unlockedAt = if (isUnlocked) System.currentTimeMillis() else null,
-                        lastUpdated = System.currentTimeMillis()
-                    )
+                AchievementProgress(
+                    achievementId = achievement.id,
+                    progress = progress,
+                    maxProgress = threshold,
+                    isUnlocked = isUnlocked,
+                    unlockedAt = if (isUnlocked) System.currentTimeMillis() else null,
+                    lastUpdated = System.currentTimeMillis(),
                 )
+            }
 
-                achievementsProcessed++
-                if (isUnlocked) achievementsUnlocked++
+            // Batch insert progress updates in chunks
+            progressUpdates.chunked(BATCH_SIZE).forEach { batch ->
+                batch.forEach { progress ->
+                    repository.insertOrUpdateProgress(progress)
+                    achievementsProcessed++
+                    if (progress.isUnlocked) achievementsUnlocked++
+                }
             }
 
             // Populate activity log for streak calculation
             populateActivityLog()
 
             val duration = System.currentTimeMillis() - startTime
-            logcat(LogPriority.INFO) { "Achievement calculation completed in ${duration}ms. Processed: $achievementsProcessed, Unlocked: $achievementsUnlocked" }
+            logcat(LogPriority.INFO) {
+                "Achievement calculation completed in ${duration}ms. Processed: $achievementsProcessed, Unlocked: $achievementsUnlocked"
+            }
 
             return CalculationResult(
                 success = true,
                 achievementsProcessed = achievementsProcessed,
                 achievementsUnlocked = achievementsUnlocked,
-                duration = duration
+                duration = duration,
             )
-
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e) { "Achievement calculation failed: ${e.message}" }
             return CalculationResult(
                 success = false,
-                error = e.message
+                error = e.message,
             )
         }
     }
@@ -114,7 +148,7 @@ class AchievementCalculator(
     private fun calculateQuantityProgress(
         achievement: Achievement,
         mangaChapters: Long,
-        animeEpisodes: Long
+        animeEpisodes: Long,
     ): Int {
         return when (achievement.category) {
             AchievementCategory.MANGA -> mangaChapters.toInt()
@@ -135,7 +169,7 @@ class AchievementCalculator(
     private fun calculateDiversityProgress(
         achievement: Achievement,
         genreCount: Int,
-        sourceCount: Int
+        sourceCount: Int,
     ): Int {
         return when {
             achievement.id.contains("genre", ignoreCase = true) -> {
@@ -168,6 +202,6 @@ class AchievementCalculator(
         val achievementsProcessed: Int = 0,
         val achievementsUnlocked: Int = 0,
         val duration: Long = 0,
-        val error: String? = null
+        val error: String? = null,
     )
 }

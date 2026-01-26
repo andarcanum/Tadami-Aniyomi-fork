@@ -87,8 +87,8 @@ class MangaHistoryRepositoryImpl(
                             AchievementEvent.ChapterRead(
                                 mangaId = chapterInfo.first,
                                 chapterNumber = chapterInfo.second.toInt(),
-                                timestamp = System.currentTimeMillis()
-                            )
+                                timestamp = System.currentTimeMillis(),
+                            ),
                         )
                     }
                 } catch (e: Exception) {

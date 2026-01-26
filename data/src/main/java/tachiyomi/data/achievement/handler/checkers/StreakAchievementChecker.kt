@@ -1,5 +1,26 @@
 package tachiyomi.data.achievement.handler.checkers
 
+/**
+ * Проверщик достижений серий (streak).
+ *
+ * Отслеживает последовательные дни активности пользователя для достижений типа STREAK.
+ * Серия не прерывается, если еще нет активности сегодня - проверяется вчерашний день.
+ *
+ * Активность:
+ * - Чтение главы манги
+ * - Просмотр серии аниме
+ *
+ * Алгоритм подсчета:
+ * 1. Проверить сегодняшний день
+ * 2. Если есть активность сегодня - считать и идти к вчерашнему дню
+ * 3. Если нет активности сегодня - проверить вчерашний день
+ * 4. Продолжать пока есть активность в каждый день
+ * 5. Прервать если дня без активности
+ *
+ * @param database База данных достижений для логирования активности
+ *
+ * @see AchievementType.STREAK
+ */
 import tachiyomi.data.achievement.database.AchievementsDatabase
 
 class StreakAchievementChecker(
@@ -7,9 +28,10 @@ class StreakAchievementChecker(
 ) {
 
     companion object {
-        // Number of milliseconds in a day
+        /** Количество миллисекунд в дне */
         private const val MILLIS_IN_DAY = 24 * 60 * 60 * 1000L
-        // Maximum streak to check (prevents infinite loops)
+
+        /** Максимальная серия для проверки (предотвращает бесконечные циклы) */
         private const val MAX_STREAK_DAYS = 365
     }
 
@@ -69,7 +91,7 @@ class StreakAchievementChecker(
             date = today,
             chapter_count = 1,
             episode_count = 0,
-            last_updated = System.currentTimeMillis()
+            last_updated = System.currentTimeMillis(),
         )
     }
 
@@ -82,7 +104,7 @@ class StreakAchievementChecker(
             date = today,
             chapter_count = 0,
             episode_count = 1,
-            last_updated = System.currentTimeMillis()
+            last_updated = System.currentTimeMillis(),
         )
     }
 
@@ -92,7 +114,7 @@ class StreakAchievementChecker(
     private suspend fun getActivityForDate(date: Long): ActivityLog? {
         return database.achievementActivityLogQueries.getActivityForDate(
             date,
-            ::mapActivityLog
+            ::mapActivityLog,
         ).executeAsOneOrNull()
     }
 
@@ -126,7 +148,7 @@ class StreakAchievementChecker(
         val date: Long,
         val chapterCount: Long,
         val episodeCount: Long,
-        val lastUpdated: Long
+        val lastUpdated: Long,
     )
 
     /**
@@ -142,7 +164,7 @@ class StreakAchievementChecker(
             date = date,
             chapterCount = chapter_count,
             episodeCount = episode_count,
-            lastUpdated = last_updated
+            lastUpdated = last_updated,
         )
     }
 }

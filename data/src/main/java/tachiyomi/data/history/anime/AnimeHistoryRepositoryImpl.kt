@@ -93,8 +93,8 @@ class AnimeHistoryRepositoryImpl(
                             AchievementEvent.EpisodeWatched(
                                 animeId = episodeInfo.first,
                                 episodeNumber = episodeInfo.second.toInt(),
-                                timestamp = System.currentTimeMillis()
-                            )
+                                timestamp = System.currentTimeMillis(),
+                            ),
                         )
                     }
                 } catch (e: Exception) {

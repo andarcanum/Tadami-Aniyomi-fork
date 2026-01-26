@@ -6,7 +6,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class AchievementDefinitions(
     val version: Int,
-    val achievements: List<AchievementJson>
+    val achievements: List<AchievementJson>,
 )
 
 @Serializable
@@ -25,5 +25,5 @@ data class AchievementJson(
     @SerialName("is_secret")
     val isSecret: Boolean = false,
     @SerialName("unlockable_id")
-    val unlockableId: String? = null
+    val unlockableId: String? = null,
 )

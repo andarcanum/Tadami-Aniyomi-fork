@@ -4,9 +4,15 @@ import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import app.cash.sqldelight.coroutines.mapToOneOrNull
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
-import tachiyomi.data.achievement.Achievements
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.take
 import tachiyomi.data.achievement.Achievement_progress
+import tachiyomi.data.achievement.Achievements
 import tachiyomi.data.achievement.database.AchievementsDatabase
 import tachiyomi.domain.achievement.model.Achievement
 import tachiyomi.domain.achievement.model.AchievementCategory
@@ -18,12 +24,24 @@ class AchievementRepositoryImpl(
     private val database: AchievementsDatabase,
 ) : AchievementRepository {
 
+    // In-memory cache for achievements
+    private val achievementsCache = MutableStateFlow<List<Achievement>?>(null)
+
+    // In-memory cache for progress
+    private val progressCache = MutableStateFlow<Map<String, AchievementProgress>?>(null)
+
     override fun getAll(): Flow<List<Achievement>> {
-        return database.achievementsQueries
-            .selectAll()
-            .asFlow()
-            .mapToList()
-            .map { list -> list.map { it.toDomainModel() } }
+        return achievementsCache.filterNotNull().take(1)
+            .onCompletion {
+                emitAll(
+                    database.achievementsQueries
+                        .selectAll()
+                        .asFlow()
+                        .mapToList()
+                        .map { list -> list.map { it.toDomainModel() } }
+                        .onEach { achievementsCache.value = it },
+                )
+            }
     }
 
     override fun getByCategory(category: AchievementCategory): Flow<List<Achievement>> {
@@ -43,11 +61,22 @@ class AchievementRepositoryImpl(
     }
 
     override fun getAllProgress(): Flow<List<AchievementProgress>> {
-        return database.achievementProgressQueries
-            .selectAll()
-            .asFlow()
-            .mapToList()
-            .map { list -> list.map { it.toDomainModel() } }
+        return progressCache.filterNotNull().take(1)
+            .map { it.values.toList() }
+            .onCompletion {
+                emitAll(
+                    database.achievementProgressQueries
+                        .selectAll()
+                        .asFlow()
+                        .mapToList()
+                        .map { list ->
+                            list.map { it.toDomainModel() }
+                        }
+                        .onEach { progressList ->
+                            progressCache.value = progressList.associateBy { it.achievementId }
+                        },
+                )
+            }
     }
 
     override suspend fun insertAchievement(achievement: Achievement) {
@@ -88,6 +117,10 @@ class AchievementRepositoryImpl(
             unlocked_at = progress.unlockedAt,
             last_updated = progress.lastUpdated,
         )
+        // Update cache
+        progressCache.value?.let { cache ->
+            progressCache.value = cache + (progress.achievementId to progress)
+        }
     }
 
     override suspend fun deleteAchievement(id: String) {

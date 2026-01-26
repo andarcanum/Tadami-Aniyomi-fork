@@ -8,11 +8,20 @@ CREATE TABLE achievement_progress (
     FOREIGN KEY(achievement_id) REFERENCES achievements(id) ON DELETE CASCADE
 );
 
+-- Indexes for optimized queries
 CREATE INDEX progress_unlocked_idx ON achievement_progress(is_unlocked);
 CREATE INDEX progress_updated_idx ON achievement_progress(last_updated);
+CREATE INDEX progress_achievement_idx ON achievement_progress(achievement_id);
+CREATE INDEX progress_unlocked_sort_idx ON achievement_progress(is_unlocked, last_updated DESC);
 
 selectAll:
 SELECT * FROM achievement_progress;
+
+getUnlockedSorted:
+SELECT * FROM achievement_progress
+WHERE is_unlocked = 1
+ORDER BY last_updated DESC
+LIMIT :limit;
 
 getById:
 SELECT * FROM achievement_progress

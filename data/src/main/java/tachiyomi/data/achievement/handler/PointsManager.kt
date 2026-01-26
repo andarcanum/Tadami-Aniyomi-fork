@@ -1,10 +1,8 @@
 package tachiyomi.data.achievement.handler
 
 import app.cash.sqldelight.coroutines.asFlow
-import app.cash.sqldelight.coroutines.mapToOneOrDefault
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapOnNotNull
 import kotlinx.coroutines.withContext
 import tachiyomi.data.achievement.database.AchievementsDatabase
@@ -47,7 +45,7 @@ class PointsManager(
                     UserPoints(
                         totalPoints = it.total_points.toInt(),
                         level = it.level.toInt(),
-                        achievementsUnlocked = it.achievements_unlocked.toInt()
+                        achievementsUnlocked = it.achievements_unlocked.toInt(),
                     )
                 } ?: UserPoints()
             }
@@ -62,7 +60,7 @@ class PointsManager(
                         UserPoints(
                             totalPoints = it.total_points.toInt(),
                             level = it.level.toInt(),
-                            achievementsUnlocked = it.achievements_unlocked.toInt()
+                            achievementsUnlocked = it.achievements_unlocked.toInt(),
                         )
                     }
             } catch (e: Exception) {

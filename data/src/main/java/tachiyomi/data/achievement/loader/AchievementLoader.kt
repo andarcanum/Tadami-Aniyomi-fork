@@ -5,6 +5,8 @@ import android.content.SharedPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import logcat.LogPriority
+import logcat.logcat
 import tachiyomi.data.achievement.handler.AchievementCalculator
 import tachiyomi.data.achievement.model.AchievementDefinitions
 import tachiyomi.data.achievement.model.AchievementJson
@@ -12,8 +14,6 @@ import tachiyomi.domain.achievement.model.Achievement
 import tachiyomi.domain.achievement.model.AchievementCategory
 import tachiyomi.domain.achievement.model.AchievementType
 import tachiyomi.domain.achievement.repository.AchievementRepository
-import logcat.LogPriority
-import logcat.logcat
 
 class AchievementLoader(
     private val context: Context,
@@ -59,7 +59,9 @@ class AchievementLoader(
                     val result = it.calculateInitialProgress()
                     if (result.success) {
                         saveCalculationVersion(definitions.version)
-                        logcat(LogPriority.INFO) { "Retroactive calculation completed: ${result.achievementsUnlocked} achievements unlocked" }
+                        logcat(LogPriority.INFO) {
+                            "Retroactive calculation completed: ${result.achievementsUnlocked} achievements unlocked"
+                        }
                     } else {
                         logcat(LogPriority.ERROR) { "Retroactive calculation failed: ${result.error}" }
                     }
@@ -118,7 +120,7 @@ class AchievementLoader(
             isSecret = isSecret,
             unlockableId = unlockableId,
             version = 1,
-            createdAt = System.currentTimeMillis()
+            createdAt = System.currentTimeMillis(),
         )
     }
 }

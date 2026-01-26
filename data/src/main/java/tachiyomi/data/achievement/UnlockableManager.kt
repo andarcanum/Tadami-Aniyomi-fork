@@ -3,9 +3,9 @@ package tachiyomi.data.achievement
 import android.content.SharedPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import tachiyomi.domain.achievement.model.Achievement
 import logcat.LogPriority
 import logcat.logcat
+import tachiyomi.domain.achievement.model.Achievement
 
 /**
  * Manages unlockable content that is unlocked via achievements.
@@ -186,12 +186,12 @@ enum class UnlockableType {
     THEME,
     BADGE,
     DISPLAY,
-    UNKNOWN
+    UNKNOWN,
 }
 
 private inline fun SharedPreferences.edit(
     commit: Boolean = false,
-    action: SharedPreferences.Editor.() -> Unit
+    action: SharedPreferences.Editor.() -> Unit,
 ) {
     val editor = edit()
     action(editor)

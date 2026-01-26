@@ -21,7 +21,7 @@ class AchievementsDatabase(
 
     companion object {
         const val NAME = "achievements.db"
-        const val VERSION = 3L
+        const val VERSION = 4L
     }
 
     private val database = SqlDelightAchievementsDatabase(

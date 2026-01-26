@@ -1,11 +1,40 @@
 package tachiyomi.data.achievement.handler
 
+/**
+ * Главный обработчик системы достижений.
+ *
+ * Координирует процесс проверки и разблокировки достижений.
+ * Подписывается на события из EventBus и делегирует проверку соответствующим checker'ам.
+ *
+ * Поток обработки:
+ * 1. Получает событие из EventBus
+ * 2. Определяет тип события и релевантные достижения
+ * 3. Вычисляет прогресс через checker'ы
+ * 4. Обновляет прогресс в базе данных
+ * 5. Если разблокировано - добавляет очки и разблокирует награды
+ * 6. Уведомляет через callback
+ *
+ * @param eventBus Шина событий для подписки на действия пользователя
+ * @param repository Репозиторий для управления достижениями и прогрессом
+ * @param diversityChecker Проверщик достижений разнообразия (жанры, источники)
+ * @param streakChecker Проверчик серий активности (дни подряд)
+ * @param pointsManager Менеджер для управления очками пользователя
+ * @param unlockableManager Менеджер для разблокировки наград (темы, значки)
+ *
+ * @see AchievementEvent
+ * @see AchievementEventBus
+ * @see DiversityAchievementChecker
+ * @see StreakAchievementChecker
+ */
+
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import logcat.LogPriority
+import logcat.logcat
 import tachiyomi.data.achievement.UnlockableManager
 import tachiyomi.data.achievement.handler.checkers.DiversityAchievementChecker
 import tachiyomi.data.achievement.handler.checkers.StreakAchievementChecker
@@ -15,8 +44,6 @@ import tachiyomi.domain.achievement.model.AchievementCategory
 import tachiyomi.domain.achievement.model.AchievementProgress
 import tachiyomi.domain.achievement.model.AchievementType
 import tachiyomi.domain.achievement.repository.AchievementRepository
-import logcat.LogPriority
-import logcat.logcat
 
 class AchievementHandler(
     private val eventBus: AchievementEventBus,
@@ -146,8 +173,8 @@ class AchievementHandler(
                     maxProgress = threshold,
                     isUnlocked = newProgress >= threshold,
                     unlockedAt = if (newProgress >= threshold) System.currentTimeMillis() else null,
-                    lastUpdated = System.currentTimeMillis()
-                )
+                    lastUpdated = System.currentTimeMillis(),
+                ),
             )
 
             if (newProgress >= threshold) {
@@ -161,8 +188,8 @@ class AchievementHandler(
                     progress = newProgress,
                     isUnlocked = shouldUnlock,
                     unlockedAt = if (shouldUnlock) System.currentTimeMillis() else currentProgress.unlockedAt,
-                    lastUpdated = System.currentTimeMillis()
-                )
+                    lastUpdated = System.currentTimeMillis(),
+                ),
             )
 
             if (shouldUnlock) {
@@ -195,15 +222,27 @@ class AchievementHandler(
                 when {
                     achievement.id.contains("genre", ignoreCase = true) -> {
                         when {
-                            achievement.id.contains("manga", ignoreCase = true) -> diversityChecker.getMangaGenreDiversity()
-                            achievement.id.contains("anime", ignoreCase = true) -> diversityChecker.getAnimeGenreDiversity()
+                            achievement.id.contains(
+                                "manga",
+                                ignoreCase = true,
+                            ) -> diversityChecker.getMangaGenreDiversity()
+                            achievement.id.contains(
+                                "anime",
+                                ignoreCase = true,
+                            ) -> diversityChecker.getAnimeGenreDiversity()
                             else -> diversityChecker.getGenreDiversity()
                         }
                     }
                     achievement.id.contains("source", ignoreCase = true) -> {
                         when {
-                            achievement.id.contains("manga", ignoreCase = true) -> diversityChecker.getMangaSourceDiversity()
-                            achievement.id.contains("anime", ignoreCase = true) -> diversityChecker.getAnimeSourceDiversity()
+                            achievement.id.contains(
+                                "manga",
+                                ignoreCase = true,
+                            ) -> diversityChecker.getMangaSourceDiversity()
+                            achievement.id.contains(
+                                "anime",
+                                ignoreCase = true,
+                            ) -> diversityChecker.getAnimeSourceDiversity()
                             else -> diversityChecker.getSourceDiversity()
                         }
                     }
