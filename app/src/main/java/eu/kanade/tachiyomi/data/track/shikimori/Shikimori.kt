@@ -50,7 +50,7 @@ class Shikimori(id: Long) :
 
     private val interceptor by lazy { ShikimoriInterceptor(this) }
 
-    private val api by lazy { ShikimoriApi(id, client, interceptor) }
+    val api by lazy { ShikimoriApi(id, client, interceptor) }
 
     override fun getScoreList(): ImmutableList<String> = SCORE_LIST
 

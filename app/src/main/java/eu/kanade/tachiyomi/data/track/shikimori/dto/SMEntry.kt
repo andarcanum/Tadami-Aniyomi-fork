@@ -16,7 +16,7 @@ data class SMEntry(
     val score: Double,
     val url: String,
     val status: String,
-    val kind: String,
+    val kind: String?,
     @SerialName("aired_on")
     val airedOn: String?,
 ) {
@@ -25,12 +25,12 @@ data class SMEntry(
             remote_id = this@SMEntry.id
             title = name
             total_chapters = chapters!!
-            cover_url = ShikimoriApi.BASE_URL + image.preview
+            cover_url = ShikimoriApi.BASE_URL + image.original
             summary = ""
             score = this@SMEntry.score
             tracking_url = ShikimoriApi.BASE_URL + url
             publishing_status = this@SMEntry.status
-            publishing_type = kind
+            publishing_type = kind ?: "unknown"
             start_date = airedOn ?: ""
         }
     }
@@ -40,12 +40,12 @@ data class SMEntry(
             remote_id = this@SMEntry.id
             title = name
             total_episodes = episodes!!
-            cover_url = ShikimoriApi.BASE_URL + image.preview
+            cover_url = ShikimoriApi.BASE_URL + image.original
             summary = ""
             score = this@SMEntry.score
             tracking_url = ShikimoriApi.BASE_URL + url
             publishing_status = this@SMEntry.status
-            publishing_type = kind
+            publishing_type = kind ?: "unknown"
             start_date = airedOn ?: ""
         }
     }
@@ -53,5 +53,6 @@ data class SMEntry(
 
 @Serializable
 data class SUEntryCover(
+    val original: String,
     val preview: String,
 )

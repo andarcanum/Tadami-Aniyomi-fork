@@ -21,9 +21,12 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
+import logcat.LogPriority
+import logcat.logcat
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.jsoup.Jsoup
 import tachiyomi.core.common.util.lang.withIOContext
 import uy.kohesive.injekt.injectLazy
 import tachiyomi.domain.track.anime.model.AnimeTrack as DomainAnimeTrack
@@ -236,6 +239,62 @@ class ShikimoriApi(
                 .awaitSuccess()
                 .parseAs<SMUser>()
                 .id
+        }
+    }
+
+    /**
+     * Parse poster URL from Shikimori anime page HTML.
+     * Used as fallback when API returns missing_preview.jpg placeholder.
+     *
+     * @param animeId Shikimori anime ID
+     * @return Poster URL or null if not found
+     */
+    suspend fun parsePosterFromHtml(animeId: Long): String? {
+        return withIOContext {
+            try {
+                logcat(LogPriority.DEBUG) { "Parsing poster from HTML for anime $animeId" }
+
+                // Fetch HTML page
+                val url = "$BASE_URL/animes/$animeId"
+                val response = client.newCall(GET(url)).awaitSuccess()
+                val html = response.body.string()
+
+                // Parse with JSoup
+                val doc = Jsoup.parse(html)
+
+                // Try to find poster URL in data-href (best quality)
+                val dataHrefPoster = doc.selectFirst("div.b-db_entry-poster[data-href]")
+                    ?.attr("data-href")
+                if (!dataHrefPoster.isNullOrBlank() && !dataHrefPoster.contains("missing_")) {
+                    logcat(LogPriority.DEBUG) { "Found poster in data-href: $dataHrefPoster" }
+                    return@withIOContext dataHrefPoster
+                }
+
+                // Fallback: try to find poster URL in meta tag
+                val metaPoster = doc.selectFirst("meta[itemprop=image]")?.attr("content")
+                if (!metaPoster.isNullOrBlank() && !metaPoster.contains("missing_")) {
+                    logcat(LogPriority.DEBUG) { "Found poster in meta tag: $metaPoster" }
+                    return@withIOContext metaPoster
+                }
+
+                // Fallback: try to find in picture element
+                val picturePoster = doc.selectFirst("picture.poster img")?.attr("src")
+                if (!picturePoster.isNullOrBlank() && !picturePoster.contains("missing_")) {
+                    val fullUrl = if (picturePoster.startsWith("http")) {
+                        picturePoster
+                    } else {
+                        "$BASE_URL$picturePoster"
+                    }
+                    logcat(LogPriority.DEBUG) { "Found poster in picture element: $fullUrl" }
+                    return@withIOContext fullUrl
+                }
+
+                logcat(LogPriority.WARN) { "No poster found in HTML for anime $animeId" }
+                null
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR) { "Failed to parse poster from HTML: ${e.message}" }
+                null
+            }
         }
     }
 
