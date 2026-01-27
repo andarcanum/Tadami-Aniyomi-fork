@@ -46,10 +46,14 @@ class AchievementLoader(
                 logcat(LogPriority.INFO) { "[ACHIEVEMENTS] Achievements already up to date (version $currentVersion), skipping load" }
                 // Check if achievements exist in database
                 val existingCount = repository.getAll().first().size
-                logcat(LogPriority.INFO) { "[ACHIEVEMENTS] Existing achievements in database: $existingCount" }
-                if (existingCount == 0) {
+                logcat(LogPriority.INFO) { "[ACHIEVEMENTS] Existing achievements in database: $existingCount, JSON has: ${definitions.achievements.size}" }
+
+                // Force reload if counts don't match (new achievements added)
+                if (existingCount < definitions.achievements.size) {
+                    logcat(LogPriority.WARN) { "[ACHIEVEMENTS] WARNING: Database has fewer achievements than JSON! Forcing reload..." }
+                    saveVersion(0)
+                } else if (existingCount == 0) {
                     logcat(LogPriority.WARN) { "[ACHIEVEMENTS] WARNING: Version says up to date but database is empty! Forcing reload..." }
-                    // Force load by resetting version
                     saveVersion(0)
                 } else {
                     return Result.success(0)

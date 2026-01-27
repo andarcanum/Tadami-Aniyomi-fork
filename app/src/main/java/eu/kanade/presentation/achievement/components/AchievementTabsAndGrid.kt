@@ -33,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -66,11 +67,13 @@ fun AchievementTabsAndGrid(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        AchievementGrid(
-            state = state,
-            modifier = Modifier.fillMaxSize(),
-            onAchievementClick = onAchievementClick,
-        )
+        key(state.selectedCategory) {
+            AchievementGrid(
+                state = state,
+                modifier = Modifier.fillMaxSize(),
+                onAchievementClick = onAchievementClick,
+            )
+        }
     }
 }
 

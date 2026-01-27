@@ -700,4 +700,102 @@
     <string name="achievement_stats_points">Очки • %d%%</string>
     <string name="achievement_stats_unlocked">Открыто • %d%%</string>
     <string name="achievement_back">Назад</string>
+
+    <!-- Achievement Titles - ANIME -->
+    <string name="achievement_anime_marathoner_title">Марафонец-новичок</string>
+    <string name="achievement_anime_binger_title">Бингер</string>
+    <string name="achievement_anime_addict_title">Заядлый отаку</string>
+    <string name="achievement_anime_legend_title">Аниме-легенда</string>
+    <string name="achievement_anime_first_finish_title">Финалист</string>
+    <string name="achievement_anime_story_seeker_title">Искатель историй</string>
+    <string name="achievement_anime_season_conqueror_title">Покоритель сезонов</string>
+
+    <!-- Achievement Descriptions - ANIME -->
+    <string name="achievement_anime_marathoner_desc">10 серий за всё время - это только разминка!</string>
+    <string name="achievement_anime_binger_desc">Просмотрено 50 серий</string>
+    <string name="achievement_anime_addict_desc">500 серий! Ваши глаза ещё не устали?</string>
+    <string name="achievement_anime_legend_desc">Тысяча серий. Вы официально легенда.</string>
+    <string name="achievement_anime_first_finish_desc">Первое завершённое аниме</string>
+    <string name="achievement_anime_story_seeker_desc">10 завершённых аниме</string>
+    <string name="achievement_anime_season_conqueror_desc">50 аниме просмотрено до конца</string>
+
+    <!-- Achievement Titles - MANGA -->
+    <string name="achievement_manga_reader_title">Читатель</string>
+    <string name="achievement_manga_fan_title">Мангака-фанат</string>
+    <string name="achievement_manga_legend_title">Манга-легенда</string>
+    <string name="achievement_manga_first_finish_title">Финишёр</string>
+    <string name="achievement_manga_story_collector_title">Коллекционер историй</string>
+    <string name="achievement_manga_finale_seeker_title">Искатель финалов</string>
+    <string name="achievement_manga_long_haul_title">Долгостройщик</string>
+
+    <!-- Achievement Descriptions - MANGA -->
+    <string name="achievement_manga_reader_desc">Половина сотни глав</string>
+    <string name="achievement_manga_fan_desc">500 глав! Вы точно не художник?</string>
+    <string name="achievement_manga_legend_desc">Тысяча глав. Эпическая цифра.</string>
+    <string name="achievement_manga_first_finish_desc">Первое завершённое</string>
+    <string name="achievement_manga_story_collector_desc">10 завершённых манг</string>
+    <string name="achievement_manga_finale_seeker_desc">50 манг дочитаны до конца</string>
+    <string name="achievement_manga_long_haul_desc">Дочитайте мангу с 200+ главами</string>
+
+    <!-- Achievement Titles - BOTH -->
+    <string name="achievement_content_deity_title">Божество контента</string>
+    <string name="achievement_universe_overlord_title">Повелитель вселенной</string>
+    <string name="achievement_genre_god_title">Жанровый бог</string>
+    <string name="achievement_month_master_title">Мастер месяца</string>
+    <string name="achievement_season_champion_title">Чемпион сезона</string>
+    <string name="achievement_yearly_devoted_title">Годовой преданный</string>
+    <string name="achievement_library_keeper_title">Библиотечный хранитель</string>
+    <string name="achievement_library_titan_title">Титан библиотеки</string>
+    <string name="achievement_library_deity_title">Божество библиотеки</string>
+    <string name="achievement_achievement_hunter_title">Охотник за достижениями</string>
+    <string name="achievement_achievement_collector_title">Коллекционер достижений</string>
+    <string name="achievement_completionist_title">Комплишионист</string>
+    <string name="achievement_balanced_fan_title">Сбалансированный фанат</string>
+    <string name="achievement_hybrid_appreciator_title">Гибридный ценитель</string>
+    <string name="achievement_perfect_balance_title">Идеальный баланс</string>
+
+    <!-- Achievement Descriptions - BOTH -->
+    <string name="achievement_content_deity_desc">5000 единиц - вы потребляете всё подряд</string>
+    <string name="achievement_universe_overlord_desc">10000 единиц. Это... невероятно.</string>
+    <string name="achievement_genre_god_desc">20 разных жанров. Всё по вкусу!</string>
+    <string name="achievement_month_master_desc">30 дней без перерыва</string>
+    <string name="achievement_season_champion_desc">90 дней! Это целый сезон аниме!</string>
+    <string name="achievement_yearly_devoted_desc">365 дней. Легендарное достижение.</string>
+    <string name="achievement_library_keeper_desc">500 тайтлов</string>
+    <string name="achievement_library_titan_desc">1000 тайтлов</string>
+    <string name="achievement_library_deity_desc">5000 тайтлов</string>
+    <string name="achievement_achievement_hunter_desc">25 достижений</string>
+    <string name="achievement_achievement_collector_desc">50 достижений</string>
+    <string name="achievement_completionist_desc">ВСЕ достижения разблокированы</string>
+    <string name="achievement_balanced_fan_desc">50 глав и 50 серий</string>
+    <string name="achievement_hybrid_appreciator_desc">500 глав и 500 серий</string>
+    <string name="achievement_perfect_balance_desc">1000 глав и 1000 серий. Инь и ян.</string>
+
+    <!-- Achievement Titles - SECRET -->
+    <string name="achievement_secret_crybaby_title">Плакса</string>
+    <string name="achievement_secret_harem_king_title">Король гарема</string>
+    <string name="achievement_secret_truck_victim_title">Жертва грузовика</string>
+    <string name="achievement_secret_chad_reader_title">Чад-читатель</string>
+    <string name="achievement_secret_power_of_friendship_title">Сила дружбы!</string>
+    <string name="achievement_secret_plus_ultra_title">Плюс ультра!</string>
+    <string name="achievement_secret_tatakae_title">Тatakae!</string>
+    <string name="achievement_secret_all_according_to_plan_title">Всё идёт по плану</string>
+    <string name="achievement_secret_average_enjoyer_title">Обычный любитель</string>
+    <string name="achievement_secret_it_was_me_dio_title">Это была я, Дио!</string>
+    <string name="achievement_secret_king_of_pirates_title">Король пиратов</string>
+    <string name="achievement_secret_not_even_my_final_form_title">Ещё не предел!</string>
+
+    <!-- Achievement Descriptions - SECRET -->
+    <string name="achievement_secret_crybaby_desc">Дочитайте тайтл с жанром Трагедия</string>
+    <string name="achievement_secret_harem_king_desc">20+ тайтлов с жанром Harem</string>
+    <string name="achievement_secret_truck_victim_desc">20+ тайтлов с жанром Isekai</string>
+    <string name="achievement_secret_chad_reader_desc">10+ завершённых манг, 0 онгоингов</string>
+    <string name="achievement_secret_power_of_friendship_desc">10+ завершённых сёнэн-тайтлов - я стану королём!</string>
+    <string name="achievement_secret_plus_ultra_desc">Завершите тайтл с жанром Super Power</string>
+    <string name="achievement_secret_tatakae_desc">Завершите тайтл с жанром Military (отсылка к AOT)</string>
+    <string name="achievement_secret_all_according_to_plan_desc">Завершите тайтл с жанром Psychological (отсылка к Code Geass)</string>
+    <string name="achievement_secret_average_enjoyer_desc">Ровно 1 аниме и 1 манга в библиотеке (отсылка к One Punch Man)</string>
+    <string name="achievement_secret_it_was_me_dio_desc">Jojo's Bizarre Adventure в библиотеке (отсылка к JoJo)</string>
+    <string name="achievement_secret_king_of_pirates_desc">1000+ глав манги (отсылка к One Piece)</string>
+    <string name="achievement_secret_not_even_my_final_form_desc">9000+ очков достижений (отсылка к Dragon Ball, OVER 9000!)</string>
 </resources>

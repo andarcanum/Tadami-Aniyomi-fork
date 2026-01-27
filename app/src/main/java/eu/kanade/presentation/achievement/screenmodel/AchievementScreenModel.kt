@@ -94,7 +94,7 @@ sealed interface AchievementScreenState {
     ) : AchievementScreenState {
         val filteredAchievements: List<Achievement>
             get() = when (selectedCategory) {
-                AchievementCategory.BOTH -> achievements.filter { it.category != AchievementCategory.SECRET }
+                AchievementCategory.BOTH -> achievements
                 AchievementCategory.ANIME -> achievements.filter { it.category == AchievementCategory.ANIME || it.category == AchievementCategory.BOTH }
                 AchievementCategory.MANGA -> achievements.filter { it.category == AchievementCategory.MANGA || it.category == AchievementCategory.BOTH }
                 AchievementCategory.SECRET -> achievements.filter { it.category == AchievementCategory.SECRET }
