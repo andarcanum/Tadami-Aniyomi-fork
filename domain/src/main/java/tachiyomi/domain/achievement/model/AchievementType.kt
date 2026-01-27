@@ -7,4 +7,6 @@ enum class AchievementType {
     STREAK,
     LIBRARY,
     META,
+    BALANCED,
+    SECRET,
 }

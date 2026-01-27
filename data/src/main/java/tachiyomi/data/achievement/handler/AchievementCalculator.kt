@@ -74,7 +74,9 @@ class AchievementCalculator(
                     )
                     AchievementType.STREAK -> streak
                     AchievementType.LIBRARY -> calculateLibraryProgress(achievement, libraryCounts)
+                    AchievementType.BALANCED -> calculateBalancedProgress(mangaChapters, animeEpisodes)
                     AchievementType.META -> 0
+                    AchievementType.SECRET -> 0 // Secret achievements handled by AchievementHandler.checkSecretAchievements()
                 }
 
                 buildProgress(achievement, progress)
@@ -201,6 +203,13 @@ class AchievementCalculator(
             AchievementCategory.ANIME -> animeCount.toInt()
             AchievementCategory.BOTH, AchievementCategory.SECRET -> (mangaCount + animeCount).toInt()
         }
+    }
+
+    private fun calculateBalancedProgress(
+        mangaChapters: Long,
+        animeEpisodes: Long,
+    ): Int {
+        return minOf(mangaChapters, animeEpisodes).toInt().coerceAtLeast(0)
     }
 
     private fun buildProgress(achievement: Achievement, progress: Int): AchievementProgress {

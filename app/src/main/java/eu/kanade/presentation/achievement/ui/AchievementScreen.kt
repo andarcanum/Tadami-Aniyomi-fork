@@ -315,7 +315,7 @@ private fun AuroraStatCard(
                     )
                 }
             }
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(top = 12.dp, bottom = 4.dp, start = 16.dp, end = 16.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -341,7 +341,7 @@ private fun AuroraStatCard(
             Column {
                 Text(
                     text = value,
-                    fontSize = 22.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = colors.textPrimary,
                     letterSpacing = 0.5.sp,
