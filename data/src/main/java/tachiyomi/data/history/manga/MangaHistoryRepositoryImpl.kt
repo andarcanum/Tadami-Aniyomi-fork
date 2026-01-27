@@ -83,17 +83,17 @@ class MangaHistoryRepositoryImpl(
                     }
 
                     if (chapterInfo != null) {
-                        eventBus.tryEmit(
-                            AchievementEvent.ChapterRead(
-                                mangaId = chapterInfo.first,
-                                chapterNumber = chapterInfo.second.toInt(),
-                                timestamp = System.currentTimeMillis(),
-                            ),
+                        val event = AchievementEvent.ChapterRead(
+                            mangaId = chapterInfo.first,
+                            chapterNumber = chapterInfo.second.toInt(),
+                            timestamp = System.currentTimeMillis(),
                         )
+                        val emitted = eventBus.tryEmit(event)
+                        logcat(LogPriority.INFO) { "[ACHIEVEMENTS] Publishing ChapterRead event: mangaId=${chapterInfo.first}, chapter=${chapterInfo.second}, emitted=$emitted" }
                     }
                 } catch (e: Exception) {
                     // Don't let event publishing errors affect history operations
-                    logcat(LogPriority.WARN, throwable = e)
+                    logcat(LogPriority.WARN, throwable = e) { "[ACHIEVEMENTS] Failed to publish chapter read event" }
                 }
             }
         } catch (e: Exception) {

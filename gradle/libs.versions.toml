@@ -3,6 +3,7 @@ aboutlib_version = "11.6.3"
 leakcanary = "2.14"
 moko = "0.24.5"
 okhttp_version = "5.0.0-alpha.14"
+paging = "3.3.0"
 richtext = "0.20.0"
 shizuku_version = "13.1.0"
 sqldelight = "2.0.2"
@@ -80,9 +81,10 @@ shizuku-provider = { module = "dev.rikka.shizuku:provider", version.ref = "shizu
 leakcanary-android = { module = "com.squareup.leakcanary:leakcanary-android", version.ref = "leakcanary" }
 leakcanary-plumber = { module = "com.squareup.leakcanary:plumber-android", version.ref = "leakcanary" }
 
+paging-common = { module = "androidx.paging:paging-common", version.ref = "paging" }
+
 sqldelight-android-driver = { module = "app.cash.sqldelight:android-driver", version.ref = "sqldelight" }
 sqldelight-coroutines = { module = "app.cash.sqldelight:coroutines-extensions-jvm", version.ref = "sqldelight" }
-sqldelight-android-paging = { module = "app.cash.sqldelight:androidx-paging3-extensions", version.ref = "sqldelight" }
 sqldelight-dialects-sql = { module = "app.cash.sqldelight:sqlite-3-38-dialect", version.ref = "sqldelight" }
 
 junit = "org.junit.jupiter:junit-jupiter:5.11.4"
@@ -108,7 +110,7 @@ js-engine = ["quickjs-android"]
 sqlite = ["sqlite-framework", "sqlite-ktx", "sqlite-android"]
 coil = ["coil-core", "coil-gif", "coil-compose", "coil-network-okhttp"]
 shizuku = ["shizuku-api", "shizuku-provider"]
-sqldelight = ["sqldelight-android-driver", "sqldelight-coroutines", "sqldelight-android-paging"]
+sqldelight = ["sqldelight-android-driver", "sqldelight-coroutines"]
 voyager = ["voyager-navigator", "voyager-screenmodel", "voyager-tab-navigator", "voyager-transitions"]
 richtext = ["richtext-commonmark", "richtext-m3"]
 test = ["junit", "kotest-assertions", "mockk"]

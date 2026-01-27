@@ -29,7 +29,8 @@ dependencies {
 
     implementation(libs.unifile)
 
-    api(libs.sqldelight.android.paging)
+    // AndroidX Paging for PagingSource
+    api(libs.paging.common)
 
     compileOnly(libs.compose.stablemarker)
 

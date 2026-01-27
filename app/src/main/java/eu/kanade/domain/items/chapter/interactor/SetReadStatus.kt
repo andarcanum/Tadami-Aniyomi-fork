@@ -10,12 +10,15 @@ import tachiyomi.domain.entries.manga.repository.MangaRepository
 import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.items.chapter.model.ChapterUpdate
 import tachiyomi.domain.items.chapter.repository.ChapterRepository
+import tachiyomi.data.achievement.handler.AchievementEventBus
+import tachiyomi.data.achievement.model.AchievementEvent
 
 class SetReadStatus(
     private val downloadPreferences: DownloadPreferences,
     private val deleteDownload: DeleteChapterDownload,
     private val mangaRepository: MangaRepository,
     private val chapterRepository: ChapterRepository,
+    private val eventBus: AchievementEventBus,
 ) {
 
     private val mapper = { chapter: Chapter, read: Boolean ->
@@ -55,6 +58,26 @@ class SetReadStatus(
                         chapters = chapters.toTypedArray(),
                     )
                 }
+        }
+
+        if (read) {
+            // Emit ChapterRead events for achievement tracking
+            chaptersToUpdate.forEach { chapter ->
+                eventBus.tryEmit(
+                    AchievementEvent.ChapterRead(
+                        mangaId = chapter.mangaId,
+                        chapterNumber = chapter.chapterNumber.toInt(),
+                    ),
+                )
+            }
+
+            // Check for manga completion
+            chaptersToUpdate.map { it.mangaId }.distinct().forEach { mangaId ->
+                val allChapters = chapterRepository.getChapterByMangaId(mangaId)
+                if (allChapters.all { it.read }) {
+                    eventBus.tryEmit(AchievementEvent.MangaCompleted(mangaId))
+                }
+            }
         }
 
         Result.Success

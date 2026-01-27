@@ -124,7 +124,7 @@ private data class HomeHubHistory(
 private data class HomeHubRecommendation(
     val entryId: Long,
     val title: String,
-    val coverUrl: String?,
+    val coverData: EntryCover?,
     val subtitle: String? = null,
 )
 
@@ -290,7 +290,7 @@ private fun HomeHubScreenModel.State.toUiState(): HomeHubUiState {
             HomeHubRecommendation(
                 entryId = it.animeId,
                 title = it.title,
-                coverUrl = it.coverUrl,
+                coverData = it.coverData,
                 subtitle = "${it.seenCount}/${it.totalCount} эп.",
             )
         },
@@ -324,7 +324,7 @@ private fun MangaHomeHubScreenModel.State.toUiState(): HomeHubUiState {
             HomeHubRecommendation(
                 entryId = it.mangaId,
                 title = it.title,
-                coverUrl = it.coverUrl,
+                coverData = it.coverData,
                 subtitle = "$readCount/${it.totalCount} гл.",
             )
         },
@@ -896,7 +896,7 @@ private fun RecommendationsGrid(
                 AuroraCard(
                     modifier = Modifier.width(128.dp).aspectRatio(0.68f),
                     title = item.title,
-                    coverData = item.coverUrl,
+                    coverData = item.coverData,
                     subtitle = item.subtitle,
                     onClick = { onEntryClick(item.entryId) },
                     imagePadding = 6.dp,

@@ -26,7 +26,7 @@ import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.core.common.Constants
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
-import eu.kanade.tachiyomi.ui.achievement.AchievementsTab
+import eu.kanade.presentation.achievement.screen.AchievementScreenVoyager
 import eu.kanade.tachiyomi.ui.category.CategoriesTab
 import eu.kanade.tachiyomi.ui.download.DownloadsTab
 import eu.kanade.tachiyomi.ui.setting.PlayerSettingsScreen
@@ -93,7 +93,7 @@ data object MoreTab : Tab {
                 onSettingsClick = { navigator.push(SettingsScreen()) },
                 onAboutClick = { navigator.push(AboutScreen) },
                 onStatsClick = { navigator.push(StatsTab) },
-                onAchievementsClick = { navigator.push(AchievementsTab) },
+                onAchievementsClick = { navigator.push(AchievementScreenVoyager) },
                 onHelpClick = { uriHandler.openUri(Constants.URL_HELP) },
             )
         } else {

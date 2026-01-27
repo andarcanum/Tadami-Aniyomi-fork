@@ -91,6 +91,8 @@ import tachiyomi.data.updates.anime.AnimeUpdatesRepositoryImpl
 import tachiyomi.data.updates.manga.MangaUpdatesRepositoryImpl
 import tachiyomi.data.achievement.repository.AchievementRepositoryImpl
 import tachiyomi.data.achievement.loader.AchievementLoader
+import tachiyomi.data.handlers.manga.MangaDatabaseHandler
+import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
 import tachiyomi.data.achievement.handler.AchievementEventBus
 import tachiyomi.data.achievement.handler.AchievementHandler
 import tachiyomi.data.achievement.handler.PointsManager
@@ -243,7 +245,7 @@ class DomainModule : InjektModule {
         addFactory { HideMangaCategory(get()) }
         addFactory { DeleteMangaCategory(get(), get(), get()) }
 
-        addSingletonFactory<AnimeRepository> { AnimeRepositoryImpl(get()) }
+        addSingletonFactory<AnimeRepository> { AnimeRepositoryImpl(get(), get()) }
         addFactory { GetDuplicateLibraryAnime(get()) }
         addFactory { GetAnimeFavorites(get()) }
         addFactory { GetLibraryAnime(get()) }
@@ -266,7 +268,7 @@ class DomainModule : InjektModule {
         addFactory { ShouldUpdateDbSeason() }
         addFactory { SyncSeasonsWithSource(get(), get(), get(), get(), get()) }
 
-        addSingletonFactory<MangaRepository> { MangaRepositoryImpl(get()) }
+        addSingletonFactory<MangaRepository> { MangaRepositoryImpl(get(), get()) }
         addFactory { GetDuplicateLibraryManga(get()) }
         addFactory { GetMangaFavorites(get()) }
         addFactory { GetLibraryManga(get()) }
@@ -321,7 +323,7 @@ class DomainModule : InjektModule {
         addFactory { GetEpisodesByAnimeId(get()) }
         addFactory { GetEpisodeByUrlAndAnimeId(get()) }
         addFactory { UpdateEpisode(get()) }
-        addFactory { SetSeenStatus(get(), get(), get(), get()) }
+        addFactory { SetSeenStatus(get(), get(), get(), get(), get()) }
         addFactory { ShouldUpdateDbEpisode() }
         addFactory { SyncEpisodesWithSource(get(), get(), get(), get(), get(), get(), get(), get()) }
         addFactory { FilterEpisodesForDownload(get(), get(), get()) }
@@ -331,7 +333,7 @@ class DomainModule : InjektModule {
         addFactory { GetChaptersByMangaId(get()) }
         addFactory { GetChapterByUrlAndMangaId(get()) }
         addFactory { UpdateChapter(get()) }
-        addFactory { SetReadStatus(get(), get(), get(), get()) }
+        addFactory { SetReadStatus(get(), get(), get(), get(), get()) }
         addFactory { ShouldUpdateDbChapter() }
         addFactory { SyncChaptersWithSource(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
         addFactory { GetAvailableScanlators(get()) }
@@ -429,11 +431,10 @@ class DomainModule : InjektModule {
         addSingletonFactory<AchievementRepository> { AchievementRepositoryImpl(get()) }
         addSingletonFactory { DiversityAchievementChecker(get(), get()) }
         addSingletonFactory { StreakAchievementChecker(get()) }
-        addSingletonFactory { AchievementCalculator(get(), get(), get(), get(), get()) }
-        addSingletonFactory { AchievementLoader(get(), get(), get(), get()) }
+        addSingletonFactory { AchievementCalculator(get(), get(), get(), get(), get(), get()) }
         addSingletonFactory { AchievementEventBus() }
-        addSingletonFactory { PointsManager(get()) }
-        addSingletonFactory { UnlockableManager(get()) }
-        addSingletonFactory { AchievementHandler(get(), get(), get(), get(), get(), get()) }
+        addSingletonFactory { AchievementHandler(get(), get(), get(), get(), get(), get(), get(), get()) }
+        // Note: AchievementLoader, PointsManager, UnlockableManager require Context
+        // They are registered in AppModule instead
     }
 }

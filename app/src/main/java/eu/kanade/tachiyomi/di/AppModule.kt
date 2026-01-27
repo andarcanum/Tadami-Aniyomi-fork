@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.di
 
 import android.app.Application
+import android.content.Context
 import android.os.Build
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
@@ -272,6 +273,15 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory { StorageManager(app, get()) }
 
         addSingletonFactory { ExternalIntents() }
+
+        // Achievement system - these require Context so they're registered in AppModule
+        addSingletonFactory { tachiyomi.data.achievement.loader.AchievementLoader(app, get(), get()) }
+        addSingletonFactory { tachiyomi.data.achievement.handler.PointsManager(get()) }
+        addSingletonFactory {
+            tachiyomi.data.achievement.UnlockableManager(
+                app.getSharedPreferences("achievement_unlockables", Context.MODE_PRIVATE),
+            )
+        }
 
         // Asynchronously init expensive components for a faster cold start
         java.util.concurrent.Executors.newSingleThreadExecutor().execute {

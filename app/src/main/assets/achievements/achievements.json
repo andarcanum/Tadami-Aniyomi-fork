@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "achievements": [
     {
       "id": "first_chapter",
@@ -80,7 +80,7 @@
       "threshold": 1000,
       "points": 500,
       "title": "Мастер контента",
-      "description": "Прочитайте/посмотрите 1000 единиц контента",
+      "description": "Прочитайте/Посмотрите 1000 единиц контента",
       "badge_icon": "ic_badge_master",
       "unlockable_id": "theme_achievement_gold",
       "is_hidden": false,
@@ -88,12 +88,12 @@
     },
     {
       "id": "master_achiever",
-      "type": "quantity",
+      "type": "meta",
       "category": "both",
-      "threshold": 50,
+      "threshold": 10,
       "points": 500,
       "title": "Мастер достижений",
-      "description": "Разблокируйте 50 достижений",
+      "description": "Разблокируйте 10 достижений",
       "badge_icon": "ic_badge_master_achiever",
       "unlockable_id": "badge_achievement_master",
       "is_hidden": false,
@@ -127,7 +127,7 @@
     },
     {
       "id": "library_collector",
-      "type": "quantity",
+      "type": "library",
       "category": "both",
       "threshold": 100,
       "points": 150,

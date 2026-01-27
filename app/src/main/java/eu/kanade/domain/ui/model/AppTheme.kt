@@ -23,8 +23,8 @@ enum class AppTheme(val titleRes: StringResource?, val isAuroraStyle: Boolean = 
     TIDAL_WAVE(MR.strings.theme_tidalwave),
     YINYANG(MR.strings.theme_yinyang),
     YOTSUBA(MR.strings.theme_yotsuba),
-    AURORA(MR.strings.label_default),
     MONOCHROME(MR.strings.theme_monochrome),
+    AURORA(AYMR.strings.theme_aurora),
 
     // Deprecated
     DARK_BLUE(null),

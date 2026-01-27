@@ -45,6 +45,7 @@ class AchievementCalculatorTest : AchievementTestBase() {
             animeHandler = animeHandler,
             diversityChecker = diversityChecker,
             streakChecker = streakChecker,
+            achievementsDatabase = database,
         )
     }
 
@@ -232,9 +233,6 @@ class AchievementCalculatorTest : AchievementTestBase() {
         coEvery { mangaHandler.awaitOneOrNull<Long>(any()) } returns 10L
         coEvery { animeHandler.awaitOneOrNull<Long>(any()) } returns 0L
 
-        coEvery { diversityChecker.getGenreDiversity() } returns 0
-        coEvery { diversityChecker.getSourceDiversity() } returns 0
-        coEvery { streakChecker.getCurrentStreak() } returns 0
 
         val result = calculator.calculateInitialProgress()
 
@@ -261,9 +259,6 @@ class AchievementCalculatorTest : AchievementTestBase() {
         coEvery { mangaHandler.awaitOneOrNull<Long>(any()) } returns 0L
         coEvery { animeHandler.awaitOneOrNull<Long>(any()) } returns 0L
 
-        coEvery { diversityChecker.getGenreDiversity() } returns 0
-        coEvery { diversityChecker.getSourceDiversity() } returns 0
-        coEvery { streakChecker.getCurrentStreak() } returns 0
 
         val result = calculator.calculateInitialProgress()
 
@@ -287,9 +282,6 @@ class AchievementCalculatorTest : AchievementTestBase() {
         coEvery { repository.insertOrUpdateProgress(any()) } returns Unit
         coEvery { mangaHandler.awaitOneOrNull<Long>(any()) } returns 10L
         coEvery { animeHandler.awaitOneOrNull<Long>(any()) } returns 0L
-        coEvery { diversityChecker.getGenreDiversity() } returns 0
-        coEvery { diversityChecker.getSourceDiversity() } returns 0
-        coEvery { streakChecker.getCurrentStreak() } returns 0
 
         val result = calculator.calculateInitialProgress()
 

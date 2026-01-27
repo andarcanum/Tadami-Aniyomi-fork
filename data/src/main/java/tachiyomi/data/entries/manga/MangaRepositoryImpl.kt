@@ -10,11 +10,15 @@ import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.entries.manga.model.MangaUpdate
 import tachiyomi.domain.entries.manga.repository.MangaRepository
 import tachiyomi.domain.library.manga.LibraryManga
+import tachiyomi.data.achievement.handler.AchievementEventBus
+import tachiyomi.data.achievement.model.AchievementEvent
+import tachiyomi.domain.achievement.model.AchievementCategory
 import java.time.LocalDate
 import java.time.ZoneId
 
 class MangaRepositoryImpl(
     private val handler: MangaDatabaseHandler,
+    private val eventBus: AchievementEventBus,
 ) : MangaRepository {
 
     override suspend fun getMangaById(id: Long): Manga {
@@ -172,6 +176,16 @@ class MangaRepositoryImpl(
                     version = value.version,
                     isSyncing = 0,
                 )
+
+                // Emit achievement event if favorite status changed
+                value.favorite?.let { isFavorite ->
+                    val event = if (isFavorite) {
+                        AchievementEvent.LibraryAdded(value.id, AchievementCategory.MANGA)
+                    } else {
+                        AchievementEvent.LibraryRemoved(value.id, AchievementCategory.MANGA)
+                    }
+                    eventBus.tryEmit(event)
+                }
             }
         }
     }

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.VideoSettings
 import androidx.compose.material3.LocalContentColor
@@ -45,6 +46,7 @@ import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.more.settings.screen.about.AboutScreen
 import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
+import eu.kanade.presentation.achievement.screen.AchievementScreenVoyager
 import eu.kanade.presentation.util.LocalBackPress
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.ui.setting.PlayerSettingsScreen
@@ -215,6 +217,12 @@ object SettingsMainScreen : Screen() {
             subtitleRes = AYMR.strings.pref_player_settings_summary,
             icon = Icons.Outlined.VideoSettings,
             screen = PlayerSettingsScreen(mainSettings = true),
+        ),
+        Item(
+            titleRes = AYMR.strings.label_achievements,
+            subtitleRes = AYMR.strings.pref_achievements_summary,
+            icon = Icons.Outlined.EmojiEvents,
+            screen = AchievementScreenVoyager,
         ),
         Item(
             titleRes = MR.strings.pref_category_downloads,

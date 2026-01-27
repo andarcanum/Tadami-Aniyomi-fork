@@ -52,13 +52,16 @@ import eu.kanade.tachiyomi.util.system.WebViewUtil
 import eu.kanade.tachiyomi.util.system.animatorDurationScale
 import eu.kanade.tachiyomi.util.system.cancelNotification
 import eu.kanade.tachiyomi.util.system.notify
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import logcat.AndroidLogcatLogger
 import logcat.LogPriority
 import logcat.LogcatLogger
+import logcat.logcat
 import mihon.core.migration.Migrator
 import mihon.core.migration.migrations.migrations
 import org.conscrypt.Conscrypt
@@ -66,7 +69,6 @@ import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.util.system.ImageUtil
-import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.widget.entries.anime.AnimeWidgetManager
 import tachiyomi.presentation.widget.entries.manga.MangaWidgetManager
@@ -81,9 +83,11 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
     private val networkPreferences: NetworkPreferences by injectLazy()
 
     private val disableIncognitoReceiver = DisableIncognitoReceiver()
+    private val achievementScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     @SuppressLint("LaunchActivityFromNotification")
     override fun onCreate() {
+        LogcatLogger.install(AndroidLogcatLogger(LogPriority.VERBOSE))
         super<Application>.onCreate()
         patchInjekt()
 
@@ -162,26 +166,21 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         }
 
         // Initialize achievements from JSON
-        scope.launch {
+        achievementScope.launch {
             try {
-                val loader = Injekt.get<AchievementLoader>()
-                val result = loader.loadAchievements()
-                result.onSuccess { count ->
-                    if (count > 0) {
-                        logcat { "Loaded $count achievement definitions from JSON" }
-                    }
-                }.onFailure { e ->
-                    logcat(LogPriority.ERROR, e) { "Failed to load achievement definitions" }
-                }
+                val loader = Injekt.get<tachiyomi.data.achievement.loader.AchievementLoader>()
+                loader.loadAchievements()
             } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Error loading achievements" }
+                logcat(LogPriority.ERROR) { "Error during achievement initialization: ${e.message}" }
             }
         }
 
         // Start achievement handler
-        scope.launch {
+        achievementScope.launch {
             try {
+                logcat(LogPriority.INFO) { "[ACHIEVEMENTS-INIT] About to get AchievementHandler from Injekt..." }
                 val achievementHandler = Injekt.get<tachiyomi.data.achievement.handler.AchievementHandler>()
+                logcat(LogPriority.INFO) { "[ACHIEVEMENTS-INIT] AchievementHandler obtained successfully" }
 
                 // Set up callback to show unlock banners
                 achievementHandler.unlockCallback = object : tachiyomi.data.achievement.handler.AchievementHandler.AchievementUnlockCallback {
@@ -190,10 +189,12 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
                     }
                 }
 
+                logcat(LogPriority.INFO) { "[ACHIEVEMENTS-INIT] Calling achievementHandler.start()..." }
                 achievementHandler.start()
-                logcat { "Achievement handler started" }
+                logcat(LogPriority.INFO) { "[ACHIEVEMENTS-INIT] AchievementHandler started successfully" }
             } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to start achievement handler" }
+                logcat(LogPriority.ERROR) { "[ACHIEVEMENTS-INIT] Failed to start achievement handler: ${e.message}" }
+                logcat(LogPriority.ERROR) { "[ACHIEVEMENTS-INIT] Failed to start achievement handler: ${e.stackTraceToString()}" }
             }
         }
 
@@ -284,7 +285,7 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         try {
             Notifications.createChannels(this)
         } catch (e: Exception) {
-            logcat(LogPriority.ERROR, e) { "Failed to modify notification channels" }
+            logcat(LogPriority.ERROR) { "Failed to modify notification channels: ${e.message}" }
         }
     }
 

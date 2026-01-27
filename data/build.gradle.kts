@@ -53,7 +53,7 @@ dependencies {
     implementation(projects.domain)
     implementation(projects.core.common)
 
-    api(libs.bundles.sqldelight)
+    implementation(libs.bundles.sqldelight)
 
     testImplementation(libs.bundles.test)
     testImplementation(kotlinx.coroutines.test)

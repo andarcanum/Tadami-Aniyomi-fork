@@ -211,6 +211,9 @@ dependencies {
 
     implementation(libs.bundles.sqlite)
 
+    // SqlDelight driver for creating database instances
+    implementation(libs.sqldelight.android.driver)
+
     implementation(kotlinx.reflect)
     implementation(kotlinx.immutables)
 

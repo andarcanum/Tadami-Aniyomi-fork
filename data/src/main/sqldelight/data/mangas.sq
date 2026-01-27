@@ -192,3 +192,8 @@ getLibrarySources:
 SELECT source
 FROM mangas
 WHERE favorite = 1;
+
+getLibraryCount:
+SELECT COUNT(*)
+FROM mangas
+WHERE favorite = 1;

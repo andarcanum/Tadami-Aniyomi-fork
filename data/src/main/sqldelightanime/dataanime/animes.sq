@@ -218,3 +218,8 @@ getLibrarySources:
 SELECT source
 FROM animes
 WHERE favorite = 1;
+
+getLibraryCount:
+SELECT COUNT(*)
+FROM animes
+WHERE favorite = 1;

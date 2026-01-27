@@ -3,6 +3,7 @@ package tachiyomi.data.achievement.loader
 import android.content.Context
 import android.content.SharedPreferences
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import logcat.LogPriority
@@ -33,12 +34,26 @@ class AchievementLoader(
 
     suspend fun loadAchievements(): Result<Int> {
         return try {
+            logcat(LogPriority.INFO) { "[ACHIEVEMENTS] Loading achievements from JSON..." }
             val definitions = loadJsonFromAssets()
 
             // Check version migration
             val currentVersion = getCurrentVersion()
+            logcat(LogPriority.INFO) { "[ACHIEVEMENTS] JSON version: ${definitions.version}, current: $currentVersion" }
+            logcat(LogPriority.INFO) { "[ACHIEVEMENTS] JSON definitions decoded: ${definitions.achievements.size} achievements found in file" }
+
             if (definitions.version <= currentVersion) {
-                return Result.success(0)
+                logcat(LogPriority.INFO) { "[ACHIEVEMENTS] Achievements already up to date (version $currentVersion), skipping load" }
+                // Check if achievements exist in database
+                val existingCount = repository.getAll().first().size
+                logcat(LogPriority.INFO) { "[ACHIEVEMENTS] Existing achievements in database: $existingCount" }
+                if (existingCount == 0) {
+                    logcat(LogPriority.WARN) { "[ACHIEVEMENTS] WARNING: Version says up to date but database is empty! Forcing reload..." }
+                    // Force load by resetting version
+                    saveVersion(0)
+                } else {
+                    return Result.success(0)
+                }
             }
 
             // Insert achievements
@@ -47,7 +62,14 @@ class AchievementLoader(
                 val achievement = achievementJson.toDomainModel()
                 repository.insertAchievement(achievement)
                 inserted++
+                logcat(LogPriority.VERBOSE) { "[ACHIEVEMENTS] Inserted achievement: ${achievement.id} - ${achievement.title}" }
             }
+
+            logcat(LogPriority.INFO) { "[ACHIEVEMENTS] Inserted $inserted achievements from JSON" }
+
+            // Verify insertion
+            val finalCount = repository.getAll().first().size
+            logcat(LogPriority.INFO) { "[ACHIEVEMENTS] Verification: Database now contains $finalCount achievements" }
 
             // Save version
             saveVersion(definitions.version)
@@ -55,21 +77,22 @@ class AchievementLoader(
             // Trigger retroactive calculation on first load or version upgrade
             if (shouldCalculateInitialProgress(definitions.version)) {
                 calculator?.let {
-                    logcat(LogPriority.INFO) { "Running retroactive achievement calculation..." }
+                    logcat(LogPriority.INFO) { "[ACHIEVEMENTS] Running retroactive achievement calculation..." }
                     val result = it.calculateInitialProgress()
                     if (result.success) {
                         saveCalculationVersion(definitions.version)
                         logcat(LogPriority.INFO) {
-                            "Retroactive calculation completed: ${result.achievementsUnlocked} achievements unlocked"
+                            "[ACHIEVEMENTS] Retroactive calculation completed: ${result.achievementsUnlocked} achievements unlocked"
                         }
                     } else {
-                        logcat(LogPriority.ERROR) { "Retroactive calculation failed: ${result.error}" }
+                        logcat(LogPriority.ERROR) { "[ACHIEVEMENTS] Retroactive calculation failed: ${result.error}" }
                     }
                 }
             }
 
             Result.success(inserted)
         } catch (e: Exception) {
+            logcat(LogPriority.ERROR) { "[ACHIEVEMENTS] Failed to load achievements from JSON: ${e.message}" }
             Result.failure(e)
         }
     }

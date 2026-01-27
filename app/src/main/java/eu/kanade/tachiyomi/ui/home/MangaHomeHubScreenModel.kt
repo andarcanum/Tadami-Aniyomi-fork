@@ -75,8 +75,7 @@ class MangaHomeHubScreenModel(
     data class RecommendationData(
         val mangaId: Long,
         val title: String,
-        val coverUrl: String?,
-        val coverLastModified: Long,
+        val coverData: MangaCover,
         val totalCount: Long,
         val unreadCount: Long,
     )
@@ -239,8 +238,7 @@ class MangaHomeHubScreenModel(
     private fun CachedMangaRecommendationItem.toRecommendationData() = RecommendationData(
         mangaId = mangaId,
         title = title,
-        coverUrl = coverUrl,
-        coverLastModified = coverLastModified,
+        coverData = MangaCover(mangaId, -1, true, coverUrl, coverLastModified),
         totalCount = totalCount,
         unreadCount = unreadCount,
     )
@@ -263,8 +261,7 @@ class MangaHomeHubScreenModel(
     private fun LibraryManga.toRecommendationData() = RecommendationData(
         mangaId = manga.id,
         title = manga.title,
-        coverUrl = manga.thumbnailUrl,
-        coverLastModified = manga.coverLastModified,
+        coverData = MangaCover(manga.id, manga.source, manga.favorite, manga.thumbnailUrl, manga.coverLastModified),
         totalCount = totalChapters,
         unreadCount = unreadCount,
     )
@@ -289,8 +286,8 @@ class MangaHomeHubScreenModel(
     private fun RecommendationData.toCached() = CachedMangaRecommendationItem(
         mangaId = mangaId,
         title = title,
-        coverUrl = coverUrl,
-        coverLastModified = coverLastModified,
+        coverUrl = coverData.url,
+        coverLastModified = coverData.lastModified,
         totalCount = totalCount,
         unreadCount = unreadCount,
     )

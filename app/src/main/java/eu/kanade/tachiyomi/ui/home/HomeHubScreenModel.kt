@@ -74,8 +74,7 @@ class HomeHubScreenModel(
     data class RecommendationData(
         val animeId: Long,
         val title: String,
-        val coverUrl: String?,
-        val coverLastModified: Long,
+        val coverData: AnimeCover,
         val totalCount: Long,
         val seenCount: Long,
     )
@@ -236,8 +235,7 @@ class HomeHubScreenModel(
     private fun CachedRecommendationItem.toRecommendationData() = RecommendationData(
         animeId = animeId,
         title = title,
-        coverUrl = coverUrl,
-        coverLastModified = coverLastModified,
+        coverData = AnimeCover(animeId, -1, true, coverUrl, coverLastModified),
         totalCount = totalCount,
         seenCount = seenCount,
     )
@@ -260,8 +258,7 @@ class HomeHubScreenModel(
     private fun LibraryAnime.toRecommendationData() = RecommendationData(
         animeId = anime.id,
         title = anime.title,
-        coverUrl = anime.thumbnailUrl,
-        coverLastModified = anime.coverLastModified,
+        coverData = AnimeCover(anime.id, -1, true, anime.thumbnailUrl, anime.coverLastModified),
         totalCount = totalCount,
         seenCount = seenCount,
     )
@@ -286,8 +283,8 @@ class HomeHubScreenModel(
     private fun RecommendationData.toCached() = CachedRecommendationItem(
         animeId = animeId,
         title = title,
-        coverUrl = coverUrl,
-        coverLastModified = coverLastModified,
+        coverUrl = coverData.url,
+        coverLastModified = coverData.lastModified,
         totalCount = totalCount,
         seenCount = seenCount,
     )

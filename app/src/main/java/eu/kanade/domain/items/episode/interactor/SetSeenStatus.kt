@@ -10,12 +10,15 @@ import tachiyomi.domain.entries.anime.repository.AnimeRepository
 import tachiyomi.domain.items.episode.model.Episode
 import tachiyomi.domain.items.episode.model.EpisodeUpdate
 import tachiyomi.domain.items.episode.repository.EpisodeRepository
+import tachiyomi.data.achievement.handler.AchievementEventBus
+import tachiyomi.data.achievement.model.AchievementEvent
 
 class SetSeenStatus(
     private val downloadPreferences: DownloadPreferences,
     private val deleteDownload: DeleteEpisodeDownload,
     private val animeRepository: AnimeRepository,
     private val episodeRepository: EpisodeRepository,
+    private val eventBus: AchievementEventBus,
 ) {
 
     private val mapper = { episode: Episode, read: Boolean ->
@@ -55,6 +58,26 @@ class SetSeenStatus(
                         episodes = episodes.toTypedArray(),
                     )
                 }
+        }
+
+        if (seen) {
+            // Emit EpisodeWatched events for achievement tracking
+            episodesToUpdate.forEach { episode ->
+                eventBus.tryEmit(
+                    AchievementEvent.EpisodeWatched(
+                        animeId = episode.animeId,
+                        episodeNumber = episode.episodeNumber.toInt(),
+                    ),
+                )
+            }
+
+            // Check for anime completion
+            episodesToUpdate.map { it.animeId }.distinct().forEach { animeId ->
+                val allEpisodes = episodeRepository.getEpisodeByAnimeId(animeId)
+                if (allEpisodes.all { it.seen }) {
+                    eventBus.tryEmit(AchievementEvent.AnimeCompleted(animeId))
+                }
+            }
         }
 
         Result.Success

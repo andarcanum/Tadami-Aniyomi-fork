@@ -128,6 +128,11 @@ UPDATE user_stats
 SET total_points = total_points + :points
 WHERE id = 1;
 
+setTotalPoints:
+UPDATE user_stats
+SET total_points = :points
+WHERE id = 1;
+
 setLevel:
 UPDATE user_stats
 SET level = :level
@@ -136,6 +141,11 @@ WHERE id = 1;
 incrementUnlocked:
 UPDATE user_stats
 SET achievements_unlocked = achievements_unlocked + 1
+WHERE id = 1;
+
+setUnlockedCount:
+UPDATE user_stats
+SET achievements_unlocked = :count
 WHERE id = 1;
 
 initUserStats:

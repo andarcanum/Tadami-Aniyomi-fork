@@ -116,7 +116,6 @@ val playerRippleConfiguration
 
 private val colorSchemes: Map<AppTheme, BaseColorScheme> = mapOf(
     AppTheme.DEFAULT to AuroraColorScheme,
-    AppTheme.AURORA to AuroraColorScheme,
     AppTheme.CLOUDFLARE to CloudflareColorScheme,
     AppTheme.COTTONCANDY to CottoncandyColorScheme,
     AppTheme.DOOM to DoomColorScheme,

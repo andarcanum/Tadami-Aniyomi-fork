@@ -5,6 +5,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import logcat.LogPriority
+import logcat.logcat
 import tachiyomi.data.achievement.model.AchievementEvent
 
 /**
@@ -39,7 +41,7 @@ class AchievementEventBus {
      * - DROP_OLDEST: При переполнении удалять старейшие события
      */
     private val _events = MutableSharedFlow<AchievementEvent>(
-        replay = 0,
+        replay = 1,
         extraBufferCapacity = 100,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
@@ -58,6 +60,7 @@ class AchievementEventBus {
      * @param event Событие для отправки
      */
     suspend fun emit(event: AchievementEvent) {
+        logcat(LogPriority.VERBOSE) { "[ACHIEVEMENTS] EventBus(${this.hashCode()}) emit: $event (subs=${_events.subscriptionCount.value})" }
         _events.emit(event)
     }
 
@@ -68,7 +71,11 @@ class AchievementEventBus {
      * @return true если событие успешно отправлено, false если буфер полон
      */
     fun tryEmit(event: AchievementEvent): Boolean {
-        return _events.tryEmit(event)
+        val emitted = _events.tryEmit(event)
+        logcat(LogPriority.VERBOSE) {
+            "[ACHIEVEMENTS] EventBus(${this.hashCode()}) tryEmit: $event emitted=$emitted (subs=${_events.subscriptionCount.value})"
+        }
+        return emitted
     }
 
     /**
