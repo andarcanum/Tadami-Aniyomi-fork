@@ -5,8 +5,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,6 +17,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -37,8 +41,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.presentation.achievement.components.AchievementActivityGraph
+import eu.kanade.presentation.achievement.components.AchievementCard
+import eu.kanade.presentation.achievement.components.AchievementCategoryTabs
 import eu.kanade.presentation.achievement.components.AchievementContent
-import eu.kanade.presentation.achievement.components.AchievementTabsAndGrid
+import eu.kanade.presentation.achievement.components.AchievementStatsComparison
 import eu.kanade.presentation.achievement.screenmodel.AchievementScreenState
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.achievement.model.Achievement
@@ -114,30 +121,63 @@ fun AchievementScreen(
                         0f
                     }
 
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        // Floating Stats Header
-                        AuroraStatsHeader(
-                            totalPoints = state.totalPoints,
-                            totalPossiblePoints = totalPossiblePoints,
-                            pointsFraction = pointsFraction,
-                            unlockedCount = state.unlockedCount,
-                            totalCount = state.totalCount,
-                            unlockedFraction = unlockedFraction,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                        )
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        // Статистика (объединить в один item для оптимизации)
+                        item {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                AuroraStatsHeader(
+                                    totalPoints = state.totalPoints,
+                                    totalPossiblePoints = totalPossiblePoints,
+                                    pointsFraction = pointsFraction,
+                                    unlockedCount = state.unlockedCount,
+                                    totalCount = state.totalCount,
+                                    unlockedFraction = unlockedFraction,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
 
-                        // Spacer for visual separation
-                        Spacer(modifier = Modifier.height(16.dp))
+                                AchievementStatsComparison(
+                                    currentMonth = state.currentMonthStats,
+                                    previousMonth = state.previousMonthStats,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        }
 
-                        // Main content with tabs
-                        AchievementTabsAndGrid(
-                            state = state,
-                            onCategoryChanged = onCategoryChanged,
-                            onAchievementClick = onAchievementClick,
-                            modifier = modifier,
-                        )
+                        // График активности
+                        item {
+                            AchievementActivityGraph(
+                                activityData = state.activityData,
+                            )
+                        }
+
+                        // Табы категорий
+                        item {
+                            AchievementCategoryTabs(
+                                selectedCategory = state.selectedCategory,
+                                onCategoryChanged = onCategoryChanged,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+
+                        // Сетка достижений
+                        items(
+                            items = state.filteredAchievements,
+                            key = { it.id }
+                        ) { achievement ->
+                            val progress = state.progress[achievement.id]
+                            AchievementCard(
+                                achievement = achievement,
+                                progress = progress,
+                                onClick = { onAchievementClick(achievement) },
+                            )
+                        }
                     }
 
                     // Show detail dialog if achievement is selected

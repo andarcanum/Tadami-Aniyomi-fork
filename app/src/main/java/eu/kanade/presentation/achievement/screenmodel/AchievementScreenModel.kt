@@ -20,16 +20,21 @@ import tachiyomi.data.achievement.loader.AchievementLoader
 import tachiyomi.domain.achievement.model.Achievement
 import tachiyomi.domain.achievement.model.AchievementCategory
 import tachiyomi.domain.achievement.model.AchievementProgress
+import tachiyomi.domain.achievement.model.DayActivity
+import tachiyomi.domain.achievement.model.MonthStats
 import tachiyomi.domain.achievement.model.UserPoints
 import tachiyomi.domain.achievement.repository.AchievementRepository
+import tachiyomi.domain.achievement.repository.ActivityDataRepository
 import tachiyomi.data.achievement.handler.PointsManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import kotlinx.coroutines.flow.catch
 
 class AchievementScreenModel(
     private val repository: AchievementRepository = Injekt.get(),
     private val loader: AchievementLoader = Injekt.get(),
     private val pointsManager: PointsManager = Injekt.get(),
+    private val activityDataRepository: ActivityDataRepository = Injekt.get(),
 ) : StateScreenModel<AchievementScreenState>(AchievementScreenState.Loading) {
 
     // Separate state for category to avoid being overwritten by combine
@@ -42,14 +47,23 @@ class AchievementScreenModel(
                 repository.getAll(),
                 repository.getAllProgress(),
                 pointsManager.subscribeToPoints(),
-                categoryState, // Include categoryState in combine
-            ) { achievements, progress, userPoints, selectedCategory ->
+                categoryState,
+                activityDataRepository.getActivityData(365),
+            ) { achievements, progress, userPoints, selectedCategory, activityData ->
+                val currentStats = activityDataRepository.getCurrentMonthStats()
+                val previousStats = activityDataRepository.getPreviousMonthStats()
+
                 AchievementScreenState.Success(
                     achievements = achievements,
                     progress = progress.associateBy { it.achievementId },
                     userPoints = userPoints,
                     selectedCategory = selectedCategory,
+                    activityData = activityData,
+                    currentMonthStats = currentStats,
+                    previousMonthStats = previousStats,
                 )
+            }.catch { error ->
+                error.printStackTrace()
             }.collect { state ->
                 mutableState.update { state }
             }
@@ -91,6 +105,9 @@ sealed interface AchievementScreenState {
         val userPoints: UserPoints = UserPoints(),
         val selectedCategory: AchievementCategory = AchievementCategory.BOTH,
         val selectedAchievement: Achievement? = null,
+        val activityData: List<DayActivity> = emptyList(),
+        val currentMonthStats: MonthStats = MonthStats(0, 0, 0, 0),
+        val previousMonthStats: MonthStats = MonthStats(0, 0, 0, 0),
     ) : AchievementScreenState {
         val filteredAchievements: List<Achievement>
             get() = when (selectedCategory) {

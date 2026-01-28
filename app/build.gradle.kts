@@ -312,6 +312,9 @@ dependencies {
     implementation(aniyomilibs.seeker)
     // true type parser
     implementation(aniyomilibs.truetypeparser)
+
+    // Lottie animations
+    implementation(libs.lottie.compose)
 }
 
 androidComponents {

@@ -75,11 +75,11 @@ class AchievementCalculatorTest : AchievementTestBase() {
 
         // Mock database handlers
         coEvery {
-            mangaHandler.awaitOneOrNull<Long>(any())
+            mangaHandler.awaitOneOrNull<Long>(any<Long>())
         } returns 150L // 150 chapters read
 
         coEvery {
-            animeHandler.awaitOneOrNull<Long>(any())
+            animeHandler.awaitOneOrNull<Long>(any<Long>())
         } returns 25L // 25 episodes watched
 
         // Mock diversity and streak
@@ -120,8 +120,8 @@ class AchievementCalculatorTest : AchievementTestBase() {
         coEvery { repository.insertOrUpdateProgress(any()) } returns Unit
 
         // Mock history
-        coEvery { mangaHandler.awaitOneOrNull<Long>(any()) } returns 0L
-        coEvery { animeHandler.awaitOneOrNull<Long>(any()) } returns 0L
+        coEvery { mangaHandler.awaitOneOrNull<Long>(any<Long>()) } returns 0L
+        coEvery { animeHandler.awaitOneOrNull<Long>(any<Long>()) } returns 0L
 
         // Mock diversity
         coEvery { diversityChecker.getGenreDiversity() } returns 5
@@ -155,8 +155,8 @@ class AchievementCalculatorTest : AchievementTestBase() {
         coEvery { repository.insertOrUpdateProgress(any()) } returns Unit
 
         // Mock history
-        coEvery { mangaHandler.awaitOneOrNull<Long>(any()) } returns 0L
-        coEvery { animeHandler.awaitOneOrNull<Long>(any()) } returns 0L
+        coEvery { mangaHandler.awaitOneOrNull<Long>(any<Long>()) } returns 0L
+        coEvery { animeHandler.awaitOneOrNull<Long>(any<Long>()) } returns 0L
 
         // Mock diversity
         coEvery { diversityChecker.getGenreDiversity() } returns 0
@@ -202,8 +202,8 @@ class AchievementCalculatorTest : AchievementTestBase() {
         coEvery { repository.insertOrUpdateProgress(any()) } returns Unit
 
         // Mock handlers
-        coEvery { mangaHandler.awaitOneOrNull<Long>(any()) } returns 1000L
-        coEvery { animeHandler.awaitOneOrNull<Long>(any()) } returns 500L
+        coEvery { mangaHandler.awaitOneOrNull<Long>(any<Long>()) } returns 1000L
+        coEvery { animeHandler.awaitOneOrNull<Long>(any<Long>()) } returns 500L
 
         coEvery { diversityChecker.getGenreDiversity() } returns 10
         coEvery { diversityChecker.getSourceDiversity() } returns 5
@@ -230,8 +230,8 @@ class AchievementCalculatorTest : AchievementTestBase() {
         coEvery { repository.insertOrUpdateProgress(any()) } returns Unit
 
         // User has read chapters
-        coEvery { mangaHandler.awaitOneOrNull<Long>(any()) } returns 10L
-        coEvery { animeHandler.awaitOneOrNull<Long>(any()) } returns 0L
+        coEvery { mangaHandler.awaitOneOrNull<Long>(any<Long>()) } returns 10L
+        coEvery { animeHandler.awaitOneOrNull<Long>(any<Long>()) } returns 0L
 
 
         val result = calculator.calculateInitialProgress()
@@ -256,8 +256,8 @@ class AchievementCalculatorTest : AchievementTestBase() {
         coEvery { repository.insertOrUpdateProgress(any()) } returns Unit
 
         // No history
-        coEvery { mangaHandler.awaitOneOrNull<Long>(any()) } returns 0L
-        coEvery { animeHandler.awaitOneOrNull<Long>(any()) } returns 0L
+        coEvery { mangaHandler.awaitOneOrNull<Long>(any<Long>()) } returns 0L
+        coEvery { animeHandler.awaitOneOrNull<Long>(any<Long>()) } returns 0L
 
 
         val result = calculator.calculateInitialProgress()
@@ -280,12 +280,12 @@ class AchievementCalculatorTest : AchievementTestBase() {
 
         coEvery { repository.getAll() } returns flowOf(listOf(achievement))
         coEvery { repository.insertOrUpdateProgress(any()) } returns Unit
-        coEvery { mangaHandler.awaitOneOrNull<Long>(any()) } returns 10L
-        coEvery { animeHandler.awaitOneOrNull<Long>(any()) } returns 0L
+        coEvery { mangaHandler.awaitOneOrNull<Long>(any<Long>()) } returns 10L
+        coEvery { animeHandler.awaitOneOrNull<Long>(any<Long>()) } returns 0L
 
         val result = calculator.calculateInitialProgress()
 
         result.success shouldBe true
-        result.duration shouldBeGreaterThan 0L
+        assert(result.duration > 0L)
     }
 }

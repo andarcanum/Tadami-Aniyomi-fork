@@ -19,7 +19,7 @@ abstract class AchievementTestBase {
     protected val testDispatcher = UnconfinedTestDispatcher()
 
     @BeforeEach
-    fun setup() {
+    open fun setup() {
         // Create in-memory SQLite driver for testing
         driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
 
@@ -31,7 +31,7 @@ abstract class AchievementTestBase {
     }
 
     @AfterEach
-    fun tearDown() {
+    open fun tearDown() {
         // Close database connection
         driver.close()
     }

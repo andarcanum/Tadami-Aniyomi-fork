@@ -1,0 +1,135 @@
+package tachiyomi.data.achievement.handler
+
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
+import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import tachiyomi.data.achievement.model.AchievementEvent
+import tachiyomi.data.achievement.UserProfileManager
+import tachiyomi.data.achievement.UnlockableManager
+import tachiyomi.data.achievement.handler.checkers.DiversityAchievementChecker
+import tachiyomi.data.achievement.handler.checkers.StreakAchievementChecker
+import tachiyomi.data.achievement.handler.checkers.TimeBasedAchievementChecker
+import tachiyomi.data.achievement.handler.checkers.FeatureBasedAchievementChecker
+import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
+import tachiyomi.data.handlers.manga.MangaDatabaseHandler
+import tachiyomi.domain.achievement.repository.AchievementRepository
+import tachiyomi.domain.entries.anime.repository.AnimeRepository
+import tachiyomi.domain.entries.manga.repository.MangaRepository
+
+class FeatureUsageTest {
+
+    private lateinit var eventBus: AchievementEventBus
+    private lateinit var achievementHandler: AchievementHandler
+
+    @BeforeEach
+    fun setup() {
+        eventBus = mockk(relaxed = true)
+        // Создаем минимально необходимые mock-объекты для AchievementHandler
+        val repository = mockk<AchievementRepository>(relaxed = true)
+        val diversityChecker = mockk<DiversityAchievementChecker>(relaxed = true)
+        val streakChecker = mockk<StreakAchievementChecker>(relaxed = true)
+        val timeBasedChecker = mockk<TimeBasedAchievementChecker>(relaxed = true)
+        val featureBasedChecker = mockk<FeatureBasedAchievementChecker>(relaxed = true)
+        val featureCollector = FeatureUsageCollector(mockk(relaxed = true))
+        val pointsManager = mockk<PointsManager>(relaxed = true)
+        val unlockableManager = mockk<UnlockableManager>(relaxed = true)
+        val mangaHandler = mockk<MangaDatabaseHandler>(relaxed = true)
+        val animeHandler = mockk<AnimeDatabaseHandler>(relaxed = true)
+        val mangaRepository = mockk<MangaRepository>(relaxed = true)
+        val animeRepository = mockk<AnimeRepository>(relaxed = true)
+        val userProfileManager = UserProfileManager()
+
+        achievementHandler = AchievementHandler(
+            eventBus,
+            repository,
+            diversityChecker,
+            streakChecker,
+            timeBasedChecker,
+            featureBasedChecker,
+            featureCollector,
+            pointsManager,
+            unlockableManager,
+            mangaHandler,
+            animeHandler,
+            mangaRepository,
+            animeRepository,
+            userProfileManager
+        )
+    }
+
+    @Test
+    fun `trackFeatureUsed emits DOWNLOAD feature event`() = runTest {
+        achievementHandler.trackFeatureUsed(AchievementEvent.Feature.DOWNLOAD)
+
+        verify(exactly = 1) {
+            eventBus.tryEmit(match {
+                it is AchievementEvent.FeatureUsed && it.feature == AchievementEvent.Feature.DOWNLOAD
+            })
+        }
+    }
+
+    @Test
+    fun `trackFeatureUsed emits SEARCH feature event`() = runTest {
+        achievementHandler.trackFeatureUsed(AchievementEvent.Feature.SEARCH)
+
+        verify(exactly = 1) {
+            eventBus.tryEmit(match {
+                it is AchievementEvent.FeatureUsed && it.feature == AchievementEvent.Feature.SEARCH
+            })
+        }
+    }
+
+    @Test
+    fun `trackFeatureUsed emits ADVANCED_SEARCH feature event`() = runTest {
+        achievementHandler.trackFeatureUsed(AchievementEvent.Feature.ADVANCED_SEARCH)
+
+        verify(exactly = 1) {
+            eventBus.tryEmit(match {
+                it is AchievementEvent.FeatureUsed && it.feature == AchievementEvent.Feature.ADVANCED_SEARCH
+            })
+        }
+    }
+
+    @Test
+    fun `trackFeatureUsed emits BACKUP feature event`() = runTest {
+        achievementHandler.trackFeatureUsed(AchievementEvent.Feature.BACKUP)
+
+        verify(exactly = 1) {
+            eventBus.tryEmit(match {
+                it is AchievementEvent.FeatureUsed && it.feature == AchievementEvent.Feature.BACKUP
+            })
+        }
+    }
+
+    @Test
+    fun `trackFeatureUsed emits FILTER feature event`() = runTest {
+        achievementHandler.trackFeatureUsed(AchievementEvent.Feature.FILTER)
+
+        verify(exactly = 1) {
+            eventBus.tryEmit(match {
+                it is AchievementEvent.FeatureUsed && it.feature == AchievementEvent.Feature.FILTER
+            })
+        }
+    }
+
+    @Test
+    fun `multiple trackFeatureUsed calls emit multiple events`() = runTest {
+        achievementHandler.trackFeatureUsed(AchievementEvent.Feature.DOWNLOAD)
+        achievementHandler.trackFeatureUsed(AchievementEvent.Feature.SEARCH)
+        achievementHandler.trackFeatureUsed(AchievementEvent.Feature.DOWNLOAD)
+
+        verify(exactly = 2) {
+            eventBus.tryEmit(match {
+                it is AchievementEvent.FeatureUsed && it.feature == AchievementEvent.Feature.DOWNLOAD
+            })
+        }
+        verify(exactly = 1) {
+            eventBus.tryEmit(match {
+                it is AchievementEvent.FeatureUsed && it.feature == AchievementEvent.Feature.SEARCH
+            })
+        }
+    }
+}

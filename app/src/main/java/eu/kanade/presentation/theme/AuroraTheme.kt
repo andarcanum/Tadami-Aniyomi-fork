@@ -1,13 +1,30 @@
 package eu.kanade.presentation.theme
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.theme.colorscheme.AuroraColorScheme
 
 @Immutable
@@ -29,6 +46,11 @@ data class AuroraColors(
     val progressCyan: Color,
     val glowEffect: Color,
     val gradientPurple: Color,
+    // Semantic colors for achievements and feedback
+    val success: Color,
+    val warning: Color,
+    val error: Color,
+    val achievementGold: Color,
 ) {
     val backgroundGradient: Brush
         get() = Brush.verticalGradient(listOf(gradientStart, gradientEnd))
@@ -118,6 +140,11 @@ data class AuroraColors(
                 progressCyan = colorScheme.secondary,
                 glowEffect = colorScheme.primary,
                 gradientPurple = colorScheme.tertiary,
+                // Semantic colors
+                success = if (isDark) Color(0xFF4ADE80) else Color(0xFF22C55E),
+                warning = if (isDark) Color(0xFFFBBF24) else Color(0xFFF59E0B),
+                error = if (isDark) Color(0xFFF87171) else Color(0xFFEF4444),
+                achievementGold = Color(0xFFFFB800),
             )
         }
 
@@ -139,6 +166,11 @@ data class AuroraColors(
             progressCyan = AuroraColorScheme.aniviewCyan,
             glowEffect = AuroraColorScheme.aniviewGlow,
             gradientPurple = AuroraColorScheme.aniviewPurple,
+            // Semantic colors - dark theme
+            success = Color(0xFF4ADE80),
+            warning = Color(0xFFFBBF24),
+            error = Color(0xFFF87171),
+            achievementGold = Color(0xFFFFB800),
         )
 
         val Light = AuroraColors(
@@ -158,6 +190,11 @@ data class AuroraColors(
             progressCyan = AuroraColorScheme.aniviewCyan,
             glowEffect = AuroraColorScheme.aniviewElectricBlue,
             gradientPurple = Color(0xFF6366f1),
+            // Semantic colors - light theme
+            success = Color(0xFF22C55E),
+            warning = Color(0xFFF59E0B),
+            error = Color(0xFFEF4444),
+            achievementGold = Color(0xFFFFB800),
         )
     }
 }
@@ -172,5 +209,101 @@ object AuroraTheme {
     @Composable
     fun colorsForCurrentTheme(): AuroraColors {
         return if (isSystemInDarkTheme()) AuroraColors.Dark else AuroraColors.Light
+    }
+}
+
+// Preview composables for semantic colors
+@Preview(name = "Dark Semantic Colors")
+@Composable
+private fun AuroraSemanticColorsDarkPreview() {
+    val colors = AuroraColors.Dark
+    AuroraSemanticColorsPreviewContent(colors, "Dark Theme")
+}
+
+@Preview(name = "Light Semantic Colors")
+@Composable
+private fun AuroraSemanticColorsLightPreview() {
+    val colors = AuroraColors.Light
+    AuroraSemanticColorsPreviewContent(colors, "Light Theme")
+}
+
+@Composable
+private fun AuroraSemanticColorsPreviewContent(colors: AuroraColors, themeName: String) {
+    MaterialTheme {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(colors.background)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "AuroraColors - $themeName",
+                color = colors.textPrimary,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = "Semantic Colors",
+                color = colors.textSecondary,
+                style = MaterialTheme.typography.labelMedium
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Success color
+            ColorPreviewRow(
+                name = "success",
+                color = colors.success,
+                textColor = colors.textPrimary
+            )
+
+            // Warning color
+            ColorPreviewRow(
+                name = "warning",
+                color = colors.warning,
+                textColor = colors.textPrimary
+            )
+
+            // Error color
+            ColorPreviewRow(
+                name = "error",
+                color = colors.error,
+                textColor = colors.textPrimary
+            )
+
+            // Achievement Gold color
+            ColorPreviewRow(
+                name = "achievementGold",
+                color = colors.achievementGold,
+                textColor = colors.textPrimary
+            )
+        }
+    }
+}
+
+@Composable
+private fun ColorPreviewRow(
+    name: String,
+    color: Color,
+    textColor: Color
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(color, RoundedCornerShape(8.dp))
+        )
+        Text(
+            text = name,
+            color = textColor,
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Text(
+            text = color.toString().takeLast(9),
+            color = textColor.copy(alpha = 0.7f),
+            style = MaterialTheme.typography.bodySmall
+        )
     }
 }

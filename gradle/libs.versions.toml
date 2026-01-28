@@ -11,6 +11,7 @@ sqlite = "2.4.0"
 voyager = "1.0.1"
 spotless = "7.0.2"
 ktlint-core = "1.5.0"
+lottie = "6.4.0"
 
 [libraries]
 desugar = "com.android.tools:desugar_jdk_libs:2.1.5"
@@ -98,6 +99,7 @@ voyager-transitions = { module = "cafe.adriel.voyager:voyager-transitions", vers
 
 spotless-gradle = { group = "com.diffplug.spotless", name = "spotless-plugin-gradle", version.ref = "spotless" }
 ktlint-core = { module = "com.pinterest.ktlint:ktlint-cli", version.ref = "ktlint-core" }
+lottie-compose = { module = "com.airbnb.android:lottie-compose", version.ref = "lottie" }
 
 [plugins]
 aboutLibraries = { id = "com.mikepenz.aboutlibraries.plugin", version.ref = "aboutlib_version" }

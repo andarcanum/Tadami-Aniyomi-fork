@@ -9,8 +9,11 @@ import kotlinx.coroutines.launch
 import logcat.LogPriority
 import logcat.logcat
 import tachiyomi.data.achievement.UnlockableManager
+import tachiyomi.data.achievement.UserProfileManager
 import tachiyomi.data.achievement.handler.checkers.DiversityAchievementChecker
 import tachiyomi.data.achievement.handler.checkers.StreakAchievementChecker
+import tachiyomi.data.achievement.handler.checkers.TimeBasedAchievementChecker
+import tachiyomi.data.achievement.handler.checkers.FeatureBasedAchievementChecker
 import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
 import tachiyomi.data.handlers.manga.MangaDatabaseHandler
@@ -30,12 +33,16 @@ class AchievementHandler(
     private val repository: AchievementRepository,
     private val diversityChecker: DiversityAchievementChecker,
     private val streakChecker: StreakAchievementChecker,
+    private val timeBasedChecker: TimeBasedAchievementChecker,
+    private val featureBasedChecker: FeatureBasedAchievementChecker,
+    private val featureCollector: FeatureUsageCollector,
     private val pointsManager: PointsManager,
     private val unlockableManager: UnlockableManager,
     private val mangaHandler: MangaDatabaseHandler,
     private val animeHandler: AnimeDatabaseHandler,
     private val mangaRepository: MangaRepository,
     private val animeRepository: AnimeRepository,
+    private val userProfileManager: UserProfileManager,
 ) {
 
     interface AchievementUnlockCallback {
@@ -72,7 +79,13 @@ class AchievementHandler(
             is AchievementEvent.LibraryRemoved -> handleLibraryRemoved(event)
             is AchievementEvent.MangaCompleted -> handleMangaCompleted(event)
             is AchievementEvent.AnimeCompleted -> handleAnimeCompleted(event)
+            is AchievementEvent.SessionEnd -> handleSessionEnd(event)
+            is AchievementEvent.AppStart -> handleAppStart(event)
+            is AchievementEvent.FeatureUsed -> handleFeatureUsed(event)
         }
+
+        // Check time-based and feature-based achievements for all events
+        checkTimeAndFeatureAchievements(event)
 
         // Check secret achievements for all events
         checkSecretAchievements(event)
@@ -154,6 +167,63 @@ class AchievementHandler(
         }
     }
 
+    private suspend fun handleSessionEnd(event: AchievementEvent.SessionEnd) {
+        // Handle session duration based achievements if any
+        val achievements = repository.getAll().first()
+            .filter { it.type == AchievementType.EVENT && it.id.contains("session") }
+
+        achievements.forEach { achievement ->
+            checkAndUpdateProgress(achievement, event)
+        }
+    }
+
+    private suspend fun handleAppStart(event: AchievementEvent.AppStart) {
+        // Handle time-based achievements (Ночной чтец, Жаворонок, etc.)
+        val achievements = repository.getAll().first()
+            .filter {
+                it.type == AchievementType.EVENT &&
+                    (it.id.contains("time") || it.id.contains("owl") || it.id.contains("lark") ||
+                        it.id.contains("morning") || it.id.contains("night") || it.id.contains("early_bird"))
+            }
+
+        achievements.forEach { achievement ->
+            checkAndUpdateProgress(achievement, event)
+        }
+    }
+
+    private suspend fun handleFeatureUsed(event: AchievementEvent.FeatureUsed) {
+        // Сохраняем статистику использования функций
+        featureCollector.onFeatureUsed(event.feature, event.count)
+
+        // Handle feature usage achievements (Коллекционер, Исследователь, etc.)
+        val achievements = repository.getAll().first()
+            .filter {
+                it.type == AchievementType.EVENT &&
+                    (it.id.contains("feature") || it.id.contains("download") ||
+                        it.id.contains("search") || it.id.contains("backup") ||
+                        it.id.contains("filter") || it.id.contains("collector") ||
+                        it.id.contains("explorer"))
+            }
+
+        achievements.forEach { achievement ->
+            checkAndUpdateProgress(achievement, event)
+        }
+    }
+
+    /**
+     * Публичный метод для отправки событий о использовании функций
+     * Вызывайте этот метод из UI при выполнении определенных действий
+     */
+    fun trackFeatureUsed(feature: AchievementEvent.Feature) {
+        scope.launch {
+            try {
+                eventBus.tryEmit(AchievementEvent.FeatureUsed(feature = feature))
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR) { "[ACHIEVEMENTS] Failed to track feature usage: ${e.message}" }
+            }
+        }
+    }
+
     private suspend fun checkAndUpdateProgress(
         achievement: Achievement,
         event: AchievementEvent,
@@ -168,19 +238,32 @@ class AchievementHandler(
         currentProgress: AchievementProgress?,
         newProgress: Int,
     ) {
+        if (achievement.isTiered) {
+            // Обработка многоуровневого достижения
+            applyTieredProgressUpdate(achievement, currentProgress, newProgress)
+        } else {
+            // Обработка обычного достижения
+            applyStandardProgressUpdate(achievement, currentProgress, newProgress)
+        }
+    }
+
+    private suspend fun applyStandardProgressUpdate(
+        achievement: Achievement,
+        currentProgress: AchievementProgress?,
+        newProgress: Int,
+    ) {
         val threshold = achievement.threshold ?: 1
         logcat(LogPriority.INFO) { "[ACHIEVEMENTS] Checking ${achievement.id}: current=$currentProgress, new=$newProgress, threshold=$threshold" }
 
         if (currentProgress == null) {
             logcat(LogPriority.INFO) { "[ACHIEVEMENTS] Creating new progress for ${achievement.id}" }
             repository.insertOrUpdateProgress(
-                AchievementProgress(
+                AchievementProgress.createStandard(
                     achievementId = achievement.id,
                     progress = newProgress,
                     maxProgress = threshold,
                     isUnlocked = newProgress >= threshold,
                     unlockedAt = if (newProgress >= threshold) System.currentTimeMillis() else null,
-                    lastUpdated = System.currentTimeMillis(),
                 ),
             )
 
@@ -207,6 +290,111 @@ class AchievementHandler(
         } else {
             logcat(LogPriority.VERBOSE) { "[ACHIEVEMENTS] ${achievement.id} already unlocked, skipping" }
         }
+    }
+
+    private suspend fun applyTieredProgressUpdate(
+        achievement: Achievement,
+        currentProgress: AchievementProgress?,
+        newProgress: Int,
+    ) {
+        val tiers = achievement.tiers ?: return
+        logcat(LogPriority.INFO) { "[ACHIEVEMENTS] Checking tiered ${achievement.id}: newProgress=$newProgress" }
+
+        // Вычисляем текущий уровень
+        val newTierIndex = tiers.indexOfLast { newProgress >= it.threshold }
+        val newCurrentTier = newTierIndex + 1 // 0-based index to 1-based tier
+        val previousTier = currentProgress?.currentTier ?: 0
+
+        // Вычисляем прогресс до следующего уровня
+        val nextTier = tiers.getOrNull(newCurrentTier)
+        val tierProgress = if (nextTier != null) {
+            val previousThreshold = tiers.getOrNull(newCurrentTier - 1)?.threshold ?: 0
+            newProgress - previousThreshold
+        } else {
+            // Уже на максимальном уровне
+            0
+        }
+
+        val tierMaxProgress = if (nextTier != null) {
+            val previousThreshold = tiers.getOrNull(newCurrentTier - 1)?.threshold ?: 0
+            nextTier.threshold - previousThreshold
+        } else {
+            100
+        }
+
+        logcat(LogPriority.INFO) {
+            "[ACHIEVEMENTS] Tiered ${achievement.id}: " +
+                "tier=$newCurrentTier/${tiers.size}, " +
+                "tierProgress=$tierProgress/$tierMaxProgress, " +
+                "previousTier=$previousTier"
+        }
+
+        // Создаем или обновляем прогресс
+        val progressToSave = AchievementProgress.createTiered(
+            achievementId = achievement.id,
+            progress = newProgress,
+            currentTier = newCurrentTier,
+            maxTier = tiers.size,
+            tierProgress = tierProgress,
+            tierMaxProgress = tierMaxProgress,
+            isUnlocked = newCurrentTier > 0,
+            unlockedAt = if (newCurrentTier > 0 && previousTier == 0) System.currentTimeMillis()
+                else currentProgress?.unlockedAt,
+        )
+
+        repository.insertOrUpdateProgress(progressToSave)
+
+        // Если уровень повысился, отправляем уведомление
+        if (newCurrentTier > previousTier && newCurrentTier > 0) {
+            val unlockedTier = tiers[newTierIndex]
+            logcat(LogPriority.INFO) {
+                "[ACHIEVEMENTS] TIER UP! ${achievement.id}: " +
+                    "tier $previousTier -> $newCurrentTier (${unlockedTier.title})"
+            }
+            onAchievementTierUp(achievement, unlockedTier, newCurrentTier)
+        }
+    }
+
+    private fun onAchievementTierUp(
+        achievement: Achievement,
+        tier: tachiyomi.domain.achievement.model.AchievementTier,
+        tierLevel: Int,
+    ) {
+        logcat(LogPriority.INFO) {
+            "Achievement tier up: ${achievement.title} - Tier $tierLevel: ${tier.title} (+${tier.points} points)"
+        }
+
+        scope.launch {
+            try {
+                pointsManager.addPoints(tier.points)
+                updateMetaAchievements()
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR) {
+                    "Failed to add tier points for achievement: ${achievement.title}, ${e.message}"
+                }
+            }
+
+            try {
+                unlockableManager.unlockAchievementRewards(achievement)
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR) {
+                    "Failed to unlock tier rewards for achievement: ${achievement.title}, ${e.message}"
+                }
+            }
+
+            // Выдаем XP за достижение уровня
+            try {
+                val xpReward = tier.points * 10 // XP = points * 10
+                userProfileManager.addXP(xpReward)
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR) {
+                    "Failed to add XP for tier up: ${achievement.title}, ${e.message}"
+                }
+            }
+        }
+
+        // Отправляем callback
+        unlockCallback?.onAchievementUnlocked(achievement)
     }
 
     private suspend fun calculateProgress(
@@ -265,6 +453,16 @@ class AchievementHandler(
                 // Return current progress from DB
                 currentProgress?.progress ?: 0
             }
+            AchievementType.TIME_BASED -> {
+                // Используем TimeBasedAchievementChecker для асинхронной проверки
+                // Возвращаем текущий прогресс, обновление произойдет асинхронно
+                currentProgress?.progress ?: 0
+            }
+            AchievementType.FEATURE_BASED -> {
+                // Используем FeatureBasedAchievementChecker для асинхронной проверки
+                // Возвращаем текущий прогресс, обновление произойдет асинхронно
+                currentProgress?.progress ?: 0
+            }
         }
     }
 
@@ -282,6 +480,31 @@ class AchievementHandler(
                 id.contains("manga_complete") || id.contains("completed_manga") || id.contains("manga_completed")
             is AchievementEvent.AnimeCompleted ->
                 id.contains("anime_complete") || id.contains("completed_anime") || id.contains("anime_completed")
+            is AchievementEvent.SessionEnd ->
+                id.contains("session") || id.contains("time")
+            is AchievementEvent.AppStart -> {
+                // Проверка достижений, основанных на времени суток
+                when (event.hourOfDay) {
+                    in 2..5 -> id.contains("night") || id.contains("owl") || id.contains("late")
+                    in 6..9 -> id.contains("morning") || id.contains("lark") || id.contains("early_bird")
+                    in 10..14 -> id.contains("afternoon")
+                    in 15..18 -> id.contains("evening")
+                    in 19..23, 0, 1 -> id.contains("night")
+                    else -> false
+                }
+            }
+            is AchievementEvent.FeatureUsed -> {
+                // Проверка достижений, основанных на использовании функций
+                when (event.feature) {
+                    AchievementEvent.Feature.DOWNLOAD -> id.contains("download") || id.contains("collector")
+                    AchievementEvent.Feature.SEARCH, AchievementEvent.Feature.ADVANCED_SEARCH ->
+                        id.contains("search") || id.contains("explorer")
+                    AchievementEvent.Feature.BACKUP -> id.contains("backup")
+                    AchievementEvent.Feature.FILTER -> id.contains("filter")
+                    AchievementEvent.Feature.SETTINGS -> id.contains("settings")
+                    else -> false
+                }
+            }
         }
     }
 
@@ -356,9 +579,74 @@ class AchievementHandler(
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR) { "Failed to unlock rewards for achievement: ${achievement.title}, ${e.message}" }
             }
+
+            // Выдаем награды за достижение
+            if (achievement.hasRewards) {
+                try {
+                    userProfileManager.grantRewards(achievement.getAllRewards())
+                } catch (e: Exception) {
+                    logcat(LogPriority.ERROR) { "Failed to grant profile rewards: ${e.message}" }
+                }
+            }
         }
 
         unlockCallback?.onAchievementUnlocked(achievement)
+    }
+
+    // ==================== TIME & FEATURE BASED ACHIEVEMENT CHECKERS ====================
+
+    /**
+     * Проверка TIME_BASED и FEATURE_BASED достижений
+     * Вызывается для всех событий
+     */
+    private suspend fun checkTimeAndFeatureAchievements(event: AchievementEvent) {
+        // Получаем все достижения категории BOTH
+        val achievements = repository.getByCategory(AchievementCategory.BOTH).first()
+
+        val timeAndFeatureAchievements = achievements.filter {
+            it.type == AchievementType.TIME_BASED || it.type == AchievementType.FEATURE_BASED
+        }
+
+        timeAndFeatureAchievements.forEach { achievement ->
+            val currentProgress = repository.getProgress(achievement.id).first()
+            if (currentProgress?.isUnlocked == true) return@forEach
+
+            val threshold = achievement.threshold ?: 1
+
+            when (achievement.type) {
+                AchievementType.TIME_BASED -> {
+                    val shouldUnlock = timeBasedChecker.check(achievement, currentProgress ?: AchievementProgress.createStandard(achievement.id, 0, 0, false))
+                    if (shouldUnlock && (currentProgress == null || !currentProgress.isUnlocked)) {
+                        repository.insertOrUpdateProgress(
+                            AchievementProgress.createStandard(
+                                achievementId = achievement.id,
+                                progress = threshold,
+                                maxProgress = threshold,
+                                isUnlocked = true,
+                                unlockedAt = System.currentTimeMillis(),
+                            ),
+                        )
+                        onAchievementUnlocked(achievement)
+                    }
+                }
+                AchievementType.FEATURE_BASED -> {
+                    val shouldUnlock = featureBasedChecker.check(achievement, currentProgress ?: AchievementProgress.createStandard(achievement.id, 0, 0, false))
+                    if (shouldUnlock && (currentProgress == null || !currentProgress.isUnlocked)) {
+                        repository.insertOrUpdateProgress(
+                            AchievementProgress.createStandard(
+                                achievementId = achievement.id,
+                                progress = threshold,
+                                maxProgress = threshold,
+                                isUnlocked = true,
+                                unlockedAt = System.currentTimeMillis(),
+                            ),
+                        )
+                        onAchievementUnlocked(achievement)
+                    }
+                }
+                else -> {}
+            }
+        }
     }
 
     // ==================== SECRET ACHIEVEMENT CHECKERS ====================

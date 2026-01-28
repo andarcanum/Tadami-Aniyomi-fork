@@ -81,6 +81,7 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
 
     private val basePreferences: BasePreferences by injectLazy()
     private val networkPreferences: NetworkPreferences by injectLazy()
+    private val sessionManager: tachiyomi.data.achievement.handler.SessionManager by injectLazy()
 
     private val disableIncognitoReceiver = DisableIncognitoReceiver()
     private val achievementScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -259,10 +260,12 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
 
     override fun onStart(owner: LifecycleOwner) {
         SecureActivityDelegate.onApplicationStart()
+        sessionManager.onSessionStart()
     }
 
     override fun onStop(owner: LifecycleOwner) {
         SecureActivityDelegate.onApplicationStopped()
+        sessionManager.onSessionEnd()
     }
 
     override fun getPackageName(): String {

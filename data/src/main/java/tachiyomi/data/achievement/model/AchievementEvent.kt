@@ -38,4 +38,33 @@ sealed class AchievementEvent {
         val animeId: Long,
         override val timestamp: Long = System.currentTimeMillis(),
     ) : AchievementEvent()
+
+    data class SessionEnd(
+        val durationMs: Long,
+        override val timestamp: Long = System.currentTimeMillis(),
+    ) : AchievementEvent()
+
+    data class AppStart(
+        val hourOfDay: Int, // 0-23, для достижений типа "Ночной чтец" (2-5) или "Жаворонок" (6-9)
+        override val timestamp: Long = System.currentTimeMillis(),
+    ) : AchievementEvent()
+
+    data class FeatureUsed(
+        val feature: Feature,
+        val count: Int = 1,
+        override val timestamp: Long = System.currentTimeMillis(),
+    ) : AchievementEvent()
+
+    enum class Feature {
+        SEARCH,           // Использование поиска
+        ADVANCED_SEARCH,  // Расширенный поиск
+        FILTER,           // Использование фильтров
+        DOWNLOAD,         // Скачивание глав/серий
+        BACKUP,           // Создание бэкапа
+        RESTORE,          // Восстановление из бэкапа
+        SETTINGS,         // Изменение настроек
+        STATS,            // Просмотр статистики
+        THEME_CHANGE,     // Смена темы
+        LOGO_CLICK,       // Нажатие на логотип (для секретных достижений)
+    }
 }

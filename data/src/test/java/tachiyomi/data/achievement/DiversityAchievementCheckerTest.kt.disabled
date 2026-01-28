@@ -14,7 +14,6 @@ import org.junit.jupiter.api.parallel.ExecutionMode
 import tachiyomi.data.achievement.handler.checkers.DiversityAchievementChecker
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
 import tachiyomi.data.handlers.manga.MangaDatabaseHandler
-import tachiyomi.mi.data.AnimeDatabase as SqlDelightAnimeDatabase
 
 @Execution(ExecutionMode.CONCURRENT)
 class DiversityAchievementCheckerTest {
@@ -33,117 +32,117 @@ class DiversityAchievementCheckerTest {
     @Test
     fun `genre diversity counts unique genres correctly`() = runTest {
         coEvery {
-            mangaHandler.awaitList<Any>(any())
+            mangaHandler.awaitList<String?>(any<String?>())
         } returns listOf("Action, Adventure", "Comedy", "Drama, Romance")
 
         coEvery {
-            animeHandler.awaitList<Any>(any())
+            animeHandler.awaitList<String?>(any<String?>())
         } returns listOf("Action", "Fantasy, Adventure", "Sci-Fi")
 
         val count = checker.getGenreDiversity()
-        count shouldBe 7 // Action, Adventure, Comedy, Drama, Romance, Fantasy, Sci-Fi
+        assert(count == 7L) { "Expected 7 genres, but got $count" } // Action, Adventure, Comedy, Drama, Romance, Fantasy, Sci-Fi
     }
 
     @Test
     fun `genre diversity handles empty lists`() = runTest {
         coEvery {
-            mangaHandler.awaitList<Any>(any())
+            mangaHandler.awaitList<String?>(any<String?>())
         } returns emptyList()
 
         coEvery {
-            animeHandler.awaitList<Any>(any())
+            animeHandler.awaitList<String?>(any<String?>())
         } returns emptyList()
 
         val count = checker.getGenreDiversity()
-        count shouldBe 0
+        assert(count == 0L) { "Expected 0 genres, but got $count" }
     }
 
     @Test
     fun `genre diversity handles null entries`() = runTest {
         coEvery {
-            mangaHandler.awaitList<Any>(any())
+            mangaHandler.awaitList<String?>(any<String?>())
         } returns listOf("Action", null, "Comedy", null)
 
         coEvery {
-            animeHandler.awaitList<Any>(any())
+            animeHandler.awaitList<String?>(any<String?>())
         } returns listOf(null, "Drama")
 
         val count = checker.getGenreDiversity()
-        count shouldBe 3 // Action, Comedy, Drama
+        assert(count == 3L) { "Expected 3 genres, but got $count" } // Action, Comedy, Drama
     }
 
     @Test
     fun `genre diversity counts manga genres only`() = runTest {
         coEvery {
-            mangaHandler.awaitList<Any>(any())
+            mangaHandler.awaitList<String?>(any<String?>())
         } returns listOf("Action, Adventure", "Comedy", "Romance")
 
         val count = checker.getMangaGenreDiversity()
-        count shouldBe 4 // Action, Adventure, Comedy, Romance
+        assert(count == 4L) { "Expected 4 genres, but got $count" }
     }
 
     @Test
     fun `genre diversity counts anime genres only`() = runTest {
         coEvery {
-            animeHandler.awaitList<Any>(any())
+            animeHandler.awaitList<String?>(any<String?>())
         } returns listOf("Fantasy", "Sci-Fi, Action", "Horror")
 
         val count = checker.getAnimeGenreDiversity()
-        count shouldBe 4 // Fantasy, Sci-Fi, Action, Horror
+        assert(count == 4L) { "Expected 4 genres, but got $count" }
     }
 
     @Test
     fun `source diversity counts unique sources`() = runTest {
         coEvery {
-            mangaHandler.awaitList<Long>(any())
+            mangaHandler.awaitList<Long>(any<Long>())
         } returns listOf(1L, 2L, 3L, 1L, 2L)
 
         coEvery {
-            animeHandler.awaitList<Long>(any())
+            animeHandler.awaitList<Long>(any<Long>())
         } returns listOf(2L, 3L, 4L, 5L)
 
         val count = checker.getSourceDiversity()
-        count shouldBe 5 // 1, 2, 3, 4, 5
+        assert(count == 5L) { "Expected 5 sources, but got $count" } // 1, 2, 3, 4, 5
     }
 
     @Test
     fun `source diversity handles empty lists`() = runTest {
         coEvery {
-            mangaHandler.awaitList<Long>(any())
+            mangaHandler.awaitList<Long>(any<Long>())
         } returns emptyList()
 
         coEvery {
-            animeHandler.awaitList<Long>(any())
+            animeHandler.awaitList<Long>(any<Long>())
         } returns emptyList()
 
         val count = checker.getSourceDiversity()
-        count shouldBe 0
+        assert(count == 0L) { "Expected 0 sources, but got $count" }
     }
 
     @Test
     fun `source diversity counts manga sources only`() = runTest {
         coEvery {
-            mangaHandler.awaitList<Long>(any())
+            mangaHandler.awaitList<Long>(any<Long>())
         } returns listOf(10L, 20L, 30L, 10L, 40L)
 
         val count = checker.getMangaSourceDiversity()
-        count shouldBe 4 // 10, 20, 30, 40
+        assert(count == 4L) { "Expected 4 sources, but got $count" } // 10, 20, 30, 40
     }
 
     @Test
     fun `source diversity counts anime sources only`() = runTest {
         coEvery {
-            animeHandler.awaitList<Long>(any())
+            animeHandler.awaitList<Long>(any<Long>())
         } returns listOf(100L, 200L, 100L, 300L)
 
         val count = checker.getAnimeSourceDiversity()
-        count shouldBe 3 // 100, 200, 300
+        assert(count == 3L) { "Expected 3 sources, but got $count" } // 100, 200, 300
     }
 
     @Test
     fun `genre parsing handles various formats`() = runTest {
         coEvery {
-            mangaHandler.awaitList<Any>(any())
+            mangaHandler.awaitList<String?>(any<String?>())
         } returns listOf(
             "Action, Comedy, Drama",
             "Action,Comedy,Romance", // No spaces
@@ -152,7 +151,7 @@ class DiversityAchievementCheckerTest {
         )
 
         val count = checker.getMangaGenreDiversity()
-        count shouldBe 4 // Action, Comedy, Drama, Romance
+        assert(count == 4L) { "Expected 4 genres, but got $count" } // Action, Comedy, Drama, Romance
     }
 
     @Test
@@ -160,23 +159,23 @@ class DiversityAchievementCheckerTest {
         var callCount = 0
 
         coEvery {
-            mangaHandler.awaitList<Any>(any())
+            mangaHandler.awaitList<String?>(any<String?>())
         } answers {
             callCount++
             listOf("Action", "Comedy")
         }
 
         coEvery {
-            animeHandler.awaitList<Any>(any())
+            animeHandler.awaitList<String?>(any<String?>())
         } returns emptyList()
 
         // First call
         checker.getGenreDiversity()
-        callCount shouldBe 1
+        assert(callCount == 1) { "Expected callCount to be 1, but was $callCount" }
 
         // Second call should use cache
         checker.getGenreDiversity()
-        callCount shouldBe 1
+        assert(callCount == 1) { "Expected callCount to be 1, but was $callCount" }
     }
 
     @Test
@@ -184,23 +183,23 @@ class DiversityAchievementCheckerTest {
         var callCount = 0
 
         coEvery {
-            mangaHandler.awaitList<Any>(any())
+            mangaHandler.awaitList<String?>(any<String?>())
         } answers {
             callCount++
             listOf("Action")
         }
 
         coEvery {
-            animeHandler.awaitList<Any>(any())
+            animeHandler.awaitList<String?>(any<String?>())
         } returns emptyList()
 
         checker.getGenreDiversity()
-        callCount shouldBe 1
+        assert(callCount == 1) { "Expected callCount to be 1, but was $callCount" }
 
         checker.clearCache()
 
         checker.getGenreDiversity()
-        callCount shouldBe 2
+        assert(callCount == 2) { "Expected callCount to be 2, but was $callCount" }
     }
 
     @Test
@@ -208,36 +207,36 @@ class DiversityAchievementCheckerTest {
         var callCount = 0
 
         coEvery {
-            mangaHandler.awaitList<Long>(any())
+            mangaHandler.awaitList<Long>(any<Long>())
         } answers {
             callCount++
             listOf(1L, 2L)
         }
 
         coEvery {
-            animeHandler.awaitList<Long>(any())
+            animeHandler.awaitList<Long>(any<Long>())
         } returns emptyList()
 
         checker.getSourceDiversity()
-        callCount shouldBe 1
+        assert(callCount == 1) { "Expected callCount to be 1, but was $callCount" }
 
         checker.clearCache()
 
         checker.getSourceDiversity()
-        callCount shouldBe 2
+        assert(callCount == 2) { "Expected callCount to be 2, but was $callCount" }
     }
 
     @Test
     fun `genre diversity deduplicates across categories`() = runTest {
         coEvery {
-            mangaHandler.awaitList<Any>(any())
+            mangaHandler.awaitList<String?>(any<String?>())
         } returns listOf("Action, Adventure", "Comedy")
 
         coEvery {
-            animeHandler.awaitList<Any>(any())
+            animeHandler.awaitList<String?>(any<String?>())
         } returns listOf("Action", "Adventure", "Drama")
 
         val count = checker.getGenreDiversity()
-        count shouldBe 5 // Action, Adventure, Comedy, Drama (Action and Adventure deduplicated)
+        assert(count == 5L) { "Expected 5 genres, but got $count" } // Action, Adventure, Comedy, Drama (Action and Adventure deduplicated)
     }
 }
