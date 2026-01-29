@@ -11,6 +11,7 @@ import androidx.core.app.ActivityCompat
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.model.AnimeMetadataSource
 import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.domain.ui.model.StartScreen
 import eu.kanade.domain.ui.model.TabletUiMode
@@ -45,7 +46,7 @@ object SettingsAppearanceScreen : SearchableSettings {
         return listOf(
             getThemeGroup(uiPreferences = uiPreferences),
             getDisplayGroup(uiPreferences = uiPreferences),
-            getShikimoriGroup(uiPreferences = uiPreferences),
+            getMetadataGroup(uiPreferences = uiPreferences),
         )
     }
 
@@ -208,21 +209,25 @@ object SettingsAppearanceScreen : SearchableSettings {
     }
 
     @Composable
-    private fun getShikimoriGroup(
+    private fun getMetadataGroup(
         uiPreferences: UiPreferences,
     ): Preference.PreferenceGroup {
         return Preference.PreferenceGroup(
-            title = stringResource(AYMR.strings.pref_category_shikimori),
+            title = stringResource(AYMR.strings.pref_category_metadata),
             preferenceItems = persistentListOf(
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = uiPreferences.useShikimoriRating(),
-                    title = stringResource(AYMR.strings.pref_use_shikimori_rating),
-                    subtitle = stringResource(AYMR.strings.pref_use_shikimori_rating_summary),
-                ),
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = uiPreferences.useShikimoriCovers(),
-                    title = stringResource(AYMR.strings.pref_use_shikimori_covers),
-                    subtitle = stringResource(AYMR.strings.pref_use_shikimori_covers_summary),
+                Preference.PreferenceItem.ListPreference(
+                    preference = uiPreferences.animeMetadataSource(),
+                    entries = AnimeMetadataSource.entries
+                        .associateWith {
+                            when (it) {
+                                AnimeMetadataSource.ANILIST -> "Anilist"
+                                AnimeMetadataSource.SHIKIMORI -> "Shikimori"
+                                AnimeMetadataSource.NONE -> stringResource(MR.strings.off)
+                            }
+                        }
+                        .toImmutableMap(),
+                    title = stringResource(AYMR.strings.pref_anime_metadata_source),
+                    subtitle = stringResource(AYMR.strings.pref_anime_metadata_source_summary),
                 ),
             ),
         )

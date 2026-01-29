@@ -5,9 +5,11 @@ import androidx.core.net.toUri
 import eu.kanade.tachiyomi.data.database.models.anime.AnimeTrack
 import eu.kanade.tachiyomi.data.database.models.manga.MangaTrack
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALAddEntryResult
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALAnime
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALCurrentUserResult
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALOAuth
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALSearchResult
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALSingleMediaResult
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALUserListEntryQueryResult
 import eu.kanade.tachiyomi.data.track.model.AnimeTrackSearch
 import eu.kanade.tachiyomi.data.track.model.MangaTrackSearch
@@ -17,6 +19,7 @@ import eu.kanade.tachiyomi.network.interceptor.rateLimit
 import eu.kanade.tachiyomi.network.jsonMime
 import eu.kanade.tachiyomi.network.parseAs
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -25,6 +28,8 @@ import kotlinx.serialization.json.putJsonObject
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 import tachiyomi.core.common.util.lang.withIOContext
+import tachiyomi.core.common.util.system.logcat
+import logcat.LogPriority
 import uy.kohesive.injekt.injectLazy
 import java.time.Instant
 import java.time.ZoneId
@@ -333,14 +338,19 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
                 }
             }
             with(json) {
-                authClient.newCall(
+                val response = authClient.newCall(
                     POST(
                         API_URL,
                         body = payload.toString().toRequestBody(jsonMime),
                     ),
                 )
                     .awaitSuccess()
-                    .parseAs<ALSearchResult>()
+
+                // Log raw JSON response for debugging
+                val responseBody = response.body.string()
+                logcat(logcat.LogPriority.DEBUG) { "AnilistApi: Raw JSON response: $responseBody" }
+
+                json.decodeFromString<ALSearchResult>(responseBody)
                     .data.page.media
                     .map { it.toALAnime().toTrack() }
             }
@@ -563,6 +573,82 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
             put("year", dateTime.year)
             put("month", dateTime.monthValue)
             put("day", dateTime.dayOfMonth)
+        }
+    }
+
+    /**
+     * Search for a single anime by Anilist ID.
+     * Used for metadata fetching when we already know the Anilist ID.
+     */
+    suspend fun searchAnimeById(id: Long): ALAnime? {
+        return withIOContext {
+            val query = """
+            |query GetById(${'$'}id: Int) {
+                |Media(id: ${'$'}id, type: ANIME) {
+                    |id
+                    |studios {
+                        |edges {
+                            |isMain
+                            |node {
+                                |name
+                            |}
+                        |}
+                    |}
+                    |title {
+                        |userPreferred
+                    |}
+                    |coverImage {
+                        |large
+                    |}
+                    |format
+                    |status
+                    |episodes
+                    |description
+                    |startDate {
+                        |year
+                        |month
+                        |day
+                    |}
+                    |averageScore
+                |}
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("id", id)
+                }
+            }
+            with(json) {
+                authClient.newCall(
+                    POST(
+                        API_URL,
+                        body = payload.toString().toRequestBody(jsonMime),
+                    ),
+                )
+                    .awaitSuccess()
+                    .parseAs<ALSingleMediaResult>()
+                    .let { result ->
+                        val media = result.data.media
+                        if (media != null) {
+                            ALAnime(
+                                remoteId = media.id,
+                                title = media.title.userPreferred,
+                                imageUrl = media.coverImage.large,
+                                description = media.description,
+                                format = media.format?.replace("_", "-") ?: "",
+                                publishingStatus = media.status ?: "",
+                                startDateFuzzy = media.startDate.toEpochMilli(),
+                                totalEpisodes = media.episodes ?: 0,
+                                averageScore = media.averageScore ?: -1,
+                                studios = media.studios,
+                            )
+                        } else {
+                            null
+                        }
+                    }
+            }
         }
     }
 

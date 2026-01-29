@@ -222,7 +222,9 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory { AnimeCoverCache(app) }
         addSingletonFactory { AnimeBackgroundCache(app) }
 
+        // Anime metadata caches
         addSingletonFactory { tachiyomi.data.shikimori.ShikimoriMetadataCache(get()) }
+        addSingletonFactory { tachiyomi.data.anilist.AnilistMetadataCache(get()) }
 
         addSingletonFactory { NetworkHelper(app, get()) }
         addSingletonFactory { JavaScriptEngine(app) }
@@ -245,13 +247,22 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory { DelayedAnimeTrackingStore(app) }
         addSingletonFactory { DelayedMangaTrackingStore(app) }
 
-        // Shikimori integration
+        // Anime metadata integration
         addSingletonFactory {
             val trackerManager = get<TrackerManager>()
             eu.kanade.domain.shikimori.interactor.GetShikimoriMetadata(
                 metadataCache = get(),
                 shikimori = trackerManager.shikimori,
                 shikimoriApi = trackerManager.shikimori.api,
+                getAnimeTracks = get(),
+                preferences = get(),
+            )
+        }
+        addSingletonFactory {
+            val trackerManager = get<TrackerManager>()
+            eu.kanade.domain.anilist.interactor.GetAnilistMetadata(
+                metadataCache = get(),
+                anilistApi = trackerManager.aniList.api,
                 getAnimeTracks = get(),
                 preferences = get(),
             )
