@@ -6,6 +6,7 @@ import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.data.achievement.handler.AchievementEventBus
 import tachiyomi.data.achievement.handler.FeatureUsageCollector
 import tachiyomi.domain.achievement.model.Achievement

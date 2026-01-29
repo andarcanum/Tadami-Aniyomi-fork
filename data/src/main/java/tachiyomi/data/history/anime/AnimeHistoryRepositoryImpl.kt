@@ -6,6 +6,7 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.handler.AchievementEventBus
 import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
+import tachiyomi.domain.achievement.repository.ActivityDataRepository
 import tachiyomi.domain.history.anime.model.AnimeHistory
 import tachiyomi.domain.history.anime.model.AnimeHistoryUpdate
 import tachiyomi.domain.history.anime.model.AnimeHistoryWithRelations
@@ -14,6 +15,7 @@ import tachiyomi.domain.history.anime.repository.AnimeHistoryRepository
 class AnimeHistoryRepositoryImpl(
     private val handler: AnimeDatabaseHandler,
     private val eventBus: AchievementEventBus,
+    private val activityDataRepository: ActivityDataRepository,
 ) : AnimeHistoryRepository {
 
     override fun getAnimeHistory(query: String): Flow<List<AnimeHistoryWithRelations>> {
@@ -82,6 +84,9 @@ class AnimeHistoryRepositoryImpl(
             // Only publish if this is an actual watch operation (has a valid seenAt date)
             if (historyUpdate.seenAt.time > 0) {
                 try {
+                    // Record activity for stats
+                    activityDataRepository.recordWatching(1)
+
                     val episodeInfo = handler.awaitOneOrNull {
                         animehistoryQueries.getEpisodeInfo(historyUpdate.episodeId) { animeId, episodeNumber ->
                             Pair(animeId, episodeNumber)

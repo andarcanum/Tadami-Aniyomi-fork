@@ -10,13 +10,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
-import org.junit.Before
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
 import tachiyomi.domain.achievement.model.ActivityType
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 class ActivityDataRepositoryTest {
 
@@ -27,7 +27,7 @@ class ActivityDataRepositoryTest {
 
     private val dateFormatter = DateTimeFormatter.ISO_LOCAL_DATE
 
-    @Before
+    @BeforeEach
     fun setup() {
         context = mockk(relaxed = true)
         prefs = mockk(relaxed = true)

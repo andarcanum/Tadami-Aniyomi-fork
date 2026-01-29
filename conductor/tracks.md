@@ -14,5 +14,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Fix and Refine Achievement Activity Graph**
+- [~] **Track: Fix and Refine Achievement Activity Graph**
   *Link: [./tracks/fix_achievement_activity_graph_20260129/](./tracks/fix_achievement_activity_graph_20260129/)*

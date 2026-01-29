@@ -3,15 +3,15 @@
 ## Phase 1: Data Infrastructure & Tracking Fix
 Goal: Ensure activity data is correctly recorded and retrieved.
 
-- [ ] Task: Create unit tests for `ActivityDataRepository` to verify day-to-day activity aggregation.
-    - [ ] Target: `ActivityDataRepositoryTest.kt`
-    - [ ] Test Cases: Storage of reading events, watching events, and retrieval of the 365-day list.
-- [ ] Task: Fix `ActivityDataRepositoryImpl` to correctly fetch data.
-    - [ ] Investigate if `prefs.getInt` is the correct source or if it should query the History database.
-    - [ ] Ensure all `ActivityType` values (READING, WATCHING, APP_OPEN) are supported.
-- [ ] Task: Verify event publishing in Repositories.
-    - [ ] Check `MangaHistoryRepositoryImpl` and `AnimeHistoryRepositoryImpl` to ensure they call `activityDataRepository.logActivity()`.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Data Infrastructure' (Protocol in workflow.md)
+- [x] Task: Create unit tests for `ActivityDataRepository` to verify day-to-day activity aggregation.
+    - [x] Target: `ActivityDataRepositoryTest.kt`
+    - [x] Test Cases: Storage of reading events, watching events, and retrieval of the 365-day list.
+- [x] Task: Fix `ActivityDataRepositoryImpl` to correctly fetch data.
+    - [x] Investigate if `prefs.getInt` is the correct source or if it should query the History database.
+    - [x] Ensure all `ActivityType` values (READING, WATCHING, APP_OPEN) are supported.
+- [x] Task: Verify event publishing in Repositories.
+    - [x] Check `MangaHistoryRepositoryImpl` and `AnimeHistoryRepositoryImpl` to ensure they call `activityDataRepository.logActivity()`.
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Data Infrastructure' (Protocol in workflow.md)
 
 ## Phase 2: ScreenModel Data Flow
 Goal: Ensure the UI state receives the activity data from the repository.

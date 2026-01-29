@@ -6,6 +6,7 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.handler.AchievementEventBus
 import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.data.handlers.manga.MangaDatabaseHandler
+import tachiyomi.domain.achievement.repository.ActivityDataRepository
 import tachiyomi.domain.history.manga.model.MangaHistory
 import tachiyomi.domain.history.manga.model.MangaHistoryUpdate
 import tachiyomi.domain.history.manga.model.MangaHistoryWithRelations
@@ -14,6 +15,7 @@ import tachiyomi.domain.history.manga.repository.MangaHistoryRepository
 class MangaHistoryRepositoryImpl(
     private val handler: MangaDatabaseHandler,
     private val eventBus: AchievementEventBus,
+    private val activityDataRepository: ActivityDataRepository,
 ) : MangaHistoryRepository {
 
     override fun getMangaHistory(query: String): Flow<List<MangaHistoryWithRelations>> {
@@ -76,6 +78,9 @@ class MangaHistoryRepositoryImpl(
             // Only publish if this is an actual read operation (has a valid readAt date)
             if (historyUpdate.readAt.time > 0) {
                 try {
+                    // Record activity for stats
+                    activityDataRepository.recordReading(1)
+
                     val chapterInfo = handler.awaitOneOrNull {
                         historyQueries.getChapterInfo(historyUpdate.chapterId) { mangaId, chapterNumber ->
                             Pair(mangaId, chapterNumber)
