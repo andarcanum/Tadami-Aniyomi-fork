@@ -1,0 +1,8 @@
+﻿{
+    "description":  "Fix bug where AniList metadata source returns 404 for large cover images; implement fallback URL logic.",
+    "track_id":  "fix_anilist_cover_404_20260129",
+    "type":  "bug",
+    "created_at":  "2026-01-29T20:27:58Z",
+    "status":  "new",
+    "updated_at":  "2026-01-29T20:27:58Z"
+}
