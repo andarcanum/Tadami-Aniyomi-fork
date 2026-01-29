@@ -9,5 +9,10 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [~] **Track: Fix ForegroundServiceDidNotStartInTimeException crash related to WorkManager's SystemForegroundService.**
+- [x] **Track: Fix ForegroundServiceDidNotStartInTimeException crash related to WorkManager's SystemForegroundService.**
   *Link: [./tracks/fix_foreground_service_crash_20260129/](./tracks/fix_foreground_service_crash_20260129/)*
+
+---
+
+- [ ] **Track: Fix and Refine Achievement Activity Graph**
+  *Link: [./tracks/fix_achievement_activity_graph_20260129/](./tracks/fix_achievement_activity_graph_20260129/)*
