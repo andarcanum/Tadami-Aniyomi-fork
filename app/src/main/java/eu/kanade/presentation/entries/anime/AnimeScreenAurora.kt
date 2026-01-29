@@ -139,7 +139,7 @@ fun AnimeScreenAuroraImpl(
         Injekt.get<eu.kanade.domain.ui.UiPreferences>().animeMetadataSource().get()
     }
 
-    val resolvedCoverUrl = remember(
+    val resolvedCover = remember(
         state.anime,
         state.isMetadataLoading,
         state.metadataError,
@@ -205,7 +205,8 @@ fun AnimeScreenAuroraImpl(
             anime = anime,
             scrollOffset = scrollOffset,
             firstVisibleItemIndex = firstVisibleItemIndex,
-            resolvedCoverUrl = resolvedCoverUrl,
+            resolvedCoverUrl = resolvedCover.url,
+            resolvedCoverUrlFallback = resolvedCover.fallbackUrl,
         )
 
         // Scrollable content
@@ -524,25 +525,38 @@ fun AnimeScreenAuroraImpl(
     }
 }
 
+data class ResolvedCover(
+    val url: String?,
+    val fallbackUrl: String?,
+)
+
 private fun resolveCoverUrl(
     state: AnimeScreenModel.State.Success,
     useMetadataCovers: Boolean,
-): String? {
+): ResolvedCover {
     if (!useMetadataCovers) {
-        return state.anime.thumbnailUrl
+        return ResolvedCover(state.anime.thumbnailUrl, null)
     }
 
     if (state.isMetadataLoading) {
-        return null
+        return ResolvedCover(null, null)
     }
 
     val metadataCoverUrl = state.animeMetadata?.coverUrl?.takeIf { it.isNotBlank() }
+    val metadataCoverUrlFallback = state.animeMetadata?.coverUrlFallback?.takeIf { it.isNotBlank() }
+
     return when (state.metadataError) {
-        null -> metadataCoverUrl ?: state.anime.thumbnailUrl
+        null -> {
+            if (metadataCoverUrl != null) {
+                ResolvedCover(metadataCoverUrl, metadataCoverUrlFallback ?: state.anime.thumbnailUrl)
+            } else {
+                ResolvedCover(state.anime.thumbnailUrl, null)
+            }
+        }
         AnimeScreenModel.MetadataError.NetworkError,
         AnimeScreenModel.MetadataError.NotFound,
         AnimeScreenModel.MetadataError.NotAuthenticated,
         AnimeScreenModel.MetadataError.Disabled,
-        -> state.anime.thumbnailUrl
+        -> ResolvedCover(state.anime.thumbnailUrl, null)
     }
 }

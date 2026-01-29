@@ -35,6 +35,7 @@ fun FullscreenPosterBackground(
     firstVisibleItemIndex: Int,
     modifier: Modifier = Modifier,
     resolvedCoverUrl: String?,
+    resolvedCoverUrlFallback: String? = null,
 ) {
     val context = LocalContext.current
 
@@ -60,11 +61,18 @@ fun FullscreenPosterBackground(
 
     Box(modifier = modifier.fillMaxSize()) {
         if (resolvedCoverUrl != null) {
+            var model by remember(resolvedCoverUrl) { androidx.compose.runtime.mutableStateOf(resolvedCoverUrl) }
+
             AsyncImage(
-                model = remember(resolvedCoverUrl, anime.id, anime.coverLastModified) {
+                model = remember(model, anime.id, anime.coverLastModified) {
                     ImageRequest.Builder(context)
-                        .data(resolvedCoverUrl)
+                        .data(model)
                         .build()
+                },
+                onError = {
+                    if (model == resolvedCoverUrl && resolvedCoverUrlFallback != null) {
+                        model = resolvedCoverUrlFallback
+                    }
                 },
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
