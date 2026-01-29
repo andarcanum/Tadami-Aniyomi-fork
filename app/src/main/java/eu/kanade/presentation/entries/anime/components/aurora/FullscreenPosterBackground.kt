@@ -26,7 +26,7 @@ import tachiyomi.domain.entries.anime.model.Anime
  * @param anime Anime object containing cover information
  * @param scrollOffset Current scroll offset from LazyListState
  * @param firstVisibleItemIndex Current first visible item index from LazyListState
- * @param posterModel Resolved poster model to display (null to skip loading)
+ * @param resolvedCoverUrl Resolved cover URL to display (null to skip loading)
  */
 @Composable
 fun FullscreenPosterBackground(
@@ -34,7 +34,8 @@ fun FullscreenPosterBackground(
     scrollOffset: Int,
     firstVisibleItemIndex: Int,
     modifier: Modifier = Modifier,
-    posterModel: Any?,
+    resolvedCoverUrl: String?,
+    resolvedCoverUrlFallback: String? = null,
 ) {
     val context = LocalContext.current
 
@@ -59,12 +60,19 @@ fun FullscreenPosterBackground(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        if (posterModel != null) {
+        if (resolvedCoverUrl != null) {
+            var model by remember(resolvedCoverUrl) { androidx.compose.runtime.mutableStateOf(resolvedCoverUrl) }
+
             AsyncImage(
-                model = remember(posterModel, anime.id, anime.coverLastModified) {
+                model = remember(model, anime.id, anime.coverLastModified) {
                     ImageRequest.Builder(context)
-                        .data(posterModel)
+                        .data(model)
                         .build()
+                },
+                onError = {
+                    if (model == resolvedCoverUrl && resolvedCoverUrlFallback != null) {
+                        model = resolvedCoverUrlFallback
+                    }
                 },
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
