@@ -19,7 +19,6 @@ import eu.kanade.domain.entries.anime.interactor.UpdateAnime
 import eu.kanade.domain.entries.anime.model.downloadedFilter
 import eu.kanade.domain.entries.anime.model.seasonDownloadedFilter
 import eu.kanade.domain.entries.anime.model.toSAnime
-import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.items.episode.interactor.SetSeenStatus
 import eu.kanade.domain.items.episode.interactor.SyncEpisodesWithSource
 import eu.kanade.domain.track.anime.interactor.AddAnimeTracks
@@ -35,15 +34,12 @@ import eu.kanade.tachiyomi.animesource.UnmeteredSource
 import eu.kanade.tachiyomi.animesource.model.FetchType
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.Video
-import eu.kanade.tachiyomi.data.cache.AnimeBackgroundCache
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadCache
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
 import eu.kanade.tachiyomi.data.track.EnhancedAnimeTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
-import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.HttpException
-import eu.kanade.tachiyomi.network.get
 import eu.kanade.tachiyomi.ui.entries.anime.track.AnimeTrackItem
 import eu.kanade.tachiyomi.ui.player.settings.GesturePreferences
 import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences
@@ -71,6 +67,7 @@ import mihon.domain.items.episode.interactor.FilterEpisodesForDownload
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.CheckboxState
 import tachiyomi.core.common.preference.TriState
+import tachiyomi.core.common.preference.getEnum
 import tachiyomi.core.common.preference.mapAsCheckboxState
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
@@ -103,6 +100,7 @@ import tachiyomi.domain.items.season.service.seasonSortAlphabetically
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import tachiyomi.domain.track.anime.interactor.GetAnimeTracks
+import tachiyomi.domain.anilist.model.AnilistMetadata
 import tachiyomi.domain.shikimori.model.ShikimoriMetadata
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
@@ -147,11 +145,10 @@ class AnimeScreenModel(
     private val filterEpisodesForDownload: FilterEpisodesForDownload = Injekt.get(),
     internal val setAnimeViewerFlags: SetAnimeViewerFlags = Injekt.get(),
     private val preferenceStore: tachiyomi.core.common.preference.PreferenceStore = Injekt.get(),
+    private val getAnilistMetadata: eu.kanade.domain.anilist.interactor.GetAnilistMetadata = Injekt.get(),
+    private val anilistMetadataCache: tachiyomi.data.anilist.AnilistMetadataCache = Injekt.get(),
     private val getShikimoriMetadata: eu.kanade.domain.shikimori.interactor.GetShikimoriMetadata = Injekt.get(),
     private val shikimoriMetadataCache: tachiyomi.data.shikimori.ShikimoriMetadataCache = Injekt.get(),
-    private val uiPreferences: UiPreferences = Injekt.get(),
-    private val backgroundCache: AnimeBackgroundCache = Injekt.get(),
-    private val networkHelper: NetworkHelper = Injekt.get(),
     val snackbarHostState: SnackbarHostState = SnackbarHostState(),
 ) : StateScreenModel<AnimeScreenModel.State>(State.Loading) {
 
@@ -266,6 +263,13 @@ class AnimeScreenModel(
             val needRefreshEpisode = episodes.isEmpty() && anime.fetchType == FetchType.Episodes
             val needRefreshSeason = seasons.isEmpty() && anime.fetchType == FetchType.Seasons
 
+            // Check if metadata loading will be needed
+            val metadataSource = preferenceStore.getEnum(
+                "anime_metadata_source",
+                eu.kanade.domain.ui.model.AnimeMetadataSource.ANILIST,
+            ).get()
+            val willLoadMetadata = metadataSource != eu.kanade.domain.ui.model.AnimeMetadataSource.NONE
+
             // Show what we have earlier
             mutableState.update {
                 State.Success(
@@ -276,15 +280,12 @@ class AnimeScreenModel(
                     seasons = seasons,
                     isRefreshingData = needRefreshInfo || needRefreshEpisode || needRefreshSeason,
                     dialog = null,
+                    // Start with isMetadataLoading = true if metadata will be loaded
+                    isMetadataLoading = willLoadMetadata,
                 )
             }
             // Start observe tracking since it only needs animeId
             observeTrackers()
-
-            // Load Shikimori metadata in parallel
-            screenModelScope.launchIO {
-                loadShikimoriMetadata(animeId)
-            }
 
             // Fetch info-episodes when needed
             if (screenModelScope.isActive) {
@@ -294,6 +295,9 @@ class AnimeScreenModel(
                 )
                 fetchFromSourceTasks.awaitAll()
             }
+
+            // Load metadata after fetching fresh data from source
+            loadAnimeMetadata(animeId)
 
             // Initial loading finished
             updateSuccessState { it.copy(isRefreshingData = false) }
@@ -310,6 +314,9 @@ class AnimeScreenModel(
             fetchFromSourceTasks.awaitAll()
             updateSuccessState { it.copy(isRefreshingData = false) }
             successState?.let { updateAiringTime(it.anime, it.trackItems, manualFetch) }
+
+            // Reload metadata after refreshing from source
+            loadAnimeMetadata(successState?.anime?.id ?: return@launch)
         }
     }
 
@@ -1550,110 +1557,153 @@ class AnimeScreenModel(
 
     // Track sheet - end
 
-    // Shikimori integration - start
+    // Anime metadata integration (Anilist/Shikimori) - start
 
-    private suspend fun loadShikimoriMetadata(animeId: Long) {
+    /**
+     * Unified metadata loading that supports both Anilist and Shikimori.
+     * Source is determined by UiPreferences.animeMetadataSource().
+     */
+    private suspend fun loadAnimeMetadata(animeId: Long) {
         val currentState = successState ?: return
 
-        val cachedMetadata = shikimoriMetadataCache.get(animeId)
-        val cachedCoverUrl = cachedMetadata?.coverUrl
-        if (!cachedCoverUrl.isNullOrBlank()) {
-            screenModelScope.launchIO {
-                cacheShikimoriCoverIfNeeded(currentState.anime, cachedCoverUrl)
-            }
-        }
-
-        // Show loading while keeping cached metadata (if any)
+        // Show loading
         updateSuccessState {
-            it.copy(
-                shikimoriMetadata = cachedMetadata,
-                isShikimoriLoading = true,
-                shikimoriError = null,
-            )
+            it.copy(isMetadataLoading = true, metadataError = null)
         }
 
         try {
-            val metadata = getShikimoriMetadata.await(currentState.anime)
+            // Get the metadata source preference
+            val metadataSource = preferenceStore.getEnum(
+                "anime_metadata_source",
+                eu.kanade.domain.ui.model.AnimeMetadataSource.ANILIST,
+            ).get()
 
-            val metadataCoverUrl = metadata?.coverUrl
-            if (!metadataCoverUrl.isNullOrBlank()) {
-                screenModelScope.launchIO {
-                    cacheShikimoriCoverIfNeeded(currentState.anime, metadataCoverUrl)
+            val metadata = when (metadataSource) {
+                eu.kanade.domain.ui.model.AnimeMetadataSource.ANILIST -> {
+                    val anilistMeta = getAnilistMetadata.await(currentState.anime)
+                    anilistMeta?.let { AnimeMetadataData.Anilist(it) }
+                    // No fallback to Shikimori - use plugin thumbnail instead
                 }
+                eu.kanade.domain.ui.model.AnimeMetadataSource.SHIKIMORI -> {
+                    val shikimoriMeta = getShikimoriMetadata.await(currentState.anime)
+                    shikimoriMeta?.let { AnimeMetadataData.Shikimori(it) }
+                    // No fallback to Anilist - use plugin thumbnail instead
+                }
+                eu.kanade.domain.ui.model.AnimeMetadataSource.NONE -> null
             }
 
             updateSuccessState {
                 it.copy(
-                    shikimoriMetadata = metadata,
-                    isShikimoriLoading = false,
-                    shikimoriError = if (metadata == null || !metadata.hasData()) {
-                        ShikimoriError.NotFound
+                    animeMetadata = metadata,
+                    isMetadataLoading = false,
+                    metadataError = if (metadata == null || !metadata.hasData()) {
+                        MetadataError.NotFound
                     } else {
                         null
                     },
                 )
             }
         } catch (e: Exception) {
-            logcat(LogPriority.ERROR, e) { "Failed to load Shikimori metadata for anime $animeId" }
-
-            // Try to show cached data on error
-            val cached = shikimoriMetadataCache.get(animeId)
+            logcat(LogPriority.ERROR, e) { "Failed to load anime metadata for anime $animeId" }
 
             // Check if error is "Not authenticated"
             val error = when {
-                e.isNotAuthenticatedShikimori() ->
-                    ShikimoriError.NotAuthenticated
-                else -> ShikimoriError.NetworkError
+                e.isNotAuthenticatedError() -> MetadataError.NotAuthenticated
+                else -> MetadataError.NetworkError
             }
 
             updateSuccessState {
                 it.copy(
-                    shikimoriMetadata = cached,
-                    isShikimoriLoading = false,
-                    shikimoriError = error,
+                    animeMetadata = null,
+                    isMetadataLoading = false,
+                    metadataError = error,
                 )
             }
         }
     }
 
-    private suspend fun cacheShikimoriCoverIfNeeded(anime: Anime, coverUrl: String) {
-        if (!uiPreferences.useShikimoriCovers().get()) return
-        if (coverUrl.isBlank()) return
-        if (backgroundCache.getCustomBackgroundFile(anime.id).exists()) return
-
-        val cacheFile = backgroundCache.getBackgroundFile(coverUrl) ?: return
-        if (cacheFile.exists()) return
-
-        try {
-            networkHelper.client.get(coverUrl).use { response ->
-                val body = response.body ?: return
-                backgroundCache.setBackgroundToCache(coverUrl, body.byteStream())
-            }
-        } catch (e: Exception) {
-            logcat(LogPriority.ERROR, e) { "Failed to cache Shikimori cover for anime ${anime.id}" }
-        }
-    }
-
-    fun retryShikimoriLoad() {
+    fun retryMetadataLoad() {
         val currentState = successState ?: return
         screenModelScope.launchIO {
-            loadShikimoriMetadata(currentState.anime.id)
+            loadAnimeMetadata(currentState.anime.id)
         }
     }
 
-    // Shikimori integration - end
+    // Anime metadata integration - end
 
-    private fun Throwable.isNotAuthenticatedShikimori(): Boolean {
+    private fun Throwable.isNotAuthenticatedError(): Boolean {
         var current: Throwable? = this
         while (current != null) {
             val message = current.message.orEmpty()
-            if (message.contains("Not authenticated", ignoreCase = true) &&
-                message.contains("Shikimori", ignoreCase = true)) {
+            if (message.contains("Not authenticated", ignoreCase = true)) {
                 return true
             }
             current = current.cause
         }
         return false
+    }
+
+    /**
+     * Sealed class for metadata from different sources.
+     */
+    sealed class AnimeMetadataData {
+        data class Anilist(val data: AnilistMetadata) : AnimeMetadataData()
+        data class Shikimori(val data: ShikimoriMetadata) : AnimeMetadataData()
+
+        val score: Double?
+            get() = when (this) {
+                is Anilist -> data.getDisplayScore()
+                is Shikimori -> data.score
+            }
+
+        val format: String?
+            get() = when (this) {
+                is Anilist -> data.format
+                is Shikimori -> data.kind
+            }
+
+        val status: String?
+            get() = when (this) {
+                is Anilist -> data.status
+                is Shikimori -> data.status
+            }
+
+        val formattedStatus: String?
+            get() = when (this) {
+                is Anilist -> data.getFormattedStatus()
+                is Shikimori -> data.getFormattedStatus()
+            }
+
+        val coverUrl: String?
+            get() = when (this) {
+                is Anilist -> data.coverUrl
+                is Shikimori -> data.coverUrl
+            }
+
+        val coverUrlFallback: String?
+            get() = when (this) {
+                is Anilist -> data.coverUrlFallback
+                is Shikimori -> data.coverUrl // Shikimori doesn't have separate sizes
+            }
+
+        fun isCompleted(): Boolean = when (this) {
+            is Anilist -> data.status?.equals("FINISHED", ignoreCase = true) == true ||
+                data.status?.equals("CANCELLED", ignoreCase = true) == true
+            is Shikimori -> data.status?.equals("released", ignoreCase = true) == true ||
+                data.status?.equals("discontinued", ignoreCase = true) == true
+        }
+
+        fun hasData(): Boolean = when (this) {
+            is Anilist -> data.hasData()
+            is Shikimori -> data.hasData()
+        }
+    }
+
+    sealed interface MetadataError {
+        data object NetworkError : MetadataError
+        data object NotFound : MetadataError
+        data object NotAuthenticated : MetadataError
+        data object Disabled : MetadataError
     }
 
     sealed interface Dialog {
@@ -1731,13 +1781,6 @@ class AnimeScreenModel(
         updateSuccessState { it.copy(dialog = Dialog.ShowQualities(episode, it.anime, it.source)) }
     }
 
-    sealed interface ShikimoriError {
-        data object NetworkError : ShikimoriError
-        data object NotFound : ShikimoriError
-        data object NotAuthenticated : ShikimoriError
-        data object Disabled : ShikimoriError
-    }
-
     sealed interface State {
         @Immutable
         data object Loading : State
@@ -1759,10 +1802,10 @@ class AnimeScreenModel(
                 anime.nextEpisodeToAir,
                 anime.nextEpisodeAiringAt,
             ),
-            // Shikimori integration
-            val shikimoriMetadata: ShikimoriMetadata? = null,
-            val isShikimoriLoading: Boolean = false,
-            val shikimoriError: ShikimoriError? = null,
+            // Anime metadata integration (Anilist/Shikimori)
+            val animeMetadata: AnimeMetadataData? = null,
+            val isMetadataLoading: Boolean = false,
+            val metadataError: MetadataError? = null,
         ) : State {
 
             val processedSeasons by lazy {

@@ -224,7 +224,7 @@ class AnimeScreen(
                 screenModel.showDubbingDialog()
             }.takeIf { successState.availableDubbings.isNotEmpty() },
             selectedDubbing = screenModel.getPreferredDubbing().takeIf { it.isNotBlank() },
-            onRetryShikimori = screenModel::retryShikimoriLoad,
+            onRetryMetadata = screenModel::retryMetadataLoad,
         )
 
         val onDismissRequest = {

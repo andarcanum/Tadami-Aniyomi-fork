@@ -21,11 +21,19 @@ data class ALAnime(
     val averageScore: Int,
     val studios: ALStudios,
 ) {
+    /**
+     * Convert medium cover URL to large for better quality.
+     * Anilist API returns medium by default, but large is available by changing the path.
+     * Example: .../cover/medium/bx200556-TezRfCQCFLbA.png -> .../cover/large/bx200556-TezRfCQCFLbA.png
+     */
+    val largeImageUrl: String
+        get() = imageUrl.replace("/medium/", "/large/")
+
     fun toTrack() = AnimeTrackSearch.create(TrackerManager.ANILIST).apply {
         remote_id = remoteId
         title = this@ALAnime.title
         total_episodes = totalEpisodes
-        cover_url = imageUrl
+        cover_url = largeImageUrl
         summary = description?.htmlDecode() ?: ""
         score = averageScore.toDouble()
         tracking_url = AnilistApi.animeUrl(remote_id)

@@ -213,12 +213,12 @@ private fun StatItem(
         modifier = modifier
             .height(120.dp)
             .background(
-                color = colors.glass.copy(alpha = 0.5f),
+                color = colors.surface.copy(alpha = 0.7f),
                 shape = RoundedCornerShape(16.dp),
             )
             .border(
                 width = 1.dp,
-                color = colors.divider.copy(alpha = 0.3f),
+                color = colors.accent.copy(alpha = 0.2f),
                 shape = RoundedCornerShape(16.dp),
             )
             .padding(12.dp),

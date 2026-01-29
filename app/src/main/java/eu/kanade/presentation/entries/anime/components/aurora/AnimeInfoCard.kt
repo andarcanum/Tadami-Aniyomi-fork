@@ -36,6 +36,7 @@ import eu.kanade.presentation.entries.manga.components.aurora.GlassmorphismCard
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreenModel
+import tachiyomi.domain.anilist.model.AnilistMetadata
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.shikimori.model.ShikimoriMetadata
 import tachiyomi.i18n.MR
@@ -56,6 +57,7 @@ private fun filterDescription(description: String?): String? {
         "Original Title:", "Оригинальное название:",
         "Rating:", "Рейтинг:",
         "Shikimori", "сикимори",
+        "Anilist", "анилист",
     )
 
     return description.lines()
@@ -71,7 +73,7 @@ private fun filterDescription(description: String?): String? {
 
 /**
  * Info card containing description, stats, and genre tags for anime.
- * Displays: Rating (from Shikimori), Type (from Shikimori), Status, Next Update
+ * Displays: Rating (from Anilist/Shikimori), Type, Status, Next Update
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -86,11 +88,11 @@ fun AnimeInfoCard(
     onToggleGenres: () -> Unit,
     modifier: Modifier = Modifier,
     statsRequester: BringIntoViewRequester? = null,
-    // Shikimori integration
-    shikimoriMetadata: ShikimoriMetadata? = null,
-    isShikimoriLoading: Boolean = false,
-    shikimoriError: AnimeScreenModel.ShikimoriError? = null,
-    onRetryShikimori: () -> Unit = {},
+    // Metadata integration (supports both Anilist and Shikimori)
+    animeMetadata: AnimeScreenModel.AnimeMetadataData? = null,
+    isMetadataLoading: Boolean = false,
+    metadataError: AnimeScreenModel.MetadataError? = null,
+    onRetryMetadata: () -> Unit = {},
     onLoginClick: () -> Unit = {},
 ) {
     val colors = AuroraTheme.colors
@@ -104,15 +106,10 @@ fun AnimeInfoCard(
         }
     }
 
-    // Determine if anime is completed (prefer Shikimori status)
-    val isCompleted = when {
-        shikimoriMetadata?.status?.lowercase() == "released" -> true
-        shikimoriMetadata?.status?.lowercase() == "discontinued" -> true
-        else -> anime.status.toInt() in listOf(
-            SAnime.COMPLETED,
-            SAnime.PUBLISHING_FINISHED,
-            SAnime.CANCELLED,
-        )
+    // Determine if anime is completed (prefer metadata status)
+    val isCompleted = animeMetadata?.isCompleted() ?: when (anime.status.toInt()) {
+        SAnime.COMPLETED, SAnime.PUBLISHING_FINISHED, SAnime.CANCELLED -> true
+        else -> false
     }
 
     GlassmorphismCard(
@@ -137,48 +134,48 @@ fun AnimeInfoCard(
                     },
                 horizontalArrangement = if (isCompleted) Arrangement.SpaceBetween else Arrangement.SpaceEvenly,
             ) {
-                // Rating (from Shikimori)
+                // Rating (from metadata source)
                 StatItem(
                     value = when {
-                        isShikimoriLoading -> "..."
-                        shikimoriError == AnimeScreenModel.ShikimoriError.NotAuthenticated -> stringResource(MR.strings.not_applicable)
-                        else -> shikimoriMetadata?.score?.let { String.format("%.1f", it) } ?: stringResource(MR.strings.not_applicable)
+                        isMetadataLoading -> "..."
+                        metadataError == AnimeScreenModel.MetadataError.NotAuthenticated -> stringResource(MR.strings.not_applicable)
+                        else -> animeMetadata?.score?.let { String.format("%.1f", it) } ?: stringResource(MR.strings.not_applicable)
                     },
                     label = "РЕЙТИНГ",
                     modifier = if (isCompleted) Modifier else Modifier.weight(1f),
-                    isLoading = isShikimoriLoading,
-                    error = shikimoriError,
-                    onRetry = onRetryShikimori,
+                    isLoading = isMetadataLoading,
+                    error = metadataError,
+                    onRetry = onRetryMetadata,
                     onLoginClick = onLoginClick,
                 )
 
-                // Type (from Shikimori)
+                // Type (from metadata source)
                 StatItem(
                     value = when {
-                        isShikimoriLoading -> "..."
-                        shikimoriError == AnimeScreenModel.ShikimoriError.NotAuthenticated -> stringResource(MR.strings.not_applicable)
-                        else -> shikimoriMetadata?.kind?.uppercase() ?: stringResource(MR.strings.not_applicable)
+                        isMetadataLoading -> "..."
+                        metadataError == AnimeScreenModel.MetadataError.NotAuthenticated -> stringResource(MR.strings.not_applicable)
+                        else -> animeMetadata?.format?.uppercase() ?: stringResource(MR.strings.not_applicable)
                     },
                     label = "ТИП",
                     modifier = if (isCompleted) Modifier else Modifier.weight(1f),
-                    isLoading = isShikimoriLoading,
-                    error = shikimoriError,
-                    onRetry = onRetryShikimori,
+                    isLoading = isMetadataLoading,
+                    error = metadataError,
+                    onRetry = onRetryMetadata,
                     onLoginClick = onLoginClick,
                 )
 
-                // Status (from Shikimori if available, otherwise from source)
+                // Status (from metadata source if available, otherwise from source)
                 StatItem(
                     value = when {
-                        isShikimoriLoading -> "..."
-                        shikimoriError == AnimeScreenModel.ShikimoriError.NotAuthenticated -> AnimeStatusFormatter.formatStatus(anime.status)
-                        else -> shikimoriMetadata?.getFormattedStatus() ?: AnimeStatusFormatter.formatStatus(anime.status)
+                        isMetadataLoading -> "..."
+                        metadataError == AnimeScreenModel.MetadataError.NotAuthenticated -> AnimeStatusFormatter.formatStatus(anime.status)
+                        else -> animeMetadata?.formattedStatus ?: AnimeStatusFormatter.formatStatus(anime.status)
                     },
                     label = "СТАТУС",
                     modifier = if (isCompleted) Modifier else Modifier.weight(1f),
-                    isLoading = isShikimoriLoading,
-                    error = shikimoriError,
-                    onRetry = onRetryShikimori,
+                    isLoading = isMetadataLoading,
+                    error = metadataError,
+                    onRetry = onRetryMetadata,
                 )
 
                 // Next Update - only show if not completed
@@ -300,7 +297,7 @@ private fun StatItem(
     label: String,
     modifier: Modifier = Modifier,
     isLoading: Boolean = false,
-    error: AnimeScreenModel.ShikimoriError? = null,
+    error: AnimeScreenModel.MetadataError? = null,
     onRetry: () -> Unit = {},
     onLoginClick: () -> Unit = {},
 ) {
@@ -323,7 +320,7 @@ private fun StatItem(
             )
 
             // Show retry icon for NetworkError
-            if (error == AnimeScreenModel.ShikimoriError.NetworkError) {
+            if (error == AnimeScreenModel.MetadataError.NetworkError) {
                 Spacer(modifier = Modifier.padding(start = 4.dp))
                 Icon(
                     imageVector = Icons.Filled.Refresh,
@@ -336,11 +333,11 @@ private fun StatItem(
             }
 
             // Show info icon for Disabled (user not logged in) - clickable
-            if (error == AnimeScreenModel.ShikimoriError.NotAuthenticated && !isLoading) {
+            if (error == AnimeScreenModel.MetadataError.NotAuthenticated && !isLoading) {
                 Spacer(modifier = Modifier.padding(start = 4.dp))
                 Icon(
                     imageVector = Icons.Filled.Info,
-                    contentDescription = "Авторизуйтесь в Shikimori",
+                    contentDescription = "Авторизуйтесь в сервисе",
                     tint = colors.textSecondary.copy(alpha = 0.6f),
                     modifier = Modifier
                         .size(14.dp)

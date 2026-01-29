@@ -38,8 +38,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreenModel
 import tachiyomi.domain.entries.anime.model.Anime
-import tachiyomi.domain.shikimori.model.ShikimoriMetadata
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
@@ -82,7 +82,7 @@ fun AnimeHeroContent(
     onContinueWatching: () -> Unit,
     onDubbingClicked: (() -> Unit)?,
     selectedDubbing: String?,
-    shikimoriMetadata: ShikimoriMetadata? = null,
+    animeMetadata: AnimeScreenModel.AnimeMetadataData? = null,
     modifier: Modifier = Modifier,
 ) {
     val uiPreferences = remember { Injekt.get<UiPreferences>() }
@@ -163,8 +163,8 @@ fun AnimeHeroContent(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Shikimori rating
-            if (shikimoriMetadata?.score != null) {
+            // Metadata rating (Anilist/Shikimori)
+            if (animeMetadata?.score != null) {
                 Icon(
                     Icons.Filled.Star,
                     contentDescription = null,
@@ -172,7 +172,7 @@ fun AnimeHeroContent(
                     modifier = Modifier.size(14.dp),
                 )
                 Text(
-                    text = String.format("%.1f", shikimoriMetadata.score),
+                    text = String.format("%.1f", animeMetadata.score),
                     fontSize = 13.sp,
                     color = Color.White.copy(alpha = 0.85f),
                     fontWeight = FontWeight.Medium,

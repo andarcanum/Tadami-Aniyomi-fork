@@ -70,9 +70,9 @@ import eu.kanade.presentation.entries.anime.components.aurora.AnimeInfoCard
 import eu.kanade.presentation.entries.anime.components.aurora.EpisodesHeader
 import eu.kanade.presentation.entries.anime.components.aurora.FullscreenPosterBackground
 import eu.kanade.presentation.theme.AuroraTheme
-import eu.kanade.tachiyomi.data.cache.AnimeBackgroundCache
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreenModel
 import eu.kanade.tachiyomi.ui.entries.anime.EpisodeList
+import eu.kanade.domain.ui.model.AnimeMetadataSource
 import tachiyomi.domain.items.episode.model.Episode
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
@@ -126,8 +126,7 @@ fun AnimeScreenAuroraImpl(
     onDubbingClicked: (() -> Unit)?,
     selectedDubbing: String?,
     onDownloadLongClick: ((Episode) -> Unit)?,
-    onRetryShikimori: () -> Unit,
-    useShikimoriCovers: Boolean,
+    onRetryMetadata: () -> Unit,
 ) {
     val anime = state.anime
     val episodes = state.episodeListItems
@@ -135,17 +134,21 @@ fun AnimeScreenAuroraImpl(
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
 
-    val resolvedCoverUrl = remember(
-        state.anime,
-        state.isShikimoriLoading,
-        state.shikimoriError,
-        state.shikimoriMetadata,
-        useShikimoriCovers,
-    ) {
-        resolveCoverUrl(state, useShikimoriCovers)
+    // Get the metadata source preference to determine cover URL
+    val metadataSource = remember {
+        Injekt.get<eu.kanade.domain.ui.UiPreferences>().animeMetadataSource().get()
     }
 
-    val backgroundCache = remember { Injekt.get<AnimeBackgroundCache>() }
+    val resolvedCoverUrl = remember(
+        state.anime,
+        state.isMetadataLoading,
+        state.metadataError,
+        state.animeMetadata,
+        metadataSource,
+    ) {
+        resolveCoverUrl(state, metadataSource != eu.kanade.domain.ui.model.AnimeMetadataSource.NONE)
+    }
+
     val lazyListState = rememberLazyListState()
     val scrollOffset by remember { derivedStateOf { lazyListState.firstVisibleItemScrollOffset } }
     val firstVisibleItemIndex by remember { derivedStateOf { lazyListState.firstVisibleItemIndex } }
@@ -160,23 +163,34 @@ fun AnimeScreenAuroraImpl(
     var descriptionExpanded by remember { mutableStateOf(false) }
     var genresExpanded by remember { mutableStateOf(false) }
 
-    // One-time Shikimori hint flag
-    var shikimoriHintShown by remember { mutableStateOf(false) }
+    // Check if metadata auth hint was already shown (persistent)
+    val metadataAuthHintShown = remember {
+        Injekt.get<eu.kanade.domain.ui.UiPreferences>().metadataAuthHintShown()
+    }
+    var metadataHintDismissed by remember { mutableStateOf(false) }
 
-    // One-time Snackbar when Shikimori is disabled
-    LaunchedEffect(state.shikimoriError) {
-        if (state.shikimoriError == AnimeScreenModel.ShikimoriError.NotAuthenticated &&
-            !shikimoriHintShown &&
+    // One-time Snackbar when metadata source is not authenticated
+    LaunchedEffect(state.metadataError) {
+        if (state.metadataError == AnimeScreenModel.MetadataError.NotAuthenticated &&
+            !metadataAuthHintShown.get() &&
+            !metadataHintDismissed &&
             onTrackingClicked != null) {
             val result = snackbarHostState.showSnackbar(
-                message = "Авторизуйтесь в Shikimori для рейтинга, типа и обложки",
+                message = "Авторизуйтесь в сервисе для рейтинга, типа и обложки",
                 actionLabel = "Войти",
+                withDismissAction = true,  // Add dismiss button
                 duration = SnackbarDuration.Long,
             )
-            if (result == SnackbarResult.ActionPerformed) {
-                onTrackingClicked.invoke()
+            when (result) {
+                SnackbarResult.ActionPerformed -> {
+                    onTrackingClicked.invoke()
+                    metadataAuthHintShown.set(true)  // Don't show again
+                }
+                SnackbarResult.Dismissed -> {
+                    metadataHintDismissed = true
+                    metadataAuthHintShown.set(true)  // Don't show again
+                }
             }
-            shikimoriHintShown = true
         }
     }
 
@@ -187,15 +201,11 @@ fun AnimeScreenAuroraImpl(
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Fixed background poster
-        val cachedCoverFile = remember(resolvedCoverUrl) {
-            resolvedCoverUrl?.let { backgroundCache.getBackgroundFile(it) }?.takeIf { it.exists() }
-        }
-        val posterModel = cachedCoverFile ?: resolvedCoverUrl
         FullscreenPosterBackground(
             anime = anime,
             scrollOffset = scrollOffset,
             firstVisibleItemIndex = firstVisibleItemIndex,
-            posterModel = posterModel,
+            resolvedCoverUrl = resolvedCoverUrl,
         )
 
         // Scrollable content
@@ -241,10 +251,10 @@ fun AnimeScreenAuroraImpl(
                         onToggleGenres = {
                             genresExpanded = !genresExpanded
                         },
-                        shikimoriMetadata = state.shikimoriMetadata,
-                        isShikimoriLoading = state.isShikimoriLoading,
-                        shikimoriError = state.shikimoriError,
-                        onRetryShikimori = onRetryShikimori,
+                        animeMetadata = state.animeMetadata,
+                        isMetadataLoading = state.isMetadataLoading,
+                        metadataError = state.metadataError,
+                        onRetryMetadata = onRetryMetadata,
                         onLoginClick = {
                             onTrackingClicked?.invoke()
                         },
@@ -365,7 +375,7 @@ fun AnimeScreenAuroraImpl(
                         onContinueWatching = onContinueWatching,
                         onDubbingClicked = onDubbingClicked,
                         selectedDubbing = selectedDubbing,
-                        shikimoriMetadata = state.shikimoriMetadata,
+                        animeMetadata = state.animeMetadata,
                     )
                 }
             }
@@ -516,27 +526,23 @@ fun AnimeScreenAuroraImpl(
 
 private fun resolveCoverUrl(
     state: AnimeScreenModel.State.Success,
-    useShikimoriCovers: Boolean,
+    useMetadataCovers: Boolean,
 ): String? {
-    if (!useShikimoriCovers) {
+    if (!useMetadataCovers) {
         return state.anime.thumbnailUrl
     }
 
-    val shikimoriCoverUrl = state.shikimoriMetadata?.coverUrl?.takeIf { it.isNotBlank() }
-    if (shikimoriCoverUrl != null) {
-        return shikimoriCoverUrl
-    }
-
-    if (state.isShikimoriLoading) {
+    if (state.isMetadataLoading) {
         return null
     }
 
-    return when (state.shikimoriError) {
-        null -> state.anime.thumbnailUrl
-        AnimeScreenModel.ShikimoriError.NetworkError,
-        AnimeScreenModel.ShikimoriError.NotFound,
-        AnimeScreenModel.ShikimoriError.NotAuthenticated,
-        AnimeScreenModel.ShikimoriError.Disabled,
+    val metadataCoverUrl = state.animeMetadata?.coverUrl?.takeIf { it.isNotBlank() }
+    return when (state.metadataError) {
+        null -> metadataCoverUrl ?: state.anime.thumbnailUrl
+        AnimeScreenModel.MetadataError.NetworkError,
+        AnimeScreenModel.MetadataError.NotFound,
+        AnimeScreenModel.MetadataError.NotAuthenticated,
+        AnimeScreenModel.MetadataError.Disabled,
         -> state.anime.thumbnailUrl
     }
 }

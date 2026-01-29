@@ -750,6 +750,11 @@
     <string name="aurora_select_dubbing">Select Dubbing</string>
     <string name="aurora_no_description">No description</string>
 
+    <!-- Metadata Integration -->
+    <string name="pref_category_metadata">Anime Metadata</string>
+    <string name="pref_anime_metadata_source">Metadata source</string>
+    <string name="pref_anime_metadata_source_summary">Source for anime posters, ratings, and status</string>
+
     <!-- Shikimori Integration -->
     <string name="pref_category_shikimori">Shikimori Integration</string>
     <string name="pref_use_shikimori_rating">Use Shikimori ratings and types</string>

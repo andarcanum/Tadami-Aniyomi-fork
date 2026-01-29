@@ -1,5 +1,6 @@
 package eu.kanade.domain.ui
 
+import eu.kanade.domain.ui.model.AnimeMetadataSource
 import eu.kanade.domain.ui.model.AppTheme
 import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.domain.ui.model.StartScreen
@@ -38,8 +39,25 @@ class UiPreferences(
 
     fun navStyle() = preferenceStore.getEnum("bottom_rail_nav_style", NavStyle.MOVE_HISTORY_TO_MORE)
 
+    /**
+     * Source for anime metadata (posters, ratings, type, status).
+     * Default is ANILIST for better coverage and quality.
+     */
+    fun animeMetadataSource() = preferenceStore.getEnum(
+        "anime_metadata_source",
+        AnimeMetadataSource.ANILIST,
+    )
+
+    /**
+     * Whether the metadata authentication hint has been shown.
+     * Used to show the hint only once.
+     */
+    fun metadataAuthHintShown() = preferenceStore.getBoolean("metadata_auth_hint_shown", false)
+
+    @Deprecated("Use animeMetadataSource() instead", ReplaceWith("animeMetadataSource()"))
     fun useShikimoriRating() = preferenceStore.getBoolean("use_shikimori_rating", true)
 
+    @Deprecated("Use animeMetadataSource() instead", ReplaceWith("animeMetadataSource()"))
     fun useShikimoriCovers() = preferenceStore.getBoolean("use_shikimori_covers", true)
 
     fun showOriginalTitle() = preferenceStore.getBoolean("show_original_title", true)

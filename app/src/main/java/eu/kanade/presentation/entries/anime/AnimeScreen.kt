@@ -191,12 +191,12 @@ fun AnimeScreen(
     selectedDubbing: String? = null,
     onDownloadLongClick: ((Episode) -> Unit)? = null,
 
-    // Shikimori retry
-    onRetryShikimori: () -> Unit,
+    // Metadata retry (Anilist/Shikimori)
+    onRetryMetadata: () -> Unit,
 ) {
     val uiPreferences = Injekt.get<eu.kanade.domain.ui.UiPreferences>()
     val theme by uiPreferences.appTheme().collectAsState()
-    val useShikimoriCovers by uiPreferences.useShikimoriCovers().collectAsState()
+    val metadataSource by uiPreferences.animeMetadataSource().collectAsState()
 
     if (theme.isAuroraStyle && !isTabletUi) {
         AnimeScreenAuroraImpl(
@@ -241,8 +241,7 @@ fun AnimeScreen(
             onDubbingClicked = onDubbingClicked,
             selectedDubbing = selectedDubbing,
             onDownloadLongClick = onDownloadLongClick,
-            onRetryShikimori = onRetryShikimori,
-            useShikimoriCovers = useShikimoriCovers,
+            onRetryMetadata = onRetryMetadata,
         )
         return
     }
@@ -302,7 +301,6 @@ fun AnimeScreen(
             onClickContinueWatching = onContinueWatchingClicked,
             onDubbingClicked = onDubbingClicked,
             selectedDubbing = selectedDubbing,
-            useShikimoriCovers = useShikimoriCovers,
         )
     } else {
         AnimeScreenLargeImpl(
@@ -347,7 +345,6 @@ fun AnimeScreen(
             onClickContinueWatching = onContinueWatchingClicked,
             onDubbingClicked = onDubbingClicked,
             selectedDubbing = selectedDubbing,
-            useShikimoriCovers = useShikimoriCovers,
         )
     }
 }
@@ -413,11 +410,9 @@ private fun AnimeScreenSmallImpl(
     // Dubbing selection
     onDubbingClicked: (() -> Unit)?,
     selectedDubbing: String?,
-
-    // Shikimori
-    useShikimoriCovers: Boolean,
 ) {
     val uiPreferences = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }
+    val metadataSource by uiPreferences.animeMetadataSource().collectAsState()
     val showOriginalTitle by uiPreferences.showOriginalTitle().collectAsState()
     val originalTitle = remember(state.anime.description) {
         parseOriginalTitle(state.anime.description)
@@ -430,12 +425,12 @@ private fun AnimeScreenSmallImpl(
 
     val resolvedCoverUrl = remember(
         state.anime,
-        state.isShikimoriLoading,
-        state.shikimoriError,
-        state.shikimoriMetadata,
-        useShikimoriCovers,
+        state.isMetadataLoading,
+        state.metadataError,
+        state.animeMetadata,
+        metadataSource,
     ) {
-        resolveCoverUrl(state, useShikimoriCovers)
+        resolveCoverUrl(state, metadataSource)
     }
 
     val density = LocalDensity.current
@@ -789,11 +784,9 @@ fun AnimeScreenLargeImpl(
     // Dubbing selection
     onDubbingClicked: (() -> Unit)?,
     selectedDubbing: String?,
-
-    // Shikimori
-    useShikimoriCovers: Boolean,
 ) {
     val uiPreferences = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }
+    val metadataSource by uiPreferences.animeMetadataSource().collectAsState()
     val showOriginalTitle by uiPreferences.showOriginalTitle().collectAsState()
     val originalTitle = remember(state.anime.description) {
         parseOriginalTitle(state.anime.description)
@@ -806,12 +799,12 @@ fun AnimeScreenLargeImpl(
 
     val resolvedCoverUrl = remember(
         state.anime,
-        state.isShikimoriLoading,
-        state.shikimoriError,
-        state.shikimoriMetadata,
-        useShikimoriCovers,
+        state.isMetadataLoading,
+        state.metadataError,
+        state.animeMetadata,
+        metadataSource,
     ) {
-        resolveCoverUrl(state, useShikimoriCovers)
+        resolveCoverUrl(state, metadataSource)
     }
 
     val layoutDirection = LocalLayoutDirection.current
@@ -1276,23 +1269,23 @@ private fun onEpisodeItemClick(
 
 private fun resolveCoverUrl(
     state: AnimeScreenModel.State.Success,
-    useShikimoriCovers: Boolean,
+    metadataSource: eu.kanade.domain.ui.model.AnimeMetadataSource,
 ): String? {
-    if (!useShikimoriCovers) {
+    if (metadataSource == eu.kanade.domain.ui.model.AnimeMetadataSource.NONE) {
         return state.anime.thumbnailUrl
     }
 
-    if (state.isShikimoriLoading) {
+    if (state.isMetadataLoading) {
         return null
     }
 
-    val shikimoriCoverUrl = state.shikimoriMetadata?.coverUrl?.takeIf { it.isNotBlank() }
-    return when (state.shikimoriError) {
-        null -> shikimoriCoverUrl ?: state.anime.thumbnailUrl
-        AnimeScreenModel.ShikimoriError.NetworkError,
-        AnimeScreenModel.ShikimoriError.NotFound,
-        AnimeScreenModel.ShikimoriError.NotAuthenticated,
-        AnimeScreenModel.ShikimoriError.Disabled,
+    val metadataCoverUrl = state.animeMetadata?.coverUrl?.takeIf { it.isNotBlank() }
+    return when (state.metadataError) {
+        null -> metadataCoverUrl ?: state.anime.thumbnailUrl
+        AnimeScreenModel.MetadataError.NetworkError,
+        AnimeScreenModel.MetadataError.NotFound,
+        AnimeScreenModel.MetadataError.NotAuthenticated,
+        AnimeScreenModel.MetadataError.Disabled,
         -> state.anime.thumbnailUrl
     }
 }
