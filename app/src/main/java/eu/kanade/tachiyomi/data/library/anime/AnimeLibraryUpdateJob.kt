@@ -98,6 +98,12 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
     private var animeToUpdate: List<LibraryAnime> = mutableListOf()
 
     override suspend fun doWork(): Result {
+        try {
+            setForeground(getForegroundInfo())
+        } catch (e: IllegalStateException) {
+            logcat(LogPriority.ERROR, e) { "Not allowed to set foreground job" }
+        }
+
         if (tags.contains(WORK_NAME_AUTO)) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
                 val preferences = Injekt.get<LibraryPreferences>()
@@ -106,12 +112,6 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                     return Result.retry()
                 }
             }
-        }
-
-        try {
-            setForeground(getForegroundInfo())
-        } catch (e: IllegalStateException) {
-            logcat(LogPriority.ERROR, e) { "Not allowed to set foreground job" }
         }
 
         libraryPreferences.lastUpdatedTimestamp().set(Instant.now().toEpochMilli())

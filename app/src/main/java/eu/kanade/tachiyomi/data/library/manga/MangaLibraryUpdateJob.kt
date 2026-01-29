@@ -92,11 +92,23 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
     private var mangaToUpdate: List<LibraryManga> = mutableListOf()
 
     override suspend fun doWork(): Result {
+        try {
+            setForeground(getForegroundInfo())
+        } catch (e: IllegalStateException) {
+            logcat(LogPriority.ERROR, e) { "Not allowed to set foreground job" }
+        }
+
         if (tags.contains(WORK_NAME_AUTO)) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
                 val preferences = Injekt.get<LibraryPreferences>()
                 val restrictions = preferences.autoUpdateDeviceRestrictions().get()
                 if ((DEVICE_ONLY_ON_WIFI in restrictions) && !context.isConnectedToWifi()) {
+                    return Result.retry()
+                }
+                if ((DEVICE_NETWORK_NOT_METERED in restrictions) && context.isConnectedToWifi()) {
+                    return Result.retry()
+                }
+                if ((DEVICE_CHARGING in restrictions) && !context.isCharging()) {
                     return Result.retry()
                 }
             }
@@ -105,12 +117,6 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
             if (context.workManager.isRunning(WORK_NAME_MANUAL)) {
                 return Result.retry()
             }
-        }
-
-        try {
-            setForeground(getForegroundInfo())
-        } catch (e: IllegalStateException) {
-            logcat(LogPriority.ERROR, e) { "Not allowed to set foreground job" }
         }
 
         libraryPreferences.lastUpdatedTimestamp().set(Instant.now().toEpochMilli())

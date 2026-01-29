@@ -37,6 +37,8 @@ class BackupCreateJob(private val context: Context, workerParams: WorkerParamete
     private val notifier = BackupNotifier(context)
 
     override suspend fun doWork(): Result {
+        setForegroundSafely()
+
         val isAutoBackup = inputData.getBoolean(IS_AUTO_BACKUP_KEY, true)
 
         if (isAutoBackup && BackupRestoreJob.isRunning(context)) return Result.retry()
@@ -44,8 +46,6 @@ class BackupCreateJob(private val context: Context, workerParams: WorkerParamete
         val uri = inputData.getString(LOCATION_URI_KEY)?.toUri()
             ?: getAutomaticBackupLocation()
             ?: return Result.failure()
-
-        setForegroundSafely()
 
         val options = inputData.getBooleanArray(OPTIONS_KEY)?.let { BackupOptions.fromBooleanArray(it) }
             ?: BackupOptions()

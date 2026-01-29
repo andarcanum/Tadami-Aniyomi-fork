@@ -54,6 +54,8 @@ class MangaDownloadJob(context: Context, workerParams: WorkerParameters) : Corou
     }
 
     override suspend fun doWork(): Result {
+        setForegroundSafely()
+
         var networkCheck = checkNetworkState(
             applicationContext.activeNetworkState(),
             downloadPreferences.downloadOnlyOverWifi().get(),
@@ -63,8 +65,6 @@ class MangaDownloadJob(context: Context, workerParams: WorkerParameters) : Corou
         if (!active) {
             return Result.failure()
         }
-
-        setForegroundSafely()
 
         coroutineScope {
             combineTransform(
