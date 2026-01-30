@@ -1,7 +1,7 @@
 package eu.kanade.presentation.achievement.components
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,17 +25,21 @@ import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
-import androidx.compose.material3.TooltipState
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
@@ -150,11 +155,15 @@ private fun ActivityBar(
     totalItems: Int,
 ) {
     val colors = AuroraTheme.colors
+    val coroutineScope = rememberCoroutineScope()
 
     // Staggered animation delay for each bar
     val staggerDelay = index.toFloat() / totalItems
     val barAnimationProgress = ((animationProgress - staggerDelay) / (1f - staggerDelay)).coerceIn(0f, 1f)
     val animatedHeight = (heightFraction * barAnimationProgress).coerceIn(0.05f, 1f)
+
+    // Tooltip state
+    val tooltipState = rememberTooltipState()
 
     // Highlight state for long-press
     var isHighlighted by remember { mutableStateOf(false) }
@@ -168,26 +177,25 @@ private fun ActivityBar(
         label = "bar_color",
     )
 
-    // Create tooltip state
-    val tooltipState = remember { TooltipState() }
-
     // Month formatter for short month names in Russian
     val monthFormatter = remember { DateTimeFormatter.ofPattern("MMM", Locale("ru")) }
     val monthLabel = month.format(monthFormatter).lowercase().take(3)
 
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = {
+            PlainTooltip {
+                ActivityTooltipContent(month = month, stats = stats)
+            }
+        },
+        state = tooltipState,
         modifier = Modifier.width(24.dp)
     ) {
-        TooltipBox(
-            positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-            tooltip = {
-                ActivityTooltip(
-                    month = month,
-                    stats = stats,
-                )
-            },
-            state = tooltipState,
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.semantics {
+                contentDescription = "Activity bar for ${month.month.name}"
+            }
         ) {
             // The Bar with long-press gesture
             Box(
@@ -207,8 +215,7 @@ private fun ActivityBar(
                         detectTapGestures(
                             onLongPress = {
                                 isHighlighted = true
-                                // Show tooltip on long press
-                                kotlinx.coroutines.runBlocking {
+                                coroutineScope.launch {
                                     tooltipState.show()
                                 }
                             },
@@ -216,32 +223,30 @@ private fun ActivityBar(
                                 // Wait for release
                                 tryAwaitRelease()
                                 isHighlighted = false
-                                // Hide tooltip when released
-                                kotlinx.coroutines.runBlocking {
+                                coroutineScope.launch {
                                     tooltipState.dismiss()
                                 }
                             }
                         )
                     },
             )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Month Label
+            Text(
+                text = monthLabel,
+                color = if (isHighlighted) colors.accent else colors.textSecondary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+            )
         }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Month Label
-        Text(
-            text = monthLabel,
-            color = if (isHighlighted) colors.accent else colors.textSecondary,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-        )
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ActivityTooltip(
+private fun ActivityTooltipContent(
     month: YearMonth,
     stats: MonthStats,
 ) {
@@ -252,82 +257,80 @@ private fun ActivityTooltip(
     val monthName = month.format(fullMonthFormatter)
         .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale("ru")) else it.toString() }
 
-    PlainTooltip {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(4.dp)
-        ) {
-            // Month name
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(8.dp)
+    ) {
+        // Month name
+        Text(
+            text = monthName,
+            color = colors.textPrimary,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp,
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // Total activity
+        if (stats.totalActivity > 0) {
             Text(
-                text = monthName,
-                color = colors.textPrimary,
-                fontWeight = FontWeight.Bold,
-                fontSize = 13.sp,
+                text = "Всего: ${stats.totalActivity}",
+                color = colors.accent,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 12.sp,
             )
+        }
 
-            Spacer(modifier = Modifier.height(4.dp))
+        // Chapters
+        if (stats.chaptersRead > 0) {
+            Text(
+                text = "Глав: ${stats.chaptersRead}",
+                color = colors.textSecondary,
+                fontSize = 11.sp,
+            )
+        }
 
-            // Total activity
-            if (stats.totalActivity > 0) {
-                Text(
-                    text = "Всего: ${stats.totalActivity}",
-                    color = colors.accent,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 12.sp,
-                )
+        // Episodes
+        if (stats.episodesWatched > 0) {
+            Text(
+                text = "Эпизодов: ${stats.episodesWatched}",
+                color = colors.progressCyan,
+                fontSize = 11.sp,
+            )
+        }
+
+        // Time in app
+        if (stats.timeInAppMinutes > 0) {
+            val hours = stats.timeInAppMinutes / 60
+            val minutes = stats.timeInAppMinutes % 60
+            val timeText = if (hours > 0) {
+                "${hours}ч ${minutes}мин"
+            } else {
+                "${minutes}мин"
             }
+            Text(
+                text = "Время: $timeText",
+                color = colors.textSecondary,
+                fontSize = 11.sp,
+            )
+        }
 
-            // Chapters
-            if (stats.chaptersRead > 0) {
-                Text(
-                    text = "Глав: ${stats.chaptersRead}",
-                    color = colors.textSecondary,
-                    fontSize = 11.sp,
-                )
-            }
+        // Achievements
+        if (stats.achievementsUnlocked > 0) {
+            Text(
+                text = "Достижений: ${stats.achievementsUnlocked}",
+                color = colors.accent.copy(alpha = 0.8f),
+                fontSize = 11.sp,
+            )
+        }
 
-            // Episodes
-            if (stats.episodesWatched > 0) {
-                Text(
-                    text = "Эпизодов: ${stats.episodesWatched}",
-                    color = colors.progressCyan,
-                    fontSize = 11.sp,
-                )
-            }
-
-            // Time in app
-            if (stats.timeInAppMinutes > 0) {
-                val hours = stats.timeInAppMinutes / 60
-                val minutes = stats.timeInAppMinutes % 60
-                val timeText = if (hours > 0) {
-                    "${hours}ч ${minutes}мин"
-                } else {
-                    "${minutes}мин"
-                }
-                Text(
-                    text = "Время: $timeText",
-                    color = colors.textSecondary,
-                    fontSize = 11.sp,
-                )
-            }
-
-            // Achievements
-            if (stats.achievementsUnlocked > 0) {
-                Text(
-                    text = "Достижений: ${stats.achievementsUnlocked}",
-                    color = colors.accent.copy(alpha = 0.8f),
-                    fontSize = 11.sp,
-                )
-            }
-
-            // No activity message
-            if (stats.totalActivity == 0) {
-                Text(
-                    text = "Нет активности",
-                    color = colors.textSecondary.copy(alpha = 0.7f),
-                    fontSize = 11.sp,
-                )
-            }
+        // No activity message
+        if (stats.totalActivity == 0) {
+            Text(
+                text = "Нет активности",
+                color = colors.textSecondary.copy(alpha = 0.7f),
+                fontSize = 11.sp,
+            )
         }
     }
 }
