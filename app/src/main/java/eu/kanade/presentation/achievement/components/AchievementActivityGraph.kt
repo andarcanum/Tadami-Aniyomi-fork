@@ -1,97 +1,77 @@
 package eu.kanade.presentation.achievement.components
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.TooltipState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material3.MaterialTheme
-import eu.kanade.presentation.theme.AuroraColors
-import eu.kanade.presentation.theme.LocalAuroraColors
 import eu.kanade.presentation.theme.AuroraTheme
-import kotlinx.coroutines.delay
-import java.time.LocalDate
+import tachiyomi.domain.achievement.model.MonthStats
+import java.time.YearMonth
 import java.time.format.DateTimeFormatter
-import java.time.format.TextStyle
-import java.time.temporal.WeekFields
 import java.util.Locale
-import tachiyomi.domain.achievement.model.DayActivity
-import tachiyomi.domain.achievement.model.ActivityType
+import kotlin.math.max
 
-/**
- * GitHub-style activity contribution graph for achievements
- *
- * @param activityData List of daily activity data
- * @param modifier Modifier for the component
- */
 @Composable
 fun AchievementActivityGraph(
-    activityData: List<DayActivity>,
+    yearlyStats: List<Pair<YearMonth, MonthStats>>,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
-    val scrollState = rememberScrollState()
 
-    // Calculate weeks for display
-    val weeks = remember(activityData) { organizeIntoWeeks(activityData) }
-    val monthLabels = remember(weeks) { calculateMonthLabels(weeks) }
+    // Calculate max value for scaling
+    val maxActivity = remember(yearlyStats) {
+        yearlyStats.maxOfOrNull { it.second.totalActivity } ?: 1
+    }.coerceAtLeast(1)
 
-    // Animation state
-    val animationProgress = remember { Animatable(0f) }
+    // Animation state using spring for smoothness
+    var animationStarted by remember { mutableStateOf(false) }
+    val animationProgress by animateFloatAsState(
+        targetValue = if (animationStarted) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow,
+        ),
+        label = "activity_animation",
+    )
 
-    LaunchedEffect(Unit) {
-        animationProgress.animateTo(
-            targetValue = 1f,
-            animationSpec = tween(
-                durationMillis = 800,
-                easing = FastOutSlowInEasing,
-            ),
-        )
+    LaunchedEffect(yearlyStats) {
+        animationStarted = true
     }
 
     Card(
@@ -108,7 +88,6 @@ fun AchievementActivityGraph(
                 .fillMaxWidth()
                 .padding(16.dp),
         ) {
-            // Title
             Text(
                 text = "Активность за год",
                 color = colors.textPrimary,
@@ -117,425 +96,257 @@ fun AchievementActivityGraph(
                 letterSpacing = 0.5.sp,
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // Month labels row
-            MonthLabelsRow(
-                monthLabels = monthLabels,
-                colors = colors,
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Activity grid with horizontal scroll
+            // Bar Chart Row with Canvas for trend line
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(scrollState),
+                    .height(180.dp)
             ) {
+                // Trend line layer
+                if (yearlyStats.size >= 3) {
+                    TrendLine(
+                        yearlyStats = yearlyStats,
+                        maxActivity = maxActivity,
+                        animationProgress = animationProgress,
+                    )
+                }
+
+                // Bars layer
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    modifier = Modifier.padding(end = 8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
                 ) {
-                    weeks.forEachIndexed { weekIndex, weekDays ->
-                        WeekColumn(
-                            weekDays = weekDays,
-                            weekIndex = weekIndex,
-                            colors = colors,
-                            animationProgress = animationProgress.value,
-                            totalWeeks = weeks.size,
+                    yearlyStats.forEachIndexed { index, (month, stats) ->
+                        val heightFraction = (stats.totalActivity.toFloat() / maxActivity).coerceIn(0.05f, 1f)
+
+                        ActivityBar(
+                            month = month,
+                            stats = stats,
+                            heightFraction = heightFraction,
+                            animationProgress = animationProgress,
+                            index = index,
+                            totalItems = yearlyStats.size
                         )
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Legend
-            ActivityLegend(colors = colors)
         }
     }
 }
 
-/**
- * Month labels displayed above the activity grid
- */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MonthLabelsRow(
-    monthLabels: List<Pair<Int, String>>,
-    colors: AuroraColors,
-) {
-    val density = LocalDensity.current
-    val cellSize = 12.dp
-    val cellSpacing = 2.dp
-    val columnSpacing = 2.dp
-
-    val weekColumnWidth = with(density) {
-        (cellSize.toPx() * 7) + (cellSpacing.toPx() * 6)
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(20.dp),
-    ) {
-        monthLabels.forEach { (weekIndex, monthName) ->
-            val position = with(density) {
-                (weekIndex * (weekColumnWidth + columnSpacing.toPx())).toDp()
-            }
-
-            Text(
-                text = monthName,
-                color = colors.textSecondary.copy(alpha = 0.8f),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(start = position + 4.dp),
-            )
-        }
-    }
-}
-
-/**
- * Single week column containing 7 day cells
- */
-@Composable
-private fun WeekColumn(
-    weekDays: List<DayActivity?>,
-    weekIndex: Int,
-    colors: AuroraColors,
+private fun ActivityBar(
+    month: YearMonth,
+    stats: MonthStats,
+    heightFraction: Float,
     animationProgress: Float,
-    totalWeeks: Int,
+    index: Int,
+    totalItems: Int,
 ) {
+    val colors = AuroraTheme.colors
+
+    // Staggered animation delay for each bar
+    val staggerDelay = index.toFloat() / totalItems
+    val barAnimationProgress = ((animationProgress - staggerDelay) / (1f - staggerDelay)).coerceIn(0f, 1f)
+    val animatedHeight = (heightFraction * barAnimationProgress).coerceIn(0.05f, 1f)
+
+    // Highlight state for long-press
+    var isHighlighted by remember { mutableStateOf(false) }
+    val barColor by animateColorAsState(
+        targetValue = if (isHighlighted) {
+            colors.accent.copy(alpha = 1f)
+        } else {
+            colors.accent.copy(alpha = 0.7f)
+        },
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "bar_color",
+    )
+
+    // Create tooltip state
+    val tooltipState = remember { TooltipState() }
+
+    // Month formatter for short month names in Russian
+    val monthFormatter = remember { DateTimeFormatter.ofPattern("MMM", Locale("ru")) }
+    val monthLabel = month.format(monthFormatter).lowercase().take(3)
+
     Column(
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-        modifier = Modifier.drawBehind {
-            if (weekIndex % 4 == 0 && weekIndex > 0) {
-                drawLine(
-                    color = colors.divider.copy(alpha = 0.2f),
-                    start = Offset(-1.dp.toPx(), 0f),
-                    end = Offset(-1.dp.toPx(), size.height),
-                    strokeWidth = 1.dp.toPx(),
-                )
-            }
-        }
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.width(24.dp)
     ) {
-        weekDays.forEach { dayActivity ->
-            if (dayActivity != null) {
-                DayCell(
-                    dayActivity = dayActivity,
-                    colors = colors,
-                    animationProgress = animationProgress,
-                    weekIndex = weekIndex,
-                    totalWeeks = totalWeeks,
-                )
-            } else {
-                // Empty cell for padding
-                Spacer(modifier = Modifier.size(12.dp))
-            }
-        }
-    }
-}
-
-/**
- * Individual day cell with tooltip on long press
- */
-@Composable
-private fun DayCell(
-    dayActivity: DayActivity,
-    colors: AuroraColors,
-    animationProgress: Float,
-    weekIndex: Int,
-    totalWeeks: Int,
-) {
-    var showTooltip by remember { mutableStateOf(false) }
-    var tooltipOffset by remember { mutableStateOf(Offset.Zero) }
-
-    // Calculate staggered animation delay based on position
-    val staggerDelay = (weekIndex * 7 + dayActivity.date.dayOfWeek.value) * 15
-    val cellAnimationProgress = ((animationProgress * 1000 - staggerDelay) / 500f)
-        .coerceIn(0f, 1f)
-
-    val cellColor = calculateCellColor(dayActivity.level, colors)
-    val animatedAlpha = cellColor.alpha * cellAnimationProgress
-
-    Box(
-        modifier = Modifier
-            .size(12.dp)
-            .clip(RoundedCornerShape(2.dp))
-            .background(cellColor.copy(alpha = animatedAlpha))
-            .border(
-                width = 0.5.dp,
-                color = when (dayActivity.level) {
-                    0 -> colors.divider.copy(alpha = 0.4f)
-                    else -> Color.Transparent
-                },
-                shape = RoundedCornerShape(2.dp),
-            )
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onLongPress = { offset ->
-                        tooltipOffset = offset
-                        showTooltip = true
-                    },
-                    onPress = {
-                        // Hide tooltip on release
-                        tryAwaitRelease()
-                        showTooltip = false
-                    },
+        TooltipBox(
+            positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+            tooltip = {
+                ActivityTooltip(
+                    month = month,
+                    stats = stats,
                 )
             },
-        contentAlignment = Alignment.Center,
-    ) {
-        // Tooltip
-        if (showTooltip) {
-            DayTooltip(
-                dayActivity = dayActivity,
-                colors = colors,
-            )
-        }
-    }
-}
-
-/**
- * Tooltip showing date and activity details
- */
-@Composable
-private fun DayTooltip(
-    dayActivity: DayActivity,
-    colors: AuroraColors,
-) {
-    val dateFormatter = remember { DateTimeFormatter.ofPattern("d MMMM yyyy", Locale("ru")) }
-    val activityText = when (dayActivity.type) {
-        ActivityType.READING -> "${dayActivity.level * 5}+ глав прочитано"
-        ActivityType.WATCHING -> "${dayActivity.level * 3}+ эпизодов просмотрено"
-        ActivityType.APP_OPEN -> "${dayActivity.level * 2}+ открытий приложения"
-    }
-
-    Box(
-        modifier = Modifier
-            .offset(y = (-40).dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(colors.background.copy(alpha = 0.95f))
-            .border(
-                width = 1.dp,
-                color = colors.accent.copy(alpha = 0.3f),
-                shape = RoundedCornerShape(8.dp),
-            )
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-            .drawBehind {
-                // Glow effect
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            colors.accent.copy(alpha = 0.1f),
-                            Color.Transparent,
-                        ),
-                        center = Offset(size.width / 2, size.height / 2),
-                        radius = size.width * 0.8f,
-                    ),
-                )
-            },
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
+            state = tooltipState,
         ) {
-            Text(
-                text = dayActivity.date.format(dateFormatter),
-                color = colors.textPrimary,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-            )
-            Text(
-                text = activityText,
-                color = colors.accent,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-    }
-}
-
-/**
- * Legend explaining activity levels
- */
-@Composable
-private fun ActivityLegend(
-    colors: AuroraColors,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "Меньше",
-            color = colors.textSecondary.copy(alpha = 0.6f),
-            fontSize = 10.sp,
-        )
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        // Level indicators
-        (0..4).forEach { level ->
-            val cellColor = calculateCellColor(level, colors)
+            // The Bar with long-press gesture
             Box(
                 modifier = Modifier
-                    .size(10.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(cellColor)
-                    .border(
-                        width = 0.5.dp,
-                        color = if (level == 0) colors.divider.copy(alpha = 0.3f) else Color.Transparent,
-                        shape = RoundedCornerShape(2.dp),
-                    ),
+                    .width(16.dp)
+                    .fillMaxHeight(animatedHeight)
+                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                barColor,
+                                barColor.copy(alpha = 0.3f)
+                            )
+                        )
+                    )
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onLongPress = {
+                                isHighlighted = true
+                                // Show tooltip on long press
+                                kotlinx.coroutines.runBlocking {
+                                    tooltipState.show()
+                                }
+                            },
+                            onPress = {
+                                // Wait for release
+                                tryAwaitRelease()
+                                isHighlighted = false
+                                // Hide tooltip when released
+                                kotlinx.coroutines.runBlocking {
+                                    tooltipState.dismiss()
+                                }
+                            }
+                        )
+                    },
             )
-            Spacer(modifier = Modifier.width(4.dp))
         }
 
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
+        // Month Label
         Text(
-            text = "Больше",
-            color = colors.textSecondary.copy(alpha = 0.6f),
-            fontSize = 10.sp,
+            text = monthLabel,
+            color = if (isHighlighted) colors.accent else colors.textSecondary,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
         )
     }
 }
 
-/**
- * Calculate color based on activity level
- */
-private fun calculateCellColor(level: Int, colors: AuroraColors): Color {
-    return when (level.coerceIn(0, 4)) {
-        0 -> Color.Transparent
-        1 -> colors.accent.copy(alpha = 0.25f)
-        2 -> colors.accent.copy(alpha = 0.45f)
-        3 -> colors.accent.copy(alpha = 0.7f)
-        4 -> colors.accent
-        else -> Color.Transparent
-    }
-}
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ActivityTooltip(
+    month: YearMonth,
+    stats: MonthStats,
+) {
+    val colors = AuroraTheme.colors
 
-/**
- * Organize activity data into weeks for grid display
- */
-private fun organizeIntoWeeks(activityData: List<DayActivity>): List<List<DayActivity?>> {
-    if (activityData.isEmpty()) return emptyList()
+    // Full month name formatter
+    val fullMonthFormatter = remember { DateTimeFormatter.ofPattern("LLLL yyyy", Locale("ru")) }
+    val monthName = month.format(fullMonthFormatter)
+        .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale("ru")) else it.toString() }
 
-    val sortedData = activityData.sortedBy { it.date }
-    val startDate = sortedData.first().date
-    val endDate = sortedData.last().date
+    PlainTooltip {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(4.dp)
+        ) {
+            // Month name
+            Text(
+                text = monthName,
+                color = colors.textPrimary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+            )
 
-    val weekFields = WeekFields.of(Locale.getDefault())
-    val dataByDate = sortedData.associateBy { it.date }
+            Spacer(modifier = Modifier.height(4.dp))
 
-    // Calculate the start of the first week (Monday)
-    val firstWeekStart = startDate.with(weekFields.dayOfWeek(), 1L)
+            // Total activity
+            if (stats.totalActivity > 0) {
+                Text(
+                    text = "Всего: ${stats.totalActivity}",
+                    color = colors.accent,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp,
+                )
+            }
 
-    // Generate all weeks
-    val weeks = mutableListOf<List<DayActivity?>>()
-    var currentWeekStart = firstWeekStart
+            // Chapters
+            if (stats.chaptersRead > 0) {
+                Text(
+                    text = "Глав: ${stats.chaptersRead}",
+                    color = colors.textSecondary,
+                    fontSize = 11.sp,
+                )
+            }
 
-    while (!currentWeekStart.isAfter(endDate)) {
-        val weekDays = (0..6).map { dayOffset ->
-            val currentDate = currentWeekStart.plusDays(dayOffset.toLong())
-            dataByDate[currentDate]
-        }
-        weeks.add(weekDays)
-        currentWeekStart = currentWeekStart.plusWeeks(1)
-    }
+            // Episodes
+            if (stats.episodesWatched > 0) {
+                Text(
+                    text = "Эпизодов: ${stats.episodesWatched}",
+                    color = colors.progressCyan,
+                    fontSize = 11.sp,
+                )
+            }
 
-    return weeks
-}
+            // Time in app
+            if (stats.timeInAppMinutes > 0) {
+                val hours = stats.timeInAppMinutes / 60
+                val minutes = stats.timeInAppMinutes % 60
+                val timeText = if (hours > 0) {
+                    "${hours}ч ${minutes}мин"
+                } else {
+                    "${minutes}мин"
+                }
+                Text(
+                    text = "Время: $timeText",
+                    color = colors.textSecondary,
+                    fontSize = 11.sp,
+                )
+            }
 
-/**
- * Calculate month labels with their week positions
- */
-private fun calculateMonthLabels(weeks: List<List<DayActivity?>>): List<Pair<Int, String>> {
-    val labels = mutableListOf<Pair<Int, String>>()
-    var lastMonth: java.time.Month? = null
+            // Achievements
+            if (stats.achievementsUnlocked > 0) {
+                Text(
+                    text = "Достижений: ${stats.achievementsUnlocked}",
+                    color = colors.accent.copy(alpha = 0.8f),
+                    fontSize = 11.sp,
+                )
+            }
 
-    weeks.forEachIndexed { weekIndex, weekDays ->
-        // Find first non-null day in the week
-        val firstDay = weekDays.firstOrNull { it != null }
-        firstDay?.let { dayActivity ->
-            val month = dayActivity.date.month
-            if (month != lastMonth) {
-                val monthName = month.getDisplayName(TextStyle.SHORT, Locale("ru")).uppercase()
-                labels.add(weekIndex to monthName)
-                lastMonth = month
+            // No activity message
+            if (stats.totalActivity == 0) {
+                Text(
+                    text = "Нет активности",
+                    color = colors.textSecondary.copy(alpha = 0.7f),
+                    fontSize = 11.sp,
+                )
             }
         }
     }
-
-    return labels
-}
-
-// Preview
-@Preview(showBackground = true, backgroundColor = 0xFF0f172a)
-@Composable
-private fun AchievementActivityGraphPreview() {
-    val previewData = generatePreviewData()
-
-    CompositionLocalProvider(LocalAuroraColors provides AuroraColors.Dark) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(AuroraColors.Dark.background)
-                .padding(16.dp),
-        ) {
-            AchievementActivityGraph(
-                activityData = previewData,
-            )
-        }
-    }
-}
-
-@Preview(showBackground = true, backgroundColor = 0xFFf8fafc)
-@Composable
-private fun AchievementActivityGraphLightPreview() {
-    val previewData = generatePreviewData()
-
-    CompositionLocalProvider(LocalAuroraColors provides AuroraColors.Light) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(AuroraColors.Light.background)
-                .padding(16.dp),
-        ) {
-            AchievementActivityGraph(
-                activityData = previewData,
-            )
-        }
-    }
 }
 
 /**
- * Generate sample data for preview
+ * Calculates the total activity (chapters + episodes) for a month
  */
-private fun generatePreviewData(): List<DayActivity> {
-    val data = mutableListOf<DayActivity>()
-    val endDate = LocalDate.now()
-    val startDate = endDate.minusDays(365)
+private val MonthStats.totalActivity: Int
+    get() = chaptersRead + episodesWatched
 
-    var currentDate = startDate
-    while (!currentDate.isAfter(endDate)) {
-        // Random activity level with some patterns
-        val level = when {
-            // Weekend bias - more activity on weekends
-            currentDate.dayOfWeek.value >= 6 -> (0..4).random()
-            // Recent bias - more activity in recent months
-            currentDate.isAfter(endDate.minusMonths(3)) -> (0..4).random()
-            else -> (0..3).random()
-        }
-
-        if (level > 0) {
-            val type = ActivityType.entries.toTypedArray().random()
-            data.add(DayActivity(date = currentDate, level = level, type = type))
-        }
-
-        currentDate = currentDate.plusDays(1)
+/**
+ * Calculates 3-month moving average trend line data
+ */
+private fun calculateTrendLine(data: List<Pair<YearMonth, MonthStats>>): List<Float> {
+    return data.mapIndexed { index, _ ->
+        val window = data.subList(
+            maxOf(0, index - 1),
+            minOf(data.size, index + 2)
+        )
+        window.map { it.second.totalActivity.toFloat() }.average().toFloat()
     }
-
-    return data
 }

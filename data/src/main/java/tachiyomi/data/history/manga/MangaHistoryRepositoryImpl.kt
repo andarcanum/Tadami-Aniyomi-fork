@@ -79,7 +79,11 @@ class MangaHistoryRepositoryImpl(
             if (historyUpdate.readAt.time > 0) {
                 try {
                     // Record activity for stats
-                    activityDataRepository.recordReading(1)
+                    activityDataRepository.recordReading(
+                        id = historyUpdate.chapterId,
+                        chaptersCount = 1,
+                        durationMs = historyUpdate.sessionReadDuration,
+                    )
 
                     val chapterInfo = handler.awaitOneOrNull {
                         historyQueries.getChapterInfo(historyUpdate.chapterId) { mangaId, chapterNumber ->

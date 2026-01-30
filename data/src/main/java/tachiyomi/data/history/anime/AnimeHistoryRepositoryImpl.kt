@@ -85,7 +85,11 @@ class AnimeHistoryRepositoryImpl(
             if (historyUpdate.seenAt.time > 0) {
                 try {
                     // Record activity for stats
-                    activityDataRepository.recordWatching(1)
+                    activityDataRepository.recordWatching(
+                        id = historyUpdate.episodeId,
+                        episodesCount = 1,
+                        durationMs = 20 * 60 * 1000L, // 20 minutes estimate
+                    )
 
                     val episodeInfo = handler.awaitOneOrNull {
                         animehistoryQueries.getEpisodeInfo(historyUpdate.episodeId) { animeId, episodeNumber ->

@@ -153,7 +153,7 @@ fun AchievementScreen(
                         // График активности
                         item {
                             AchievementActivityGraph(
-                                activityData = state.activityData,
+                                yearlyStats = state.yearlyStats,
                             )
                         }
 

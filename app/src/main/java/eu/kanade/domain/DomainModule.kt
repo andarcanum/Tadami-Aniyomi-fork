@@ -445,7 +445,7 @@ class DomainModule : InjektModule {
         addSingletonFactory { AchievementEventBus() }
         addSingletonFactory { SessionManager(get(), get()) }
         addSingletonFactory { tachiyomi.data.achievement.UserProfileManager() }
-        addSingletonFactory { AchievementHandler(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+        addSingletonFactory { AchievementHandler(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
         // Note: AchievementLoader, PointsManager, UnlockableManager require Context
         // They are registered in AppModule instead
     }

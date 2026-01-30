@@ -30,49 +30,32 @@ class ActivityDataRepositoryImpl(
     override fun getActivityData(days: Int): Flow<List<DayActivity>> = flow {
         val activities = mutableListOf<DayActivity>()
         val today = LocalDate.now()
+        // Start from 'days' ago to include today
+        val startDate = today.minusDays((days - 1).toLong())
 
-        for (i in 0 until days) {
-            val date = today.minusDays(i.toLong())
-            val dateStr = date.format(dateFormatter)
+        var currentDate = startDate
+        while (!currentDate.isAfter(today)) {
+            val dateStr = currentDate.format(dateFormatter)
 
-            // Check for reading activity
             val chaptersRead = prefs.getInt(KEY_CHAPTERS_PREFIX + dateStr, 0)
-            if (chaptersRead > 0) {
-                activities.add(
-                    DayActivity(
-                        date = date,
-                        level = calculateActivityLevel(chaptersRead, ActivityType.READING),
-                        type = ActivityType.READING,
-                    ),
-                )
-            }
-
-            // Check for watching activity
             val episodesWatched = prefs.getInt(KEY_EPISODES_PREFIX + dateStr, 0)
-            if (episodesWatched > 0) {
-                activities.add(
-                    DayActivity(
-                        date = date,
-                        level = calculateActivityLevel(episodesWatched, ActivityType.WATCHING),
-                        type = ActivityType.WATCHING,
-                    ),
-                )
+            val appOpens = prefs.getInt(KEY_APP_OPENS_PREFIX + dateStr, 0)
+            val achievementsUnlocked = prefs.getInt(KEY_ACHIEVEMENTS_PREFIX + dateStr, 0)
+
+            // Determine activity type and level
+            val (type, level) = when {
+                achievementsUnlocked > 0 -> ActivityType.READING to 4 // Highlighting achievements with max level
+                episodesWatched > 0 -> ActivityType.WATCHING to calculateActivityLevel(episodesWatched, ActivityType.WATCHING)
+                chaptersRead > 0 -> ActivityType.READING to calculateActivityLevel(chaptersRead, ActivityType.READING)
+                appOpens > 0 -> ActivityType.APP_OPEN to 1
+                else -> ActivityType.APP_OPEN to 0
             }
 
-            // Check for app opens
-            val appOpens = prefs.getInt(KEY_APP_OPENS_PREFIX + dateStr, 0)
-            if (appOpens > 0 && chaptersRead == 0 && episodesWatched == 0) {
-                activities.add(
-                    DayActivity(
-                        date = date,
-                        level = 1,
-                        type = ActivityType.APP_OPEN,
-                    ),
-                )
-            }
+            activities.add(DayActivity(currentDate, level, type))
+            currentDate = currentDate.plusDays(1)
         }
 
-        emit(activities.sortedByDescending { it.date })
+        emit(activities) // Ascending order: Oldest -> Newest
     }.flowOn(ioContext)
 
     override suspend fun getMonthStats(year: Int, month: Int): MonthStats {
@@ -81,8 +64,8 @@ class ActivityDataRepositoryImpl(
 
         var chaptersRead = 0
         var episodesWatched = 0
-        var appOpens = 0
         var achievementsUnlocked = 0
+        var totalDurationMs = 0L
 
         for (day in 1..daysInMonth) {
             val date = yearMonth.atDay(day)
@@ -90,12 +73,12 @@ class ActivityDataRepositoryImpl(
 
             chaptersRead += prefs.getInt(KEY_CHAPTERS_PREFIX + dateStr, 0)
             episodesWatched += prefs.getInt(KEY_EPISODES_PREFIX + dateStr, 0)
-            appOpens += prefs.getInt(KEY_APP_OPENS_PREFIX + dateStr, 0)
             achievementsUnlocked += prefs.getInt(KEY_ACHIEVEMENTS_PREFIX + dateStr, 0)
+            totalDurationMs += prefs.getLong(KEY_DURATION_PREFIX + dateStr, 0L)
         }
 
-        // Estimate time in app (rough calculation: 5 min per chapter, 20 min per episode)
-        val timeInAppMinutes = chaptersRead * 5 + episodesWatched * 20
+        // Convert ms to minutes
+        val timeInAppMinutes = (totalDurationMs / 60000).toInt()
 
         return MonthStats(
             chaptersRead = chaptersRead,
@@ -116,22 +99,40 @@ class ActivityDataRepositoryImpl(
         return getMonthStats(previousMonth.year, previousMonth.monthValue)
     }
 
-    override suspend fun recordReading(chaptersCount: Int) {
+    override suspend fun recordReading(id: Long, chaptersCount: Int, durationMs: Long) {
         val today = LocalDate.now().format(dateFormatter)
+        val keySet = "read_ids_$today"
+        val existingIds = prefs.getStringSet(keySet, emptySet()) ?: emptySet()
+        
         prefs.edit {
-            val current = prefs.getInt(KEY_CHAPTERS_PREFIX + today, 0)
-            putInt(KEY_CHAPTERS_PREFIX + today, current + chaptersCount)
+            if (!existingIds.contains(id.toString())) {
+                val currentCount = prefs.getInt(KEY_CHAPTERS_PREFIX + today, 0)
+                putInt(KEY_CHAPTERS_PREFIX + today, currentCount + chaptersCount)
+                putStringSet(keySet, existingIds + id.toString())
+            }
+            if (durationMs > 0) {
+                val currentDuration = prefs.getLong(KEY_DURATION_PREFIX + today, 0L)
+                putLong(KEY_DURATION_PREFIX + today, currentDuration + durationMs)
+            }
         }
-        logcat { "Recorded $chaptersCount chapters read" }
     }
 
-    override suspend fun recordWatching(episodesCount: Int) {
+    override suspend fun recordWatching(id: Long, episodesCount: Int, durationMs: Long) {
         val today = LocalDate.now().format(dateFormatter)
+        val keySet = "watch_ids_$today"
+        val existingIds = prefs.getStringSet(keySet, emptySet()) ?: emptySet()
+
         prefs.edit {
-            val current = prefs.getInt(KEY_EPISODES_PREFIX + today, 0)
-            putInt(KEY_EPISODES_PREFIX + today, current + episodesCount)
+            if (!existingIds.contains(id.toString())) {
+                val currentCount = prefs.getInt(KEY_EPISODES_PREFIX + today, 0)
+                putInt(KEY_EPISODES_PREFIX + today, currentCount + episodesCount)
+                putStringSet(keySet, existingIds + id.toString())
+            }
+            if (durationMs > 0) {
+                val currentDuration = prefs.getLong(KEY_DURATION_PREFIX + today, 0L)
+                putLong(KEY_DURATION_PREFIX + today, currentDuration + durationMs)
+            }
         }
-        logcat { "Recorded $episodesCount episodes watched" }
     }
 
     override suspend fun recordAppOpen() {
@@ -140,6 +141,27 @@ class ActivityDataRepositoryImpl(
             val current = prefs.getInt(KEY_APP_OPENS_PREFIX + today, 0)
             putInt(KEY_APP_OPENS_PREFIX + today, current + 1)
         }
+    }
+
+    override suspend fun recordAchievementUnlock() {
+        val today = LocalDate.now().format(dateFormatter)
+        prefs.edit {
+            val current = prefs.getInt(KEY_ACHIEVEMENTS_PREFIX + today, 0)
+            putInt(KEY_ACHIEVEMENTS_PREFIX + today, current + 1)
+        }
+        logcat { "Recorded achievement unlock for $today" }
+    }
+
+    override suspend fun getLastTwelveMonthsStats(): List<Pair<YearMonth, MonthStats>> {
+        val today = YearMonth.now()
+        val stats = mutableListOf<Pair<YearMonth, MonthStats>>()
+
+        // Last 12 months including current
+        for (i in 11 downTo 0) {
+            val month = today.minusMonths(i.toLong())
+            stats.add(month to getMonthStats(month.year, month.monthValue))
+        }
+        return stats
     }
 
     private fun calculateActivityLevel(count: Int, type: ActivityType): Int {
@@ -166,5 +188,6 @@ class ActivityDataRepositoryImpl(
         private const val KEY_EPISODES_PREFIX = "episodes_"
         private const val KEY_APP_OPENS_PREFIX = "app_opens_"
         private const val KEY_ACHIEVEMENTS_PREFIX = "achievements_"
+        private const val KEY_DURATION_PREFIX = "duration_"
     }
 }

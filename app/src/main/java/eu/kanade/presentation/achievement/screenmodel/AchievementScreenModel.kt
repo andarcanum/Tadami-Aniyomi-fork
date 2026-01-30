@@ -52,6 +52,7 @@ class AchievementScreenModel(
             ) { achievements, progress, userPoints, selectedCategory, activityData ->
                 val currentStats = activityDataRepository.getCurrentMonthStats()
                 val previousStats = activityDataRepository.getPreviousMonthStats()
+                val yearlyStats = activityDataRepository.getLastTwelveMonthsStats()
 
                 AchievementScreenState.Success(
                     achievements = achievements,
@@ -59,6 +60,7 @@ class AchievementScreenModel(
                     userPoints = userPoints,
                     selectedCategory = selectedCategory,
                     activityData = activityData,
+                    yearlyStats = yearlyStats,
                     currentMonthStats = currentStats,
                     previousMonthStats = previousStats,
                 )
@@ -106,6 +108,7 @@ sealed interface AchievementScreenState {
         val selectedCategory: AchievementCategory = AchievementCategory.BOTH,
         val selectedAchievement: Achievement? = null,
         val activityData: List<DayActivity> = emptyList(),
+        val yearlyStats: List<Pair<java.time.YearMonth, MonthStats>> = emptyList(),
         val currentMonthStats: MonthStats = MonthStats(0, 0, 0, 0),
         val previousMonthStats: MonthStats = MonthStats(0, 0, 0, 0),
     ) : AchievementScreenState {

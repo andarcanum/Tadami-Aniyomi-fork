@@ -28,6 +28,8 @@ import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.entries.manga.repository.MangaRepository
 import eu.kanade.tachiyomi.source.model.SManga
 
+import tachiyomi.domain.achievement.repository.ActivityDataRepository
+
 class AchievementHandler(
     private val eventBus: AchievementEventBus,
     private val repository: AchievementRepository,
@@ -43,6 +45,7 @@ class AchievementHandler(
     private val mangaRepository: MangaRepository,
     private val animeRepository: AnimeRepository,
     private val userProfileManager: UserProfileManager,
+    private val activityDataRepository: ActivityDataRepository,
 ) {
 
     interface AchievementUnlockCallback {
@@ -366,6 +369,7 @@ class AchievementHandler(
 
         scope.launch {
             try {
+                activityDataRepository.recordAchievementUnlock()
                 pointsManager.addPoints(tier.points)
                 updateMetaAchievements()
             } catch (e: Exception) {
@@ -567,6 +571,7 @@ class AchievementHandler(
 
         scope.launch {
             try {
+                activityDataRepository.recordAchievementUnlock()
                 pointsManager.addPoints(achievement.points)
                 pointsManager.incrementUnlocked()
                 updateMetaAchievements()
