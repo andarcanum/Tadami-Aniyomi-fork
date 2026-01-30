@@ -350,3 +350,74 @@ private fun calculateTrendLine(data: List<Pair<YearMonth, MonthStats>>): List<Fl
         window.map { it.second.totalActivity.toFloat() }.average().toFloat()
     }
 }
+
+@Composable
+private fun TrendLine(
+    yearlyStats: List<Pair<YearMonth, MonthStats>>,
+    maxActivity: Int,
+    animationProgress: Float,
+) {
+    val colors = AuroraTheme.colors
+    val trendData = remember(yearlyStats) { calculateTrendLine(yearlyStats) }
+
+    androidx.compose.foundation.Canvas(
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxHeight()
+            .padding(horizontal = 12.dp)
+    ) {
+        if (trendData.size < 2) return@Canvas
+
+        val barWidth = size.width / yearlyStats.size
+        val centerOffset = barWidth / 2
+
+        // Calculate points for trend line
+        val points = trendData.mapIndexed { index, value ->
+            val x = index * barWidth + centerOffset
+            val heightFraction = (value / maxActivity).coerceIn(0.05f, 1f)
+            val y = size.height - (size.height * heightFraction * animationProgress)
+            androidx.compose.ui.geometry.Offset(x, y)
+        }
+
+        // Draw trend line with animation
+        if (points.size >= 2) {
+            val path = androidx.compose.ui.graphics.Path().apply {
+                moveTo(points.first().x, points.first().y)
+                
+                // Draw smooth curve through points
+                for (i in 1 until points.size) {
+                    val prevPoint = points[i - 1]
+                    val currentPoint = points[i]
+                    
+                    // Use quadratic bezier for smooth curve
+                    val controlX = (prevPoint.x + currentPoint.x) / 2
+                    quadraticBezierTo(
+                        controlX, prevPoint.y,
+                        currentPoint.x, currentPoint.y
+                    )
+                }
+            }
+
+            // Draw the line
+            drawPath(
+                path = path,
+                color = colors.progressCyan.copy(alpha = 0.8f * animationProgress),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                    width = 2.dp.toPx(),
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                    join = androidx.compose.ui.graphics.StrokeJoin.Round
+                )
+            )
+
+            // Draw glow effect
+            drawPath(
+                path = path,
+                color = colors.progressCyan.copy(alpha = 0.3f * animationProgress),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                    width = 6.dp.toPx(),
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round
+                )
+            )
+        }
+    }
+}
