@@ -62,6 +62,8 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.source.anime.interactor.GetAnimeIncognitoState
 import eu.kanade.domain.source.manga.interactor.GetMangaIncognitoState
+import eu.kanade.presentation.achievement.components.AchievementGroupNotification
+import eu.kanade.presentation.achievement.components.AchievementListDialog
 import eu.kanade.presentation.achievement.components.AchievementUnlockBanner
 import eu.kanade.presentation.components.AppStateBanners
 import eu.kanade.presentation.components.DownloadedOnlyBannerBackgroundColor
@@ -107,6 +109,7 @@ import eu.kanade.tachiyomi.util.system.toast
 import eu.kanade.tachiyomi.util.system.updaterEnabled
 import eu.kanade.tachiyomi.util.view.setComposeContent
 import kotlinx.coroutines.channels.awaitClose
+import tachiyomi.domain.achievement.model.Achievement
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
@@ -252,6 +255,31 @@ class MainActivity : BaseActivity() {
                                 .align(Alignment.TopCenter)
                                 .padding(top = 8.dp),
                         )
+                        // Achievement group notification (for multiple achievements after reader/player)
+                        var showAchievementsList by remember { mutableStateOf(false) }
+                        var pendingAchievements by remember { mutableStateOf<List<Achievement>>(emptyList()) }
+
+                        AchievementGroupNotification(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 8.dp),
+                            onViewAll = { achievements ->
+                                // Get achievements directly from notification
+                                pendingAchievements = achievements
+                                showAchievementsList = true
+                            },
+                        )
+
+                        // Achievement list dialog
+                        if (showAchievementsList && pendingAchievements.isNotEmpty()) {
+                            AchievementListDialog(
+                                achievements = pendingAchievements,
+                                onDismiss = {
+                                    showAchievementsList = false
+                                    pendingAchievements = emptyList()
+                                },
+                            )
+                        }
                         // Draw navigation bar scrim when needed
                         if (remember { isNavigationBarNeedsScrim() }) {
                             Spacer(

@@ -47,6 +47,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -350,6 +351,7 @@ private fun AchievementBannerItem(
             .background(
                 brush = Brush.linearGradient(
                     colors = if (isRare) {
+                        // Rare achievements keep gold/orange theme (universal for rarity)
                         listOf(
                             Color(0xFFFF6B00), // Orange
                             Color(0xFFFFD700), // Gold
@@ -357,10 +359,11 @@ private fun AchievementBannerItem(
                             Color(0xFFFFD700), // Gold
                         )
                     } else {
+                        // Normal achievements use adaptive accent color
                         listOf(
-                            Color(0xFF0095FF), // Electric blue
-                            Color(0xFF00E5FF), // Cyan
-                            Color(0xFF7C4DFF), // Purple
+                            colors.accent.copy(alpha = 0.7f).compositeOver(Color.White.copy(alpha = 0.3f)),
+                            colors.accent,
+                            colors.accent.copy(alpha = 0.8f).compositeOver(Color.Black.copy(alpha = 0.2f)),
                         )
                     },
                     start = Offset(0f, 0f),
@@ -544,19 +547,76 @@ private fun AchievementBannerItem(
 
 /**
  * Global manager for showing achievement unlock banners
+ * Supports deferred notifications when user is in reader/player
  */
 object AchievementBannerManager {
     private var onShowCallback: ((Achievement) -> Unit)? = null
+    private var onShowGroupCallback: ((List<Achievement>) -> Unit)? = null
+    private val pendingAchievements = mutableListOf<Achievement>()
+    private var isInReaderOrPlayer = false
 
     fun setOnShowCallback(callback: (Achievement) -> Unit) {
         onShowCallback = callback
     }
 
+    fun setOnShowGroupCallback(callback: (List<Achievement>) -> Unit) {
+        onShowGroupCallback = callback
+    }
+
+    /**
+     * Call when entering reader or player to defer notifications
+     */
+    fun setInReaderOrPlayer(value: Boolean) {
+        isInReaderOrPlayer = value
+        if (!value && pendingAchievements.isNotEmpty()) {
+            // User exited reader/player, show grouped notification
+            showPendingAchievements()
+        }
+    }
+
     fun showAchievement(achievement: Achievement) {
-        onShowCallback?.invoke(achievement)
+        if (isInReaderOrPlayer) {
+            // Defer notification until user exits reader/player
+            pendingAchievements.add(achievement)
+        } else {
+            // Show immediately
+            onShowCallback?.invoke(achievement)
+        }
+    }
+
+    /**
+     * Show all pending achievements as a group
+     */
+    private fun showPendingAchievements() {
+        if (pendingAchievements.isEmpty()) return
+
+        if (pendingAchievements.size == 1) {
+            // Single achievement - show normal banner
+            onShowCallback?.invoke(pendingAchievements.first())
+        } else {
+            // Multiple achievements - show group notification
+            onShowGroupCallback?.invoke(pendingAchievements.toList())
+        }
+        pendingAchievements.clear()
+    }
+
+    /**
+     * Get current pending count for UI display
+     */
+    fun getPendingCount(): Int = pendingAchievements.size
+
+    /**
+     * Get list of pending achievements and clear the queue
+     */
+    fun getPendingAchievements(): List<Achievement> {
+        val list = pendingAchievements.toList()
+        pendingAchievements.clear()
+        return list
     }
 
     fun clear() {
         onShowCallback = null
+        onShowGroupCallback = null
+        pendingAchievements.clear()
     }
 }
