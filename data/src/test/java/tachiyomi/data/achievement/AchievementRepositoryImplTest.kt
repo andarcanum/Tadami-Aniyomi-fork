@@ -18,6 +18,7 @@ class AchievementRepositoryImplTest : AchievementTestBase() {
 
     private lateinit var repository: AchievementRepositoryImpl
 
+    @org.junit.jupiter.api.BeforeEach
     override fun setup() {
         super.setup()
         repository = AchievementRepositoryImpl(database)

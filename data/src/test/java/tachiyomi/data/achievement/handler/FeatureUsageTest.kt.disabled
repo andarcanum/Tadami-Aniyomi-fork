@@ -33,7 +33,7 @@ class FeatureUsageTest {
         val streakChecker = mockk<StreakAchievementChecker>(relaxed = true)
         val timeBasedChecker = mockk<TimeBasedAchievementChecker>(relaxed = true)
         val featureBasedChecker = mockk<FeatureBasedAchievementChecker>(relaxed = true)
-        val featureCollector = FeatureUsageCollector(mockk(relaxed = true))
+        val featureCollector = FeatureUsageCollector(eventBus)
         val pointsManager = mockk<PointsManager>(relaxed = true)
         val unlockableManager = mockk<UnlockableManager>(relaxed = true)
         val mangaHandler = mockk<MangaDatabaseHandler>(relaxed = true)

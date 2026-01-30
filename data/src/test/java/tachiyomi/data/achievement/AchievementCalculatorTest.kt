@@ -30,13 +30,14 @@ class AchievementCalculatorTest : AchievementTestBase() {
     private lateinit var streakChecker: StreakAchievementChecker
     private lateinit var calculator: AchievementCalculator
 
+    @BeforeEach
     override fun setup() {
         super.setup()
 
         repository = mockk()
         mangaHandler = mockk()
         animeHandler = mockk()
-        diversityChecker = mockk()
+        diversityChecker = mockk(relaxed = true)
         streakChecker = mockk()
 
         calculator = AchievementCalculator(
@@ -47,6 +48,11 @@ class AchievementCalculatorTest : AchievementTestBase() {
             streakChecker = streakChecker,
             achievementsDatabase = database,
         )
+
+        // Default stubs
+        coEvery { streakChecker.getCurrentStreak() } returns 0
+        coEvery { mangaHandler.awaitOneOrNull<Long>(any(), any()) } returns 0L
+        coEvery { animeHandler.awaitOneOrNull<Long>(any(), any()) } returns 0L
     }
 
     @Test
@@ -75,11 +81,11 @@ class AchievementCalculatorTest : AchievementTestBase() {
 
         // Mock database handlers
         coEvery {
-            mangaHandler.awaitOneOrNull<Long>(any<Long>())
+            mangaHandler.awaitOneOrNull<Long>(any(), any())
         } returns 150L // 150 chapters read
 
         coEvery {
-            animeHandler.awaitOneOrNull<Long>(any<Long>())
+            animeHandler.awaitOneOrNull<Long>(any(), any())
         } returns 25L // 25 episodes watched
 
         // Mock diversity and streak
@@ -89,6 +95,10 @@ class AchievementCalculatorTest : AchievementTestBase() {
 
         // Run calculation
         val result = calculator.calculateInitialProgress()
+
+        if (!result.success) {
+            System.err.println("Calculation failed: ${result.error}")
+        }
 
         // Verify result
         result.success shouldBe true
@@ -108,7 +118,7 @@ class AchievementCalculatorTest : AchievementTestBase() {
         )
 
         val sourceAchievement = Achievement(
-            id = "source_3",
+            id = "manga_source_3",
             type = AchievementType.DIVERSITY,
             category = AchievementCategory.MANGA,
             threshold = 3,
@@ -120,8 +130,8 @@ class AchievementCalculatorTest : AchievementTestBase() {
         coEvery { repository.insertOrUpdateProgress(any()) } returns Unit
 
         // Mock history
-        coEvery { mangaHandler.awaitOneOrNull<Long>(any<Long>()) } returns 0L
-        coEvery { animeHandler.awaitOneOrNull<Long>(any<Long>()) } returns 0L
+        coEvery { mangaHandler.awaitOneOrNull<Long>(any(), any()) } returns 0L
+        coEvery { animeHandler.awaitOneOrNull<Long>(any(), any()) } returns 0L
 
         // Mock diversity
         coEvery { diversityChecker.getGenreDiversity() } returns 5
@@ -155,8 +165,8 @@ class AchievementCalculatorTest : AchievementTestBase() {
         coEvery { repository.insertOrUpdateProgress(any()) } returns Unit
 
         // Mock history
-        coEvery { mangaHandler.awaitOneOrNull<Long>(any<Long>()) } returns 0L
-        coEvery { animeHandler.awaitOneOrNull<Long>(any<Long>()) } returns 0L
+        coEvery { mangaHandler.awaitOneOrNull<Long>(any(), any()) } returns 0L
+        coEvery { animeHandler.awaitOneOrNull<Long>(any(), any()) } returns 0L
 
         // Mock diversity
         coEvery { diversityChecker.getGenreDiversity() } returns 0
@@ -202,8 +212,8 @@ class AchievementCalculatorTest : AchievementTestBase() {
         coEvery { repository.insertOrUpdateProgress(any()) } returns Unit
 
         // Mock handlers
-        coEvery { mangaHandler.awaitOneOrNull<Long>(any<Long>()) } returns 1000L
-        coEvery { animeHandler.awaitOneOrNull<Long>(any<Long>()) } returns 500L
+        coEvery { mangaHandler.awaitOneOrNull<Long>(any(), any()) } returns 1000L
+        coEvery { animeHandler.awaitOneOrNull<Long>(any(), any()) } returns 500L
 
         coEvery { diversityChecker.getGenreDiversity() } returns 10
         coEvery { diversityChecker.getSourceDiversity() } returns 5
@@ -230,8 +240,8 @@ class AchievementCalculatorTest : AchievementTestBase() {
         coEvery { repository.insertOrUpdateProgress(any()) } returns Unit
 
         // User has read chapters
-        coEvery { mangaHandler.awaitOneOrNull<Long>(any<Long>()) } returns 10L
-        coEvery { animeHandler.awaitOneOrNull<Long>(any<Long>()) } returns 0L
+        coEvery { mangaHandler.awaitOneOrNull<Long>(any(), any()) } returns 10L
+        coEvery { animeHandler.awaitOneOrNull<Long>(any(), any()) } returns 0L
 
 
         val result = calculator.calculateInitialProgress()
@@ -256,8 +266,8 @@ class AchievementCalculatorTest : AchievementTestBase() {
         coEvery { repository.insertOrUpdateProgress(any()) } returns Unit
 
         // No history
-        coEvery { mangaHandler.awaitOneOrNull<Long>(any<Long>()) } returns 0L
-        coEvery { animeHandler.awaitOneOrNull<Long>(any<Long>()) } returns 0L
+        coEvery { mangaHandler.awaitOneOrNull<Long>(any(), any()) } returns 0L
+        coEvery { animeHandler.awaitOneOrNull<Long>(any(), any()) } returns 0L
 
 
         val result = calculator.calculateInitialProgress()
@@ -280,8 +290,8 @@ class AchievementCalculatorTest : AchievementTestBase() {
 
         coEvery { repository.getAll() } returns flowOf(listOf(achievement))
         coEvery { repository.insertOrUpdateProgress(any()) } returns Unit
-        coEvery { mangaHandler.awaitOneOrNull<Long>(any<Long>()) } returns 10L
-        coEvery { animeHandler.awaitOneOrNull<Long>(any<Long>()) } returns 0L
+        coEvery { mangaHandler.awaitOneOrNull<Long>(any(), any()) } returns 10L
+        coEvery { animeHandler.awaitOneOrNull<Long>(any(), any()) } returns 0L
 
         val result = calculator.calculateInitialProgress()
 
