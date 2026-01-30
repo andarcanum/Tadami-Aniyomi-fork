@@ -194,9 +194,15 @@ fun AnimeScreen(
     // Metadata retry (Anilist/Shikimori)
     onRetryMetadata: () -> Unit,
 ) {
+    val context = LocalContext.current
     val uiPreferences = Injekt.get<eu.kanade.domain.ui.UiPreferences>()
     val theme by uiPreferences.appTheme().collectAsState()
     val metadataSource by uiPreferences.animeMetadataSource().collectAsState()
+
+    val navigator = LocalNavigator.currentOrThrow
+    val onSettingsClicked: (() -> Unit)? = {
+        navigator.push(AnimeSourcePreferencesScreen(state.source.id))
+    }.takeIf { state.source is ConfigurableAnimeSource }
 
     if (theme.isAuroraStyle && !isTabletUi) {
         AnimeScreenAuroraImpl(
@@ -242,21 +248,16 @@ fun AnimeScreen(
             selectedDubbing = selectedDubbing,
             onDownloadLongClick = onDownloadLongClick,
             onRetryMetadata = onRetryMetadata,
+            onSettingsClicked = onSettingsClicked,
         )
         return
     }
 
-    val context = LocalContext.current
     val onCopyTagToClipboard: (tag: String) -> Unit = {
         if (it.isNotEmpty()) {
             context.copyToClipboard(it, it)
         }
     }
-
-    val navigator = LocalNavigator.currentOrThrow
-    val onSettingsClicked: (() -> Unit)? = {
-        navigator.push(AnimeSourcePreferencesScreen(state.source.id))
-    }.takeIf { state.source is ConfigurableAnimeSource }
 
     if (!isTabletUi) {
         AnimeScreenSmallImpl(

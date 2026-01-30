@@ -5,6 +5,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,7 +36,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -52,11 +52,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.domain.ui.model.AnimeMetadataSource
@@ -127,6 +130,7 @@ fun AnimeScreenAuroraImpl(
     selectedDubbing: String?,
     onDownloadLongClick: ((Episode) -> Unit)?,
     onRetryMetadata: () -> Unit,
+    onSettingsClicked: (() -> Unit)?,
 ) {
     val anime = state.anime
     val episodes = state.episodeListItems
@@ -416,99 +420,73 @@ fun AnimeScreenAuroraImpl(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // Back button
-            IconButton(
+            // Back button - Aurora glassmorphism style
+            AuroraActionButton(
                 onClick = navigateUp,
-                modifier = Modifier
-                    .size(44.dp)
-                    .background(colors.accent.copy(alpha = 0.2f), CircleShape),
-            ) {
-                Icon(
-                    Icons.Filled.ArrowBack,
-                    contentDescription = null,
-                    tint = colors.accent,
-                )
-            }
+                icon = Icons.Filled.ArrowBack,
+                contentDescription = null,
+            )
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // Filter button
-            IconButton(
+            // Filter button - Aurora glassmorphism style
+            AuroraActionButton(
                 onClick = onFilterButtonClicked,
-                modifier = Modifier
-                    .size(44.dp)
-                    .background(colors.accent.copy(alpha = 0.2f), CircleShape),
-            ) {
-                Icon(
-                    Icons.Default.FilterList,
-                    contentDescription = null,
-                    tint = colors.accent,
-                )
-            }
+                icon = Icons.Default.FilterList,
+                contentDescription = null,
+            )
 
-            // Download menu
+            // Download menu - Aurora glassmorphism style
             if (onDownloadActionClicked != null) {
                 var downloadExpanded by remember { mutableStateOf(false) }
-                Box {
-                    IconButton(
+                Box(contentAlignment = Alignment.TopEnd) {
+                    AuroraActionButton(
                         onClick = { downloadExpanded = !downloadExpanded },
-                        modifier = Modifier
-                            .size(44.dp)
-                            .background(colors.accent.copy(alpha = 0.2f), CircleShape),
-                    ) {
-                        Icon(
-                            Icons.Filled.Download,
-                            contentDescription = null,
-                            tint = colors.accent,
-                        )
-                    }
-                    DropdownMenu(
+                        icon = Icons.Filled.Download,
+                        contentDescription = null,
+                    )
+                    EntryDownloadDropdownMenu(
                         expanded = downloadExpanded,
                         onDismissRequest = { downloadExpanded = false },
-                    ) {
-                        EntryDownloadDropdownMenu(
-                            expanded = true,
-                            onDismissRequest = { downloadExpanded = false },
-                            onDownloadClicked = { onDownloadActionClicked.invoke(it) },
-                            isManga = false,
-                        )
-                    }
+                        onDownloadClicked = { onDownloadActionClicked.invoke(it) },
+                        isManga = false,
+                    )
                 }
             }
 
-            // More menu
+            // More menu - Aurora glassmorphism style
             var showMenu by remember { mutableStateOf(false) }
-            Box {
-                IconButton(
+            Box(contentAlignment = Alignment.TopEnd) {
+                AuroraActionButton(
                     onClick = { showMenu = !showMenu },
-                    modifier = Modifier
-                        .size(44.dp)
-                        .background(colors.accent.copy(alpha = 0.2f), CircleShape),
-                ) {
-                    Icon(
-                        Icons.Default.MoreVert,
-                        contentDescription = null,
-                        tint = colors.accent,
-                    )
-                }
-                DropdownMenu(
+                    icon = Icons.Default.MoreVert,
+                    contentDescription = null,
+                )
+                AuroraDropdownMenu(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false },
                 ) {
-                    androidx.compose.material3.DropdownMenuItem(
-                        text = {
-                            androidx.compose.material3.Text(text = stringResource(MR.strings.action_webview_refresh))
-                        },
+                    AuroraDropdownMenuItem(
+                        text = stringResource(MR.strings.action_webview_refresh),
                         onClick = {
                             onRefresh()
                             showMenu = false
                         },
                     )
                     if (onShareClicked != null) {
-                        androidx.compose.material3.DropdownMenuItem(
-                            text = { androidx.compose.material3.Text(text = stringResource(MR.strings.action_share)) },
+                        AuroraDropdownMenuItem(
+                            text = stringResource(MR.strings.action_share),
                             onClick = {
                                 onShareClicked()
+                                showMenu = false
+                            },
+                        )
+                    }
+                    if (onSettingsClicked != null) {
+                        AuroraDropdownMenuItem(
+                            text = stringResource(MR.strings.action_settings),
+                            onClick = {
+                                onSettingsClicked()
                                 showMenu = false
                             },
                         )
@@ -559,4 +537,105 @@ private fun resolveCoverUrl(
         AnimeScreenModel.MetadataError.Disabled,
         -> ResolvedCover(state.anime.thumbnailUrl, null)
     }
+}
+
+/**
+ * Aurora-styled action button with glassmorphism effect
+ */
+@Composable
+private fun AuroraActionButton(
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AuroraTheme.colors
+
+    Box(
+        modifier = modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        colors.surface.copy(alpha = 0.9f),
+                        colors.surface.copy(alpha = 0.6f),
+                    ),
+                    center = Offset(0.3f, 0.3f),
+                    radius = 0.8f,
+                ),
+            )
+            .drawBehind {
+                // Subtle inner glow
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            colors.accent.copy(alpha = 0.15f),
+                            Color.Transparent,
+                        ),
+                        center = Offset(size.width * 0.3f, size.height * 0.3f),
+                        radius = size.width * 0.6f,
+                    ),
+                )
+            }
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = colors.accent.copy(alpha = 0.95f),
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
+/**
+ * Aurora-styled dropdown menu container
+ */
+@Composable
+private fun AuroraDropdownMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val colors = AuroraTheme.colors
+
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismissRequest,
+        offset = DpOffset(x = 0.dp, y = 8.dp),
+        modifier = modifier,
+    ) {
+        content()
+    }
+}
+
+/**
+ * Aurora-styled dropdown menu item
+ */
+@Composable
+private fun AuroraDropdownMenuItem(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AuroraTheme.colors
+
+    androidx.compose.material3.DropdownMenuItem(
+        text = {
+            Text(
+                text = text,
+                color = colors.textPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        },
+        onClick = onClick,
+        modifier = modifier,
+        colors = androidx.compose.material3.MenuDefaults.itemColors(
+            textColor = colors.textPrimary,
+        ),
+    )
 }
