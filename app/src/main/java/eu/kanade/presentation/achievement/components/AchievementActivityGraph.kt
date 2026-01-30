@@ -4,6 +4,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -16,7 +17,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -52,6 +57,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.max
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AchievementActivityGraph(
     yearlyStats: List<Pair<YearMonth, MonthStats>>,
@@ -59,25 +65,21 @@ fun AchievementActivityGraph(
 ) {
     val colors = AuroraTheme.colors
 
-    // Calculate max value for scaling
+    // Группировка месяцев по полугодиям с сортировкой
+    val firstHalf = yearlyStats
+        .filter { it.first.monthValue in 1..6 }
+        .sortedBy { it.first.monthValue }
+    val secondHalf = yearlyStats
+        .filter { it.first.monthValue in 7..12 }
+        .sortedBy { it.first.monthValue }
+
+    // Рассчитываем maxActivity для всех 12 месяцев (для единой шкалы)
     val maxActivity = remember(yearlyStats) {
         yearlyStats.maxOfOrNull { it.second.totalActivity } ?: 1
     }.coerceAtLeast(1)
 
-    // Animation state using spring for smoothness
-    var animationStarted by remember { mutableStateOf(false) }
-    val animationProgress by animateFloatAsState(
-        targetValue = if (animationStarted) 1f else 0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow,
-        ),
-        label = "activity_animation",
-    )
-
-    LaunchedEffect(yearlyStats) {
-        animationStarted = true
-    }
+    // Pager для переключения между полугодиями
+    val pagerState = rememberPagerState(pageCount = { 2 })
 
     Card(
         modifier = modifier
@@ -93,55 +95,146 @@ fun AchievementActivityGraph(
                 .fillMaxWidth()
                 .padding(16.dp),
         ) {
-            Text(
-                text = "Активность за год",
-                color = colors.textPrimary,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.5.sp,
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Bar Chart Row with Canvas for trend line
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp)
+            // Заголовок с индикатором периода
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Trend line layer
-                if (yearlyStats.size >= 3) {
-                    TrendLine(
-                        yearlyStats = yearlyStats,
-                        maxActivity = maxActivity,
-                        animationProgress = animationProgress,
-                    )
+                Text(
+                    text = "Активность за год",
+                    color = colors.textPrimary,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp,
+                )
+
+                // Индикатор текущего периода
+                Text(
+                    text = when (pagerState.currentPage) {
+                        0 -> "Янв–Июнь"
+                        1 -> "Июль–Дек"
+                        else -> ""
+                    },
+                    color = colors.accent,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Горизонтальный Pager
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxWidth(),
+            ) { page ->
+                val monthsToShow = when (page) {
+                    0 -> firstHalf
+                    1 -> secondHalf
+                    else -> emptyList()
                 }
 
-                // Bars layer
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Bottom
-                ) {
-                    yearlyStats.forEachIndexed { index, (month, stats) ->
-                        val heightFraction = (stats.totalActivity.toFloat() / maxActivity).coerceIn(0.05f, 1f)
+                MonthBarChart(
+                    months = monthsToShow,
+                    maxActivity = maxActivity,
+                )
+            }
 
-                        ActivityBar(
-                            month = month,
-                            stats = stats,
-                            heightFraction = heightFraction,
-                            animationProgress = animationProgress,
-                            index = index,
-                            totalItems = yearlyStats.size
-                        )
-                    }
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Индикаторы страниц (точки)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                repeat(2) { index ->
+                    Box(
+                        modifier = Modifier
+                            .size(if (pagerState.currentPage == index) 8.dp else 6.dp)
+                            .padding(horizontal = 4.dp)
+                            .background(
+                                color = if (pagerState.currentPage == index) {
+                                    colors.accent
+                                } else {
+                                    colors.textSecondary.copy(alpha = 0.3f)
+                                },
+                                shape = CircleShape,
+                            ),
+                    )
                 }
             }
         }
     }
+}
+
+/**
+ * Bar chart для отображения месяцев (6 штук на странице)
+ */
+@Composable
+private fun MonthBarChart(
+    months: List<Pair<YearMonth, MonthStats>>,
+    maxActivity: Int,
+    modifier: Modifier = Modifier,
+) {
+    // Animation state
+    var animationStarted by remember { mutableStateOf(false) }
+    val animationProgress by animateFloatAsState(
+        targetValue = if (animationStarted) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow,
+        ),
+        label = "activity_animation",
+    )
+
+    LaunchedEffect(months) {
+        animationStarted = true
+    }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(180.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        months.forEachIndexed { index, (month, stats) ->
+            val heightFraction = calculateHeightFraction(
+                activity = stats.totalActivity,
+                maxActivity = maxActivity,
+            )
+
+            ActivityBar(
+                month = month,
+                stats = stats,
+                heightFraction = heightFraction,
+                animationProgress = animationProgress,
+                index = index,
+                totalItems = months.size,
+            )
+        }
+    }
+}
+
+/**
+ * Калькулятор высоты графика с ограничением максимума
+ *
+ * @param activity Активность месяца (chapters + episodes)
+ * @param maxActivity Максимальная активность среди всех месяцев
+ * @return heightFraction в диапазоне [0.05f, 0.75f]
+ */
+private fun calculateHeightFraction(
+    activity: Int,
+    maxActivity: Int,
+): Float {
+    if (maxActivity == 0) return 0.05f
+
+    // Базовая нормализация
+    val normalized = activity.toFloat() / maxActivity
+
+    // Ограничиваем максимум до 75% (чтобы графики не были слишком высокими)
+    return normalized.coerceIn(0.05f, 0.75f)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -340,87 +433,3 @@ private fun ActivityTooltipContent(
  */
 private val MonthStats.totalActivity: Int
     get() = chaptersRead + episodesWatched
-
-/**
- * Calculates 3-month moving average trend line data
- */
-private fun calculateTrendLine(data: List<Pair<YearMonth, MonthStats>>): List<Float> {
-    return data.mapIndexed { index, _ ->
-        val window = data.subList(
-            maxOf(0, index - 1),
-            minOf(data.size, index + 2)
-        )
-        window.map { it.second.totalActivity.toFloat() }.average().toFloat()
-    }
-}
-
-@Composable
-private fun TrendLine(
-    yearlyStats: List<Pair<YearMonth, MonthStats>>,
-    maxActivity: Int,
-    animationProgress: Float,
-) {
-    val colors = AuroraTheme.colors
-    val trendData = remember(yearlyStats) { calculateTrendLine(yearlyStats) }
-
-    androidx.compose.foundation.Canvas(
-        modifier = Modifier
-            .fillMaxWidth()
-            .fillMaxHeight()
-            .padding(horizontal = 12.dp)
-    ) {
-        if (trendData.size < 2) return@Canvas
-
-        val barWidth = size.width / yearlyStats.size
-        val centerOffset = barWidth / 2
-
-        // Calculate points for trend line
-        val points = trendData.mapIndexed { index, value ->
-            val x = index * barWidth + centerOffset
-            val heightFraction = (value / maxActivity).coerceIn(0.05f, 1f)
-            val y = size.height - (size.height * heightFraction * animationProgress)
-            androidx.compose.ui.geometry.Offset(x, y)
-        }
-
-        // Draw trend line with animation
-        if (points.size >= 2) {
-            val path = androidx.compose.ui.graphics.Path().apply {
-                moveTo(points.first().x, points.first().y)
-                
-                // Draw smooth curve through points
-                for (i in 1 until points.size) {
-                    val prevPoint = points[i - 1]
-                    val currentPoint = points[i]
-                    
-                    // Use quadratic bezier for smooth curve
-                    val controlX = (prevPoint.x + currentPoint.x) / 2
-                    quadraticBezierTo(
-                        controlX, prevPoint.y,
-                        currentPoint.x, currentPoint.y
-                    )
-                }
-            }
-
-            // Draw the line
-            drawPath(
-                path = path,
-                color = colors.progressCyan.copy(alpha = 0.8f * animationProgress),
-                style = androidx.compose.ui.graphics.drawscope.Stroke(
-                    width = 2.dp.toPx(),
-                    cap = androidx.compose.ui.graphics.StrokeCap.Round,
-                    join = androidx.compose.ui.graphics.StrokeJoin.Round
-                )
-            )
-
-            // Draw glow effect
-            drawPath(
-                path = path,
-                color = colors.progressCyan.copy(alpha = 0.3f * animationProgress),
-                style = androidx.compose.ui.graphics.drawscope.Stroke(
-                    width = 6.dp.toPx(),
-                    cap = androidx.compose.ui.graphics.StrokeCap.Round
-                )
-            )
-        }
-    }
-}
