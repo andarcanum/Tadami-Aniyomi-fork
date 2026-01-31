@@ -1,6 +1,0 @@
-{
-  "skipTools": ["Read", "Glob", "Grep", "TodoWrite"],
-  "captureTools": ["Edit", "Write", "Bash", "Task"],
-  "maxProfileItems": 5,
-  "debug": false
-}

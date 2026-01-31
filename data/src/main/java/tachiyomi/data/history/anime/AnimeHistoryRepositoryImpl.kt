@@ -3,10 +3,7 @@ package tachiyomi.data.history.anime
 import kotlinx.coroutines.flow.Flow
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
-import tachiyomi.data.achievement.handler.AchievementEventBus
-import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
-import tachiyomi.domain.achievement.repository.ActivityDataRepository
 import tachiyomi.domain.history.anime.model.AnimeHistory
 import tachiyomi.domain.history.anime.model.AnimeHistoryUpdate
 import tachiyomi.domain.history.anime.model.AnimeHistoryWithRelations
@@ -14,8 +11,6 @@ import tachiyomi.domain.history.anime.repository.AnimeHistoryRepository
 
 class AnimeHistoryRepositoryImpl(
     private val handler: AnimeDatabaseHandler,
-    private val eventBus: AchievementEventBus,
-    private val activityDataRepository: ActivityDataRepository,
 ) : AnimeHistoryRepository {
 
     override fun getAnimeHistory(query: String): Flow<List<AnimeHistoryWithRelations>> {
@@ -80,37 +75,6 @@ class AnimeHistoryRepositoryImpl(
                 )
             }
 
-            // Publish achievement event after successful upsert
-            // Only publish if this is an actual watch operation (has a valid seenAt date)
-            if (historyUpdate.seenAt.time > 0) {
-                try {
-                    // Record activity for stats
-                    activityDataRepository.recordWatching(
-                        id = historyUpdate.episodeId,
-                        episodesCount = 1,
-                        durationMs = 20 * 60 * 1000L, // 20 minutes estimate
-                    )
-
-                    val episodeInfo = handler.awaitOneOrNull {
-                        animehistoryQueries.getEpisodeInfo(historyUpdate.episodeId) { animeId, episodeNumber ->
-                            Pair(animeId, episodeNumber)
-                        }
-                    }
-
-                    if (episodeInfo != null) {
-                        eventBus.tryEmit(
-                            AchievementEvent.EpisodeWatched(
-                                animeId = episodeInfo.first,
-                                episodeNumber = episodeInfo.second.toInt(),
-                                timestamp = System.currentTimeMillis(),
-                            ),
-                        )
-                    }
-                } catch (e: Exception) {
-                    // Don't let event publishing errors affect history operations
-                    logcat(LogPriority.WARN, throwable = e)
-                }
-            }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, throwable = e)
         }

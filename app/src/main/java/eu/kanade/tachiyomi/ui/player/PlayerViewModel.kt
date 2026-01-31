@@ -129,6 +129,9 @@ import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import tachiyomi.domain.track.anime.interactor.GetAnimeTracks
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.data.achievement.handler.AchievementEventBus
+import tachiyomi.data.achievement.model.AchievementEvent
+import tachiyomi.domain.achievement.repository.ActivityDataRepository
 import tachiyomi.source.local.entries.anime.isLocal
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -172,6 +175,8 @@ class PlayerViewModel @JvmOverloads constructor(
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
     private val preferenceStore: PreferenceStore = Injekt.get(),
     uiPreferences: UiPreferences = Injekt.get(),
+    private val eventBus: AchievementEventBus = Injekt.get(),
+    private val activityDataRepository: ActivityDataRepository = Injekt.get(),
 ) : ViewModel() {
 
     private val _currentPlaylist = MutableStateFlow<List<Episode>>(emptyList())
@@ -1068,6 +1073,11 @@ class PlayerViewModel @JvmOverloads constructor(
 
     private var episodeToDownload: AnimeDownload? = null
 
+    /**
+     * The time the episode was started watching
+     */
+    private var episodeReadStartTime: Long? = null
+
     private fun filterEpisodeList(episodes: List<Episode>): List<Episode> {
         val anime = currentAnime.value ?: return episodes
         val selectedEpisode = episodes.find { it.id == episodeId }
@@ -1256,6 +1266,7 @@ class PlayerViewModel @JvmOverloads constructor(
         mediaTitle.update { _ -> episode.name }
         _isEpisodeOnline.update { _ -> isEpisodeOnline() == true }
         MPVLib.setPropertyDouble("user-data/current-anime/episode-number", episode.episode_number.toDouble())
+        episodeReadStartTime = System.currentTimeMillis()
     }
 
     private fun initEpisodeList(anime: Anime): List<Episode> {
@@ -1683,6 +1694,32 @@ class PlayerViewModel @JvmOverloads constructor(
 
     private suspend fun updateEpisodeProgressOnComplete(currentEp: Episode) {
         currentEp.seen = true
+
+        // Emit EpisodeWatched event for achievement tracking
+        val animeId = currentAnime.value?.id ?: 0L
+        eventBus.tryEmit(
+            AchievementEvent.EpisodeWatched(
+                animeId = animeId,
+                episodeNumber = currentEp.episode_number.toInt(),
+            ),
+        )
+
+        // Record watching activity for stats
+        val episodeId = currentEp.id ?: 0L
+        if (episodeId > 0) {
+            activityDataRepository.recordWatching(
+                id = episodeId,
+                episodesCount = 1,
+                durationMs = episodeReadStartTime?.let { System.currentTimeMillis() - it } ?: 0L,
+            )
+        }
+
+        // Check for anime completion
+        val allEpisodes = currentPlaylist.value
+        if (allEpisodes.all { it.seen }) {
+            eventBus.tryEmit(AchievementEvent.AnimeCompleted(animeId))
+        }
+
         updateTrackEpisodeSeen(currentEp)
         deleteEpisodeIfNeeded(currentEp)
 

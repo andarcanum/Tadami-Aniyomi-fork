@@ -51,6 +51,8 @@ import eu.kanade.presentation.util.LocalBackPress
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.ui.setting.PlayerSettingsScreen
 import kotlinx.collections.immutable.persistentListOf
+import tachiyomi.data.achievement.handler.AchievementHandler
+import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.Scaffold
@@ -88,6 +90,12 @@ object SettingsMainScreen : Screen() {
         val backPress = LocalBackPress.currentOrThrow
         val uiPreferences = Injekt.get<UiPreferences>()
         val theme by uiPreferences.appTheme().collectAsState()
+
+        // Track settings visit for achievement
+        val achievementHandler = Injekt.get<AchievementHandler>()
+        LaunchedEffect(Unit) {
+            achievementHandler.trackFeatureUsed(AchievementEvent.Feature.SETTINGS)
+        }
 
         if (theme.isAuroraStyle && !twoPane) {
             SettingsAuroraContent(

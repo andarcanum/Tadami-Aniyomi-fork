@@ -63,6 +63,8 @@ import tachiyomi.domain.source.manga.service.MangaSourceManager
 import tachiyomi.domain.track.manga.interactor.GetMangaTracks
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.data.achievement.handler.AchievementHandler
+import tachiyomi.data.achievement.model.AchievementEvent
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
@@ -87,6 +89,7 @@ class MangaDownloader(
     private val xml: XML = Injekt.get(),
     private val getCategories: GetMangaCategories = Injekt.get(),
     private val getMangaTracks: GetMangaTracks = Injekt.get(),
+    private val achievementHandler: AchievementHandler = Injekt.get(),
     // SY -->
     private val sourcePreferences: SourcePreferences = Injekt.get(),
     // SY <--
@@ -432,6 +435,7 @@ class MangaDownloader(
             DiskUtil.createNoMediaFile(tmpDir, context)
 
             download.status = MangaDownload.State.DOWNLOADED
+            achievementHandler.trackFeatureUsed(AchievementEvent.Feature.DOWNLOAD)
         } catch (error: Throwable) {
             if (error is CancellationException) throw error
             // If the page list threw, it will resume here

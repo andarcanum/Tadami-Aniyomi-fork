@@ -15,6 +15,8 @@ import tachiyomi.domain.category.anime.interactor.SetSortModeForAnimeCategory
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.library.anime.model.AnimeLibrarySort
 import tachiyomi.domain.library.model.LibraryDisplayMode
+import tachiyomi.data.achievement.handler.AchievementHandler
+import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.domain.library.service.LibraryPreferences
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -26,6 +28,7 @@ class AnimeLibrarySettingsScreenModel(
     private val setAnimeDisplayMode: SetAnimeDisplayMode = Injekt.get(),
     private val setSortModeForCategory: SetSortModeForAnimeCategory = Injekt.get(),
     trackerManager: TrackerManager = Injekt.get(),
+    private val achievementHandler: AchievementHandler = Injekt.get(),
 ) : ScreenModel {
 
     val trackersFlow = trackerManager.loggedInTrackersFlow()
@@ -39,6 +42,7 @@ class AnimeLibrarySettingsScreenModel(
         preference(libraryPreferences).getAndSet {
             it.next()
         }
+        achievementHandler.trackFeatureUsed(AchievementEvent.Feature.FILTER)
     }
 
     fun toggleTracker(id: Int) {

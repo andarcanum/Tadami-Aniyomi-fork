@@ -6,12 +6,15 @@ import tachiyomi.core.common.util.lang.withNonCancellableContext
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.handler.AchievementEventBus
 import tachiyomi.data.achievement.model.AchievementEvent
+import tachiyomi.domain.achievement.repository.ActivityDataRepository
 import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.entries.manga.repository.MangaRepository
 import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.items.chapter.model.ChapterUpdate
 import tachiyomi.domain.items.chapter.repository.ChapterRepository
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 class SetReadStatus(
     private val downloadPreferences: DownloadPreferences,
@@ -19,6 +22,7 @@ class SetReadStatus(
     private val mangaRepository: MangaRepository,
     private val chapterRepository: ChapterRepository,
     private val eventBus: AchievementEventBus,
+    private val activityDataRepository: ActivityDataRepository = Injekt.get(),
 ) {
 
     private val mapper = { chapter: Chapter, read: Boolean ->
@@ -77,6 +81,15 @@ class SetReadStatus(
                 if (allChapters.all { it.read }) {
                     eventBus.tryEmit(AchievementEvent.MangaCompleted(mangaId))
                 }
+            }
+
+            // Record reading activity for stats
+            chaptersToUpdate.forEach { chapter ->
+                activityDataRepository.recordReading(
+                    id = chapter.id,
+                    chaptersCount = 1,
+                    durationMs = 0L, // Duration is tracked separately
+                )
             }
         }
 

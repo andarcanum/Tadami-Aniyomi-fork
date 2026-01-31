@@ -50,6 +50,8 @@ import logcat.LogPriority
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.data.achievement.handler.AchievementHandler
+import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.domain.release.interactor.GetApplicationRelease
 import tachiyomi.domain.release.service.AppUpdatePreferences
 import tachiyomi.i18n.MR
@@ -92,7 +94,12 @@ object AboutScreen : Screen() {
                 contentPadding = contentPadding,
             ) {
                 item {
-                    LogoHeader()
+                    val achievementHandler = Injekt.get<AchievementHandler>()
+                    LogoHeader(
+                        onClick = {
+                            achievementHandler.trackFeatureUsed(AchievementEvent.Feature.LOGO_CLICK)
+                        }
+                    )
                 }
 
                 item {

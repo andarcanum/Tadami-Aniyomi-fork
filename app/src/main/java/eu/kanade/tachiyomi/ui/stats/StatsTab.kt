@@ -20,6 +20,8 @@ import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.stats.anime.animeStatsTab
 import eu.kanade.tachiyomi.ui.stats.manga.mangaStatsTab
 import kotlinx.collections.immutable.persistentListOf
+import tachiyomi.data.achievement.handler.AchievementHandler
+import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
@@ -70,6 +72,10 @@ data object StatsTab : Tab {
 
         LaunchedEffect(Unit) {
             (context as? MainActivity)?.ready = true
+
+            // Track stats visit for achievement
+            val achievementHandler = Injekt.get<AchievementHandler>()
+            achievementHandler.trackFeatureUsed(AchievementEvent.Feature.STATS)
         }
     }
 }

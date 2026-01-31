@@ -6,12 +6,15 @@ import tachiyomi.core.common.util.lang.withNonCancellableContext
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.handler.AchievementEventBus
 import tachiyomi.data.achievement.model.AchievementEvent
+import tachiyomi.domain.achievement.repository.ActivityDataRepository
 import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.entries.anime.repository.AnimeRepository
 import tachiyomi.domain.items.episode.model.Episode
 import tachiyomi.domain.items.episode.model.EpisodeUpdate
 import tachiyomi.domain.items.episode.repository.EpisodeRepository
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 class SetSeenStatus(
     private val downloadPreferences: DownloadPreferences,
@@ -19,6 +22,7 @@ class SetSeenStatus(
     private val animeRepository: AnimeRepository,
     private val episodeRepository: EpisodeRepository,
     private val eventBus: AchievementEventBus,
+    private val activityDataRepository: ActivityDataRepository = Injekt.get(),
 ) {
 
     private val mapper = { episode: Episode, read: Boolean ->
@@ -77,6 +81,15 @@ class SetSeenStatus(
                 if (allEpisodes.all { it.seen }) {
                     eventBus.tryEmit(AchievementEvent.AnimeCompleted(animeId))
                 }
+            }
+
+            // Record watching activity for stats
+            episodesToUpdate.forEach { episode ->
+                activityDataRepository.recordWatching(
+                    id = episode.id,
+                    episodesCount = 1,
+                    durationMs = 20 * 60 * 1000L, // 20 minutes estimate
+                )
             }
         }
 

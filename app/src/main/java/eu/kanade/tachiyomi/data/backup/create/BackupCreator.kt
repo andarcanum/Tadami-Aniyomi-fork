@@ -34,6 +34,8 @@ import okio.gzip
 import okio.sink
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.data.achievement.handler.AchievementHandler
+import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.domain.backup.service.BackupPreferences
 import tachiyomi.domain.entries.anime.interactor.GetAnimeFavorites
 import tachiyomi.domain.entries.anime.model.Anime
@@ -72,6 +74,7 @@ class BackupCreator(
     private val animeSourcesBackupCreator: AnimeSourcesBackupCreator = AnimeSourcesBackupCreator(),
     private val mangaSourcesBackupCreator: MangaSourcesBackupCreator = MangaSourcesBackupCreator(),
     private val extensionsBackupCreator: ExtensionsBackupCreator = ExtensionsBackupCreator(context),
+    private val achievementHandler: AchievementHandler = Injekt.get(),
 ) {
 
     suspend fun backup(uri: Uri, options: BackupOptions): String {
@@ -146,6 +149,11 @@ class BackupCreator(
 
             if (isAutoBackup) {
                 backupPreferences.lastAutoBackupTimestamp().set(Instant.now().toEpochMilli())
+            }
+
+            // Track backup achievement for manual backups only
+            if (!isAutoBackup) {
+                achievementHandler.trackFeatureUsed(AchievementEvent.Feature.BACKUP)
             }
 
             return fileUri.toString()
