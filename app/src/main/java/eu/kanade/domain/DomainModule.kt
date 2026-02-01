@@ -436,6 +436,8 @@ class DomainModule : InjektModule {
         addFactory { TrackSelect(get(), get()) }
 
         addSingletonFactory<AchievementRepository> { AchievementRepositoryImpl(get()) }
+        addSingletonFactory<tachiyomi.domain.achievement.repository.UserProfileRepository> { tachiyomi.data.achievement.UserProfileRepositoryImpl(get()) }
+        addSingletonFactory<tachiyomi.domain.achievement.repository.ActivityDataRepository> { tachiyomi.data.achievement.ActivityDataRepositoryImpl(get()) }
         addSingletonFactory { DiversityAchievementChecker(get(), get()) }
         addSingletonFactory { StreakAchievementChecker(get()) }
         addSingletonFactory { FeatureUsageCollector(get()) }
@@ -444,7 +446,7 @@ class DomainModule : InjektModule {
         addSingletonFactory { AchievementCalculator(get(), get(), get(), get(), get(), get()) }
         addSingletonFactory { AchievementEventBus() }
         addSingletonFactory { SessionManager(get(), get()) }
-        addSingletonFactory { tachiyomi.data.achievement.UserProfileManager() }
+        addSingletonFactory { tachiyomi.data.achievement.UserProfileManager(get()) }
         addSingletonFactory { AchievementHandler(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
         // Note: AchievementLoader, PointsManager, UnlockableManager require Context
         // They are registered in AppModule instead

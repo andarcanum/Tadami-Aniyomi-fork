@@ -177,6 +177,34 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
             }
         }
 
+        // Migrate legacy activity data from SharedPreferences to database (v4 → v5)
+        achievementScope.launch {
+            try {
+                val migrator = eu.kanade.tachiyomi.data.backup.restore.LegacyActivityDataMigrator(
+                    context = this@App,
+                    repository = Injekt.get(),
+                )
+
+                if (migrator.isMigrationNeeded()) {
+                    logcat(LogPriority.INFO) { "[MIGRATION] Starting legacy activity data migration..." }
+                    val result = migrator.migrate()
+
+                    if (result.success) {
+                        logcat(LogPriority.INFO) {
+                            "[MIGRATION] Migration completed: ${result.recordsMigrated} records migrated, " +
+                                "${result.recordsFailed} failed in ${result.duration}ms"
+                        }
+                        // Optional: Clear legacy data after successful migration
+                        // migrator.clearLegacyData()
+                    } else {
+                        logcat(LogPriority.ERROR) { "[MIGRATION] Migration failed: ${result.error}" }
+                    }
+                }
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR) { "[MIGRATION] Error during legacy data migration: ${e.message}" }
+            }
+        }
+
         // Start achievement handler
         achievementScope.launch {
             try {

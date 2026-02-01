@@ -108,8 +108,20 @@ class AchievementCalculator(
                 .filter { it.isUnlocked }
                 .sumOf { achievementsById[it.achievementId]?.points ?: 0 }
 
-            achievementsDatabase.achievementProgressQueries.setTotalPoints(totalPoints.toLong())
-            achievementsDatabase.achievementProgressQueries.setUnlockedCount(achievementsUnlocked.toLong())
+            achievementsDatabase.userProfileQueries.updateXP(
+                user_id = "default",
+                total_xp = totalPoints.toLong(),
+                current_xp = (totalPoints % 100).toLong(),
+                level = 1, // Will be calculated by PointsManager
+                xp_to_next_level = 100,
+                last_updated = System.currentTimeMillis(),
+            )
+            achievementsDatabase.userProfileQueries.updateAchievementCounts(
+                user_id = "default",
+                unlocked = achievementsUnlocked.toLong(),
+                total = allProgressUpdates.size.toLong(),
+                last_updated = System.currentTimeMillis(),
+            )
 
             populateActivityLog()
 

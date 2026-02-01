@@ -285,12 +285,21 @@ class AppModule(val app: Application) : InjektModule {
 
         addSingletonFactory { ExternalIntents() }
 
-        // Achievement system - these require Context so they're registered in AppModule
+        // Achievement system repositories
+        addSingletonFactory<tachiyomi.domain.achievement.repository.AchievementRepository> {
+            tachiyomi.data.achievement.repository.AchievementRepositoryImpl(get())
+        }
+        addSingletonFactory<tachiyomi.domain.achievement.repository.ActivityDataRepository> {
+            tachiyomi.data.achievement.ActivityDataRepositoryImpl(get())
+        }
+        addSingletonFactory<tachiyomi.domain.achievement.repository.UserProfileRepository> {
+            tachiyomi.data.achievement.UserProfileRepositoryImpl(get())
+        }
+
+        // Achievement system managers and handlers
         addSingletonFactory { tachiyomi.data.achievement.loader.AchievementLoader(app, get(), get()) }
         addSingletonFactory { tachiyomi.data.achievement.handler.PointsManager(get()) }
-        addSingletonFactory<tachiyomi.domain.achievement.repository.ActivityDataRepository> {
-            tachiyomi.data.achievement.ActivityDataRepositoryImpl(app, kotlinx.coroutines.Dispatchers.IO)
-        }
+        addSingletonFactory { tachiyomi.data.achievement.UserProfileManager(get()) }
         addSingletonFactory {
             tachiyomi.data.achievement.UnlockableManager(
                 app.getSharedPreferences("achievement_unlockables", Context.MODE_PRIVATE),

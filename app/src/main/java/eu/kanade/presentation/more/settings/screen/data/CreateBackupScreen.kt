@@ -27,6 +27,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.flow.update
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.LabeledCheckbox
 import tachiyomi.presentation.core.components.LazyColumnWithAction
 import tachiyomi.presentation.core.components.SectionCard
@@ -102,6 +103,12 @@ class CreateBackupScreen : Screen() {
                 item {
                     SectionCard(MR.strings.label_extensions) {
                         Options(BackupOptions.extensionOptions, state, model)
+                    }
+                }
+
+                item {
+                    SectionCard(AYMR.strings.achievements) {
+                        Options(BackupOptions.achievementsOptions, state, model)
                     }
                 }
             }

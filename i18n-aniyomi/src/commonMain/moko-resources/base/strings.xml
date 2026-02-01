@@ -772,4 +772,8 @@
     <string name="achievement_stats_points">Points • %d%%</string>
     <string name="achievement_stats_unlocked">Unlocked • %d%%</string>
     <string name="achievement_back">Back</string>
+
+    <!-- Backup Options -->
+    <string name="achievements">Achievements</string>
+    <string name="stats">Statistics</string>
 </resources>

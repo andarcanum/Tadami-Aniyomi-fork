@@ -20,6 +20,11 @@ data class LegacyBackup(
     @ProtoNumber(107) var backupAnimeExtensionRepo: List<BackupExtensionRepos> = emptyList(),
     @ProtoNumber(108) var backupMangaExtensionRepo: List<BackupExtensionRepos> = emptyList(),
     @ProtoNumber(109) var backupCustomButton: List<BackupCustomButtons> = emptyList(),
+    // Achievement system
+    @ProtoNumber(600) var backupAchievements: List<BackupAchievement> = emptyList(),
+    @ProtoNumber(601) var backupUserProfile: BackupUserProfile? = null,
+    @ProtoNumber(602) var backupActivityLog: List<BackupDayActivity> = emptyList(),
+    @ProtoNumber(603) var backupStats: BackupStats? = null,
 ) {
     fun toBackup(): Backup {
         return Backup(
@@ -37,6 +42,10 @@ data class LegacyBackup(
             backupExtensions = backupExtensions,
             backupAnimeExtensionRepo = backupAnimeExtensionRepo,
             backupCustomButton = backupCustomButton,
+            backupAchievements = backupAchievements,
+            backupUserProfile = backupUserProfile,
+            backupActivityLog = backupActivityLog,
+            backupStats = backupStats,
         )
     }
 }
@@ -59,4 +68,10 @@ data class Backup(
     @ProtoNumber(504) var backupExtensions: List<BackupExtension> = emptyList(),
     @ProtoNumber(505) var backupAnimeExtensionRepo: List<BackupExtensionRepos> = emptyList(),
     @ProtoNumber(506) var backupCustomButton: List<BackupCustomButtons> = emptyList(),
+
+    // Achievement system
+    @ProtoNumber(600) var backupAchievements: List<BackupAchievement> = emptyList(),
+    @ProtoNumber(601) var backupUserProfile: BackupUserProfile? = null,
+    @ProtoNumber(602) var backupActivityLog: List<BackupDayActivity> = emptyList(),
+    @ProtoNumber(603) var backupStats: BackupStats? = null,
 )

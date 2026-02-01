@@ -1,0 +1,108 @@
+-- Activity log table for tracking user activity (refactored to match DayActivity domain model)
+CREATE TABLE activity_log (
+    date TEXT NOT NULL PRIMARY KEY,  -- ISO-8601 format (YYYY-MM-DD)
+    level INTEGER NOT NULL DEFAULT 0,
+    type INTEGER NOT NULL DEFAULT 0,  -- ActivityType ordinal (0=APP_OPEN, 1=READING, 2=WATCHING)
+    -- Detailed counts for statistics (allows recalculating level)
+    chapters_read INTEGER NOT NULL DEFAULT 0,
+    episodes_watched INTEGER NOT NULL DEFAULT 0,
+    app_opens INTEGER NOT NULL DEFAULT 0,
+    achievements_unlocked INTEGER NOT NULL DEFAULT 0,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    last_updated INTEGER NOT NULL
+);
+
+CREATE INDEX activity_log_date_idx ON activity_log(date);
+CREATE INDEX activity_log_level_idx ON activity_log(level);
+
+selectAllActivityLog:
+SELECT * FROM activity_log ORDER BY date DESC;
+
+getActivityForDateRange:
+SELECT * FROM activity_log
+WHERE date >= :start_date AND date <= :end_date
+ORDER BY date ASC;
+
+getActivityForDate:
+SELECT * FROM activity_log WHERE date = :date;
+
+upsertActivity:
+INSERT INTO activity_log(
+    date, level, type, chapters_read, episodes_watched,
+    app_opens, achievements_unlocked, duration_ms, last_updated
+) VALUES (
+    :date, :level, :type, :chapters_read, :episodes_watched,
+    :app_opens, :achievements_unlocked, :duration_ms, :last_updated
+)
+ON CONFLICT(date) DO UPDATE SET
+    level = :level,
+    type = :type,
+    chapters_read = :chapters_read,
+    episodes_watched = :episodes_watched,
+    app_opens = :app_opens,
+    achievements_unlocked = :achievements_unlocked,
+    duration_ms = :duration_ms,
+    last_updated = :last_updated;
+
+-- Increment-style updates for real-time tracking
+incrementChapters:
+INSERT INTO activity_log(date, level, type, chapters_read, last_updated)
+VALUES (:date, :level, 1, :count, :last_updated)
+ON CONFLICT(date) DO UPDATE SET
+    chapters_read = chapters_read + :count,
+    level = MAX(level, :level),
+    type = CASE WHEN type < 1 THEN 1 ELSE type END,
+    last_updated = :last_updated;
+
+incrementEpisodes:
+INSERT INTO activity_log(date, level, type, episodes_watched, last_updated)
+VALUES (:date, :level, 2, :count, :last_updated)
+ON CONFLICT(date) DO UPDATE SET
+    episodes_watched = episodes_watched + :count,
+    level = MAX(level, :level),
+    type = 2,
+    last_updated = :last_updated;
+
+incrementAppOpens:
+INSERT INTO activity_log(date, level, type, app_opens, last_updated)
+VALUES (:date, 1, 0, 1, :last_updated)
+ON CONFLICT(date) DO UPDATE SET
+    app_opens = app_opens + 1,
+    level = MAX(level, 1),
+    last_updated = :last_updated;
+
+incrementAchievements:
+UPDATE activity_log
+SET achievements_unlocked = achievements_unlocked + 1,
+    level = 4,
+    last_updated = :last_updated
+WHERE date = :date;
+
+addDuration:
+INSERT INTO activity_log(date, duration_ms, last_updated)
+VALUES (:date, :duration_ms, :last_updated)
+ON CONFLICT(date) DO UPDATE SET
+    duration_ms = duration_ms + :duration_ms,
+    last_updated = :last_updated;
+
+deleteActivityLog:
+DELETE FROM activity_log WHERE date = :date;
+
+deleteAllActivityLog:
+DELETE FROM activity_log;
+
+-- Stats queries
+getMonthActivity:
+SELECT * FROM activity_log
+WHERE date LIKE :year_month || '%'
+ORDER BY date ASC;
+
+getActivityStats:
+SELECT
+    SUM(chapters_read) AS total_chapters,
+    SUM(episodes_watched) AS total_episodes,
+    SUM(app_opens) AS total_opens,
+    SUM(achievements_unlocked) AS total_achievements,
+    SUM(duration_ms) AS total_duration
+FROM activity_log
+WHERE date >= :start_date AND date <= :end_date;

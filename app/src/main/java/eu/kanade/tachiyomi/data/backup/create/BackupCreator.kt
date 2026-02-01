@@ -16,6 +16,7 @@ import eu.kanade.tachiyomi.data.backup.create.creators.MangaCategoriesBackupCrea
 import eu.kanade.tachiyomi.data.backup.create.creators.MangaExtensionRepoBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.MangaSourcesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.PreferenceBackupCreator
+import eu.kanade.tachiyomi.data.backup.create.creators.AchievementBackupCreator
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupAnime
 import eu.kanade.tachiyomi.data.backup.models.BackupAnimeSource
@@ -74,6 +75,7 @@ class BackupCreator(
     private val animeSourcesBackupCreator: AnimeSourcesBackupCreator = AnimeSourcesBackupCreator(),
     private val mangaSourcesBackupCreator: MangaSourcesBackupCreator = MangaSourcesBackupCreator(),
     private val extensionsBackupCreator: ExtensionsBackupCreator = ExtensionsBackupCreator(context),
+    private val achievementBackupCreator: AchievementBackupCreator = AchievementBackupCreator(),
     private val achievementHandler: AchievementHandler = Injekt.get(),
 ) {
 
@@ -112,6 +114,8 @@ class BackupCreator(
             }
             val backupManga = backupMangas(getMangaFavorites.await() + nonFavoriteManga, options)
 
+            val achievementData = achievementBackupCreator(options)
+
             val backup = Backup(
                 backupManga = backupManga,
                 backupCategories = backupMangaCategories(options),
@@ -127,6 +131,10 @@ class BackupCreator(
                 backupExtensions = backupExtensions(options),
                 backupAnimeExtensionRepo = backupAnimeExtensionRepos(options),
                 backupCustomButton = backupCustomButtons(options),
+                backupAchievements = achievementData.achievements,
+                backupUserProfile = achievementData.userProfile,
+                backupActivityLog = achievementData.activityLog,
+                backupStats = achievementData.stats,
             )
 
             val byteArray = parser.encodeToByteArray(Backup.serializer(), backup)

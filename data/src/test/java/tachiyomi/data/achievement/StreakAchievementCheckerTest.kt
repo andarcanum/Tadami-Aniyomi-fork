@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.parallel.Execution
 import org.junit.jupiter.api.parallel.ExecutionMode
 import tachiyomi.data.achievement.handler.checkers.StreakAchievementChecker
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 @Execution(ExecutionMode.CONCURRENT)
 class StreakAchievementCheckerTest : AchievementTestBase() {
@@ -36,15 +38,15 @@ class StreakAchievementCheckerTest : AchievementTestBase() {
 
     @Test
     fun `streak counts consecutive days`() = runTest {
-        val today = (System.currentTimeMillis() / millisInDay) * millisInDay
+        val today = LocalDate.now()
 
         // Log activity for today and past 2 days
         repeat(3) { dayOffset ->
-            val date = today - (dayOffset * millisInDay)
-            database.achievementProgressQueries.upsertActivityLog(
+            val date = today.minusDays(dayOffset.toLong()).format(DateTimeFormatter.ISO_LOCAL_DATE)
+            database.activityLogQueries.incrementChapters(
                 date = date,
-                chapter_count = 1,
-                episode_count = 0,
+                level = 1,
+                count = 1,
                 last_updated = System.currentTimeMillis(),
             )
         }
@@ -55,20 +57,20 @@ class StreakAchievementCheckerTest : AchievementTestBase() {
 
     @Test
     fun `streak breaks on missing day`() = runTest {
-        val today = (System.currentTimeMillis() / millisInDay) * millisInDay
+        val today = LocalDate.now()
 
         // Log activity for today and 2 days ago (skipping yesterday)
-        database.achievementProgressQueries.upsertActivityLog(
-            date = today,
-            chapter_count = 1,
-            episode_count = 0,
+        database.activityLogQueries.incrementChapters(
+            date = today.format(DateTimeFormatter.ISO_LOCAL_DATE),
+            level = 1,
+            count = 1,
             last_updated = System.currentTimeMillis(),
         )
 
-        database.achievementProgressQueries.upsertActivityLog(
-            date = today - (2 * millisInDay),
-            chapter_count = 1,
-            episode_count = 0,
+        database.activityLogQueries.incrementChapters(
+            date = today.minusDays(2).format(DateTimeFormatter.ISO_LOCAL_DATE),
+            level = 1,
+            count = 1,
             last_updated = System.currentTimeMillis(),
         )
 
@@ -78,20 +80,20 @@ class StreakAchievementCheckerTest : AchievementTestBase() {
 
     @Test
     fun `streak continues even without activity today yet`() = runTest {
-        val today = (System.currentTimeMillis() / millisInDay) * millisInDay
+        val today = LocalDate.now()
 
         // Log activity for yesterday and day before
-        database.achievementProgressQueries.upsertActivityLog(
-            date = today - millisInDay,
-            chapter_count = 1,
-            episode_count = 0,
+        database.activityLogQueries.incrementChapters(
+            date = today.minusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE),
+            level = 1,
+            count = 1,
             last_updated = System.currentTimeMillis(),
         )
 
-        database.achievementProgressQueries.upsertActivityLog(
-            date = today - (2 * millisInDay),
-            chapter_count = 1,
-            episode_count = 0,
+        database.activityLogQueries.incrementChapters(
+            date = today.minusDays(2).format(DateTimeFormatter.ISO_LOCAL_DATE),
+            level = 1,
+            count = 1,
             last_updated = System.currentTimeMillis(),
         )
 
@@ -101,38 +103,26 @@ class StreakAchievementCheckerTest : AchievementTestBase() {
 
     @Test
     fun `logging chapter read increments count`() = runTest {
-        val today = (System.currentTimeMillis() / millisInDay) * millisInDay
-
         streakChecker.logChapterRead()
 
-        val activity = database.achievementProgressQueries.getActivityForDate(
-            date = today,
-            mapper = { date, chapterCount, episodeCount, lastUpdated ->
-                Triple(date, chapterCount, episodeCount)
-            },
-        ).executeAsOneOrNull()
+        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val activity = database.activityLogQueries.getActivityForDate(date = today).executeAsOneOrNull()
 
         activity shouldNotBe null
-        activity!!.second shouldBe 1L // chapter_count
-        activity.third shouldBe 0L // episode_count
+        activity!!.chapters_read shouldBe 1L
+        activity.episodes_watched shouldBe 0L
     }
 
     @Test
     fun `logging episode watched increments count`() = runTest {
-        val today = (System.currentTimeMillis() / millisInDay) * millisInDay
-
         streakChecker.logEpisodeWatched()
 
-        val activity = database.achievementProgressQueries.getActivityForDate(
-            date = today,
-            mapper = { date, chapterCount, episodeCount, lastUpdated ->
-                Triple(date, chapterCount, episodeCount)
-            },
-        ).executeAsOneOrNull()
+        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val activity = database.activityLogQueries.getActivityForDate(date = today).executeAsOneOrNull()
 
         activity shouldNotBe null
-        activity!!.second shouldBe 0L // chapter_count
-        activity.third shouldBe 1L // episode_count
+        activity!!.chapters_read shouldBe 0L
+        activity.episodes_watched shouldBe 1L
     }
 
     @Test
@@ -141,29 +131,29 @@ class StreakAchievementCheckerTest : AchievementTestBase() {
         streakChecker.logChapterRead()
         streakChecker.logChapterRead()
 
-        val today = (System.currentTimeMillis() / millisInDay) * millisInDay
-
-        val activity = database.achievementProgressQueries.getActivityForDate(
-            date = today,
-            mapper = { date, chapterCount, episodeCount, lastUpdated ->
-                Triple(date, chapterCount, episodeCount)
-            },
-        ).executeAsOneOrNull()
+        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val activity = database.activityLogQueries.getActivityForDate(date = today).executeAsOneOrNull()
 
         activity shouldNotBe null
-        // The upsert operation updates the existing record
-        activity!!.second shouldBe 3L
+        // The increment operation updates the existing record
+        activity!!.chapters_read shouldBe 3L
     }
 
     @Test
     fun `mixed chapter and episode activity counts towards streak`() = runTest {
-        val today = (System.currentTimeMillis() / millisInDay) * millisInDay
+        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
 
         // Log both chapter and episode activity
-        database.achievementProgressQueries.upsertActivityLog(
+        database.activityLogQueries.incrementChapters(
             date = today,
-            chapter_count = 5,
-            episode_count = 3,
+            level = 1,
+            count = 5,
+            last_updated = System.currentTimeMillis(),
+        )
+        database.activityLogQueries.incrementEpisodes(
+            date = today,
+            level = 1,
+            count = 3,
             last_updated = System.currentTimeMillis(),
         )
 
@@ -173,14 +163,14 @@ class StreakAchievementCheckerTest : AchievementTestBase() {
 
     @Test
     fun `streak resets after gap`() = runTest {
-        val today = (System.currentTimeMillis() / millisInDay) * millisInDay
+        val today = LocalDate.now()
 
         // Create a 5-day streak
         repeat(5) { dayOffset ->
-            database.achievementProgressQueries.upsertActivityLog(
-                date = today - (dayOffset * millisInDay),
-                chapter_count = 1,
-                episode_count = 0,
+            database.activityLogQueries.incrementChapters(
+                date = today.minusDays(dayOffset.toLong()).format(DateTimeFormatter.ISO_LOCAL_DATE),
+                level = 1,
+                count = 1,
                 last_updated = System.currentTimeMillis(),
             )
         }
@@ -189,7 +179,9 @@ class StreakAchievementCheckerTest : AchievementTestBase() {
         initialStreak shouldBe 5
 
         // Now add a gap by removing activity from yesterday
-        database.achievementProgressQueries.deleteActivityLog(today - millisInDay)
+        database.activityLogQueries.deleteActivityLog(
+            today.minusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE),
+        )
 
         val newStreak = streakChecker.getCurrentStreak()
         newStreak shouldBe 1 // Only today counts now (yesterday was removed, streak broken)
@@ -197,14 +189,14 @@ class StreakAchievementCheckerTest : AchievementTestBase() {
 
     @Test
     fun `long streak is calculated correctly`() = runTest {
-        val today = (System.currentTimeMillis() / millisInDay) * millisInDay
+        val today = LocalDate.now()
 
         // Create a 30-day streak
         repeat(30) { dayOffset ->
-            database.achievementProgressQueries.upsertActivityLog(
-                date = today - (dayOffset * millisInDay),
-                chapter_count = 1,
-                episode_count = 0,
+            database.activityLogQueries.incrementChapters(
+                date = today.minusDays(dayOffset.toLong()).format(DateTimeFormatter.ISO_LOCAL_DATE),
+                level = 1,
+                count = 1,
                 last_updated = System.currentTimeMillis(),
             )
         }

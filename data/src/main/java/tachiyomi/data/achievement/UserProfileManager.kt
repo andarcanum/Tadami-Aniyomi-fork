@@ -1,32 +1,41 @@
 package tachiyomi.data.achievement
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import logcat.LogPriority
 import logcat.logcat
 import tachiyomi.domain.achievement.model.Reward
 import tachiyomi.domain.achievement.model.RewardType
 import tachiyomi.domain.achievement.model.UserProfile
+import tachiyomi.domain.achievement.repository.UserProfileRepository
 
 /**
  * Менеджер профиля пользователя
  * Управляет XP, уровнями, званиями и наградами
- * Временно хранит профиль в памяти (сохранение в Preferences - TODO)
+ * Хранит профиль в базе данных через UserProfileRepository
  */
-class UserProfileManager() {
+class UserProfileManager(
+    private val repository: UserProfileRepository,
+) {
 
-    private val scope = kotlinx.coroutines.CoroutineScope(
-        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default,
-    )
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    private val _profile = MutableStateFlow<UserProfile>(UserProfile.createDefault())
-    val profile: Flow<UserProfile> = _profile
+    private val userId = "default"
+
+    val profile: Flow<UserProfile?> = repository.getProfile(userId)
 
     /**
      * Получить текущий профиль
      */
     suspend fun getCurrentProfile(): UserProfile {
-        return _profile.value
+        return repository.getProfileSync(userId) ?: UserProfile.createDefault().also {
+            // Инициализация профиля при первом запуске
+            repository.saveProfile(it)
+        }
     }
 
     /**
@@ -43,14 +52,14 @@ class UserProfileManager() {
         val oldLevel = currentProfile.level
         val levelUp = newLevel > oldLevel
 
-        val updatedProfile = currentProfile.copy(
+        // Обновляем только XP-related поля через специальный метод
+        repository.updateXP(
+            userId = userId,
             totalXP = newTotalXP,
-            level = newLevel,
             currentXP = calculateCurrentLevelXP(newTotalXP, newLevel),
+            level = newLevel,
             xpToNextLevel = UserProfile.getXPForLevel(newLevel + 1),
         )
-
-        _profile.value = updatedProfile
 
         if (levelUp) {
             logcat(LogPriority.INFO) {
@@ -68,12 +77,7 @@ class UserProfileManager() {
         val currentProfile = getCurrentProfile()
         if (currentProfile.titles.contains(title)) return
 
-        val updatedProfile = currentProfile.copy(
-            titles = currentProfile.titles + title,
-        )
-
-        _profile.value = updatedProfile
-
+        repository.addTitle(userId, title)
         logcat(LogPriority.INFO) { "[ACHIEVEMENTS] Title unlocked: $title" }
     }
 
@@ -84,12 +88,7 @@ class UserProfileManager() {
         val currentProfile = getCurrentProfile()
         if (currentProfile.badges.contains(badge)) return
 
-        val updatedProfile = currentProfile.copy(
-            badges = currentProfile.badges + badge,
-        )
-
-        _profile.value = updatedProfile
-
+        repository.addBadge(userId, badge)
         logcat(LogPriority.INFO) { "[ACHIEVEMENTS] Badge unlocked: $badge" }
     }
 
@@ -101,20 +100,15 @@ class UserProfileManager() {
         val currentProfile = getCurrentProfile()
         if (currentProfile.unlockedThemes.contains(themeId)) return
 
-        val updatedProfile = currentProfile.copy(
-            unlockedThemes = currentProfile.unlockedThemes + themeId,
-        )
-
-        _profile.value = updatedProfile
-
+        repository.addTheme(userId, themeId)
         logcat(LogPriority.INFO) { "[ACHIEVEMENTS] Theme unlocked: $themeId" }
     }
 
     /**
      * Получить список ID разблокированных тем
      */
-    fun getUnlockedThemes(): List<String> {
-        return _profile.value.unlockedThemes
+    suspend fun getUnlockedThemes(): List<String> {
+        return getCurrentProfile().unlockedThemes
     }
 
     /**
@@ -148,13 +142,7 @@ class UserProfileManager() {
      * Обновить количество разблокированных достижений
      */
     suspend fun updateAchievementsCount(unlocked: Int, total: Int) {
-        val currentProfile = getCurrentProfile()
-        val updatedProfile = currentProfile.copy(
-            achievementsUnlocked = unlocked,
-            totalAchievements = total,
-        )
-
-        _profile.value = updatedProfile
+        repository.updateAchievementCounts(userId, unlocked, total)
     }
 
     /**
@@ -169,10 +157,39 @@ class UserProfileManager() {
     }
 
     /**
-     * Загрузить профиль (временно загружает дефолтный профиль)
-     * TODO: Загружать из Preferences
+     * Загрузить профиль из базы данных
+     * Если профиль не существует, создается дефолтный
      */
     suspend fun loadProfile() {
-        _profile.value = UserProfile.createDefault()
+        val existingProfile = repository.getProfileSync(userId)
+        if (existingProfile == null) {
+            val defaultProfile = UserProfile.createDefault()
+            repository.saveProfile(defaultProfile)
+            logcat(LogPriority.INFO) { "[ACHIEVEMENTS] Created default profile" }
+        } else {
+            logcat(LogPriority.INFO) {
+                "[ACHIEVEMENTS] Loaded profile: level ${existingProfile.level}, XP ${existingProfile.totalXP}"
+            }
+        }
+    }
+
+    /**
+     * Восстановить профиль из бэкапа
+     * Используется при восстановлении данных
+     */
+    suspend fun restoreProfile(profile: UserProfile) {
+        repository.saveProfile(profile)
+        logcat(LogPriority.INFO) {
+            "[ACHIEVEMENTS] Profile restored: level ${profile.level}, XP ${profile.totalXP}"
+        }
+    }
+
+    /**
+     * Удалить профиль пользователя
+     * Используется для сброса данных
+     */
+    suspend fun deleteProfile() {
+        repository.deleteProfile(userId)
+        logcat(LogPriority.INFO) { "[ACHIEVEMENTS] Profile deleted" }
     }
 }
