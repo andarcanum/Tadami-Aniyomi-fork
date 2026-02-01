@@ -1,0 +1,83 @@
+-- User profile table (replaces user_stats with full UserProfile support)
+CREATE TABLE user_profile (
+    user_id TEXT NOT NULL PRIMARY KEY DEFAULT 'default',
+    username TEXT,
+    level INTEGER NOT NULL DEFAULT 1,
+    current_xp INTEGER NOT NULL DEFAULT 0,
+    xp_to_next_level INTEGER NOT NULL DEFAULT 100,
+    total_xp INTEGER NOT NULL DEFAULT 0,
+    -- Stored as JSON arrays (simple, no need for join tables)
+    titles TEXT NOT NULL DEFAULT '[]',        -- JSON array of strings
+    badges TEXT NOT NULL DEFAULT '[]',        -- JSON array of strings
+    unlocked_themes TEXT NOT NULL DEFAULT '[]', -- JSON array of strings
+    achievements_unlocked INTEGER NOT NULL DEFAULT 0,
+    total_achievements INTEGER NOT NULL DEFAULT 0,
+    join_date INTEGER NOT NULL,
+    last_updated INTEGER NOT NULL
+);
+
+getUserProfile:
+SELECT * FROM user_profile WHERE user_id = :user_id;
+
+getDefaultProfile:
+SELECT * FROM user_profile WHERE user_id = 'default';
+
+upsertProfile:
+INSERT INTO user_profile(
+    user_id, username, level, current_xp, xp_to_next_level, total_xp,
+    titles, badges, unlocked_themes,
+    achievements_unlocked, total_achievements, join_date, last_updated
+) VALUES (
+    :user_id, :username, :level, :current_xp, :xp_to_next_level, :total_xp,
+    :titles, :badges, :unlocked_themes,
+    :achievements_unlocked, :total_achievements, :join_date, :last_updated
+)
+ON CONFLICT(user_id) DO UPDATE SET
+    username = :username,
+    level = :level,
+    current_xp = :current_xp,
+    xp_to_next_level = :xp_to_next_level,
+    total_xp = :total_xp,
+    titles = :titles,
+    badges = :badges,
+    unlocked_themes = :unlocked_themes,
+    achievements_unlocked = :achievements_unlocked,
+    total_achievements = :total_achievements,
+    last_updated = :last_updated;
+
+updateXP:
+UPDATE user_profile
+SET total_xp = :total_xp,
+    current_xp = :current_xp,
+    level = :level,
+    xp_to_next_level = :xp_to_next_level,
+    last_updated = :last_updated
+WHERE user_id = :user_id;
+
+addTitle:
+UPDATE user_profile
+SET titles = :titles,
+    last_updated = :last_updated
+WHERE user_id = :user_id;
+
+addBadge:
+UPDATE user_profile
+SET badges = :badges,
+    last_updated = :last_updated
+WHERE user_id = :user_id;
+
+addTheme:
+UPDATE user_profile
+SET unlocked_themes = :unlocked_themes,
+    last_updated = :last_updated
+WHERE user_id = :user_id;
+
+updateAchievementCounts:
+UPDATE user_profile
+SET achievements_unlocked = :unlocked,
+    total_achievements = :total,
+    last_updated = :last_updated
+WHERE user_id = :user_id;
+
+deleteProfile:
+DELETE FROM user_profile WHERE user_id = :user_id;

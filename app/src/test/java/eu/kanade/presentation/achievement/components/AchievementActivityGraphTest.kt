@@ -1,7 +1,8 @@
 package eu.kanade.presentation.achievement.components
 
-import org.junit.Assert.*
-import org.junit.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import org.junit.jupiter.api.Test
 import tachiyomi.domain.achievement.model.MonthStats
 import java.time.YearMonth
 
@@ -17,16 +18,16 @@ class AchievementActivityGraphTest {
 
         // Act & Assert
         // Полная активность -> 75% (ограничение)
-        assertEquals(0.75f, calculateHeightFraction(100, maxActivity), 0.01f)
+        assertEquals(0.75f, calculateHeightFraction(100, maxActivity), absoluteTolerance = 0.01f)
 
         // Половина активности -> 50%
-        assertEquals(0.50f, calculateHeightFraction(50, maxActivity), 0.01f)
+        assertEquals(0.50f, calculateHeightFraction(50, maxActivity), absoluteTolerance = 0.01f)
 
         // Четверть активности -> 25%
-        assertEquals(0.25f, calculateHeightFraction(25, maxActivity), 0.01f)
+        assertEquals(0.25f, calculateHeightFraction(25, maxActivity), absoluteTolerance = 0.01f)
 
         // Нулевая активность -> 5% (минимум для видимости)
-        assertEquals(0.05f, calculateHeightFraction(0, maxActivity), 0.01f)
+        assertEquals(0.05f, calculateHeightFraction(0, maxActivity), absoluteTolerance = 0.01f)
     }
 
     /**
@@ -35,10 +36,10 @@ class AchievementActivityGraphTest {
     @Test
     fun `calculateHeightFraction handles edge cases`() {
         // maxActivity = 0 -> минимум
-        assertEquals(0.05f, calculateHeightFraction(0, 0), 0.01f)
+        assertEquals(0.05f, calculateHeightFraction(0, 0), absoluteTolerance = 0.01f)
 
         // Очень большая активность (1000) при maxActivity = 1000 -> 75%
-        assertEquals(0.75f, calculateHeightFraction(1000, 1000), 0.01f)
+        assertEquals(0.75f, calculateHeightFraction(1000, 1000), absoluteTolerance = 0.01f)
 
         // Малая активность (1) при большом maxActivity (1000) -> близко к 0.05f
         assertTrue(calculateHeightFraction(1, 1000) < 0.1f)
@@ -126,9 +127,9 @@ class AchievementActivityGraphTest {
         val maxActivity = 100
 
         // Любая активность >= maxActivity должна давать 0.75f
-        assertEquals(0.75f, calculateHeightFraction(100, maxActivity), 0.01f)
-        assertEquals(0.75f, calculateHeightFraction(150, maxActivity), 0.01f)
-        assertEquals(0.75f, calculateHeightFraction(200, maxActivity), 0.01f)
+        assertEquals(0.75f, calculateHeightFraction(100, maxActivity), absoluteTolerance = 0.01f)
+        assertEquals(0.75f, calculateHeightFraction(150, maxActivity), absoluteTolerance = 0.01f)
+        assertEquals(0.75f, calculateHeightFraction(200, maxActivity), absoluteTolerance = 0.01f)
     }
 
     /**
@@ -139,8 +140,8 @@ class AchievementActivityGraphTest {
         val maxActivity = 1000
 
         // Очень маленькая активность должна давать минимум 0.05f
-        assertEquals(0.05f, calculateHeightFraction(0, maxActivity), 0.01f)
-        assertEquals(0.05f, calculateHeightFraction(1, maxActivity), 0.01f)
+        assertEquals(0.05f, calculateHeightFraction(0, maxActivity), absoluteTolerance = 0.01f)
+        assertEquals(0.05f, calculateHeightFraction(1, maxActivity), absoluteTolerance = 0.01f)
     }
 
     // Helper: Приватная копия calculateHeightFraction для тестирования

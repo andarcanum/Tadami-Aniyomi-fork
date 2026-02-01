@@ -92,6 +92,8 @@ sqldelight-dialects-sql = { module = "app.cash.sqldelight:sqlite-3-38-dialect", 
 junit = "org.junit.jupiter:junit-jupiter:5.11.4"
 kotest-assertions = "io.kotest:kotest-assertions-core:5.9.1"
 mockk = "io.mockk:mockk:1.13.17"
+kotlin-test = "org.jetbrains.kotlin:kotlin-test:2.1.0"
+robolectric = "org.robolectric:robolectric:4.13"
 
 voyager-navigator = { module = "cafe.adriel.voyager:voyager-navigator", version.ref = "voyager" }
 voyager-screenmodel = { module = "cafe.adriel.voyager:voyager-screenmodel", version.ref = "voyager" }
@@ -116,4 +118,4 @@ shizuku = ["shizuku-api", "shizuku-provider"]
 sqldelight = ["sqldelight-android-driver", "sqldelight-coroutines"]
 voyager = ["voyager-navigator", "voyager-screenmodel", "voyager-tab-navigator", "voyager-transitions"]
 richtext = ["richtext-commonmark", "richtext-m3"]
-test = ["junit", "kotest-assertions", "mockk"]
+test = ["junit", "kotest-assertions", "mockk", "kotlin-test"]

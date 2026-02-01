@@ -806,4 +806,8 @@
     <string name="achievement_secret_it_was_me_dio_desc">Jojo's Bizarre Adventure в библиотеке (отсылка к JoJo)</string>
     <string name="achievement_secret_king_of_pirates_desc">1000+ глав манги (отсылка к One Piece)</string>
     <string name="achievement_secret_not_even_my_final_form_desc">9000+ очков достижений (отсылка к Dragon Ball, OVER 9000!)</string>
+
+    <!-- Backup Options -->
+    <string name="achievements">Достижения</string>
+    <string name="stats">Статистика</string>
 </resources>

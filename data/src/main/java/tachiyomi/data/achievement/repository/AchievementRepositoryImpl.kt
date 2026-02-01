@@ -75,24 +75,32 @@ class AchievementRepositoryImpl(
     }
 
     override suspend fun updateProgress(progress: AchievementProgress) {
-        database.achievementProgressQueries.update(
+        database.achievementProgressQueries.updateWithTiers(
+            achievement_id = progress.achievementId,
             progress = progress.progress.toLong(),
             max_progress = progress.maxProgress.toLong(),
             is_unlocked = if (progress.isUnlocked) 1L else 0L,
             unlocked_at = progress.unlockedAt,
             last_updated = progress.lastUpdated,
-            achievement_id = progress.achievementId,
+            current_tier = progress.currentTier.toLong(),
+            max_tier = progress.maxTier.toLong(),
+            tier_progress = progress.tierProgress.toLong(),
+            tier_max_progress = progress.tierMaxProgress.toLong(),
         )
     }
 
     override suspend fun insertOrUpdateProgress(progress: AchievementProgress) {
-        database.achievementProgressQueries.upsert(
+        database.achievementProgressQueries.upsertWithTiers(
             achievement_id = progress.achievementId,
             progress = progress.progress.toLong(),
             max_progress = progress.maxProgress.toLong(),
             is_unlocked = if (progress.isUnlocked) 1L else 0L,
             unlocked_at = progress.unlockedAt,
             last_updated = progress.lastUpdated,
+            current_tier = progress.currentTier.toLong(),
+            max_tier = progress.maxTier.toLong(),
+            tier_progress = progress.tierProgress.toLong(),
+            tier_max_progress = progress.tierMaxProgress.toLong(),
         )
     }
 
@@ -130,6 +138,11 @@ class AchievementRepositoryImpl(
             isUnlocked = is_unlocked == 1L,
             unlockedAt = unlocked_at,
             lastUpdated = last_updated,
+            // Tier support
+            currentTier = current_tier.toInt(),
+            maxTier = max_tier.toInt(),
+            tierProgress = tier_progress.toInt(),
+            tierMaxProgress = tier_max_progress.toInt(),
         )
     }
 }

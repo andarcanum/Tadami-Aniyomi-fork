@@ -302,6 +302,10 @@ dependencies {
     implementation(libs.leakcanary.plumber)
 
     testImplementation(kotlinx.coroutines.test)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.sqldelight.sqlite.driver)
+    testImplementation("androidx.test:core:1.6.1")
+    testImplementation("androidx.test.ext:junit:1.2.1")
 
     // mpv-android
     implementation(aniyomilibs.aniyomi.mpv)

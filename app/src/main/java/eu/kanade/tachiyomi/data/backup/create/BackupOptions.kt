@@ -18,6 +18,8 @@ data class BackupOptions(
     val sourceSettings: Boolean = true,
     val privateSettings: Boolean = false,
     val extensions: Boolean = false,
+    val achievements: Boolean = true,
+    val stats: Boolean = true,
 ) {
 
     fun asBooleanArray() = booleanArrayOf(
@@ -33,6 +35,8 @@ data class BackupOptions(
         sourceSettings,
         privateSettings,
         extensions,
+        achievements,
+        stats,
     )
 
     fun canCreate() = libraryEntries ||
@@ -40,7 +44,9 @@ data class BackupOptions(
         appSettings ||
         extensionRepoSettings ||
         customButton ||
-        sourceSettings
+        sourceSettings ||
+        achievements ||
+        stats
 
     companion object {
         val libraryOptions = persistentListOf(
@@ -117,19 +123,34 @@ data class BackupOptions(
             ),
         )
 
+        val achievementsOptions = persistentListOf(
+            Entry(
+                label = AYMR.strings.achievements,
+                getter = BackupOptions::achievements,
+                setter = { options, enabled -> options.copy(achievements = enabled) },
+            ),
+            Entry(
+                label = AYMR.strings.stats,
+                getter = BackupOptions::stats,
+                setter = { options, enabled -> options.copy(stats = enabled) },
+            ),
+        )
+
         fun fromBooleanArray(array: BooleanArray) = BackupOptions(
-            libraryEntries = array[0],
-            categories = array[1],
-            chapters = array[2],
-            tracking = array[3],
-            history = array[4],
-            readEntries = array[5],
-            appSettings = array[6],
-            extensionRepoSettings = array[7],
-            customButton = array[8],
-            sourceSettings = array[9],
-            privateSettings = array[10],
-            extensions = array[11],
+            libraryEntries = array.getOrNull(0) ?: true,
+            categories = array.getOrNull(1) ?: true,
+            chapters = array.getOrNull(2) ?: true,
+            tracking = array.getOrNull(3) ?: true,
+            history = array.getOrNull(4) ?: true,
+            readEntries = array.getOrNull(5) ?: true,
+            appSettings = array.getOrNull(6) ?: true,
+            extensionRepoSettings = array.getOrNull(7) ?: true,
+            customButton = array.getOrNull(8) ?: true,
+            sourceSettings = array.getOrNull(9) ?: true,
+            privateSettings = array.getOrNull(10) ?: false,
+            extensions = array.getOrNull(11) ?: false,
+            achievements = array.getOrNull(12) ?: true,
+            stats = array.getOrNull(13) ?: true,
         )
     }
 

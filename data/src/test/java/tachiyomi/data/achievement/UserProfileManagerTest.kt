@@ -1,19 +1,82 @@
 package tachiyomi.data.achievement
 
+import io.mockk.coEvery
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.achievement.model.Reward
 import tachiyomi.domain.achievement.model.RewardType
 import tachiyomi.domain.achievement.model.UserProfile
+import tachiyomi.domain.achievement.repository.UserProfileRepository
 
 class UserProfileManagerTest {
 
     private lateinit var userProfileManager: UserProfileManager
+    private lateinit var mockRepository: UserProfileRepository
 
     @BeforeEach
     fun setup() {
-        userProfileManager = UserProfileManager()
+        var currentProfile = UserProfile.createDefault()
+
+        mockRepository = mockk(relaxed = true) {
+            coEvery { getProfileSync(any()) } answers { currentProfile }
+            coEvery { saveProfile(any()) } answers { currentProfile = firstArg() }
+
+            // Mock updateXP - вызывается из addXP()
+            coEvery { updateXP(any(), any(), any(), any(), any()) } answers {
+                val totalXP = secondArg<Int>()
+                val currentXP = thirdArg<Int>()
+                val level = arg<Int>(3)
+                val xpToNextLevel = arg<Int>(4)
+                currentProfile = currentProfile.copy(
+                    totalXP = totalXP,
+                    currentXP = currentXP,
+                    level = level,
+                    xpToNextLevel = xpToNextLevel
+                )
+            }
+
+            // Mock addTitle - вызывается из addTitle()
+            coEvery { addTitle(any(), any()) } answers {
+                val title = secondArg<String>()
+                currentProfile = currentProfile.copy(
+                    titles = currentProfile.titles + title
+                )
+            }
+
+            // Mock addBadge - вызывается из addBadge()
+            coEvery { addBadge(any(), any()) } answers {
+                val badge = secondArg<String>()
+                currentProfile = currentProfile.copy(
+                    badges = currentProfile.badges + badge
+                )
+            }
+
+            // Mock addTheme - вызывается из unlockTheme()
+            coEvery { addTheme(any(), any()) } answers {
+                val themeId = secondArg<String>()
+                currentProfile = currentProfile.copy(
+                    unlockedThemes = currentProfile.unlockedThemes + themeId
+                )
+            }
+
+            // Mock updateAchievementCounts - вызывается из updateAchievementsCount()
+            coEvery { updateAchievementCounts(any(), any(), any()) } answers {
+                val unlocked = secondArg<Int>()
+                val total = thirdArg<Int>()
+                currentProfile = currentProfile.copy(
+                    achievementsUnlocked = unlocked,
+                    totalAchievements = total
+                )
+            }
+
+            every { getProfile(any()) } returns flowOf(currentProfile)
+        }
+
+        userProfileManager = UserProfileManager(mockRepository)
     }
 
     @Test
