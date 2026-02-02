@@ -217,7 +217,9 @@ class ActivityDataRepositoryImpl(
     ): Pair<ActivityType, Int> {
         return when {
             achievementsUnlocked > 0 -> ActivityType.READING to 4 // Highlighting achievements with max level
-            episodesWatched > 0 -> ActivityType.WATCHING to calculateActivityLevel(episodesWatched, ActivityType.WATCHING)
+            episodesWatched > 0 ->
+                ActivityType.WATCHING to
+                    calculateActivityLevel(episodesWatched, ActivityType.WATCHING)
             chaptersRead > 0 -> ActivityType.READING to calculateActivityLevel(chaptersRead, ActivityType.READING)
             appOpens > 0 -> ActivityType.APP_OPEN to 1
             else -> ActivityType.APP_OPEN to 0

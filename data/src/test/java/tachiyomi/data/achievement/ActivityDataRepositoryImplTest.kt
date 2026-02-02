@@ -246,14 +246,14 @@ class ActivityDataRepositoryImplTest {
 
         // Test different activity levels
         val testCases = listOf(
-            Triple(1, 0, 1),   // 1 chapter = level 1
-            Triple(7, 0, 2),   // 7 chapters = level 2
-            Triple(15, 0, 3),  // 15 chapters = level 3
-            Triple(25, 0, 4),  // 25 chapters = level 4
-            Triple(0, 1, 1),   // 1 episode = level 1
-            Triple(0, 4, 2),   // 4 episodes = level 2
-            Triple(0, 7, 3),   // 7 episodes = level 3
-            Triple(0, 12, 4),  // 12 episodes = level 4
+            Triple(1, 0, 1), // 1 chapter = level 1
+            Triple(7, 0, 2), // 7 chapters = level 2
+            Triple(15, 0, 3), // 15 chapters = level 3
+            Triple(25, 0, 4), // 25 chapters = level 4
+            Triple(0, 1, 1), // 1 episode = level 1
+            Triple(0, 4, 2), // 4 episodes = level 2
+            Triple(0, 7, 3), // 7 episodes = level 3
+            Triple(0, 12, 4), // 12 episodes = level 4
         )
 
         testCases.forEachIndexed { index, (chapters, episodes, expectedLevel) ->
