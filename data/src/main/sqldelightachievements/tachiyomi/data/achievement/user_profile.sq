@@ -45,6 +45,17 @@ ON CONFLICT(user_id) DO UPDATE SET
     total_achievements = :total_achievements,
     last_updated = :last_updated;
 
+insertProfileIfNotExists:
+INSERT OR IGNORE INTO user_profile(
+    user_id, username, level, current_xp, xp_to_next_level, total_xp,
+    titles, badges, unlocked_themes,
+    achievements_unlocked, total_achievements, join_date, last_updated
+) VALUES (
+    :user_id, :username, :level, :current_xp, :xp_to_next_level, :total_xp,
+    :titles, :badges, :unlocked_themes,
+    :achievements_unlocked, :total_achievements, :join_date, :last_updated
+);
+
 updateXP:
 UPDATE user_profile
 SET total_xp = :total_xp,

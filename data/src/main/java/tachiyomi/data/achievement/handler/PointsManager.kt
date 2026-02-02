@@ -21,8 +21,8 @@ class PointsManager(
     }
 
     private fun initializeStats() {
-        // Create default profile if doesn't exist
-        database.userProfileQueries.upsertProfile(
+        // Create default profile ONLY if doesn't exist (won't overwrite restored data)
+        database.userProfileQueries.insertProfileIfNotExists(
             user_id = "default",
             username = null,
             level = 1,
