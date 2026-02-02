@@ -599,6 +599,71 @@
     <string name="aurora_greeting_anime_time">Время аниме!</string>
     <string name="aurora_greeting_main_character">Момент главного героя</string>
 
+    <!-- Streak-based Greetings -->
+    <string name="aurora_greeting_streak_continues">Стрик продолжается! 🔥</string>
+    <string name="aurora_greeting_streak_7_days">7 дней подряд - легенда!</string>
+    <string name="aurora_greeting_streak_loyal">Верный фанат!</string>
+    <string name="aurora_greeting_streak_unstoppable">Неудержимая серия!</string>
+    <string name="aurora_greeting_streak_daily">Не пропускаешь ни дня~</string>
+
+    <!-- Achievement-based Greetings -->
+    <string name="aurora_greeting_achievement_hunter">Охотник за ачивками!</string>
+    <string name="aurora_greeting_achievement_10">10 достижений - впечатляет!</string>
+    <string name="aurora_greeting_achievement_collector">Коллекционер трофеев~</string>
+    <string name="aurora_greeting_achievement_master">Мастер достижений!</string>
+    <string name="aurora_greeting_achievement_50">50+ ачивок - вау!</string>
+    <string name="aurora_greeting_achievement_legendary">Легендарный статус!</string>
+
+    <!-- Statistics-based Greetings -->
+    <string name="aurora_greeting_stats_100_eps">100 серий позади!</string>
+    <string name="aurora_greeting_stats_marathoner">Марафонщик года!</string>
+    <string name="aurora_greeting_stats_500_eps">500+ эпизодов - ух ты!</string>
+    <string name="aurora_greeting_stats_beginner_critic">Начинающий критик</string>
+    <string name="aurora_greeting_stats_expert">Эксперт по аниме</string>
+    <string name="aurora_greeting_stats_1000_eps">1000+ серий - монстр!</string>
+    <string name="aurora_greeting_stats_pro_viewer">Профессиональный зритель</string>
+    <string name="aurora_greeting_stats_impressive">Впечатляющий опыт</string>
+
+    <!-- Library-based Greetings -->
+    <string name="aurora_greeting_library_impressive">Впечатляющая коллекция!</string>
+    <string name="aurora_greeting_library_50">50+ тайтлов - вау!</string>
+    <string name="aurora_greeting_library_growing">Библиотека растёт~</string>
+    <string name="aurora_greeting_library_true_collector">Настоящий коллекционер</string>
+    <string name="aurora_greeting_library_100">100+ аниме - вау!</string>
+
+    <!-- Weekend/Special Days Greetings -->
+    <string name="aurora_greeting_weekend_time">Выходные = аниме-время!</string>
+    <string name="aurora_greeting_saturday_perfect">Идеальная суббота</string>
+    <string name="aurora_greeting_sunday_marathon">Воскресенье для марафона</string>
+    <string name="aurora_greeting_weekend_relax">Отдыхаем с аниме</string>
+
+    <!-- Binge Session Greetings -->
+    <string name="aurora_greeting_binge_real_marathon">Настоящий марафон!</string>
+    <string name="aurora_greeting_binge_3_hours">3+ часа - легенда!</string>
+    <string name="aurora_greeting_binge_master">Биндж-мастер!</string>
+
+    <!-- First Time / Milestones Greetings -->
+    <string name="aurora_greeting_welcome_family">Добро пожаловать в семью!</string>
+    <string name="aurora_greeting_first_time">Первый раз здесь?</string>
+
+    <!-- Extended Morning Greetings -->
+    <string name="aurora_greeting_morning_early_bird">Ранняя пташка~</string>
+    <string name="aurora_greeting_morning_fresh">Свежее утро!</string>
+    <string name="aurora_greeting_morning_energetic">Бодрое начало дня</string>
+
+    <!-- Extended Afternoon Greetings -->
+    <string name="aurora_greeting_afternoon_break">Перерыв на аниме</string>
+    <string name="aurora_greeting_afternoon_relax">Дневной отдых</string>
+
+    <!-- Extended Evening Greetings -->
+    <string name="aurora_greeting_evening_relax_time">Вечер для расслабления</string>
+    <string name="aurora_greeting_evening_sunset">Закатный вайб</string>
+    <string name="aurora_greeting_evening_after_work">После работы/учёбы</string>
+
+    <!-- Extended Night Greetings -->
+    <string name="aurora_greeting_night_midnight">Полуночный сеанс</string>
+    <string name="aurora_greeting_night_starry">Звёздная ночь с аниме</string>
+
     <!-- Browse Screen -->
     <string name="aurora_browse">Обзор</string>
     <string name="aurora_discover_sources">Открыть источники</string>

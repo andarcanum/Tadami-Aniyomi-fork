@@ -31,6 +31,9 @@ class HomeHubScreenModel(
     private val userProfilePreferences: UserProfilePreferences = Injekt.get(),
     private val sourcePreferences: SourcePreferences = Injekt.get(),
     private val sourceManager: AnimeSourceManager = Injekt.get(),
+    private val userProfileManager: tachiyomi.data.achievement.UserProfileManager = Injekt.get(),
+    private val streakChecker: tachiyomi.data.achievement.handler.checkers.StreakAchievementChecker = Injekt.get(),
+    private val activityDataRepository: tachiyomi.domain.achievement.repository.ActivityDataRepository = Injekt.get(),
 ) : StateScreenModel<HomeHubScreenModel.State>(State()) {
 
     private val fastCache = HomeHubFastCache(Injekt.get<android.app.Application>())
@@ -82,25 +85,44 @@ class HomeHubScreenModel(
     init {
         val cached = fastCache.load()
         val lastOpened = userProfilePreferences.lastOpenedTime().get()
-        val greeting = GreetingProvider.getGreeting(lastOpened)
 
-        userProfilePreferences.lastOpenedTime().set(System.currentTimeMillis())
+        // Собираем статистику для умного приветствия
+        screenModelScope.launchIO {
+            val profile = userProfileManager.getCurrentProfile()
+            val currentStreak = streakChecker.getCurrentStreak()
+            val monthStats = activityDataRepository.getCurrentMonthStats()
+            val libraryAnime = getLibraryAnime.await()
 
-        mutableState.update {
-            it.copy(
-                hero = cached.hero?.toHeroData(),
-                history = cached.history.map { h -> h.toHistoryData() },
-                recommendations = cached.recommendations.map { r -> r.toRecommendationData() },
-                userName = cached.userName,
-                userAvatar = cached.userAvatar,
-                greeting = greeting,
-                isInitialized = cached.isInitialized,
-                isLoading = false,
+            val achievementCount = profile.achievementsUnlocked
+            val episodesWatched = monthStats.episodesWatched
+            val librarySize = libraryAnime.size
+            val isFirstTime = lastOpened == 0L
+
+            val greeting = GreetingProvider.getGreeting(
+                lastOpenedTime = lastOpened,
+                achievementCount = achievementCount,
+                episodesWatched = episodesWatched,
+                librarySize = librarySize,
+                currentStreak = currentStreak,
+                isFirstTime = isFirstTime,
             )
-        }
 
-        cached.hero?.let { hero ->
-            screenModelScope.launchIO {
+            userProfilePreferences.lastOpenedTime().set(System.currentTimeMillis())
+
+            mutableState.update {
+                it.copy(
+                    hero = cached.hero?.toHeroData(),
+                    history = cached.history.map { h -> h.toHistoryData() },
+                    recommendations = cached.recommendations.map { r -> r.toRecommendationData() },
+                    userName = cached.userName,
+                    userAvatar = cached.userAvatar,
+                    greeting = greeting,
+                    isInitialized = cached.isInitialized,
+                    isLoading = false,
+                )
+            }
+
+            cached.hero?.let { hero ->
                 loadHeroEpisode(hero.animeId, hero.episodeId)
             }
         }
