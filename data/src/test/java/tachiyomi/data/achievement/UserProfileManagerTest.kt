@@ -35,7 +35,7 @@ class UserProfileManagerTest {
                     totalXP = totalXP,
                     currentXP = currentXP,
                     level = level,
-                    xpToNextLevel = xpToNextLevel
+                    xpToNextLevel = xpToNextLevel,
                 )
             }
 
@@ -43,7 +43,7 @@ class UserProfileManagerTest {
             coEvery { addTitle(any(), any()) } answers {
                 val title = secondArg<String>()
                 currentProfile = currentProfile.copy(
-                    titles = currentProfile.titles + title
+                    titles = currentProfile.titles + title,
                 )
             }
 
@@ -51,7 +51,7 @@ class UserProfileManagerTest {
             coEvery { addBadge(any(), any()) } answers {
                 val badge = secondArg<String>()
                 currentProfile = currentProfile.copy(
-                    badges = currentProfile.badges + badge
+                    badges = currentProfile.badges + badge,
                 )
             }
 
@@ -59,7 +59,7 @@ class UserProfileManagerTest {
             coEvery { addTheme(any(), any()) } answers {
                 val themeId = secondArg<String>()
                 currentProfile = currentProfile.copy(
-                    unlockedThemes = currentProfile.unlockedThemes + themeId
+                    unlockedThemes = currentProfile.unlockedThemes + themeId,
                 )
             }
 
@@ -69,7 +69,7 @@ class UserProfileManagerTest {
                 val total = thirdArg<Int>()
                 currentProfile = currentProfile.copy(
                     achievementsUnlocked = unlocked,
-                    totalAchievements = total
+                    totalAchievements = total,
                 )
             }
 

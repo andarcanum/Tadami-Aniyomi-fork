@@ -74,7 +74,6 @@ class AnimeHistoryRepositoryImpl(
                     historyUpdate.seenAt,
                 )
             }
-
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, throwable = e)
         }

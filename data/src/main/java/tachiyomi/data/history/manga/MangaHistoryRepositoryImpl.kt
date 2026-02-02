@@ -68,7 +68,6 @@ class MangaHistoryRepositoryImpl(
                     historyUpdate.sessionReadDuration,
                 )
             }
-
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, throwable = e)
         }

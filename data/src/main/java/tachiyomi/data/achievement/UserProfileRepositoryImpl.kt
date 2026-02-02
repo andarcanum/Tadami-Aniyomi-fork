@@ -120,7 +120,9 @@ class UserProfileRepositoryImpl(
             totalXP = total_xp.toInt(),
             titles = runCatching { json.decodeFromString<List<String>>(titles) }.getOrDefault(emptyList()),
             badges = runCatching { json.decodeFromString<List<String>>(badges) }.getOrDefault(emptyList()),
-            unlockedThemes = runCatching { json.decodeFromString<List<String>>(unlocked_themes) }.getOrDefault(emptyList()),
+            unlockedThemes = runCatching {
+                json.decodeFromString<List<String>>(unlocked_themes)
+            }.getOrDefault(emptyList()),
             achievementsUnlocked = achievements_unlocked.toInt(),
             totalAchievements = total_achievements.toInt(),
             joinDate = join_date,
