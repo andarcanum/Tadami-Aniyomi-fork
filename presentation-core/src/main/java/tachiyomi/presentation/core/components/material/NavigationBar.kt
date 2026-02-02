@@ -33,7 +33,7 @@ fun NavigationBar(
     androidx.compose.material3.Surface(
         color = containerColor,
         contentColor = contentColor,
-        tonalElevation = tonalElevation,
+        tonalElevation = if (containerColor.alpha < 1f) 0.dp else tonalElevation,
         modifier = modifier,
     ) {
         Row(
