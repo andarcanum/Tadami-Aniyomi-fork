@@ -20,6 +20,7 @@ tasks_error.log
 
 # Configuration files
 local.properties
+.env
 
 # macOS specific files
 .DS_Store
