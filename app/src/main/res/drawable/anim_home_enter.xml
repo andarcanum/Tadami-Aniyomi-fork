@@ -7,79 +7,21 @@
             android:height="24dp"
             android:viewportWidth="24"
             android:viewportHeight="24">
-            <group
-                android:name="group_outlined"
-                android:pivotX="12"
-                android:pivotY="12">
-                <path
-                    android:name="path_outlined"
-                    android:fillColor="#000000"
-                    android:pathData="M12,5.69L17,10.19V18H15V12H9V18H7V10.19L12,5.69M12,3L2,12H5V20H11V14H13V20H19V12H22L12,3Z" />
-            </group>
-            <group
-                android:name="group_filled"
-                android:pivotX="12"
-                android:pivotY="12"
-                android:alpha="0">
-                <path
-                    android:name="path_filled"
-                    android:fillColor="#000000"
-                    android:pathData="M10,20V14H14V20H19V12H22L12,3L2,12H5V20H10Z" />
-            </group>
+            <path
+                android:name="home"
+                android:fillColor="#000000"
+                android:pathData="M12,5.69 L17,10.19 V18 H15 V12 H9 V18 H7 V10.19 L12,5.69 M12,3 L2,12 H5 V20 H11 V14 H13 V20 H19 V12 H22 L12,3 Z" />
         </vector>
     </aapt:attr>
-    <target android:name="group_outlined">
+    <target android:name="home">
         <aapt:attr name="android:animation">
-            <set>
-                <objectAnimator
-                    android:duration="300"
-                    android:interpolator="@android:interpolator/fast_out_slow_in"
-                    android:propertyName="alpha"
-                    android:valueFrom="1"
-                    android:valueTo="0"
-                    android:valueType="floatType" />
-                <objectAnimator
-                    android:duration="300"
-                    android:interpolator="@android:interpolator/fast_out_slow_in"
-                    android:propertyName="scaleX"
-                    android:valueFrom="1"
-                    android:valueTo="0.8"
-                    android:valueType="floatType" />
-                <objectAnimator
-                    android:duration="300"
-                    android:interpolator="@android:interpolator/fast_out_slow_in"
-                    android:propertyName="scaleY"
-                    android:valueFrom="1"
-                    android:valueTo="0.8"
-                    android:valueType="floatType" />
-            </set>
-        </aapt:attr>
-    </target>
-    <target android:name="group_filled">
-        <aapt:attr name="android:animation">
-            <set>
-                <objectAnimator
-                    android:duration="300"
-                    android:interpolator="@android:interpolator/fast_out_slow_in"
-                    android:propertyName="alpha"
-                    android:valueFrom="0"
-                    android:valueTo="1"
-                    android:valueType="floatType" />
-                <objectAnimator
-                    android:duration="300"
-                    android:interpolator="@android:interpolator/fast_out_slow_in"
-                    android:propertyName="scaleX"
-                    android:valueFrom="0.8"
-                    android:valueTo="1"
-                    android:valueType="floatType" />
-                <objectAnimator
-                    android:duration="300"
-                    android:interpolator="@android:interpolator/fast_out_slow_in"
-                    android:propertyName="scaleY"
-                    android:valueFrom="0.8"
-                    android:valueTo="1"
-                    android:valueType="floatType" />
-            </set>
+            <objectAnimator
+                android:duration="300"
+                android:interpolator="@android:interpolator/fast_out_slow_in"
+                android:propertyName="pathData"
+                android:valueFrom="M12,5.69 L17,10.19 V18 H15 V12 H9 V18 H7 V10.19 L12,5.69 M12,3 L2,12 H5 V20 H11 V14 H13 V20 H19 V12 H22 L12,3 Z"
+                android:valueTo="M12,12 L12,12 V12 H12 V12 H12 V12 H12 V12 L12,12 M12,3 L2,12 H5 V20 H10 V14 H14 V20 H19 V12 H22 L12,3 Z"
+                android:valueType="pathType" />
         </aapt:attr>
     </target>
 </animated-vector>

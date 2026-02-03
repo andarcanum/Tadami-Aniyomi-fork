@@ -145,13 +145,11 @@ object HomeHubTab : Tab {
             val title = stringResource(AYMR.strings.aurora_home)
             val isSelected = LocalTabNavigator.current.current is HomeHubTab
             val image = AnimatedImageVector.animatedVectorResource(R.drawable.anim_home_enter)
-            return remember(isSelected) {
-                TabOptions(
-                    index = 0u,
-                    title = title,
-                    icon = rememberAnimatedVectorPainter(image, isSelected),
-                )
-            }
+            return TabOptions(
+                index = 0u,
+                title = title,
+                icon = rememberAnimatedVectorPainter(image, isSelected),
+            )
         }
 
     @Composable
