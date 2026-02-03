@@ -21,3 +21,8 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [x] **Track: Analyze and fix achievement logic, ensuring alignment with definitions through unit testing.**
   *Link: [./tracks/fix_achievement_logic_20260130/](./tracks/fix_achievement_logic_20260130/)*
+
+---
+
+- [x] **Track: Redesign the Home icon in the navigation bar to match the style of other icons (Browse, Updates, History) and add a 'Filled vs Outlined' animation when active/inactive.**
+  *Link: [./tracks/update_home_icon_20260203/](./tracks/update_home_icon_20260203/)*
