@@ -506,11 +506,22 @@ private fun HomeHubScreen(
     val recommendations = state.recommendations.filter { matchesQuery(it.title) }
     val showWelcome = state.showWelcome && !isFiltering
 
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsTopHeight
+
+// ...
+
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = contentPadding,
     ) {
+        // Status bar spacer
+        item(key = "status_bar_spacer") {
+            Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+        }
+
         // Inline Header with avatar, username, and tabs
         item(key = "inline_header") {
             Column(
