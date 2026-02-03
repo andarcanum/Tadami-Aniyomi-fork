@@ -199,8 +199,12 @@ class AchievementHandler(
             .filter {
                 it.type == AchievementType.EVENT &&
                     (
-                        it.id.contains("time") || it.id.contains("owl") || it.id.contains("lark") ||
-                            it.id.contains("morning") || it.id.contains("night") || it.id.contains("early_bird")
+                        it.id.contains("time") ||
+                            it.id.contains("owl") ||
+                            it.id.contains("lark") ||
+                            it.id.contains("morning") ||
+                            it.id.contains("night") ||
+                            it.id.contains("early_bird")
                         )
             }
 
@@ -218,9 +222,12 @@ class AchievementHandler(
             .filter {
                 it.type == AchievementType.EVENT &&
                     (
-                        it.id.contains("feature") || it.id.contains("download") ||
-                            it.id.contains("search") || it.id.contains("backup") ||
-                            it.id.contains("filter") || it.id.contains("collector") ||
+                        it.id.contains("feature") ||
+                            it.id.contains("download") ||
+                            it.id.contains("search") ||
+                            it.id.contains("backup") ||
+                            it.id.contains("filter") ||
+                            it.id.contains("collector") ||
                             it.id.contains("explorer")
                         )
             }

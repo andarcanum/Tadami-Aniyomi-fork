@@ -25,11 +25,11 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tachiyomi.core.common.preference.toggle
+import tachiyomi.data.achievement.handler.AchievementHandler
+import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.domain.entries.manga.interactor.GetManga
 import tachiyomi.domain.entries.manga.interactor.NetworkToLocalManga
 import tachiyomi.domain.entries.manga.model.Manga
-import tachiyomi.data.achievement.handler.AchievementHandler
-import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.domain.source.manga.service.MangaSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get

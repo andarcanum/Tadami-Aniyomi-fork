@@ -1,10 +1,10 @@
 package eu.kanade.presentation.achievement.components
 
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.achievement.model.MonthStats
 import java.time.YearMonth
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class AchievementActivityGraphTest {
 
@@ -52,7 +52,7 @@ class AchievementActivityGraphTest {
     fun `graph updates when activity data changes`() {
         // Arrange
         val initialStats = listOf(
-            YearMonth.of(2024, 1) to MonthStats(10, 5, 0, 0),  // totalActivity = 15
+            YearMonth.of(2024, 1) to MonthStats(10, 5, 0, 0), // totalActivity = 15
             YearMonth.of(2024, 2) to MonthStats(20, 10, 0, 0), // totalActivity = 30
         )
 

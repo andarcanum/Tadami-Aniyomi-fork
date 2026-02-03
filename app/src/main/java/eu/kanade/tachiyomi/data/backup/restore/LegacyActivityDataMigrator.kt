@@ -97,8 +97,11 @@ class LegacyActivityDataMigrator(
                     val durationMs = prefs.getLong(KEY_PREFIX_DURATION + dateStr, 0L)
 
                     // Skip empty records (all zeros)
-                    if (chaptersRead == 0 && episodesWatched == 0 && appOpens == 0 &&
-                        achievementsUnlocked == 0 && durationMs == 0L
+                    if (chaptersRead == 0 &&
+                        episodesWatched == 0 &&
+                        appOpens == 0 &&
+                        achievementsUnlocked == 0 &&
+                        durationMs == 0L
                     ) {
                         return@forEach
                     }

@@ -95,7 +95,7 @@ data class AuroraColors(
             val effectiveSurface = if (isDark && isAmoled) {
                 Color(0xFF0C0C0C)
             } else {
-                effectiveBackground  // Используем тот же цвет, что и background для блендинга
+                effectiveBackground // Используем тот же цвет, что и background для блендинга
             }
 
             // Generate gradient colors based on theme's primary color

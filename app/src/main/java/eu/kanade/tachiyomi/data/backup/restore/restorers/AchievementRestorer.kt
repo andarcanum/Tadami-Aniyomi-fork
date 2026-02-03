@@ -7,7 +7,6 @@ import eu.kanade.tachiyomi.data.backup.models.BackupUserProfile
 import kotlinx.coroutines.flow.firstOrNull
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.UserProfileManager
-import tachiyomi.domain.achievement.model.AchievementProgress
 import tachiyomi.domain.achievement.repository.AchievementRepository
 import tachiyomi.domain.achievement.repository.ActivityDataRepository
 import uy.kohesive.injekt.Injekt
@@ -30,7 +29,11 @@ class AchievementRestorer(
         backupActivityLog: List<BackupDayActivity>,
         backupStats: BackupStats? = null,
     ) {
-        if (backupAchievements.isEmpty() && backupUserProfile == null && backupActivityLog.isEmpty() && backupStats == null) {
+        if (backupAchievements.isEmpty() &&
+            backupUserProfile == null &&
+            backupActivityLog.isEmpty() &&
+            backupStats == null
+        ) {
             logcat { "[BACKUP] No achievement data to restore" }
             return
         }
@@ -109,7 +112,9 @@ class AchievementRestorer(
             if (currentProfile == null) {
                 // No existing profile - restore backup as-is
                 userProfileRepository.saveProfile(backupProfile)
-                logcat { "[BACKUP] User profile restored (new): level ${backupProfile.level}, XP ${backupProfile.totalXP}" }
+                logcat {
+                    "[BACKUP] User profile restored (new): level ${backupProfile.level}, XP ${backupProfile.totalXP}"
+                }
                 return
             }
 
@@ -140,7 +145,9 @@ class AchievementRestorer(
 
             // Save merged profile directly to database
             userProfileRepository.saveProfile(mergedProfile)
-            logcat { "[BACKUP] User profile restored (merged): level ${mergedProfile.level}, XP ${mergedProfile.totalXP}" }
+            logcat {
+                "[BACKUP] User profile restored (merged): level ${mergedProfile.level}, XP ${mergedProfile.totalXP}"
+            }
         } catch (e: Exception) {
             logcat(throwable = e) { "[BACKUP] Error restoring user profile" }
         }

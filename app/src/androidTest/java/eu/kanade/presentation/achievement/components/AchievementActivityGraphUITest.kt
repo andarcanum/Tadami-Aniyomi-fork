@@ -1,7 +1,15 @@
 package eu.kanade.presentation.achievement.components
 
-import androidx.compose.ui.test.*
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.fetchSemanticsNodes
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
 import org.junit.Rule
 import org.junit.Test
 import tachiyomi.domain.achievement.model.MonthStats
@@ -126,7 +134,7 @@ class AchievementActivityGraphUITest {
         // Assert: На первой странице должно быть 6 столбцов (январь-июнь)
         val firstPageBars = composeTestRule.onAllNodesWithContentDescription(
             "Activity bar for",
-            substring = true
+            substring = true,
         )
 
         // Проверяем что есть столбцы (точное количество зависит от реализации semantics)

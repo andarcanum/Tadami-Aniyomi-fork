@@ -69,7 +69,8 @@ enum class TierLevel(val displayName: String, val level: Int) {
     PLATINUM("Платина", 4),
     DIAMOND("Алмаз", 5),
     MASTER("Мастер", 6),
-    GRANDMASTER("Грандмастер", 7);
+    GRANDMASTER("Грандмастер", 7),
+    ;
 
     companion object {
         fun fromLevel(level: Int): TierLevel? = entries.find { it.level == level }

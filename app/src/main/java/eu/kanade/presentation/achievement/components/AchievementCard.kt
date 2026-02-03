@@ -25,8 +25,6 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -145,106 +143,119 @@ fun AchievementCard(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 // Header row: Icon, Title, Points with checkmark in corner
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                // Checkmark in top-right corner for unlocked
-                if (isUnlocked) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .size(24.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(colors.accent.copy(alpha = 0.2f))
-                            .border(
-                                width = 1.dp,
-                                color = colors.accent.copy(alpha = 0.5f),
-                                shape = RoundedCornerShape(6.dp),
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            tint = colors.accent,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    }
-                }
-
-                Row(
+                Box(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // Achievement Icon with hexagonal shape option
-                    if (achievement.isHidden && !isUnlocked) {
-                        HiddenAchievementIcon(
-                            modifier = Modifier.size(52.dp),
-                        )
-                    } else {
-                        AchievementIcon(
-                            achievement = achievement,
-                            isUnlocked = isUnlocked,
-                            modifier = Modifier.size(52.dp),
-                            size = 52.dp,
-                            useHexagonShape = true,
-                        )
+                    // Checkmark in top-right corner for unlocked
+                    if (isUnlocked) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .size(24.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(colors.accent.copy(alpha = 0.2f))
+                                .border(
+                                    width = 1.dp,
+                                    color = colors.accent.copy(alpha = 0.5f),
+                                    shape = RoundedCornerShape(6.dp),
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = colors.accent,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
                     }
 
-                    Spacer(modifier = Modifier.width(14.dp))
-
-                    // Title and Points
-                    Column(
-                        modifier = Modifier.weight(1f),
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            text = if (achievement.isHidden && !isUnlocked) {
-                                "???"
-                            } else {
-                                achievement.title
-                            },
-                            color = if (isUnlocked) colors.textPrimary else colors.textSecondary,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = TextStyle(
-                                letterSpacing = 0.3.sp,
-                                shadow = if (isUnlocked) {
-                                    Shadow(
-                                        color = colors.accent.copy(alpha = 0.5f),
-                                        blurRadius = 8f,
-                                    )
-                                } else {
-                                    null
-                                },
-                            ),
-                        )
+                        // Achievement Icon with hexagonal shape option
+                        if (achievement.isHidden && !isUnlocked) {
+                            HiddenAchievementIcon(
+                                modifier = Modifier.size(52.dp),
+                            )
+                        } else {
+                            AchievementIcon(
+                                achievement = achievement,
+                                isUnlocked = isUnlocked,
+                                modifier = Modifier.size(52.dp),
+                                size = 52.dp,
+                                useHexagonShape = true,
+                            )
+                        }
 
-                        if (achievement.points > 0) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Star,
-                                    contentDescription = null,
-                                    tint = if (isUnlocked) colors.accent else colors.textSecondary.copy(alpha = 0.5f),
-                                    modifier = Modifier.size(14.dp),
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "${achievement.points} очков",
-                                    color = if (isUnlocked) colors.accent else colors.textSecondary.copy(alpha = 0.7f),
-                                    fontSize = 12.sp,
-                                    fontWeight = if (isUnlocked) FontWeight.SemiBold else FontWeight.Normal,
-                                    letterSpacing = 0.5.sp,
-                                )
+                        Spacer(modifier = Modifier.width(14.dp))
+
+                        // Title and Points
+                        Column(
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(
+                                text = if (achievement.isHidden && !isUnlocked) {
+                                    "???"
+                                } else {
+                                    achievement.title
+                                },
+                                color = if (isUnlocked) colors.textPrimary else colors.textSecondary,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = TextStyle(
+                                    letterSpacing = 0.3.sp,
+                                    shadow = if (isUnlocked) {
+                                        Shadow(
+                                            color = colors.accent.copy(alpha = 0.5f),
+                                            blurRadius = 8f,
+                                        )
+                                    } else {
+                                        null
+                                    },
+                                ),
+                            )
+
+                            if (achievement.points > 0) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                val pointsText = "${achievement.points} очков"
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Star,
+                                        contentDescription = null,
+                                        tint = if (isUnlocked) {
+                                            colors.accent
+                                        } else {
+                                            colors.textSecondary.copy(alpha = 0.5f)
+                                        },
+                                        modifier = Modifier.size(14.dp),
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = pointsText,
+                                        color = if (isUnlocked) {
+                                            colors.accent
+                                        } else {
+                                            colors.textSecondary.copy(alpha = 0.7f)
+                                        },
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isUnlocked) {
+                                            FontWeight.SemiBold
+                                        } else {
+                                            FontWeight.Normal
+                                        },
+                                        letterSpacing = 0.5.sp,
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
 
                 // Description
                 if (!achievement.isHidden || isUnlocked) {
@@ -318,7 +329,6 @@ private fun HiddenAchievementIcon(
         )
     }
 }
-
 
 /**
  * Holographic progress bar with animated shimmer effect

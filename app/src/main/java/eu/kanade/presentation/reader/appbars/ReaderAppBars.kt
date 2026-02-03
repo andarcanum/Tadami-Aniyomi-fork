@@ -1,11 +1,9 @@
 package eu.kanade.presentation.reader.appbars
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -21,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Bookmark
@@ -38,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
@@ -144,55 +142,55 @@ fun ReaderAppBars(
                         subtitle = chapterTitle,
                         navigateUp = navigateUp,
                         actions = {
-                        AppBarActions(
-                            actions = persistentListOf<AppBar.AppBarAction>().builder()
-                                .apply {
-                                    add(
-                                        AppBar.Action(
-                                            title = stringResource(
-                                                if (bookmarked) {
-                                                    MR.strings.action_remove_bookmark
+                            AppBarActions(
+                                actions = persistentListOf<AppBar.AppBarAction>().builder()
+                                    .apply {
+                                        add(
+                                            AppBar.Action(
+                                                title = stringResource(
+                                                    if (bookmarked) {
+                                                        MR.strings.action_remove_bookmark
+                                                    } else {
+                                                        MR.strings.action_bookmark
+                                                    },
+                                                ),
+                                                icon = if (bookmarked) {
+                                                    Icons.Outlined.Bookmark
                                                 } else {
-                                                    MR.strings.action_bookmark
+                                                    Icons.Outlined.BookmarkBorder
                                                 },
-                                            ),
-                                            icon = if (bookmarked) {
-                                                Icons.Outlined.Bookmark
-                                            } else {
-                                                Icons.Outlined.BookmarkBorder
-                                            },
-                                            onClick = onToggleBookmarked,
-                                        ),
-                                    )
-                                    onOpenInWebView?.let {
-                                        add(
-                                            AppBar.OverflowAction(
-                                                title = stringResource(MR.strings.action_open_in_web_view),
-                                                onClick = it,
+                                                onClick = onToggleBookmarked,
                                             ),
                                         )
+                                        onOpenInWebView?.let {
+                                            add(
+                                                AppBar.OverflowAction(
+                                                    title = stringResource(MR.strings.action_open_in_web_view),
+                                                    onClick = it,
+                                                ),
+                                            )
+                                        }
+                                        onOpenInBrowser?.let {
+                                            add(
+                                                AppBar.OverflowAction(
+                                                    title = stringResource(MR.strings.action_open_in_browser),
+                                                    onClick = it,
+                                                ),
+                                            )
+                                        }
+                                        onShare?.let {
+                                            add(
+                                                AppBar.OverflowAction(
+                                                    title = stringResource(MR.strings.action_share),
+                                                    onClick = it,
+                                                ),
+                                            )
+                                        }
                                     }
-                                    onOpenInBrowser?.let {
-                                        add(
-                                            AppBar.OverflowAction(
-                                                title = stringResource(MR.strings.action_open_in_browser),
-                                                onClick = it,
-                                            ),
-                                        )
-                                    }
-                                    onShare?.let {
-                                        add(
-                                            AppBar.OverflowAction(
-                                                title = stringResource(MR.strings.action_share),
-                                                onClick = it,
-                                            ),
-                                        )
-                                    }
-                                }
-                                .build(),
-                        )
-                    },
-                )
+                                    .build(),
+                            )
+                        },
+                    )
 
                     // Expandable auto-scroll controls
                     AnimatedVisibility(

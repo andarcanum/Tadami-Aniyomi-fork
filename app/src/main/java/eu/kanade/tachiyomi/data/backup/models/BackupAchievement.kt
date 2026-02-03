@@ -157,7 +157,9 @@ data class BackupReward(
 ) {
     fun toReward(): Reward {
         return Reward(
-            type = tachiyomi.domain.achievement.model.RewardType.entries.getOrElse(type) { tachiyomi.domain.achievement.model.RewardType.EXPERIENCE },
+            type = tachiyomi.domain.achievement.model.RewardType.entries.getOrElse(type) {
+                tachiyomi.domain.achievement.model.RewardType.EXPERIENCE
+            },
             id = id,
             value = value,
             title = title,

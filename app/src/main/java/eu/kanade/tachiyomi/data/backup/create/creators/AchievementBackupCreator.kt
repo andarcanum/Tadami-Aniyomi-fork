@@ -19,12 +19,8 @@ import tachiyomi.domain.entries.anime.interactor.GetLibraryAnime
 import tachiyomi.domain.entries.manga.interactor.GetLibraryManga
 import tachiyomi.domain.history.manga.interactor.GetTotalReadDuration
 import tachiyomi.domain.items.episode.interactor.GetEpisodesByAnimeId
-import tachiyomi.domain.library.anime.LibraryAnime
-import tachiyomi.domain.library.manga.LibraryManga
 import tachiyomi.domain.track.anime.interactor.GetAnimeTracks
-import tachiyomi.domain.track.anime.model.AnimeTrack
 import tachiyomi.domain.track.manga.interactor.GetMangaTracks
-import tachiyomi.domain.track.manga.model.MangaTrack
 import tachiyomi.source.local.entries.anime.isLocal
 import tachiyomi.source.local.entries.manga.isLocal
 import uy.kohesive.injekt.Injekt
@@ -236,7 +232,9 @@ class AchievementBackupCreator(
                     val service = trackerManager.get(track.trackerId) as? MangaTracker
                     service?.get10PointScore(track) ?: track.score
                 }.average()
-            } else 0.0
+            } else {
+                0.0
+            }
 
             MangaStatsData(
                 libraryCount = distinctManga.size,
@@ -285,7 +283,9 @@ class AchievementBackupCreator(
                     val service = trackerManager.get(track.trackerId) as? AnimeTracker
                     service?.get10PointScore(track) ?: track.score
                 }.average()
-            } else 0.0
+            } else {
+                0.0
+            }
 
             // Calculate total watch time
             var totalWatchTime = 0L

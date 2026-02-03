@@ -71,6 +71,18 @@ import mihon.domain.items.chapter.interactor.FilterChaptersForDownload
 import mihon.domain.items.episode.interactor.FilterEpisodesForDownload
 import mihon.domain.upcoming.anime.interactor.GetUpcomingAnime
 import mihon.domain.upcoming.manga.interactor.GetUpcomingManga
+import tachiyomi.data.achievement.ActivityDataRepositoryImpl
+import tachiyomi.data.achievement.UserProfileManager
+import tachiyomi.data.achievement.handler.AchievementCalculator
+import tachiyomi.data.achievement.handler.AchievementEventBus
+import tachiyomi.data.achievement.handler.AchievementHandler
+import tachiyomi.data.achievement.handler.FeatureUsageCollector
+import tachiyomi.data.achievement.handler.SessionManager
+import tachiyomi.data.achievement.handler.checkers.DiversityAchievementChecker
+import tachiyomi.data.achievement.handler.checkers.FeatureBasedAchievementChecker
+import tachiyomi.data.achievement.handler.checkers.StreakAchievementChecker
+import tachiyomi.data.achievement.handler.checkers.TimeBasedAchievementChecker
+import tachiyomi.data.achievement.repository.AchievementRepositoryImpl
 import tachiyomi.data.category.anime.AnimeCategoryRepositoryImpl
 import tachiyomi.data.category.manga.MangaCategoryRepositoryImpl
 import tachiyomi.data.custombutton.CustomButtonRepositoryImpl
@@ -89,17 +101,8 @@ import tachiyomi.data.track.anime.AnimeTrackRepositoryImpl
 import tachiyomi.data.track.manga.MangaTrackRepositoryImpl
 import tachiyomi.data.updates.anime.AnimeUpdatesRepositoryImpl
 import tachiyomi.data.updates.manga.MangaUpdatesRepositoryImpl
-import tachiyomi.data.achievement.repository.AchievementRepositoryImpl
-import tachiyomi.data.achievement.ActivityDataRepositoryImpl
-import tachiyomi.data.achievement.loader.AchievementLoader
-import tachiyomi.data.handlers.manga.MangaDatabaseHandler
-import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
-import tachiyomi.data.achievement.handler.AchievementEventBus
-import tachiyomi.data.achievement.handler.AchievementHandler
-import tachiyomi.data.achievement.handler.SessionManager
-import tachiyomi.data.achievement.UserProfileManager
-import tachiyomi.data.achievement.handler.PointsManager
-import tachiyomi.data.achievement.UnlockableManager
+import tachiyomi.domain.achievement.repository.AchievementRepository
+import tachiyomi.domain.achievement.repository.ActivityDataRepository
 import tachiyomi.domain.category.anime.interactor.CreateAnimeCategoryWithName
 import tachiyomi.domain.category.anime.interactor.DeleteAnimeCategory
 import tachiyomi.domain.category.anime.interactor.GetAnimeCategories
@@ -209,14 +212,6 @@ import tachiyomi.domain.updates.anime.interactor.GetAnimeUpdates
 import tachiyomi.domain.updates.anime.repository.AnimeUpdatesRepository
 import tachiyomi.domain.updates.manga.interactor.GetMangaUpdates
 import tachiyomi.domain.updates.manga.repository.MangaUpdatesRepository
-import tachiyomi.domain.achievement.repository.AchievementRepository
-import tachiyomi.domain.achievement.repository.ActivityDataRepository
-import tachiyomi.data.achievement.handler.AchievementCalculator
-import tachiyomi.data.achievement.handler.checkers.DiversityAchievementChecker
-import tachiyomi.data.achievement.handler.checkers.StreakAchievementChecker
-import tachiyomi.data.achievement.handler.checkers.TimeBasedAchievementChecker
-import tachiyomi.data.achievement.handler.checkers.FeatureBasedAchievementChecker
-import tachiyomi.data.achievement.handler.FeatureUsageCollector
 import uy.kohesive.injekt.api.InjektModule
 import uy.kohesive.injekt.api.InjektRegistrar
 import uy.kohesive.injekt.api.addFactory
@@ -436,8 +431,12 @@ class DomainModule : InjektModule {
         addFactory { TrackSelect(get(), get()) }
 
         addSingletonFactory<AchievementRepository> { AchievementRepositoryImpl(get()) }
-        addSingletonFactory<tachiyomi.domain.achievement.repository.UserProfileRepository> { tachiyomi.data.achievement.UserProfileRepositoryImpl(get()) }
-        addSingletonFactory<tachiyomi.domain.achievement.repository.ActivityDataRepository> { tachiyomi.data.achievement.ActivityDataRepositoryImpl(get()) }
+        addSingletonFactory<tachiyomi.domain.achievement.repository.UserProfileRepository> {
+            tachiyomi.data.achievement.UserProfileRepositoryImpl(get())
+        }
+        addSingletonFactory<tachiyomi.domain.achievement.repository.ActivityDataRepository> {
+            tachiyomi.data.achievement.ActivityDataRepositoryImpl(get())
+        }
         addSingletonFactory { DiversityAchievementChecker(get(), get()) }
         addSingletonFactory { StreakAchievementChecker(get()) }
         addSingletonFactory { FeatureUsageCollector(get()) }
@@ -446,8 +445,16 @@ class DomainModule : InjektModule {
         addSingletonFactory { AchievementCalculator(get(), get(), get(), get(), get(), get()) }
         addSingletonFactory { AchievementEventBus() }
         addSingletonFactory { SessionManager(get(), get()) }
-        addSingletonFactory { tachiyomi.data.achievement.UserProfileManager(get()) }
-        addSingletonFactory { AchievementHandler(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+        addSingletonFactory {
+            tachiyomi.data.achievement.UserProfileManager(get())
+        }
+        addSingletonFactory {
+            AchievementHandler(
+                get(), get(), get(), get(), get(),
+                get(), get(), get(), get(), get(),
+                get(), get(), get(), get(), get(),
+            )
+        }
         // Note: AchievementLoader, PointsManager, UnlockableManager require Context
         // They are registered in AppModule instead
     }

@@ -3,7 +3,6 @@ package eu.kanade.tachiyomi.data.backup
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
-import eu.kanade.tachiyomi.data.backup.create.BackupOptions
 import eu.kanade.tachiyomi.data.backup.create.creators.AchievementBackupCreator
 import eu.kanade.tachiyomi.data.backup.models.BackupAchievement
 import eu.kanade.tachiyomi.data.backup.models.BackupDayActivity

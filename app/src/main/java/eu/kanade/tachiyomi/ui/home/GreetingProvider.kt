@@ -247,15 +247,19 @@ object GreetingProvider {
 
     private fun checkStreakMilestone(streak: Int): StringResource? {
         return when {
-            streak >= 14 -> getDateBasedRandom(listOf(
-                AYMR.strings.aurora_greeting_streak_unstoppable,
-                AYMR.strings.aurora_greeting_streak_loyal,
-                AYMR.strings.aurora_greeting_streak_daily,
-            ))
-            streak >= 7 -> getDateBasedRandom(listOf(
-                AYMR.strings.aurora_greeting_streak_7_days,
-                AYMR.strings.aurora_greeting_streak_continues,
-            ))
+            streak >= 14 -> getDateBasedRandom(
+                listOf(
+                    AYMR.strings.aurora_greeting_streak_unstoppable,
+                    AYMR.strings.aurora_greeting_streak_loyal,
+                    AYMR.strings.aurora_greeting_streak_daily,
+                ),
+            )
+            streak >= 7 -> getDateBasedRandom(
+                listOf(
+                    AYMR.strings.aurora_greeting_streak_7_days,
+                    AYMR.strings.aurora_greeting_streak_continues,
+                ),
+            )
             streak >= 3 -> getDateBasedRandom(streakGreetings)
             else -> null
         }
@@ -264,10 +268,12 @@ object GreetingProvider {
     private fun checkAchievementMilestone(count: Int): StringResource? {
         return when {
             count >= 100 -> AYMR.strings.aurora_greeting_achievement_legendary // единственный вариант
-            count >= 50 -> getDateBasedRandom(listOf(
-                AYMR.strings.aurora_greeting_achievement_50,
-                AYMR.strings.aurora_greeting_achievement_master,
-            ))
+            count >= 50 -> getDateBasedRandom(
+                listOf(
+                    AYMR.strings.aurora_greeting_achievement_50,
+                    AYMR.strings.aurora_greeting_achievement_master,
+                ),
+            )
             count >= 10 -> getDateBasedRandom(achievementGreetings)
             else -> null
         }
@@ -275,14 +281,18 @@ object GreetingProvider {
 
     private fun checkStatsMilestone(episodes: Int): StringResource? {
         return when {
-            episodes >= 1000 -> getDateBasedRandom(listOf(
-                AYMR.strings.aurora_greeting_stats_1000_eps,
-                AYMR.strings.aurora_greeting_stats_pro_viewer,
-            ))
-            episodes >= 500 -> getDateBasedRandom(listOf(
-                AYMR.strings.aurora_greeting_stats_500_eps,
-                AYMR.strings.aurora_greeting_stats_marathoner,
-            ))
+            episodes >= 1000 -> getDateBasedRandom(
+                listOf(
+                    AYMR.strings.aurora_greeting_stats_1000_eps,
+                    AYMR.strings.aurora_greeting_stats_pro_viewer,
+                ),
+            )
+            episodes >= 500 -> getDateBasedRandom(
+                listOf(
+                    AYMR.strings.aurora_greeting_stats_500_eps,
+                    AYMR.strings.aurora_greeting_stats_marathoner,
+                ),
+            )
             episodes >= 100 -> getDateBasedRandom(statsGreetings)
             else -> null
         }
@@ -290,14 +300,18 @@ object GreetingProvider {
 
     private fun checkLibraryMilestone(size: Int): StringResource? {
         return when {
-            size >= 100 -> getDateBasedRandom(listOf(
-                AYMR.strings.aurora_greeting_library_100,
-                AYMR.strings.aurora_greeting_library_true_collector,
-            ))
-            size >= 50 -> getDateBasedRandom(listOf(
-                AYMR.strings.aurora_greeting_library_50,
-                AYMR.strings.aurora_greeting_library_impressive,
-            ))
+            size >= 100 -> getDateBasedRandom(
+                listOf(
+                    AYMR.strings.aurora_greeting_library_100,
+                    AYMR.strings.aurora_greeting_library_true_collector,
+                ),
+            )
+            size >= 50 -> getDateBasedRandom(
+                listOf(
+                    AYMR.strings.aurora_greeting_library_50,
+                    AYMR.strings.aurora_greeting_library_impressive,
+                ),
+            )
             size >= 10 -> getDateBasedRandom(libraryGreetings)
             else -> null
         }

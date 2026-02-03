@@ -11,10 +11,10 @@ data class AchievementProgress(
     val unlockedAt: Long? = null,
     val lastUpdated: Long = System.currentTimeMillis(),
     // Многоуровневая система
-    val currentTier: Int = 0,          // Текущий достигнутый уровень (0 = нет уровня)
-    val maxTier: Int = 0,              // Максимальный уровень в достижении
-    val tierProgress: Int = 0,         // Прогресс до следующего уровня
-    val tierMaxProgress: Int = 100,    // Максимум прогресса для текущего уровня
+    val currentTier: Int = 0, // Текущий достигнутый уровень (0 = нет уровня)
+    val maxTier: Int = 0, // Максимальный уровень в достижении
+    val tierProgress: Int = 0, // Прогресс до следующего уровня
+    val tierMaxProgress: Int = 100, // Максимум прогресса для текущего уровня
 ) {
     /**
      * Процент выполнения текущего уровня (0.0 - 1.0)

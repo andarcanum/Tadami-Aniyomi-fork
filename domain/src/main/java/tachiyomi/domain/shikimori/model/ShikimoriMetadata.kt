@@ -7,13 +7,13 @@ package tachiyomi.domain.shikimori.model
  */
 data class ShikimoriMetadata(
     val animeId: Long,
-    val shikimoriId: Long?,       // null = not found in Shikimori
-    val score: Double?,           // Rating (e.g., 8.5)
-    val kind: String?,            // Type: tv, movie, ova, special, ona, music
-    val status: String?,          // Status: anons, ongoing, released, discontinued
-    val coverUrl: String?,        // URL to Shikimori poster
-    val searchQuery: String,      // Query used to search (for debugging)
-    val updatedAt: Long,          // Timestamp of last update
+    val shikimoriId: Long?, // null = not found in Shikimori
+    val score: Double?, // Rating (e.g., 8.5)
+    val kind: String?, // Type: tv, movie, ova, special, ona, music
+    val status: String?, // Status: anons, ongoing, released, discontinued
+    val coverUrl: String?, // URL to Shikimori poster
+    val searchQuery: String, // Query used to search (for debugging)
+    val updatedAt: Long, // Timestamp of last update
     val isManualMatch: Boolean = false, // true if user manually selected
 ) {
     /**
