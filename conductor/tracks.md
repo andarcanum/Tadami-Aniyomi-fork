@@ -21,3 +21,8 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [x] **Track: Analyze and fix achievement logic, ensuring alignment with definitions through unit testing.**
   *Link: [./tracks/fix_achievement_logic_20260130/](./tracks/fix_achievement_logic_20260130/)*
+
+---
+
+- [x] **Track: Make the status bar transparent on the Home screen to match the design of other screens.**
+  *Link: [./tracks/transparent_status_bar_home_20260203/](./tracks/transparent_status_bar_home_20260203/)*
