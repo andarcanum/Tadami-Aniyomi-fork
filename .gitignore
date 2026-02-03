@@ -43,6 +43,7 @@ build_errors.txt
 build_errors_utf8.txt
 .agents/
 .omc/
+.worktrees/
 
 # MCP & AI tools
 .mcp.json
