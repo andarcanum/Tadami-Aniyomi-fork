@@ -2,6 +2,9 @@ package eu.kanade.tachiyomi.ui.home
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.graphics.res.animatedVectorResource
+import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
+import androidx.compose.animation.graphics.vector.AnimatedImageVector
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -28,7 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.VideoLibrary
@@ -53,7 +56,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -81,6 +83,7 @@ import eu.kanade.presentation.more.settings.screen.browse.AnimeExtensionReposScr
 import eu.kanade.presentation.more.settings.screen.browse.MangaExtensionReposScreen
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.Tab
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.browse.BrowseTab
 import eu.kanade.tachiyomi.ui.browse.anime.source.browse.BrowseAnimeSourceScreen
 import eu.kanade.tachiyomi.ui.browse.manga.source.browse.BrowseMangaSourceScreen
@@ -140,8 +143,15 @@ object HomeHubTab : Tab {
         @Composable
         get() {
             val title = stringResource(AYMR.strings.aurora_home)
-            val icon = rememberVectorPainter(Icons.Filled.Home)
-            return remember { TabOptions(index = 0u, title = title, icon = icon) }
+            val isSelected = LocalTabNavigator.current.current is HomeHubTab
+            val image = AnimatedImageVector.animatedVectorResource(R.drawable.anim_home_enter)
+            return remember(isSelected) {
+                TabOptions(
+                    index = 0u,
+                    title = title,
+                    icon = rememberAnimatedVectorPainter(image, isSelected),
+                )
+            }
         }
 
     @Composable
@@ -712,7 +722,11 @@ private fun HeroSection(
 ) {
     val colors = AuroraTheme.colors
     val overlayGradient = remember(colors) {
-        Brush.verticalGradient(listOf(Color.Transparent, colors.gradientEnd.copy(alpha = 0.8f)), startY = 0f, endY = 1000f)
+        Brush.verticalGradient(
+            listOf(Color.Transparent, colors.gradientEnd.copy(alpha = 0.8f)),
+            startY = 0f,
+            endY = 1000f,
+        )
     }
 
     Box(
