@@ -62,6 +62,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.source.anime.interactor.GetAnimeIncognitoState
 import eu.kanade.domain.source.manga.interactor.GetMangaIncognitoState
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.achievement.components.AchievementGroupNotification
 import eu.kanade.presentation.achievement.components.AchievementListDialog
 import eu.kanade.presentation.achievement.components.AchievementUnlockBanner
@@ -124,6 +125,7 @@ import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.achievement.model.Achievement
 import tachiyomi.domain.achievement.repository.ActivityDataRepository
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.release.interactor.GetApplicationRelease
@@ -192,15 +194,11 @@ class MainActivity : BaseActivity() {
                 incognito || incognitoAnime -> IncognitoModeBannerBackgroundColor
                 else -> MaterialTheme.colorScheme.surface
             }
-            LaunchedEffect(isSystemInDarkTheme, statusBarBackgroundColor) {
-                // Draw edge-to-edge and set system bars color to transparent
-                val lightStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.BLACK)
-                val darkStyle = SystemBarStyle.dark(Color.TRANSPARENT)
-                enableEdgeToEdge(
-                    statusBarStyle = if (statusBarBackgroundColor.luminance() > 0.5) lightStyle else darkStyle,
-                    navigationBarStyle = if (isSystemInDarkTheme) darkStyle else lightStyle,
-                )
-            }
+
+            // Get current theme for Aurora detection
+            val uiPreferences = remember { Injekt.get<UiPreferences>() }
+            val theme by uiPreferences.appTheme().collectAsState()
+            val isAurora = theme.isAuroraStyle
 
             Navigator(
                 screen = HomeScreen,
@@ -209,6 +207,25 @@ class MainActivity : BaseActivity() {
                     disposeSteps = true,
                 ),
             ) { navigator ->
+                LaunchedEffect(isSystemInDarkTheme, statusBarBackgroundColor, navigator.lastItem, isAurora) {
+                    // Draw edge-to-edge and set system bars color to transparent
+                    val lightStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.BLACK)
+                    val transparentLightStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+                    val darkStyle = SystemBarStyle.dark(Color.TRANSPARENT)
+                    val isHomeScreen = navigator.lastItem == HomeScreen
+                    val isLightStatusBar = statusBarBackgroundColor.luminance() > 0.5
+                    enableEdgeToEdge(
+                        statusBarStyle = if (isHomeScreen && isAurora) {
+                            // For Aurora theme on home screen: fully transparent status bar with light icons
+                            transparentLightStyle
+                        } else if (isHomeScreen) {
+                            if (isLightStatusBar) transparentLightStyle else darkStyle
+                        } else {
+                            if (isLightStatusBar) lightStyle else darkStyle
+                        },
+                        navigationBarStyle = if (isSystemInDarkTheme) darkStyle else lightStyle,
+                    )
+                }
 
                 LaunchedEffect(navigator) {
                     this@MainActivity.navigator = navigator

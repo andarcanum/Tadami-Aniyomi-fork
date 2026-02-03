@@ -1,0 +1,27 @@
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector
+            android:name="home_icon"
+            android:width="24dp"
+            android:height="24dp"
+            android:viewportWidth="24"
+            android:viewportHeight="24">
+            <path
+                android:name="home"
+                android:fillColor="#000000"
+                android:pathData="M12,5.69 L17,10.19 V18 H15 V12 H9 V18 H7 V10.19 L12,5.69 M12,3 L2,12 H5 V20 H11 V14 H13 V20 H19 V12 H22 L12,3 Z" />
+        </vector>
+    </aapt:attr>
+    <target android:name="home">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="300"
+                android:interpolator="@android:interpolator/fast_out_slow_in"
+                android:propertyName="pathData"
+                android:valueFrom="M12,5.69 L17,10.19 V18 H15 V12 H9 V18 H7 V10.19 L12,5.69 M12,3 L2,12 H5 V20 H11 V14 H13 V20 H19 V12 H22 L12,3 Z"
+                android:valueTo="M12,12 L12,12 V12 H12 V12 H12 V12 H12 V12 L12,12 M12,3 L2,12 H5 V20 H10 V14 H14 V20 H19 V12 H22 L12,3 Z"
+                android:valueType="pathType" />
+        </aapt:attr>
+    </target>
+</animated-vector>

@@ -28,6 +28,7 @@ import eu.kanade.domain.SYDomainModule
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.setAppCompatDelegateThemeMode
+import eu.kanade.presentation.achievement.components.AchievementBannerManager
 import eu.kanade.tachiyomi.crash.CrashActivity
 import eu.kanade.tachiyomi.crash.GlobalExceptionHandler
 import eu.kanade.tachiyomi.data.coil.AnimeCoverKeyer
@@ -39,8 +40,6 @@ import eu.kanade.tachiyomi.data.coil.MangaCoverKeyer
 import eu.kanade.tachiyomi.data.coil.MangaKeyer
 import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
 import eu.kanade.tachiyomi.data.notification.Notifications
-import tachiyomi.data.achievement.loader.AchievementLoader
-import eu.kanade.presentation.achievement.components.AchievementBannerManager
 import eu.kanade.tachiyomi.di.AppModule
 import eu.kanade.tachiyomi.di.PreferenceModule
 import eu.kanade.tachiyomi.network.NetworkHelper
@@ -55,9 +54,9 @@ import eu.kanade.tachiyomi.util.system.notify
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 import logcat.AndroidLogcatLogger
 import logcat.logcat
 import logcat.LogPriority
@@ -70,6 +69,7 @@ import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.util.system.ImageUtil
+import tachiyomi.data.achievement.loader.AchievementLoader
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.widget.entries.anime.AnimeWidgetManager
 import tachiyomi.presentation.widget.entries.manga.MangaWidgetManager
@@ -213,18 +213,23 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
                 logcat(LogPriority.INFO) { "[ACHIEVEMENTS-INIT] AchievementHandler obtained successfully" }
 
                 // Set up callback to show unlock banners
-                achievementHandler.unlockCallback = object : tachiyomi.data.achievement.handler.AchievementHandler.AchievementUnlockCallback {
-                    override fun onAchievementUnlocked(achievement: tachiyomi.domain.achievement.model.Achievement) {
-                        AchievementBannerManager.showAchievement(achievement)
+                achievementHandler.unlockCallback =
+                    object : tachiyomi.data.achievement.handler.AchievementHandler.AchievementUnlockCallback {
+                        override fun onAchievementUnlocked(
+                            achievement: tachiyomi.domain.achievement.model.Achievement,
+                        ) {
+                            AchievementBannerManager.showAchievement(achievement)
+                        }
                     }
-                }
 
                 logcat(LogPriority.INFO) { "[ACHIEVEMENTS-INIT] Calling achievementHandler.start()..." }
                 achievementHandler.start()
                 logcat(LogPriority.INFO) { "[ACHIEVEMENTS-INIT] AchievementHandler started successfully" }
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR) { "[ACHIEVEMENTS-INIT] Failed to start achievement handler: ${e.message}" }
-                logcat(LogPriority.ERROR) { "[ACHIEVEMENTS-INIT] Failed to start achievement handler: ${e.stackTraceToString()}" }
+                logcat(LogPriority.ERROR) {
+                    "[ACHIEVEMENTS-INIT] Failed to start achievement handler: ${e.stackTraceToString()}"
+                }
             }
         }
 

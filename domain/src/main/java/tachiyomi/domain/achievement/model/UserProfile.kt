@@ -126,16 +126,16 @@ data class UserProfile(
  */
 @Immutable
 data class ProfileStats(
-    val totalReadTime: Long = 0,           // Общее время чтения (мс)
-    val totalChaptersRead: Int = 0,        // Всего прочитано глав
-    val totalEpisodesWatched: Int = 0,      // Всего просмотрено серий
-    val totalDownloads: Int = 0,            // Всего скачиваний
-    val totalSearches: Int = 0,             // Всего поисков
-    val longestStreak: Int = 0,             // Самая длинная серия (дней)
-    val currentStreak: Int = 0,             // Текущая серия (дней)
-    val mangaInLibrary: Int = 0,            // Манги в библиотеке
-    val animeInLibrary: Int = 0,            // Аниме в библиотеке
-    val favoriteGenre: String? = null,      // Любимый жанр
+    val totalReadTime: Long = 0, // Общее время чтения (мс)
+    val totalChaptersRead: Int = 0, // Всего прочитано глав
+    val totalEpisodesWatched: Int = 0, // Всего просмотрено серий
+    val totalDownloads: Int = 0, // Всего скачиваний
+    val totalSearches: Int = 0, // Всего поисков
+    val longestStreak: Int = 0, // Самая длинная серия (дней)
+    val currentStreak: Int = 0, // Текущая серия (дней)
+    val mangaInLibrary: Int = 0, // Манги в библиотеке
+    val animeInLibrary: Int = 0, // Аниме в библиотеке
+    val favoriteGenre: String? = null, // Любимый жанр
     val rarestAchievements: List<String> = emptyList(), // Редчайшие достижения
 ) {
     /**

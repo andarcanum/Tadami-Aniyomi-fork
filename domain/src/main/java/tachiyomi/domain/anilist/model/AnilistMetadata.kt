@@ -7,14 +7,14 @@ package tachiyomi.domain.anilist.model
  */
 data class AnilistMetadata(
     val animeId: Long,
-    val anilistId: Long?,       // null = not found in Anilist
-    val score: Double?,           // Rating 0-100 (from averageScore)
-    val format: String?,          // Type: TV, MOVIE, OVA, SPECIAL, ONA, MUSIC
-    val status: String?,          // Status: FINISHED, RELEASING, NOT_YET_RELEASED, CANCELLED
-    val coverUrl: String?,        // URL to Anilist poster (coverImage.large)
+    val anilistId: Long?, // null = not found in Anilist
+    val score: Double?, // Rating 0-100 (from averageScore)
+    val format: String?, // Type: TV, MOVIE, OVA, SPECIAL, ONA, MUSIC
+    val status: String?, // Status: FINISHED, RELEASING, NOT_YET_RELEASED, CANCELLED
+    val coverUrl: String?, // URL to Anilist poster (coverImage.large)
     val coverUrlFallback: String?, // URL to medium quality poster (fallback if large fails)
-    val searchQuery: String,      // Query used to search (for debugging)
-    val updatedAt: Long,          // Timestamp of last update
+    val searchQuery: String, // Query used to search (for debugging)
+    val updatedAt: Long, // Timestamp of last update
     val isManualMatch: Boolean = false, // true if user manually selected
 ) {
     /**

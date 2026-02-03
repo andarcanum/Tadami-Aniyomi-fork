@@ -207,11 +207,15 @@ private fun ExtensionContent(
                             action = {
                                 IconButton(onClick = { onToggleSection(header) }) {
                                     Icon(
-                                        imageVector = if (isCollapsed) Icons.Outlined.ExpandMore else Icons.Outlined.ExpandLess,
+                                        imageVector = if (isCollapsed) {
+                                            Icons.Outlined.ExpandMore
+                                        } else {
+                                            Icons.Outlined.ExpandLess
+                                        },
                                         contentDescription = null,
                                     )
                                 }
-                            }
+                            },
                         )
                     }
                 }

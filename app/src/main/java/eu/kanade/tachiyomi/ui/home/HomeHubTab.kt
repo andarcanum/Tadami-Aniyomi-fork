@@ -2,6 +2,9 @@ package eu.kanade.tachiyomi.ui.home
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.graphics.res.animatedVectorResource
+import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
+import androidx.compose.animation.graphics.vector.AnimatedImageVector
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -10,13 +13,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -28,7 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.VideoLibrary
@@ -53,7 +59,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -81,6 +86,7 @@ import eu.kanade.presentation.more.settings.screen.browse.AnimeExtensionReposScr
 import eu.kanade.presentation.more.settings.screen.browse.MangaExtensionReposScreen
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.Tab
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.browse.BrowseTab
 import eu.kanade.tachiyomi.ui.browse.anime.source.browse.BrowseAnimeSourceScreen
 import eu.kanade.tachiyomi.ui.browse.manga.source.browse.BrowseMangaSourceScreen
@@ -140,8 +146,13 @@ object HomeHubTab : Tab {
         @Composable
         get() {
             val title = stringResource(AYMR.strings.aurora_home)
-            val icon = rememberVectorPainter(Icons.Filled.Home)
-            return remember { TabOptions(index = 0u, title = title, icon = icon) }
+            val isSelected = LocalTabNavigator.current.current is HomeHubTab
+            val image = AnimatedImageVector.animatedVectorResource(R.drawable.anim_home_enter)
+            return TabOptions(
+                index = 0u,
+                title = title,
+                icon = rememberAnimatedVectorPainter(image, isSelected),
+            )
         }
 
     @Composable
@@ -268,6 +279,7 @@ object HomeHubTab : Tab {
             onAvatarClick = { photoPickerLauncher.launch("image/*") },
             onNameClick = { showNameDialog = true },
             showTabs = false,
+            applyStatusBarsPadding = false,
         )
     }
 }
@@ -502,6 +514,11 @@ private fun HomeHubScreen(
         modifier = Modifier.fillMaxSize(),
         contentPadding = contentPadding,
     ) {
+        // Status bar spacer
+        item(key = "status_bar_spacer") {
+            Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+        }
+
         // Inline Header with avatar, username, and tabs
         item(key = "inline_header") {
             Column(
@@ -558,18 +575,20 @@ private fun HomeHubScreen(
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
-                        Box(
-                            modifier = Modifier.align(
-                                Alignment.BottomEnd,
-                            ).size(16.dp).background(colors.accent, CircleShape),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                Icons.Filled.CameraAlt,
-                                null,
-                                tint = colors.textOnAccent,
-                                modifier = Modifier.size(10.dp),
-                            )
+                        if (state.userAvatar.isEmpty()) {
+                            Box(
+                                modifier = Modifier.align(
+                                    Alignment.BottomEnd,
+                                ).size(16.dp).background(colors.accent, CircleShape),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    Icons.Filled.CameraAlt,
+                                    null,
+                                    tint = colors.textOnAccent,
+                                    modifier = Modifier.size(10.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -712,7 +731,11 @@ private fun HeroSection(
 ) {
     val colors = AuroraTheme.colors
     val overlayGradient = remember(colors) {
-        Brush.verticalGradient(listOf(Color.Transparent, colors.gradientEnd.copy(alpha = 0.8f)), startY = 0f, endY = 1000f)
+        Brush.verticalGradient(
+            listOf(Color.Transparent, colors.gradientEnd.copy(alpha = 0.8f)),
+            startY = 0f,
+            endY = 1000f,
+        )
     }
 
     Box(

@@ -5,8 +5,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.test.*
+import androidx.compose.ui.test.assertExists
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodes
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.waitForIdle
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.achievement.components.AchievementActivityGraph
 import eu.kanade.presentation.achievement.components.AchievementStatsComparison
@@ -44,7 +51,7 @@ class AchievementScreenTest {
                 Box(
                     modifier = Modifier
                         .background(AuroraColors.Dark.background)
-                        .padding(16.dp)
+                        .padding(16.dp),
                 ) {
                     AchievementStatsComparison(
                         currentMonth = currentStats,
@@ -71,7 +78,7 @@ class AchievementScreenTest {
                 Box(
                     modifier = Modifier
                         .background(AuroraColors.Dark.background)
-                        .padding(16.dp)
+                        .padding(16.dp),
                 ) {
                     AchievementActivityGraph(yearlyStats = yearlyStats)
                 }
@@ -99,7 +106,7 @@ class AchievementScreenTest {
                 Box(
                     modifier = Modifier
                         .background(AuroraColors.Dark.background)
-                        .padding(16.dp)
+                        .padding(16.dp),
                 ) {
                     AchievementStatsComparison(
                         currentMonth = currentStats,
@@ -125,7 +132,7 @@ class AchievementScreenTest {
                 Box(
                     modifier = Modifier
                         .background(AuroraColors.Dark.background)
-                        .padding(16.dp)
+                        .padding(16.dp),
                 ) {
                     AchievementActivityGraph(yearlyStats = yearlyStats)
                 }
@@ -158,7 +165,7 @@ class AchievementScreenTest {
                 Box(
                     modifier = Modifier
                         .background(AuroraColors.Dark.background)
-                        .padding(16.dp)
+                        .padding(16.dp),
                 ) {
                     AchievementActivityGraph(yearlyStats = yearlyStats)
                 }

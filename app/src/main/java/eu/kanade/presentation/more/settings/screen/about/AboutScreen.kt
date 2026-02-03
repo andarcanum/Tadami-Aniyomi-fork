@@ -98,7 +98,7 @@ object AboutScreen : Screen() {
                     LogoHeader(
                         onClick = {
                             achievementHandler.trackFeatureUsed(AchievementEvent.Feature.LOGO_CLICK)
-                        }
+                        },
                     )
                 }
 

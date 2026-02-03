@@ -1,0 +1,60 @@
+# Build files
+.gradle
+.kotlin
+build
+*.apk
+build.log
+build_error.log
+build_log.txt
+build_output.txt
+build_err.log
+build_out.log
+build_task9.log
+tasks_error.log
+
+# IDE files
+*.iml
+.idea/*
+!.idea/icon.png
+/captures
+
+# Configuration files
+local.properties
+.env
+
+# macOS specific files
+.DS_Store
+
+# Local working files
+.sisyphus/
+desigh-fix/
+4pda.md
+new4pda.md
+resize_icon.py
+icon_processed.png
+icon-ai-social-1-*.png
+
+# Tools
+.claude/
+
+# Ignored by Agent
+.gradle-user/
+build_errors.txt
+build_errors_utf8.txt
+.agents/
+.omc/
+
+# MCP & AI tools
+.mcp.json
+CLAUDE.md
+
+# Node.js
+package-lock.json
+node_modules/
+
+# Temporary files
+temp_result.xml
+*.tmp
+
+# Conductor tracks (local metadata)
+conductor/tracks/

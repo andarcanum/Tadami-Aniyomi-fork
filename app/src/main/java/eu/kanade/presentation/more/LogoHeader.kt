@@ -16,7 +16,7 @@ import eu.kanade.tachiyomi.R
 
 @Composable
 fun LogoHeader(
-    onClick: (() -> Unit)? = null
+    onClick: (() -> Unit)? = null,
 ) {
     Column(
         modifier = Modifier

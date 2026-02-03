@@ -20,7 +20,7 @@ enum class RewardType {
     BADGE,
 
     /** Специальные возможности */
-    SPECIAL
+    SPECIAL,
 }
 
 /**

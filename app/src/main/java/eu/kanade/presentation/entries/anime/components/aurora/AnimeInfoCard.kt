@@ -13,9 +13,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -38,9 +38,7 @@ import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreenModel
 import tachiyomi.domain.anilist.model.AnilistMetadata
 import tachiyomi.domain.entries.anime.model.Anime
-import tachiyomi.domain.shikimori.model.ShikimoriMetadata
 import tachiyomi.i18n.MR
-import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -138,8 +136,11 @@ fun AnimeInfoCard(
                 StatItem(
                     value = when {
                         isMetadataLoading -> "..."
-                        metadataError == AnimeScreenModel.MetadataError.NotAuthenticated -> stringResource(MR.strings.not_applicable)
-                        else -> animeMetadata?.score?.let { String.format("%.1f", it) } ?: stringResource(MR.strings.not_applicable)
+                        metadataError == AnimeScreenModel.MetadataError.NotAuthenticated -> stringResource(
+                            MR.strings.not_applicable,
+                        )
+                        else -> animeMetadata?.score?.let { String.format("%.1f", it) }
+                            ?: stringResource(MR.strings.not_applicable)
                     },
                     label = "РЕЙТИНГ",
                     modifier = if (isCompleted) Modifier else Modifier.weight(1f),
@@ -153,7 +154,9 @@ fun AnimeInfoCard(
                 StatItem(
                     value = when {
                         isMetadataLoading -> "..."
-                        metadataError == AnimeScreenModel.MetadataError.NotAuthenticated -> stringResource(MR.strings.not_applicable)
+                        metadataError == AnimeScreenModel.MetadataError.NotAuthenticated -> stringResource(
+                            MR.strings.not_applicable,
+                        )
                         else -> animeMetadata?.format?.uppercase() ?: stringResource(MR.strings.not_applicable)
                     },
                     label = "ТИП",
@@ -168,7 +171,9 @@ fun AnimeInfoCard(
                 StatItem(
                     value = when {
                         isMetadataLoading -> "..."
-                        metadataError == AnimeScreenModel.MetadataError.NotAuthenticated -> AnimeStatusFormatter.formatStatus(anime.status)
+                        metadataError == AnimeScreenModel.MetadataError.NotAuthenticated -> {
+                            AnimeStatusFormatter.formatStatus(anime.status)
+                        }
                         else -> animeMetadata?.formattedStatus ?: AnimeStatusFormatter.formatStatus(anime.status)
                     },
                     label = "СТАТУС",
@@ -239,7 +244,6 @@ fun AnimeInfoCard(
                     verticalArrangement = Arrangement.Top,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,

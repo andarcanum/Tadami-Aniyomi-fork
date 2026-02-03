@@ -80,9 +80,12 @@ class AchievementCalculator(
                     AchievementType.LIBRARY -> calculateLibraryProgress(achievement, libraryCounts)
                     AchievementType.BALANCED -> calculateBalancedProgress(mangaChapters, animeEpisodes)
                     AchievementType.META -> 0
-                    AchievementType.SECRET -> 0 // Secret achievements handled by AchievementHandler.checkSecretAchievements()
-                    AchievementType.TIME_BASED -> 0 // Time-based achievements handled by AchievementHandler.checkTimeAndFeatureAchievements()
-                    AchievementType.FEATURE_BASED -> 0 // Feature-based achievements handled by AchievementHandler.checkTimeAndFeatureAchievements()
+                    // Secret achievements handled by AchievementHandler.checkSecretAchievements()
+                    AchievementType.SECRET -> 0
+                    // Time-based achievements handled by AchievementHandler
+                    AchievementType.TIME_BASED -> 0
+                    // Feature-based achievements handled by AchievementHandler
+                    AchievementType.FEATURE_BASED -> 0
                 }
 
                 buildProgress(achievement, progress)

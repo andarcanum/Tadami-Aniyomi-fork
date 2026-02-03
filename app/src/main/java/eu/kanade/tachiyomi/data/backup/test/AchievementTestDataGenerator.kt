@@ -1,7 +1,6 @@
 package eu.kanade.tachiyomi.data.backup.test
 
 import android.content.Context
-import android.content.SharedPreferences
 import eu.kanade.tachiyomi.data.backup.models.BackupAchievement
 import eu.kanade.tachiyomi.data.backup.models.BackupDayActivity
 import eu.kanade.tachiyomi.data.backup.models.BackupUserProfile
@@ -53,7 +52,8 @@ object AchievementTestDataGenerator {
             }
 
             val appOpens = if (chaptersRead > 0 || episodesWatched > 0) 1 else 0
-            val durationMs = (chaptersRead * 600_000L) + (episodesWatched * 1_200_000L) // 10min per chapter, 20min per episode
+            // 10min per chapter, 20min per episode
+            val durationMs = (chaptersRead * 600_000L) + (episodesWatched * 1_200_000L)
 
             if (chaptersRead > 0) {
                 editor.putInt("chapters_$dateStr", chaptersRead)
@@ -108,7 +108,7 @@ object AchievementTestDataGenerator {
                     level = level,
                     type = type,
                     // Legacy format: no detailed metrics (default = 0)
-                )
+                ),
             )
         }
 
@@ -163,7 +163,7 @@ object AchievementTestDataGenerator {
                     appOpens = appOpens,
                     achievementsUnlocked = achievementsUnlocked,
                     durationMs = durationMs,
-                )
+                ),
             )
         }
 
