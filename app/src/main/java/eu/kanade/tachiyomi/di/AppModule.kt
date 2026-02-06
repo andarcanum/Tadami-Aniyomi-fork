@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.di
 
 import android.app.Application
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import android.os.Build
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
@@ -102,6 +103,33 @@ import java.io.File
 
 class AppModule(val app: Application) : InjektModule {
 
+    /**
+     * We use a separate SqlDelight database for ranobe. If a previous/dev build created an
+     * incompatible or partially initialized file (e.g. correct user_version but missing tables),
+     * the app will crash on first query. Self-heal by deleting the file so it is recreated.
+     */
+    private fun ensureNovelDatabaseIsUsable(context: Context) {
+        val dbName = "tachiyomi.noveldb"
+        val dbFile = context.getDatabasePath(dbName)
+        if (!dbFile.exists()) return
+
+        val shouldDelete = runCatching {
+            val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
+            val cursor = db.rawQuery(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+                arrayOf("novelsources"),
+            )
+            val hasRequiredTable = cursor.moveToFirst()
+            cursor.close()
+            db.close()
+            !hasRequiredTable
+        }.getOrElse { true }
+
+        if (shouldDelete) {
+            context.deleteDatabase(dbName)
+        }
+    }
+
     override fun InjektRegistrar.registerInjectables() {
         addSingleton(app)
 
@@ -129,6 +157,8 @@ class AppModule(val app: Application) : InjektModule {
                 }
             },
         )
+
+        ensureNovelDatabaseIsUsable(app)
 
         val sqlDriverAnime = AndroidSqliteDriver(
             schema = AnimeDatabase.Schema,
