@@ -1,0 +1,90 @@
+import java.util.Date;
+
+CREATE TABLE novel_history(
+    _id INTEGER NOT NULL PRIMARY KEY,
+    chapter_id INTEGER NOT NULL UNIQUE,
+    last_read INTEGER AS Date,
+    time_read INTEGER NOT NULL,
+    FOREIGN KEY(chapter_id) REFERENCES novel_chapters (_id)
+    ON DELETE CASCADE
+);
+
+CREATE INDEX novel_history_chapter_id_index ON novel_history(chapter_id);
+
+getHistoryByNovelId:
+SELECT
+H._id,
+H.chapter_id,
+H.last_read,
+H.time_read
+FROM novel_history H
+JOIN novel_chapters C
+ON H.chapter_id = C._id
+WHERE C.novel_id = :novelId AND C._id = H.chapter_id;
+
+getHistoryByChapterUrl:
+SELECT
+H._id,
+H.chapter_id,
+H.last_read,
+H.time_read
+FROM novel_history H
+JOIN novel_chapters C
+ON H.chapter_id = C._id
+WHERE C.url = :chapterUrl AND C._id = H.chapter_id;
+
+resetHistoryById:
+UPDATE novel_history
+SET last_read = 0
+WHERE _id = :historyId;
+
+resetHistoryByNovelId:
+UPDATE novel_history
+SET last_read = 0
+WHERE _id IN (
+    SELECT H._id
+    FROM novels N
+    INNER JOIN novel_chapters C
+    ON N._id = C.novel_id
+    INNER JOIN novel_history H
+    ON C._id = H.chapter_id
+    WHERE N._id = :novelId
+);
+
+removeAllHistory:
+DELETE FROM novel_history;
+
+removeResettedHistory:
+DELETE FROM novel_history
+WHERE last_read = 0;
+
+upsert:
+INSERT INTO novel_history(chapter_id, last_read, time_read)
+VALUES (:chapterId, :readAt, :time_read)
+ON CONFLICT(chapter_id)
+DO UPDATE
+SET
+    last_read = :readAt,
+    time_read = time_read + :time_read
+WHERE chapter_id = :chapterId;
+
+getReadDuration:
+SELECT coalesce(sum(time_read), 0)
+FROM novel_history;
+
+getChapterInfo:
+SELECT
+    C.novel_id,
+    C.chapter_number
+FROM novel_chapters C
+WHERE C._id = :chapterId;
+
+getTotalChaptersRead:
+SELECT COUNT(*)
+FROM novel_history;
+
+getChaptersReadByNovelId:
+SELECT COUNT(*)
+FROM novel_history H
+INNER JOIN novel_chapters C ON H.chapter_id = C._id
+WHERE C.novel_id = :novelId;

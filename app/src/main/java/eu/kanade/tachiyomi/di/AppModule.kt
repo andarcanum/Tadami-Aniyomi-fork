@@ -10,6 +10,8 @@ import data.History
 import data.Mangas
 import dataanime.Animehistory
 import dataanime.Animes
+import datanovel.Novel_history
+import datanovel.Novels
 import eu.kanade.domain.track.anime.store.DelayedAnimeTrackingStore
 import eu.kanade.domain.track.manga.store.DelayedMangaTrackingStore
 import eu.kanade.tachiyomi.BuildConfig
@@ -27,10 +29,28 @@ import eu.kanade.tachiyomi.data.saver.ImageSaver
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
 import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
+import eu.kanade.tachiyomi.extension.novel.DefaultNovelExtensionManager
+import eu.kanade.tachiyomi.extension.novel.NovelExtensionManager
+import eu.kanade.tachiyomi.extension.novel.NovelExtensionUpdateChecker
+import eu.kanade.tachiyomi.extension.novel.NovelPluginSourceFactory
+import eu.kanade.tachiyomi.extension.novel.api.NetworkNovelPluginIndexFetcher
+import eu.kanade.tachiyomi.extension.novel.api.NovelPluginApi
+import eu.kanade.tachiyomi.extension.novel.api.NovelPluginApiFacade
+import eu.kanade.tachiyomi.extension.novel.api.NovelPluginIndexFetcher
+import eu.kanade.tachiyomi.extension.novel.api.NovelPluginIndexParser
+import eu.kanade.tachiyomi.extension.novel.api.NovelPluginRepoProvider
+import eu.kanade.tachiyomi.extension.novel.repo.InMemoryNovelPluginStorage
+import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoParser
+import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoService
+import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoUpdateInteractor
+import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage as NovelRepoPluginStorage
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelJsRuntimeFactory
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelJsSourceFactory
 import eu.kanade.tachiyomi.network.JavaScriptEngine
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.source.anime.AndroidAnimeSourceManager
 import eu.kanade.tachiyomi.source.manga.AndroidMangaSourceManager
+import eu.kanade.tachiyomi.source.novel.AndroidNovelSourceManager
 import eu.kanade.tachiyomi.ui.player.ExternalIntents
 import io.requery.android.database.sqlite.RequerySQLiteOpenHelperFactory
 import kotlinx.serialization.json.Json
@@ -50,10 +70,22 @@ import tachiyomi.data.handlers.anime.AndroidAnimeDatabaseHandler
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
 import tachiyomi.data.handlers.manga.AndroidMangaDatabaseHandler
 import tachiyomi.data.handlers.manga.MangaDatabaseHandler
+import tachiyomi.data.handlers.novel.AndroidNovelDatabaseHandler
+import tachiyomi.data.handlers.novel.NovelDatabaseHandler
+import tachiyomi.data.extension.novel.AndroidNovelPluginKeyValueStore
+import tachiyomi.data.extension.novel.NetworkNovelPluginDownloader
+import tachiyomi.data.extension.novel.NovelPluginDownloader
+import tachiyomi.data.extension.novel.NovelPluginInstaller
+import tachiyomi.data.extension.novel.NovelPluginInstallerFacade
+import tachiyomi.data.extension.novel.NovelPluginKeyValueStore
+import tachiyomi.data.extension.novel.NovelPluginStorage
+import mihon.domain.extensionrepo.novel.interactor.GetNovelExtensionRepo
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import tachiyomi.domain.source.manga.service.MangaSourceManager
+import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.storage.service.StorageManager
 import tachiyomi.mi.data.AnimeDatabase
+import tachiyomi.novel.data.NovelDatabase
 import tachiyomi.source.local.entries.anime.LocalAnimeFetchTypeManager
 import tachiyomi.source.local.image.anime.LocalAnimeBackgroundManager
 import tachiyomi.source.local.image.anime.LocalAnimeCoverManager
@@ -66,6 +98,7 @@ import uy.kohesive.injekt.api.InjektRegistrar
 import uy.kohesive.injekt.api.addSingleton
 import uy.kohesive.injekt.api.addSingletonFactory
 import uy.kohesive.injekt.api.get
+import java.io.File
 
 class AppModule(val app: Application) : InjektModule {
 
@@ -147,6 +180,31 @@ class AppModule(val app: Application) : InjektModule {
             },
         )
 
+        val sqlDriverNovel = AndroidSqliteDriver(
+            schema = NovelDatabase.Schema,
+            context = app,
+            name = "tachiyomi.noveldb",
+            factory = if (BuildConfig.DEBUG && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                // Support database inspector in Android Studio
+                FrameworkSQLiteOpenHelperFactory()
+            } else {
+                RequerySQLiteOpenHelperFactory()
+            },
+            callback = object : AndroidSqliteDriver.Callback(NovelDatabase.Schema) {
+                override fun onOpen(db: SupportSQLiteDatabase) {
+                    super.onOpen(db)
+                    setPragma(db, "foreign_keys = ON")
+                    setPragma(db, "journal_mode = WAL")
+                    setPragma(db, "synchronous = NORMAL")
+                }
+                private fun setPragma(db: SupportSQLiteDatabase, pragma: String) {
+                    val cursor = db.query("PRAGMA $pragma")
+                    cursor.moveToFirst()
+                    cursor.close()
+                }
+            },
+        )
+
         addSingletonFactory {
             Database(
                 driver = sqlDriverManga,
@@ -154,6 +212,19 @@ class AppModule(val app: Application) : InjektModule {
                     last_readAdapter = DateColumnAdapter,
                 ),
                 mangasAdapter = Mangas.Adapter(
+                    genreAdapter = StringListColumnAdapter,
+                    update_strategyAdapter = MangaUpdateStrategyColumnAdapter,
+                ),
+            )
+        }
+
+        addSingletonFactory {
+            NovelDatabase(
+                driver = sqlDriverNovel,
+                novel_historyAdapter = Novel_history.Adapter(
+                    last_readAdapter = DateColumnAdapter,
+                ),
+                novelsAdapter = Novels.Adapter(
                     genreAdapter = StringListColumnAdapter,
                     update_strategyAdapter = MangaUpdateStrategyColumnAdapter,
                 ),
@@ -177,6 +248,13 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory {
             AchievementsDatabase(
                 driver = sqlDriverAchievements,
+            )
+        }
+
+        addSingletonFactory<NovelDatabaseHandler> {
+            AndroidNovelDatabaseHandler(
+                get(),
+                sqlDriverNovel,
             )
         }
 
@@ -229,8 +307,34 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory { NetworkHelper(app, get()) }
         addSingletonFactory { JavaScriptEngine(app) }
 
+        addSingletonFactory { NovelPluginIndexParser(get()) }
+        addSingletonFactory<NovelPluginIndexFetcher> { NetworkNovelPluginIndexFetcher(get<NetworkHelper>().client) }
+        addSingletonFactory<NovelPluginRepoProvider> {
+            val getRepos: GetNovelExtensionRepo = get()
+            object : NovelPluginRepoProvider {
+                override suspend fun getAll() = getRepos.getAll()
+            }
+        }
+        addSingletonFactory { NovelPluginApi(get(), get(), get()) }
+        addSingletonFactory<NovelPluginApiFacade> { get<NovelPluginApi>() }
+        addSingletonFactory { NovelPluginStorage(File(app.filesDir, "novel_plugins")) }
+        addSingletonFactory<NovelPluginDownloader> { NetworkNovelPluginDownloader(get<NetworkHelper>().client) }
+        addSingletonFactory { NovelPluginInstaller(get(), get(), get()) }
+        addSingletonFactory<NovelPluginInstallerFacade> { get<NovelPluginInstaller>() }
+        addSingletonFactory<NovelPluginKeyValueStore> { AndroidNovelPluginKeyValueStore(app) }
+        addSingletonFactory { NovelJsRuntimeFactory(get(), get(), get()) }
+        addSingletonFactory<NovelPluginSourceFactory> { NovelJsSourceFactory(get(), get(), get()) }
+
+        addSingletonFactory<NovelExtensionManager> { DefaultNovelExtensionManager(get(), get(), get(), get()) }
+        addSingletonFactory { NovelExtensionUpdateChecker() }
+        addSingletonFactory { NovelPluginRepoParser(get()) }
+        addSingletonFactory<NovelRepoPluginStorage> { InMemoryNovelPluginStorage() }
+        addSingletonFactory { NovelPluginRepoService(get<NetworkHelper>().client, get()) }
+        addSingletonFactory { NovelPluginRepoUpdateInteractor(get(), get(), get()) }
+
         addSingletonFactory<MangaSourceManager> { AndroidMangaSourceManager(app, get(), get()) }
         addSingletonFactory<AnimeSourceManager> { AndroidAnimeSourceManager(app, get(), get()) }
+        addSingletonFactory<NovelSourceManager> { AndroidNovelSourceManager(get(), get()) }
 
         addSingletonFactory { MangaExtensionManager(app) }
         addSingletonFactory { AnimeExtensionManager(app) }
@@ -312,9 +416,11 @@ class AppModule(val app: Application) : InjektModule {
 
             get<MangaSourceManager>()
             get<AnimeSourceManager>()
+            get<NovelSourceManager>()
 
             get<Database>()
             get<AnimeDatabase>()
+            get<NovelDatabase>()
             get<AchievementsDatabase>()
 
             get<MangaDownloadManager>()

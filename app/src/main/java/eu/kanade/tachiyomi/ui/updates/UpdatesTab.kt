@@ -28,14 +28,19 @@ import eu.kanade.presentation.components.TabbedScreen
 import eu.kanade.presentation.components.TabbedScreenAurora
 import eu.kanade.presentation.updates.anime.AnimeUpdatesAuroraContent
 import eu.kanade.presentation.updates.manga.MangaUpdatesAuroraContent
+import eu.kanade.presentation.updates.novel.NovelUpdatesScreen
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.download.DownloadsTab
+import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.updates.anime.AnimeUpdatesScreenModel
 import eu.kanade.tachiyomi.ui.updates.anime.animeUpdatesTab
 import eu.kanade.tachiyomi.ui.updates.manga.MangaUpdatesScreenModel
 import eu.kanade.tachiyomi.ui.updates.manga.mangaUpdatesTab
+import eu.kanade.tachiyomi.ui.updates.novel.NovelUpdatesScreenModel
+import eu.kanade.tachiyomi.ui.updates.novel.novelUpdatesTab
+import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
 import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
@@ -86,6 +91,8 @@ data object UpdatesTab : Tab {
             val animeState by animeScreenModel.state.collectAsState()
             val mangaScreenModel = rememberScreenModel { MangaUpdatesScreenModel() }
             val mangaState by mangaScreenModel.state.collectAsState()
+            val novelScreenModel = rememberScreenModel { NovelUpdatesScreenModel() }
+            val novelState by novelScreenModel.state.collectAsState()
 
             var selectedTab by rememberSaveable { mutableIntStateOf(TAB_ANIME) }
 
@@ -97,6 +104,7 @@ data object UpdatesTab : Tab {
                     if (showMangaSection) {
                         add(TAB_MANGA)
                     }
+                    add(TAB_NOVEL)
                 }
             }
 
@@ -141,6 +149,25 @@ data object UpdatesTab : Tab {
                         ),
                     )
                 }
+                add(
+                    TabContent(
+                        titleRes = AYMR.strings.label_novel,
+                        content = { contentPadding, _ ->
+                            NovelUpdatesScreen(
+                                state = novelState,
+                                lastUpdated = novelScreenModel.lastUpdated,
+                                contentPadding = PaddingValues(
+                                    bottom = contentPadding.calculateBottomPadding(),
+                                ),
+                                onNovelClick = { navigator.push(NovelScreen(it)) },
+                                onChapterClick = { navigator.push(NovelReaderScreen(it)) },
+                                onToggleSelection = novelScreenModel::toggleSelection,
+                                onMultiBookmarkClicked = novelScreenModel::bookmarkUpdates,
+                                onMultiMarkAsReadClicked = novelScreenModel::markUpdatesRead,
+                            )
+                        },
+                    ),
+                )
             }.build()
 
             val initialPage = tabIds.indexOf(selectedTab).coerceAtLeast(0)
@@ -201,6 +228,7 @@ data object UpdatesTab : Tab {
                 tabs = persistentListOf(
                     animeUpdatesTab(context, fromMore),
                     mangaUpdatesTab(context, fromMore),
+                    novelUpdatesTab(context, fromMore),
                 ),
             )
         }
@@ -213,3 +241,4 @@ data object UpdatesTab : Tab {
 
 private const val TAB_ANIME = 0
 private const val TAB_MANGA = 1
+private const val TAB_NOVEL = 2

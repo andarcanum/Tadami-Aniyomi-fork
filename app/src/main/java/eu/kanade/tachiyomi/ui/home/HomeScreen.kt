@@ -50,6 +50,7 @@ import eu.kanade.tachiyomi.ui.history.HistoriesTab
 import eu.kanade.tachiyomi.ui.home.HomeHubTab
 import eu.kanade.tachiyomi.ui.library.anime.AnimeLibraryTab
 import eu.kanade.tachiyomi.ui.library.manga.MangaLibraryTab
+import eu.kanade.tachiyomi.ui.library.novel.NovelLibraryTab
 import eu.kanade.tachiyomi.ui.more.MoreTab
 import eu.kanade.tachiyomi.ui.updates.UpdatesTab
 import kotlinx.coroutines.channels.Channel
@@ -185,6 +186,7 @@ object HomeScreen : Screen() {
                         when (defaultTab) {
                             AnimeLibraryTab -> AnimeLibraryTab.search(it)
                             MangaLibraryTab -> MangaLibraryTab.search(it)
+                            NovelLibraryTab -> NovelLibraryTab.search(it)
                             else -> {}
                         }
                     }
@@ -194,6 +196,7 @@ object HomeScreen : Screen() {
                         tabNavigator.current = when (it) {
                             is Tab.AnimeLib -> AnimeLibraryTab
                             is Tab.Library -> MangaLibraryTab
+                            is Tab.NovelLib -> NovelLibraryTab
                             is Tab.Updates -> UpdatesTab
                             is Tab.History -> HistoriesTab
                             is Tab.Browse -> {
@@ -215,6 +218,9 @@ object HomeScreen : Screen() {
                         }
                         if (it is Tab.Library && it.mangaIdToOpen != null) {
                             navigator.push(MangaScreen(it.mangaIdToOpen))
+                        }
+                        if (it is Tab.NovelLib && it.novelIdToOpen != null) {
+                            navigator.push(eu.kanade.tachiyomi.ui.entries.novel.NovelScreen(it.novelIdToOpen))
                         }
                         if (it is Tab.More && it.toDownloads) {
                             navigator.push(DownloadsTab)
@@ -348,7 +354,10 @@ object HomeScreen : Screen() {
                             combine(
                                 pref.mangaExtensionUpdatesCount().changes(),
                                 pref.animeExtensionUpdatesCount().changes(),
-                            ) { extCount, animeExtCount -> extCount + animeExtCount }
+                                pref.novelExtensionUpdatesCount().changes(),
+                            ) { mangaCount, animeCount, novelCount ->
+                                ExtensionUpdateCounts.sum(mangaCount, animeCount, novelCount)
+                            }
                                 .collectLatest { value = it }
                         }
                         if (count > 0) {
@@ -392,6 +401,7 @@ object HomeScreen : Screen() {
     sealed interface Tab {
         data class AnimeLib(val animeIdToOpen: Long? = null) : Tab
         data class Library(val mangaIdToOpen: Long? = null) : Tab
+        data class NovelLib(val novelIdToOpen: Long? = null) : Tab
         data object Updates : Tab
         data object History : Tab
         data class Browse(val toExtensions: Boolean = false, val anime: Boolean = false) : Tab

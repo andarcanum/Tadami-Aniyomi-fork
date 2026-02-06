@@ -39,6 +39,7 @@ import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.anime.AnimeMetadataUpdateJob
 import eu.kanade.tachiyomi.data.library.manga.MangaLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.manga.MangaMetadataUpdateJob
+import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.NetworkPreferences
 import eu.kanade.tachiyomi.network.PREF_DOH_360
@@ -320,6 +321,7 @@ object SettingsAdvancedScreen : SearchableSettings {
                     onClick = {
                         AnimeLibraryUpdateJob.startNow(context)
                         MangaLibraryUpdateJob.startNow(context)
+                        NovelLibraryUpdateJob.startNow(context)
                         AnimeMetadataUpdateJob.startNow(context)
                         MangaMetadataUpdateJob.startNow(context)
                     },

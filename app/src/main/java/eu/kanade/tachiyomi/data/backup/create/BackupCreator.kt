@@ -16,6 +16,7 @@ import eu.kanade.tachiyomi.data.backup.create.creators.MangaBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.MangaCategoriesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.MangaExtensionRepoBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.MangaSourcesBackupCreator
+import eu.kanade.tachiyomi.data.backup.create.creators.NovelExtensionRepoBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.PreferenceBackupCreator
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupAnime
@@ -71,6 +72,7 @@ class BackupCreator(
     private val preferenceBackupCreator: PreferenceBackupCreator = PreferenceBackupCreator(),
     private val animeExtensionRepoBackupCreator: AnimeExtensionRepoBackupCreator = AnimeExtensionRepoBackupCreator(),
     private val mangaExtensionRepoBackupCreator: MangaExtensionRepoBackupCreator = MangaExtensionRepoBackupCreator(),
+    private val novelExtensionRepoBackupCreator: NovelExtensionRepoBackupCreator = NovelExtensionRepoBackupCreator(),
     private val customButtonBackupCreator: CustomButtonBackupCreator = CustomButtonBackupCreator(),
     private val animeSourcesBackupCreator: AnimeSourcesBackupCreator = AnimeSourcesBackupCreator(),
     private val mangaSourcesBackupCreator: MangaSourcesBackupCreator = MangaSourcesBackupCreator(),
@@ -131,6 +133,7 @@ class BackupCreator(
                 backupExtensions = backupExtensions(options),
                 backupAnimeExtensionRepo = backupAnimeExtensionRepos(options),
                 backupCustomButton = backupCustomButtons(options),
+                backupNovelExtensionRepo = backupNovelExtensionRepos(options),
                 backupAchievements = achievementData.achievements,
                 backupUserProfile = achievementData.userProfile,
                 backupActivityLog = achievementData.activityLog,
@@ -219,6 +222,12 @@ class BackupCreator(
         if (!options.extensionRepoSettings) return emptyList()
 
         return mangaExtensionRepoBackupCreator()
+    }
+
+    private suspend fun backupNovelExtensionRepos(options: BackupOptions): List<BackupExtensionRepos> {
+        if (!options.extensionRepoSettings) return emptyList()
+
+        return novelExtensionRepoBackupCreator()
     }
 
     private suspend fun backupCustomButtons(options: BackupOptions): List<BackupCustomButtons> {

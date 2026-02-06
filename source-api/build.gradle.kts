@@ -20,6 +20,13 @@ kotlin {
                 implementation(compose.runtime)
             }
         }
+        val commonTest by getting {
+            dependencies {
+                implementation(libs.bundles.test)
+                implementation(libs.kotlin.test)
+                implementation(kotlinx.coroutines.test)
+            }
+        }
         val androidMain by getting {
             dependencies {
                 implementation(projects.core.common)

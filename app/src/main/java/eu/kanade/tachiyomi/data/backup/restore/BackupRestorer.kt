@@ -21,6 +21,7 @@ import eu.kanade.tachiyomi.data.backup.restore.restorers.ExtensionsRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.MangaCategoriesRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.MangaExtensionRepoRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.MangaRestorer
+import eu.kanade.tachiyomi.data.backup.restore.restorers.NovelExtensionRepoRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.PreferenceRestorer
 import eu.kanade.tachiyomi.util.system.createFileInCacheDir
 import kotlinx.coroutines.CoroutineScope
@@ -45,6 +46,7 @@ class BackupRestorer(
     private val preferenceRestorer: PreferenceRestorer = PreferenceRestorer(context),
     private val animeExtensionRepoRestorer: AnimeExtensionRepoRestorer = AnimeExtensionRepoRestorer(),
     private val mangaExtensionRepoRestorer: MangaExtensionRepoRestorer = MangaExtensionRepoRestorer(),
+    private val novelExtensionRepoRestorer: NovelExtensionRepoRestorer = NovelExtensionRepoRestorer(),
     private val customButtonRestorer: CustomButtonRestorer = CustomButtonRestorer(),
     private val animeRestorer: AnimeRestorer = AnimeRestorer(),
     private val mangaRestorer: MangaRestorer = MangaRestorer(),
@@ -99,7 +101,9 @@ class BackupRestorer(
             restoreAmount += 1
         }
         if (options.extensionRepoSettings) {
-            restoreAmount += backup.backupAnimeExtensionRepo.size + backup.backupMangaExtensionRepo.size
+            restoreAmount += backup.backupAnimeExtensionRepo.size +
+                backup.backupMangaExtensionRepo.size +
+                backup.backupNovelExtensionRepo.size
         }
         if (options.customButtons) {
             restoreAmount += 1
@@ -129,7 +133,11 @@ class BackupRestorer(
                 restoreManga(backup.backupManga, if (options.categories) backup.backupCategories else emptyList())
             }
             if (options.extensionRepoSettings) {
-                restoreExtensionRepos(backup.backupAnimeExtensionRepo, backup.backupMangaExtensionRepo)
+                restoreExtensionRepos(
+                    backup.backupAnimeExtensionRepo,
+                    backup.backupMangaExtensionRepo,
+                    backup.backupNovelExtensionRepo,
+                )
             }
             if (options.customButtons) {
                 restoreCustomButtons(backup.backupCustomButton)
@@ -245,6 +253,7 @@ class BackupRestorer(
     private fun CoroutineScope.restoreExtensionRepos(
         backupAnimeExtensionRepo: List<BackupExtensionRepos>,
         backupMangaExtensionRepo: List<BackupExtensionRepos>,
+        backupNovelExtensionRepo: List<BackupExtensionRepos>,
     ) = launch {
         backupAnimeExtensionRepo
             .forEach {
@@ -273,6 +282,25 @@ class BackupRestorer(
                     mangaExtensionRepoRestorer(it)
                 } catch (e: Exception) {
                     errors.add(Date() to "Error Adding Manga Repo: ${it.name} : ${e.message}")
+                }
+
+                restoreProgress += 1
+                notifier.showRestoreProgress(
+                    context.stringResource(MR.strings.extensionRepo_settings),
+                    restoreProgress,
+                    restoreAmount,
+                    isSync,
+                )
+            }
+
+        backupNovelExtensionRepo
+            .forEach {
+                ensureActive()
+
+                try {
+                    novelExtensionRepoRestorer(it)
+                } catch (e: Exception) {
+                    errors.add(Date() to "Error Adding Novel Repo: ${it.name} : ${e.message}")
                 }
 
                 restoreProgress += 1

@@ -26,6 +26,12 @@ android {
                 schemaOutputDirectory.set(project.file("./src/main/sqldelightanime"))
                 srcDirs.from(project.file("./src/main/sqldelightanime"))
             }
+            create("NovelDatabase") {
+                packageName.set("tachiyomi.novel.data")
+                dialect(libs.sqldelight.dialects.sql)
+                schemaOutputDirectory.set(project.file("./src/main/sqldelightnovel"))
+                srcDirs.from(project.file("./src/main/sqldelightnovel"))
+            }
             create("AchievementsDatabase") {
                 packageName.set("tachiyomi.data.achievement")
                 dialect(libs.sqldelight.dialects.sql)
@@ -58,4 +64,5 @@ dependencies {
     testImplementation(libs.bundles.test)
     testImplementation(kotlinx.coroutines.test)
     testImplementation(libs.sqldelight.sqlite.driver)
+    testImplementation(libs.okhttp.mockwebserver)
 }

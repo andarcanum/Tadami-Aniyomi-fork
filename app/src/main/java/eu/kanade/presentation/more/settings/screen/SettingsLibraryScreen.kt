@@ -21,6 +21,7 @@ import eu.kanade.presentation.more.settings.PreferenceItem
 import eu.kanade.presentation.more.settings.widget.TriStateListDialog
 import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.manga.MangaLibraryUpdateJob
+import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
 import eu.kanade.tachiyomi.ui.category.CategoriesTab
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
@@ -236,6 +237,7 @@ object SettingsLibraryScreen : SearchableSettings {
                     onValueChanged = {
                         MangaLibraryUpdateJob.setupTask(context, it)
                         AnimeLibraryUpdateJob.setupTask(context, it)
+                        NovelLibraryUpdateJob.setupTask(context, it)
                         true
                     },
                 ),
@@ -254,6 +256,7 @@ object SettingsLibraryScreen : SearchableSettings {
                         ContextCompat.getMainExecutor(context).execute {
                             MangaLibraryUpdateJob.setupTask(context)
                             AnimeLibraryUpdateJob.setupTask(context)
+                            NovelLibraryUpdateJob.setupTask(context)
                         }
                         true
                     },

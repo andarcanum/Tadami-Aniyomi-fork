@@ -14,6 +14,7 @@ import eu.kanade.tachiyomi.data.backup.models.StringPreferenceValue
 import eu.kanade.tachiyomi.data.backup.models.StringSetPreferenceValue
 import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.manga.MangaLibraryUpdateJob
+import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
 import eu.kanade.tachiyomi.source.sourcePreferences
 import tachiyomi.core.common.preference.AndroidPreferenceStore
 import tachiyomi.core.common.preference.PreferenceStore
@@ -44,6 +45,7 @@ class PreferenceRestorer(
 
         AnimeLibraryUpdateJob.setupTask(context)
         MangaLibraryUpdateJob.setupTask(context)
+        NovelLibraryUpdateJob.setupTask(context)
         BackupCreateJob.setupTask(context)
     }
 

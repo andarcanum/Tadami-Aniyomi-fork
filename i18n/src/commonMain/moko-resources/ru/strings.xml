@@ -245,6 +245,7 @@
     <string name="ext_downloading">Загружается</string>
     <string name="ext_installing">Устанавливается</string>
     <string name="ext_installed">Установлено</string>
+    <string name="ext_available">Доступно</string>
     <string name="ext_untrusted">Ненадёжное</string>
     <string name="ext_uninstall">Удалить</string>
     <string name="untrusted_extension">Ненадёжное расширение</string>

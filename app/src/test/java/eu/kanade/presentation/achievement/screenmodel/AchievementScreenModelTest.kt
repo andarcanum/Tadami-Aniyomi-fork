@@ -51,19 +51,21 @@ class AchievementScreenModelTest {
     }
 
     @Test
-    fun `should load activity data into Success state`() = runTest {
-        // Given
-        val activity = listOf(DayActivity(LocalDate.now(), 1, tachiyomi.domain.achievement.model.ActivityType.APP_OPEN))
-        coEvery { activityDataRepository.getActivityData(365) } returns flowOf(activity)
+    fun `should load activity data into Success state`() {
+        runTest {
+            // Given
+            val activity = listOf(DayActivity(LocalDate.now(), 1, tachiyomi.domain.achievement.model.ActivityType.APP_OPEN))
+            coEvery { activityDataRepository.getActivityData(365) } returns flowOf(activity)
 
-        val screenModel = AchievementScreenModel(repository, loader, pointsManager, activityDataRepository)
+            val screenModel = AchievementScreenModel(repository, loader, pointsManager, activityDataRepository)
 
-        // When
-        testDispatcher.scheduler.advanceUntilIdle()
+            // When
+            testDispatcher.scheduler.advanceUntilIdle()
 
-        // Then
-        val state = screenModel.state.value
-        state.shouldBeInstanceOf<AchievementScreenState.Success>()
-        (state as AchievementScreenState.Success).activityData shouldBe activity
+            // Then
+            val state = screenModel.state.value
+            state.shouldBeInstanceOf<AchievementScreenState.Success>()
+            (state as AchievementScreenState.Success).activityData shouldBe activity
+        }
     }
 }

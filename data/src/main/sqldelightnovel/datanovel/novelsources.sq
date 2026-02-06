@@ -1,0 +1,24 @@
+CREATE TABLE novelsources(
+    _id INTEGER NOT NULL PRIMARY KEY,
+    lang TEXT NOT NULL,
+    name TEXT NOT NULL
+);
+
+findAll:
+SELECT *
+FROM novelsources;
+
+findOne:
+SELECT *
+FROM novelsources
+WHERE _id = :id;
+
+upsert:
+INSERT INTO novelsources(_id, lang, name)
+VALUES (:id, :lang, :name)
+ON CONFLICT(_id)
+DO UPDATE
+SET
+    lang = :lang,
+    name = :name
+WHERE _id = :id;
