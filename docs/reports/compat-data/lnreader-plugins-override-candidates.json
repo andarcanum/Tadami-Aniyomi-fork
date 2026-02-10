@@ -1,0 +1,10 @@
+{
+  "generatedAt": "2026-02-10T17:10:05.443Z",
+  "source": "live-smoke",
+  "summary": {
+    "totalPlugins": 251,
+    "candidateCount": 0,
+    "skippedExistingOverrides": 2
+  },
+  "entries": []
+}

@@ -1,0 +1,7745 @@
+{
+  "generatedAt": "2026-02-10T17:04:10.164Z",
+  "scenario": "live-smoke",
+  "inputs": {
+    "indexPath": "D:\\lnreader\\INDREADER\\lnreader-plugins\\.dist\\plugins.min.json",
+    "pluginBaseDir": "D:\\lnreader\\INDREADER\\lnreader-plugins\\.js\\plugins",
+    "query": "love",
+    "timeoutMs": 15000,
+    "concurrency": 8,
+    "limit": null
+  },
+  "summary": {
+    "totalPlugins": 251,
+    "passedAllStages": 0,
+    "failedPlugins": 251
+  },
+  "stageFailures": {
+    "popular": 110,
+    "search": 250,
+    "novel": 1,
+    "chapters": 0,
+    "chapterText": 0
+  },
+  "failureCodes": {
+    "invalid_json": 44,
+    "invalid_search_url": 1,
+    "network_error": 76,
+    "request_failed": 141,
+    "request_timeout": 5
+  },
+  "plugins": [
+    {
+      "id": "arnovel",
+      "site": "https://ar-no.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "azora",
+      "site": "https://azoramoon.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "dilartube",
+      "site": "https://golden.rest/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "freekolnovel",
+      "site": "https://free.kolnovel.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "hizomanga",
+      "site": "https://hizomanga.net/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "kolnovel",
+      "site": "https://kolnovel.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novel4up",
+      "site": "https://novel4up.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novelsparadise",
+      "site": "https://novelsparadise.site/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "olaoe",
+      "site": "https://olaoe.cyou/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_timeout"
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_timeout"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "rewayatclub",
+      "site": "https://rewayat.club/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "riwyat",
+      "site": "https://cenele.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "sunovels",
+      "site": "https://sunovels.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "69shu",
+      "site": "https://www.69shu.xyz",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "ixdzs8",
+      "site": "https://ixdzs8.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "linovel",
+      "site": "https://www.linovel.net",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_timeout"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "linovelib",
+      "site": "https://www.bilinovel.com",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "linovelib_tw",
+      "site": "https://tw.linovelib.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novel543",
+      "site": "https://www.novel543.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "quanben",
+      "site": "https://www.quanben.io/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "1stkissnovel",
+      "site": "https://1stkissnovel.org/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "allnovel",
+      "site": "https://allnovel.org/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "anf.net",
+      "site": "https://novgo.net/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "arcane",
+      "site": "https://arcanetranslations.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "archiveofourown",
+      "site": "https://archiveofourown.org/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_timeout"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "asuralightnovel",
+      "site": "https://srankmanga.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "bellereservoir",
+      "site": "https://bellereservoir.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 526
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 526
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "BLN",
+      "site": "https://bestlightnovel.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "boxnovel",
+      "site": "https://novlove.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "chrysanthemumgarden",
+      "site": "https://chrysanthemumgarden.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "citrusaurora",
+      "site": "https://citrusaurora.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "coralboutique",
+      "site": "https://coralboutique.xyz/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "cpunovel",
+      "site": "https://cpunovel.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "crimsonscrolls",
+      "site": "https://crimsonscrolls.net",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "daoistquest",
+      "site": "https://daoist.quest",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "daonovel",
+      "site": "https://daonovel.co/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "daotranslate",
+      "site": "https://daotranslate.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "DDL.com",
+      "site": "https://www.divinedaolibrary.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "dearestrosalie",
+      "site": "https://dearestrosalie.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "dragonholic",
+      "site": "https://dragonholic.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "dragontea",
+      "site": "https://dragontea.ink/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "dreambigtl",
+      "site": "https://www.dreambigtl.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "duskblossoms",
+      "site": "https://duskblossoms.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "earlynovel",
+      "site": "https://earlynovel.net/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "ellotl",
+      "site": "https://ellotl.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "eternalune",
+      "site": "https://eternalune.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "etudetranslations",
+      "site": "https://etudetranslations.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "fannovel",
+      "site": "https://www.fanmtl.com",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "fanstranslations",
+      "site": "https://fanstranslations.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "fenrir",
+      "site": "https://fenrirealm.com",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "fictionzone",
+      "site": "https://fictionzone.net",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "foxaholic",
+      "site": "https://www.foxaholic.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "foxteller",
+      "site": "https://www.foxteller.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "FWK.US",
+      "site": "https://faqwiki.us/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "FWN.com",
+      "site": "https://freewebnovel.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "galaxytranslations",
+      "site": "https://darkstartranslations.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "genesistudio",
+      "site": "https://genesistudio.com",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "guavaread",
+      "site": "https://guavaread.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "hiraethtranslation",
+      "site": "https://hiraethtranslation.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "hotnovelpub",
+      "site": "https://hotnovelpub.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "inkitt",
+      "site": "https://www.inkitt.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "ippotranslations",
+      "site": "https://ippotranslations.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "kdtnovels",
+      "site": "https://kdtnovels.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "keopi",
+      "site": "https://keopitranslations.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "knoxt",
+      "site": "https://knoxt.space/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "lazygirltranslations",
+      "site": "https://lazygirltranslations.com",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "LeafStudio",
+      "site": "https://leafstudio.site/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "libread",
+      "site": "https://libread.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "lightnovelcave",
+      "site": "https://www.lightnovelcave.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "lightnovelplus",
+      "site": "https://lightnovelplus.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "lightnovelpub",
+      "site": "https://www.lightnovelpub.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "lightnovelpubvip",
+      "site": "https://lightnovelpub.vip/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "lightnoveltranslations",
+      "site": "https://lightnovelstranslations.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "LightNovelUpdates",
+      "site": "https://www.lightnovelupdates.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "lightnovelworld",
+      "site": "https://www.lightnovelworld.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "lilyonthevalley",
+      "site": "https://lilyonthevalley.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 530
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 530
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "lnheaven",
+      "site": "https://lightnovelheaven.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "lnmtl",
+      "site": "https://lnmtl.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "ltnovel",
+      "site": "https://www.ltnovels.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "lunarletters",
+      "site": "https://lunarletters.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "meownovel",
+      "site": "https://meownovel.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "moonlightnovel",
+      "site": "https://moonlightnovel.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "mostnovel",
+      "site": "https://mostnovel.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "mtl-novel",
+      "site": "https://mtl-novel.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "mtlnovel",
+      "site": "https://www.mtlnovels.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "mtlreader",
+      "site": "https://mtlreader.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "mvlempyr.com",
+      "site": "https://www.mvlempyr.io/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "mysticalmerries",
+      "site": "https://mysticalmerries.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "neosekaiTLS",
+      "site": "https://www.neosekaitranslations.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "nitromanga",
+      "site": "https://nitromanga.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "NO.net",
+      "site": "https://novelsonline.org",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "noblemtl",
+      "site": "https://noblemtl.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "noicetranslations",
+      "site": "https://noicetranslations.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novelbin",
+      "site": "https://novelbin.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novelbuddy",
+      "site": "https://novelbuddy.io/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novelcool",
+      "site": "https://www.novelcool.com",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novelfire",
+      "site": "https://novelfire.net/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novelfire.paged",
+      "site": "https://novelfire.net/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novelfull",
+      "site": "https://novelfull.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novelhall",
+      "site": "https://novelhall.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novelib",
+      "site": "https://novelib.com",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novelight",
+      "site": "https://novelight.net/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novelmultiverse",
+      "site": "https://www.novelmultiverse.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novelsknight",
+      "site": "https://novelsknight.punchmanga.online/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novelTL",
+      "site": "https://noveltranslate.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novelupdates",
+      "site": "https://www.novelupdates.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "pandamtl",
+      "site": "https://pandamtl.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "pasteltales",
+      "site": "https://pasteltales.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "pawread",
+      "site": "https://m.pawread.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "penguinsquad",
+      "site": "https://penguin-squad.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "prizmatranslation",
+      "site": "https://prizmatranslation.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "rainofsnow",
+      "site": "https://rainofsnow.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "ranobes",
+      "site": "https://ranobes.top",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "ranovel",
+      "site": "https://ranovel.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "readfanfic",
+      "site": "https://readfanfic.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_timeout"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "readfrom",
+      "site": "https://readfrom.net",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "readnovelfull",
+      "site": "https://readnovelfull.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "reaperscans.com",
+      "site": "https://reaperscans.com",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 502
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "ReLib",
+      "site": "https://re-library.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "requiemtls",
+      "site": "https://requiemtls.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "rln.app",
+      "site": "https://rln.app",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "royalroad",
+      "site": "https://www.royalroad.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "salmonlatte",
+      "site": "https://salmonlatte.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 525
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 525
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "scribblehub",
+      "site": "https://www.scribblehub.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "sleeptTLS",
+      "site": "https://sleepytranslations.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "sonicmtl",
+      "site": "https://www.sonicmtl.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "storyseedling",
+      "site": "https://storyseedling.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "sweetescape",
+      "site": "https://sweetescapetranslations.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "systemtranslation",
+      "site": "https://systemtranslation.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "translatinotaku",
+      "site": "https://translatinotaku.net/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "transweaver",
+      "site": "https://transweaver.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "universalnovel",
+      "site": "https://universalnovel.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "vandytranslate",
+      "site": "https://vandytranslate.com",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "violetlily",
+      "site": "https://violetlilytranslation.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "vynovel",
+      "site": "https://vynovel.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "webnovel",
+      "site": "https://www.webnovel.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "webnovelover",
+      "site": "https://www.webnovelover.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "webnovelrating",
+      "site": "https://www.webnovel.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "WebNovelTraslation",
+      "site": "https://webnoveltranslations.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "webnovelworld",
+      "site": "https://www.webnovelworld.org/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "whitemoonlightnovels",
+      "site": "https://whitemoonlightnovels.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "wooksteahouse",
+      "site": "https://wooksteahouse.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "wordexcerpt",
+      "site": "https://wordexcerpt.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "WTRLAB",
+      "site": "https://wtr-lab.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "wuxiacity",
+      "site": "https://www.wuxiafox.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "wuxiamtl",
+      "site": "https://www.fanmtl.com",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "wuxiap",
+      "site": "https://www.wuxiabox.com",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "wuxiaspace",
+      "site": "https://www.wuxiaspot.com",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "wuxiav",
+      "site": "https://www.wuxiav.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "wuxiaworld",
+      "site": "https://www.wuxiaworld.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "wuxiaworld.site",
+      "site": "https://wuxiaworld.site/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "zetroTL",
+      "site": "https://zetrotranslation.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "chireads",
+      "site": "https://chireads.com",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "harkeneliwood",
+      "site": "https://harkeneliwood.wordpress.com",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "kisswood",
+      "site": "https://kisswood.eu",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "lightnovelfr",
+      "site": "https://lightnovelfr.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "massnovel",
+      "site": "https://massnovel.fr/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "mtlnovel-fr",
+      "site": "https://fr.mtlnovels.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "noveldeglace",
+      "site": "https://noveldeglace.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novhell",
+      "site": "https://novhell.org",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "phenixscans",
+      "site": "https://phenixscans.fr",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "warriorlegendtrad",
+      "site": "https://warriorlegendtrad.wordpress.com",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "worldnovel",
+      "site": "https://world-novel.fr/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "wuxialnscantrad",
+      "site": "https://wuxialnscantrad.wordpress.com",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "xiaowaz",
+      "site": "https://xiaowaz.fr",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "bacalightnovel",
+      "site": "https://bacalightnovel.co/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "IDWN.id",
+      "site": "https://indowebnovel.id/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "meionovel",
+      "site": "https://meionovels.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "morenovel",
+      "site": "https://vanovel.com",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "mtlnovel-id",
+      "site": "https://id.mtlnovels.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novelbookid",
+      "site": "https://www.novelbook.id/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novelringan.com",
+      "site": "https://novelringan.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "sakura.id",
+      "site": "https://sakuranovel.id/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "sektenovel",
+      "site": "https://sektenovel.web.id/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "wbnovel",
+      "site": "https://wbnovel.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "kakuyomu",
+      "site": "https://kakuyomu.jp",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "yomou.syosetu",
+      "site": "https://yomou.syosetu.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "agit.xyz",
+      "site": "https://agit664.xyz",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "fortuneeternal",
+      "site": "https://www.fortuneeternal.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novelki.pl",
+      "site": "https://novelki.pl",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "betternovels",
+      "site": "https://betternovels.net/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "blogdoamonnovels",
+      "site": "https://www.blogdoamonnovels.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "centralnovel",
+      "site": "https://centralnovel.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "kiniga",
+      "site": "https://kiniga.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "lanovels",
+      "site": "https://lanovels.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "lightnovelbrasil",
+      "site": "https://lightnovelbrasil.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "mtlnovel-pt",
+      "site": "https://pt.mtlnovels.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novelmania.com.br",
+      "site": "https://novelmania.com.br",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "tsundoku",
+      "site": "https://tsundoku.com.br",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "AT",
+      "site": "https://author.today",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "bookhamster",
+      "site": "https://bookhamster.ru",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "bookriver",
+      "site": "https://bookriver.ru",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "erolate",
+      "site": "https://erolate.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 500
+        },
+        "search": {
+          "status": "pass",
+          "candidateCount": 20
+        },
+        "novel": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 500
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": "https://erolate.com/book/4611",
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "eznovels",
+      "site": "https://eznovels.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "ficbook",
+      "site": "https://ficbook.net",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "freedlit.space",
+      "site": "https://freedlit.space",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "ifreedom",
+      "site": "https://ifreedom.su",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "jaomix.ru",
+      "site": "https://jaomix.ru",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "mtlnovel-ru",
+      "site": "https://ru.mtlnovels.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "neobook",
+      "site": "https://neobook.org",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novelcool-ru",
+      "site": "https://ru.novelcool.com",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novelovh",
+      "site": "https://novel.ovh",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "ranobes-ru",
+      "site": "https://ranobes.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "ReN",
+      "site": "https://renovels.org",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "RLIB",
+      "site": "https://ranobelib.me",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "RNBH.org",
+      "site": "https://ranobehub.org",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "RNRF",
+      "site": "https://ранобэ.рф",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "rulate",
+      "site": "https://tl.rulate.ru",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "RV",
+      "site": "https://ruvers.ru/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "TL",
+      "site": "https://novel.tl",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "TopLiba",
+      "site": "https://topliba.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "zelluloza",
+      "site": "https://zelluloza.ru",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "allnovelread",
+      "site": "https://allnovelread.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "AnimesHoy12",
+      "site": "https://animeshoy12.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "HasuTL",
+      "site": "https://hasutl.wordpress.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "lightnoveldaily",
+      "site": "https://lightnoveldaily.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "mtlnovel-es",
+      "site": "https://es.mtlnovels.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novelasligera",
+      "site": "https://novelasligera.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "oasistranslations",
+      "site": "https://oasistranslations.wordpress.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "panchotranslations",
+      "site": "https://panchotranslations.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "reinowuxia",
+      "site": "http://www.reinowuxia.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "skynovels",
+      "site": "https://www.skynovels.net/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "TCSega",
+      "site": "https://teamchmantranslations.com",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "traducciones",
+      "site": "https://traduccionesamistosas.topmanhuas.org/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "tunovelaligera",
+      "site": "https://tunovelaligera.com",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "yuukitls",
+      "site": "https://yuukitls.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novel-lucky",
+      "site": "https://novel-lucky.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "novelpdf",
+      "site": "https://novelpdf.xyz/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "azraznovel",
+      "site": "https://araznovel.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "ekitaplar",
+      "site": "https://e-kitaplar.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "epiknovel",
+      "site": "https://www.epiknovel.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "Kakikata",
+      "site": "https://kakikata.com.tr/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "kodekslibrary",
+      "site": "https://www.kodekslibrary.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "mangatr",
+      "site": "https://manga-tr.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "nabiscans",
+      "site": "https://nabiscans.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "namevt",
+      "site": "https://namevt.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "noveloku",
+      "site": "https://noveloku.com.tr/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "noveltr",
+      "site": "https://noveltr.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "ragnarscans",
+      "site": "https://ragnarscans.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "thnovels",
+      "site": "https://thnovels.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "turkcelightnovels",
+      "site": "https://turkcelightnovels.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "webnoveloku",
+      "site": "https://www.webnoveloku.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "bakainua",
+      "site": "https://baka.in.ua",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "smakolykytl",
+      "site": "https://smakolykytl.site/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "uaranobeclub",
+      "site": "https://uaranobe.club/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "lightnovel.vn",
+      "site": "https://lightnovel.vn",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "ln.hako",
+      "site": "https://ln.hako.vn",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "nettruyen",
+      "site": "https://nettruyen.com.vn",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "truyenchu",
+      "site": "https://truyenchu.vn",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "truyenconect",
+      "site": "https://truyenconect.com",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_timeout"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "truyenfull",
+      "site": "https://truyenfull.io",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "komga",
+      "site": "url",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_search_url"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    }
+  ]
+}
