@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.extension.novel.api
 
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.awaitSuccess
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -27,6 +28,8 @@ class NetworkNovelPluginIndexFetcher(
                 try {
                     val response = client.newCall(GET(candidate)).awaitSuccess()
                     return@withContext response.body?.string().orEmpty()
+                } catch (error: CancellationException) {
+                    throw error
                 } catch (error: Exception) {
                     lastError = error
                 }
