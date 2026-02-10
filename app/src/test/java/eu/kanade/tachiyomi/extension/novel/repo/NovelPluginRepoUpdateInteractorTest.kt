@@ -137,6 +137,68 @@ class NovelPluginRepoUpdateInteractorTest {
             updates shouldBe listOf(newerUpdate)
         }
     }
+
+    @Test
+    fun `findUpdates keeps same plugin id across different repo roots`() {
+        runTest {
+            val installedEntry = NovelPluginRepoEntry(
+                id = "novel",
+                name = "Novel Source",
+                site = "https://example.org",
+                lang = "en",
+                version = 1,
+                url = "https://example.org/novel.js",
+                iconUrl = null,
+                customJsUrl = null,
+                customCssUrl = null,
+                hasSettings = false,
+                sha256 = "deadbeef",
+            )
+            val repoOneUpdate = installedEntry.copy(
+                version = 2,
+                site = "https://repo-one.example",
+                url = "https://repo-one.example/novel.js",
+                sha256 = "repo-one",
+            )
+            val repoTwoUpdate = installedEntry.copy(
+                version = 4,
+                site = "https://repo-two.example",
+                url = "https://repo-two.example/novel.js",
+                sha256 = "repo-two",
+            )
+            val storage = InMemoryNovelPluginStorage().apply {
+                save(
+                    NovelPluginPackage(
+                        entry = installedEntry,
+                        script = "main".toByteArray(),
+                        customJs = null,
+                        customCss = null,
+                    ),
+                )
+            }
+            val repoService = FakeRepoService(
+                mapOf(
+                    "https://repo-one.example/index.min.json" to listOf(repoOneUpdate),
+                    "https://repo-two.example/index.min.json" to listOf(repoTwoUpdate),
+                ),
+            )
+
+            val interactor = NovelPluginRepoUpdateInteractor(
+                repoService = repoService,
+                storage = storage,
+                updateChecker = NovelExtensionUpdateChecker(),
+            )
+
+            val updates = interactor.findUpdates(
+                listOf(
+                    "https://repo-one.example/index.min.json",
+                    "https://repo-two.example/index.min.json",
+                ),
+            )
+
+            updates shouldBe listOf(repoOneUpdate, repoTwoUpdate)
+        }
+    }
 }
 
 private class FakeRepoService(

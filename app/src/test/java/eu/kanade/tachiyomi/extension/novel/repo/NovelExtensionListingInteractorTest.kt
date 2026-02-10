@@ -173,6 +173,77 @@ class NovelExtensionListingInteractorTest {
     }
 
     @Test
+    fun `fetch keeps same plugin id from different repos`() {
+        runTest {
+            val getRepos = mockk<GetNovelExtensionRepo>()
+            val repoService = mockk<NovelPluginRepoServiceContract>()
+            val storage = mockk<NovelPluginStorage>()
+
+            val firstRepo = ExtensionRepo(
+                baseUrl = "https://repo-one.example",
+                name = "Repo One",
+                shortName = null,
+                website = "https://repo-one.example",
+                signingKeyFingerprint = "ONE",
+            )
+            val secondRepo = ExtensionRepo(
+                baseUrl = "https://repo-two.example",
+                name = "Repo Two",
+                shortName = null,
+                website = "https://repo-two.example",
+                signingKeyFingerprint = "TWO",
+            )
+            coEvery { getRepos.getAll() } returns listOf(firstRepo, secondRepo)
+
+            val fromFirstRepo = NovelPluginRepoEntry(
+                id = "same-id",
+                name = "First Mirror",
+                site = "Repo One",
+                lang = "en",
+                version = 2,
+                url = "https://repo-one.example/same-id.js",
+                iconUrl = null,
+                customJsUrl = null,
+                customCssUrl = null,
+                hasSettings = false,
+                sha256 = "one",
+            )
+            val fromSecondRepo = NovelPluginRepoEntry(
+                id = "same-id",
+                name = "Second Mirror",
+                site = "Repo Two",
+                lang = "en",
+                version = 5,
+                url = "https://repo-two.example/same-id.js",
+                iconUrl = null,
+                customJsUrl = null,
+                customCssUrl = null,
+                hasSettings = false,
+                sha256 = "two",
+            )
+
+            coEvery { repoService.fetch("https://repo-one.example/index.min.json") } returns listOf(fromFirstRepo)
+            coEvery { repoService.fetch("https://repo-one.example/plugins.min.json") } returns emptyList()
+            coEvery { repoService.fetch("https://repo-two.example/index.min.json") } returns listOf(fromSecondRepo)
+            coEvery { repoService.fetch("https://repo-two.example/plugins.min.json") } returns emptyList()
+            coEvery { storage.getAll() } returns emptyList()
+
+            val interactor = NovelExtensionListingInteractor(
+                getExtensionRepo = getRepos,
+                repoService = repoService,
+                storage = storage,
+                updateChecker = NovelExtensionUpdateChecker(),
+            )
+
+            val listing = interactor.fetch()
+
+            listing.updates shouldBe emptyList()
+            listing.installed shouldBe emptyList()
+            listing.available.shouldContainExactly(fromFirstRepo, fromSecondRepo)
+        }
+    }
+
+    @Test
     fun `fetch returns installed even with no repos`() {
         runTest {
             val getRepos = mockk<GetNovelExtensionRepo>()

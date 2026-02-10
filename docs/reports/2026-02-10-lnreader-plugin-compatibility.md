@@ -1,7 +1,7 @@
 ﻿# Compatibility Check: `lnreader-plugins` Live Smoke vs `ranobe-aniyomi`
 
 Date: 2026-02-10  
-Scenario: live runtime smoke against converted plugin scripts (`popular -> search -> novel -> chapters -> chapterText`).
+Scenario: live network smoke using handler-presence detection plus generic HTTP checks (`popular -> search -> novel -> chapters -> chapterText` stage model).
 
 ## Inputs
 

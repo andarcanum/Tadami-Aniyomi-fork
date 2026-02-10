@@ -23,9 +23,9 @@ class NovelExtensionListingInteractor(
             .flatMap { repo ->
                 resolveNovelPluginRepoIndexUrls(repo.baseUrl)
                     .flatMap { repoService.fetch(it) }
+                    .groupBy { it.id }
+                    .mapNotNull { (_, entries) -> entries.maxByOrNull { it.version } }
             }
-            .groupBy { it.id }
-            .mapNotNull { (_, entries) -> entries.maxByOrNull { it.version } }
 
         val updates = updateChecker.findUpdates(installed, available)
         val installedIds = installed.map { it.id }.toSet()
