@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.extension.novel.api
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoEntry
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoUpdateInteractor
+import eu.kanade.tachiyomi.extension.novel.repo.resolveNovelPluginRepoIndexUrls
 import mihon.domain.extensionrepo.novel.interactor.GetNovelExtensionRepo
 import mihon.domain.extensionrepo.novel.interactor.UpdateNovelExtensionRepo
 import tachiyomi.core.common.preference.Preference
@@ -37,7 +38,8 @@ internal class NovelExtensionApi(
         updateExtensionRepo.awaitAll()
 
         val repoUrls = getExtensionRepo.getAll()
-            .map { "${it.baseUrl}/index.min.json" }
+            .flatMap { resolveNovelPluginRepoIndexUrls(it.baseUrl) }
+            .distinct()
 
         val updates = repoUpdateInteractor.findUpdates(repoUrls)
         if (!fromAvailableExtensionList) {

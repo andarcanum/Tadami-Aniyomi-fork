@@ -5,6 +5,7 @@ import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoEntry
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoUpdateInteractor
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
+import io.mockk.coJustRun
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -71,20 +72,20 @@ class NovelExtensionApiTest {
         }
     }
 
-        @Test
-        fun `when checked normally expect update count set`() {
-            runTest {
-                nowMs = 2_000_000L
-                every { lastCheckPreference.get() } returns 0L
+    @Test
+    fun `when checked normally expect update count set`() {
+        runTest {
+            nowMs = 2_000_000L
+            every { lastCheckPreference.get() } returns 0L
 
-                val repo = ExtensionRepo(
+            val repo = ExtensionRepo(
                 baseUrl = "https://example.org",
                 name = "Example",
                 shortName = null,
                 website = "https://example.org",
                 signingKeyFingerprint = "ABC",
-                )
-                val entry = NovelPluginRepoEntry(
+            )
+            val entry = NovelPluginRepoEntry(
                 id = "example-id",
                 name = "Example Source",
                 site = "Example",
@@ -96,20 +97,75 @@ class NovelExtensionApiTest {
                 customCssUrl = null,
                 hasSettings = false,
                 sha256 = "deadbeef",
+            )
+
+            coEvery { getExtensionRepo.getAll() } returns listOf(repo)
+            coEvery {
+                repoUpdateInteractor.findUpdates(
+                    listOf(
+                        "https://example.org/index.min.json",
+                        "https://example.org/plugins.min.json",
+                    ),
                 )
+            } returns listOf(entry)
+            coJustRun { updateExtensionRepo.awaitAll() }
 
-                coEvery { getExtensionRepo.getAll() } returns listOf(repo)
-                coEvery {
+            val result = api.checkForUpdates()
+
+            result shouldBe listOf(entry)
+            coVerify { updateExtensionRepo.awaitAll() }
+            coVerify {
+                repoUpdateInteractor.findUpdates(
+                    listOf(
+                        "https://example.org/index.min.json",
+                        "https://example.org/plugins.min.json",
+                    ),
+                )
+            }
+            verify { lastCheckPreference.set(nowMs) }
+            verify { updatesCountPreference.set(1) }
+        }
+    }
+
+    @Test
+    fun `when repo base url already points to index file expect no double suffix`() {
+        runTest {
+            nowMs = 3_000_000L
+            every { lastCheckPreference.get() } returns 0L
+
+            val repo = ExtensionRepo(
+                baseUrl = "https://example.org/index.min.json",
+                name = "Example",
+                shortName = null,
+                website = "https://example.org",
+                signingKeyFingerprint = "ABC",
+            )
+            val entry = NovelPluginRepoEntry(
+                id = "example-id",
+                name = "Example Source",
+                site = "Example",
+                lang = "en",
+                version = 2,
+                url = "https://example.org/plugin.js",
+                iconUrl = null,
+                customJsUrl = null,
+                customCssUrl = null,
+                hasSettings = false,
+                sha256 = "deadbeef",
+            )
+
+            coEvery { getExtensionRepo.getAll() } returns listOf(repo)
+            coEvery {
                 repoUpdateInteractor.findUpdates(listOf("https://example.org/index.min.json"))
-                } returns listOf(entry)
-                coEvery { updateExtensionRepo.awaitAll() } returns emptyList()
+            } returns listOf(entry)
+            coJustRun { updateExtensionRepo.awaitAll() }
 
-                val result = api.checkForUpdates()
+            val result = api.checkForUpdates()
 
-                result shouldBe listOf(entry)
-                coVerify { updateExtensionRepo.awaitAll() }
-                verify { lastCheckPreference.set(nowMs) }
-                verify { updatesCountPreference.set(1) }
+            result shouldBe listOf(entry)
+            coVerify {
+                repoUpdateInteractor.findUpdates(listOf("https://example.org/index.min.json"))
             }
         }
     }
+}
