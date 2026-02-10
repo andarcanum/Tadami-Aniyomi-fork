@@ -273,7 +273,7 @@ async function runLiveSmokeForPlugin({
     popular: hasPopular ? stageSkip('site_unavailable') : stageSkip('missing_handler'),
     search: hasSearch ? stageSkip('search_unavailable') : stageSkip('missing_handler'),
     novel: hasParseNovel ? stageSkip('search_unavailable') : stageSkip('missing_handler'),
-    chapters: stageSkip('novel_unavailable'),
+    chapters: hasParseNovel ? stageSkip('novel_unavailable') : stageSkip('missing_handler'),
     chapterText: hasParseChapter ? stageSkip('chapters_unavailable') : stageSkip('missing_handler'),
   };
 

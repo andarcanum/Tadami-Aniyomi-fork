@@ -187,6 +187,46 @@ test('runLiveSmokeForPlugin marks search stage as skipped when handler is missin
   assert.equal(result.stages.chapterText.code, 'chapters_unavailable');
 });
 
+test('runLiveSmokeForPlugin marks chapters as missing_handler when parseNovel handler is missing', async () => {
+  const plugin = {
+    id: 'demo',
+    site: 'https://example.org',
+  };
+  const scriptText = `
+    exports.default = {
+      popularNovels() {},
+      searchNovels() {},
+      parseChapter() {}
+    };
+  `;
+
+  const fetcher = async (url) => {
+    if (url === 'https://example.org') {
+      return makeResponse({ text: '<html><body>ok</body></html>' });
+    }
+    if (url.startsWith('https://example.org/search/autocomplete')) {
+      return makeResponse({ json: [{ url: '/book/4' }] });
+    }
+    throw new Error(`Unexpected URL ${url}`);
+  };
+
+  const result = await runLiveSmokeForPlugin({
+    plugin,
+    scriptText,
+    fetcher,
+    query: 'love',
+  });
+
+  assert.equal(result.stages.popular.status, 'pass');
+  assert.equal(result.stages.search.status, 'pass');
+  assert.equal(result.stages.novel.status, 'skip');
+  assert.equal(result.stages.novel.code, 'missing_handler');
+  assert.equal(result.stages.chapters.status, 'skip');
+  assert.equal(result.stages.chapters.code, 'missing_handler');
+  assert.equal(result.stages.chapterText.status, 'skip');
+  assert.equal(result.stages.chapterText.code, 'chapters_unavailable');
+});
+
 test('runLiveSmokeForPlugin falls back to next search template when first is invalid', async () => {
   const plugin = {
     id: 'demo',
