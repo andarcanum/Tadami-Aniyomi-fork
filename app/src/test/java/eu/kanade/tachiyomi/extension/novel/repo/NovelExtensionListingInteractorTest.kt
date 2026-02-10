@@ -21,71 +21,70 @@ class NovelExtensionListingInteractorTest {
             val storage = mockk<NovelPluginStorage>()
 
             val repo = ExtensionRepo(
-            baseUrl = "https://example.org",
-            name = "Example",
-            shortName = null,
-            website = "https://example.org",
-            signingKeyFingerprint = "ABC",
+                baseUrl = "https://example.org",
+                name = "Example",
+                shortName = null,
+                website = "https://example.org",
+                signingKeyFingerprint = "ABC",
             )
             coEvery { getRepos.getAll() } returns listOf(repo)
 
             val availableUpdate = NovelPluginRepoEntry(
-            id = "source-1",
-            name = "Source 1",
-            site = "Example",
-            lang = "en",
-            version = 2,
-            url = "https://example.org/source-1.js",
-            iconUrl = null,
-            customJsUrl = null,
-            customCssUrl = null,
-            hasSettings = false,
-            sha256 = "aaa",
+                id = "source-1",
+                name = "Source 1",
+                site = "Example",
+                lang = "en",
+                version = 2,
+                url = "https://example.org/source-1.js",
+                iconUrl = null,
+                customJsUrl = null,
+                customCssUrl = null,
+                hasSettings = false,
+                sha256 = "aaa",
             )
             val availableNew = NovelPluginRepoEntry(
-            id = "source-2",
-            name = "Source 2",
-            site = "Example",
-            lang = "en",
-            version = 1,
-            url = "https://example.org/source-2.js",
-            iconUrl = null,
-            customJsUrl = null,
-            customCssUrl = null,
-            hasSettings = false,
-            sha256 = "bbb",
+                id = "source-2",
+                name = "Source 2",
+                site = "Example",
+                lang = "en",
+                version = 1,
+                url = "https://example.org/source-2.js",
+                iconUrl = null,
+                customJsUrl = null,
+                customCssUrl = null,
+                hasSettings = false,
+                sha256 = "bbb",
             )
-            coEvery {
-            repoService.fetch("https://example.org/index.min.json")
-            } returns listOf(availableUpdate, availableNew)
+            coEvery { repoService.fetch("https://example.org/index.min.json") } returns listOf(availableUpdate)
+            coEvery { repoService.fetch("https://example.org/plugins.min.json") } returns listOf(availableNew)
 
             val installed = NovelPluginRepoEntry(
-            id = "source-1",
-            name = "Source 1",
-            site = "Example",
-            lang = "en",
-            version = 1,
-            url = "https://example.org/source-1.js",
-            iconUrl = null,
-            customJsUrl = null,
-            customCssUrl = null,
-            hasSettings = false,
-            sha256 = "old",
+                id = "source-1",
+                name = "Source 1",
+                site = "Example",
+                lang = "en",
+                version = 1,
+                url = "https://example.org/source-1.js",
+                iconUrl = null,
+                customJsUrl = null,
+                customCssUrl = null,
+                hasSettings = false,
+                sha256 = "old",
             )
             coEvery { storage.getAll() } returns listOf(
-            NovelPluginPackage(
-            entry = installed,
-            script = byteArrayOf(),
-            customJs = null,
-            customCss = null,
-            ),
+                NovelPluginPackage(
+                    entry = installed,
+                    script = byteArrayOf(),
+                    customJs = null,
+                    customCss = null,
+                ),
             )
 
             val interactor = NovelExtensionListingInteractor(
-            getExtensionRepo = getRepos,
-            repoService = repoService,
-            storage = storage,
-            updateChecker = NovelExtensionUpdateChecker(),
+                getExtensionRepo = getRepos,
+                repoService = repoService,
+                storage = storage,
+                updateChecker = NovelExtensionUpdateChecker(),
             )
 
             val listing = interactor.fetch()
@@ -94,32 +93,142 @@ class NovelExtensionListingInteractorTest {
             listing.installed.shouldContainExactly(installed)
             listing.available.shouldContainExactly(availableNew)
             coVerify(exactly = 1) { repoService.fetch("https://example.org/index.min.json") }
+            coVerify(exactly = 1) { repoService.fetch("https://example.org/plugins.min.json") }
         }
     }
 
-        @Test
-        fun `fetch returns installed even with no repos`() {
-            runTest {
-                val getRepos = mockk<GetNovelExtensionRepo>()
-                val repoService = mockk<NovelPluginRepoServiceContract>()
-                val storage = mockk<NovelPluginStorage>()
+    @Test
+    fun `fetch dedupes duplicate ids across index formats to highest version`() {
+        runTest {
+            val getRepos = mockk<GetNovelExtensionRepo>()
+            val repoService = mockk<NovelPluginRepoServiceContract>()
+            val storage = mockk<NovelPluginStorage>()
 
-                coEvery { getRepos.getAll() } returns emptyList()
-                coEvery { storage.getAll() } returns emptyList()
+            val repo = ExtensionRepo(
+                baseUrl = "https://example.org",
+                name = "Example",
+                shortName = null,
+                website = "https://example.org",
+                signingKeyFingerprint = "ABC",
+            )
+            coEvery { getRepos.getAll() } returns listOf(repo)
 
-                val interactor = NovelExtensionListingInteractor(
+            val duplicateFromIndex = NovelPluginRepoEntry(
+                id = "source-dup",
+                name = "Source Dup",
+                site = "Example",
+                lang = "en",
+                version = 1,
+                url = "https://example.org/source-dup-v1.js",
+                iconUrl = null,
+                customJsUrl = null,
+                customCssUrl = null,
+                hasSettings = false,
+                sha256 = "dup-v1",
+            )
+            val duplicateFromPlugins = NovelPluginRepoEntry(
+                id = "source-dup",
+                name = "Source Dup",
+                site = "Example",
+                lang = "en",
+                version = 3,
+                url = "https://example.org/source-dup-v3.js",
+                iconUrl = null,
+                customJsUrl = null,
+                customCssUrl = null,
+                hasSettings = false,
+                sha256 = "dup-v3",
+            )
+            val unique = NovelPluginRepoEntry(
+                id = "source-unique",
+                name = "Source Unique",
+                site = "Example",
+                lang = "en",
+                version = 1,
+                url = "https://example.org/source-unique.js",
+                iconUrl = null,
+                customJsUrl = null,
+                customCssUrl = null,
+                hasSettings = false,
+                sha256 = "unique",
+            )
+
+            coEvery { repoService.fetch("https://example.org/index.min.json") } returns listOf(duplicateFromIndex, unique)
+            coEvery { repoService.fetch("https://example.org/plugins.min.json") } returns listOf(duplicateFromPlugins)
+            coEvery { storage.getAll() } returns emptyList()
+
+            val interactor = NovelExtensionListingInteractor(
                 getExtensionRepo = getRepos,
                 repoService = repoService,
                 storage = storage,
                 updateChecker = NovelExtensionUpdateChecker(),
-                )
+            )
 
-                val listing = interactor.fetch()
+            val listing = interactor.fetch()
 
-                listing.updates shouldBe emptyList()
-                listing.installed shouldBe emptyList()
-                listing.available shouldBe emptyList()
-                coVerify(exactly = 0) { repoService.fetch(any<String>()) }
-            }
+            listing.updates shouldBe emptyList()
+            listing.installed shouldBe emptyList()
+            listing.available.shouldContainExactly(duplicateFromPlugins, unique)
         }
     }
+
+    @Test
+    fun `fetch returns installed even with no repos`() {
+        runTest {
+            val getRepos = mockk<GetNovelExtensionRepo>()
+            val repoService = mockk<NovelPluginRepoServiceContract>()
+            val storage = mockk<NovelPluginStorage>()
+
+            coEvery { getRepos.getAll() } returns emptyList()
+            coEvery { storage.getAll() } returns emptyList()
+
+            val interactor = NovelExtensionListingInteractor(
+                getExtensionRepo = getRepos,
+                repoService = repoService,
+                storage = storage,
+                updateChecker = NovelExtensionUpdateChecker(),
+            )
+
+            val listing = interactor.fetch()
+
+            listing.updates shouldBe emptyList()
+            listing.installed shouldBe emptyList()
+            listing.available shouldBe emptyList()
+            coVerify(exactly = 0) { repoService.fetch(any<String>()) }
+        }
+    }
+
+    @Test
+    fun `fetch uses repo url as is when base url already ends with index file`() {
+        runTest {
+            val getRepos = mockk<GetNovelExtensionRepo>()
+            val repoService = mockk<NovelPluginRepoServiceContract>()
+            val storage = mockk<NovelPluginStorage>()
+
+            val repo = ExtensionRepo(
+                baseUrl = "https://example.org/index.min.json",
+                name = "Example",
+                shortName = null,
+                website = "https://example.org",
+                signingKeyFingerprint = "ABC",
+            )
+            coEvery { getRepos.getAll() } returns listOf(repo)
+            coEvery { repoService.fetch("https://example.org/index.min.json") } returns emptyList()
+            coEvery { storage.getAll() } returns emptyList()
+
+            val interactor = NovelExtensionListingInteractor(
+                getExtensionRepo = getRepos,
+                repoService = repoService,
+                storage = storage,
+                updateChecker = NovelExtensionUpdateChecker(),
+            )
+
+            val listing = interactor.fetch()
+
+            listing.updates shouldBe emptyList()
+            listing.installed shouldBe emptyList()
+            listing.available shouldBe emptyList()
+            coVerify(exactly = 1) { repoService.fetch("https://example.org/index.min.json") }
+        }
+    }
+}

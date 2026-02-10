@@ -20,7 +20,12 @@ class NovelExtensionListingInteractor(
     suspend fun fetch(): NovelExtensionListing {
         val installed = storage.getAll().map { it.entry }
         val available = getExtensionRepo.getAll()
-            .flatMap { repoService.fetch("${it.baseUrl}/index.min.json") }
+            .flatMap { repo ->
+                resolveNovelPluginRepoIndexUrls(repo.baseUrl)
+                    .flatMap { repoService.fetch(it) }
+            }
+            .groupBy { it.id }
+            .mapNotNull { (_, entries) -> entries.maxByOrNull { it.version } }
 
         val updates = updateChecker.findUpdates(installed, available)
         val installedIds = installed.map { it.id }.toSet()
