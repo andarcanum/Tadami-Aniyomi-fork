@@ -1,0 +1,48 @@
+{
+  "id": "novelbin",
+  "name": "Novel Bin",
+  "lang": "English",
+  "site": "https://novelbin.com/",
+  "fixtures": [
+    {
+      "key": "site",
+      "url": "https://novelbin.com/",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 8854,
+      "file": "site.html",
+      "error": null
+    },
+    {
+      "key": "search-autocomplete-query",
+      "url": "https://novelbin.com/search/autocomplete?query=love",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 8968,
+      "file": "search-autocomplete-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-query",
+      "url": "https://novelbin.com/search?query=love",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 8926,
+      "file": "search-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-keyword",
+      "url": "https://novelbin.com/search?keyword=love",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 8954,
+      "file": "search-keyword.txt",
+      "error": null
+    }
+  ]
+}

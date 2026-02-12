@@ -1,0 +1,48 @@
+{
+  "id": "wuxiaworld",
+  "name": "Wuxia World",
+  "lang": "English",
+  "site": "https://www.wuxiaworld.com/",
+  "fixtures": [
+    {
+      "key": "site",
+      "url": "https://www.wuxiaworld.com/",
+      "status": 200,
+      "ok": true,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 245879,
+      "file": "site.html",
+      "error": null
+    },
+    {
+      "key": "search-autocomplete-query",
+      "url": "https://www.wuxiaworld.com/search/autocomplete?query=love",
+      "status": 200,
+      "ok": true,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 54145,
+      "file": "search-autocomplete-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-query",
+      "url": "https://www.wuxiaworld.com/search?query=love",
+      "status": 200,
+      "ok": true,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 53991,
+      "file": "search-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-keyword",
+      "url": "https://www.wuxiaworld.com/search?keyword=love",
+      "status": 200,
+      "ok": true,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 53991,
+      "file": "search-keyword.txt",
+      "error": null
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "id": "ranobes-ru",
+  "name": "Ranobes (RU)",
+  "lang": "Русский",
+  "site": "https://ranobes.com",
+  "fixtures": [
+    {
+      "key": "site",
+      "url": "https://ranobes.com/",
+      "status": 200,
+      "ok": true,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 77325,
+      "file": "site.html",
+      "error": null
+    },
+    {
+      "key": "search-autocomplete-query",
+      "url": "https://ranobes.com/search/autocomplete?query=love",
+      "status": 404,
+      "ok": false,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 63733,
+      "file": "search-autocomplete-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-query",
+      "url": "https://ranobes.com/search?query=love",
+      "status": 404,
+      "ok": false,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 63733,
+      "file": "search-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-keyword",
+      "url": "https://ranobes.com/search?keyword=love",
+      "status": 404,
+      "ok": false,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 63733,
+      "file": "search-keyword.txt",
+      "error": null
+    }
+  ]
+}

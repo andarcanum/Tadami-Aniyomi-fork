@@ -1,0 +1,48 @@
+{
+  "id": "novelbuddy",
+  "name": "NovelBuddy.io",
+  "lang": "English",
+  "site": "https://novelbuddy.io/",
+  "fixtures": [
+    {
+      "key": "site",
+      "url": "https://novelbuddy.io/",
+      "status": 200,
+      "ok": true,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 276276,
+      "file": "site.html",
+      "error": null
+    },
+    {
+      "key": "search-autocomplete-query",
+      "url": "https://novelbuddy.io/search/autocomplete?query=love",
+      "status": 404,
+      "ok": false,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 326268,
+      "file": "search-autocomplete-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-query",
+      "url": "https://novelbuddy.io/search?query=love",
+      "status": 200,
+      "ok": true,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 325005,
+      "file": "search-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-keyword",
+      "url": "https://novelbuddy.io/search?keyword=love",
+      "status": 200,
+      "ok": true,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 325013,
+      "file": "search-keyword.txt",
+      "error": null
+    }
+  ]
+}

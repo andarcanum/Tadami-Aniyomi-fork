@@ -1,0 +1,48 @@
+{
+  "id": "ranobes",
+  "name": "Ranobes",
+  "lang": "English",
+  "site": "https://ranobes.top",
+  "fixtures": [
+    {
+      "key": "site",
+      "url": "https://ranobes.top/",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 6307,
+      "file": "site.html",
+      "error": null
+    },
+    {
+      "key": "search-autocomplete-query",
+      "url": "https://ranobes.top/search/autocomplete?query=love",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 6307,
+      "file": "search-autocomplete-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-query",
+      "url": "https://ranobes.top/search?query=love",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 6307,
+      "file": "search-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-keyword",
+      "url": "https://ranobes.top/search?keyword=love",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 6307,
+      "file": "search-keyword.txt",
+      "error": null
+    }
+  ]
+}

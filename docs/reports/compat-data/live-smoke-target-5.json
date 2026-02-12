@@ -1,0 +1,195 @@
+{
+  "generatedAt": "2026-02-11T11:11:07.803Z",
+  "scenario": "live-smoke",
+  "inputs": {
+    "indexPath": "D:\\lnreader\\INDREADER\\lnreader-plugins\\.dist\\plugins.min.json",
+    "pluginBaseDir": "D:\\lnreader\\INDREADER\\lnreader-plugins\\.js\\plugins",
+    "query": "love",
+    "timeoutMs": 20000,
+    "concurrency": 3,
+    "limit": null,
+    "langs": null,
+    "ids": [
+      "rulate",
+      "royalroad",
+      "scribblehub",
+      "wuxiaworld",
+      "novelupdates"
+    ],
+    "hasCases": false
+  },
+  "summary": {
+    "totalPlugins": 5,
+    "passedAllStages": 0,
+    "failedPlugins": 5
+  },
+  "stageFailures": {
+    "popular": 3,
+    "search": 5,
+    "novel": 0,
+    "chapters": 0,
+    "chapterText": 0
+  },
+  "failureCodes": {
+    "invalid_json": 1,
+    "network_error": 1,
+    "request_failed": 3
+  },
+  "plugins": [
+    {
+      "id": "novelupdates",
+      "site": "https://www.novelupdates.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "royalroad",
+      "site": "https://www.royalroad.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "scribblehub",
+      "site": "https://www.scribblehub.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "wuxiaworld",
+      "site": "https://www.wuxiaworld.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "invalid_json"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "rulate",
+      "site": "https://tl.rulate.ru",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "search": {
+          "status": "fail",
+          "code": "network_error"
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    }
+  ]
+}

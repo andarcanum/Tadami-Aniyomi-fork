@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ru" data-id="3">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
+    <meta name="MobileOptimized" content="176">
+    <meta name="HandheldFriendly" content="True">
+    <meta http-equiv="Pragma" content="no-cache"/>
+    <meta http-equiv="Expires" content="-1"/>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
+
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="RanobeLib">
+    <meta name="apple-mobile-web-app-title" content="RanobeLib">
+    <meta name="msapplication-starturl" content="https://ranobelib.me/">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/images/logo/rl/icon-180.png?22f956eb083dbd31a10288c04e703386">
+    <link rel="icon" sizes="any" href="/static/images/logo/rl/favicon.ico?22f956eb083dbd31a10288c04e703386">
+    <link rel="icon" type="image/svg+xml" href="/static/images/logo/rl/icon.svg?22f956eb083dbd31a10288c04e703386">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/images/logo/rl/favicon-32.png?22f956eb083dbd31a10288c04e703386">
+    <link rel="mask-icon" color="" href="/static/images/logo/rl/safari-pinned-tab.svg?22f956eb083dbd31a10288c04e703386">
+    <link rel="yandex-tableau-widget" href="/build/manifest/rl/tableau.json?22f956eb083dbd31a10288c04e703386">
+    <link rel="manifest" href="/build/manifest/rl/manifest.webmanifest?22f956eb083dbd31a10288c04e703386">
+    <title>Читать ранобэ и новеллы онлайн на русском. Ранобэ онлайн. Новеллы онлайн – RanobeLIB</title>
+<meta name="keywords" content="ранобэ, ранобэ онлайн, читать ранобэ, читать новеллу, читать ранобэ онлайн, читать новеллу онлайн, ранобэ бесплатно, ранобэ романтика, ранобэ про любовь, ранобэ на русском, перевод ранобэ, лучшая ранобэ, топ ранобэ, каталог ранобэ, популярные ранобэ">
+<meta name="description" content="Читать ранобэ в русском переводе онлайн, фанфики, фэнтези и аниме книги, новеллы, попаданцы. Огромный каталог книг">
+
+    <link rel="preload" as="style" href="https://ranobelib.me/build/assets/main-Bk3AgzoW.css" /><link rel="stylesheet" href="https://ranobelib.me/build/assets/main-Bk3AgzoW.css" />        <link rel="preload" as="style" href="https://ranobelib.me/build/assets/common-BSuLBvOr.css" /><link rel="preload" as="style" href="https://ranobelib.me/build/assets/main-CkHyIp2z.css" /><link rel="modulepreload" href="https://ranobelib.me/build/assets/main-BtHW68zS.js" /><link rel="modulepreload" href="https://ranobelib.me/build/assets/vendor-CydGAiw6.js" /><link rel="modulepreload" href="https://ranobelib.me/build/assets/common-BGTfi2jl.js" /><link rel="stylesheet" href="https://ranobelib.me/build/assets/common-BSuLBvOr.css" /><link rel="stylesheet" href="https://ranobelib.me/build/assets/main-CkHyIp2z.css" /><script type="module" src="https://ranobelib.me/build/assets/main-BtHW68zS.js"></script>    <script>
+        window.__SEO_STRUCTURE__ = [];
+    </script>
+    <script>
+        window.__SHOW_B_BUTTON__ = true;
+        window.__SHOW_B_HISTORY__ = true;
+        window.__SHOW_P__ = true;
+    </script>
+  </head>
+  <body>
+    <noscript>
+        <div style="text-align: center; padding: 15vh 20px; font-size: 22px;">
+            <strong>У вас отключен JavaScript!</strong> Для того, чтобы сайт работал корректно, необходимо его <strong>включить</strong> в настройках вашего браузера.
+        </div>
+    </noscript>
+        <div id="top-block"></div>
+    <div id="app">
+        <div class="scripts-error" hidden>
+    <img class="scripts-error__img" src="/static/images/luffy_1.png" alt="Ошибка">
+    <h1>Кажется, что-то пошло не так <small>[код ошибки 1]</small></h1>
+    <h3>Прочтите рекомендации ниже, которые должны помочь решить данную ошибку:</h3>
+    <ol>
+        <li>Перезагрузите страницу, нажав на кнопку 👉 <u onclick="location.reload(true)">«Перезагрузить»</u></li>
+        <li>Сбросьте кэш браузера</li>
+        <li>Проверьте, что у вас установлена последняя версия браузера</li>
+                    </ol>
+    <p>
+        Если ни одна из наших рекомендаций не помогла, вы можете связаться с нами через <a href="https://discord.gg/mangalib" target="_blank" rel="nofollow noopener">Discord</a>, личные сообщения <a href="https://vk.com/write-61486033" target="_blank" rel="nofollow noopener">ВКонтакте</a>, или <a href="https://t.me/mangalib_help_bot" target="_blank" rel="nofollow noopener">Telegram</a>
+    </p>
+</div>
+    </div>
+
+    <!-- built files will be auto injected -->
+    <script type="text/javascript">
+    window.__YA_ID__ = "43229194";
+    window.yaContextCb = window.yaContextCb || [];
+
+    // Yandex.Metrika counter
+    (function(m, e, t, r, i, k, a) {
+        m[i] = m[i] || function() {
+            (m[i].a = m[i].a || []).push(arguments)
+        };
+        m[i].l = 1 * new Date();
+        k = e.createElement(t), a = e.getElementsByTagName(t)[0], k.async = 1, k.src = r, a.parentNode.insertBefore(
+            k, a)
+    })(window, document, "script", "https://mc.webvisor.org/metrika/tag_ww.js", "ym");
+    ym(43229194, "init", {
+        clickmap: true,
+        trackLinks: true,
+        accurateTrackBounce: true,
+        webvisor: true,
+        trackHash: true
+    });
+</script>
+<noscript>
+    <div><img src="https://mc.yandex.ru/watch/43229194" style="position:absolute; left:-9999px;" alt="pxl" /></div>
+</noscript>
+<!-- /Yandex.Metrika counter -->
+
+<!-- Retail Rocket -->
+<script type="text/javascript">
+  var rrPartnerId = "6864da8b89370440dccbf59b";
+  var rrApi = rrApi || {};
+  var rrApiOnReady = rrApiOnReady || [];
+  var rrDisabledCookies = false;
+  (function(d) {
+    var ref = d.getElementsByTagName('script')[0];
+    var apiJs, apiJsId = 'rrApi-jssdk';
+    if (d.getElementById(apiJsId)) return;
+    apiJs = d.createElement('script');
+    apiJs.id = apiJsId;
+    apiJs.async = true;
+    apiJs.src = "//cdn.retailrocket.ru/content/javascript/tracking.js";
+    ref.parentNode.insertBefore(apiJs, ref);
+  }(document));
+</script>
+    <style>
+    .scripts-error {
+        max-width: 700px;
+        margin: 0 auto;
+        line-height: 1.6;
+        padding: var(--content-px);
+    }
+
+    .scripts-error__img {
+        display: block;
+    }
+
+    .scripts-error u, .scripts-error a {
+        cursor: pointer;
+        color: var(--text-link);
+    }
+
+    .scripts-error h1 {
+        margin-bottom: var(--spacing);
+    }
+
+    .scripts-error h1 small {
+        font-weight: normal;
+        font-size: 60%;
+        color: var(--text-secondary);
+    }
+</style>
+<script>
+    setTimeout(function() {
+        var scriptsErr = document.querySelector('.scripts-error');
+        if (scriptsErr) {
+            scriptsErr.removeAttribute('hidden');
+
+            try {
+                if ('caches' in window) {
+                    caches.keys().then(function(keys) {
+                        keys.forEach(function(cacheKey) {
+                            caches.delete(cacheKey);
+                        });
+                    });
+                }
+
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.getRegistrations().then(function (registrations) {
+                        registrations.forEach(function(reg) {
+                            reg.unregister();
+                        });
+                    });
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        }
+    }, 5000);
+</script>
+    <script
+    src="https://yandex.ru/ads/system/context.js"
+    async
+></script>
+  </body>
+</html>

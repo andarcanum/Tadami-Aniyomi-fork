@@ -1,0 +1,48 @@
+{
+  "id": "novelfire",
+  "name": "Novel Fire",
+  "lang": "English",
+  "site": "https://novelfire.net/",
+  "fixtures": [
+    {
+      "key": "site",
+      "url": "https://novelfire.net/",
+      "status": 200,
+      "ok": true,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 20478,
+      "file": "site.html",
+      "error": null
+    },
+    {
+      "key": "search-autocomplete-query",
+      "url": "https://novelfire.net/search/autocomplete?query=love",
+      "status": 404,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 22499,
+      "file": "search-autocomplete-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-query",
+      "url": "https://novelfire.net/search?query=love",
+      "status": 200,
+      "ok": true,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 51368,
+      "file": "search-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-keyword",
+      "url": "https://novelfire.net/search?keyword=love",
+      "status": 200,
+      "ok": true,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 53073,
+      "file": "search-keyword.txt",
+      "error": null
+    }
+  ]
+}

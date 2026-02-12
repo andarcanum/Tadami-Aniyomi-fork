@@ -1,0 +1,101 @@
+{
+  "generatedAt": "2026-02-10T20:16:28.149Z",
+  "scenario": "live-smoke",
+  "inputs": {
+    "indexPath": "D:\\lnreader\\INDREADER\\lnreader-plugins\\.dist\\plugins.min.json",
+    "pluginBaseDir": "D:\\lnreader\\INDREADER\\lnreader-plugins\\.js\\plugins",
+    "query": "love",
+    "timeoutMs": 25000,
+    "concurrency": 2,
+    "limit": null,
+    "langs": [
+      "english"
+    ],
+    "ids": [
+      "royalroad",
+      "scribblehub"
+    ],
+    "hasCases": true
+  },
+  "summary": {
+    "totalPlugins": 2,
+    "passedAllStages": 0,
+    "failedPlugins": 2
+  },
+  "stageFailures": {
+    "popular": 1,
+    "search": 2,
+    "novel": 1,
+    "chapters": 0,
+    "chapterText": 0
+  },
+  "failureCodes": {
+    "request_failed": 2
+  },
+  "plugins": [
+    {
+      "id": "royalroad",
+      "site": "https://www.royalroad.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "chapters": {
+          "status": "pass",
+          "chapterCount": 215
+        },
+        "chapterText": {
+          "status": "pass",
+          "sampleChapterTextLength": 16990
+        }
+      },
+      "chapterCount": 215,
+      "sampleChapterTextLength": 16990,
+      "novelUrl": "https://www.royalroad.com/fiction/36049/the-primal-hunter",
+      "sampleChapterUrl": "https://www.royalroad.com/fiction/36049/the-primal-hunter/chapter/557051/chapter-1-another-monday-morning"
+    },
+    {
+      "id": "scribblehub",
+      "site": "https://www.scribblehub.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": "https://www.scribblehub.com/series/2178314/the-silent-architect/",
+      "sampleChapterUrl": null
+    }
+  ]
+}

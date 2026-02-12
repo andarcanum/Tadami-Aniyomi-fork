@@ -1,0 +1,48 @@
+{
+  "id": "mtlnovel",
+  "name": "MTL Novel",
+  "lang": "English",
+  "site": "https://www.mtlnovels.com/",
+  "fixtures": [
+    {
+      "key": "site",
+      "url": "https://www.mtlnovels.com/",
+      "status": null,
+      "ok": false,
+      "contentType": null,
+      "bytes": 0,
+      "file": null,
+      "error": "fetch failed"
+    },
+    {
+      "key": "search-autocomplete-query",
+      "url": "https://www.mtlnovels.com/search/autocomplete?query=love",
+      "status": 200,
+      "ok": true,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 509,
+      "file": "search-autocomplete-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-query",
+      "url": "https://www.mtlnovels.com/search?query=love",
+      "status": 200,
+      "ok": true,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 496,
+      "file": "search-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-keyword",
+      "url": "https://www.mtlnovels.com/search?keyword=love",
+      "status": 200,
+      "ok": true,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 498,
+      "file": "search-keyword.txt",
+      "error": null
+    }
+  ]
+}

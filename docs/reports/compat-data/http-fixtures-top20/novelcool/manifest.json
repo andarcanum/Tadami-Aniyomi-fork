@@ -1,0 +1,48 @@
+{
+  "id": "novelcool",
+  "name": "NovelCool",
+  "lang": "English",
+  "site": "https://www.novelcool.com",
+  "fixtures": [
+    {
+      "key": "site",
+      "url": "https://www.novelcool.com/",
+      "status": 200,
+      "ok": true,
+      "contentType": "text/html",
+      "bytes": 155,
+      "file": "site.html",
+      "error": null
+    },
+    {
+      "key": "search-autocomplete-query",
+      "url": "https://www.novelcool.com/search/autocomplete?query=love",
+      "status": 200,
+      "ok": true,
+      "contentType": "text/html",
+      "bytes": 155,
+      "file": "search-autocomplete-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-query",
+      "url": "https://www.novelcool.com/search?query=love",
+      "status": 200,
+      "ok": true,
+      "contentType": "text/html",
+      "bytes": 155,
+      "file": "search-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-keyword",
+      "url": "https://www.novelcool.com/search?keyword=love",
+      "status": 200,
+      "ok": true,
+      "contentType": "text/html",
+      "bytes": 155,
+      "file": "search-keyword.txt",
+      "error": null
+    }
+  ]
+}

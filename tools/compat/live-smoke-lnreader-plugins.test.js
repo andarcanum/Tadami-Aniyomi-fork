@@ -8,6 +8,7 @@ const {
   runLiveSmokeForPlugin,
   classifyFetchError,
   runLiveSmoke,
+  parseArgs,
 } = require('./live-smoke-lnreader-plugins');
 
 function makeResponse({
@@ -40,6 +41,23 @@ function makeResponse({
 test('classifyFetchError maps DNS failures to domain_unreachable', () => {
   const code = classifyFetchError(new Error('getaddrinfo ENOTFOUND tl.rulate.ru'));
   assert.equal(code, 'domain_unreachable');
+});
+
+test('parseArgs supports langs and ids filters', () => {
+  const parsed = parseArgs([
+    '--index', 'idx.json',
+    '--plugins-dir', 'plugins',
+    '--output', 'out.json',
+    '--langs', 'english, russian , multisrc',
+    '--ids', 'royalroad, scribblehub',
+    '--cases', 'cases.json',
+    '--concurrency', '4',
+  ]);
+
+  assert.deepEqual(parsed.langs, ['english', 'russian', 'multisrc']);
+  assert.deepEqual(parsed.ids, ['royalroad', 'scribblehub']);
+  assert.equal(parsed.casesPath, 'cases.json');
+  assert.equal(parsed.concurrency, 4);
 });
 
 test('runLiveSmokeForPlugin reports empty chapters', async () => {
@@ -335,6 +353,51 @@ test('runLiveSmokeForPlugin skips dependent stages when search has no candidates
   assert.equal(result.stages.chapterText.code, 'chapters_unavailable');
 });
 
+test('runLiveSmokeForPlugin uses explicit case novel and chapter URLs', async () => {
+  const plugin = {
+    id: 'demo',
+    site: 'https://example.org',
+  };
+  const scriptText = `
+    exports.default = {
+      popularNovels() {},
+      parseNovel() {},
+      parseChapter() {}
+    };
+  `;
+
+  const fetcher = async (url) => {
+    if (url === 'https://example.org') {
+      return makeResponse({ text: '<html><body>ok</body></html>' });
+    }
+    if (url === 'https://example.org/book/42') {
+      return makeResponse({ text: '<html><body><h1>Novel</h1></body></html>' });
+    }
+    if (url === 'https://example.org/chapter/42') {
+      return makeResponse({ text: '<div>Chapter content that is definitely long enough.</div>' });
+    }
+    throw new Error(`Unexpected URL ${url}`);
+  };
+
+  const result = await runLiveSmokeForPlugin({
+    plugin,
+    scriptText,
+    pluginCase: {
+      novelPath: '/book/42',
+      chapterPath: '/chapter/42',
+    },
+    fetcher,
+  });
+
+  assert.equal(result.stages.search.status, 'skip');
+  assert.equal(result.stages.search.code, 'missing_handler');
+  assert.equal(result.stages.novel.status, 'pass');
+  assert.equal(result.stages.chapters.status, 'pass');
+  assert.equal(result.stages.chapterText.status, 'pass');
+  assert.equal(result.novelUrl, 'https://example.org/book/42');
+  assert.equal(result.sampleChapterUrl, 'https://example.org/chapter/42');
+});
+
 function mkTmpDir(name) {
   return fs.mkdtempSync(path.join(os.tmpdir(), `${name}-`));
 }
@@ -479,4 +542,64 @@ test('runLiveSmoke aggregates failure codes once per plugin per code', async () 
   assert.equal(result.plugins[0].stages.popular.code, 'request_failed');
   assert.equal(result.plugins[0].stages.search.code, 'request_failed');
   assert.equal(result.failureCodes.request_failed, 1);
+});
+
+test('runLiveSmoke filters by langs and ids', async () => {
+  const tempDir = mkTmpDir('live-smoke-filter');
+  const enRoot = path.join(tempDir, '.js', 'plugins', 'english');
+  const ruRoot = path.join(tempDir, '.js', 'plugins', 'russian');
+  fs.mkdirSync(enRoot, { recursive: true });
+  fs.mkdirSync(ruRoot, { recursive: true });
+
+  fs.writeFileSync(
+    path.join(enRoot, 'one.js'),
+    'Object.defineProperty(exports,"__esModule",{value:!0});exports.default={popularNovels(){},searchNovels(){},parseNovel(){},parseChapter(){}};',
+    'utf8',
+  );
+  fs.writeFileSync(
+    path.join(ruRoot, 'two.js'),
+    'Object.defineProperty(exports,"__esModule",{value:!0});exports.default={popularNovels(){},searchNovels(){},parseNovel(){},parseChapter(){}};',
+    'utf8',
+  );
+
+  const indexPath = path.join(tempDir, '.dist', 'plugins.min.json');
+  writeJson(indexPath, [
+    {
+      id: 'one',
+      name: 'One',
+      site: 'https://one.example',
+      lang: 'english',
+      version: '1.0.0',
+      url: 'https://raw.githubusercontent.com/acme/lnreader-plugins/plugins/v3.0.0/.js/src/plugins/english/one.js',
+    },
+    {
+      id: 'two',
+      name: 'Two',
+      site: 'https://two.example',
+      lang: 'russian',
+      version: '1.0.0',
+      url: 'https://raw.githubusercontent.com/acme/lnreader-plugins/plugins/v3.0.0/.js/src/plugins/russian/two.js',
+    },
+  ]);
+
+  const fetcher = async (url) => {
+    if (url === 'https://one.example') return makeResponse({ text: '<html>ok</html>' });
+    if (url.startsWith('https://one.example/search')) return makeResponse({ json: [{ url: '/book/1' }] });
+    if (url === 'https://one.example/book/1') return makeResponse({ text: '<a href="/chapter/1">Chapter</a>' });
+    if (url === 'https://one.example/chapter/1') return makeResponse({ text: '<div>Long enough chapter text content.</div>' });
+    throw new Error(`Unexpected URL ${url}`);
+  };
+
+  const result = await runLiveSmoke({
+    indexPath,
+    pluginBaseDir: path.join(tempDir, '.js', 'plugins'),
+    langs: ['english'],
+    ids: ['one'],
+    fetcher,
+  });
+
+  assert.equal(result.summary.totalPlugins, 1);
+  assert.equal(result.plugins[0].id, 'one');
+  assert.deepEqual(result.inputs.langs, ['english']);
+  assert.deepEqual(result.inputs.ids, ['one']);
 });

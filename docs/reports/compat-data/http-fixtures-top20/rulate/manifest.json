@@ -1,0 +1,48 @@
+{
+  "id": "rulate",
+  "name": "Rulate",
+  "lang": "Русский",
+  "site": "https://tl.rulate.ru",
+  "fixtures": [
+    {
+      "key": "site",
+      "url": "https://tl.rulate.ru/",
+      "status": null,
+      "ok": false,
+      "contentType": null,
+      "bytes": 0,
+      "file": null,
+      "error": "fetch failed"
+    },
+    {
+      "key": "search-autocomplete-query",
+      "url": "https://tl.rulate.ru/search/autocomplete?query=love",
+      "status": null,
+      "ok": false,
+      "contentType": null,
+      "bytes": 0,
+      "file": null,
+      "error": "fetch failed"
+    },
+    {
+      "key": "search-query",
+      "url": "https://tl.rulate.ru/search?query=love",
+      "status": null,
+      "ok": false,
+      "contentType": null,
+      "bytes": 0,
+      "file": null,
+      "error": "fetch failed"
+    },
+    {
+      "key": "search-keyword",
+      "url": "https://tl.rulate.ru/search?keyword=love",
+      "status": null,
+      "ok": false,
+      "contentType": null,
+      "bytes": 0,
+      "file": null,
+      "error": "fetch failed"
+    }
+  ]
+}

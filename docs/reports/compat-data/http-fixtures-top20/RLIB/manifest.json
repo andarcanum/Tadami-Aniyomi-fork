@@ -1,0 +1,48 @@
+{
+  "id": "RLIB",
+  "name": "RanobeLib",
+  "lang": "Русский",
+  "site": "https://ranobelib.me",
+  "fixtures": [
+    {
+      "key": "site",
+      "url": "https://ranobelib.me/",
+      "status": 200,
+      "ok": true,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 8415,
+      "file": "site.html",
+      "error": null
+    },
+    {
+      "key": "search-autocomplete-query",
+      "url": "https://ranobelib.me/search/autocomplete?query=love",
+      "status": 200,
+      "ok": true,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 8415,
+      "file": "search-autocomplete-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-query",
+      "url": "https://ranobelib.me/search?query=love",
+      "status": 404,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 5306,
+      "file": "search-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-keyword",
+      "url": "https://ranobelib.me/search?keyword=love",
+      "status": 404,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 5306,
+      "file": "search-keyword.txt",
+      "error": null
+    }
+  ]
+}

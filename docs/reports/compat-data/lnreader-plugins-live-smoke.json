@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-10T17:04:10.164Z",
+  "generatedAt": "2026-02-11T10:32:06.952Z",
   "scenario": "live-smoke",
   "inputs": {
     "indexPath": "D:\\lnreader\\INDREADER\\lnreader-plugins\\.dist\\plugins.min.json",
@@ -7,7 +7,10 @@
     "query": "love",
     "timeoutMs": 15000,
     "concurrency": 8,
-    "limit": null
+    "limit": null,
+    "langs": null,
+    "ids": null,
+    "hasCases": false
   },
   "summary": {
     "totalPlugins": 251,
@@ -15,17 +18,17 @@
     "failedPlugins": 251
   },
   "stageFailures": {
-    "popular": 110,
+    "popular": 107,
     "search": 250,
     "novel": 1,
     "chapters": 0,
     "chapterText": 0
   },
   "failureCodes": {
-    "invalid_json": 44,
+    "invalid_json": 43,
     "invalid_search_url": 1,
-    "network_error": 76,
-    "request_failed": 141,
+    "network_error": 72,
+    "request_failed": 146,
     "request_timeout": 5
   },
   "plugins": [
@@ -466,12 +469,13 @@
       "site": "https://www.linovel.net",
       "stages": {
         "popular": {
-          "status": "fail",
-          "code": "request_timeout"
+          "status": "pass",
+          "httpStatus": 200
         },
         "search": {
           "status": "fail",
-          "code": "network_error"
+          "code": "request_failed",
+          "httpStatus": 500
         },
         "novel": {
           "status": "skip",
@@ -594,7 +598,7 @@
         "search": {
           "status": "fail",
           "code": "request_failed",
-          "httpStatus": 404
+          "httpStatus": 403
         },
         "novel": {
           "status": "skip",
@@ -744,7 +748,7 @@
         },
         "search": {
           "status": "fail",
-          "code": "request_timeout"
+          "code": "invalid_json"
         },
         "novel": {
           "status": "skip",
@@ -1757,8 +1761,8 @@
       "site": "https://guavaread.com/",
       "stages": {
         "popular": {
-          "status": "pass",
-          "httpStatus": 200
+          "status": "fail",
+          "code": "network_error"
         },
         "search": {
           "status": "fail",
@@ -2188,8 +2192,8 @@
       "site": "https://lightnovelpub.vip/",
       "stages": {
         "popular": {
-          "status": "pass",
-          "httpStatus": 200
+          "status": "fail",
+          "code": "network_error"
         },
         "search": {
           "status": "fail",
@@ -2223,7 +2227,7 @@
         },
         "search": {
           "status": "fail",
-          "code": "invalid_json"
+          "code": "request_timeout"
         },
         "novel": {
           "status": "skip",
@@ -2347,8 +2351,7 @@
         },
         "search": {
           "status": "fail",
-          "code": "request_failed",
-          "httpStatus": 404
+          "code": "network_error"
         },
         "novel": {
           "status": "skip",
@@ -2378,8 +2381,7 @@
         },
         "search": {
           "status": "fail",
-          "code": "request_failed",
-          "httpStatus": 404
+          "code": "network_error"
         },
         "novel": {
           "status": "skip",
@@ -2649,7 +2651,8 @@
         },
         "search": {
           "status": "fail",
-          "code": "network_error"
+          "code": "request_failed",
+          "httpStatus": 403
         },
         "novel": {
           "status": "skip",
@@ -2765,8 +2768,8 @@
       "site": "https://novelsonline.org",
       "stages": {
         "popular": {
-          "status": "fail",
-          "code": "network_error"
+          "status": "pass",
+          "httpStatus": 200
         },
         "search": {
           "status": "fail",
@@ -2795,8 +2798,8 @@
       "site": "https://noblemtl.com/",
       "stages": {
         "popular": {
-          "status": "fail",
-          "code": "network_error"
+          "status": "pass",
+          "httpStatus": 200
         },
         "search": {
           "status": "fail",
@@ -2826,8 +2829,8 @@
       "site": "https://noicetranslations.com/",
       "stages": {
         "popular": {
-          "status": "fail",
-          "code": "network_error"
+          "status": "pass",
+          "httpStatus": 200
         },
         "search": {
           "status": "fail",
@@ -3108,8 +3111,7 @@
         },
         "search": {
           "status": "fail",
-          "code": "request_failed",
-          "httpStatus": 404
+          "code": "network_error"
         },
         "novel": {
           "status": "skip",
@@ -3232,8 +3234,7 @@
         },
         "search": {
           "status": "fail",
-          "code": "request_failed",
-          "httpStatus": 403
+          "code": "network_error"
         },
         "novel": {
           "status": "skip",
@@ -3288,12 +3289,13 @@
       "site": "https://pasteltales.com/",
       "stages": {
         "popular": {
-          "status": "fail",
-          "code": "network_error"
+          "status": "pass",
+          "httpStatus": 200
         },
         "search": {
           "status": "fail",
-          "code": "network_error"
+          "code": "request_failed",
+          "httpStatus": 404
         },
         "novel": {
           "status": "skip",
@@ -3350,8 +3352,7 @@
       "stages": {
         "popular": {
           "status": "fail",
-          "code": "request_failed",
-          "httpStatus": 403
+          "code": "network_error"
         },
         "search": {
           "status": "fail",
@@ -3382,7 +3383,7 @@
       "stages": {
         "popular": {
           "status": "fail",
-          "code": "network_error"
+          "code": "request_timeout"
         },
         "search": {
           "status": "fail",
@@ -3411,8 +3412,8 @@
       "site": "https://rainofsnow.com/",
       "stages": {
         "popular": {
-          "status": "pass",
-          "httpStatus": 200
+          "status": "fail",
+          "code": "network_error"
         },
         "search": {
           "status": "fail",
@@ -3442,8 +3443,7 @@
       "stages": {
         "popular": {
           "status": "fail",
-          "code": "request_failed",
-          "httpStatus": 403
+          "code": "network_error"
         },
         "search": {
           "status": "fail",
@@ -3473,8 +3473,8 @@
       "site": "https://ranovel.com/",
       "stages": {
         "popular": {
-          "status": "pass",
-          "httpStatus": 200
+          "status": "fail",
+          "code": "network_error"
         },
         "search": {
           "status": "fail",
@@ -3509,7 +3509,7 @@
         },
         "search": {
           "status": "fail",
-          "code": "request_timeout"
+          "code": "network_error"
         },
         "novel": {
           "status": "skip",
@@ -3659,12 +3659,13 @@
       "site": "https://requiemtls.com/",
       "stages": {
         "popular": {
-          "status": "fail",
-          "code": "network_error"
+          "status": "pass",
+          "httpStatus": 200
         },
         "search": {
           "status": "fail",
-          "code": "network_error"
+          "code": "request_failed",
+          "httpStatus": 404
         },
         "novel": {
           "status": "skip",
@@ -4124,8 +4125,8 @@
       "site": "https://vynovel.com",
       "stages": {
         "popular": {
-          "status": "fail",
-          "code": "network_error"
+          "status": "pass",
+          "httpStatus": 200
         },
         "search": {
           "status": "fail",
@@ -4217,7 +4218,8 @@
       "stages": {
         "popular": {
           "status": "fail",
-          "code": "network_error"
+          "code": "request_failed",
+          "httpStatus": 403
         },
         "search": {
           "status": "fail",
@@ -4308,12 +4310,12 @@
       "site": "https://whitemoonlightnovels.com/",
       "stages": {
         "popular": {
-          "status": "pass",
-          "httpStatus": 200
+          "status": "fail",
+          "code": "network_error"
         },
         "search": {
           "status": "fail",
-          "code": "network_error"
+          "code": "invalid_json"
         },
         "novel": {
           "status": "skip",
@@ -4338,8 +4340,8 @@
       "site": "https://wooksteahouse.com/",
       "stages": {
         "popular": {
-          "status": "pass",
-          "httpStatus": 200
+          "status": "fail",
+          "code": "network_error"
         },
         "search": {
           "status": "fail",
@@ -4649,7 +4651,8 @@
         },
         "search": {
           "status": "fail",
-          "code": "network_error"
+          "code": "request_failed",
+          "httpStatus": 404
         },
         "novel": {
           "status": "skip",
@@ -4735,13 +4738,12 @@
       "site": "https://kisswood.eu",
       "stages": {
         "popular": {
-          "status": "pass",
-          "httpStatus": 200
+          "status": "fail",
+          "code": "request_timeout"
         },
         "search": {
           "status": "fail",
-          "code": "request_failed",
-          "httpStatus": 404
+          "code": "network_error"
         },
         "novel": {
           "status": "skip",
@@ -5327,8 +5329,8 @@
       "site": "https://sektenovel.web.id/",
       "stages": {
         "popular": {
-          "status": "fail",
-          "code": "network_error"
+          "status": "pass",
+          "httpStatus": 200
         },
         "search": {
           "status": "fail",
@@ -5511,8 +5513,8 @@
       "site": "https://novelki.pl",
       "stages": {
         "popular": {
-          "status": "fail",
-          "code": "network_error"
+          "status": "pass",
+          "httpStatus": 200
         },
         "search": {
           "status": "fail",
@@ -5572,8 +5574,8 @@
       "site": "https://www.blogdoamonnovels.com",
       "stages": {
         "popular": {
-          "status": "fail",
-          "code": "network_error"
+          "status": "pass",
+          "httpStatus": 200
         },
         "search": {
           "status": "fail",
@@ -5694,8 +5696,8 @@
       "site": "https://lightnovelbrasil.com/",
       "stages": {
         "popular": {
-          "status": "pass",
-          "httpStatus": 200
+          "status": "fail",
+          "code": "network_error"
         },
         "search": {
           "status": "fail",
@@ -5729,7 +5731,7 @@
         },
         "search": {
           "status": "fail",
-          "code": "invalid_json"
+          "code": "network_error"
         },
         "novel": {
           "status": "skip",
@@ -6123,8 +6125,8 @@
       "site": "https://neobook.org",
       "stages": {
         "popular": {
-          "status": "pass",
-          "httpStatus": 200
+          "status": "fail",
+          "code": "network_error"
         },
         "search": {
           "status": "fail",
@@ -6341,7 +6343,8 @@
         },
         "search": {
           "status": "fail",
-          "code": "network_error"
+          "code": "request_failed",
+          "httpStatus": 404
         },
         "novel": {
           "status": "skip",
@@ -6396,12 +6399,13 @@
       "site": "https://ruvers.ru/",
       "stages": {
         "popular": {
-          "status": "fail",
-          "code": "network_error"
+          "status": "pass",
+          "httpStatus": 200
         },
         "search": {
           "status": "fail",
-          "code": "network_error"
+          "code": "request_failed",
+          "httpStatus": 404
         },
         "novel": {
           "status": "skip",
@@ -6458,8 +6462,8 @@
       "site": "https://topliba.com",
       "stages": {
         "popular": {
-          "status": "fail",
-          "code": "network_error"
+          "status": "pass",
+          "httpStatus": 200
         },
         "search": {
           "status": "fail",
@@ -6645,7 +6649,8 @@
         },
         "search": {
           "status": "fail",
-          "code": "invalid_json"
+          "code": "request_failed",
+          "httpStatus": 429
         },
         "novel": {
           "status": "skip",
@@ -7601,7 +7606,8 @@
         },
         "search": {
           "status": "fail",
-          "code": "network_error"
+          "code": "request_failed",
+          "httpStatus": 404
         },
         "novel": {
           "status": "skip",

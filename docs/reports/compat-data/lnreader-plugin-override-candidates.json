@@ -1,0 +1,6003 @@
+{
+  "generatedAt": "2026-02-10T14:50:38.040Z",
+  "source": "live-smoke",
+  "summary": {
+    "totalPlugins": 251,
+    "candidateCount": 249,
+    "skippedExistingOverrides": 2
+  },
+  "entries": [
+    {
+      "pluginId": "arnovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "azora",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "dilartube",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "freekolnovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "hizomanga",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "kolnovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "novel4up",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "novelsparadise",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "olaoe",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_timeout"
+      ]
+    },
+    {
+      "pluginId": "rewayatclub",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "riwyat",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "sunovels",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "69shu",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "ixdzs8",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "linovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "linovelib",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "linovelib_tw",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error",
+        "request_timeout"
+      ]
+    },
+    {
+      "pluginId": "novel543",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "quanben",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "1stkissnovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "allnovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "anf.net",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "arcane",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "archiveofourown",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "asuralightnovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "bellereservoir",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "BLN",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "boxnovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "chrysanthemumgarden",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "citrusaurora",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_timeout"
+      ]
+    },
+    {
+      "pluginId": "coralboutique",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "cpunovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "crimsonscrolls",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "daoistquest",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "daonovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "daotranslate",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "DDL.com",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_timeout"
+      ]
+    },
+    {
+      "pluginId": "dearestrosalie",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "dragonholic",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "dragontea",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "dreambigtl",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "duskblossoms",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "earlynovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "ellotl",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "eternalune",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "etudetranslations",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "fannovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "fanstranslations",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "fenrir",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "fictionzone",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "foxaholic",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "foxteller",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "FWK.US",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "FWN.com",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "galaxytranslations",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed",
+        "request_timeout"
+      ]
+    },
+    {
+      "pluginId": "genesistudio",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "guavaread",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "hiraethtranslation",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "hotnovelpub",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "inkitt",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "ippotranslations",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "kdtnovels",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "keopi",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "knoxt",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "lazygirltranslations",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "LeafStudio",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "libread",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "lightnovelcave",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "lightnovelplus",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "lightnovelpub",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "lightnovelpubvip",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "lightnoveltranslations",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "LightNovelUpdates",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "lightnovelworld",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "lilyonthevalley",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "lnheaven",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "lnmtl",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "ltnovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "lunarletters",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "meownovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "moonlightnovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "mostnovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error",
+        "request_timeout"
+      ]
+    },
+    {
+      "pluginId": "mtl-novel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "mtlnovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error",
+        "request_timeout"
+      ]
+    },
+    {
+      "pluginId": "mtlreader",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "mvlempyr.com",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "mysticalmerries",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "neosekaiTLS",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "nitromanga",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "NO.net",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "noblemtl",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "noicetranslations",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "novelbin",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "novelbuddy",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "novelcool",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "novelfire",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "novelfire.paged",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "novelfull",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "novelhall",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "novelib",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "novelight",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "novelmultiverse",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "novelsknight",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_timeout"
+      ]
+    },
+    {
+      "pluginId": "novelTL",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "novelupdates",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "pandamtl",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "pasteltales",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "pawread",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "penguinsquad",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "prizmatranslation",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "rainofsnow",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "ranobes",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "ranovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "readfanfic",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "readfrom",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "readnovelfull",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "reaperscans.com",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "ReLib",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "requiemtls",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "rln.app",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "royalroad",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "salmonlatte",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "scribblehub",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "sleeptTLS",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "sonicmtl",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "storyseedling",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "sweetescape",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "systemtranslation",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "translatinotaku",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "transweaver",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "universalnovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "vandytranslate",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "violetlily",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "vynovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "webnovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "webnovelover",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "webnovelrating",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "WebNovelTraslation",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "webnovelworld",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "whitemoonlightnovels",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "wooksteahouse",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "wordexcerpt",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "WTRLAB",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "wuxiacity",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "wuxiamtl",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "wuxiap",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "wuxiaspace",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "wuxiav",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "wuxiaworld",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "wuxiaworld.site",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "zetroTL",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "chireads",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "harkeneliwood",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "kisswood",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "lightnovelfr",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "massnovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "mtlnovel-fr",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "noveldeglace",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "novhell",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "phenixscans",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "warriorlegendtrad",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "worldnovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "wuxialnscantrad",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "xiaowaz",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "bacalightnovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "IDWN.id",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "meionovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "morenovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "mtlnovel-id",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "novelbookid",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "novelringan.com",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "sakura.id",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "sektenovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "wbnovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "kakuyomu",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "yomou.syosetu",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "agit.xyz",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "fortuneeternal",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "novelki.pl",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "betternovels",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "blogdoamonnovels",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "centralnovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "kiniga",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "lanovels",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "lightnovelbrasil",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "mtlnovel-pt",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "novelmania.com.br",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "tsundoku",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "AT",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "bookhamster",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_timeout"
+      ]
+    },
+    {
+      "pluginId": "bookriver",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "eznovels",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error",
+        "request_timeout"
+      ]
+    },
+    {
+      "pluginId": "ficbook",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "freedlit.space",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "ifreedom",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_timeout"
+      ]
+    },
+    {
+      "pluginId": "jaomix.ru",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_timeout"
+      ]
+    },
+    {
+      "pluginId": "mtlnovel-ru",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "neobook",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "novelcool-ru",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "novelovh",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "ranobes-ru",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "ReN",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "RLIB",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "RNBH.org",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "RNRF",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "RV",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "TL",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "TopLiba",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "zelluloza",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "allnovelread",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "AnimesHoy12",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "HasuTL",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "lightnoveldaily",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "mtlnovel-es",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "novelasligera",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "oasistranslations",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "panchotranslations",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "reinowuxia",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "skynovels",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "TCSega",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "traducciones",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "tunovelaligera",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_timeout"
+      ]
+    },
+    {
+      "pluginId": "yuukitls",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "novel-lucky",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "novelpdf",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "azraznovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "ekitaplar",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "epiknovel",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "Kakikata",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "kodekslibrary",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "mangatr",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "nabiscans",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "namevt",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "noveloku",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "noveltr",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "ragnarscans",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "thnovels",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "turkcelightnovels",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "webnoveloku",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "bakainua",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "smakolykytl",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "invalid_json",
+        "missing_novel_candidate"
+      ]
+    },
+    {
+      "pluginId": "uaranobeclub",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "lightnovel.vn",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "ln.hako",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "nettruyen",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "request_failed"
+      ]
+    },
+    {
+      "pluginId": "truyenchu",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "truyenconect",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error",
+        "request_timeout"
+      ]
+    },
+    {
+      "pluginId": "truyenfull",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    },
+    {
+      "pluginId": "komga",
+      "domainAliases": {},
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\"/chapter\"], a[href*=\"/read\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      },
+      "reasonCodes": [
+        "missing_novel_candidate",
+        "network_error"
+      ]
+    }
+  ]
+}

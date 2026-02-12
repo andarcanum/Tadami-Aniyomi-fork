@@ -5,8 +5,15 @@ const path = require('node:path');
 function usage() {
   const script = path.basename(process.argv[1] || 'live-smoke-lnreader-plugins.js');
   console.log(
-    `Usage: ${script} --index <plugins.min.json> --plugins-dir <.js/plugins> --output <report.json> [--query <text>] [--limit <n>] [--timeout-ms <n>] [--concurrency <n>]`,
+    `Usage: ${script} --index <plugins.min.json> --plugins-dir <.js/plugins> --output <report.json> [--query <text>] [--limit <n>] [--timeout-ms <n>] [--concurrency <n>] [--langs <csv>] [--ids <csv>] [--cases <cases.json>]`,
   );
+}
+
+function parseCsv(value) {
+  return String(value || '')
+    .split(',')
+    .map((it) => it.trim())
+    .filter(Boolean);
 }
 
 function parseArgs(args) {
@@ -51,6 +58,21 @@ function parseArgs(args) {
     }
     if (arg === '--concurrency') {
       parsed.concurrency = Number(args[i + 1] || 8);
+      i += 1;
+      continue;
+    }
+    if (arg === '--langs') {
+      parsed.langs = parseCsv(args[i + 1]);
+      i += 1;
+      continue;
+    }
+    if (arg === '--ids') {
+      parsed.ids = parseCsv(args[i + 1]);
+      i += 1;
+      continue;
+    }
+    if (arg === '--cases') {
+      parsed.casesPath = args[i + 1];
       i += 1;
       continue;
     }
@@ -258,6 +280,7 @@ async function fetchWithTimeout(url, fetcher, timeoutMs) {
 async function runLiveSmokeForPlugin({
   plugin,
   scriptText,
+  pluginCase = null,
   fetcher = fetch,
   query = 'love',
   timeoutMs = 15000,
@@ -281,6 +304,12 @@ async function runLiveSmokeForPlugin({
   let sampleChapterTextLength = 0;
   let novelUrl = null;
   let sampleChapterUrl = null;
+  const explicitNovelUrl = pluginCase && (pluginCase.novelUrl || pluginCase.novelPath)
+    ? resolveUrl(site, pluginCase.novelUrl || pluginCase.novelPath)
+    : null;
+  const explicitChapterUrl = pluginCase && (pluginCase.chapterUrl || pluginCase.chapterPath)
+    ? resolveUrl(site, pluginCase.chapterUrl || pluginCase.chapterPath)
+    : null;
 
   if (!site) {
     return {
@@ -362,11 +391,12 @@ async function runLiveSmokeForPlugin({
   }
 
   if (hasParseNovel) {
-    if (stages.search.status !== 'pass' || searchCandidates.length === 0) {
+    const hasSearchCandidate = stages.search.status === 'pass' && searchCandidates.length > 0;
+    if (!explicitNovelUrl && !hasSearchCandidate) {
       stages.novel = stageSkip('search_unavailable');
       stages.chapters = stageSkip('novel_unavailable');
     } else {
-      novelUrl = resolveUrl(site, searchCandidates[0]);
+      novelUrl = explicitNovelUrl || resolveUrl(site, searchCandidates[0]);
       if (!novelUrl) {
         stages.novel = stageFail('invalid_novel_url');
         stages.chapters = stageSkip('novel_unavailable');
@@ -382,10 +412,15 @@ async function runLiveSmokeForPlugin({
             const chapterUrls = extractChapterUrls(html, novelUrl);
             chapterCount = chapterUrls.length;
             if (chapterUrls.length === 0) {
-              stages.chapters = stageFail('empty_chapters');
+              if (explicitChapterUrl) {
+                stages.chapters = stagePass({ chapterCount: 0, source: 'case_chapter' });
+                sampleChapterUrl = explicitChapterUrl;
+              } else {
+                stages.chapters = stageFail('empty_chapters');
+              }
             } else {
               stages.chapters = stagePass({ chapterCount });
-              sampleChapterUrl = chapterUrls[0];
+              sampleChapterUrl = chapterUrls[0] || explicitChapterUrl;
             }
           }
         } catch (error) {
@@ -398,6 +433,12 @@ async function runLiveSmokeForPlugin({
   }
 
   if (hasParseChapter) {
+    if (!sampleChapterUrl && explicitChapterUrl) {
+      sampleChapterUrl = explicitChapterUrl;
+      stages.chapters = stages.chapters.status === 'skip'
+        ? stagePass({ chapterCount: 0, source: 'case_chapter' })
+        : stages.chapters;
+    }
     if (stages.chapters.status !== 'pass' || !sampleChapterUrl) {
       stages.chapterText = stageSkip('chapters_unavailable');
     } else {
@@ -438,15 +479,35 @@ async function runLiveSmoke({
   timeoutMs = 15000,
   concurrency = 8,
   limit = 0,
+  langs = [],
+  ids = [],
+  cases = {},
   fetcher = fetch,
 }) {
   const indexRaw = readJson(indexPath);
   if (!Array.isArray(indexRaw)) throw new Error('Index must be an array');
   const fileIndex = buildPluginFileIndex(pluginBaseDir);
 
-  const entries = limit > 0 ? indexRaw.slice(0, limit) : indexRaw;
+  const normalizedLangs = Array.isArray(langs) ? langs.map((it) => String(it).trim().toLowerCase()).filter(Boolean) : [];
+  const normalizedIds = Array.isArray(ids) ? ids.map((it) => String(it).trim().toLowerCase()).filter(Boolean) : [];
+
+  let filteredEntries = indexRaw;
+  if (normalizedLangs.length > 0) {
+    const allowedLangs = new Set(normalizedLangs);
+    filteredEntries = filteredEntries.filter((entry) => allowedLangs.has(String(entry.lang || '').trim().toLowerCase()));
+  }
+  if (normalizedIds.length > 0) {
+    const allowedIds = new Set(normalizedIds);
+    filteredEntries = filteredEntries.filter((entry) => allowedIds.has(String(entry.id || '').trim().toLowerCase()));
+  }
+
+  const entries = limit > 0 ? filteredEntries.slice(0, limit) : filteredEntries;
   const workers = Math.max(1, Number(concurrency) || 1);
   const plugins = new Array(entries.length);
+  const caseEntries = Object.entries(cases || {});
+  const casesById = Object.fromEntries(
+    caseEntries.map(([id, value]) => [String(id).trim().toLowerCase(), value]),
+  );
 
   async function runSingle(index) {
     const entry = entries[index];
@@ -478,6 +539,7 @@ async function runLiveSmoke({
     const result = await runLiveSmokeForPlugin({
       plugin,
       scriptText,
+      pluginCase: casesById[plugin.id.toLowerCase()] || null,
       query,
       timeoutMs,
       fetcher,
@@ -548,6 +610,9 @@ async function runLiveSmoke({
       timeoutMs,
       concurrency: workers,
       limit: limit > 0 ? limit : null,
+      langs: normalizedLangs.length > 0 ? normalizedLangs : null,
+      ids: normalizedIds.length > 0 ? normalizedIds : null,
+      hasCases: caseEntries.length > 0,
     },
     summary: {
       totalPlugins: plugins.length,
@@ -580,7 +645,11 @@ async function main() {
     pluginBaseDir: parsed.pluginBaseDir,
     query: parsed.query,
     timeoutMs: parsed.timeoutMs,
+    concurrency: parsed.concurrency,
     limit: parsed.limit,
+    langs: parsed.langs || [],
+    ids: parsed.ids || [],
+    cases: parsed.casesPath ? readJson(parsed.casesPath) : {},
   });
   writeJson(parsed.outputPath, report, parsed.pretty);
   console.log(`Wrote ${parsed.outputPath}`);

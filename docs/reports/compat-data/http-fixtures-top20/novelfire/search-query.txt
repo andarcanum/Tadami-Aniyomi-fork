@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en" theme="dark" bgcolor="black" hgcolor="purple">
+    <head>
+        <meta charset="utf-8"><title>Read  novel online for free  - Novel Fire</title><meta name="description" content="Find  on Novel Fire , related books to read"><meta name="copyright" content="Copyright © Novel Fire"><meta name="author" content="Novel Fire"><meta name="robots" content="index,follow"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><meta property="og:site_name" content="Novel Fire"><meta property="og:type" content="website"><meta property="og:url" content="http://novelfire.net/search?query=love"><meta property="og:title" content="Read  novel online for free  - Novel Fire"><meta property="og:description" content="Find  on Novel Fire , related books to read"><meta property="og:image" content="https://novelfire.net/bg-logo.jpg?v=4.8"><meta property="og:locale" content="en_US"><meta name="twitter:card" content="summary"><meta name="twitter:url" content="http://novelfire.net/search?query=love"><meta name="twitter:title" content="Read  novel online for free  - Novel Fire"><meta name="twitter:description" content="Find  on Novel Fire , related books to read"><meta name="twitter:image" content="https://novelfire.net/bg-logo.jpg?v=4.8"><meta name="twitter:creator" content="Novel Fire"><meta name="csrf-token" content="LGX5sUP90wAoIO8QZX8aaOfHzyZ4mAu1lOEVtloR"><link rel="canonical" href="https://novelfire.net/search"><link rel="manifest" href="https://novelfire.net/pwa-manifest.json?v=4.8"><link rel="shortcut icon" href="https://novelfire.net/logo.ico?v=4.8"><link rel="apple-touch-icon" href="https://novelfire.net/apple-touch-icon.png?v=4.8"><link rel="preconnect" href="//fonts.gstatic.com" crossorigin><link rel="preconnect" href="//fonts.googleapis.com" crossorigin><link rel="preload stylesheet" as="style" href="https://fonts.googleapis.com/css?family=Roboto:400,500,600,700|Nunito+Sans:400,500,600,700&display=swap" crossorigin onload="this.rel='stylesheet'">
+        <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:400,500,600,700|Nunito+Sans:400,500,600,700&display=swap"></noscript>
+        <script type="application/ld+json">{ "@context":"https://schema.org/","@type" : "Organization", "name":"Novel Fire", "url":"https://novelfire.net", "slogan": "Novel Fire - Read Web Novels Online Free", "logo": "https://novelfire.net/logo.svg" }</script>
+            <script type="application/ld+json">{ "@context":"https://schema.org/","@type" :"BreadcrumbList",
+       "itemListElement":[[{"@type":"ListItem","position":1,"name":"Novel","item":"https://novelfire.net/home"}],
+                         [{"@type":"ListItem","position":2,"name":"You searched for novel","item":"https://novelfire.net/search"}]] }</script>
+        <link rel="stylesheet" type="text/css" href="/frontend/css/navbar.min.css?ver=4.8"><link rel="stylesheet" type="text/css" href="/frontend/css/media-mobile.min.css?ver=4.8"><link rel="stylesheet" type="text/css" media="screen and (min-width: 768px)" href="/frontend/css/media-768.min.css?ver=4.8"><link rel="stylesheet" type="text/css" media="screen and (min-width: 1024px)" href="/frontend/css/media-1024.min.css?ver=4.8"><link rel="stylesheet" type="text/css" media="screen and (min-width: 1270px)" href="/frontend/css/media-1270.min.css?ver=4.8"><link rel="stylesheet" type="text/css" href="/frontend/css/fontello.css?ver=4.8">
+            <link rel="stylesheet" type="text/css" href="/frontend/css/pagedlist.css?ver=4.8" />
+    <link rel="stylesheet" type="text/css" href="/frontend/css/browsepg.min.css?ver=4.8" />
+     <style>#advfilterhead{padding-top:10px}#advfilterhead .section-header .getmorebtn {flex-shrink: 0;padding: 5px 10px;background-color: var(--bg-color-secondary-2);color: #f1f3f5;border-radius: 6px;}@media  screen and (max-width: 768px){#advfilterhead .section-header h1 {font-size: 1rem;}}#search-section{background-color:#fff;background-color:var(--bg-color-main);}#search-section h1{margin:0;font-weight:400;font-size:26px;}#search-section form{display:block;-webkit-box-sizing:border-box;box-sizing:border-box;}#search-section form label{font-size:1rem;display:block;margin-bottom:4px;}#search-section form .form-group{position:relative;}#search-section form input[type=search]{width:100%;border-radius:60px;height:2.5rem;font-weight:500;line-height:1.5rem;padding:.25rem 4.5rem .25rem 3rem;font-size:.925rem;display:block;-webkit-appearance:none;-webkit-tap-highlight-color:rgba(0,0,0,0);background-image:none;background-color:var(--bg-color-7);border:1px solid var(--border-color-4);color:var(--text-color);}#search-section form input[type=text]::-webkit-input-placeholder{font-size:24px;}#search-section form input[type=text]:hover{border-bottom-color:#4c5fe2;}#search-section form .search-i{font-size:28px;top:50%;margin-top:-22px;padding-left:0;color:#c0c2cc;position:absolute;left:0;}#search-section form .selectize-dropdown{font-size:14px;}#search-section form .selectize-input{font-size:16px;}#search-section form .selectize-input input{font-size:16px;}#search-section form .single{margin-bottom:1rem;}#search-section form button[type=submit]{padding:.25rem .3rem;background-color:#2d73e7;color:#fff;width:8rem;text-align:center;text-decoration:none;width:initial;padding:8px 16px;border-radius:5px;font-size:16px;border:1px solid transparent;vertical-align:middle;white-space:nowrap;text-transform:uppercase;}#search-section form .submit{text-align:center;}#search-section form button.hide{position:absolute;clip:rect(0 0 0 0);}#search-section form .advanced{margin:1rem 0;display:-ms-grid;display:grid;-ms-grid-columns:1fr;grid-template-columns:repeat(1,1fr);grid-gap:6px;}#search-section .search_label{width:3rem;height:2.5rem;border-radius:2rem 0 0 2rem;color:rgba(18,18,23,.24);position:absolute;z-index:1;top:0;left:0;}#search-section .search_label svg{position:absolute;margin:auto;top:0;left:0;right:0;bottom:0;vertical-align:middle;display:inline-block;color:rgba(18,18,23,.24);}#search-section .loading-dual-ring{width:50px;height:50px;}#search-section .loading-dual-ring:after{width:50px;height:50px;}#search-section #novelListBase{min-height:150px;}#search-section .popular-novels{margin-top:30px;}.popular-novels h2{font-size:1.2rem;margin-top:0;margin-bottom:14px;padding-bottom:6px;border-bottom:2px solid var(--border-color-2);}@media  screen and (min-width:768px){#search-section{margin-top:30px;background-color:transparent;}#search-section form input[type=search]{height:4rem;padding:.5rem 5.5rem .5rem 4rem;font-size:1.3rem;background-color:var(--bg-color-7);}#search-section .search-container{padding:30px 10%;}#search-section .form-group{margin:0 auto;}#search-section .search_label{width:4rem;height:4rem;}#search-section .search_label svg{width:1.3rem;height:1.3rem;}#search-section .loading-dual-ring{width:50px;height:50px;}#search-section .loading-dual-ring:after{width:50px;height:50px;}#search-section #novelListBase{min-height:150px;padding:0 20px;}#search-section #novelListBase .novel-list.horizontal .novel-item .cover-wrap{width:17%;}#search-section .popular-novels{padding:0 20px;margin-top:30px;}.popular-novels h2{font-size:20px;}#search-section .popular-novels .novel-list{margin-left:-20px;}#search-section .popular-novels .novel-list.col5 .novel-item{margin-left:20px;margin-bottom:20px;}#search-section .popular-novels .novel-list.horizontal .novel-item{margin-left:20px;margin-bottom:20px;}#search-section .popular-novels .novel-list.horizontal .novel-item .cover-wrap{width:13%;}#search-section form label{font-size:1rem;}#search-section .advanced{grid-template-columns:repeat(2,1fr);grid-gap:20px;margin:2rem 0;}}@media  screen and (min-width:1024px){#search-section #novelListBase .novel-list.horizontal .novel-item .cover-wrap{width:13%;}}</style>
+        <link rel="stylesheet" href="/frontend/css/style.min.css?ver=4.8" type="text/css" media="all">
+            </head>
+    <body class="fade-out">
+        <header class="main-header skiptranslate">
+            <div class="wrapper">
+                <div class="nav-logo"><a title="Novel Fire - Read Web Novels Online Free" href="/home"><img src="/logo.svg?ver=4.8" alt="Novel Fire"></a></div>
+                <div class="navigation-bar">
+                    <nav>
+                        <span class="lnw-slog fs-14">Your fictional stories hub.</span>
+                        <ul class="navbar-menu">
+                                <li class="nav-item"><a title="Explore The Recently Added Novels" href="/genre-all/sort-new/status-all/all-novel" class="nav-link"><i class="icon-th-large"></i> Browse</a></li>
+                                <li class="nav-item"><a title="Novel Ranking" href="/ranking" class="nav-link"><i class="icon-diamond"></i> Ranking</a></li>
+                                <li class="nav-item"><a title="Check out the recently added novel chapters" href="/latest-release-novels" class="nav-link"><i class="icon-book-open"></i> Updates</a></li>
+                                <li class="nav-item dropdown _hover">
+                                    <a href="javascript:;" class="nav-link"><i class="icon-th-list"></i> Useful</a>
+                                    <div class="drop-items">
+                                        <a title="Search Novels with Advanced Filtering Function" href="/search-adv" class="drop-link"><i class="icon-filter"></i> Filter</a>
+                                        <a title="Member List" href="/user/member-list" class="drop-link"><i class="icon-users"></i> Member List</a>
+                                        <a title="Random Novel" href="/random-novel" class="drop-link"><i class="icon-arrows-cw"></i> Random</a>
+                                        <a title="All Tags" href="/all-tags/A" class="drop-link"><i class="icon-tags"></i> All Tags</a>
+                                        <a title="Feedback & Requests" href="/notices" class="drop-link"><i class="icon-megaphone"></i> Requests</a>
+                                    </div>
+                                </li>
+                                <li class="nav-item"><a class="nightmode_switch" data-content="Light Theme"><i class="icon-sun"></i></a></li>
+                                <li class="nav-item nav-search"><form class="search-form"><i class="icon-search"></i><input type="text" id="inputContent" placeholder="Search by title..." autocomplete="off"><span class="clear-input"><i class="icon-cancel"></i></span><div class="search-filter"><button type="button" class="filter-btn" id="filterDropdownBtn"><span id="filterLabel">Title</span><i class="icon-dropdown"></i></button><ul id="filterDropdownMenu"><li data-value="title" class="active">Title</li><li data-value="author">Author</li><li data-value="both">Both</li></ul></div></form><section id="novelListBase"></section></li>
+                            </ul>
+                    </nav>
+                    <div class="login-wrap-nav">
+                                                    <a class="nav-link login button" href="#modal" data-close-menu-mobile="1">Login</a>
+                                            </div>
+                </div>
+                <div class="nav-back"></div><button id="mobile-menu-btn"><div id="burger-btn"></div></button><span class="nav notify-bell mobile-block icon-bell-alt"></span>
+            </div>
+        </header>
+        <div class="sidebar-wrapper"></div><main role="main"><div class="navbar-breadcrumb">
+    <div class="breadcrumb show-dots container">
+        <a title="Novel Fire - Read Web Novels Online Free" href="/home"><svg class="svg-home" height="20" viewBox="0 0 24 24" width="20"><path d="M0 0h24v24H0z" fill="none"/><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg> Novel</a>
+        <svg width="10" height="10" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/></svg>
+        <a title="Search" href="https://novelfire.net/search">Search</a>
+    </div>
+</div>
+<article id="latest-updates">
+    <div class="container">
+        <header id="header">
+            <h1>“” found on Novel Fire with 15699 results...</h1>
+        </header>
+        <ul class="novel-list horizontal col2 chapters">
+                            <li class="novel-item">
+                    <a title="Shadow Slave" href="/book/shadow-slave">
+                        <div class="cover-wrap">
+                            <figure class="novel-cover">
+                                <img src="/server-1/shadow-slave.jpg" alt="Shadow Slave">
+                            </figure>
+                        </div>
+                        <div class="item-body">
+                            <h4 class="novel-title text1row">Shadow Slave</h4>
+                            <div class="novel-stats">
+                                <strong><i class="icon-crown"></i> Rank 1</strong>
+                            </div>
+                            <div class="novel-stats">
+                                <span><i class="icon-book-open"></i> 2814 Chapters</span>
+                            </div>
+                        </div>
+                    </a>
+                </li>
+                            <li class="novel-item">
+                    <a title="Reverend Insanity" href="/book/reverend-insanity">
+                        <div class="cover-wrap">
+                            <figure class="novel-cover">
+                                <img src="/server-1/reverend-insanity.jpg" alt="Reverend Insanity">
+                            </figure>
+                        </div>
+                        <div class="item-body">
+                            <h4 class="novel-title text1row">Reverend Insanity</h4>
+                            <div class="novel-stats">
+                                <strong><i class="icon-crown"></i> Rank 2</strong>
+                            </div>
+                            <div class="novel-stats">
+                                <span><i class="icon-book-open"></i> 2334 Chapters</span>
+                            </div>
+                        </div>
+                    </a>
+                </li>
+                            <li class="novel-item">
+                    <a title="Lord of the Mysteries" href="/book/lord-of-the-mysteries">
+                        <div class="cover-wrap">
+                            <figure class="novel-cover">
+                                <img src="/server-1/lord-of-the-mysteries.jpg" alt="Lord of the Mysteries">
+                            </figure>
+                        </div>
+                        <div class="item-body">
+                            <h4 class="novel-title text1row">Lord of the Mysteries</h4>
+                            <div class="novel-stats">
+                                <strong><i class="icon-crown"></i> Rank 3</strong>
+                            </div>
+                            <div class="novel-stats">
+                                <span><i class="icon-book-open"></i> 1432 Chapters</span>
+                            </div>
+                        </div>
+                    </a>
+                </li>
+                            <li class="novel-item">
+                    <a title="A Regressor’s Tale of Cultivation" href="/book/a-regressors-tale-of-cultivation">
+                        <div class="cover-wrap">
+                            <figure class="novel-cover">
+                                <img src="/server-1/a-regressors-tale-of-cultivation.jpg" alt="A Regressor’s Tale of Cultivation">
+                            </figure>
+                        </div>
+                        <div class="item-body">
+                            <h4 class="novel-title text1row">A Regressor’s Tale of Cultivation</h4>
+                            <div class="novel-stats">
+                                <strong><i class="icon-crown"></i> Rank 4</strong>
+                            </div>
+                            <div class="novel-stats">
+                                <span><i class="icon-book-open"></i> 821 Chapters</span>
+                            </div>
+                        </div>
+                    </a>
+                </li>
+                            <li class="novel-item">
+                    <a title="Kill the Sun" href="/book/kill-the-sun">
+                        <div class="cover-wrap">
+                            <figure class="novel-cover">
+                                <img src="/server-1/kill-the-sun.jpg" alt="Kill the Sun">
+                            </figure>
+                        </div>
+                        <div class="item-body">
+                            <h4 class="novel-title text1row">Kill the Sun</h4>
+                            <div class="novel-stats">
+                                <strong><i class="icon-crown"></i> Rank 5</strong>
+                            </div>
+                            <div class="novel-stats">
+                                <span><i class="icon-book-open"></i> 992 Chapters</span>
+                            </div>
+                        </div>
+                    </a>
+                </li>
+                            <li class="novel-item">
+                    <a title="Tribulation of Myriad Races" href="/book/tribulation-of-myriad-races">
+                        <div class="cover-wrap">
+                            <figure class="novel-cover">
+                                <img src="/server-1/tribulation-of-myriad-races.jpg" alt="Tribulation of Myriad Races">
+                            </figure>
+                        </div>
+                        <div class="item-body">
+                            <h4 class="novel-title text1row">Tribulation of Myriad Races</h4>
+                            <div class="novel-stats">
+                                <strong><i class="icon-crown"></i> Rank 6</strong>
+                            </div>
+                            <div class="novel-stats">
+                                <span><i class="icon-book-open"></i> 1837 Chapters</span>
+                            </div>
+                        </div>
+                    </a>
+                </li>
+                            <li class="novel-item">
+                    <a title="Advent of the Three Calamities" href="/book/advent-of-the-three-calamities">
+                        <div class="cover-wrap">
+                            <figure class="novel-cover">
+                                <img src="/server-1/advent-of-the-three-calamities.jpg" alt="Advent of the Three Calamities">
+                            </figure>
+                        </div>
+                        <div class="item-body">
+                            <h4 class="novel-title text1row">Advent of the Three Calamities</h4>
+                            <div class="novel-stats">
+                                <strong><i class="icon-crown"></i> Rank 7</strong>
+                            </div>
+                            <div class="novel-stats">
+                                <span><i class="icon-book-open"></i> 820 Chapters</span>
+                            </div>
+                        </div>
+                    </a>
+                </li>
+                            <li class="novel-item">
+                    <a title="Young Master's PoV: Woke Up As A Villain In A Game One Day" href="/book/young-masters-pov-woke-up-as-a-villain-in-a-game-one-day">
+                        <div class="cover-wrap">
+                            <figure class="novel-cover">
+                                <img src="/server-1/young-masters-pov-woke-up-as-a-villain-in-a-game-one-day.jpg" alt="Young Master's PoV: Woke Up As A Villain In A Game One Day">
+                            </figure>
+                        </div>
+                        <div class="item-body">
+                            <h4 class="novel-title text1row">Young Master's PoV: Woke Up As A Villain In A Game One Day</h4>
+                            <div class="novel-stats">
+                                <strong><i class="icon-crown"></i> Rank 8</strong>
+                            </div>
+                            <div class="novel-stats">
+                                <span><i class="icon-book-open"></i> 341 Chapters</span>
+                            </div>
+                        </div>
+                    </a>
+                </li>
+                            <li class="novel-item">
+                    <a title="Omniscient Reader's Viewpoint" href="/book/omniscient-readers-viewpoint">
+                        <div class="cover-wrap">
+                            <figure class="novel-cover">
+                                <img src="/server-1/omniscient-readers-viewpoint.jpg" alt="Omniscient Reader's Viewpoint">
+                            </figure>
+                        </div>
+                        <div class="item-body">
+                            <h4 class="novel-title text1row">Omniscient Reader's Viewpoint</h4>
+                            <div class="novel-stats">
+                                <strong><i class="icon-crown"></i> Rank 9</strong>
+                            </div>
+                            <div class="novel-stats">
+                                <span><i class="icon-book-open"></i> 552 Chapters</span>
+                            </div>
+                        </div>
+                    </a>
+                </li>
+                            <li class="novel-item">
+                    <a title="The Author's POV" href="/book/the-authors-pov">
+                        <div class="cover-wrap">
+                            <figure class="novel-cover">
+                                <img src="/server-1/the-authors-pov.jpg" alt="The Author's POV">
+                            </figure>
+                        </div>
+                        <div class="item-body">
+                            <h4 class="novel-title text1row">The Author's POV</h4>
+                            <div class="novel-stats">
+                                <strong><i class="icon-crown"></i> Rank 10</strong>
+                            </div>
+                            <div class="novel-stats">
+                                <span><i class="icon-book-open"></i> 862 Chapters</span>
+                            </div>
+                        </div>
+                    </a>
+                </li>
+                            <li class="novel-item">
+                    <a title="The Mirror Legacy" href="/book/the-mirror-legacy">
+                        <div class="cover-wrap">
+                            <figure class="novel-cover">
+                                <img src="/server-1/the-mirror-legacy.jpg" alt="The Mirror Legacy">
+                            </figure>
+                        </div>
+                        <div class="item-body">
+                            <h4 class="novel-title text1row">The Mirror Legacy</h4>
+                            <div class="novel-stats">
+                                <strong><i class="icon-crown"></i> Rank 11</strong>
+                            </div>
+                            <div class="novel-stats">
+                                <span><i class="icon-book-open"></i> 1306 Chapters</span>
+                            </div>
+                        </div>
+                    </a>
+                </li>
+                            <li class="novel-item">
+                    <a title="Horror Game Developer: My games aren't that scary!" href="/book/horror-game-developer-my-games-arent-that-scary">
+                        <div class="cover-wrap">
+                            <figure class="novel-cover">
+                                <img src="/server-1/horror-game-developer-my-games-arent-that-scary.jpg" alt="Horror Game Developer: My games aren't that scary!">
+                            </figure>
+                        </div>
+                        <div class="item-body">
+                            <h4 class="novel-title text1row">Horror Game Developer: My games aren't that scary!</h4>
+                            <div class="novel-stats">
+                                <strong><i class="icon-crown"></i> Rank 12</strong>
+                            </div>
+                            <div class="novel-stats">
+                                <span><i class="icon-book-open"></i> 498 Chapters</span>
+                            </div>
+                        </div>
+                    </a>
+                </li>
+                            <li class="novel-item">
+                    <a title="Diary of a Dead Wizard" href="/book/diary-of-a-dead-wizard">
+                        <div class="cover-wrap">
+                            <figure class="novel-cover">
+                                <img src="/server-1/diary-of-a-dead-wizard.jpg" alt="Diary of a Dead Wizard">
+                            </figure>
+                        </div>
+                        <div class="item-body">
+                            <h4 class="novel-title text1row">Diary of a Dead Wizard</h4>
+                            <div class="novel-stats">
+                                <strong><i class="icon-crown"></i> Rank 13</strong>
+                            </div>
+                            <div class="novel-stats">
+                                <span><i class="icon-book-open"></i> 1037 Chapters</span>
+                            </div>
+                        </div>
+                    </a>
+                </li>
+                            <li class="novel-item">
+                    <a title="The Legendary Mechanic" href="/book/the-legendary-mechanic">
+                        <div class="cover-wrap">
+                            <figure class="novel-cover">
+                                <img src="/server-1/the-legendary-mechanic.jpg" alt="The Legendary Mechanic">
+                            </figure>
+                        </div>
+                        <div class="item-body">
+                            <h4 class="novel-title text1row">The Legendary Mechanic</h4>
+                            <div class="novel-stats">
+                                <strong><i class="icon-crown"></i> Rank 14</strong>
+                            </div>
+                            <div class="novel-stats">
+                                <span><i class="icon-book-open"></i> 1463 Chapters</span>
+                            </div>
+                        </div>
+                    </a>
+                </li>
+                            <li class="novel-item">
+                    <a title="Lord of Mysteries 2: Circle of Inevitability" href="/book/lord-of-mysteries-2-circle-of-inevitability">
+                        <div class="cover-wrap">
+                            <figure class="novel-cover">
+                                <img src="/server-1/lord-of-mysteries-2-circle-of-inevitability.jpg" alt="Lord of Mysteries 2: Circle of Inevitability">
+                            </figure>
+                        </div>
+                        <div class="item-body">
+                            <h4 class="novel-title text1row">Lord of Mysteries 2: Circle of Inevitability</h4>
+                            <div class="novel-stats">
+                                <strong><i class="icon-crown"></i> Rank 15</strong>
+                            </div>
+                            <div class="novel-stats">
+                                <span><i class="icon-book-open"></i> 1181 Chapters</span>
+                            </div>
+                        </div>
+                    </a>
+                </li>
+                            <li class="novel-item">
+                    <a title="My House of Horrors" href="/book/my-house-of-horrors">
+                        <div class="cover-wrap">
+                            <figure class="novel-cover">
+                                <img src="/server-1/my-house-of-horrors.jpg" alt="My House of Horrors">
+                            </figure>
+                        </div>
+                        <div class="item-body">
+                            <h4 class="novel-title text1row">My House of Horrors</h4>
+                            <div class="novel-stats">
+                                <strong><i class="icon-crown"></i> Rank 16</strong>
+                            </div>
+                            <div class="novel-stats">
+                                <span><i class="icon-book-open"></i> 1215 Chapters</span>
+                            </div>
+                        </div>
+                    </a>
+                </li>
+                            <li class="novel-item">
+                    <a title="The Beginning After The End" href="/book/the-beginning-after-the-end">
+                        <div class="cover-wrap">
+                            <figure class="novel-cover">
+                                <img src="/server-1/the-beginning-after-the-end.jpg" alt="The Beginning After The End">
+                            </figure>
+                        </div>
+                        <div class="item-body">
+                            <h4 class="novel-title text1row">The Beginning After The End</h4>
+                            <div class="novel-stats">
+                                <strong><i class="icon-crown"></i> Rank 17</strong>
+                            </div>
+                            <div class="novel-stats">
+                                <span><i class="icon-book-open"></i> 535 Chapters</span>
+                            </div>
+                        </div>
+                    </a>
+                </li>
+                            <li class="novel-item">
+                    <a title="Who Let Him Cultivate?!" href="/book/who-let-him-cultivate">
+                        <div class="cover-wrap">
+                            <figure class="novel-cover">
+                                <img src="/server-1/who-let-him-cultivate.jpg" alt="Who Let Him Cultivate?!">
+                            </figure>
+                        </div>
+                        <div class="item-body">
+                            <h4 class="novel-title text1row">Who Let Him Cultivate?!</h4>
+                            <div class="novel-stats">
+                                <strong><i class="icon-crown"></i> Rank 18</strong>
+                            </div>
+                            <div class="novel-stats">
+                                <span><i class="icon-book-open"></i> 1364 Chapters</span>
+                            </div>
+                        </div>
+                    </a>
+                </li>
+                            <li class="novel-item">
+                    <a title="The Innkeeper" href="/book/the-innkeeper">
+                        <div class="cover-wrap">
+                            <figure class="novel-cover">
+                                <img src="/server-1/the-innkeeper.jpg" alt="The Innkeeper">
+                            </figure>
+                        </div>
+                        <div class="item-body">
+                            <h4 class="novel-title text1row">The Innkeeper</h4>
+                            <div class="novel-stats">
+                                <strong><i class="icon-crown"></i> Rank 19</strong>
+                            </div>
+                            <div class="novel-stats">
+                                <span><i class="icon-book-open"></i> 2079 Chapters</span>
+                            </div>
+                        </div>
+                    </a>
+                </li>
+                            <li class="novel-item">
+                    <a title="Lord of the Truth" href="/book/lord-of-the-truth">
+                        <div class="cover-wrap">
+                            <figure class="novel-cover">
+                                <img src="/server-1/lord-of-the-truth.jpg" alt="Lord of the Truth">
+                            </figure>
+                        </div>
+                        <div class="item-body">
+                            <h4 class="novel-title text1row">Lord of the Truth</h4>
+                            <div class="novel-stats">
+                                <strong><i class="icon-crown"></i> Rank 20</strong>
+                            </div>
+                            <div class="novel-stats">
+                                <span><i class="icon-book-open"></i> 1988 Chapters</span>
+                            </div>
+                        </div>
+                    </a>
+                </li>
+                    </ul>
+        <div class="text-center mb-4 mb-lg-5"><nav>
+        <ul class="pagination">
+            
+                            <li class="page-item disabled" aria-disabled="true" aria-label="&laquo; Previous">
+                    <span class="page-link" aria-hidden="true">&lsaquo;</span>
+                </li>
+            
+            
+                            
+                
+                
+                                                                                        <li class="page-item active" aria-current="page"><span class="page-link">1</span></li>
+                                                                                                <li class="page-item"><a class="page-link" href="https://novelfire.net/search?query=love&amp;page=2">2</a></li>
+                                                                                                <li class="page-item"><a class="page-link" href="https://novelfire.net/search?query=love&amp;page=3">3</a></li>
+                                                                                                <li class="page-item"><a class="page-link" href="https://novelfire.net/search?query=love&amp;page=4">4</a></li>
+                                                                                                <li class="page-item"><a class="page-link" href="https://novelfire.net/search?query=love&amp;page=5">5</a></li>
+                                                                                                <li class="page-item"><a class="page-link" href="https://novelfire.net/search?query=love&amp;page=6">6</a></li>
+                                                                                                <li class="page-item"><a class="page-link" href="https://novelfire.net/search?query=love&amp;page=7">7</a></li>
+                                                                                                <li class="page-item"><a class="page-link" href="https://novelfire.net/search?query=love&amp;page=8">8</a></li>
+                                                                                                <li class="page-item"><a class="page-link" href="https://novelfire.net/search?query=love&amp;page=9">9</a></li>
+                                                                                                <li class="page-item"><a class="page-link" href="https://novelfire.net/search?query=love&amp;page=10">10</a></li>
+                                                                                        
+                                    <li class="page-item disabled" aria-disabled="true"><span class="page-link">...</span></li>
+                
+                
+                                            
+                
+                
+                                                                                        <li class="page-item"><a class="page-link" href="https://novelfire.net/search?query=love&amp;page=784">784</a></li>
+                                                                                                <li class="page-item"><a class="page-link" href="https://novelfire.net/search?query=love&amp;page=785">785</a></li>
+                                                                        
+            
+                            <li class="page-item">
+                    <a class="page-link" href="https://novelfire.net/search?query=love&amp;page=2" rel="next" aria-label="Next &raquo;">&rsaquo;</a>
+                </li>
+                    </ul>
+    </nav>
+</div>
+        <section class="popular-novels"><div class="section-header"><h3>Some Popular Novels</h3><a title="Some Popular Novels" href="/genre-all/sort-popular/status-all/all-novel" class="getmorebtn">See More</a></div><ul class="novel-list col6"><li class="novel-item"><a title="All MILFs are Mine" href="/book/all-milfs-are-mine"><div class="cover-wrap"><figure class="novel-cover"><img class="lazy" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" data-src="/server-1/all-milfs-are-mine.jpg" alt="All MILFs are Mine"></figure></div><div class="item-body"><h4 class="novel-title text2row">All MILFs are Mine</h4><div class="novel-stats"><span><i class="icon-crown"></i> Rank 193</span></div><div class="novel-stats"><span class="info-rating pb-1" data-rating="3.9"></span></div></div></a></li><li class="novel-item"><a title="I Was Mistaken as a Great War Commander" href="/book/i-was-mistaken-as-a-great-war-commander"><div class="cover-wrap"><figure class="novel-cover"><img class="lazy" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" data-src="/server-1/i-was-mistaken-as-a-great-war-commander.jpg" alt="I Was Mistaken as a Great War Commander"></figure></div><div class="item-body"><h4 class="novel-title text2row">I Was Mistaken as a Great War Commander</h4><div class="novel-stats"><span><i class="icon-crown"></i> Rank 45</span></div><div class="novel-stats"><span class="info-rating pb-1" data-rating="4.7"></span></div></div></a></li><li class="novel-item"><a title="My Living Shadow System Devours To Make Me Stronger" href="/book/my-living-shadow-system-devours-to-make-me-stronger"><div class="cover-wrap"><figure class="novel-cover"><img class="lazy" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" data-src="/server-1/my-living-shadow-system-devours-to-make-me-stronger.jpg" alt="My Living Shadow System Devours To Make Me Stronger"></figure></div><div class="item-body"><h4 class="novel-title text2row">My Living Shadow System Devours To Make Me Stronger</h4><div class="novel-stats"><span><i class="icon-crown"></i> Rank 24</span></div><div class="novel-stats"><span class="info-rating pb-1" data-rating="3.9"></span></div></div></a></li><li class="novel-item"><a title="The Regressor Can Make Them All" href="/book/the-regressor-can-make-them-all"><div class="cover-wrap"><figure class="novel-cover"><img class="lazy" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" data-src="/server-1/the-regressor-can-make-them-all.jpg" alt="The Regressor Can Make Them All"></figure></div><div class="item-body"><h4 class="novel-title text2row">The Regressor Can Make Them All</h4><div class="novel-stats"><span><i class="icon-crown"></i> Rank 125</span></div><div class="novel-stats"><span class="info-rating pb-1" data-rating="5"></span></div></div></a></li><li class="novel-item"><a title="I Became a Ruined Character in a Dark Fantasy" href="/book/i-became-a-ruined-character-in-a-dark-fantasy"><div class="cover-wrap"><figure class="novel-cover"><img class="lazy" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" data-src="/server-1/i-became-a-ruined-character-in-a-dark-fantasy.jpg" alt="I Became a Ruined Character in a Dark Fantasy"></figure></div><div class="item-body"><h4 class="novel-title text2row">I Became a Ruined Character in a Dark Fantasy</h4><div class="novel-stats"><span><i class="icon-crown"></i> Rank 92</span></div><div class="novel-stats"><span class="info-rating pb-1" data-rating="5"></span></div></div></a></li><li class="novel-item"><a title="Dao of the Bizarre Immortal" href="/book/dao-of-the-bizarre-immortal"><div class="cover-wrap"><figure class="novel-cover"><img class="lazy" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" data-src="/server-1/dao-of-the-bizarre-immortal.jpg" alt="Dao of the Bizarre Immortal"></figure></div><div class="item-body"><h4 class="novel-title text2row">Dao of the Bizarre Immortal</h4><div class="novel-stats"><span><i class="icon-crown"></i> Rank 40</span></div><div class="novel-stats"><span class="info-rating pb-1" data-rating="4.9"></span></div></div></a></li><li class="novel-item"><a title="The Perfect Run" href="/book/the-perfect-run"><div class="cover-wrap"><figure class="novel-cover"><img class="lazy" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" data-src="/server-1/the-perfect-run.jpg" alt="The Perfect Run"></figure></div><div class="item-body"><h4 class="novel-title text2row">The Perfect Run</h4><div class="novel-stats"><span><i class="icon-crown"></i> Rank 35</span></div><div class="novel-stats"><span class="info-rating pb-1" data-rating="4.8"></span></div></div></a></li><li class="novel-item"><a title="The Regressor and the Blind Saint" href="/book/the-regressor-and-the-blind-saint"><div class="cover-wrap"><figure class="novel-cover"><img class="lazy" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" data-src="/server-1/the-regressor-and-the-blind-saint.jpg" alt="The Regressor and the Blind Saint"></figure></div><div class="item-body"><h4 class="novel-title text2row">The Regressor and the Blind Saint</h4><div class="novel-stats"><span><i class="icon-crown"></i> Rank 36</span></div><div class="novel-stats"><span class="info-rating pb-1" data-rating="4.6"></span></div></div></a></li><li class="novel-item"><a title="The Innkeeper" href="/book/the-innkeeper"><div class="cover-wrap"><figure class="novel-cover"><img class="lazy" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" data-src="/server-1/the-innkeeper.jpg" alt="The Innkeeper"></figure></div><div class="item-body"><h4 class="novel-title text2row">The Innkeeper</h4><div class="novel-stats"><span><i class="icon-crown"></i> Rank 19</span></div><div class="novel-stats"><span class="info-rating pb-1" data-rating="4.5"></span></div></div></a></li><li class="novel-item"><a title="Reverend Insanity" href="/book/reverend-insanity"><div class="cover-wrap"><figure class="novel-cover"><img class="lazy" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" data-src="/server-1/reverend-insanity.jpg" alt="Reverend Insanity"></figure></div><div class="item-body"><h4 class="novel-title text2row">Reverend Insanity</h4><div class="novel-stats"><span><i class="icon-crown"></i> Rank 2</span></div><div class="novel-stats"><span class="info-rating pb-1" data-rating="4.8"></span></div></div></a></li><li class="novel-item"><a title="Chrysalis" href="/book/chrysalis"><div class="cover-wrap"><figure class="novel-cover"><img class="lazy" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" data-src="/server-1/chrysalis.jpg" alt="Chrysalis"></figure></div><div class="item-body"><h4 class="novel-title text2row">Chrysalis</h4><div class="novel-stats"><span><i class="icon-crown"></i> Rank 29</span></div><div class="novel-stats"><span class="info-rating pb-1" data-rating="4.8"></span></div></div></a></li><li class="novel-item"><a title="Cultivation Online" href="/book/cultivation-online"><div class="cover-wrap"><figure class="novel-cover"><img class="lazy" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" data-src="/server-1/cultivation-online.jpg" alt="Cultivation Online"></figure></div><div class="item-body"><h4 class="novel-title text2row">Cultivation Online</h4><div class="novel-stats"><span><i class="icon-crown"></i> Rank 56</span></div><div class="novel-stats"><span class="info-rating pb-1" data-rating="3.6"></span></div></div></a></li></ul></section>
+    </div>
+</article>
+</main>
+        <footer><div class="wrapper skiptranslate"><div class="col logo text-center"><a title="Novel Fire - Read Web Novels Online Free" href="/home" style="display:inline-block"><img class="lazy footer-logo" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" data-src="/logo.svg?ver=4.8" alt="Novel Fire"></a></div><nav class="col links"><ul><li><a title="Explore the Top Rated Novels" href="/ranking">Novel Ranking</a></li><li><a title="Recently Added Novel Chapters" href="/latest-release-novels">Latest Chapters</a></li><li><a title="Explore The Recently Added Novels" href="/genre-all/sort-new/status-all/all-novel">Latest Novels</a></li><li><a title="Completed Novels" href="/genre-all/sort-popular/status-completed/all-novel">Completed Novels</a></li></ul></nav><nav class="col links"><ul><li><a title="Most Popular Romance Genre Novels" href="/genre-romance/sort-popular/status-all/all-novel">Romance</a></li><li><a title="Most Popular Josei Genre Novels" href="/genre-josei/sort-popular/status-all/all-novel">Josei</a></li><li><a title="Most Popular Video Games Genre Novels" href="/genre-video-games/sort-popular/status-all/all-novel">Video Games</a></li><li><a title="Most Popular Fantasy Genre Novels" href="/genre-fantasy/sort-popular/status-all/all-novel">Fantasy</a></li></ul></nav><nav class="col links"><ul><li><a title="Most Popular Martial Arts Genre Novels" href="/genre-martial-arts/sort-popular/status-all/all-novel">Martial Arts</a></li><li><a title="Most Popular Slice of Life Genre Novels" href="/genre-slice-of-life/sort-popular/status-all/all-novel">Slice of Life</a></li><li><a title="Most Popular Sci-fi Genre Novels" href="/genre-sci-fi/sort-popular/status-all/all-novel">Sci-fi</a></li><li><a title="Most Popular Supernatural Genre Novels" href="/genre-supernatural/sort-popular/status-all/all-novel">Supernatural</a></li></ul></nav><nav class="col links"><ul><li><a title="Privacy Policy" href="/page/privacy-policy">Privacy Policy</a></li><li><a title="Terms of Service" href="/page/terms-of-service">Terms of Service</a></li><li><a title="Contact Us" href="/contact-us">Contact Us</a></li></ul></nav><div class="clearfix copyright py-2 w-100 mt-3 text-center"><p>Made with ♥ for Novel Lovers</p><p class="fs-14">Disclaimer: This site Novel Fire does not store any files on its server. All contents are provided by non-affiliated third parties.</p></div></div></footer><div id="toast-container"></div><div class="ajax_waiting"></div><script src="https://cdnjs.cloudflare.com/ajax/libs/js-cookie/3.0.1/js.cookie.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script><script src="/frontend/js/appsettings.min.js?ver=4.8"></script><script src="/frontend/js/app.min.js?ver=4.8"></script><a id="back-to-top" href="#"><i class="icon-up"></i></a>
+    <div id="modal" class="popupContainer" style="display:none"><header class="popupHeader"><span class="header_title">Login</span><span class="modal_close"><i class="icon-cancel"></i></span></header><section class="popupBody"><div class="social_login box-social"><div class="notification"></div><div><a href="/auth/redirect/google" class="social_box google"><span class="icon"><i class="i-googlePlus"></i></span><span class="icon_title">LOG IN WITH GOOGLE</span></a><a href="javascript:void(0)" id="login_form" class="social_box"><span class="icon"><i class="i-mail"></i></span><span class="icon_title">LOG IN WITH EMAIL</span></a></div><div class="centeredText">Don't have an account?<br><a href="javascript:void(0)" id="register_form" class="font-weight">Sign up with your email address.</a></div></div><div class="user_login edit-form"><form><label>Email</label><input type="email"><div class="alert alert-email"></div><label>Password</label><input type="password"><div class="alert alert-password"></div><div class="checkbox" style="display:flex"><input id="remember" type="checkbox"><label for="remember">Remember Me</label><label style="margin-left:auto"><a href="javascript:void(0)" id="forgot_password" class="forgot_password">Forgot Password?</a></label></div><div class="action_btns"><div class="one_half"><a href="javascript:void(0)" class="button btn-modal back_btn"><i class="icon-left-big"></i> Back</a></div><div class="one_half last"><a href="javascript:void(0)" class="button btn-modal" onclick="loginAjax()">Login</a></div></div></form></div><div class="user_register edit-form"><form><div class="box-social"><a href="/auth/redirect/google" class="social_box google"><span class="icon"><i class="i-googlePlus"></i></span><span class="icon_title">SIGN UP WITH GOOGLE</span></a></div><div class="oauth-divider"><span>or</span></div><label>Email</label><input type="email"><div class="alert alert-email"></div><label>Username</label><input type="text"><div class="alert alert-name"></div><label>Password</label><input type="password"><div class="alert alert-password"></div><label>Confirm Password</label><input type="password" name="confirm-password"><div class="alert alert-confirm-password"></div><div class="action_btns"><div class="one_half"><a href="javascript:void(0)" class="button btn-modal back_btn"><i class="icon-left-big"></i> Back</a></div><div class="one_half last"><a href="javascript:void(0)" class="button btn-modal" onclick="registerAjax()">Sign Up</a></div></div></form></div><div class="user_forgot_password edit-form"><form><div class="pb-2"><p style="padding-bottom:10px">Enter your email address that you used to register. We'll send you an email with a link to reset your password.</p><p><i>If you don’t see the email, check other places it might be, like your junk, spam, social, or other folders.</i></p></div><input type="email" placeholder="Email"><div class="alert alert-email"></div><div class="action_btns"><div class="one_half"><a href="javascript:void(0)" class="button btn-modal back_btn_from_forgot_password"><i class="icon-left-big"></i> Back</a></div><div class="one_half last"><a href="javascript:void(0)" class="button btn-modal" onclick="codePasswordResetAjax()">Send</a></div></div></form></div><div class="form_alert"><form><div class="alert"></div></form></div></section></div>
+    <script src="/frontend/js/modal.min.js?ver=4.8"></script>
+ <script async src="https://www.googletagmanager.com/gtag/js?id=G-PKXR4EBQ8F"></script><script>window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());gtag('config', 'G-PKXR4EBQ8F');</script>
+     <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9cc323e1b98ad26d',t:'MTc3MDgwNTUwNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>

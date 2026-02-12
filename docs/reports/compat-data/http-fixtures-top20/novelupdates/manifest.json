@@ -1,0 +1,48 @@
+{
+  "id": "novelupdates",
+  "name": "Novel Updates",
+  "lang": "English",
+  "site": "https://www.novelupdates.com/",
+  "fixtures": [
+    {
+      "key": "site",
+      "url": "https://www.novelupdates.com/",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 8905,
+      "file": "site.html",
+      "error": null
+    },
+    {
+      "key": "search-autocomplete-query",
+      "url": "https://www.novelupdates.com/search/autocomplete?query=love",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 9041,
+      "file": "search-autocomplete-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-query",
+      "url": "https://www.novelupdates.com/search?query=love",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 8998,
+      "file": "search-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-keyword",
+      "url": "https://www.novelupdates.com/search?keyword=love",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 8940,
+      "file": "search-keyword.txt",
+      "error": null
+    }
+  ]
+}

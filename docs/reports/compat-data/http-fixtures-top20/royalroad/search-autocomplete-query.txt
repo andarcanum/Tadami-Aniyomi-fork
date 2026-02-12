@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<!--[if IE 8]> <html lang="en" class="ie8 no-js"> <![endif]-->
+<!--[if IE 9]> <html lang="en" class="ie9 no-js"> <![endif]-->
+<!--[if !IE]><!-->
+<html lang="en">
+<!--<![endif]-->
+<head>
+    <meta charset="utf-8"/>
+    <title>Not Found | Royal Road</title>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    
+    
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300;0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <link type="text/css" rel="stylesheet" href="/dist/vendor.css?v=GgBWfHuqztbawYE97Ue6afL8bXib6g9SBie_4FRImVU" />
+    <link type="text/css" rel="stylesheet" href="/dist/site-light.css?v=oTusPbzM_DWp4_ohXofjSB98WhjEwYCSnovNLsd9sD4" />
+    
+    <link rel="icon" href="/icons/android-chrome-192x192.png?v=20200125" sizes="192x192" />
+    <link rel="shortcut icon" href="/icons/favicon.ico?v=20200125" sizes="16x16 24x24 32x32"/>
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-icon-180x180.png?v=20200125">
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png?v=20200125">
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png?v=20200125">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="msapplication-TileColor" content="#ffffff">
+    <meta name="msapplication-TileImage" content="/icons/ms-icon-144x144.png">
+    <meta name="theme-color" content="#FFFFFF">
+        <meta name="sentry-trace" content="e4a255d8283d41acbe479ba28dfda386-83c894163941f1c1"/>
+        <meta name="baggage" content="sentry-trace_id=e4a255d8283d41acbe479ba28dfda386, sentry-public_key=de5ce8f509e7458780cbb83f5b040bf0, sentry-release=RoyalRoad.Web.Website%404.1.20260209.4, sentry-environment=production">
+    <script type="text/javascript">
+        window.royalroad = window.royalroad || {init: []};
+        window.royalroad.isPremium = false;
+        window.royalroad.version = "RoyalRoad.Web.Website@"+"4.1.20260209.4";
+        window.royalroad.userId = 0;
+        window.royalroad.environment = "Production";
+        window.royalroad.actionRoute = "Home.StatusNotFound";
+        window.royalroad.username = "";
+        window.royalroad.betaFeatures = false;
+        
+        window.dateFormat = "yyyy-MM-dd";
+        window.dateTimeFormat = "yyyy-MM-dd HH:mm";
+    </script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=default%2Ces6"></script>
+<script>('WeakMap' in window && 'IntersectionObserver' in window && 'assign' in Object && 'fetch' in window||document.write("\u003Cscript type=\u0022text/javascript\u0022 src=\u0022/dist/polyfill.js\u0022\u003E\u003C/script\u003E"));</script>
+
+</head>
+<body class="page-container-bg-solid light-theme">
+
+
+
+    
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-DZHTJVDKRZ"></script>
+<script>        
+        function createGa() {
+            function adBlockEnabled() {
+                var ad = document.createElement('ins');
+                ad.className = 'AdSense';
+                ad.style.display = 'block';
+                ad.style.position = 'absolute';
+                ad.style.top = '-1px';
+                ad.style.height = '1px';
+                document.body.appendChild(ad);
+                var isAdBlockEnabled = !ad.clientHeight;
+                document.body.removeChild(ad);
+                return isAdBlockEnabled;
+            }
+        
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('set', {
+                "dimension4": adBlockEnabled()
+            });
+    
+            gtag('set', {"dimension5":"NotLoggedIn","dimension6":"NitroPay"});
+            function getCookie(name) {
+                var value = "; " + document.cookie;
+                var parts = value.split("; " + name + "=");
+                if (parts.length == 2) return parts.pop().split(";").shift();
+            }
+            
+            if (true){
+                gtag('set', { 'anonymize_ip': true });
+            }
+
+                    gtag('consent', 'default', {
+                        'ad_storage': 'denied',
+                        'analytics_storage': 'denied'
+                    });
+                            gtag('config', 'G-DZHTJVDKRZ');
+        }
+
+        createGa();
+    </script>
+
+<div class="background-overlay"></div>
+<div class="page-header">
+    <!-- BEGIN HEADER TOP -->
+<div class="page-header-top">
+    <div class="container">
+        <!-- BEGIN LOGO -->
+        <div class="page-logo">
+            <a href="/home">
+                <img src="/dist/img/logo/rr-logo-gold-white-small-min.png" alt="Royal Road" title="Royal Road" class="logo-default">
+            </a>
+        </div>
+        <!-- END LOGO -->
+        <!-- BEGIN RESPONSIVE MENU TOGGLER -->
+        <a href="javascript:;" class="menu-toggler" aria-label="Toggle Menu" role="button"></a>
+        <!-- END RESPONSIVE MENU TOGGLER -->
+        <!-- BEGIN TOP NAVIGATION MENU -->
+        <div class="top-menu">
+            <ul class="nav navbar-nav pull-right">
+                <!-- BEGIN NOTIFICATION DROPDOWN -->
+                <li class="dropdown dropdown-extended dropdown-notification dropdown-dark" id="header_notification_bar">
+                    <a href="javascript:;" class="dropdown-toggle notifications" data-toggle="dropdown" data-close-others="true" aria-label="Notifications - 0 new">
+                            <i class="fal fa-bell"></i>
+                        <span class="badge badge-danger alert no-announcement" data-count="0" style="display:none">0</span>
+                    </a>
+                    <ul class="dropdown-menu notifications">
+                        <li class="external">
+                            <h3>
+                                You have
+                                <strong><span class="nr-announcement">no</span> pending</strong> notifications
+                            </h3>
+                            <a href="/notifications/list">View all</a>
+                        </li>
+                        <li>
+                            <ul class="dropdown-menu-list scroller" style="height: 250px;" data-handle-color="#637283">
+                                <li style="overflow: hidden">
+                                    <div class="loader spinner">Loading...</div>
+                                </li>
+                            </ul>
+                        </li>
+                            <li class="font-sm text-center external">
+                                <div>
+                                </div>
+                            </li>
+                    </ul>
+                </li>
+                <!-- END NOTIFICATION DROPDOWN -->
+
+                    <li>
+                        <a href="/account/login?returnurl=%2FHome%2F404">
+                            <i class="far fa-sign-in"></i> Log In
+                        </a>
+                    </li>
+            </ul>
+        </div>
+        <!-- END TOP NAVIGATION MENU -->
+    </div>
+</div>
+<!-- END HEADER TOP -->
+    <div class="page-header-menu">
+        <div class="container">
+            <form class="search-form" action="/fictions/search" method="GET">
+                <div class="input-group">
+                    <input type="text" class="form-control" placeholder="Search title..." name="title" aria-label="Fiction search">
+                    <span class="input-group-btn">
+                        <a href="javascript:;" class="btn submit" aria-label="Search" role="button">
+                            <i class="far fa-search"></i>
+                        </a>
+                        <a class="btn btn-icon-only btn-primary popovers adv-search" data-trigger="hover" data-container="body" data-placement="bottom" data-content="Advanced Search" aria-label="Advanced Search" href="/fictions/search?advanced=true">
+                            <i class="fa fa-list"></i>
+                        </a>
+                    </span>
+                </div>
+            </form>
+            <div class="hor-menu">
+    <ul class="nav navbar-nav">
+            <li class="dropdown menu-dropdown classic-menu-dropdown ">
+                <a href="javascript:;"  aria-label="Read" role="button" aria-expanded=false aria-haspopup=true data-toggle=dropdown class=dropdown-toggle>
+                    <i class="fa fa-book"></i> Read
+                        <span class="fas fa-chevron-down"></span>
+                </a>
+
+                    <ul class="dropdown-menu pull-left">
+                            <li class=" ">
+                                <a href="/fictions/best-rated" class="nav-link" rel="">
+                                    <i class="fa fa-trophy"></i> Best Rated
+                                </a>
+                            </li>
+                            <li class=" ">
+                                <a href="/fictions/trending" class="nav-link" rel="">
+                                    <i class="fa fa-analytics"></i> Trending
+                                </a>
+                            </li>
+                            <li class=" ">
+                                <a href="/fictions/active-popular" class="nav-link" rel="">
+                                    <i class="fa fa-caret-square-right"></i> Ongoing Fictions
+                                </a>
+                            </li>
+                            <li class=" ">
+                                <a href="/fictions/complete" class="nav-link" rel="">
+                                    <i class="fa fa-flag-checkered"></i> Complete
+                                </a>
+                            </li>
+                            <li class=" ">
+                                <a href="/fictions/weekly-popular" class="nav-link" rel="">
+                                    <i class="fa fa-chart-line"></i> Popular this week
+                                </a>
+                            </li>
+                            <li class=" ">
+                                <a href="/fictions/latest-updates" class="nav-link" rel="">
+                                    <i class="fa fa-clock"></i> Latest Updates
+                                </a>
+                            </li>
+                            <li class=" ">
+                                <a href="/fictions/new" class="nav-link" rel="">
+                                    <i class="fa fa-sync"></i> Newest Fictions
+                                </a>
+                            </li>
+                            <li class=" ">
+                                <a href="/fictions/rising-stars" class="nav-link" rel="">
+                                    <i class="fa fa-star-shooting fa-rotate-180"></i> Rising Stars
+                                </a>
+                            </li>
+                            <li class=" ">
+                                <a href="/fictions/writathon" class="nav-link" rel="">
+                                    <i class="fa fa-flag-checkered"></i> Writathon
+                                </a>
+                            </li>
+                            <li class=" ">
+                                <a href="/fictions/search" class="nav-link" rel="">
+                                    <i class="fa fa-search"></i> Search
+                                </a>
+                            </li>
+                            <li class=" ">
+                                <a href="/fiction/random" class="nav-link" rel="noreferrer noopener">
+                                    <i class="fa fa-random"></i> Surprise me!
+                                </a>
+                            </li>
+                    </ul>
+            </li>
+            <li class="dropdown menu-dropdown classic-menu-dropdown ">
+                <a href="/author-dashboard"  aria-label="Write" role="link" >
+                    <i class="fa fa-pencil"></i> Write
+                </a>
+
+            </li>
+            <li class="dropdown menu-dropdown classic-menu-dropdown ">
+                <a href="/forums"  aria-label="Forums" role="link" >
+                    <i class="fa fa-comments"></i> Forums
+                </a>
+
+            </li>
+            <li class="dropdown menu-dropdown classic-menu-dropdown ">
+                <a href="/user/memberlist"  aria-label="Member List" role="link" >
+                    <i class="fa fa-users"></i> Member List
+                </a>
+
+            </li>
+            <li class="dropdown menu-dropdown classic-menu-dropdown ">
+                <a href="javascript:;"  aria-label="Support" role="button" aria-expanded=false aria-haspopup=true data-toggle=dropdown class=dropdown-toggle>
+                    <i class="fas fa-life-ring"></i> Support
+                        <span class="fas fa-chevron-down"></span>
+                </a>
+
+                    <ul class="dropdown-menu pull-left">
+                            <li class=" ">
+                                <a href="/support/knowledgebase" class="nav-link" rel="">
+                                    <i class="fas fa-question-circle"></i> Knowledge Base
+                                </a>
+                            </li>
+                            <li class=" ">
+                                <a href="/ideas" class="nav-link" rel="">
+                                    <i class="fa fa-lightbulb"></i> Suggestions
+                                </a>
+                            </li>
+                            <li class=" ">
+                                <a href="https://www.royalroad.com/forums/1124" class="nav-link" rel="">
+                                    <i class="fa fa-users"></i> Community Help
+                                </a>
+                            </li>
+                            <li class=" ">
+                                <a href="/support" class="nav-link" rel="">
+                                    <i class="fas fa-user-headset"></i> Support Tickets
+                                </a>
+                            </li>
+                            <li class=" ">
+                                <a href="https://status.royalroad.com" class="nav-link" rel="">
+                                    <i class="fa fa-check-circle"></i> Status
+                                </a>
+                            </li>
+                    </ul>
+            </li>
+            <li class="dropdown menu-dropdown classic-menu-dropdown ">
+                <a href="/premium"  aria-label="Premium" role="link" >
+                    <i class="fa fa-star"></i> Premium
+                </a>
+
+            </li>
+    </ul>
+</div>
+        </div>
+    </div>
+</div>
+<div class="page-container">
+    <div class="page-content-wrapper">
+        <div class="page-content">
+            <div class="container">
+                
+<style>
+    .number {
+        letter-spacing: initial !important;
+    }
+</style>
+
+<div>
+    &nbsp;
+</div>
+<div class="portlet light">
+    <div class="row">
+        <div class="col-md-12 page-404" style="margin-bottom: 100px">
+            <div class="number font-red-sunglo"> 404 </div>
+            <div>
+                <h3>Page Not Found</h3>
+                <p>
+                        <strong>We cannot find the page you're looking for.</strong>   
+                </p>
+                <p>
+                    <a href="/"> Return home </a> or try the search bar below.
+                </p>
+                <form action="/fictions/search">
+                    <div class="input-group input-medium" style="margin: auto">
+                        <input type="text" class="form-control" placeholder="keyword..." name="keyword">
+                        <span class="input-group-btn">
+                            <button type="submit" class="btn btn-primary" name="submit" value="submit">
+                                <i class="fa fa-search"></i> Search
+                            </button>
+                        </span>
+                    </div>
+                    <!-- /input-group -->
+                </form>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+            </div>
+        </div>
+    </div>
+</div>
+<div class="page-prefooter">
+    <div class="container">
+        <div class="row">
+            <div class="col-md-3 col-sm-6 col-xs-12 footer-block">
+                <h2>About</h2>
+                <p> Royal Road&reg; is the home of web novels and fan fictions! In our amazing community, you can find various talented individuals who write as a hobby or even professionally, artists who create art for them, and many, many readers who provide valuable feedback and encouragement. </p>
+            </div>
+            <div class="col-md-3 col-sm-6 col-xs12 footer-block">
+                    <h2>Amazon Affiliate</h2>
+                    <div class="smalltext">
+                        Royal Road&reg; as an Amazon Associate earns from qualifying purchases.
+                    </div>
+            </div>
+            <div class="col-md-3 col-sm-6 col-xs-12 footer-block">
+                <h2>
+                    <label for="style" style="font-weight: inherit; color: inherit">Theme Select</label>
+                </h2>
+                <div class="subscribe-form">
+                    <select name="style" id="style" class="style-select form-control">
+                        <option value="dark">Dark</option>
+                        <option value="light" selected="selected">Light</option>
+                    </select>
+                </div>
+                <br/>
+                <h2>Follow Us On</h2>
+                <ul class="social-icons">
+                    <li>
+                        <a href="https://facebook.com/royalroadl" target="_blank" rel="noopener noreferrer" data-original-title="facebook" class="facebook" aria-label="Our Facebook Page"></a>
+                    </li>
+                    <li>
+                        <a href="https://twitter.com/royalroadl" target="_blank" rel="noopener noreferrer" data-original-title="twitter" class="twitter" aria-label="Our Twitter Page"></a>
+                    </li>
+                    <li>
+                        <a href="https://www.pinterest.co.uk/royalroadofficial/" target="_blank" rel="noopener noreferrer" data-original-title="pinterest" class="pintrest" aria-label="Our Pinterest Page"></a>
+                    </li>
+                    <li>
+                        <a href="https://www.instagram.com/royalroad.official" target="_blank" rel="noopener noreferrer" data-original-title="instagram" class="instagram" aria-label="Our Instagram Page"></a>
+                    </li>
+                    <li>
+                        <a href="https://www.tiktok.com/@royalroadofficial" target="_blank" rel="noopener noreferrer" data-original-title="tiktok" class="tiktok" aria-label="Our Tiktok Page"></a>
+                    </li>
+                </ul>
+            </div>
+            <!--sse-->
+            <div class="col-md-3 col-sm-6 col-xs-12 footer-block">
+                <h2>Need some help?</h2>
+                <div>
+                    <a href="/support">Create a support ticket</a>
+                </div>
+                <div>
+                    <span data-ccpa-link="1"></span>
+                    <div id="ncmp-consent-link"></div>
+                </div>
+                <br/>
+                <div>
+                    <h2>Contact</h2>
+                    <a href="/contact">Contact Us by Email</a>
+                </div>
+                <br/>
+                <h2>Advertising</h2>
+                <div>
+                    <a href="/pages/advertising-faq">Ads for Authors</a>
+                    <br/>
+                    <a href="/cdn-cgi/l/email-protection#e794868b8294a780809488819390869582c98e88">Programmatic Advertising</a>
+                </div>
+            </div>
+            <!--/sse-->
+        </div>
+    </div>
+</div>
+<!-- END PRE-FOOTER -->
+<!-- BEGIN INNER FOOTER -->
+<div class="page-footer footer">
+    <div class="container">
+        <div class="pull-left">
+            Royal Road&reg; &copy; 2026
+        </div>
+        <div class="pull-right">
+            <a href="/tos">Terms of Service</a> |
+            <a title="Privacy Policy" href="/privacypolicy">Privacy Policy</a> |
+            <a title="Cookie Policy" href="/cookiepolicy">Cookie Policy</a> |
+            <a title="DMCA" href="/dmca">DMCA</a> |
+            <a href="/blog">Blog</a> |
+            <a href="https://status.royalroad.com" rel="noopener noreferrer">Status</a>
+        </div>
+    </div>
+</div>
+<div class="scroll-to-top">
+    <i></i>
+</div>
+<div class="scroll-to-top-tooltip" style="display: none"> Tap again to scroll to the top! </div>
+
+
+
+    <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script nomodule src="/dist/site.legacy.js?v=AGt73J005a7KzSOwIV4y615xlyLLSh60L-2Kv5Uin20"></script>
+    <script type="module" src="/dist/site.modern.js?v=BlzZ7f_TDz3YhSwNRS-Oov7CtyBq76rwGC6o8vxzDyI"></script>
+
+
+<script src="https://ajax.googleapis.com/ajax/libs/webfont/1.6.26/webfont.js"></script>
+<script>
+        WebFont.load({
+            google: {
+                families: ['Ubuntu', 'Ubuntu Condensed', 'Roboto:300,400,500,600,700', 'Merriweather:300,400,500,600,700']
+            }
+        });
+    </script>
+
+
+
+
+<link type="text/css" rel="stylesheet" href="/users/borders.css?v=IQAz8kXT90j79alUNEWl5A=="/>
+<script type="text/javascript"></script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9cc3237a5954651b',t:'MTc3MDgwNTQ4Nw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
+<!--
+ ___               _   ___              _
+| _ \___ _  _ __ _| | | _ \___  __ _ __| |
+|   / _ \ || / _` | | |   / _ \/ _` / _` |
+|_|_\___/\_, \__,_|_| |_|_\___/\__,_\__,_|
+       |__/
+-->

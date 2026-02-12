@@ -1,0 +1,48 @@
+{
+  "id": "novelhall",
+  "name": "Novel Hall",
+  "lang": "English",
+  "site": "https://novelhall.com/",
+  "fixtures": [
+    {
+      "key": "site",
+      "url": "https://novelhall.com/",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 8877,
+      "file": "site.html",
+      "error": null
+    },
+    {
+      "key": "search-autocomplete-query",
+      "url": "https://novelhall.com/search/autocomplete?query=love",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 8990,
+      "file": "search-autocomplete-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-query",
+      "url": "https://novelhall.com/search?query=love",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 8927,
+      "file": "search-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-keyword",
+      "url": "https://novelhall.com/search?keyword=love",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 8933,
+      "file": "search-keyword.txt",
+      "error": null
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "id": "royalroad",
+  "name": "Royal Road",
+  "lang": "English",
+  "site": "https://www.royalroad.com/",
+  "fixtures": [
+    {
+      "key": "site",
+      "url": "https://www.royalroad.com/",
+      "status": 200,
+      "ok": true,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 167937,
+      "file": "site.html",
+      "error": null
+    },
+    {
+      "key": "search-autocomplete-query",
+      "url": "https://www.royalroad.com/search/autocomplete?query=love",
+      "status": 404,
+      "ok": false,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 22678,
+      "file": "search-autocomplete-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-query",
+      "url": "https://www.royalroad.com/search?query=love",
+      "status": 404,
+      "ok": false,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 22678,
+      "file": "search-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-keyword",
+      "url": "https://www.royalroad.com/search?keyword=love",
+      "status": 404,
+      "ok": false,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 22678,
+      "file": "search-keyword.txt",
+      "error": null
+    }
+  ]
+}

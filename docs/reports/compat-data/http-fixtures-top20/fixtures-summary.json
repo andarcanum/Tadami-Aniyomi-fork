@@ -1,0 +1,992 @@
+{
+  "generatedAt": "2026-02-11T10:24:47.155Z",
+  "indexPath": "D:\\lnreader\\INDREADER\\lnreader-plugins\\.dist\\plugins.min.json",
+  "outputDir": "docs/reports/compat-data/http-fixtures-top20",
+  "query": "love",
+  "timeoutMs": 15000,
+  "selectedCount": 20,
+  "ids": [
+    "royalroad",
+    "scribblehub",
+    "novelupdates",
+    "RLIB",
+    "rulate",
+    "ranobes",
+    "ranovel",
+    "wuxiaworld",
+    "webnovel",
+    "novelbin",
+    "lightnovelpub",
+    "novelfire",
+    "mtlnovel",
+    "novelfull",
+    "ranobes-ru",
+    "linovelib",
+    "lightnovelworld",
+    "novelcool",
+    "novelhall",
+    "novelbuddy"
+  ],
+  "plugins": [
+    {
+      "id": "royalroad",
+      "name": "Royal Road",
+      "lang": "English",
+      "site": "https://www.royalroad.com/",
+      "fixtures": [
+        {
+          "key": "site",
+          "url": "https://www.royalroad.com/",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html; charset=utf-8",
+          "bytes": 167937,
+          "file": "site.html",
+          "error": null
+        },
+        {
+          "key": "search-autocomplete-query",
+          "url": "https://www.royalroad.com/search/autocomplete?query=love",
+          "status": 404,
+          "ok": false,
+          "contentType": "text/html; charset=utf-8",
+          "bytes": 22678,
+          "file": "search-autocomplete-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-query",
+          "url": "https://www.royalroad.com/search?query=love",
+          "status": 404,
+          "ok": false,
+          "contentType": "text/html; charset=utf-8",
+          "bytes": 22678,
+          "file": "search-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-keyword",
+          "url": "https://www.royalroad.com/search?keyword=love",
+          "status": 404,
+          "ok": false,
+          "contentType": "text/html; charset=utf-8",
+          "bytes": 22678,
+          "file": "search-keyword.txt",
+          "error": null
+        }
+      ]
+    },
+    {
+      "id": "scribblehub",
+      "name": "Scribble Hub",
+      "lang": "English",
+      "site": "https://www.scribblehub.com/",
+      "fixtures": [
+        {
+          "key": "site",
+          "url": "https://www.scribblehub.com/",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8882,
+          "file": "site.html",
+          "error": null
+        },
+        {
+          "key": "search-autocomplete-query",
+          "url": "https://www.scribblehub.com/search/autocomplete?query=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 9018,
+          "file": "search-autocomplete-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-query",
+          "url": "https://www.scribblehub.com/search?query=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8954,
+          "file": "search-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-keyword",
+          "url": "https://www.scribblehub.com/search?keyword=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8960,
+          "file": "search-keyword.txt",
+          "error": null
+        }
+      ]
+    },
+    {
+      "id": "novelupdates",
+      "name": "Novel Updates",
+      "lang": "English",
+      "site": "https://www.novelupdates.com/",
+      "fixtures": [
+        {
+          "key": "site",
+          "url": "https://www.novelupdates.com/",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8905,
+          "file": "site.html",
+          "error": null
+        },
+        {
+          "key": "search-autocomplete-query",
+          "url": "https://www.novelupdates.com/search/autocomplete?query=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 9041,
+          "file": "search-autocomplete-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-query",
+          "url": "https://www.novelupdates.com/search?query=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8998,
+          "file": "search-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-keyword",
+          "url": "https://www.novelupdates.com/search?keyword=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8940,
+          "file": "search-keyword.txt",
+          "error": null
+        }
+      ]
+    },
+    {
+      "id": "RLIB",
+      "name": "RanobeLib",
+      "lang": "Русский",
+      "site": "https://ranobelib.me",
+      "fixtures": [
+        {
+          "key": "site",
+          "url": "https://ranobelib.me/",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8415,
+          "file": "site.html",
+          "error": null
+        },
+        {
+          "key": "search-autocomplete-query",
+          "url": "https://ranobelib.me/search/autocomplete?query=love",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8415,
+          "file": "search-autocomplete-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-query",
+          "url": "https://ranobelib.me/search?query=love",
+          "status": 404,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 5306,
+          "file": "search-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-keyword",
+          "url": "https://ranobelib.me/search?keyword=love",
+          "status": 404,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 5306,
+          "file": "search-keyword.txt",
+          "error": null
+        }
+      ]
+    },
+    {
+      "id": "rulate",
+      "name": "Rulate",
+      "lang": "Русский",
+      "site": "https://tl.rulate.ru",
+      "fixtures": [
+        {
+          "key": "site",
+          "url": "https://tl.rulate.ru/",
+          "status": null,
+          "ok": false,
+          "contentType": null,
+          "bytes": 0,
+          "file": null,
+          "error": "fetch failed"
+        },
+        {
+          "key": "search-autocomplete-query",
+          "url": "https://tl.rulate.ru/search/autocomplete?query=love",
+          "status": null,
+          "ok": false,
+          "contentType": null,
+          "bytes": 0,
+          "file": null,
+          "error": "fetch failed"
+        },
+        {
+          "key": "search-query",
+          "url": "https://tl.rulate.ru/search?query=love",
+          "status": null,
+          "ok": false,
+          "contentType": null,
+          "bytes": 0,
+          "file": null,
+          "error": "fetch failed"
+        },
+        {
+          "key": "search-keyword",
+          "url": "https://tl.rulate.ru/search?keyword=love",
+          "status": null,
+          "ok": false,
+          "contentType": null,
+          "bytes": 0,
+          "file": null,
+          "error": "fetch failed"
+        }
+      ]
+    },
+    {
+      "id": "ranobes",
+      "name": "Ranobes",
+      "lang": "English",
+      "site": "https://ranobes.top",
+      "fixtures": [
+        {
+          "key": "site",
+          "url": "https://ranobes.top/",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 6307,
+          "file": "site.html",
+          "error": null
+        },
+        {
+          "key": "search-autocomplete-query",
+          "url": "https://ranobes.top/search/autocomplete?query=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 6307,
+          "file": "search-autocomplete-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-query",
+          "url": "https://ranobes.top/search?query=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 6307,
+          "file": "search-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-keyword",
+          "url": "https://ranobes.top/search?keyword=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 6307,
+          "file": "search-keyword.txt",
+          "error": null
+        }
+      ]
+    },
+    {
+      "id": "ranovel",
+      "name": "Ranovel",
+      "lang": "English",
+      "site": "https://ranovel.com/",
+      "fixtures": [
+        {
+          "key": "site",
+          "url": "https://ranovel.com/",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html",
+          "bytes": 237548,
+          "file": "site.html",
+          "error": null
+        },
+        {
+          "key": "search-autocomplete-query",
+          "url": "https://ranovel.com/search/autocomplete?query=love",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 178812,
+          "file": "search-autocomplete-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-query",
+          "url": "https://ranovel.com/search?query=love",
+          "status": 404,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 139248,
+          "file": "search-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-keyword",
+          "url": "https://ranovel.com/search?keyword=love",
+          "status": 404,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 139248,
+          "file": "search-keyword.txt",
+          "error": null
+        }
+      ]
+    },
+    {
+      "id": "wuxiaworld",
+      "name": "Wuxia World",
+      "lang": "English",
+      "site": "https://www.wuxiaworld.com/",
+      "fixtures": [
+        {
+          "key": "site",
+          "url": "https://www.wuxiaworld.com/",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html; charset=utf-8",
+          "bytes": 245879,
+          "file": "site.html",
+          "error": null
+        },
+        {
+          "key": "search-autocomplete-query",
+          "url": "https://www.wuxiaworld.com/search/autocomplete?query=love",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html; charset=utf-8",
+          "bytes": 54145,
+          "file": "search-autocomplete-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-query",
+          "url": "https://www.wuxiaworld.com/search?query=love",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html; charset=utf-8",
+          "bytes": 53991,
+          "file": "search-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-keyword",
+          "url": "https://www.wuxiaworld.com/search?keyword=love",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html; charset=utf-8",
+          "bytes": 53991,
+          "file": "search-keyword.txt",
+          "error": null
+        }
+      ]
+    },
+    {
+      "id": "webnovel",
+      "name": "Webnovel",
+      "lang": "English",
+      "site": "https://www.webnovel.com",
+      "fixtures": [
+        {
+          "key": "site",
+          "url": "https://www.webnovel.com/",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8858,
+          "file": "site.html",
+          "error": null
+        },
+        {
+          "key": "search-autocomplete-query",
+          "url": "https://www.webnovel.com/search/autocomplete?query=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 9037,
+          "file": "search-autocomplete-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-query",
+          "url": "https://www.webnovel.com/search?query=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8951,
+          "file": "search-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-keyword",
+          "url": "https://www.webnovel.com/search?keyword=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8979,
+          "file": "search-keyword.txt",
+          "error": null
+        }
+      ]
+    },
+    {
+      "id": "novelbin",
+      "name": "Novel Bin",
+      "lang": "English",
+      "site": "https://novelbin.com/",
+      "fixtures": [
+        {
+          "key": "site",
+          "url": "https://novelbin.com/",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8854,
+          "file": "site.html",
+          "error": null
+        },
+        {
+          "key": "search-autocomplete-query",
+          "url": "https://novelbin.com/search/autocomplete?query=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8968,
+          "file": "search-autocomplete-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-query",
+          "url": "https://novelbin.com/search?query=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8926,
+          "file": "search-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-keyword",
+          "url": "https://novelbin.com/search?keyword=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8954,
+          "file": "search-keyword.txt",
+          "error": null
+        }
+      ]
+    },
+    {
+      "id": "lightnovelpub",
+      "name": "LightNovelPub",
+      "lang": "English",
+      "site": "https://www.lightnovelpub.com/",
+      "fixtures": [
+        {
+          "key": "site",
+          "url": "https://www.lightnovelpub.com/",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8906,
+          "file": "site.html",
+          "error": null
+        },
+        {
+          "key": "search-autocomplete-query",
+          "url": "https://www.lightnovelpub.com/search/autocomplete?query=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 9063,
+          "file": "search-autocomplete-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-query",
+          "url": "https://www.lightnovelpub.com/search?query=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8999,
+          "file": "search-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-keyword",
+          "url": "https://www.lightnovelpub.com/search?keyword=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 9005,
+          "file": "search-keyword.txt",
+          "error": null
+        }
+      ]
+    },
+    {
+      "id": "novelfire",
+      "name": "Novel Fire",
+      "lang": "English",
+      "site": "https://novelfire.net/",
+      "fixtures": [
+        {
+          "key": "site",
+          "url": "https://novelfire.net/",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 20478,
+          "file": "site.html",
+          "error": null
+        },
+        {
+          "key": "search-autocomplete-query",
+          "url": "https://novelfire.net/search/autocomplete?query=love",
+          "status": 404,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 22499,
+          "file": "search-autocomplete-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-query",
+          "url": "https://novelfire.net/search?query=love",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 51368,
+          "file": "search-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-keyword",
+          "url": "https://novelfire.net/search?keyword=love",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 53073,
+          "file": "search-keyword.txt",
+          "error": null
+        }
+      ]
+    },
+    {
+      "id": "mtlnovel",
+      "name": "MTL Novel",
+      "lang": "English",
+      "site": "https://www.mtlnovels.com/",
+      "fixtures": [
+        {
+          "key": "site",
+          "url": "https://www.mtlnovels.com/",
+          "status": null,
+          "ok": false,
+          "contentType": null,
+          "bytes": 0,
+          "file": null,
+          "error": "fetch failed"
+        },
+        {
+          "key": "search-autocomplete-query",
+          "url": "https://www.mtlnovels.com/search/autocomplete?query=love",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html; charset=utf-8",
+          "bytes": 509,
+          "file": "search-autocomplete-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-query",
+          "url": "https://www.mtlnovels.com/search?query=love",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html; charset=utf-8",
+          "bytes": 496,
+          "file": "search-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-keyword",
+          "url": "https://www.mtlnovels.com/search?keyword=love",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html; charset=utf-8",
+          "bytes": 498,
+          "file": "search-keyword.txt",
+          "error": null
+        }
+      ]
+    },
+    {
+      "id": "novelfull",
+      "name": "NovelFull",
+      "lang": "English",
+      "site": "https://novelfull.com/",
+      "fixtures": [
+        {
+          "key": "site",
+          "url": "https://novelfull.com/",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 52627,
+          "file": "site.html",
+          "error": null
+        },
+        {
+          "key": "search-autocomplete-query",
+          "url": "https://novelfull.com/search/autocomplete?query=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 6814,
+          "file": "search-autocomplete-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-query",
+          "url": "https://novelfull.com/search?query=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8927,
+          "file": "search-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-keyword",
+          "url": "https://novelfull.com/search?keyword=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8912,
+          "file": "search-keyword.txt",
+          "error": null
+        }
+      ]
+    },
+    {
+      "id": "ranobes-ru",
+      "name": "Ranobes (RU)",
+      "lang": "Русский",
+      "site": "https://ranobes.com",
+      "fixtures": [
+        {
+          "key": "site",
+          "url": "https://ranobes.com/",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html; charset=utf-8",
+          "bytes": 77325,
+          "file": "site.html",
+          "error": null
+        },
+        {
+          "key": "search-autocomplete-query",
+          "url": "https://ranobes.com/search/autocomplete?query=love",
+          "status": 404,
+          "ok": false,
+          "contentType": "text/html; charset=utf-8",
+          "bytes": 63733,
+          "file": "search-autocomplete-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-query",
+          "url": "https://ranobes.com/search?query=love",
+          "status": 404,
+          "ok": false,
+          "contentType": "text/html; charset=utf-8",
+          "bytes": 63733,
+          "file": "search-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-keyword",
+          "url": "https://ranobes.com/search?keyword=love",
+          "status": 404,
+          "ok": false,
+          "contentType": "text/html; charset=utf-8",
+          "bytes": 63733,
+          "file": "search-keyword.txt",
+          "error": null
+        }
+      ]
+    },
+    {
+      "id": "linovelib",
+      "name": "Linovelib",
+      "lang": "中文, 汉语, 漢語",
+      "site": "https://www.bilinovel.com",
+      "fixtures": [
+        {
+          "key": "site",
+          "url": "https://www.bilinovel.com/",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 174249,
+          "file": "site.html",
+          "error": null
+        },
+        {
+          "key": "search-autocomplete-query",
+          "url": "https://www.bilinovel.com/search/autocomplete?query=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 6819,
+          "file": "search-autocomplete-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-query",
+          "url": "https://www.bilinovel.com/search?query=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8953,
+          "file": "search-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-keyword",
+          "url": "https://www.bilinovel.com/search?keyword=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8980,
+          "file": "search-keyword.txt",
+          "error": null
+        }
+      ]
+    },
+    {
+      "id": "lightnovelworld",
+      "name": "LightNovelWord",
+      "lang": "English",
+      "site": "https://www.lightnovelworld.com/",
+      "fixtures": [
+        {
+          "key": "site",
+          "url": "https://www.lightnovelworld.com/",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8908,
+          "file": "site.html",
+          "error": null
+        },
+        {
+          "key": "search-autocomplete-query",
+          "url": "https://www.lightnovelworld.com/search/autocomplete?query=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 9044,
+          "file": "search-autocomplete-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-query",
+          "url": "https://www.lightnovelworld.com/search?query=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 9001,
+          "file": "search-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-keyword",
+          "url": "https://www.lightnovelworld.com/search?keyword=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8964,
+          "file": "search-keyword.txt",
+          "error": null
+        }
+      ]
+    },
+    {
+      "id": "novelcool",
+      "name": "NovelCool",
+      "lang": "English",
+      "site": "https://www.novelcool.com",
+      "fixtures": [
+        {
+          "key": "site",
+          "url": "https://www.novelcool.com/",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html",
+          "bytes": 155,
+          "file": "site.html",
+          "error": null
+        },
+        {
+          "key": "search-autocomplete-query",
+          "url": "https://www.novelcool.com/search/autocomplete?query=love",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html",
+          "bytes": 155,
+          "file": "search-autocomplete-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-query",
+          "url": "https://www.novelcool.com/search?query=love",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html",
+          "bytes": 155,
+          "file": "search-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-keyword",
+          "url": "https://www.novelcool.com/search?keyword=love",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html",
+          "bytes": 155,
+          "file": "search-keyword.txt",
+          "error": null
+        }
+      ]
+    },
+    {
+      "id": "novelhall",
+      "name": "Novel Hall",
+      "lang": "English",
+      "site": "https://novelhall.com/",
+      "fixtures": [
+        {
+          "key": "site",
+          "url": "https://novelhall.com/",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8877,
+          "file": "site.html",
+          "error": null
+        },
+        {
+          "key": "search-autocomplete-query",
+          "url": "https://novelhall.com/search/autocomplete?query=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8990,
+          "file": "search-autocomplete-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-query",
+          "url": "https://novelhall.com/search?query=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8927,
+          "file": "search-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-keyword",
+          "url": "https://novelhall.com/search?keyword=love",
+          "status": 403,
+          "ok": false,
+          "contentType": "text/html; charset=UTF-8",
+          "bytes": 8933,
+          "file": "search-keyword.txt",
+          "error": null
+        }
+      ]
+    },
+    {
+      "id": "novelbuddy",
+      "name": "NovelBuddy.io",
+      "lang": "English",
+      "site": "https://novelbuddy.io/",
+      "fixtures": [
+        {
+          "key": "site",
+          "url": "https://novelbuddy.io/",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html; charset=utf-8",
+          "bytes": 276276,
+          "file": "site.html",
+          "error": null
+        },
+        {
+          "key": "search-autocomplete-query",
+          "url": "https://novelbuddy.io/search/autocomplete?query=love",
+          "status": 404,
+          "ok": false,
+          "contentType": "text/html; charset=utf-8",
+          "bytes": 326268,
+          "file": "search-autocomplete-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-query",
+          "url": "https://novelbuddy.io/search?query=love",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html; charset=utf-8",
+          "bytes": 325005,
+          "file": "search-query.txt",
+          "error": null
+        },
+        {
+          "key": "search-keyword",
+          "url": "https://novelbuddy.io/search?keyword=love",
+          "status": 200,
+          "ok": true,
+          "contentType": "text/html; charset=utf-8",
+          "bytes": 325013,
+          "file": "search-keyword.txt",
+          "error": null
+        }
+      ]
+    }
+  ]
+}

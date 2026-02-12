@@ -1,0 +1,48 @@
+{
+  "id": "lightnovelpub",
+  "name": "LightNovelPub",
+  "lang": "English",
+  "site": "https://www.lightnovelpub.com/",
+  "fixtures": [
+    {
+      "key": "site",
+      "url": "https://www.lightnovelpub.com/",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 8906,
+      "file": "site.html",
+      "error": null
+    },
+    {
+      "key": "search-autocomplete-query",
+      "url": "https://www.lightnovelpub.com/search/autocomplete?query=love",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 9063,
+      "file": "search-autocomplete-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-query",
+      "url": "https://www.lightnovelpub.com/search?query=love",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 8999,
+      "file": "search-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-keyword",
+      "url": "https://www.lightnovelpub.com/search?keyword=love",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 9005,
+      "file": "search-keyword.txt",
+      "error": null
+    }
+  ]
+}

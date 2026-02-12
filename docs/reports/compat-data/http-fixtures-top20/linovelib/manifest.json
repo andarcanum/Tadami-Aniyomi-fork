@@ -1,0 +1,48 @@
+{
+  "id": "linovelib",
+  "name": "Linovelib",
+  "lang": "中文, 汉语, 漢語",
+  "site": "https://www.bilinovel.com",
+  "fixtures": [
+    {
+      "key": "site",
+      "url": "https://www.bilinovel.com/",
+      "status": 200,
+      "ok": true,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 174249,
+      "file": "site.html",
+      "error": null
+    },
+    {
+      "key": "search-autocomplete-query",
+      "url": "https://www.bilinovel.com/search/autocomplete?query=love",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 6819,
+      "file": "search-autocomplete-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-query",
+      "url": "https://www.bilinovel.com/search?query=love",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 8953,
+      "file": "search-query.txt",
+      "error": null
+    },
+    {
+      "key": "search-keyword",
+      "url": "https://www.bilinovel.com/search?keyword=love",
+      "status": 403,
+      "ok": false,
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 8980,
+      "file": "search-keyword.txt",
+      "error": null
+    }
+  ]
+}

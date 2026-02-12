@@ -1,0 +1,99 @@
+{
+  "generatedAt": "2026-02-10T20:10:34.058Z",
+  "scenario": "live-smoke",
+  "inputs": {
+    "indexPath": "D:\\lnreader\\INDREADER\\lnreader-plugins\\.dist\\plugins.min.json",
+    "pluginBaseDir": "D:\\lnreader\\INDREADER\\lnreader-plugins\\.js\\plugins",
+    "query": "love",
+    "timeoutMs": 20000,
+    "concurrency": 2,
+    "limit": null,
+    "langs": [
+      "english"
+    ],
+    "ids": [
+      "royalroad",
+      "scribblehub"
+    ]
+  },
+  "summary": {
+    "totalPlugins": 2,
+    "passedAllStages": 0,
+    "failedPlugins": 2
+  },
+  "stageFailures": {
+    "popular": 1,
+    "search": 2,
+    "novel": 0,
+    "chapters": 0,
+    "chapterText": 0
+  },
+  "failureCodes": {
+    "request_failed": 2
+  },
+  "plugins": [
+    {
+      "id": "royalroad",
+      "site": "https://www.royalroad.com/",
+      "stages": {
+        "popular": {
+          "status": "pass",
+          "httpStatus": 200
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 404
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    },
+    {
+      "id": "scribblehub",
+      "site": "https://www.scribblehub.com/",
+      "stages": {
+        "popular": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "search": {
+          "status": "fail",
+          "code": "request_failed",
+          "httpStatus": 403
+        },
+        "novel": {
+          "status": "skip",
+          "code": "search_unavailable"
+        },
+        "chapters": {
+          "status": "skip",
+          "code": "novel_unavailable"
+        },
+        "chapterText": {
+          "status": "skip",
+          "code": "chapters_unavailable"
+        }
+      },
+      "chapterCount": 0,
+      "sampleChapterTextLength": 0,
+      "novelUrl": null,
+      "sampleChapterUrl": null
+    }
+  ]
+}
