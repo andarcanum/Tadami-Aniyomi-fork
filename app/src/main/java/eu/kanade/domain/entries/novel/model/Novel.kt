@@ -19,8 +19,7 @@ fun Novel.toSNovel(): SNovel = SNovel.create().also {
 // TODO: move these into the domain model
 val Novel.downloadedFilter: TriState
     get() {
-        // Novels don't support offline downloads yet; do NOT apply the global "downloaded only" filter.
-        // Keep flag-based filtering only (UI currently doesn't expose it).
+        // Keep this flag-based to avoid coupling novel chapter filtering to the global manga downloaded-only mode.
         return when (downloadedFilterRaw) {
             Novel.CHAPTER_SHOW_DOWNLOADED -> TriState.ENABLED_IS
             Novel.CHAPTER_SHOW_NOT_DOWNLOADED -> TriState.ENABLED_NOT

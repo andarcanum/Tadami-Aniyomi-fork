@@ -28,6 +28,7 @@ import tachiyomi.core.common.preference.InMemoryPreferenceStore
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.domain.entries.novel.interactor.NetworkToLocalNovel
+import tachiyomi.domain.entries.novel.interactor.GetNovelByUrlAndSourceId
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.source.novel.interactor.GetRemoteNovel
 import tachiyomi.domain.source.novel.repository.NovelSourceRepository
@@ -70,6 +71,7 @@ class BrowseNovelSourceScreenModelTest {
                 sourceManager = sourceManager,
                 getRemoteNovel = getRemoteNovel,
                 sourcePreferences = prefs,
+                getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
                 networkToLocalNovel = networkToLocal,
             )
 
@@ -93,6 +95,7 @@ class BrowseNovelSourceScreenModelTest {
             sourceManager = sourceManager,
             getRemoteNovel = getRemoteNovel,
             sourcePreferences = prefs,
+            getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
             networkToLocalNovel = networkToLocal,
         )
 
@@ -117,6 +120,7 @@ class BrowseNovelSourceScreenModelTest {
             sourceManager = sourceManager,
             getRemoteNovel = getRemoteNovel,
             sourcePreferences = prefs,
+            getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
             networkToLocalNovel = networkToLocal,
         )
 
@@ -155,6 +159,7 @@ class BrowseNovelSourceScreenModelTest {
                 sourceManager = sourceManager,
                 getRemoteNovel = getRemoteNovel,
                 sourcePreferences = prefs,
+                getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
                 networkToLocalNovel = networkToLocal,
             )
 
@@ -186,6 +191,7 @@ class BrowseNovelSourceScreenModelTest {
             sourceManager = sourceManager,
             getRemoteNovel = getRemoteNovel,
             sourcePreferences = prefs,
+            getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
             networkToLocalNovel = networkToLocal,
         )
 
@@ -218,6 +224,7 @@ class BrowseNovelSourceScreenModelTest {
                 sourceManager = sourceManager,
                 getRemoteNovel = getRemoteNovel,
                 sourcePreferences = prefs,
+                getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
                 networkToLocalNovel = networkToLocal,
             )
         }
@@ -250,6 +257,7 @@ class BrowseNovelSourceScreenModelTest {
                 sourceManager = sourceManager,
                 getRemoteNovel = getRemoteNovel,
                 sourcePreferences = prefs,
+                getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
                 networkToLocalNovel = networkToLocal,
             )
 

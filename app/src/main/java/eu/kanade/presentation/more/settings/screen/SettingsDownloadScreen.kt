@@ -33,6 +33,8 @@ import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.collections.immutable.toPersistentMap
 import tachiyomi.domain.category.anime.interactor.GetAnimeCategories
 import tachiyomi.domain.category.manga.interactor.GetMangaCategories
+import tachiyomi.domain.category.novel.interactor.GetNovelCategories
+import tachiyomi.domain.category.novel.model.NovelCategory
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.i18n.MR
@@ -57,6 +59,8 @@ object SettingsDownloadScreen : SearchableSettings {
         val allMangaCategories by getMangaCategories.subscribe().collectAsState(initial = emptyList())
         val getAnimeCategories = remember { Injekt.get<GetAnimeCategories>() }
         val allAnimeCategories by getAnimeCategories.subscribe().collectAsState(initial = emptyList())
+        val getNovelCategories = remember { Injekt.get<GetNovelCategories>() }
+        val allNovelCategories by getNovelCategories.subscribe().collectAsState(initial = emptyList())
         val downloadPreferences = remember { Injekt.get<DownloadPreferences>() }
         val basePreferences = remember { Injekt.get<BasePreferences>() }
         val speedLimit by downloadPreferences.downloadSpeedLimit().collectAsState()
@@ -108,11 +112,13 @@ object SettingsDownloadScreen : SearchableSettings {
                 downloadPreferences = downloadPreferences,
                 animeCategories = allAnimeCategories.toImmutableList(),
                 mangaCategories = allMangaCategories.toImmutableList(),
+                novelCategories = allNovelCategories.toCategoryList().toImmutableList(),
             ),
             getAutoDownloadGroup(
                 downloadPreferences = downloadPreferences,
                 allAnimeCategories = allAnimeCategories.toImmutableList(),
                 allMangaCategories = allMangaCategories.toImmutableList(),
+                allNovelCategories = allNovelCategories.toCategoryList().toImmutableList(),
             ),
             getDownloadAheadGroup(downloadPreferences = downloadPreferences),
             getExternalDownloaderGroup(
@@ -127,6 +133,7 @@ object SettingsDownloadScreen : SearchableSettings {
         downloadPreferences: DownloadPreferences,
         animeCategories: ImmutableList<Category>,
         mangaCategories: ImmutableList<Category>,
+        novelCategories: ImmutableList<Category>,
     ): Preference.PreferenceGroup {
         return Preference.PreferenceGroup(
             title = stringResource(AYMR.strings.pref_category_delete_chapters),
@@ -158,6 +165,10 @@ object SettingsDownloadScreen : SearchableSettings {
                 getExcludedAnimeCategoriesPreference(
                     downloadPreferences = downloadPreferences,
                     categories = { animeCategories },
+                ),
+                getExcludedNovelCategoriesPreference(
+                    downloadPreferences = downloadPreferences,
+                    categories = { novelCategories },
                 ),
                 getExcludedCategoriesPreference(
                     downloadPreferences = downloadPreferences,
@@ -196,10 +207,25 @@ object SettingsDownloadScreen : SearchableSettings {
     }
 
     @Composable
+    private fun getExcludedNovelCategoriesPreference(
+        downloadPreferences: DownloadPreferences,
+        categories: () -> List<Category>,
+    ): Preference.PreferenceItem.MultiSelectListPreference {
+        return Preference.PreferenceItem.MultiSelectListPreference(
+            preference = downloadPreferences.removeExcludeNovelCategories(),
+            entries = categories()
+                .associate { it.id.toString() to it.visualName }
+                .toImmutableMap(),
+            title = stringResource(AYMR.strings.pref_remove_exclude_categories_novel),
+        )
+    }
+
+    @Composable
     private fun getAutoDownloadGroup(
         downloadPreferences: DownloadPreferences,
         allAnimeCategories: ImmutableList<Category>,
         allMangaCategories: ImmutableList<Category>,
+        allNovelCategories: ImmutableList<Category>,
     ): Preference.PreferenceGroup {
         val downloadNewEpisodesPref = downloadPreferences.downloadNewEpisodes()
         val downloadNewUnseenEpisodesOnlyPref = downloadPreferences.downloadNewUnseenEpisodesOnly()
@@ -228,6 +254,37 @@ object SettingsDownloadScreen : SearchableSettings {
                         newExcluded.fastMap { it.id.toString() }.toSet(),
                     )
                     showAnimeDialog = false
+                },
+            )
+        }
+
+        val downloadNewNovelChaptersPref = downloadPreferences.downloadNewNovelChapters()
+        val downloadNewUnreadNovelChaptersOnlyPref = downloadPreferences.downloadNewUnreadNovelChaptersOnly()
+        val downloadNewNovelChapterCategoriesPref = downloadPreferences.downloadNewNovelChapterCategories()
+        val downloadNewNovelChapterCategoriesExcludePref = downloadPreferences.downloadNewNovelChapterCategoriesExclude()
+
+        val downloadNewNovelChapters by downloadNewNovelChaptersPref.collectAsState()
+
+        val includedNovel by downloadNewNovelChapterCategoriesPref.collectAsState()
+        val excludedNovel by downloadNewNovelChapterCategoriesExcludePref.collectAsState()
+        var showNovelDialog by rememberSaveable { mutableStateOf(false) }
+        if (showNovelDialog) {
+            TriStateListDialog(
+                title = stringResource(AYMR.strings.novel_categories),
+                message = stringResource(MR.strings.pref_download_new_categories_details),
+                items = allNovelCategories,
+                initialChecked = includedNovel.mapNotNull { id -> allNovelCategories.find { it.id.toString() == id } },
+                initialInversed = excludedNovel.mapNotNull { id -> allNovelCategories.find { it.id.toString() == id } },
+                itemLabel = { it.visualName },
+                onDismissRequest = { showNovelDialog = false },
+                onValueChanged = { newIncluded, newExcluded ->
+                    downloadNewNovelChapterCategoriesPref.set(
+                        newIncluded.fastMap { it.id.toString() }.toSet(),
+                    )
+                    downloadNewNovelChapterCategoriesExcludePref.set(
+                        newExcluded.fastMap { it.id.toString() }.toSet(),
+                    )
+                    showNovelDialog = false
                 },
             )
         }
@@ -284,6 +341,25 @@ object SettingsDownloadScreen : SearchableSettings {
                     ),
                     enabled = downloadNewEpisodes,
                     onClick = { showAnimeDialog = true },
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = downloadNewNovelChaptersPref,
+                    title = stringResource(AYMR.strings.pref_download_new_novel_chapters),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = downloadNewUnreadNovelChaptersOnlyPref,
+                    title = stringResource(AYMR.strings.pref_download_new_unread_novel_chapters_only),
+                    enabled = downloadNewNovelChapters,
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(AYMR.strings.novel_categories),
+                    subtitle = getCategoriesLabel(
+                        allCategories = allNovelCategories,
+                        included = includedNovel,
+                        excluded = excludedNovel,
+                    ),
+                    enabled = downloadNewNovelChapters,
+                    onClick = { showNovelDialog = true },
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = downloadNewChaptersPref,
@@ -436,6 +512,18 @@ object SettingsDownloadScreen : SearchableSettings {
                     Text(text = stringResource(MR.strings.action_ok))
                 }
             },
+        )
+    }
+}
+
+private fun List<NovelCategory>.toCategoryList(): List<Category> {
+    return map {
+        Category(
+            id = it.id,
+            name = it.name,
+            order = it.order,
+            flags = it.flags,
+            hidden = it.hidden,
         )
     }
 }

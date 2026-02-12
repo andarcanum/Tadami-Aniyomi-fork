@@ -21,6 +21,7 @@ import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.preference.plusAssign
 import tachiyomi.domain.category.anime.interactor.GetAnimeCategories
 import tachiyomi.domain.category.manga.interactor.GetMangaCategories
+import tachiyomi.domain.category.novel.interactor.GetNovelCategories
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.library.service.LibraryPreferences
@@ -31,6 +32,7 @@ class PreferenceRestorer(
     private val context: Context,
     private val getMangaCategories: GetMangaCategories = Injekt.get(),
     private val getAnimeCategories: GetAnimeCategories = Injekt.get(),
+    private val getNovelCategories: GetNovelCategories = Injekt.get(),
     private val preferenceStore: PreferenceStore = Injekt.get(),
 ) {
     suspend fun restoreApp(
@@ -63,9 +65,23 @@ class PreferenceRestorer(
     ) {
         val allMangaCategories = if (backupCategories != null) getMangaCategories.await() else emptyList()
         val allAnimeCategories = if (backupCategories != null) getAnimeCategories.await() else emptyList()
+        val allNovelCategories = if (backupCategories != null) {
+            getNovelCategories.await().map {
+                Category(
+                    id = it.id,
+                    name = it.name,
+                    order = it.order,
+                    flags = it.flags,
+                    hidden = it.hidden,
+                )
+            }
+        } else {
+            emptyList()
+        }
 
         val mangaCategoriesByName = allMangaCategories.associateBy { it.name }
         val animeCategoriesByName = allAnimeCategories.associateBy { it.name }
+        val novelCategoriesByName = allNovelCategories.associateBy { it.name }
         val backupCategoriesById = backupCategories?.associateBy { it.id.toString() }.orEmpty()
 
         val prefs = preferenceStore.getAll()
@@ -80,6 +96,9 @@ class PreferenceRestorer(
                             } else if (key == LibraryPreferences.DEFAULT_ANIME_CATEGORY_PREF_KEY) {
                                 backupCategoriesById[value.value.toString()]
                                     ?.let { animeCategoriesByName[it.name]?.id?.toInt() }
+                            } else if (key == LibraryPreferences.DEFAULT_NOVEL_CATEGORY_PREF_KEY) {
+                                backupCategoriesById[value.value.toString()]
+                                    ?.let { novelCategoriesByName[it.name]?.id?.toInt() }
                             } else {
                                 value.value
                             }
@@ -116,6 +135,7 @@ class PreferenceRestorer(
                                 backupCategoriesById,
                                 mangaCategoriesByName,
                                 animeCategoriesByName,
+                                novelCategoriesByName,
                             )
                             if (!restored) preferenceStore.getStringSet(key).set(value.value)
                         }
@@ -134,6 +154,7 @@ class PreferenceRestorer(
         backupCategoriesById: Map<String, BackupCategory>,
         mangaCategoriesByName: Map<String, Category>,
         animeCategoriesByName: Map<String, Category>,
+        novelCategoriesByName: Map<String, Category>,
     ): Boolean {
         val categoryPreferences = LibraryPreferences.categoryPreferenceKeys + DownloadPreferences.categoryPreferenceKeys
         if (key !in categoryPreferences) return false
@@ -145,6 +166,9 @@ class PreferenceRestorer(
                 },
                 backupCategoriesById[it]?.name?.let { name ->
                     animeCategoriesByName[name]?.id?.toString()
+                },
+                backupCategoriesById[it]?.name?.let { name ->
+                    novelCategoriesByName[name]?.id?.toString()
                 },
             )
         }.filterNotNull()

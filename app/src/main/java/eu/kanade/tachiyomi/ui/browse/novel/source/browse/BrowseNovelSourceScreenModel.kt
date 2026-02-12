@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.cachedIn
+import androidx.paging.filter
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.core.preference.asState
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tachiyomi.domain.entries.novel.interactor.NetworkToLocalNovel
+import tachiyomi.domain.entries.novel.interactor.GetNovelByUrlAndSourceId
 import tachiyomi.domain.source.novel.interactor.GetRemoteNovel
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import uy.kohesive.injekt.Injekt
@@ -34,6 +36,7 @@ class BrowseNovelSourceScreenModel(
     sourceManager: NovelSourceManager = Injekt.get(),
     getRemoteNovel: GetRemoteNovel = Injekt.get(),
     sourcePreferences: eu.kanade.domain.source.service.SourcePreferences = Injekt.get(),
+    private val getNovelByUrlAndSourceId: GetNovelByUrlAndSourceId = Injekt.get(),
     private val networkToLocalNovel: NetworkToLocalNovel = Injekt.get(),
 ) : StateScreenModel<BrowseNovelSourceScreenModel.State>(State(Listing.valueOf(listingQuery))) {
 
@@ -93,6 +96,8 @@ class BrowseNovelSourceScreenModel(
         sourcePreferences.lastUsedNovelSource().set(source.id)
     }
 
+    private val hideInLibraryItems = sourcePreferences.hideInNovelLibraryItems().get()
+
     val novelPagerFlowFlow = state
         .map { state ->
             val listing = state.listing
@@ -112,6 +117,12 @@ class BrowseNovelSourceScreenModel(
             Pager(PagingConfig(pageSize = 25)) {
                 getRemoteNovel.subscribe(sourceId, request.query, request.filters)
             }.flow
+                .map { pagingData ->
+                    pagingData.filter { novel ->
+                        !hideInLibraryItems ||
+                            getNovelByUrlAndSourceId.await(novel.url, sourceId)?.favorite != true
+                    }
+                }
                 .cachedIn(ioCoroutineScope)
         }
         .stateIn(ioCoroutineScope, SharingStarted.Lazily, emptyFlow())

@@ -6,10 +6,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.entries.manga.model.Manga
+import tachiyomi.domain.entries.novel.model.Novel
 
 enum class ExportEntryType {
     MANGA,
     ANIME,
+    NOVEL,
 }
 
 data class ExportEntry(
@@ -31,6 +33,13 @@ data class ExportEntry(
             type = ExportEntryType.MANGA,
             author = this.author,
             artist = this.artist,
+        )
+
+        fun Novel.toExportEntry(): ExportEntry = ExportEntry(
+            title = this.title,
+            type = ExportEntryType.NOVEL,
+            author = this.author,
+            artist = null,
         )
     }
 }

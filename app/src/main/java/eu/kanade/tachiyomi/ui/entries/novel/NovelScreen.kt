@@ -226,10 +226,13 @@ class NovelScreen(
                 NovelChapterSettingsDialog(
                     onDismissRequest = screenModel::dismissDialog,
                     novel = successState.novel,
+                    onDownloadFilterChanged = screenModel::setDownloadedFilter,
                     onUnreadFilterChanged = screenModel::setUnreadFilter,
                     onBookmarkedFilterChanged = screenModel::setBookmarkedFilter,
                     onSortModeChanged = screenModel::setSorting,
                     onDisplayModeChanged = screenModel::setDisplayMode,
+                    onSetAsDefault = screenModel::setCurrentSettingsAsDefault,
+                    onResetToDefault = screenModel::resetToDefaultSettings,
                 )
             }
         }

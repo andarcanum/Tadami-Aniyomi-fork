@@ -197,6 +197,7 @@ import tachiyomi.domain.entries.manga.repository.MangaRepository
 import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
 import tachiyomi.domain.entries.novel.interactor.GetNovel
 import tachiyomi.domain.entries.novel.interactor.GetNovelByUrlAndSourceId
+import tachiyomi.domain.entries.novel.interactor.GetNovelFavorites
 import tachiyomi.domain.entries.novel.interactor.GetNovelWithChapters
 import tachiyomi.domain.entries.novel.interactor.NetworkToLocalNovel
 import tachiyomi.domain.entries.novel.interactor.ResetNovelViewerFlags
@@ -229,6 +230,7 @@ import tachiyomi.domain.items.episode.interactor.SetAnimeDefaultEpisodeFlags
 import tachiyomi.domain.items.episode.interactor.ShouldUpdateDbEpisode
 import tachiyomi.domain.items.episode.interactor.UpdateEpisode
 import tachiyomi.domain.items.episode.repository.EpisodeRepository
+import tachiyomi.domain.items.novelchapter.interactor.SetNovelDefaultChapterFlags
 import tachiyomi.domain.items.novelchapter.interactor.ShouldUpdateDbNovelChapter
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.items.season.interactor.GetAnimeSeasonsByParentId
@@ -309,7 +311,7 @@ class DomainModule : InjektModule {
         addFactory { ReorderNovelCategory(get()) }
         addFactory { UpdateNovelCategory(get()) }
         addFactory { HideNovelCategory(get()) }
-        addFactory { DeleteNovelCategory(get()) }
+        addFactory { DeleteNovelCategory(get(), get(), get()) }
         addFactory { SetNovelCategories(get()) }
 
         addSingletonFactory<AnimeRepository> { AnimeRepositoryImpl(get(), get()) }
@@ -364,9 +366,17 @@ class DomainModule : InjektModule {
         addSingletonFactory<NovelRepository> { NovelRepositoryImpl(get()) }
         addFactory { GetNovel(get()) }
         addFactory { GetNovelByUrlAndSourceId(get()) }
+        addFactory { GetNovelFavorites(get()) }
         addFactory { GetLibraryNovel(get()) }
         addFactory { GetNovelWithChapters(get(), get()) }
         addFactory { SetNovelChapterFlags(get()) }
+        addFactory {
+            SetNovelDefaultChapterFlags(
+                get(),
+                get(),
+                get(),
+            )
+        }
         addFactory { ResetNovelViewerFlags(get()) }
         addFactory { NetworkToLocalNovel(get()) }
         addFactory { UpdateNovel(get()) }

@@ -21,6 +21,7 @@ import androidx.work.workDataOf
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.entries.novel.model.toSNovel
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.util.system.isCharging
 import eu.kanade.tachiyomi.util.system.isConnectedToWifi
@@ -42,6 +43,7 @@ import tachiyomi.domain.entries.novel.interactor.GetNovel
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.items.novelchapter.model.NoChaptersException
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
+import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.DEVICE_CHARGING
@@ -63,14 +65,17 @@ class NovelLibraryUpdateJob(
 
     private val sourceManager: NovelSourceManager = Injekt.get()
     private val libraryPreferences: LibraryPreferences = Injekt.get()
+    private val downloadPreferences: DownloadPreferences = Injekt.get()
     private val getLibraryNovel: GetLibraryNovel = Injekt.get()
     private val getNovel: GetNovel = Injekt.get()
     private val updateNovel: UpdateNovel = Injekt.get()
     private val syncNovelChaptersWithSource: SyncNovelChaptersWithSource = Injekt.get()
+    private val novelDownloadManager: NovelDownloadManager = NovelDownloadManager()
 
     private val notifier = NovelLibraryUpdateNotifier(context)
 
     private var novelToUpdate: List<LibraryNovel> = emptyList()
+    private var novelCategoryIdsByNovelId: Map<Long, Set<Long>> = emptyMap()
 
     override suspend fun doWork(): Result {
         try {
@@ -134,11 +139,33 @@ class NovelLibraryUpdateJob(
 
     private suspend fun addNovelToQueue(categoryId: Long) {
         val libraryNovels = getLibraryNovel.await()
-        novelToUpdate = if (categoryId != -1L) {
+        val listToUpdate = if (categoryId != -1L) {
             libraryNovels.filter { it.category == categoryId }
         } else {
-            libraryNovels
+            val categoriesToUpdate = libraryPreferences.novelUpdateCategories().get().map { it.toLong() }
+            val includedNovels = if (categoriesToUpdate.isNotEmpty()) {
+                libraryNovels.filter { it.category in categoriesToUpdate }
+            } else {
+                libraryNovels
+            }
+
+            val categoriesToExclude = libraryPreferences.novelUpdateCategoriesExclude().get().map { it.toLong() }
+            val excludedNovelIds = if (categoriesToExclude.isNotEmpty()) {
+                libraryNovels.filter { it.category in categoriesToExclude }.map { it.novel.id }
+            } else {
+                emptyList()
+            }
+
+            includedNovels
+                .filterNot { it.novel.id in excludedNovelIds }
         }
+
+        novelCategoryIdsByNovelId = listToUpdate
+            .groupBy { it.novel.id }
+            .mapValues { (_, entries) -> entries.map { it.category }.toSet() }
+
+        novelToUpdate = listToUpdate
+            .distinctBy { it.novel.id }
             .filter { it.novel.updateStrategy == eu.kanade.tachiyomi.source.model.UpdateStrategy.ALWAYS_UPDATE }
             .sortedBy { it.novel.title }
     }
@@ -149,7 +176,6 @@ class NovelLibraryUpdateJob(
         val currentlyUpdating = CopyOnWriteArrayList<Novel>()
         val newUpdates = CopyOnWriteArrayList<Pair<Novel, Int>>()
         val failedUpdates = CopyOnWriteArrayList<Pair<Novel, String?>>()
-
         coroutineScope {
             novelToUpdate.groupBy { it.novel.source }.values
                 .map { novelsInSource ->
@@ -167,6 +193,14 @@ class NovelLibraryUpdateJob(
                                     try {
                                         val newChapters = updateNovel(novel)
                                         if (newChapters.isNotEmpty()) {
+                                            val chaptersToDownload = filterChaptersForDownload(
+                                                novel = novel,
+                                                newChapters = newChapters,
+                                                categoryIds = novelCategoryIdsByNovelId[novel.id].orEmpty(),
+                                            )
+                                            if (chaptersToDownload.isNotEmpty()) {
+                                                novelDownloadManager.downloadChapters(novel, chaptersToDownload)
+                                            }
                                             newUpdates.add(novel to newChapters.size)
                                         }
                                     } catch (e: Throwable) {
@@ -210,6 +244,28 @@ class NovelLibraryUpdateJob(
             manualFetch = false,
             fetchWindow = Pair(0L, 0L),
         )
+    }
+
+    private fun filterChaptersForDownload(
+        novel: Novel,
+        newChapters: List<NovelChapter>,
+        categoryIds: Set<Long>,
+    ): List<NovelChapter> {
+        if (!downloadPreferences.downloadNewNovelChapters().get()) return emptyList()
+
+        val included = downloadPreferences.downloadNewNovelChapterCategories().get().map { it.toLong() }.toSet()
+        if (included.isNotEmpty() && categoryIds.intersect(included).isEmpty()) return emptyList()
+
+        val excluded = downloadPreferences.downloadNewNovelChapterCategoriesExclude().get().map { it.toLong() }.toSet()
+        if (categoryIds.any { it in excluded }) return emptyList()
+
+        val unreadOnly = downloadPreferences.downloadNewUnreadNovelChaptersOnly().get()
+
+        return newChapters
+            .asSequence()
+            .filter { !unreadOnly || !it.read }
+            .filterNot { novelDownloadManager.isChapterDownloaded(novel, it.id) }
+            .toList()
     }
 
     private suspend fun withUpdateNotification(

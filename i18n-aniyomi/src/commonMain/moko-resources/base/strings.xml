@@ -33,6 +33,7 @@
     <string name="pref_incognito_mode_summary">Pauses your history</string>
     <string name="manga_from_library">Manga from library</string>
     <string name="also_set_chapter_settings_for_library">Also apply to all manga in my library</string>
+    <string name="also_set_novel_chapter_settings_for_library">Also apply to all novels in my library</string>
     <string name="dialog_with_checkbox_reset">Reset all chapters for this manga</string>
     <string name="download_insufficient_space">Couldn\'t download due to low storage space</string>
     <string name="download_queue_size_warning">Warning: large bulk downloads may lead to sources becoming slower and/or blocking Aniyomi. Tap to learn more.</string>
@@ -379,6 +380,7 @@
     <string name="manga_categories">Manga Categories</string>
     <string name="general_categories">Categories</string>
     <string name="anime_categories">Anime Categories</string>
+    <string name="novel_categories">Novel Categories</string>
     <string name="entries">Library entries</string>
     <string name="chapters_episodes">Chapters and episodes</string>
     <string name="episodes">Episodes</string>
@@ -526,6 +528,7 @@
     <string name="action_remove_bookmark_episode">Unbookmark episode</string>
     <string name="action_edit_anime_categories">Edit anime categories</string>
     <string name="action_edit_manga_categories">Edit manga categories</string>
+    <string name="action_edit_novel_categories">Edit novel categories</string>
     <string name="action_view_episodes">View episodes</string>
     <string name="action_previous_episode">Previous episode</string>
     <string name="action_play">Play</string>
@@ -541,6 +544,7 @@
     <string name="pref_search_pinned_anime_sources_only">Only search pinned anime sources in global search</string>
     <string name="pref_hide_in_manga_library_items">Hide manga entries already in library</string>
     <string name="pref_hide_in_anime_library_items">Hide anime entries already in library</string>
+    <string name="pref_hide_in_novel_library_items">Hide novel entries already in library</string>
     <string name="action_order_by_episode_number">By episode number</string>
     <string name="action_start_download_externally">Use external downloader</string>
     <string name="action_start_download_internally">Use internal downloader</string>
@@ -548,18 +552,23 @@
     <string name="pref_default_home_tab_library">Set start screen to Manga Tab</string>
     <string name="default_manga_category">Default manga category</string>
     <string name="default_anime_category">Default anime category</string>
+    <string name="default_novel_category">Default novel category</string>
     <string name="pref_manga_library_update_categories_details">Manga in excluded categories will not be updated even if they are also in included categories.</string>
     <string name="pref_anime_library_update_categories_details">Anime in excluded categories will not be updated even if they are also in included categories.</string>
+    <string name="pref_novel_library_update_categories_details">Novels in excluded categories will not be updated even if they are also in included categories.</string>
     <string name="unofficial_extension_message_aniyomi">This extension is not from the official list.</string>
     <string name="unofficial_anime_extension_message">This extension is not from the official list.</string>
     <string name="episode_download_progress">%1$d%%</string>
     <string name="pref_remove_exclude_categories_manga">Excluded manga categories</string>
     <string name="pref_remove_exclude_categories_anime">Excluded anime categories</string>
+    <string name="pref_remove_exclude_categories_novel">Excluded novel categories</string>
     <string name="pref_category_external_downloader">External downloader</string>
     <string name="pref_use_external_downloader">Always use external downloader for anime</string>
     <string name="pref_external_downloader_selection">Downloader app preference</string>
     <string name="pref_download_new_episodes">Download new episodes</string>
     <string name="pref_download_new_unseen_episodes_only">Skip downloading duplicate seen episodes</string>
+    <string name="pref_download_new_novel_chapters">Download new novel chapters</string>
+    <string name="pref_download_new_unread_novel_chapters_only">Skip downloading duplicate read novel chapters</string>
     <string name="auto_download_while_watching">Auto download while watching</string>
     <string name="download_ahead_info_anime">Only works on entries in library and if the current episode plus the next one are already downloaded</string>
     <string name="pref_track_on_add_library">Open track menu on adding to library</string>

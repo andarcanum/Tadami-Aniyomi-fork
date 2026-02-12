@@ -20,10 +20,14 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.entries.novel.interactor.GetNovelWithChapters
+import tachiyomi.domain.entries.novel.interactor.GetNovelFavorites
 import tachiyomi.domain.entries.novel.interactor.SetNovelChapterFlags
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.entries.novel.model.NovelUpdate
+import tachiyomi.domain.items.novelchapter.interactor.SetNovelDefaultChapterFlags
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
+import tachiyomi.domain.category.novel.interactor.GetNovelCategories
+import tachiyomi.domain.category.novel.interactor.SetNovelCategories
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 
 class NovelScreenModelTest {
@@ -161,15 +165,48 @@ class NovelScreenModelTest {
                 ),
             )
             val lifecycleOwner = FakeLifecycleOwner()
+            val libraryPreferences = tachiyomi.domain.library.service.LibraryPreferences(
+                preferenceStore = preferenceStore,
+            )
+            val novelCategoryRepository = object : tachiyomi.domain.category.novel.repository.NovelCategoryRepository {
+                override suspend fun getCategory(id: Long) = null
+                override suspend fun getCategories() = emptyList<tachiyomi.domain.category.novel.model.NovelCategory>()
+                override suspend fun getVisibleCategories() =
+                    emptyList<tachiyomi.domain.category.novel.model.NovelCategory>()
+                override suspend fun getCategoriesByNovelId(novelId: Long) =
+                    emptyList<tachiyomi.domain.category.novel.model.NovelCategory>()
+                override suspend fun getVisibleCategoriesByNovelId(novelId: Long) =
+                    emptyList<tachiyomi.domain.category.novel.model.NovelCategory>()
+                override fun getCategoriesAsFlow() = MutableStateFlow(
+                    emptyList<tachiyomi.domain.category.novel.model.NovelCategory>(),
+                )
+                override fun getVisibleCategoriesAsFlow() = MutableStateFlow(
+                    emptyList<tachiyomi.domain.category.novel.model.NovelCategory>(),
+                )
+                override suspend fun insertCategory(category: tachiyomi.domain.category.novel.model.NovelCategory) = null
+                override suspend fun updatePartialCategory(update: tachiyomi.domain.category.novel.model.NovelCategoryUpdate) {
+                }
+                override suspend fun updateAllFlags(flags: Long) {}
+                override suspend fun deleteCategory(categoryId: Long) {}
+                override suspend fun setNovelCategories(novelId: Long, categoryIds: List<Long>) {}
+            }
 
             val screenModel = NovelScreenModel(
                 lifecycle = lifecycleOwner.lifecycle,
                 novelId = 1L,
+                libraryPreferences = libraryPreferences,
                 getNovelWithChapters = getNovelWithChapters,
                 updateNovel = updateNovel,
                 syncNovelChaptersWithSource = sync,
                 novelChapterRepository = chapterRepository,
                 setNovelChapterFlags = SetNovelChapterFlags(novelRepository),
+                setNovelDefaultChapterFlags = SetNovelDefaultChapterFlags(
+                    libraryPreferences = libraryPreferences,
+                    setNovelChapterFlags = SetNovelChapterFlags(novelRepository),
+                    getFavorites = GetNovelFavorites(novelRepository),
+                ),
+                getNovelCategories = GetNovelCategories(novelCategoryRepository),
+                setNovelCategories = SetNovelCategories(novelCategoryRepository),
                 sourceManager = sourceManager,
                 novelReaderPreferences = eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences(
                     preferenceStore = preferenceStore,
@@ -186,12 +223,12 @@ class NovelScreenModelTest {
             screenModel.toggleFavorite()
 
             withTimeout(1_000) {
-                while (novelRepository.lastUpdate == null) {
+                while (novelRepository.allUpdates.isEmpty()) {
                     yield()
                 }
             }
 
-            novelRepository.lastUpdate?.favorite shouldBe true
+            novelRepository.allUpdates.any { it.favorite == true } shouldBe true
             Unit
         }
     }
@@ -206,6 +243,7 @@ class NovelScreenModelTest {
         private val novel: Novel,
     ) : tachiyomi.domain.entries.novel.repository.NovelRepository {
         var lastUpdate: NovelUpdate? = null
+        val allUpdates = mutableListOf<NovelUpdate>()
 
         override suspend fun getNovelById(id: Long): Novel = novel
         override suspend fun getNovelByIdAsFlow(id: Long) = MutableStateFlow(novel)
@@ -220,6 +258,7 @@ class NovelScreenModelTest {
         override suspend fun insertNovel(novel: Novel): Long? = null
         override suspend fun updateNovel(update: NovelUpdate): Boolean {
             lastUpdate = update
+            allUpdates += update
             return true
         }
         override suspend fun updateAllNovel(novelUpdates: List<NovelUpdate>): Boolean = true

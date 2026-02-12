@@ -5,6 +5,7 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.Lifecycle
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import eu.kanade.domain.entries.novel.model.downloadedFilter
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.entries.novel.model.toSNovel
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
@@ -22,6 +23,9 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.supervisorScope
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.core.common.util.lang.launchNonCancellable
+import tachiyomi.domain.category.novel.interactor.GetNovelCategories
+import tachiyomi.domain.category.novel.interactor.SetNovelCategories
 import tachiyomi.domain.entries.applyFilter
 import tachiyomi.domain.entries.novel.interactor.GetNovelWithChapters
 import tachiyomi.domain.entries.novel.interactor.SetNovelChapterFlags
@@ -31,8 +35,11 @@ import tachiyomi.domain.items.novelchapter.model.NoChaptersException
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
+import tachiyomi.domain.items.novelchapter.interactor.SetNovelDefaultChapterFlags
 import tachiyomi.domain.items.novelchapter.service.getNovelChapterSort
+import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.novel.service.NovelSourceManager
+import tachiyomi.domain.category.model.Category
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
@@ -56,11 +63,15 @@ data class NovelEpubExportPreferencesState(
 class NovelScreenModel(
     private val lifecycle: Lifecycle,
     private val novelId: Long,
+    private val libraryPreferences: LibraryPreferences = Injekt.get(),
     private val getNovelWithChapters: GetNovelWithChapters = Injekt.get(),
     private val updateNovel: UpdateNovel = Injekt.get(),
     private val syncNovelChaptersWithSource: SyncNovelChaptersWithSource = Injekt.get(),
     private val novelChapterRepository: NovelChapterRepository = Injekt.get(),
     private val setNovelChapterFlags: SetNovelChapterFlags = Injekt.get(),
+    private val setNovelDefaultChapterFlags: SetNovelDefaultChapterFlags = Injekt.get(),
+    private val getNovelCategories: GetNovelCategories = Injekt.get(),
+    private val setNovelCategories: SetNovelCategories = Injekt.get(),
     private val sourceManager: NovelSourceManager = Injekt.get(),
     private val novelDownloadManager: NovelDownloadManager = NovelDownloadManager(),
     private val novelEpubExporter: NovelEpubExporter = NovelEpubExporter(),
@@ -145,6 +156,9 @@ class NovelScreenModel(
         screenModelScope.launchIO {
             val novel = getNovelWithChapters.awaitNovel(novelId)
             val chapters = getNovelWithChapters.awaitChapters(novelId)
+            if (!novel.favorite) {
+                setNovelDefaultChapterFlags.await(novel)
+            }
             val shouldAutoRefreshNovel = !novel.initialized
             val shouldAutoRefreshChapters = chapters.isEmpty()
             val currentDownloadedIds = (state.value as? State.Success)
@@ -198,19 +212,55 @@ class NovelScreenModel(
     fun toggleFavorite() {
         val novel = successState?.novel ?: return
         screenModelScope.launchIO {
-            val dateAdded = if (!novel.favorite) {
-                Instant.now().toEpochMilli()
-            } else {
-                0L
+            if (novel.favorite) {
+                updateNovel.await(
+                    NovelUpdate(
+                        id = novel.id,
+                        favorite = false,
+                        dateAdded = 0L,
+                    ),
+                )
+                return@launchIO
             }
-            updateNovel.await(
+
+            val added = updateNovel.await(
                 NovelUpdate(
                     id = novel.id,
-                    favorite = !novel.favorite,
-                    dateAdded = dateAdded,
+                    favorite = true,
+                    dateAdded = Instant.now().toEpochMilli(),
                 ),
             )
+            if (!added) return@launchIO
+
+            setNovelDefaultChapterFlags.await(novel)
+
+            val categories = getCategories()
+            val defaultCategoryId = libraryPreferences.defaultNovelCategory().get().toLong()
+            val defaultCategory = categories.find { it.id == defaultCategoryId }
+            when {
+                defaultCategory != null -> moveNovelToCategories(novel.id, listOf(defaultCategory.id))
+                defaultCategoryId == 0L || categories.isEmpty() -> moveNovelToCategories(novel.id, emptyList())
+                else -> moveNovelToCategories(novel.id, emptyList())
+            }
         }
+    }
+
+    private suspend fun getCategories(): List<Category> {
+        return getNovelCategories.await()
+            .map {
+                Category(
+                    id = it.id,
+                    name = it.name,
+                    order = it.order,
+                    flags = it.flags,
+                    hidden = it.hidden,
+                )
+            }
+            .filterNot(Category::isSystemCategory)
+    }
+
+    private suspend fun moveNovelToCategories(novelId: Long, categoryIds: List<Long>) {
+        setNovelCategories.await(novelId, categoryIds)
     }
 
     fun refreshChapters(
@@ -586,6 +636,18 @@ class NovelScreenModel(
         }
     }
 
+    fun setDownloadedFilter(state: TriState) {
+        val novel = successState?.novel ?: return
+        val flag = when (state) {
+            TriState.DISABLED -> Novel.SHOW_ALL
+            TriState.ENABLED_IS -> Novel.CHAPTER_SHOW_DOWNLOADED
+            TriState.ENABLED_NOT -> Novel.CHAPTER_SHOW_NOT_DOWNLOADED
+        }
+        screenModelScope.launchIO {
+            setNovelChapterFlags.awaitSetDownloadedFilter(novel, flag)
+        }
+    }
+
     fun setBookmarkedFilter(state: TriState) {
         val novel = successState?.novel ?: return
         val flag = when (state) {
@@ -609,6 +671,23 @@ class NovelScreenModel(
         val novel = successState?.novel ?: return
         screenModelScope.launchIO {
             setNovelChapterFlags.awaitSetSortingModeOrFlipOrder(novel, sort)
+        }
+    }
+
+    fun setCurrentSettingsAsDefault(applyToExisting: Boolean) {
+        val novel = successState?.novel ?: return
+        screenModelScope.launchNonCancellable {
+            libraryPreferences.setNovelChapterSettingsDefault(novel)
+            if (applyToExisting) {
+                setNovelDefaultChapterFlags.awaitAll()
+            }
+        }
+    }
+
+    fun resetToDefaultSettings() {
+        val novel = successState?.novel ?: return
+        screenModelScope.launchNonCancellable {
+            setNovelDefaultChapterFlags.await(novel)
         }
     }
 
@@ -638,6 +717,7 @@ class NovelScreenModel(
                         .asSequence()
                         .filter { chapter ->
                             applyFilter(novel.unreadFilter) { !chapter.read } &&
+                                applyFilter(novel.downloadedFilter) { chapter.id in downloadedChapterIds } &&
                                 applyFilter(novel.bookmarkedFilter) { chapter.bookmark }
                         }
                         .sortedWith(chapterSort)

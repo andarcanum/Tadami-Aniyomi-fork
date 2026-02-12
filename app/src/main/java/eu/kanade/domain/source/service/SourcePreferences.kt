@@ -91,6 +91,11 @@ class SourcePreferences(
         false,
     )
 
+    fun hideInNovelLibraryItems() = preferenceStore.getBoolean(
+        "browse_hide_in_novel_library_items",
+        false,
+    )
+
     // SY -->
 
     // fun enableSourceBlacklist() = preferenceStore.getBoolean("eh_enable_source_blacklist", true)
