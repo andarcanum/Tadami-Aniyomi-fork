@@ -60,6 +60,13 @@ node_modules/
 # Temporary files
 temp_result.xml
 *.tmp
+build_*.log
+
+# Local planning scratch files
+/findings.md
+/plan_for_plugins.md
+/progress.md
+/task_plan.md
 
 # Local caches
 app/cash/
