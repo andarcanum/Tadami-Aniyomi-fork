@@ -21,6 +21,7 @@ import eu.kanade.domain.entries.manga.model.chaptersFiltered
 import eu.kanade.domain.entries.manga.model.downloadedFilter
 import eu.kanade.domain.entries.manga.model.toSManga
 import eu.kanade.domain.items.chapter.interactor.GetAvailableScanlators
+import eu.kanade.domain.items.chapter.interactor.GetScanlatorChapterCounts
 import eu.kanade.domain.items.chapter.interactor.SetReadStatus
 import eu.kanade.domain.items.chapter.interactor.SyncChaptersWithSource
 import eu.kanade.domain.track.manga.interactor.AddMangaTracks
@@ -107,6 +108,7 @@ class MangaScreenModel(
     private val getMangaAndChapters: GetMangaWithChapters = Injekt.get(),
     private val getDuplicateLibraryManga: GetDuplicateLibraryManga = Injekt.get(),
     private val getAvailableScanlators: GetAvailableScanlators = Injekt.get(),
+    private val getScanlatorChapterCounts: GetScanlatorChapterCounts = Injekt.get(),
     private val getExcludedScanlators: GetExcludedScanlators = Injekt.get(),
     private val setExcludedScanlators: SetExcludedScanlators = Injekt.get(),
     private val setMangaChapterFlags: SetMangaChapterFlags = Injekt.get(),
@@ -211,6 +213,17 @@ class MangaScreenModel(
                 }
         }
 
+        screenModelScope.launchIO {
+            getScanlatorChapterCounts.subscribe(mangaId)
+                .flowWithLifecycle(lifecycle)
+                .distinctUntilChanged()
+                .collectLatest { scanlatorChapterCounts ->
+                    updateSuccessState {
+                        it.copy(scanlatorChapterCounts = scanlatorChapterCounts)
+                    }
+                }
+        }
+
         observeDownloads()
 
         screenModelScope.launchIO {
@@ -233,6 +246,7 @@ class MangaScreenModel(
                     isFromSource = isFromSource,
                     chapters = chapters,
                     availableScanlators = getAvailableScanlators.await(mangaId),
+                    scanlatorChapterCounts = getScanlatorChapterCounts.await(mangaId),
                     excludedScanlators = getExcludedScanlators.await(mangaId),
                     isRefreshingData = needRefreshInfo || needRefreshChapter,
                     dialog = null,
@@ -1194,6 +1208,17 @@ class MangaScreenModel(
         }
     }
 
+    fun selectScanlator(scanlator: String?) {
+        val availableScanlators = successState?.availableScanlators.orEmpty()
+        val excluded = resolveExcludedScanlatorsForSelection(
+            selectedScanlator = scanlator,
+            availableScanlators = availableScanlators,
+        )
+        screenModelScope.launchIO {
+            setExcludedScanlators.await(mangaId, excluded)
+        }
+    }
+
     sealed interface State {
         @Immutable
         data object Loading : State
@@ -1205,6 +1230,7 @@ class MangaScreenModel(
             val isFromSource: Boolean,
             val chapters: List<ChapterList.Item>,
             val availableScanlators: Set<String>,
+            val scanlatorChapterCounts: Map<String, Int>,
             val excludedScanlators: Set<String>,
             val trackingCount: Int = 0,
             val hasLoggedInTrackers: Boolean = false,
@@ -1250,6 +1276,15 @@ class MangaScreenModel(
             val scanlatorFilterActive: Boolean
                 get() = excludedScanlators.intersect(availableScanlators).isNotEmpty()
 
+            val selectedScanlator: String?
+                get() = resolveSelectedScanlator(
+                    availableScanlators = availableScanlators,
+                    excludedScanlators = excludedScanlators,
+                )
+
+            val showScanlatorSelector: Boolean
+                get() = scanlatorChapterCounts.size > 1
+
             val filterActive: Boolean
                 get() = scanlatorFilterActive || manga.chaptersFiltered()
 
@@ -1278,6 +1313,26 @@ class MangaScreenModel(
             }
         }
     }
+}
+
+internal fun resolveSelectedScanlator(
+    availableScanlators: Set<String>,
+    excludedScanlators: Set<String>,
+): String? {
+    if (availableScanlators.isEmpty()) return null
+    val effectiveExcluded = excludedScanlators.intersect(availableScanlators)
+    val included = availableScanlators - effectiveExcluded
+    return included.singleOrNull()
+}
+
+internal fun resolveExcludedScanlatorsForSelection(
+    selectedScanlator: String?,
+    availableScanlators: Set<String>,
+): Set<String> {
+    val selection = selectedScanlator?.trim().orEmpty()
+    if (selection.isEmpty()) return emptySet()
+    if (selection !in availableScanlators) return emptySet()
+    return availableScanlators - selection
 }
 
 @Immutable

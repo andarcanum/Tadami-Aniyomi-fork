@@ -59,6 +59,7 @@ import eu.kanade.presentation.components.DropdownMenu
 import eu.kanade.presentation.components.EntryDownloadDropdownMenu
 import eu.kanade.presentation.entries.DownloadAction
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadAction
+import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
 import eu.kanade.presentation.entries.manga.components.aurora.ChaptersHeader
 import eu.kanade.presentation.entries.manga.components.aurora.FullscreenPosterBackground
 import eu.kanade.presentation.entries.manga.components.aurora.MangaActionCard
@@ -93,6 +94,9 @@ fun MangaScreenAuroraImpl(
     onTrackingClicked: (() -> Unit)?,
     onTagSearch: (String) -> Unit,
     onFilterButtonClicked: () -> Unit,
+    scanlatorChapterCounts: Map<String, Int>,
+    selectedScanlator: String?,
+    onScanlatorSelected: (String?) -> Unit,
     onRefresh: () -> Unit,
     onContinueReading: () -> Unit,
     onSearch: (query: String, global: Boolean) -> Unit,
@@ -209,6 +213,17 @@ fun MangaScreenAuroraImpl(
             item {
                 Spacer(modifier = Modifier.height(20.dp))
                 ChaptersHeader(chapterCount = chapters.size)
+            }
+
+            if (state.showScanlatorSelector) {
+                item {
+                    ScanlatorBranchSelector(
+                        scanlatorChapterCounts = scanlatorChapterCounts,
+                        selectedScanlator = selectedScanlator,
+                        onScanlatorSelected = onScanlatorSelected,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
             }
 
             // Empty state for chapters

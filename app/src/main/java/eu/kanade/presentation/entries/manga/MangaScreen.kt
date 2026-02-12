@@ -48,6 +48,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.util.fastAll
 import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.util.fastMap
+import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.relativeDateTimeText
@@ -62,6 +63,7 @@ import eu.kanade.presentation.entries.manga.components.ExpandableMangaDescriptio
 import eu.kanade.presentation.entries.manga.components.MangaActionRow
 import eu.kanade.presentation.entries.manga.components.MangaChapterListItem
 import eu.kanade.presentation.entries.manga.components.MangaInfoBox
+import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
 import eu.kanade.presentation.util.formatChapterNumber
 import eu.kanade.tachiyomi.data.download.manga.model.MangaDownload
 import eu.kanade.tachiyomi.source.ConfigurableSource
@@ -109,6 +111,9 @@ fun MangaScreen(
     onTagSearch: (String) -> Unit,
 
     onFilterButtonClicked: () -> Unit,
+    scanlatorChapterCounts: Map<String, Int>,
+    selectedScanlator: String?,
+    onScanlatorSelected: (String?) -> Unit,
     onRefresh: () -> Unit,
     onContinueReading: () -> Unit,
     onSearch: (query: String, global: Boolean) -> Unit,
@@ -162,6 +167,9 @@ fun MangaScreen(
             onTrackingClicked = onTrackingClicked,
             onTagSearch = onTagSearch,
             onFilterButtonClicked = onFilterButtonClicked,
+            scanlatorChapterCounts = scanlatorChapterCounts,
+            selectedScanlator = selectedScanlator,
+            onScanlatorSelected = onScanlatorSelected,
             onRefresh = onRefresh,
             onContinueReading = onContinueReading,
             onSearch = onSearch,
@@ -208,6 +216,9 @@ fun MangaScreen(
             onTagSearch = onTagSearch,
             onCopyTagToClipboard = onCopyTagToClipboard,
             onFilterClicked = onFilterButtonClicked,
+            scanlatorChapterCounts = scanlatorChapterCounts,
+            selectedScanlator = selectedScanlator,
+            onScanlatorSelected = onScanlatorSelected,
             onRefresh = onRefresh,
             onContinueReading = onContinueReading,
             onSearch = onSearch,
@@ -244,6 +255,9 @@ fun MangaScreen(
             onTagSearch = onTagSearch,
             onCopyTagToClipboard = onCopyTagToClipboard,
             onFilterButtonClicked = onFilterButtonClicked,
+            scanlatorChapterCounts = scanlatorChapterCounts,
+            selectedScanlator = selectedScanlator,
+            onScanlatorSelected = onScanlatorSelected,
             onRefresh = onRefresh,
             onContinueReading = onContinueReading,
             onSearch = onSearch,
@@ -286,6 +300,9 @@ private fun MangaScreenSmallImpl(
     onCopyTagToClipboard: (tag: String) -> Unit,
 
     onFilterClicked: () -> Unit,
+    scanlatorChapterCounts: Map<String, Int>,
+    selectedScanlator: String?,
+    onScanlatorSelected: (String?) -> Unit,
     onRefresh: () -> Unit,
     onContinueReading: () -> Unit,
     onSearch: (query: String, global: Boolean) -> Unit,
@@ -498,6 +515,20 @@ private fun MangaScreenSmallImpl(
                         )
                     }
 
+                    if (state.showScanlatorSelector) {
+                        item(
+                            key = "scanlator-selector",
+                            contentType = "scanlator-selector",
+                        ) {
+                            ScanlatorBranchSelector(
+                                scanlatorChapterCounts = scanlatorChapterCounts,
+                                selectedScanlator = selectedScanlator,
+                                onScanlatorSelected = onScanlatorSelected,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            )
+                        }
+                    }
+
                     sharedChapterItems(
                         manga = state.manga,
                         chapters = listItem,
@@ -535,6 +566,9 @@ fun MangaScreenLargeImpl(
     onCopyTagToClipboard: (tag: String) -> Unit,
 
     onFilterButtonClicked: () -> Unit,
+    scanlatorChapterCounts: Map<String, Int>,
+    selectedScanlator: String?,
+    onScanlatorSelected: (String?) -> Unit,
     onRefresh: () -> Unit,
     onContinueReading: () -> Unit,
     onSearch: (query: String, global: Boolean) -> Unit,
@@ -740,6 +774,20 @@ fun MangaScreenLargeImpl(
                                     onClick = onFilterButtonClicked,
                                     isManga = true,
                                 )
+                            }
+
+                            if (state.showScanlatorSelector) {
+                                item(
+                                    key = "scanlator-selector",
+                                    contentType = "scanlator-selector",
+                                ) {
+                                    ScanlatorBranchSelector(
+                                        scanlatorChapterCounts = scanlatorChapterCounts,
+                                        selectedScanlator = selectedScanlator,
+                                        onScanlatorSelected = onScanlatorSelected,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                    )
+                                }
                             }
 
                             sharedChapterItems(

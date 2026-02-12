@@ -20,6 +20,7 @@ import eu.kanade.domain.extension.manga.interactor.GetMangaExtensionsByType
 import eu.kanade.domain.extension.manga.interactor.TrustMangaExtension
 import eu.kanade.domain.extension.novel.interactor.GetNovelExtensionLanguages
 import eu.kanade.domain.items.chapter.interactor.GetAvailableScanlators
+import eu.kanade.domain.items.chapter.interactor.GetScanlatorChapterCounts
 import eu.kanade.domain.items.chapter.interactor.SetReadStatus
 import eu.kanade.domain.items.chapter.interactor.SyncChaptersWithSource
 import eu.kanade.domain.items.episode.interactor.SetSeenStatus
@@ -414,6 +415,7 @@ class DomainModule : InjektModule {
         addFactory { ShouldUpdateDbChapter() }
         addFactory { SyncChaptersWithSource(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
         addFactory { GetAvailableScanlators(get()) }
+        addFactory { GetScanlatorChapterCounts(get()) }
         addFactory { FilterChaptersForDownload(get(), get(), get()) }
 
         addSingletonFactory<NovelChapterRepository> { NovelChapterRepositoryImpl(get()) }
