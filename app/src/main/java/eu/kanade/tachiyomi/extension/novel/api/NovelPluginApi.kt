@@ -1,8 +1,8 @@
 package eu.kanade.tachiyomi.extension.novel.api
 
-import mihon.domain.extensionrepo.model.ExtensionRepo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import mihon.domain.extensionrepo.model.ExtensionRepo
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 
 class NovelPluginApi(

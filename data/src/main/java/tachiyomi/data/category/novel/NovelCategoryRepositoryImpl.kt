@@ -2,10 +2,10 @@ package tachiyomi.data.category.novel
 
 import kotlinx.coroutines.flow.Flow
 import tachiyomi.data.handlers.novel.NovelDatabaseHandler
-import tachiyomi.novel.data.NovelDatabase
 import tachiyomi.domain.category.novel.model.NovelCategory
 import tachiyomi.domain.category.novel.model.NovelCategoryUpdate
 import tachiyomi.domain.category.novel.repository.NovelCategoryRepository
+import tachiyomi.novel.data.NovelDatabase
 
 class NovelCategoryRepositoryImpl(
     private val handler: NovelDatabaseHandler,

@@ -21,7 +21,7 @@ interface NovelSourceRepository {
 
     fun searchNovels(sourceId: Long, query: String, filterList: NovelFilterList): SourcePagingSourceType
 
-    fun getPopularNovels(sourceId: Long): SourcePagingSourceType
+    fun getPopularNovels(sourceId: Long, filterList: NovelFilterList): SourcePagingSourceType
 
-    fun getLatestNovels(sourceId: Long): SourcePagingSourceType
+    fun getLatestNovels(sourceId: Long, filterList: NovelFilterList): SourcePagingSourceType
 }

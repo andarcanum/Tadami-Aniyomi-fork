@@ -18,10 +18,14 @@ import androidx.work.WorkInfo
 import androidx.work.WorkQuery
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
-import eu.kanade.domain.entries.novel.model.toSNovel
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
+import eu.kanade.domain.entries.novel.model.toSNovel
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.tachiyomi.data.notification.Notifications
+import eu.kanade.tachiyomi.util.system.isCharging
+import eu.kanade.tachiyomi.util.system.isConnectedToWifi
+import eu.kanade.tachiyomi.util.system.isRunning
+import eu.kanade.tachiyomi.util.system.workManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -36,6 +40,8 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
 import tachiyomi.domain.entries.novel.interactor.GetNovel
 import tachiyomi.domain.entries.novel.model.Novel
+import tachiyomi.domain.items.novelchapter.model.NoChaptersException
+import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.DEVICE_CHARGING
@@ -43,18 +49,12 @@ import tachiyomi.domain.library.service.LibraryPreferences.Companion.DEVICE_NETW
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.DEVICE_ONLY_ON_WIFI
 import tachiyomi.domain.source.novel.model.SourceNotInstalledException
 import tachiyomi.domain.source.novel.service.NovelSourceManager
-import tachiyomi.domain.items.novelchapter.model.NoChaptersException
-import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
-import eu.kanade.tachiyomi.util.system.isCharging
-import eu.kanade.tachiyomi.util.system.isConnectedToWifi
-import eu.kanade.tachiyomi.util.system.isRunning
-import eu.kanade.tachiyomi.util.system.workManager
 
 class NovelLibraryUpdateJob(
     private val context: Context,
@@ -108,7 +108,9 @@ class NovelLibraryUpdateJob(
                 updateChapterList()
                 Result.success()
             } catch (e: Exception) {
-                if (e is CancellationException) Result.success() else {
+                if (e is CancellationException) {
+                    Result.success()
+                } else {
                     logcat(LogPriority.ERROR, e)
                     Result.failure()
                 }
@@ -169,7 +171,9 @@ class NovelLibraryUpdateJob(
                                         }
                                     } catch (e: Throwable) {
                                         val errorMessage = when (e) {
-                                            is NoChaptersException -> context.stringResource(MR.strings.no_chapters_error)
+                                            is NoChaptersException -> context.stringResource(
+                                                MR.strings.no_chapters_error,
+                                            )
                                             is SourceNotInstalledException ->
                                                 context.stringResource(MR.strings.loader_not_implemented_error)
                                             else -> e.message

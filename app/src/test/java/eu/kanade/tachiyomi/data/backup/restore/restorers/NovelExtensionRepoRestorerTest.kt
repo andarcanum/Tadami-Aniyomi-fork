@@ -23,16 +23,16 @@ class NovelExtensionRepoRestorerTest {
             val restorer = NovelExtensionRepoRestorer(handler, getRepos)
 
             restorer(
-            BackupExtensionRepos(
-            baseUrl = "https://example.org",
-            name = "Example",
-            shortName = null,
-            website = "https://example.org",
-            signingKeyFingerprint = "ABC",
-            ),
+                BackupExtensionRepos(
+                    baseUrl = "https://example.org",
+                    name = "Example",
+                    shortName = null,
+                    website = "https://example.org",
+                    signingKeyFingerprint = "ABC",
+                ),
             )
 
             coVerify(exactly = 1) { handler.await(any(), any<suspend NovelDatabase.() -> Unit>()) }
         }
     }
-    }
+}

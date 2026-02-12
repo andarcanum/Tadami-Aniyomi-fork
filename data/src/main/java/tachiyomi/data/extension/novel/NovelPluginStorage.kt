@@ -1,8 +1,8 @@
 package tachiyomi.data.extension.novel
 
-import java.io.File
 import logcat.LogPriority
 import logcat.logcat
+import java.io.File
 
 class NovelPluginStorage(
     private val baseDir: File,
@@ -23,17 +23,23 @@ class NovelPluginStorage(
         pluginDir()
         val scriptFile = pluginScriptFile(pluginId)
         scriptFile.writeBytes(script)
-        logcat(LogPriority.INFO) { "Novel plugin script saved id=$pluginId file=${scriptFile.absolutePath} bytes=${script.size}" }
+        logcat(LogPriority.INFO) {
+            "Novel plugin script saved id=$pluginId file=${scriptFile.absolutePath} bytes=${script.size}"
+        }
 
         customJs?.let {
             val file = customJsFile(pluginId)
             file.writeBytes(it)
-            logcat(LogPriority.INFO) { "Novel plugin custom JS saved id=$pluginId file=${file.absolutePath} bytes=${it.size}" }
+            logcat(LogPriority.INFO) {
+                "Novel plugin custom JS saved id=$pluginId file=${file.absolutePath} bytes=${it.size}"
+            }
         }
         customCss?.let {
             val file = customCssFile(pluginId)
             file.writeBytes(it)
-            logcat(LogPriority.INFO) { "Novel plugin custom CSS saved id=$pluginId file=${file.absolutePath} bytes=${it.size}" }
+            logcat(LogPriority.INFO) {
+                "Novel plugin custom CSS saved id=$pluginId file=${file.absolutePath} bytes=${it.size}"
+            }
         }
     }
 

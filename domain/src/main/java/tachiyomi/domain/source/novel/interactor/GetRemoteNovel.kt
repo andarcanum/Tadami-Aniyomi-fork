@@ -10,8 +10,8 @@ class GetRemoteNovel(
 
     fun subscribe(sourceId: Long, query: String, filterList: NovelFilterList): SourcePagingSourceType {
         return when (query) {
-            QUERY_POPULAR -> repository.getPopularNovels(sourceId)
-            QUERY_LATEST -> repository.getLatestNovels(sourceId)
+            QUERY_POPULAR -> repository.getPopularNovels(sourceId, filterList)
+            QUERY_LATEST -> repository.getLatestNovels(sourceId, filterList)
             else -> repository.searchNovels(sourceId, query, filterList)
         }
     }

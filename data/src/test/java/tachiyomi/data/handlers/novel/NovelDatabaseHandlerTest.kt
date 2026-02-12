@@ -1,14 +1,14 @@
 package tachiyomi.data.handlers.novel
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import datanovel.Novel_history
+import datanovel.Novels
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import datanovel.Novel_history
-import datanovel.Novels
 import tachiyomi.data.DateColumnAdapter
 import tachiyomi.data.MangaUpdateStrategyColumnAdapter
 import tachiyomi.data.StringListColumnAdapter

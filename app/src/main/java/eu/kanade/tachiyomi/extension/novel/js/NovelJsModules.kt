@@ -10,6 +10,9 @@ fun defaultNovelJsModuleRegistry(): JsModuleRegistry {
         "@libs/filterInputs",
         "@libs/novelStatus",
         "@libs/defaultCover",
+        "@libs/proseMirrorToHtml",
+        "@libs/isAbsoluteUrl",
+        "@/types/constants",
     ).forEach { name ->
         registry.register(NamedJsModule(name))
     }

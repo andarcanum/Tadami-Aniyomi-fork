@@ -18,6 +18,7 @@ import eu.kanade.domain.extension.manga.interactor.GetExtensionSources
 import eu.kanade.domain.extension.manga.interactor.GetMangaExtensionLanguages
 import eu.kanade.domain.extension.manga.interactor.GetMangaExtensionsByType
 import eu.kanade.domain.extension.manga.interactor.TrustMangaExtension
+import eu.kanade.domain.extension.novel.interactor.GetNovelExtensionLanguages
 import eu.kanade.domain.items.chapter.interactor.GetAvailableScanlators
 import eu.kanade.domain.items.chapter.interactor.SetReadStatus
 import eu.kanade.domain.items.chapter.interactor.SyncChaptersWithSource
@@ -227,8 +228,8 @@ import tachiyomi.domain.items.episode.interactor.SetAnimeDefaultEpisodeFlags
 import tachiyomi.domain.items.episode.interactor.ShouldUpdateDbEpisode
 import tachiyomi.domain.items.episode.interactor.UpdateEpisode
 import tachiyomi.domain.items.episode.repository.EpisodeRepository
-import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.items.novelchapter.interactor.ShouldUpdateDbNovelChapter
+import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.items.season.interactor.GetAnimeSeasonsByParentId
 import tachiyomi.domain.items.season.interactor.SetAnimeDefaultSeasonFlags
 import tachiyomi.domain.items.season.interactor.ShouldUpdateDbSeason
@@ -244,6 +245,7 @@ import tachiyomi.domain.source.manga.interactor.GetRemoteManga
 import tachiyomi.domain.source.manga.repository.MangaSourceRepository
 import tachiyomi.domain.source.manga.repository.MangaStubSourceRepository
 import tachiyomi.domain.source.novel.interactor.GetRemoteNovel
+import tachiyomi.domain.source.novel.interactor.GetNovelSourcesWithNonLibraryNovels
 import tachiyomi.domain.source.novel.repository.NovelSourceRepository
 import tachiyomi.domain.source.novel.repository.NovelStubSourceRepository
 import tachiyomi.domain.track.anime.interactor.DeleteAnimeTrack
@@ -442,6 +444,7 @@ class DomainModule : InjektModule {
         addFactory { GetMangaExtensionsByType(get(), get()) }
         addFactory { GetExtensionSources(get()) }
         addFactory { GetMangaExtensionLanguages(get(), get()) }
+        addFactory { GetNovelExtensionLanguages(get(), get()) }
 
         addSingletonFactory<AnimeUpdatesRepository> { AnimeUpdatesRepositoryImpl(get()) }
         addFactory { GetAnimeUpdates(get()) }
@@ -497,6 +500,7 @@ class DomainModule : InjektModule {
             )
         }
         addFactory { GetRemoteNovel(get()) }
+        addFactory { GetNovelSourcesWithNonLibraryNovels(get()) }
         addFactory { ToggleNovelSource(get<SourcePreferences>().disabledNovelSources()) }
         addFactory { ToggleNovelSourcePin(get<SourcePreferences>().pinnedNovelSources()) }
 

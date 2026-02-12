@@ -36,11 +36,11 @@ class SyncNovelChaptersWithSourceTest {
 
         assertThrows<NoChaptersException> {
             runBlocking {
-                    interactor.await(
-                        rawSourceChapters = emptyList(),
-                        novel = Novel.create().copy(id = 1L),
-                        source = FakeNovelSource(),
-                    )
+                interactor.await(
+                    rawSourceChapters = emptyList(),
+                    novel = Novel.create().copy(id = 1L),
+                    source = FakeNovelSource(),
+                )
             }
         }
     }
@@ -58,24 +58,24 @@ class SyncNovelChaptersWithSourceTest {
             coEvery { updateNovel.await(any()) } returns true
 
             val interactor = SyncNovelChaptersWithSource(
-            novelChapterRepository = repository,
-            shouldUpdateDbNovelChapter = ShouldUpdateDbNovelChapter(),
-            updateNovel = updateNovel,
-            libraryPreferences = preferences,
+                novelChapterRepository = repository,
+                shouldUpdateDbNovelChapter = ShouldUpdateDbNovelChapter(),
+                updateNovel = updateNovel,
+                libraryPreferences = preferences,
             )
 
             val novel = Novel.create().copy(id = 10L, title = "Novel")
             val sChapter = SNovelChapter.create().apply {
-            url = "/chapter-1"
-            name = "Chapter 1"
-            date_upload = 0L
-            chapter_number = 1f
+                url = "/chapter-1"
+                name = "Chapter 1"
+                date_upload = 0L
+                chapter_number = 1f
             }
 
             val result = interactor.await(
-            rawSourceChapters = listOf(sChapter),
-            novel = novel,
-            source = FakeNovelSource(),
+                rawSourceChapters = listOf(sChapter),
+                novel = novel,
+                source = FakeNovelSource(),
             )
 
             result.size shouldBe 1
@@ -87,20 +87,20 @@ class SyncNovelChaptersWithSourceTest {
         }
     }
 
-        private class FakeNovelSource : NovelSource {
-            override val id = 1L
-            override val name = "Test"
-        }
+    private class FakeNovelSource : NovelSource {
+        override val id = 1L
+        override val name = "Test"
+    }
 
-        private class FakeNovelChapterRepository : NovelChapterRepository {
-            val addedChapters = mutableListOf<NovelChapter>()
-            val updatedChapters = mutableListOf<NovelChapterUpdate>()
-            val removedIds = mutableListOf<Long>()
-            var chapters = emptyList<NovelChapter>()
+    private class FakeNovelChapterRepository : NovelChapterRepository {
+        val addedChapters = mutableListOf<NovelChapter>()
+        val updatedChapters = mutableListOf<NovelChapterUpdate>()
+        val removedIds = mutableListOf<Long>()
+        var chapters = emptyList<NovelChapter>()
 
-            override suspend fun addAllChapters(chapters: List<NovelChapter>): List<NovelChapter> {
-                addedChapters.addAll(chapters)
-                return chapters
+        override suspend fun addAllChapters(chapters: List<NovelChapter>): List<NovelChapter> {
+            addedChapters.addAll(chapters)
+            return chapters
         }
 
         override suspend fun updateChapter(chapterUpdate: NovelChapterUpdate) {

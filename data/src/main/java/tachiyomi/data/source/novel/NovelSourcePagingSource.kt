@@ -22,15 +22,21 @@ class NovelSourceSearchPagingSource(
     }
 }
 
-class NovelSourcePopularPagingSource(source: NovelCatalogueSource) : NovelSourcePagingSource(source) {
+class NovelSourcePopularPagingSource(
+    source: NovelCatalogueSource,
+    private val filters: NovelFilterList,
+) : NovelSourcePagingSource(source) {
     override suspend fun requestNextPage(currentPage: Int): NovelsPage {
-        return source.getPopularNovels(currentPage)
+        return source.getPopularNovels(currentPage, filters)
     }
 }
 
-class NovelSourceLatestPagingSource(source: NovelCatalogueSource) : NovelSourcePagingSource(source) {
+class NovelSourceLatestPagingSource(
+    source: NovelCatalogueSource,
+    private val filters: NovelFilterList,
+) : NovelSourcePagingSource(source) {
     override suspend fun requestNextPage(currentPage: Int): NovelsPage {
-        return source.getLatestUpdates(currentPage)
+        return source.getLatestUpdates(currentPage, filters)
     }
 }
 
@@ -43,21 +49,32 @@ abstract class NovelSourcePagingSource(
     override suspend fun load(params: LoadParams<Long>): LoadResult<Long, SNovel> {
         val page = params.key ?: 1
 
-        val novelsPage = try {
+        return try {
             withIOContext {
-                requestNextPage(page.toInt())
-                    .takeIf { it.novels.isNotEmpty() }
-                    ?: throw NoChaptersException()
+                val novelsPage = requestNextPage(page.toInt())
+                when {
+                    novelsPage.novels.isNotEmpty() -> {
+                        LoadResult.Page(
+                            data = novelsPage.novels,
+                            prevKey = null,
+                            nextKey = if (novelsPage.hasNextPage) page + 1 else null,
+                        )
+                    }
+                    page == 1L -> throw NoChaptersException()
+                    else -> {
+                        // Some sources may return an empty trailing page while data already exists.
+                        // Treat this as end-of-pagination instead of an append error.
+                        LoadResult.Page(
+                            data = emptyList(),
+                            prevKey = null,
+                            nextKey = null,
+                        )
+                    }
+                }
             }
         } catch (e: Exception) {
-            return LoadResult.Error(e)
+            LoadResult.Error(e)
         }
-
-        return LoadResult.Page(
-            data = novelsPage.novels,
-            prevKey = null,
-            nextKey = if (novelsPage.hasNextPage) page + 1 else null,
-        )
     }
 
     override fun getRefreshKey(state: PagingState<Long, SNovel>): Long? {

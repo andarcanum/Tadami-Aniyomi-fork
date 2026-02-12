@@ -30,7 +30,9 @@ class NovelHistoryRepositoryImpl(
     }
 
     override suspend fun getHistoryByNovelId(novelId: Long): List<NovelHistory> {
-        return handler.awaitList { novel_historyQueries.getHistoryByNovelId(novelId, NovelHistoryMapper::mapNovelHistory) }
+        return handler.awaitList {
+            novel_historyQueries.getHistoryByNovelId(novelId, NovelHistoryMapper::mapNovelHistory)
+        }
     }
 
     override suspend fun resetNovelHistory(historyId: Long) {

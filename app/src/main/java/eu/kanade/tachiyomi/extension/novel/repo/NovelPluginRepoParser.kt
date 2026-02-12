@@ -1,7 +1,7 @@
 package eu.kanade.tachiyomi.extension.novel.repo
 
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
 
 class NovelPluginRepoParser(
     private val json: Json,

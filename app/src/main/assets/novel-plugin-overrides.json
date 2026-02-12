@@ -1,0 +1,69 @@
+{
+  "entries": [
+    {
+      "pluginId": "rulate",
+      "version": 1,
+      "domainAliases": {
+        "https://www.rulate.ru": "https://tl.rulate.ru",
+        "https://rulate.ru": "https://tl.rulate.ru"
+      },
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\\\"/chapter\\\"], a[href*=\\\"/read\\\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      }
+    },
+    {
+      "pluginId": "erolate",
+      "version": 1,
+      "scriptPatches": [
+        {
+          "pattern": "table > tbody > tr.chapter_row",
+          "replacement": "table > tbody > tr.chapter_row, tr.chapter_row, .chapter_row"
+        },
+        {
+          "pattern": "a.chapter",
+          "replacement": "a.chapter, a[href*=\\\"/chapter\\\"], a[href*=\\\"/read\\\"]"
+        }
+      ],
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": true
+      }
+    },
+    {
+      "pluginId": "novelupdates",
+      "version": 1,
+      "scriptPatches": [
+        {
+          "pattern": "n=\"https:\"+v(t).find(\"a\").first().next().attr(\"href\")",
+          "replacement": "n=(function(e){if(!e)return null;var t=String(e).trim();if(!t)return null;if(t.indexOf(\"http://\")===0||t.indexOf(\"https://\")===0)return t;if(t.indexOf(\"//\")===0)return \"https:\"+t;return t})(v(t).find(\"a\").eq(1).attr(\"href\")||v(t).find(\"a\").last().attr(\"href\")||v(t).find(\"a\").first().attr(\"href\"))"
+        }
+      ]
+    },
+    {
+      "pluginId": "TL",
+      "version": 1,
+      "scriptPatches": [
+        {
+          "pattern": "([A-Za-z_$][A-Za-z0-9_$]*)\\.sent\\(\\)\\.data",
+          "replacement": "($1.sent()||{}).data",
+          "regex": true
+        }
+      ]
+    }
+  ]
+}

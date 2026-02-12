@@ -21,4 +21,4 @@ class NovelExtensionUpdateRunnerTest {
             coVerify(exactly = 1) { api.checkForUpdates() }
         }
     }
-    }
+}

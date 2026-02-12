@@ -1,7 +1,6 @@
 package eu.kanade.tachiyomi.source.novel
 
 import eu.kanade.tachiyomi.extension.novel.NovelExtensionManager
-import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.NovelFilterList
 import eu.kanade.tachiyomi.novelsource.model.NovelsPage
@@ -41,70 +40,70 @@ class AndroidNovelSourceManagerTest {
         }
     }
 
-        @Test
-        fun `getOrStub returns stub from repository`() {
-            runTest {
-                val dispatcher = StandardTestDispatcher(testScheduler)
-                val extensionManager = FakeNovelExtensionManager()
-                val repository = FakeNovelStubSourceRepository()
-                val manager = AndroidNovelSourceManager(extensionManager, repository, dispatcher)
+    @Test
+    fun `getOrStub returns stub from repository`() {
+        runTest {
+            val dispatcher = StandardTestDispatcher(testScheduler)
+            val extensionManager = FakeNovelExtensionManager()
+            val repository = FakeNovelStubSourceRepository()
+            val manager = AndroidNovelSourceManager(extensionManager, repository, dispatcher)
 
-                repository.upsertStubNovelSource(1L, "en", "Stub")
-                advanceUntilIdle()
+            repository.upsertStubNovelSource(1L, "en", "Stub")
+            advanceUntilIdle()
 
-                val source = manager.getOrStub(1L) as StubNovelSource
+            val source = manager.getOrStub(1L) as StubNovelSource
 
-                source.id shouldBe 1L
-                source.lang shouldBe "en"
-                source.name shouldBe "Stub"
-            }
+            source.id shouldBe 1L
+            source.lang shouldBe "en"
+            source.name shouldBe "Stub"
+        }
+    }
+
+    @Test
+    fun `getStubSources excludes online sources`() {
+        runTest {
+            val dispatcher = StandardTestDispatcher(testScheduler)
+            val extensionManager = FakeNovelExtensionManager()
+            val repository = FakeNovelStubSourceRepository()
+            val manager = AndroidNovelSourceManager(extensionManager, repository, dispatcher)
+
+            val onlineSource = FakeNovelCatalogueSource(id = 1L, name = "Online", lang = "en")
+            extensionManager.emitSources(listOf(onlineSource))
+            repository.upsertStubNovelSource(1L, "en", "Online")
+            repository.upsertStubNovelSource(2L, "en", "Offline")
+            advanceUntilIdle()
+
+            val stubs = manager.getStubSources()
+
+            stubs.size shouldBe 1
+            stubs.first().id shouldBe 2L
+        }
+    }
+
+    private class FakeNovelExtensionManager : NovelExtensionManager {
+        private val sourcesState = MutableStateFlow<List<NovelSource>>(emptyList())
+
+        override val installedSourcesFlow: Flow<List<NovelSource>> = sourcesState
+        override val installedPluginsFlow = MutableStateFlow<List<NovelPlugin.Installed>>(emptyList())
+        override val availablePluginsFlow = MutableStateFlow<List<NovelPlugin.Available>>(emptyList())
+        override val updatesFlow = MutableStateFlow<List<NovelPlugin.Installed>>(emptyList())
+
+        fun emitSources(list: List<NovelSource>) {
+            sourcesState.value = list
         }
 
-        @Test
-        fun `getStubSources excludes online sources`() {
-            runTest {
-                val dispatcher = StandardTestDispatcher(testScheduler)
-                val extensionManager = FakeNovelExtensionManager()
-                val repository = FakeNovelStubSourceRepository()
-                val manager = AndroidNovelSourceManager(extensionManager, repository, dispatcher)
+        override suspend fun refreshAvailablePlugins() = Unit
 
-                val onlineSource = FakeNovelCatalogueSource(id = 1L, name = "Online", lang = "en")
-                extensionManager.emitSources(listOf(onlineSource))
-                repository.upsertStubNovelSource(1L, "en", "Online")
-                repository.upsertStubNovelSource(2L, "en", "Offline")
-                advanceUntilIdle()
-
-                val stubs = manager.getStubSources()
-
-                stubs.size shouldBe 1
-                stubs.first().id shouldBe 2L
-            }
+        override suspend fun installPlugin(plugin: NovelPlugin.Available): NovelPlugin.Installed {
+            throw UnsupportedOperationException("Not used in this test")
         }
 
-        private class FakeNovelExtensionManager : NovelExtensionManager {
-            private val sourcesState = MutableStateFlow<List<NovelSource>>(emptyList())
+        override suspend fun uninstallPlugin(plugin: NovelPlugin.Installed) = Unit
 
-            override val installedSourcesFlow: Flow<List<NovelSource>> = sourcesState
-            override val installedPluginsFlow = MutableStateFlow<List<NovelPlugin.Installed>>(emptyList())
-            override val availablePluginsFlow = MutableStateFlow<List<NovelPlugin.Available>>(emptyList())
-            override val updatesFlow = MutableStateFlow<List<NovelPlugin.Installed>>(emptyList())
+        override suspend fun getSourceData(id: Long): StubNovelSource? = null
 
-            fun emitSources(list: List<NovelSource>) {
-                sourcesState.value = list
-            }
-
-            override suspend fun refreshAvailablePlugins() = Unit
-
-            override suspend fun installPlugin(plugin: NovelPlugin.Available): NovelPlugin.Installed {
-                throw UnsupportedOperationException("Not used in this test")
-            }
-
-            override suspend fun uninstallPlugin(plugin: NovelPlugin.Installed) = Unit
-
-            override suspend fun getSourceData(id: Long): StubNovelSource? = null
-
-            override fun getPluginIconUrlForSource(sourceId: Long): String? = null
-        }
+        override fun getPluginIconUrlForSource(sourceId: Long): String? = null
+    }
 
     private class FakeNovelStubSourceRepository : NovelStubSourceRepository {
         private val state = MutableStateFlow<List<StubNovelSource>>(emptyList())

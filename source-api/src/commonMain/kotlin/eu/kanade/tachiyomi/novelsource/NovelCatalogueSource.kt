@@ -29,6 +29,15 @@ interface NovelCatalogueSource : NovelSource {
     }
 
     /**
+     * Get a page with a list of novels while applying source filters.
+     *
+     * By default sources that don't support filtered popular/latest can ignore filters.
+     */
+    suspend fun getPopularNovels(page: Int, filters: NovelFilterList): NovelsPage {
+        return getPopularNovels(page)
+    }
+
+    /**
      * Get a page with a list of novels.
      *
      * @since extensions-lib 1.5
@@ -50,6 +59,15 @@ interface NovelCatalogueSource : NovelSource {
     @Suppress("DEPRECATION")
     suspend fun getLatestUpdates(page: Int): NovelsPage {
         return fetchLatestUpdates(page).awaitSingle()
+    }
+
+    /**
+     * Get a page with a list of latest novel updates while applying source filters.
+     *
+     * By default sources that don't support filtered popular/latest can ignore filters.
+     */
+    suspend fun getLatestUpdates(page: Int, filters: NovelFilterList): NovelsPage {
+        return getLatestUpdates(page)
     }
 
     /**

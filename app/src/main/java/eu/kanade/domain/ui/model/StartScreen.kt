@@ -7,7 +7,6 @@ import eu.kanade.tachiyomi.ui.history.HistoriesTab
 import eu.kanade.tachiyomi.ui.home.HomeHubTab
 import eu.kanade.tachiyomi.ui.library.anime.AnimeLibraryTab
 import eu.kanade.tachiyomi.ui.library.manga.MangaLibraryTab
-import eu.kanade.tachiyomi.ui.library.novel.NovelLibraryTab
 import eu.kanade.tachiyomi.ui.updates.UpdatesTab
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
@@ -16,7 +15,7 @@ enum class StartScreen(val titleRes: StringResource, val tab: Tab) {
     HOME(MR.strings.label_default, HomeHubTab),
     ANIME(AYMR.strings.label_anime, AnimeLibraryTab),
     MANGA(AYMR.strings.manga, MangaLibraryTab),
-    NOVEL(AYMR.strings.label_novel_library, NovelLibraryTab),
+    NOVEL(MR.strings.label_library, AnimeLibraryTab),
     UPDATES(MR.strings.label_recent_updates, UpdatesTab),
     HISTORY(MR.strings.label_recent_manga, HistoriesTab),
     BROWSE(MR.strings.browse, BrowseTab),

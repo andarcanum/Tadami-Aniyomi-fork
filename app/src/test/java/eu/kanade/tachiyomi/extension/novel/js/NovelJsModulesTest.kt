@@ -14,6 +14,9 @@ class NovelJsModulesTest {
             "@libs/filterInputs",
             "@libs/novelStatus",
             "@libs/defaultCover",
+            "@libs/proseMirrorToHtml",
+            "@libs/isAbsoluteUrl",
+            "@/types/constants",
         )
 
         names.forEach { name ->

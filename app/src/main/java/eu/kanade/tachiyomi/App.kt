@@ -40,6 +40,8 @@ import eu.kanade.tachiyomi.data.coil.BufferedSourceFetcher
 import eu.kanade.tachiyomi.data.coil.MangaCoverFetcher
 import eu.kanade.tachiyomi.data.coil.MangaCoverKeyer
 import eu.kanade.tachiyomi.data.coil.MangaKeyer
+import eu.kanade.tachiyomi.data.coil.NovelCoverFetcher
+import eu.kanade.tachiyomi.data.coil.NovelCoverKeyer
 import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.di.AppModule
@@ -60,7 +62,6 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import logcat.AndroidLogcatLogger
-import logcat.logcat
 import logcat.LogPriority
 import logcat.LogcatLogger
 import logcat.logcat
@@ -276,11 +277,13 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
                 add(MangaCoverFetcher.MangaCoverFactory(callFactoryLazy))
                 add(AnimeImageFetcher.AnimeFactory(callFactoryLazy))
                 add(AnimeImageFetcher.AnimeCoverFactory(callFactoryLazy))
+                add(NovelCoverFetcher.Factory(callFactoryLazy))
                 // Keyer
                 add(AnimeKeyer())
                 add(MangaKeyer())
                 add(AnimeCoverKeyer())
                 add(MangaCoverKeyer())
+                add(NovelCoverKeyer())
             }
 
             crossfade((300 * this@App.animatorDurationScale).toInt())

@@ -37,6 +37,10 @@ class UiPreferences(
 
     fun showMangaSection() = preferenceStore.getBoolean("aurora_show_manga_section", true)
 
+    fun showNovelSection() = preferenceStore.getBoolean("aurora_show_novel_section", true)
+
+    fun auroraInstantTabSwitching() = preferenceStore.getBoolean("aurora_instant_tab_switching", true)
+
     fun navStyle() = preferenceStore.getEnum("bottom_rail_nav_style", NavStyle.MOVE_HISTORY_TO_MORE)
 
     /**

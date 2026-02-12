@@ -22,20 +22,20 @@ class GetEnabledNovelSourcesTest {
             val lastUsedSource = FakePreference(3L)
 
             val sources = MutableStateFlow(
-            listOf(
-            source(id = 1, lang = "en"),
-            source(id = 2, lang = "en"),
-            source(id = 3, lang = "en"),
-            ),
+                listOf(
+                    source(id = 1, lang = "en"),
+                    source(id = 2, lang = "en"),
+                    source(id = 3, lang = "en"),
+                ),
             )
             val repository = FakeNovelSourceRepository(sources)
 
             val interactor = GetEnabledNovelSources(
-            repository = repository,
-            enabledLanguages = enabledLanguages,
-            disabledSources = disabledSources,
-            pinnedSources = pinnedSources,
-            lastUsedSource = lastUsedSource,
+                repository = repository,
+                enabledLanguages = enabledLanguages,
+                disabledSources = disabledSources,
+                pinnedSources = pinnedSources,
+                lastUsedSource = lastUsedSource,
             )
 
             val result = interactor.subscribe().first()
@@ -47,40 +47,46 @@ class GetEnabledNovelSourcesTest {
         }
     }
 
-        private fun source(id: Long, lang: String) = Source(
-            id = id,
-            lang = lang,
-            name = "Source $id",
-            supportsLatest = false,
-            isStub = false,
-        )
+    private fun source(id: Long, lang: String) = Source(
+        id = id,
+        lang = lang,
+        name = "Source $id",
+        supportsLatest = false,
+        isStub = false,
+    )
 
-        private class FakeNovelSourceRepository(
-            private val sources: MutableStateFlow<List<Source>>,
-        ) : NovelSourceRepository {
-            override fun getNovelSources() = sources
-            override fun getOnlineNovelSources() = sources
-            override fun getNovelSourcesWithFavoriteCount() = TODO()
-            override fun getNovelSourcesWithNonLibraryNovels() = TODO()
-            override fun searchNovels(
-                sourceId: Long,
-                query: String,
-                filterList: eu.kanade.tachiyomi.novelsource.model.NovelFilterList,
-            ) =
-                TODO()
-            override fun getPopularNovels(sourceId: Long) = TODO()
-            override fun getLatestNovels(sourceId: Long) = TODO()
-        }
+    private class FakeNovelSourceRepository(
+        private val sources: MutableStateFlow<List<Source>>,
+    ) : NovelSourceRepository {
+        override fun getNovelSources() = sources
+        override fun getOnlineNovelSources() = sources
+        override fun getNovelSourcesWithFavoriteCount() = TODO()
+        override fun getNovelSourcesWithNonLibraryNovels() = TODO()
+        override fun searchNovels(
+            sourceId: Long,
+            query: String,
+            filterList: eu.kanade.tachiyomi.novelsource.model.NovelFilterList,
+        ) =
+            TODO()
+        override fun getPopularNovels(
+            sourceId: Long,
+            filterList: eu.kanade.tachiyomi.novelsource.model.NovelFilterList,
+        ) = TODO()
+        override fun getLatestNovels(
+            sourceId: Long,
+            filterList: eu.kanade.tachiyomi.novelsource.model.NovelFilterList,
+        ) = TODO()
+    }
 
-        private class FakePreference<T>(
-            initial: T,
-        ) : Preference<T> {
-            private val state = MutableStateFlow(initial)
+    private class FakePreference<T>(
+        initial: T,
+    ) : Preference<T> {
+        private val state = MutableStateFlow(initial)
 
-            override fun key(): String = "fake"
-            override fun get(): T = state.value
-            override fun set(value: T) {
-                state.value = value
+        override fun key(): String = "fake"
+        override fun get(): T = state.value
+        override fun set(value: T) {
+            state.value = value
         }
         override fun isSet(): Boolean = true
         override fun delete() = Unit

@@ -14,7 +14,6 @@ import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
@@ -78,6 +77,26 @@ class NovelSourceRepositoryImplTest {
     }
 
     @Test
+    fun `getOnlineNovelSources includes catalogue sources that are not NovelHttpSource`() = runTest {
+        val source = FakeNovelCatalogueOnlySource(id = 20L, name = "JsNovel", lang = "ru")
+        sourceManager.emitSources(listOf(source))
+
+        val sources = repository.getOnlineNovelSources().first()
+
+        sources.shouldBe(
+            listOf(
+                Source(
+                    id = 20L,
+                    lang = "ru",
+                    name = "JsNovel",
+                    supportsLatest = false,
+                    isStub = false,
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun `getNovelSourcesWithFavoriteCount maps counts`() = runTest {
         val source = FakeNovelCatalogueSource(id = 10L, name = "Novel", lang = "en")
         sourceManager.emitSources(listOf(source))
@@ -137,6 +156,37 @@ class NovelSourceRepositoryImplTest {
         override val lang: String,
     ) : NovelHttpSource {
         override val supportsLatest: Boolean = true
+
+        override fun fetchPopularNovels(page: Int): Observable<NovelsPage> =
+            Observable.just(NovelsPage(emptyList(), false))
+
+        override fun fetchSearchNovels(
+            page: Int,
+            query: String,
+            filters: NovelFilterList,
+        ): Observable<NovelsPage> =
+            Observable.just(NovelsPage(emptyList(), false))
+
+        override fun fetchLatestUpdates(page: Int): Observable<NovelsPage> =
+            Observable.just(NovelsPage(emptyList(), false))
+
+        override fun getFilterList(): NovelFilterList = NovelFilterList()
+
+        override fun fetchNovelDetails(novel: SNovel): Observable<SNovel> = Observable.just(novel)
+
+        override fun fetchChapterList(novel: SNovel): Observable<List<SNovelChapter>> =
+            Observable.just(emptyList())
+
+        override fun fetchChapterText(chapter: SNovelChapter): Observable<String> =
+            Observable.just("")
+    }
+
+    private class FakeNovelCatalogueOnlySource(
+        override val id: Long,
+        override val name: String,
+        override val lang: String,
+    ) : NovelCatalogueSource {
+        override val supportsLatest: Boolean = false
 
         override fun fetchPopularNovels(page: Int): Observable<NovelsPage> =
             Observable.just(NovelsPage(emptyList(), false))

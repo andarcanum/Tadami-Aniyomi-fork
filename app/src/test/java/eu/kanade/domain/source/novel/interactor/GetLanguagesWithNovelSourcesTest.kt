@@ -1,6 +1,5 @@
 package eu.kanade.domain.source.novel.interactor
 
-import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.maps.shouldContainKey
 import io.kotest.matchers.maps.shouldNotContainKey
 import io.kotest.matchers.shouldBe
@@ -20,18 +19,18 @@ class GetLanguagesWithNovelSourcesTest {
             val enabledLanguages = FakePreference<Set<String>>(setOf("ru"))
             val disabledSources = FakePreference<Set<String>>(setOf("2"))
             val sources = MutableStateFlow(
-            listOf(
-            source(id = 1, lang = "en", name = "Alpha"),
-            source(id = 2, lang = "", name = "Blank"),
-            source(id = 3, lang = "ru", name = "Beta"),
-            ),
+                listOf(
+                    source(id = 1, lang = "en", name = "Alpha"),
+                    source(id = 2, lang = "", name = "Blank"),
+                    source(id = 3, lang = "ru", name = "Beta"),
+                ),
             )
             val repository = FakeNovelSourceRepository(sources)
 
             val interactor = GetLanguagesWithNovelSources(
-            repository = repository,
-            enabledLanguages = enabledLanguages,
-            disabledSources = disabledSources,
+                repository = repository,
+                enabledLanguages = enabledLanguages,
+                disabledSources = disabledSources,
             )
 
             val result = interactor.subscribe().first()
@@ -43,39 +42,45 @@ class GetLanguagesWithNovelSourcesTest {
         }
     }
 
-        private fun source(id: Long, lang: String, name: String) = Source(
-            id = id,
-            lang = lang,
-            name = name,
-            supportsLatest = false,
-            isStub = false,
-        )
+    private fun source(id: Long, lang: String, name: String) = Source(
+        id = id,
+        lang = lang,
+        name = name,
+        supportsLatest = false,
+        isStub = false,
+    )
 
-        private class FakeNovelSourceRepository(
-            private val sources: MutableStateFlow<List<Source>>,
-        ) : NovelSourceRepository {
-            override fun getNovelSources() = sources
-            override fun getOnlineNovelSources() = sources
-            override fun getNovelSourcesWithFavoriteCount() = TODO()
-            override fun getNovelSourcesWithNonLibraryNovels() = TODO()
-            override fun searchNovels(
-                sourceId: Long,
-                query: String,
-                filterList: eu.kanade.tachiyomi.novelsource.model.NovelFilterList,
-            ) = TODO()
-            override fun getPopularNovels(sourceId: Long) = TODO()
-            override fun getLatestNovels(sourceId: Long) = TODO()
-        }
+    private class FakeNovelSourceRepository(
+        private val sources: MutableStateFlow<List<Source>>,
+    ) : NovelSourceRepository {
+        override fun getNovelSources() = sources
+        override fun getOnlineNovelSources() = sources
+        override fun getNovelSourcesWithFavoriteCount() = TODO()
+        override fun getNovelSourcesWithNonLibraryNovels() = TODO()
+        override fun searchNovels(
+            sourceId: Long,
+            query: String,
+            filterList: eu.kanade.tachiyomi.novelsource.model.NovelFilterList,
+        ) = TODO()
+        override fun getPopularNovels(
+            sourceId: Long,
+            filterList: eu.kanade.tachiyomi.novelsource.model.NovelFilterList,
+        ) = TODO()
+        override fun getLatestNovels(
+            sourceId: Long,
+            filterList: eu.kanade.tachiyomi.novelsource.model.NovelFilterList,
+        ) = TODO()
+    }
 
-        private class FakePreference<T>(
-            initial: T,
-        ) : Preference<T> {
-            private val state = MutableStateFlow(initial)
+    private class FakePreference<T>(
+        initial: T,
+    ) : Preference<T> {
+        private val state = MutableStateFlow(initial)
 
-            override fun key(): String = "fake"
-            override fun get(): T = state.value
-            override fun set(value: T) {
-                state.value = value
+        override fun key(): String = "fake"
+        override fun get(): T = state.value
+        override fun set(value: T) {
+            state.value = value
         }
         override fun isSet(): Boolean = true
         override fun delete() = Unit

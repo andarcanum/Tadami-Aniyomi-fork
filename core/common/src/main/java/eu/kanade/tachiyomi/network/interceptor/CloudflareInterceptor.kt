@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
@@ -12,13 +13,13 @@ import eu.kanade.tachiyomi.network.AndroidCookieJar
 import eu.kanade.tachiyomi.util.system.isOutdated
 import eu.kanade.tachiyomi.util.system.toast
 import okhttp3.Cookie
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.i18n.MR
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 
 class CloudflareInterceptor(
@@ -28,6 +29,7 @@ class CloudflareInterceptor(
 ) : WebViewInterceptor(context, defaultUserAgentProvider) {
 
     private val executor = ContextCompat.getMainExecutor(context)
+    private val challengeLockByHost = ConcurrentHashMap<String, Any>()
 
     override fun shouldIntercept(response: Response): Boolean {
         // Check if Cloudflare anti-bot is on
@@ -37,12 +39,22 @@ class CloudflareInterceptor(
     override fun intercept(chain: Interceptor.Chain, request: Request, response: Response): Response {
         try {
             response.close()
-            cookieManager.remove(request.url, COOKIE_NAMES, 0)
-            val oldCookie = cookieManager.get(request.url)
-                .firstOrNull { it.name == "cf_clearance" }
-            resolveWithWebView(request, oldCookie)
+            val hostLock = challengeLockByHost.getOrPut(request.url.host) { Any() }
+            synchronized(hostLock) {
+                val oldCookie = cookieManager.get(request.url)
+                    .firstOrNull { it.name == "cf_clearance" }
 
-            return chain.proceed(request)
+                if (oldCookie != null) {
+                    val retryWithExistingCookie = chain.proceed(request)
+                    if (!shouldIntercept(retryWithExistingCookie)) {
+                        return retryWithExistingCookie
+                    }
+                    retryWithExistingCookie.close()
+                }
+
+                resolveWithWebView(request, oldCookie)
+                return chain.proceed(request)
+            }
         }
         // Because OkHttp's enqueue only handles IOExceptions, wrap the exception so that
         // we don't crash the entire app
@@ -65,7 +77,7 @@ class CloudflareInterceptor(
         var cloudflareBypassed = false
         var isWebViewOutdated = false
 
-        val origRequestUrl = originalRequest.url.toString()
+        val challengeUrl = cloudflareChallengeUrlFor(originalRequest)
         val headers = parseHeaders(originalRequest.headers)
 
         executor.execute {
@@ -74,18 +86,13 @@ class CloudflareInterceptor(
             webview?.webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView, url: String) {
                     fun isCloudFlareBypassed(): Boolean {
-                        return cookieManager.get(origRequestUrl.toHttpUrl())
+                        return cookieManager.get(originalRequest.url)
                             .firstOrNull { it.name == "cf_clearance" }
                             .let { it != null && it != oldCookie }
                     }
 
                     if (isCloudFlareBypassed()) {
                         cloudflareBypassed = true
-                        latch.countDown()
-                    }
-
-                    if (url == origRequestUrl && !challengeFound) {
-                        // The first request didn't return the challenge, abort.
                         latch.countDown()
                     }
                 }
@@ -101,9 +108,21 @@ class CloudflareInterceptor(
                         }
                     }
                 }
+
+                override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, errorResponse: WebResourceResponse) {
+                    if (request.isForMainFrame) {
+                        if (errorResponse.statusCode in ERROR_CODES) {
+                            // Found the Cloudflare challenge page.
+                            challengeFound = true
+                        } else {
+                            // Unlock thread, the challenge wasn't found.
+                            latch.countDown()
+                        }
+                    }
+                }
             }
 
-            webview?.loadUrl(origRequestUrl, headers)
+            webview?.loadUrl(challengeUrl, headers)
         }
 
         latch.awaitFor30Seconds()
@@ -131,8 +150,39 @@ class CloudflareInterceptor(
     }
 }
 
+internal fun cloudflareChallengeUrlFor(request: Request): String {
+    val url = request.url
+    if (!request.shouldUseDomainRootForChallenge()) {
+        return url.toString()
+    }
+
+    return url.newBuilder()
+        .encodedPath("/")
+        .query(null)
+        .fragment(null)
+        .build()
+        .toString()
+}
+
+private fun Request.shouldUseDomainRootForChallenge(): Boolean {
+    val accept = header("Accept")
+        ?.substringBefore(',')
+        ?.trim()
+        ?.lowercase()
+        .orEmpty()
+    if (accept.startsWith("image/")) {
+        return true
+    }
+
+    val path = url.encodedPath.lowercase()
+    return STATIC_RESOURCE_PATH_REGEX.containsMatchIn(path)
+}
+
 private val ERROR_CODES = listOf(403, 503)
 private val SERVER_CHECK = arrayOf("cloudflare-nginx", "cloudflare")
-private val COOKIE_NAMES = listOf("cf_clearance")
+private val STATIC_RESOURCE_PATH_REGEX = Regex(
+    pattern = """\.(?:avif|bmp|css|gif|ico|jpe?g|js|json|m3u8|mp4|otf|png|svg|ts|ttf|webm|webp|woff2?)$""",
+    option = RegexOption.IGNORE_CASE,
+)
 
 private class CloudflareBypassException : Exception()

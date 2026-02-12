@@ -9,12 +9,14 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 
 class NovelPluginFilterMapper(
     private val json: Json,
@@ -24,19 +26,19 @@ class NovelPluginFilterMapper(
         val filters = json.decodeFromString<Map<String, PluginFilterDefinition>>(filtersJson)
         val list = filters.mapNotNull { (key, filter) ->
             when (filter.type) {
-                FilterType.Text -> PluginTextFilter(
+                FilterType.TEXT -> PluginTextFilter(
                     key = key,
                     name = filter.label,
-                    state = filter.value?.jsonPrimitive?.content ?: "",
+                    state = primitiveContent(filter.value).orEmpty(),
                 )
-                FilterType.Switch -> PluginSwitchFilter(
+                FilterType.SWITCH -> PluginSwitchFilter(
                     key = key,
                     name = filter.label,
-                    state = filter.value?.jsonPrimitive?.content?.toBoolean() ?: false,
+                    state = primitiveBoolean(filter.value),
                 )
-                FilterType.Picker -> {
+                FilterType.PICKER -> {
                     val options = filter.options.orEmpty()
-                    val defaultValue = filter.value?.jsonPrimitive?.content
+                    val defaultValue = primitiveContent(filter.value)
                     val index = options.indexOfFirst { it.value == defaultValue }.takeIf { it >= 0 } ?: 0
                     PluginPickerFilter(
                         key = key,
@@ -45,12 +47,8 @@ class NovelPluginFilterMapper(
                         state = index,
                     )
                 }
-                FilterType.Checkbox -> {
-                    val selected = filter.value
-                        ?.jsonArray
-                        ?.map { it.jsonPrimitive.content }
-                        ?.toSet()
-                        .orEmpty()
+                FilterType.CHECKBOX -> {
+                    val selected = stringValues(filter.value)
                     val options = filter.options.orEmpty()
                     PluginCheckBoxGroup(
                         key = key,
@@ -59,18 +57,10 @@ class NovelPluginFilterMapper(
                         selected = selected,
                     )
                 }
-                FilterType.XCheckbox -> {
-                    val valueObject = filter.value?.jsonObject
-                    val include = valueObject?.get("include")
-                        ?.jsonArray
-                        ?.map { it.jsonPrimitive.content }
-                        ?.toSet()
-                        .orEmpty()
-                    val exclude = valueObject?.get("exclude")
-                        ?.jsonArray
-                        ?.map { it.jsonPrimitive.content }
-                        ?.toSet()
-                        .orEmpty()
+                FilterType.XCHECKBOX -> {
+                    val valueObject = filter.value as? JsonObject
+                    val include = stringValues(valueObject?.get("include"))
+                    val exclude = stringValues(valueObject?.get("exclude"))
                     val options = filter.options.orEmpty()
                     PluginXCheckBoxGroup(
                         key = key,
@@ -96,21 +86,21 @@ class NovelPluginFilterMapper(
             }
             filters.forEach { filter ->
                 when (filter) {
-                    is PluginTextFilter -> putFilterValue(filter.key, FilterType.Text, JsonPrimitive(filter.state))
+                    is PluginTextFilter -> putFilterValue(filter.key, FilterType.TEXT, JsonPrimitive(filter.state))
                     is PluginSwitchFilter -> putFilterValue(
                         filter.key,
-                        FilterType.Switch,
+                        FilterType.SWITCH,
                         JsonPrimitive(filter.state),
                     )
                     is PluginPickerFilter -> {
                         val selected = filter.options.getOrNull(filter.state)?.value ?: ""
-                        putFilterValue(filter.key, FilterType.Picker, JsonPrimitive(selected))
+                        putFilterValue(filter.key, FilterType.PICKER, JsonPrimitive(selected))
                     }
                     is PluginCheckBoxGroup -> {
                         val selected = filter.state.filterIsInstance<PluginCheckBox>()
                             .filter { it.state }
                             .map { it.value }
-                        putFilterValue(filter.key, FilterType.Checkbox, selected.toJsonArray())
+                        putFilterValue(filter.key, FilterType.CHECKBOX, selected.toJsonArray())
                     }
                     is PluginXCheckBoxGroup -> {
                         val include = filter.state.filterIsInstance<PluginXCheckBox>()
@@ -120,15 +110,45 @@ class NovelPluginFilterMapper(
                             .filter { it.state == NovelFilter.XCheckBox.STATE_EXCLUDE }
                             .map { it.value }
                         val value = buildJsonObject {
-                            if (include.isNotEmpty()) put("include", include.toJsonArray())
-                            if (exclude.isNotEmpty()) put("exclude", exclude.toJsonArray())
+                            put("include", include.toJsonArray())
+                            put("exclude", exclude.toJsonArray())
                         }
-                        putFilterValue(filter.key, FilterType.XCheckbox, value)
+                        putFilterValue(filter.key, FilterType.XCHECKBOX, value)
                     }
                     else -> Unit
                 }
             }
         }
+    }
+
+    private fun primitiveContent(value: JsonElement?): String? {
+        return (value as? JsonPrimitive)?.contentOrNull
+    }
+
+    private fun primitiveBoolean(value: JsonElement?): Boolean {
+        val primitive = value as? JsonPrimitive ?: return false
+        primitive.booleanOrNull?.let { return it }
+        return primitive.contentOrNull?.equals("true", ignoreCase = true) == true
+    }
+
+    private fun stringValues(value: JsonElement?): Set<String> {
+        return when (value) {
+            is JsonArray -> value.asSequence()
+                .mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim() }
+                .filter { it.isNotEmpty() }
+                .toSet()
+            is JsonPrimitive -> delimitedValues(value.contentOrNull).toSet()
+            else -> emptySet()
+        }
+    }
+
+    private fun delimitedValues(value: String?): List<String> {
+        val raw = value?.trim().orEmpty()
+        if (raw.isEmpty()) return emptyList()
+        if (',' !in raw && ';' !in raw && '|' !in raw) return listOf(raw)
+        return raw.split(',', ';', '|')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
     }
 
     private fun List<String>.toJsonArray(): JsonArray {
@@ -150,11 +170,11 @@ class NovelPluginFilterMapper(
     )
 
     internal object FilterType {
-        const val Text = "Text"
-        const val Picker = "Picker"
-        const val Checkbox = "Checkbox"
-        const val Switch = "Switch"
-        const val XCheckbox = "XCheckbox"
+        const val TEXT = "Text"
+        const val PICKER = "Picker"
+        const val CHECKBOX = "Checkbox"
+        const val SWITCH = "Switch"
+        const val XCHECKBOX = "XCheckbox"
     }
 
     internal class PluginTextFilter(

@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.extension.novel
 
 import eu.kanade.tachiyomi.extension.novel.api.NovelPluginApiFacade
+import eu.kanade.tachiyomi.extension.novel.withNormalizedLang
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -13,7 +14,6 @@ import tachiyomi.data.extension.novel.NovelPluginInstallerFacade
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 import tachiyomi.domain.extension.novel.repository.NovelPluginRepository
 import tachiyomi.domain.source.novel.model.StubNovelSource
-import eu.kanade.tachiyomi.extension.novel.withNormalizedLang
 import java.util.concurrent.ConcurrentHashMap
 
 class DefaultNovelExtensionManager(

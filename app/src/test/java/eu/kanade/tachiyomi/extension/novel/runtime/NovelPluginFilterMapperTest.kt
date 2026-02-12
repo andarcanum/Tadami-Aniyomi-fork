@@ -4,7 +4,6 @@ import io.kotest.matchers.shouldBe
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
@@ -73,5 +72,57 @@ class NovelPluginFilterMapperTest {
         val tags = values["tags"]!!.jsonObject["value"] as JsonObject
         (tags["include"] as JsonArray).first().jsonPrimitive.content shouldBe "a"
         (tags["exclude"] as JsonArray).first().jsonPrimitive.content shouldBe "b"
+    }
+
+    @Test
+    fun `xcheckbox keeps include exclude keys even when empty`() {
+        val mapper = NovelPluginFilterMapper(Json { ignoreUnknownKeys = true })
+        val filtersJson = """
+            {
+              "tags": {
+                "type": "XCheckbox",
+                "label": "Tags",
+                "value": { "include": [], "exclude": [] },
+                "options": [
+                  { "label": "A", "value": "a" },
+                  { "label": "B", "value": "b" }
+                ]
+              }
+            }
+        """.trimIndent()
+
+        val filterList = mapper.toFilterList(filtersJson)
+        val values = mapper.toFilterValues(filterList)
+        val tags = values["tags"]!!.jsonObject["value"] as JsonObject
+
+        tags.containsKey("include") shouldBe true
+        tags.containsKey("exclude") shouldBe true
+        (tags["include"] as JsonArray).size shouldBe 0
+        (tags["exclude"] as JsonArray).size shouldBe 0
+    }
+
+    @Test
+    fun `checkbox filter tolerates primitive value`() {
+        val mapper = NovelPluginFilterMapper(Json { ignoreUnknownKeys = true })
+        val filtersJson = """
+            {
+              "genres": {
+                "type": "Checkbox",
+                "label": "Genres",
+                "value": "",
+                "options": [
+                  { "label": "Fantasy", "value": "fantasy" },
+                  { "label": "Sci-fi", "value": "sci" }
+                ]
+              }
+            }
+        """.trimIndent()
+
+        val filterList = mapper.toFilterList(filtersJson)
+
+        filterList.size shouldBe 1
+        val values = mapper.toFilterValues(filterList)
+        val genres = values["genres"]!!.jsonObject["value"] as JsonArray
+        genres.size shouldBe 0
     }
 }

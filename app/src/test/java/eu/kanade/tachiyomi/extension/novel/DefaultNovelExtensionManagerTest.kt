@@ -1,18 +1,17 @@
 package eu.kanade.tachiyomi.extension.novel
 
+import eu.kanade.tachiyomi.extension.novel.api.NovelPluginApiFacade
+import eu.kanade.tachiyomi.novelsource.NovelSource
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
-import eu.kanade.tachiyomi.novelsource.NovelSource
 import tachiyomi.data.extension.novel.NovelPluginInstallerFacade
 import tachiyomi.data.extension.novel.toInstalled
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 import tachiyomi.domain.extension.novel.repository.NovelPluginRepository
-import eu.kanade.tachiyomi.extension.novel.api.NovelPluginApiFacade
-import tachiyomi.domain.source.novel.model.StubNovelSource
 
 class DefaultNovelExtensionManagerTest {
 

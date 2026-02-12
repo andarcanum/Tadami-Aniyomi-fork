@@ -3,7 +3,6 @@ package tachiyomi.data.source.novel
 import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.NovelFilterList
-import eu.kanade.tachiyomi.novelsource.online.NovelHttpSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -33,7 +32,7 @@ class NovelSourceRepositoryImpl(
     override fun getOnlineNovelSources(): Flow<List<DomainSource>> {
         return sourceManager.catalogueSources.map { sources ->
             sources
-                .filterIsInstance<NovelHttpSource>()
+                .filterIsInstance<NovelCatalogueSource>()
                 .map(::mapSourceToDomainSource)
         }
     }
@@ -77,14 +76,14 @@ class NovelSourceRepositoryImpl(
         return NovelSourceSearchPagingSource(source, query, filterList)
     }
 
-    override fun getPopularNovels(sourceId: Long): SourcePagingSourceType {
+    override fun getPopularNovels(sourceId: Long, filterList: NovelFilterList): SourcePagingSourceType {
         val source = sourceManager.get(sourceId) as NovelCatalogueSource
-        return NovelSourcePopularPagingSource(source)
+        return NovelSourcePopularPagingSource(source, filterList)
     }
 
-    override fun getLatestNovels(sourceId: Long): SourcePagingSourceType {
+    override fun getLatestNovels(sourceId: Long, filterList: NovelFilterList): SourcePagingSourceType {
         val source = sourceManager.get(sourceId) as NovelCatalogueSource
-        return NovelSourceLatestPagingSource(source)
+        return NovelSourceLatestPagingSource(source, filterList)
     }
 
     private fun mapSourceToDomainSource(source: NovelSource): DomainSource = DomainSource(

@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.extension.novel.api
 
+import eu.kanade.tachiyomi.extension.novel.normalizeNovelLang
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -9,7 +10,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import tachiyomi.domain.extension.novel.model.NovelPlugin
-import eu.kanade.tachiyomi.extension.novel.normalizeNovelLang
 
 class NovelPluginIndexParser(
     private val json: Json,

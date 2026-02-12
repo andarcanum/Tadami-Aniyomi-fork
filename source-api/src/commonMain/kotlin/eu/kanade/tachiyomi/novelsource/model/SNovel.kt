@@ -27,7 +27,28 @@ interface SNovel : Serializable {
 
     fun getGenres(): List<String>? {
         if (genre.isNullOrBlank()) return null
-        return genre?.split(", ")?.map { it.trim() }?.filterNot { it.isBlank() }?.distinct()
+        val tokens = genre
+            .orEmpty()
+            .split(Regex("[,;/|\\n\\r\\t•·]+"))
+            .map {
+                it.trim()
+                    .trim('-', '–', '—', ',', ';', '/', '|', '•', '·')
+            }
+            .filter { it.isNotBlank() }
+
+        if (tokens.isEmpty()) return null
+
+        val seen = LinkedHashSet<String>()
+        val normalized = buildList {
+            tokens.forEach { token ->
+                val dedupeKey = token.lowercase()
+                if (seen.add(dedupeKey)) {
+                    add(token)
+                }
+            }
+        }
+
+        return normalized.ifEmpty { null }
     }
 
     fun copy() = create().also {

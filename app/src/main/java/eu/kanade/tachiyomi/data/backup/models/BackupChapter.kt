@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.backup.models
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.protobuf.ProtoNumber
 import tachiyomi.domain.items.chapter.model.Chapter
+import tachiyomi.domain.items.novelchapter.model.NovelChapter
 
 @Serializable
 data class BackupChapter(
@@ -25,6 +26,23 @@ data class BackupChapter(
 ) {
     fun toChapterImpl(): Chapter {
         return Chapter.create().copy(
+            url = this@BackupChapter.url,
+            name = this@BackupChapter.name,
+            chapterNumber = this@BackupChapter.chapterNumber.toDouble(),
+            scanlator = this@BackupChapter.scanlator,
+            read = this@BackupChapter.read,
+            bookmark = this@BackupChapter.bookmark,
+            lastPageRead = this@BackupChapter.lastPageRead,
+            dateFetch = this@BackupChapter.dateFetch,
+            dateUpload = this@BackupChapter.dateUpload,
+            sourceOrder = this@BackupChapter.sourceOrder,
+            lastModifiedAt = this@BackupChapter.lastModifiedAt,
+            version = this@BackupChapter.version,
+        )
+    }
+
+    fun toNovelChapterImpl(): NovelChapter {
+        return NovelChapter.create().copy(
             url = this@BackupChapter.url,
             name = this@BackupChapter.name,
             chapterNumber = this@BackupChapter.chapterNumber.toDouble(),

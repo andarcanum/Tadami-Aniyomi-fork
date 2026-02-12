@@ -8,7 +8,7 @@ fun Novel.toSNovel(): SNovel = SNovel.create().also {
     it.url = url
     it.title = title
     it.author = author
-    it.description = description
+    it.description = normalizeNovelDescription(description)
     it.genre = genre?.joinToString()
     it.status = status.toInt()
     it.thumbnail_url = thumbnailUrl
@@ -36,7 +36,7 @@ fun Novel.chaptersFiltered(): Boolean {
 
 fun Novel.copyFrom(other: SNovel): Novel {
     val author = other.author ?: author
-    val description = other.description ?: description
+    val description = normalizeNovelDescription(other.description) ?: this.description
     val genres = if (other.genre != null) {
         other.getGenres()
     } else {
@@ -59,7 +59,7 @@ fun SNovel.toDomainNovel(sourceId: Long): Novel {
         url = url,
         title = title,
         author = author,
-        description = description,
+        description = normalizeNovelDescription(description),
         genre = getGenres(),
         status = status.toLong(),
         thumbnailUrl = thumbnail_url,

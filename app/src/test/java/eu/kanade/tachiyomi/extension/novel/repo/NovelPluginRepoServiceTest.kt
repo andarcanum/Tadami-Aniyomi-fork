@@ -32,8 +32,8 @@ class NovelPluginRepoServiceTest {
             """.trimIndent()
             val client = clientWithBody(body, code = 200)
             val service = NovelPluginRepoService(
-            client = client,
-            parser = NovelPluginRepoParser(Json { ignoreUnknownKeys = true }),
+                client = client,
+                parser = NovelPluginRepoParser(Json { ignoreUnknownKeys = true }),
             )
 
             val entries = service.fetchRepoEntries("https://example.org/repo.json")
@@ -43,31 +43,31 @@ class NovelPluginRepoServiceTest {
         }
     }
 
-        @Test
-        fun `fetchRepoEntries returns empty list on http error`() {
-            runTest {
-                val client = clientWithBody("{}", code = 500)
-                val service = NovelPluginRepoService(
+    @Test
+    fun `fetchRepoEntries returns empty list on http error`() {
+        runTest {
+            val client = clientWithBody("{}", code = 500)
+            val service = NovelPluginRepoService(
                 client = client,
                 parser = NovelPluginRepoParser(Json { ignoreUnknownKeys = true }),
-                )
+            )
 
-                val entries = service.fetchRepoEntries("https://example.org/repo.json")
+            val entries = service.fetchRepoEntries("https://example.org/repo.json")
 
-                entries shouldBe emptyList()
-            }
+            entries shouldBe emptyList()
         }
+    }
 
-        private fun clientWithBody(body: String, code: Int): OkHttpClient {
-            val jsonMedia = "application/json".toMediaType()
-            val interceptor = Interceptor { chain ->
-                Response.Builder()
-                    .request(chain.request())
-                    .protocol(Protocol.HTTP_1_1)
-                    .code(code)
-                    .message("mock")
-                    .body(body.toResponseBody(jsonMedia))
-                    .build()
+    private fun clientWithBody(body: String, code: Int): OkHttpClient {
+        val jsonMedia = "application/json".toMediaType()
+        val interceptor = Interceptor { chain ->
+            Response.Builder()
+                .request(chain.request())
+                .protocol(Protocol.HTTP_1_1)
+                .code(code)
+                .message("mock")
+                .body(body.toResponseBody(jsonMedia))
+                .build()
         }
         return OkHttpClient.Builder()
             .addInterceptor(interceptor)

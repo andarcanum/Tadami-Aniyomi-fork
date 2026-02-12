@@ -12,10 +12,13 @@ class NovelJsSourceFactory(
     private val runtimeFactory: NovelJsRuntimeFactory,
     private val pluginStorage: NovelPluginStorage,
     private val json: Json,
+    private val runtimeOverrides: NovelPluginRuntimeOverrides,
 ) : NovelPluginSourceFactory {
 
     private val scriptBuilder = NovelPluginScriptBuilder()
     private val filterMapper = NovelPluginFilterMapper(json)
+    private val scriptOverridesApplier = NovelPluginScriptOverridesApplier(runtimeOverrides)
+    private val resultNormalizer = NovelPluginResultNormalizer()
 
     override fun create(plugin: NovelPlugin.Installed): NovelSource? {
         val scriptBytes = pluginStorage.readPluginScript(plugin.id)
@@ -23,7 +26,11 @@ class NovelJsSourceFactory(
             logcat(LogPriority.WARN) { "Novel plugin source missing script id=${plugin.id}" }
             return null
         }
-        val script = scriptBytes.toString(Charsets.UTF_8)
+        val runtimeOverride = runtimeOverrides.forPlugin(plugin.id)
+        val script = scriptOverridesApplier.apply(
+            pluginId = plugin.id,
+            script = scriptBytes.toString(Charsets.UTF_8),
+        )
         return NovelJsSource(
             plugin = plugin,
             script = script,
@@ -31,6 +38,8 @@ class NovelJsSourceFactory(
             json = json,
             scriptBuilder = scriptBuilder,
             filterMapper = filterMapper,
+            resultNormalizer = resultNormalizer,
+            runtimeOverride = runtimeOverride,
         )
     }
 }

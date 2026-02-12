@@ -20,16 +20,16 @@ class NovelPluginDownloaderTest {
             val customJs = "console.log('custom')".toByteArray()
             val customCss = "body { color: red; }".toByteArray()
             val entry = sampleEntry(
-            sha256 = Hash.sha256(script),
-            customJsUrl = "https://example.org/custom.js",
-            customCssUrl = "https://example.org/custom.css",
+                sha256 = Hash.sha256(script),
+                customJsUrl = "https://example.org/custom.js",
+                customCssUrl = "https://example.org/custom.css",
             )
             val client = clientWithBodies(
-            mapOf(
-            entry.url to script,
-            entry.customJsUrl!! to customJs,
-            entry.customCssUrl!! to customCss,
-            ),
+                mapOf(
+                    entry.url to script,
+                    entry.customJsUrl!! to customJs,
+                    entry.customCssUrl!! to customCss,
+                ),
             )
             val downloader = NovelPluginDownloader(client, NovelPluginPackageFactory())
 
@@ -43,31 +43,31 @@ class NovelPluginDownloaderTest {
         }
     }
 
-        @Test
-        fun `download fails on checksum mismatch`() {
-            runTest {
-                val script = "console.log('main')".toByteArray()
-                val entry = sampleEntry(sha256 = "deadbeef")
-                val client = clientWithBodies(mapOf(entry.url to script))
-                val downloader = NovelPluginDownloader(client, NovelPluginPackageFactory())
+    @Test
+    fun `download fails on checksum mismatch`() {
+        runTest {
+            val script = "console.log('main')".toByteArray()
+            val entry = sampleEntry(sha256 = "deadbeef")
+            val client = clientWithBodies(mapOf(entry.url to script))
+            val downloader = NovelPluginDownloader(client, NovelPluginPackageFactory())
 
-                val result = downloader.download(entry)
+            val result = downloader.download(entry)
 
-                result.isFailure shouldBe true
-            }
+            result.isFailure shouldBe true
         }
+    }
 
-        private fun clientWithBodies(responses: Map<String, ByteArray>): OkHttpClient {
-            val jsonMedia = "application/javascript".toMediaType()
-            val interceptor = Interceptor { chain ->
-                val body = responses[chain.request().url.toString()] ?: ByteArray(0)
-                Response.Builder()
-                    .request(chain.request())
-                    .protocol(Protocol.HTTP_1_1)
-                    .code(200)
-                    .message("mock")
-                    .body(body.toResponseBody(jsonMedia))
-                    .build()
+    private fun clientWithBodies(responses: Map<String, ByteArray>): OkHttpClient {
+        val jsonMedia = "application/javascript".toMediaType()
+        val interceptor = Interceptor { chain ->
+            val body = responses[chain.request().url.toString()] ?: ByteArray(0)
+            Response.Builder()
+                .request(chain.request())
+                .protocol(Protocol.HTTP_1_1)
+                .code(200)
+                .message("mock")
+                .body(body.toResponseBody(jsonMedia))
+                .build()
         }
         return OkHttpClient.Builder()
             .addInterceptor(interceptor)

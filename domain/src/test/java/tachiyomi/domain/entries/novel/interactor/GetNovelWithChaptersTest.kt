@@ -52,7 +52,9 @@ class GetNovelWithChaptersTest {
         override suspend fun getNovelFavorites(): List<Novel> = emptyList()
         override suspend fun getReadNovelNotInLibrary(): List<Novel> = emptyList()
         override suspend fun getLibraryNovel() = emptyList<tachiyomi.domain.library.novel.LibraryNovel>()
-        override fun getLibraryNovelAsFlow() = MutableStateFlow(emptyList<tachiyomi.domain.library.novel.LibraryNovel>())
+        override fun getLibraryNovelAsFlow() = MutableStateFlow(
+            emptyList<tachiyomi.domain.library.novel.LibraryNovel>(),
+        )
         override fun getNovelFavoritesBySourceId(sourceId: Long) = MutableStateFlow(emptyList<Novel>())
         override suspend fun insertNovel(novel: Novel): Long? = null
         override suspend fun updateNovel(update: tachiyomi.domain.entries.novel.model.NovelUpdate): Boolean = true
@@ -66,7 +68,9 @@ class GetNovelWithChaptersTest {
         private val chaptersFlow: MutableStateFlow<List<NovelChapter>>,
     ) : NovelChapterRepository {
         override suspend fun addAllChapters(chapters: List<NovelChapter>): List<NovelChapter> = chapters
-        override suspend fun updateChapter(chapterUpdate: tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate) =
+        override suspend fun updateChapter(
+            chapterUpdate: tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate,
+        ) =
             Unit
         override suspend fun updateAllChapters(
             chapterUpdates: List<tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate>,

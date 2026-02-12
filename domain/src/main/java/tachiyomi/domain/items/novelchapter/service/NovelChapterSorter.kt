@@ -30,4 +30,3 @@ fun getNovelChapterSort(novel: Novel, sortDescending: Boolean = novel.sortDescen
         else -> throw NotImplementedError("Invalid novel chapter sorting method: ${novel.sorting}")
     }
 }
-

@@ -59,9 +59,11 @@ class GetRemoteNovelTest {
         override fun searchNovels(sourceId: Long, query: String, filterList: NovelFilterList) =
             FakePagingSource().also { searchCalls++ }
 
-        override fun getPopularNovels(sourceId: Long) = FakePagingSource().also { popularCalls++ }
+        override fun getPopularNovels(sourceId: Long, filterList: NovelFilterList) =
+            FakePagingSource().also { popularCalls++ }
 
-        override fun getLatestNovels(sourceId: Long) = FakePagingSource().also { latestCalls++ }
+        override fun getLatestNovels(sourceId: Long, filterList: NovelFilterList) =
+            FakePagingSource().also { latestCalls++ }
     }
 
     private class FakePagingSource : PagingSource<Long, SNovel>() {

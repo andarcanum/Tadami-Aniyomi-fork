@@ -4,7 +4,6 @@ import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.jupiter.api.Test
 import tachiyomi.core.common.preference.Preference
-import tachiyomi.domain.source.novel.model.Source
 
 class ToggleNovelSourceTest {
 

@@ -13,7 +13,6 @@ import tachiyomi.data.DateColumnAdapter
 import tachiyomi.data.MangaUpdateStrategyColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.handlers.novel.AndroidNovelDatabaseHandler
-import tachiyomi.domain.source.novel.model.StubNovelSource
 import tachiyomi.novel.data.NovelDatabase
 
 class NovelStubSourceRepositoryImplTest {

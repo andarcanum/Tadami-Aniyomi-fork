@@ -78,4 +78,3 @@ class NovelChapterSorterTest {
         version = 1,
     )
 }
-

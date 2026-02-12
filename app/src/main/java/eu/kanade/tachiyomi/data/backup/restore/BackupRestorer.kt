@@ -10,6 +10,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCustomButtons
 import eu.kanade.tachiyomi.data.backup.models.BackupExtension
 import eu.kanade.tachiyomi.data.backup.models.BackupExtensionRepos
 import eu.kanade.tachiyomi.data.backup.models.BackupManga
+import eu.kanade.tachiyomi.data.backup.models.BackupNovel
 import eu.kanade.tachiyomi.data.backup.models.BackupPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupSourcePreferences
 import eu.kanade.tachiyomi.data.backup.restore.restorers.AchievementRestorer
@@ -21,7 +22,9 @@ import eu.kanade.tachiyomi.data.backup.restore.restorers.ExtensionsRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.MangaCategoriesRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.MangaExtensionRepoRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.MangaRestorer
+import eu.kanade.tachiyomi.data.backup.restore.restorers.NovelCategoriesRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.NovelExtensionRepoRestorer
+import eu.kanade.tachiyomi.data.backup.restore.restorers.NovelRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.PreferenceRestorer
 import eu.kanade.tachiyomi.util.system.createFileInCacheDir
 import kotlinx.coroutines.CoroutineScope
@@ -43,6 +46,7 @@ class BackupRestorer(
 
     private val animeCategoriesRestorer: AnimeCategoriesRestorer = AnimeCategoriesRestorer(),
     private val mangaCategoriesRestorer: MangaCategoriesRestorer = MangaCategoriesRestorer(),
+    private val novelCategoriesRestorer: NovelCategoriesRestorer = NovelCategoriesRestorer(),
     private val preferenceRestorer: PreferenceRestorer = PreferenceRestorer(context),
     private val animeExtensionRepoRestorer: AnimeExtensionRepoRestorer = AnimeExtensionRepoRestorer(),
     private val mangaExtensionRepoRestorer: MangaExtensionRepoRestorer = MangaExtensionRepoRestorer(),
@@ -50,6 +54,7 @@ class BackupRestorer(
     private val customButtonRestorer: CustomButtonRestorer = CustomButtonRestorer(),
     private val animeRestorer: AnimeRestorer = AnimeRestorer(),
     private val mangaRestorer: MangaRestorer = MangaRestorer(),
+    private val novelRestorer: NovelRestorer = NovelRestorer(),
     private val extensionsRestorer: ExtensionsRestorer = ExtensionsRestorer(context),
     private val achievementRestorer: AchievementRestorer = AchievementRestorer(),
 ) {
@@ -63,6 +68,7 @@ class BackupRestorer(
      */
     private var animeSourceMapping: Map<Long, String> = emptyMap()
     private var mangaSourceMapping: Map<Long, String> = emptyMap()
+    private var novelSourceMapping: Map<Long, String> = emptyMap()
 
     suspend fun restore(uri: Uri, options: RestoreOptions) {
         val startTime = System.currentTimeMillis()
@@ -87,15 +93,17 @@ class BackupRestorer(
 
         // Store source mapping for error messages
         val backupAnimeMaps = backup.backupAnimeSources
-        mangaSourceMapping = backupAnimeMaps.associate { it.sourceId to it.name }
+        animeSourceMapping = backupAnimeMaps.associate { it.sourceId to it.name }
         val backupMangaMaps = backup.backupSources
         mangaSourceMapping = backupMangaMaps.associate { it.sourceId to it.name }
+        val backupNovelMaps = backup.backupNovelSources
+        novelSourceMapping = backupNovelMaps.associate { it.sourceId to it.name }
 
         if (options.libraryEntries) {
-            restoreAmount += backup.backupManga.size + backup.backupAnime.size
+            restoreAmount += backup.backupManga.size + backup.backupAnime.size + backup.backupNovel.size
         }
         if (options.categories) {
-            restoreAmount += 2 // +2 for anime and manga categories
+            restoreAmount += 3 // +3 for anime, manga and novel categories
         }
         if (options.appSettings) {
             restoreAmount += 1
@@ -120,6 +128,7 @@ class BackupRestorer(
                 restoreCategories(
                     backupAnimeCategories = backup.backupAnimeCategories,
                     backupMangaCategories = backup.backupCategories,
+                    backupNovelCategories = backup.backupNovelCategories,
                 )
             }
             if (options.appSettings) {
@@ -131,6 +140,7 @@ class BackupRestorer(
             if (options.libraryEntries) {
                 restoreAnime(backup.backupAnime, if (options.categories) backup.backupAnimeCategories else emptyList())
                 restoreManga(backup.backupManga, if (options.categories) backup.backupCategories else emptyList())
+                restoreNovel(backup.backupNovel, if (options.categories) backup.backupNovelCategories else emptyList())
             }
             if (options.extensionRepoSettings) {
                 restoreExtensionRepos(
@@ -163,12 +173,14 @@ class BackupRestorer(
     private fun CoroutineScope.restoreCategories(
         backupAnimeCategories: List<BackupCategory>,
         backupMangaCategories: List<BackupCategory>,
+        backupNovelCategories: List<BackupCategory>,
     ) = launch {
         ensureActive()
         animeCategoriesRestorer(backupAnimeCategories)
         mangaCategoriesRestorer(backupMangaCategories)
+        novelCategoriesRestorer(backupNovelCategories)
 
-        restoreProgress += 1
+        restoreProgress += 3
         notifier.showRestoreProgress(
             context.stringResource(MR.strings.categories),
             restoreProgress,
@@ -210,6 +222,26 @@ class BackupRestorer(
                     mangaRestorer.restore(it, backupMangaCategories)
                 } catch (e: Exception) {
                     val sourceName = mangaSourceMapping[it.source] ?: it.source.toString()
+                    errors.add(Date() to "${it.title} [$sourceName]: ${e.message}")
+                }
+
+                restoreProgress += 1
+                notifier.showRestoreProgress(it.title, restoreProgress, restoreAmount, isSync)
+            }
+    }
+
+    private fun CoroutineScope.restoreNovel(
+        backupNovels: List<BackupNovel>,
+        backupNovelCategories: List<BackupCategory>,
+    ) = launch {
+        novelRestorer.sortByNew(backupNovels)
+            .forEach {
+                ensureActive()
+
+                try {
+                    novelRestorer.restore(it, backupNovelCategories)
+                } catch (e: Exception) {
+                    val sourceName = novelSourceMapping[it.source] ?: it.source.toString()
                     errors.add(Date() to "${it.title} [$sourceName]: ${e.message}")
                 }
 
