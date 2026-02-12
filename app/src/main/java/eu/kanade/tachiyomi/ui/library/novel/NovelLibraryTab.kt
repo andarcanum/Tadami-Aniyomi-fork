@@ -126,7 +126,18 @@ data object NovelLibraryTab : Tab {
                     onClickFilter = screenModel::showSettingsDialog,
                     onClickRefresh = onClickRefresh,
                     onClickGlobalUpdate = onClickRefresh,
-                    onClickOpenRandomEntry = {},
+                    onClickOpenRandomEntry = {
+                        scope.launch {
+                            val randomItem = state.items.randomOrNull()
+                            if (randomItem != null) {
+                                navigator.push(NovelScreen(randomItem.novel.id))
+                            } else {
+                                snackbarHostState.showSnackbar(
+                                    context.stringResource(MR.strings.information_no_entries_found),
+                                )
+                            }
+                        }
+                    },
                     searchQuery = state.searchQuery,
                     onSearchQueryChange = screenModel::search,
                     scrollBehavior = scrollBehavior,

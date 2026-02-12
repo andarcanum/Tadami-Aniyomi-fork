@@ -27,6 +27,8 @@ import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.BaseSortItem
+import tachiyomi.presentation.core.components.CheckboxItem
+import tachiyomi.presentation.core.components.HeadingItem
 import tachiyomi.presentation.core.components.SettingsChipRow
 import tachiyomi.presentation.core.components.SliderItem
 import tachiyomi.presentation.core.components.SortItem
@@ -213,4 +215,36 @@ private fun ColumnScope.DisplayPage(
             pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
         )
     }
+
+    HeadingItem(MR.strings.overlay_header)
+    CheckboxItem(
+        label = stringResource(MR.strings.action_display_download_badge),
+        pref = libraryPreferences.downloadBadge(),
+    )
+    CheckboxItem(
+        label = stringResource(MR.strings.action_display_unread_badge),
+        pref = libraryPreferences.unreadBadge(),
+    )
+    CheckboxItem(
+        label = stringResource(MR.strings.action_display_local_badge),
+        pref = libraryPreferences.localBadge(),
+    )
+    CheckboxItem(
+        label = stringResource(MR.strings.action_display_language_badge),
+        pref = libraryPreferences.languageBadge(),
+    )
+    CheckboxItem(
+        label = stringResource(AYMR.strings.action_display_show_continue_reading_button),
+        pref = libraryPreferences.showContinueViewingButton(),
+    )
+
+    HeadingItem(MR.strings.tabs_header)
+    CheckboxItem(
+        label = stringResource(MR.strings.action_display_show_tabs),
+        pref = libraryPreferences.categoryTabs(),
+    )
+    CheckboxItem(
+        label = stringResource(MR.strings.action_display_show_number_of_items),
+        pref = libraryPreferences.categoryNumberOfItems(),
+    )
 }
