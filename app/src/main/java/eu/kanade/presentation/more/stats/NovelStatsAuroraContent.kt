@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -67,24 +66,21 @@ fun NovelStatsAuroraContent(
 
     Box(
         modifier = Modifier
-            .fillMaxSize()
-            .background(colors.backgroundGradient),
+            .fillMaxSize(),
     ) {
         LazyColumn(
             contentPadding = paddingValues,
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
                 .padding(horizontal = 16.dp),
         ) {
             item {
-                Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = stringResource(AYMR.strings.aurora_statistics),
                     style = MaterialTheme.typography.headlineMedium,
                     color = colors.textPrimary,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
                 )
             }
 

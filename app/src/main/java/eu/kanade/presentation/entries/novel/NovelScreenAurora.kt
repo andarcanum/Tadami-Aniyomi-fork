@@ -40,12 +40,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -327,6 +329,7 @@ fun NovelScreenAuroraImpl(
                 onClick = onFilterButtonClicked,
                 icon = Icons.Default.FilterList,
                 contentDescription = null,
+                iconTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f),
             )
 
             if (!isFromSource) {
@@ -352,51 +355,53 @@ fun NovelScreenAuroraImpl(
                 onShare != null || onMigrateClicked != null
             }
             if (hasMenuActions) {
-                AuroraActionButton(
-                    onClick = { showMenu = !showMenu },
-                    icon = Icons.Default.MoreVert,
-                    contentDescription = null,
-                )
+                Box(contentAlignment = Alignment.TopEnd) {
+                    AuroraActionButton(
+                        onClick = { showMenu = !showMenu },
+                        icon = Icons.Default.MoreVert,
+                        contentDescription = null,
+                    )
 
-                AuroraDropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false },
-                ) {
-                    if (isFromSource) {
-                        AuroraDropdownMenuItem(
-                            text = stringResource(MR.strings.action_webview_refresh),
-                            onClick = {
-                                onRefresh()
-                                showMenu = false
-                            },
-                        )
-                        if (onShare != null) {
+                    AuroraDropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                    ) {
+                        if (isFromSource) {
                             AuroraDropdownMenuItem(
-                                text = stringResource(MR.strings.action_share),
+                                text = stringResource(MR.strings.action_webview_refresh),
                                 onClick = {
-                                    onShare()
+                                    onRefresh()
                                     showMenu = false
                                 },
                             )
-                        }
-                    } else {
-                        if (onShare != null) {
-                            AuroraDropdownMenuItem(
-                                text = stringResource(MR.strings.action_share),
-                                onClick = {
-                                    onShare()
-                                    showMenu = false
-                                },
-                            )
-                        }
-                        if (onMigrateClicked != null) {
-                            AuroraDropdownMenuItem(
-                                text = stringResource(MR.strings.action_migrate),
-                                onClick = {
-                                    onMigrateClicked()
-                                    showMenu = false
-                                },
-                            )
+                            if (onShare != null) {
+                                AuroraDropdownMenuItem(
+                                    text = stringResource(MR.strings.action_share),
+                                    onClick = {
+                                        onShare()
+                                        showMenu = false
+                                    },
+                                )
+                            }
+                        } else {
+                            if (onShare != null) {
+                                AuroraDropdownMenuItem(
+                                    text = stringResource(MR.strings.action_share),
+                                    onClick = {
+                                        onShare()
+                                        showMenu = false
+                                    },
+                                )
+                            }
+                            if (onMigrateClicked != null) {
+                                AuroraDropdownMenuItem(
+                                    text = stringResource(MR.strings.action_migrate),
+                                    onClick = {
+                                        onMigrateClicked()
+                                        showMenu = false
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -496,21 +501,44 @@ private fun AuroraActionButton(
     icon: ImageVector,
     contentDescription: String?,
     modifier: Modifier = Modifier,
+    iconTint: Color? = null,
 ) {
     val colors = AuroraTheme.colors
+    val tint = iconTint ?: colors.accent.copy(alpha = 0.95f)
 
     Box(
         modifier = modifier
             .size(44.dp)
             .clip(CircleShape)
-            .background(colors.surface.copy(alpha = 0.76f))
+            .background(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        colors.surface.copy(alpha = 0.9f),
+                        colors.surface.copy(alpha = 0.6f),
+                    ),
+                    center = Offset(0.3f, 0.3f),
+                    radius = 0.8f,
+                ),
+            )
+            .drawBehind {
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            colors.accent.copy(alpha = 0.15f),
+                            Color.Transparent,
+                        ),
+                        center = Offset(size.width * 0.3f, size.height * 0.3f),
+                        radius = size.width * 0.6f,
+                    ),
+                )
+            }
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = colors.accent.copy(alpha = 0.95f),
+            tint = tint,
             modifier = Modifier.size(22.dp),
         )
     }
