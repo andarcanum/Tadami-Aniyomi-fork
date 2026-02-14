@@ -129,6 +129,7 @@ import tachiyomi.data.source.novel.NovelSourceRepositoryImpl
 import tachiyomi.data.source.novel.NovelStubSourceRepositoryImpl
 import tachiyomi.data.track.anime.AnimeTrackRepositoryImpl
 import tachiyomi.data.track.manga.MangaTrackRepositoryImpl
+import tachiyomi.data.track.novel.NovelTrackRepositoryImpl
 import tachiyomi.data.updates.anime.AnimeUpdatesRepositoryImpl
 import tachiyomi.data.updates.manga.MangaUpdatesRepositoryImpl
 import tachiyomi.data.updates.novel.NovelUpdatesRepositoryImpl
@@ -269,6 +270,11 @@ import tachiyomi.domain.track.manga.interactor.GetMangaTracks
 import tachiyomi.domain.track.manga.interactor.GetTracksPerManga
 import tachiyomi.domain.track.manga.interactor.InsertMangaTrack
 import tachiyomi.domain.track.manga.repository.MangaTrackRepository
+import tachiyomi.domain.track.novel.interactor.DeleteNovelTrack
+import tachiyomi.domain.track.novel.interactor.GetNovelTracks
+import tachiyomi.domain.track.novel.interactor.GetTracksPerNovel
+import tachiyomi.domain.track.novel.interactor.InsertNovelTrack
+import tachiyomi.domain.track.novel.repository.NovelTrackRepository
 import tachiyomi.domain.updates.anime.interactor.GetAnimeUpdates
 import tachiyomi.domain.updates.anime.repository.AnimeUpdatesRepository
 import tachiyomi.domain.updates.manga.interactor.GetMangaUpdates
@@ -415,6 +421,12 @@ class DomainModule : InjektModule {
         addFactory { GetMangaTracks(get()) }
         addFactory { InsertMangaTrack(get()) }
         addFactory { SyncChapterProgressWithTrack(get(), get(), get()) }
+
+        addSingletonFactory<NovelTrackRepository> { NovelTrackRepositoryImpl(get()) }
+        addFactory { DeleteNovelTrack(get()) }
+        addFactory { GetTracksPerNovel(get()) }
+        addFactory { GetNovelTracks(get()) }
+        addFactory { InsertNovelTrack(get()) }
 
         addSingletonFactory<EpisodeRepository> { EpisodeRepositoryImpl(get()) }
         addFactory { GetEpisode(get()) }

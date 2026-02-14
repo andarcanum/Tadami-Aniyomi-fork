@@ -37,7 +37,7 @@ import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.category.novel.interactor.GetNovelCategories
 import tachiyomi.domain.category.novel.interactor.SetNovelCategories
 import tachiyomi.domain.source.novel.service.NovelSourceManager
-import tachiyomi.domain.track.manga.interactor.GetMangaTracks
+import tachiyomi.domain.track.novel.interactor.GetNovelTracks
 import tachiyomi.data.handlers.novel.NovelDatabaseHandler
 
 class NovelScreenModelTest {
@@ -190,9 +190,9 @@ class NovelScreenModelTest {
             val trackerManager = mockk<TrackerManager>().also { manager ->
                 every { manager.loggedInTrackersFlow() } returns MutableStateFlow(emptyList())
             }
-            val getMangaTracks = mockk<GetMangaTracks>().also { tracks ->
+            val getNovelTracks = mockk<GetNovelTracks>().also { tracks ->
                 every { tracks.subscribe(any()) } returns MutableStateFlow(
-                    emptyList<tachiyomi.domain.track.manga.model.MangaTrack>(),
+                    emptyList<tachiyomi.domain.track.novel.model.NovelTrack>(),
                 )
             }
             val novelCategoryRepository = object : tachiyomi.domain.category.novel.repository.NovelCategoryRepository {
@@ -247,7 +247,7 @@ class NovelScreenModelTest {
                 setNovelCategories = SetNovelCategories(novelCategoryRepository),
                 sourceManager = sourceManager,
                 trackerManager = trackerManager,
-                getTracks = getMangaTracks,
+                getTracks = getNovelTracks,
                 novelReaderPreferences = eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences(
                     preferenceStore = preferenceStore,
                     json = Json { encodeDefaults = true },

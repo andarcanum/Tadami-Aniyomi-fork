@@ -48,15 +48,7 @@ class DeepLinkNovelScreenModel(
             }
 
             mutableState.update {
-                if (novel == null) {
-                    State.NoResults
-                } else {
-                    if (chapter == null) {
-                        State.Result(novel)
-                    } else {
-                        State.Result(novel, chapter.id)
-                    }
-                }
+                resolveDeepLinkNovelState(novel = novel, chapter = chapter)
             }
         }
     }
@@ -91,5 +83,17 @@ class DeepLinkNovelScreenModel(
 
         @Immutable
         data class Result(val novel: Novel, val chapterId: Long? = null) : State
+    }
+}
+
+internal fun resolveDeepLinkNovelState(
+    novel: Novel?,
+    chapter: NovelChapter?,
+): DeepLinkNovelScreenModel.State {
+    if (novel == null) return DeepLinkNovelScreenModel.State.NoResults
+    return if (chapter == null) {
+        DeepLinkNovelScreenModel.State.Result(novel = novel)
+    } else {
+        DeepLinkNovelScreenModel.State.Result(novel = novel, chapterId = chapter.id)
     }
 }

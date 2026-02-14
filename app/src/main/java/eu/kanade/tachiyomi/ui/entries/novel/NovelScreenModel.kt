@@ -52,8 +52,8 @@ import tachiyomi.domain.items.novelchapter.interactor.SetNovelDefaultChapterFlag
 import tachiyomi.domain.items.novelchapter.service.getNovelChapterSort
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.novel.service.NovelSourceManager
-import tachiyomi.domain.track.manga.interactor.GetMangaTracks
-import tachiyomi.domain.track.manga.model.MangaTrack
+import tachiyomi.domain.track.novel.interactor.GetNovelTracks
+import tachiyomi.domain.track.novel.model.NovelTrack
 import tachiyomi.domain.category.model.Category
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -93,7 +93,7 @@ class NovelScreenModel(
     private val setNovelCategories: SetNovelCategories = Injekt.get(),
     private val sourceManager: NovelSourceManager = Injekt.get(),
     private val trackerManager: TrackerManager = Injekt.get(),
-    private val getTracks: GetMangaTracks = Injekt.get(),
+    private val getTracks: GetNovelTracks = Injekt.get(),
     private val novelDownloadManager: NovelDownloadManager = NovelDownloadManager(),
     private val novelEpubExporter: NovelEpubExporter = NovelEpubExporter(),
     private val novelReaderPreferences: NovelReaderPreferences = Injekt.get(),
@@ -940,7 +940,7 @@ internal data class NovelTrackingSummary(
 )
 
 internal fun resolveNovelTrackingSummary(
-    tracks: List<MangaTrack>,
+    tracks: List<NovelTrack>,
     loggedInMangaTrackerIds: Set<Long>,
 ): NovelTrackingSummary {
     val trackingCount = tracks.count { it.trackerId in loggedInMangaTrackerIds }

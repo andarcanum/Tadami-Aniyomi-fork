@@ -29,8 +29,8 @@
 
 ## 4. Deeplink + tracking backend parity
 - [x] Add novel deeplink flow (`Activity` + `Screen` + `ScreenModel`).
-- [ ] Implement full novel tracking backend/domain parity (repo/interactors/models) and UI integration.
-- [ ] Add tests for novel deeplink and tracking flows.
+- [x] Implement full novel tracking backend/domain parity (repo/interactors/models) and UI integration.
+- [x] Add tests for novel deeplink and tracking flows.
 
 ## 5. Final verification
 - [x] Run targeted unit/UI tests for touched modules.
@@ -38,5 +38,4 @@
 - [x] Update this plan with final statuses.
 
 ## Remaining blockers
-- Full novel tracking backend/domain parity remains open because there is currently no dedicated `domain/track/novel` stack (equivalents of manga/anime track models + interactors + repositories).
 - Test-parity items remain open because dedicated test coverage for newly added novel tabs/flows has not yet been implemented in this pass.

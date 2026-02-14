@@ -2,7 +2,7 @@ package eu.kanade.tachiyomi.ui.entries.novel
 
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
-import tachiyomi.domain.track.manga.model.MangaTrack
+import tachiyomi.domain.track.novel.model.NovelTrack
 
 class NovelTrackingSummaryTest {
 
@@ -43,10 +43,10 @@ class NovelTrackingSummaryTest {
         summary.hasLoggedInTrackers shouldBe true
     }
 
-    private fun track(id: Long, trackerId: Long): MangaTrack {
-        return MangaTrack(
+    private fun track(id: Long, trackerId: Long): NovelTrack {
+        return NovelTrack(
             id = id,
-            mangaId = 100L,
+            novelId = 100L,
             trackerId = trackerId,
             remoteId = 200L,
             libraryId = null,
