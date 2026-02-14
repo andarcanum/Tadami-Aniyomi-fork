@@ -84,6 +84,7 @@ internal const val NOVEL_CHAPTERS_PAGE_SIZE = 120
 @Composable
 fun NovelScreen(
     state: NovelScreenModel.State.Success,
+    isFromSource: Boolean,
     snackbarHostState: SnackbarHostState,
     onBack: () -> Unit,
     onStartReading: (() -> Unit)?,
@@ -122,6 +123,7 @@ fun NovelScreen(
     if (theme.isAuroraStyle) {
         NovelScreenAuroraImpl(
             state = state,
+            isFromSource = isFromSource,
             nextUpdate = state.novel.expectedNextUpdate,
             onBack = { if (state.selectedChapterIds.isNotEmpty()) onAllChapterSelected(false) else onBack() },
             onStartReading = onStartReading,

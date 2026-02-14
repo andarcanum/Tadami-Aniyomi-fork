@@ -43,8 +43,8 @@ class GlobalNovelSearchScreen(
             onClickSource = {
                 navigator.push(BrowseNovelSourceScreen(it.id, state.searchQuery))
             },
-            onClickItem = { navigator.push(NovelScreen(it.id)) },
-            onLongClickItem = { navigator.push(NovelScreen(it.id)) },
+            onClickItem = { navigator.push(NovelScreen(it.id, true)) },
+            onLongClickItem = { navigator.push(NovelScreen(it.id, true)) },
         )
     }
 }

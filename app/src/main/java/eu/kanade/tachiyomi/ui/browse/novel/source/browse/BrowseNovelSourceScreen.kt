@@ -186,7 +186,7 @@ data class BrowseNovelSourceScreen(
                 onNovelClick = { novel ->
                     scope.launch {
                         val novelId = screenModel.openNovel(novel)
-                        navigator.push(NovelScreen(novelId))
+                        navigator.push(NovelScreen(novelId, true))
                     }
                 },
             )

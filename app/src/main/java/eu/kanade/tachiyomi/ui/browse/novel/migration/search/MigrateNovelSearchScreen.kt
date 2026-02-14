@@ -43,7 +43,7 @@ class MigrateNovelSearchScreen(private val novelId: Long) : Screen() {
                     NovelMigrateSearchScreenDialogScreenModel.Dialog.Migrate(it),
                 )
             },
-            onLongClickItem = { navigator.push(NovelScreen(it.id)) },
+            onLongClickItem = { navigator.push(NovelScreen(it.id, true)) },
         )
 
         when (val dialog = dialogState.dialog) {
@@ -54,15 +54,15 @@ class MigrateNovelSearchScreen(private val novelId: Long) : Screen() {
                     screenModel = rememberScreenModel { MigrateNovelDialogScreenModel() },
                     onDismissRequest = { dialogScreenModel.setDialog(null) },
                     onClickTitle = {
-                        navigator.push(NovelScreen(dialog.novel.id))
+                        navigator.push(NovelScreen(dialog.novel.id, true))
                     },
                     onPopScreen = {
                         if (navigator.lastItem is NovelScreen) {
                             val lastItem = navigator.lastItem
                             navigator.popUntil { navigator.items.contains(lastItem) }
-                            navigator.push(NovelScreen(dialog.novel.id))
+                            navigator.push(NovelScreen(dialog.novel.id, true))
                         } else {
-                            navigator.replace(NovelScreen(dialog.novel.id))
+                            navigator.replace(NovelScreen(dialog.novel.id, true))
                         }
                     },
                 )

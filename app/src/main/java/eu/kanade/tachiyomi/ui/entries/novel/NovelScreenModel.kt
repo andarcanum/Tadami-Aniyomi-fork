@@ -211,10 +211,24 @@ class NovelScreenModel(
 
         screenModelScope.launchIO {
             val novel = getNovelWithChapters.awaitNovel(novelId)
-            val chapters = getNovelWithChapters.awaitChapters(novelId, applyScanlatorFilter = true)
             if (!novel.favorite) {
                 setNovelDefaultChapterFlags.await(novel)
             }
+
+            val availableScanlators = getAvailableNovelScanlators.await(novelId)
+            val scanlatorChapterCounts = getNovelScanlatorChapterCounts.await(novelId)
+            val storedExcludedScanlators = getNovelExcludedScanlators.await(novelId)
+            val initialExcludedScanlators = resolveDefaultNovelExcludedScanlatorsByChapterCount(
+                scanlatorChapterCounts = scanlatorChapterCounts,
+                availableScanlators = availableScanlators,
+                excludedScanlators = storedExcludedScanlators,
+            ) ?: storedExcludedScanlators
+
+            if (initialExcludedScanlators != storedExcludedScanlators) {
+                setNovelExcludedScanlators.await(novelId, initialExcludedScanlators)
+            }
+
+            val chapters = getNovelWithChapters.awaitChapters(novelId, applyScanlatorFilter = true)
             val shouldAutoRefreshNovel = !novel.initialized
             val shouldAutoRefreshChapters = chapters.isEmpty()
             val currentDownloadedIds = (state.value as? State.Success)
@@ -226,9 +240,9 @@ class NovelScreenModel(
                     novel = novel,
                     source = sourceManager.getOrStub(novel.source),
                     chapters = chapters,
-                    availableScanlators = getAvailableNovelScanlators.await(novelId),
-                    scanlatorChapterCounts = getNovelScanlatorChapterCounts.await(novelId),
-                    excludedScanlators = getNovelExcludedScanlators.await(novelId),
+                    availableScanlators = availableScanlators,
+                    scanlatorChapterCounts = scanlatorChapterCounts,
+                    excludedScanlators = initialExcludedScanlators,
                     isRefreshingData = shouldAutoRefreshNovel || shouldAutoRefreshChapters,
                     dialog = null,
                     selectedChapterIds = emptySet(),
@@ -948,6 +962,38 @@ internal fun resolveNovelTrackingSummary(
         trackingCount = trackingCount,
         hasLoggedInTrackers = loggedInMangaTrackerIds.isNotEmpty(),
     )
+}
+
+internal fun resolveDefaultNovelExcludedScanlatorsByChapterCount(
+    scanlatorChapterCounts: Map<String, Int>,
+    availableScanlators: Set<String>,
+    excludedScanlators: Set<String>,
+): Set<String>? {
+    if (availableScanlators.size < 2) return null
+    if (excludedScanlators.intersect(availableScanlators).isNotEmpty()) return null
+
+    val availableByNormalized = availableScanlators
+        .asSequence()
+        .map { it.trim() to it.trim() }
+        .filter { (normalized, _) -> normalized.isNotEmpty() }
+        .associate { it }
+    if (availableByNormalized.size < 2) return null
+
+    val preferredScanlator = scanlatorChapterCounts
+        .asSequence()
+        .map { it.key.trim() to it.value }
+        .filter { (normalized, _) -> normalized in availableByNormalized.keys }
+        .sortedWith(
+            compareByDescending<Pair<String, Int>> { it.second }
+                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.first },
+        )
+        .map { it.first }
+        .firstOrNull() ?: return null
+
+    return availableByNormalized
+        .filterKeys { it != preferredScanlator }
+        .values
+        .toSet()
 }
 
 internal fun resolveSelectedNovelScanlator(

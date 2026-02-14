@@ -64,6 +64,7 @@ import tachiyomi.presentation.core.screens.LoadingScreen
 
 class NovelScreen(
     private val novelId: Long,
+    val fromSource: Boolean = false,
 ) : eu.kanade.presentation.util.Screen() {
 
     @Composable
@@ -101,6 +102,7 @@ class NovelScreen(
 
         NovelScreen(
             state = successState,
+            isFromSource = fromSource,
             snackbarHostState = screenModel.snackbarHostState,
             onBack = navigator::pop,
             onStartReading = startChapter?.let { chapter ->

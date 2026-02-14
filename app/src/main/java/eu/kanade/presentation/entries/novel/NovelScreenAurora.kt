@@ -23,11 +23,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -47,8 +46,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.presentation.components.DropdownMenu
 import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
 import eu.kanade.presentation.entries.novel.components.aurora.ChaptersHeader
 import eu.kanade.presentation.entries.novel.components.aurora.FullscreenPosterBackground
@@ -65,6 +66,7 @@ import java.time.Instant
 @Composable
 fun NovelScreenAuroraImpl(
     state: NovelScreenModel.State.Success,
+    isFromSource: Boolean,
     nextUpdate: Instant?,
     onBack: () -> Unit,
     onStartReading: (() -> Unit)?,
@@ -326,18 +328,15 @@ fun NovelScreenAuroraImpl(
                 icon = Icons.Default.FilterList,
                 contentDescription = null,
             )
-            AuroraActionButton(
-                onClick = onRefresh,
-                icon = Icons.Default.Refresh,
-                contentDescription = null,
-            )
-            if (onMigrateClicked != null) {
+
+            if (!isFromSource) {
                 AuroraActionButton(
-                    onClick = onMigrateClicked,
-                    icon = Icons.Outlined.SwapHoriz,
+                    onClick = onRefresh,
+                    icon = Icons.Default.Refresh,
                     contentDescription = null,
                 )
             }
+
             if (onWebView != null) {
                 AuroraActionButton(
                     onClick = onWebView,
@@ -345,12 +344,62 @@ fun NovelScreenAuroraImpl(
                     contentDescription = null,
                 )
             }
-            if (onShare != null) {
+
+            var showMenu by remember { mutableStateOf(false) }
+            val hasMenuActions = if (isFromSource) {
+                true
+            } else {
+                onShare != null || onMigrateClicked != null
+            }
+            if (hasMenuActions) {
                 AuroraActionButton(
-                    onClick = onShare,
-                    icon = Icons.Default.Share,
+                    onClick = { showMenu = !showMenu },
+                    icon = Icons.Default.MoreVert,
                     contentDescription = null,
                 )
+
+                AuroraDropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                ) {
+                    if (isFromSource) {
+                        AuroraDropdownMenuItem(
+                            text = stringResource(MR.strings.action_webview_refresh),
+                            onClick = {
+                                onRefresh()
+                                showMenu = false
+                            },
+                        )
+                        if (onShare != null) {
+                            AuroraDropdownMenuItem(
+                                text = stringResource(MR.strings.action_share),
+                                onClick = {
+                                    onShare()
+                                    showMenu = false
+                                },
+                            )
+                        }
+                    } else {
+                        if (onShare != null) {
+                            AuroraDropdownMenuItem(
+                                text = stringResource(MR.strings.action_share),
+                                onClick = {
+                                    onShare()
+                                    showMenu = false
+                                },
+                            )
+                        }
+                        if (onMigrateClicked != null) {
+                            AuroraDropdownMenuItem(
+                                text = stringResource(MR.strings.action_migrate),
+                                onClick = {
+                                    onMigrateClicked()
+                                    showMenu = false
+                                },
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -465,4 +514,45 @@ private fun AuroraActionButton(
             modifier = Modifier.size(22.dp),
         )
     }
+}
+
+@Composable
+private fun AuroraDropdownMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismissRequest,
+        offset = DpOffset(x = 0.dp, y = 8.dp),
+        modifier = modifier,
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun AuroraDropdownMenuItem(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AuroraTheme.colors
+    androidx.compose.material3.DropdownMenuItem(
+        text = {
+            Text(
+                text = text,
+                color = colors.textPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        },
+        onClick = onClick,
+        modifier = modifier,
+        colors = androidx.compose.material3.MenuDefaults.itemColors(
+            textColor = colors.textPrimary,
+        ),
+    )
 }

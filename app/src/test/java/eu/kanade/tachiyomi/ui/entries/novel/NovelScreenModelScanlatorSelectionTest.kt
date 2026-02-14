@@ -52,4 +52,29 @@ class NovelScreenModelScanlatorSelectionTest {
             availableScanlators = setOf(" Team A ", "Team B ", "Team C"),
         ) shouldBe setOf("Team A", "Team C")
     }
+
+    @Test
+    fun `resolveDefaultNovelExcludedScanlatorsByChapterCount selects largest branch by default`() {
+        resolveDefaultNovelExcludedScanlatorsByChapterCount(
+            scanlatorChapterCounts = mapOf(
+                "Team A" to 3,
+                "Team B" to 10,
+                "Team C" to 7,
+            ),
+            availableScanlators = setOf("Team A", "Team B", "Team C"),
+            excludedScanlators = emptySet(),
+        ) shouldBe setOf("Team A", "Team C")
+    }
+
+    @Test
+    fun `resolveDefaultNovelExcludedScanlatorsByChapterCount keeps existing selection`() {
+        resolveDefaultNovelExcludedScanlatorsByChapterCount(
+            scanlatorChapterCounts = mapOf(
+                "Team A" to 3,
+                "Team B" to 10,
+            ),
+            availableScanlators = setOf("Team A", "Team B"),
+            excludedScanlators = setOf("Team A"),
+        ) shouldBe null
+    }
 }
