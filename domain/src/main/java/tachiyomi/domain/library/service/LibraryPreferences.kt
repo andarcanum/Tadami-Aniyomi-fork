@@ -16,30 +16,89 @@ class LibraryPreferences(
     private val preferenceStore: PreferenceStore,
 ) {
 
+    fun separateDisplayModePerMedia() = preferenceStore.getBoolean(
+        "pref_display_mode_library_per_media",
+        false,
+    )
+
     fun displayMode() = preferenceStore.getObject(
         "pref_display_mode_library",
-        LibraryDisplayMode.default,
+        LibraryDisplayMode.ComfortableGrid,
         LibraryDisplayMode.Serializer::serialize,
         LibraryDisplayMode.Serializer::deserialize,
     )
 
+    fun animeDisplayMode() = preferenceStore.getObject(
+        "pref_display_mode_animelib",
+        displayMode().get(),
+        LibraryDisplayMode.Serializer::serialize,
+        LibraryDisplayMode.Serializer::deserialize,
+    )
+
+    fun mangaDisplayMode() = preferenceStore.getObject(
+        "pref_display_mode_mangalib",
+        displayMode().get(),
+        LibraryDisplayMode.Serializer::serialize,
+        LibraryDisplayMode.Serializer::deserialize,
+    )
+
+    fun novelDisplayMode() = preferenceStore.getObject(
+        "pref_display_mode_novellib",
+        displayMode().get(),
+        LibraryDisplayMode.Serializer::serialize,
+        LibraryDisplayMode.Serializer::deserialize,
+    )
+
+    fun setDisplayModeForAnime(mode: LibraryDisplayMode) {
+        if (separateDisplayModePerMedia().get()) {
+            animeDisplayMode().set(mode)
+        } else {
+            displayMode().set(mode)
+        }
+    }
+
+    fun setDisplayModeForManga(mode: LibraryDisplayMode) {
+        if (separateDisplayModePerMedia().get()) {
+            mangaDisplayMode().set(mode)
+        } else {
+            displayMode().set(mode)
+        }
+    }
+
+    fun setDisplayModeForNovel(mode: LibraryDisplayMode) {
+        if (separateDisplayModePerMedia().get()) {
+            novelDisplayMode().set(mode)
+        } else {
+            displayMode().set(mode)
+        }
+    }
+
     fun mangaSortingMode() = preferenceStore.getObject(
         "library_sorting_mode",
-        MangaLibrarySort.default,
+        MangaLibrarySort(
+            type = MangaLibrarySort.Type.LastRead,
+            direction = MangaLibrarySort.Direction.Descending,
+        ),
         MangaLibrarySort.Serializer::serialize,
         MangaLibrarySort.Serializer::deserialize,
     )
 
     fun animeSortingMode() = preferenceStore.getObject(
         "animelib_sorting_mode",
-        AnimeLibrarySort.default,
+        AnimeLibrarySort(
+            type = AnimeLibrarySort.Type.LastSeen,
+            direction = AnimeLibrarySort.Direction.Descending,
+        ),
         AnimeLibrarySort.Serializer::serialize,
         AnimeLibrarySort.Serializer::deserialize,
     )
 
     fun novelSortingMode() = preferenceStore.getObject(
         "novellib_sorting_mode",
-        MangaLibrarySort.default,
+        MangaLibrarySort(
+            type = MangaLibrarySort.Type.LastRead,
+            direction = MangaLibrarySort.Direction.Descending,
+        ),
         MangaLibrarySort.Serializer::serialize,
         MangaLibrarySort.Serializer::deserialize,
     )
@@ -67,7 +126,7 @@ class LibraryPreferences(
     fun autoUpdateMetadata() = preferenceStore.getBoolean("auto_update_metadata", false)
 
     fun showContinueViewingButton() =
-        preferenceStore.getBoolean("display_continue_reading_button", false)
+        preferenceStore.getBoolean("display_continue_reading_button", true)
 
     // Common Category
 
@@ -108,13 +167,13 @@ class LibraryPreferences(
 
     // Mixture Columns
 
-    fun animePortraitColumns() = preferenceStore.getInt("pref_animelib_columns_portrait_key", 0)
-    fun mangaPortraitColumns() = preferenceStore.getInt("pref_library_columns_portrait_key", 0)
-    fun novelPortraitColumns() = preferenceStore.getInt("pref_novellib_columns_portrait_key", 0)
+    fun animePortraitColumns() = preferenceStore.getInt("pref_animelib_columns_portrait_key", 3)
+    fun mangaPortraitColumns() = preferenceStore.getInt("pref_library_columns_portrait_key", 3)
+    fun novelPortraitColumns() = preferenceStore.getInt("pref_novellib_columns_portrait_key", 3)
 
-    fun animeLandscapeColumns() = preferenceStore.getInt("pref_animelib_columns_landscape_key", 0)
-    fun mangaLandscapeColumns() = preferenceStore.getInt("pref_library_columns_landscape_key", 0)
-    fun novelLandscapeColumns() = preferenceStore.getInt("pref_novellib_columns_landscape_key", 0)
+    fun animeLandscapeColumns() = preferenceStore.getInt("pref_animelib_columns_landscape_key", 3)
+    fun mangaLandscapeColumns() = preferenceStore.getInt("pref_library_columns_landscape_key", 3)
+    fun novelLandscapeColumns() = preferenceStore.getInt("pref_novellib_columns_landscape_key", 3)
 
     // Mixture Filter
 

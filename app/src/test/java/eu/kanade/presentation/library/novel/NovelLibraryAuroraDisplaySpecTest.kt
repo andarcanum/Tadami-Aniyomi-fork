@@ -17,6 +17,7 @@ class NovelLibraryAuroraDisplaySpecTest {
         spec.fixedColumns shouldBe 1
         spec.adaptiveMinCellDp shouldBe null
         spec.showMetadata shouldBe true
+        spec.useCompactGridEntryStyle shouldBe false
     }
 
     @Test
@@ -30,7 +31,9 @@ class NovelLibraryAuroraDisplaySpecTest {
         spec.fixedColumns shouldBe null
         spec.adaptiveMinCellDp shouldBe 180
         spec.showMetadata shouldBe true
+        spec.useCompactGridEntryStyle shouldBe false
         spec.gridCardAspectRatio shouldBe 0.66f
+        spec.gridCoverHeightFraction shouldBe 0.68f
     }
 
     @Test
@@ -42,6 +45,7 @@ class NovelLibraryAuroraDisplaySpecTest {
 
         spec.isList shouldBe false
         spec.showMetadata shouldBe false
+        spec.useCompactGridEntryStyle shouldBe false
     }
 
     @Test
@@ -56,6 +60,8 @@ class NovelLibraryAuroraDisplaySpecTest {
         )
 
         compact.gridCardAspectRatio shouldBe 0.56f
+        compact.useCompactGridEntryStyle shouldBe true
+        comfortable.useCompactGridEntryStyle shouldBe false
         comfortable.gridCardAspectRatio shouldBe 0.66f
     }
 }

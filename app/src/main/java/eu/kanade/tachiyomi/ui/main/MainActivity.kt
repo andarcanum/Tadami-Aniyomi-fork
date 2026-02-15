@@ -7,6 +7,7 @@ import android.app.SearchManager
 import android.app.assist.AssistContent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
@@ -401,6 +402,10 @@ class MainActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (restorePortraitAfterPlayerExit) {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            restorePortraitAfterPlayerExit = false
+        }
         // Start session time tracking
         appSessionStartTime = System.currentTimeMillis()
     }
@@ -701,6 +706,7 @@ class MainActivity : BaseActivity() {
         const val SAVED_STATE_EPISODE_KEY = "saved_state_episode_key"
 
         private var externalPlayerResult: ActivityResultLauncher<Intent>? = null
+        private var restorePortraitAfterPlayerExit: Boolean = false
 
         suspend fun startPlayerActivity(
             context: Context,
@@ -722,6 +728,7 @@ class MainActivity : BaseActivity() {
                 } ?: return
                 externalPlayerResult?.launch(intent) ?: return
             } else {
+                restorePortraitAfterPlayerExit = true
                 context.startActivity(
                     PlayerActivity.newIntent(
                         context,

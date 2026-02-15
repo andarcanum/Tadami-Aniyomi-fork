@@ -15,20 +15,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items as listItems
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
@@ -36,8 +34,10 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -62,8 +62,13 @@ import coil3.request.ImageRequest
 import eu.kanade.presentation.components.AuroraCard
 import eu.kanade.presentation.components.AuroraTabRow
 import eu.kanade.presentation.components.LocalTabState
+import eu.kanade.presentation.library.components.EntryCompactGridItem
+import eu.kanade.presentation.library.components.LanguageBadge
+import eu.kanade.presentation.library.components.LazyLibraryGrid
+import eu.kanade.presentation.library.components.UnviewedBadge
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
+import tachiyomi.domain.entries.novel.model.asNovelCover
 import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.novel.service.NovelSourceManager
@@ -71,8 +76,10 @@ import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.Badge
 import tachiyomi.presentation.core.components.BadgeGroup
+import tachiyomi.presentation.core.components.FastScrollLazyColumn
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.plus
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -88,15 +95,24 @@ fun NovelLibraryAuroraContent(
     onRefresh: () -> Unit,
     onGlobalUpdate: () -> Unit,
     onOpenRandomEntry: () -> Unit,
+    onContinueReadingClicked: ((LibraryNovel) -> Unit)? = null,
+    showInlineHeader: Boolean = true,
 ) {
-    val colors = AuroraTheme.colors
-    val listState = rememberLazyListState()
-    val gridState = rememberLazyGridState()
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
     val sourceManager = remember { Injekt.get<NovelSourceManager>() }
-    val displayMode by libraryPreferences.displayMode().collectAsState()
+    val useSeparateDisplayModePerMedia by libraryPreferences
+        .separateDisplayModePerMedia()
+        .collectAsState()
+    val displayModePreference = remember(useSeparateDisplayModePerMedia) {
+        if (useSeparateDisplayModePerMedia) {
+            libraryPreferences.novelDisplayMode()
+        } else {
+            libraryPreferences.displayMode()
+        }
+    }
+    val displayMode by displayModePreference.collectAsState()
     val columnPreference = remember(configuration.orientation) {
         if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
             libraryPreferences.novelLandscapeColumns()
@@ -140,42 +156,34 @@ fun NovelLibraryAuroraContent(
         items.filter { it.novel.title.contains(query, ignoreCase = true) }
     }
 
-    val gridCells = remember(displaySpec) {
-        displaySpec.fixedColumns?.let { fixed ->
-            GridCells.Fixed(fixed)
-        } ?: GridCells.Adaptive(
-            minSize = checkNotNull(displaySpec.adaptiveMinCellDp).dp,
-        )
-    }
-
     Box(
         modifier = Modifier
-            .fillMaxSize()
-            .background(colors.backgroundGradient),
+            .fillMaxSize(),
     ) {
         if (displaySpec.isList) {
-            LazyColumn(
-                state = listState,
-                contentPadding = contentPadding,
+            FastScrollLazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = contentPadding + PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.padding(horizontal = 16.dp),
             ) {
-                item {
-                    InlineNovelLibraryHeader(
-                        isSearchActive = isSearchActive,
-                        searchQuery = query,
-                        onSearchQueryChange = onSearchQueryChange,
-                        onSearchClick = { isSearchActive = true },
-                        onSearchClose = {
-                            onSearchQueryChange(null)
-                            isSearchActive = false
-                        },
-                        hasActiveFilters = hasActiveFilters,
-                        onFilterClicked = onFilterClicked,
-                        onRefresh = onRefresh,
-                        onGlobalUpdate = onGlobalUpdate,
-                        onOpenRandomEntry = onOpenRandomEntry,
-                    )
+                if (showInlineHeader) {
+                    item {
+                        InlineNovelLibraryHeader(
+                            isSearchActive = isSearchActive,
+                            searchQuery = query,
+                            onSearchQueryChange = onSearchQueryChange,
+                            onSearchClick = { isSearchActive = true },
+                            onSearchClose = {
+                                onSearchQueryChange(null)
+                                isSearchActive = false
+                            },
+                            hasActiveFilters = hasActiveFilters,
+                            onFilterClicked = onFilterClicked,
+                            onRefresh = onRefresh,
+                            onGlobalUpdate = onGlobalUpdate,
+                            onOpenRandomEntry = onOpenRandomEntry,
+                        )
+                    }
                 }
 
                 listItems(filteredItems, key = { it.id }) { item ->
@@ -195,36 +203,36 @@ fun NovelLibraryAuroraContent(
                         modifier = Modifier
                             .fillMaxWidth()
                             .aspectRatio(2.2f),
-                        coverHeightFraction = 0.68f,
+                        coverHeightFraction = 0.62f,
                         onNovelClicked = onNovelClicked,
+                        onClickContinueReading = onContinueReadingClicked,
                     )
                 }
             }
         } else {
-            LazyVerticalGrid(
-                state = gridState,
-                columns = gridCells,
+            LazyLibraryGrid(
+                modifier = Modifier.fillMaxSize(),
+                columns = columns.coerceAtLeast(0),
                 contentPadding = contentPadding,
-                verticalArrangement = Arrangement.spacedBy(displaySpec.gridVerticalSpacingDp.dp),
-                horizontalArrangement = Arrangement.spacedBy(displaySpec.gridHorizontalSpacingDp.dp),
-                modifier = Modifier.padding(horizontal = 16.dp),
             ) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    InlineNovelLibraryHeader(
-                        isSearchActive = isSearchActive,
-                        searchQuery = query,
-                        onSearchQueryChange = onSearchQueryChange,
-                        onSearchClick = { isSearchActive = true },
-                        onSearchClose = {
-                            onSearchQueryChange(null)
-                            isSearchActive = false
-                        },
-                        hasActiveFilters = hasActiveFilters,
-                        onFilterClicked = onFilterClicked,
-                        onRefresh = onRefresh,
-                        onGlobalUpdate = onGlobalUpdate,
-                        onOpenRandomEntry = onOpenRandomEntry,
-                    )
+                if (showInlineHeader) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        InlineNovelLibraryHeader(
+                            isSearchActive = isSearchActive,
+                            searchQuery = query,
+                            onSearchQueryChange = onSearchQueryChange,
+                            onSearchClick = { isSearchActive = true },
+                            onSearchClose = {
+                                onSearchQueryChange(null)
+                                isSearchActive = false
+                            },
+                            hasActiveFilters = hasActiveFilters,
+                            onFilterClicked = onFilterClicked,
+                            onRefresh = onRefresh,
+                            onGlobalUpdate = onGlobalUpdate,
+                            onOpenRandomEntry = onOpenRandomEntry,
+                        )
+                    }
                 }
 
                 gridItems(filteredItems, key = { it.id }) { item ->
@@ -236,19 +244,67 @@ fun NovelLibraryAuroraContent(
                         showLanguageBadge = showLanguageBadge,
                         sourceLanguage = sourceLanguageByNovelId[item.novel.id].orEmpty(),
                     )
-                    NovelLibraryAuroraCard(
-                        item = item,
-                        context = context,
-                        badgeState = badgeState,
-                        showMetadata = displaySpec.showMetadata,
-                        modifier = Modifier.aspectRatio(displaySpec.gridCardAspectRatio),
-                        coverHeightFraction = displaySpec.gridCoverHeightFraction,
-                        onNovelClicked = onNovelClicked,
-                    )
+                    if (displaySpec.useCompactGridEntryStyle) {
+                        NovelLibraryCompactGridItem(
+                            item = item,
+                            badgeState = badgeState,
+                            onNovelClicked = onNovelClicked,
+                            onClickContinueReading = onContinueReadingClicked,
+                        )
+                    } else {
+                        NovelLibraryAuroraCard(
+                            item = item,
+                            context = context,
+                            badgeState = badgeState,
+                            showMetadata = displaySpec.showMetadata,
+                            modifier = Modifier.aspectRatio(displaySpec.gridCardAspectRatio),
+                            coverHeightFraction = displaySpec.gridCoverHeightFraction,
+                            onNovelClicked = onNovelClicked,
+                            onClickContinueReading = onContinueReadingClicked,
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun NovelLibraryCompactGridItem(
+    item: LibraryNovel,
+    badgeState: NovelLibraryBadgeState,
+    onNovelClicked: (Long) -> Unit,
+    onClickContinueReading: ((LibraryNovel) -> Unit)?,
+) {
+    EntryCompactGridItem(
+        coverData = item.novel.asNovelCover(),
+        title = item.novel.title,
+        onClick = { onNovelClicked(item.novel.id) },
+        onLongClick = {},
+        onClickContinueViewing = if (onClickContinueReading != null && item.unreadCount > 0) {
+            { onClickContinueReading(item) }
+        } else {
+            null
+        },
+        coverBadgeStart = {
+            if (badgeState.showDownloaded) {
+                Badge(
+                    text = "DL",
+                    color = MaterialTheme.colorScheme.tertiary,
+                    textColor = MaterialTheme.colorScheme.onTertiary,
+                )
+            }
+            UnviewedBadge(count = badgeState.unreadCount ?: 0L)
+        },
+        coverBadgeEnd = {
+            badgeState.language?.let {
+                LanguageBadge(
+                    isLocal = false,
+                    sourceLanguage = it,
+                )
+            }
+        },
+    )
 }
 
 @Composable
@@ -260,6 +316,7 @@ private fun NovelLibraryAuroraCard(
     modifier: Modifier,
     coverHeightFraction: Float,
     onNovelClicked: (Long) -> Unit,
+    onClickContinueReading: ((LibraryNovel) -> Unit)?,
 ) {
     val progressText = if (showMetadata && item.totalChapters > 0) {
         "${item.totalChapters - item.unreadCount}/${item.totalChapters} ${stringResource(
@@ -316,12 +373,23 @@ private fun NovelLibraryAuroraCard(
                 null
             },
             onClick = { onNovelClicked(item.novel.id) },
+            onClickContinueViewing = if (onClickContinueReading != null && item.unreadCount > 0) {
+                { onClickContinueReading(item) }
+            } else {
+                null
+            },
+            titleMaxLines = if (showMetadata) 1 else 2,
         )
     } else {
         NovelLibraryAuroraCoverOnlyCard(
             coverData = coverRequest,
             badgeState = badgeState,
             modifier = modifier,
+            onClickContinueViewing = if (onClickContinueReading != null && item.unreadCount > 0) {
+                { onClickContinueReading(item) }
+            } else {
+                null
+            },
             onClick = { onNovelClicked(item.novel.id) },
         )
     }
@@ -332,6 +400,7 @@ private fun NovelLibraryAuroraCoverOnlyCard(
     coverData: Any?,
     badgeState: NovelLibraryBadgeState,
     modifier: Modifier,
+    onClickContinueViewing: (() -> Unit)?,
     onClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
@@ -391,6 +460,26 @@ private fun NovelLibraryAuroraCoverOnlyCard(
                             shape = RoundedCornerShape(4.dp),
                         )
                     }
+                }
+            }
+
+            if (onClickContinueViewing != null) {
+                FilledIconButton(
+                    onClick = onClickContinueViewing,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(6.dp)
+                        .size(30.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = colors.accent.copy(alpha = 0.9f),
+                        contentColor = colors.textOnAccent,
+                    ),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
                 }
             }
         }

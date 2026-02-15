@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.library.novel
 import android.content.Context
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import eu.kanade.domain.base.BasePreferences
@@ -21,14 +22,17 @@ import org.junit.jupiter.api.Test
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
-import tachiyomi.domain.library.manga.model.MangaLibrarySort
 import tachiyomi.domain.entries.novel.model.Novel
+import tachiyomi.domain.items.novelchapter.model.NovelChapter
+import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
+import tachiyomi.domain.library.manga.model.MangaLibrarySort
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.library.novel.LibraryNovel
 
 class NovelLibraryScreenModelTest {
 
     private val getLibraryNovel: GetLibraryNovel = mockk()
+    private val chapterRepository: NovelChapterRepository = mockk()
     private val libraryFlow = MutableStateFlow<List<LibraryNovel>>(emptyList())
     private val testDispatcher = StandardTestDispatcher()
     private lateinit var basePreferences: BasePreferences
@@ -38,6 +42,7 @@ class NovelLibraryScreenModelTest {
     fun setup() {
         Dispatchers.setMain(testDispatcher)
         every { getLibraryNovel.subscribe() } returns libraryFlow
+        coEvery { chapterRepository.getChapterByNovelId(any(), any()) } returns emptyList()
         val preferenceStore = FakePreferenceStore()
         basePreferences = BasePreferences(
             context = mockk<Context>(relaxed = true),
@@ -59,6 +64,7 @@ class NovelLibraryScreenModelTest {
 
         val screenModel = NovelLibraryScreenModel(
             getLibraryNovel = getLibraryNovel,
+            chapterRepository = chapterRepository,
             basePreferences = basePreferences,
             libraryPreferences = libraryPreferences,
             hasDownloadedChapters = { false },
@@ -79,6 +85,7 @@ class NovelLibraryScreenModelTest {
 
         val screenModel = NovelLibraryScreenModel(
             getLibraryNovel = getLibraryNovel,
+            chapterRepository = chapterRepository,
             basePreferences = basePreferences,
             libraryPreferences = libraryPreferences,
             hasDownloadedChapters = { false },
@@ -100,6 +107,7 @@ class NovelLibraryScreenModelTest {
 
         val screenModel = NovelLibraryScreenModel(
             getLibraryNovel = getLibraryNovel,
+            chapterRepository = chapterRepository,
             basePreferences = basePreferences,
             libraryPreferences = libraryPreferences,
             hasDownloadedChapters = { false },
@@ -120,6 +128,7 @@ class NovelLibraryScreenModelTest {
 
         val screenModel = NovelLibraryScreenModel(
             getLibraryNovel = getLibraryNovel,
+            chapterRepository = chapterRepository,
             basePreferences = basePreferences,
             libraryPreferences = libraryPreferences,
             hasDownloadedChapters = { it.id == downloaded.id },
@@ -141,6 +150,7 @@ class NovelLibraryScreenModelTest {
 
         val screenModel = NovelLibraryScreenModel(
             getLibraryNovel = getLibraryNovel,
+            chapterRepository = chapterRepository,
             basePreferences = basePreferences,
             libraryPreferences = libraryPreferences,
             hasDownloadedChapters = { false },
@@ -164,6 +174,7 @@ class NovelLibraryScreenModelTest {
 
         val screenModel = NovelLibraryScreenModel(
             getLibraryNovel = getLibraryNovel,
+            chapterRepository = chapterRepository,
             basePreferences = basePreferences,
             libraryPreferences = libraryPreferences,
             hasDownloadedChapters = { false },
@@ -175,6 +186,51 @@ class NovelLibraryScreenModelTest {
 
         screenModel.state.value.items.shouldContainExactly(custom)
         screenModel.state.value.hasActiveFilters shouldBe true
+    }
+
+    @Test
+    fun `next unread follows reader order when source and chapter number order differ`() = runTest {
+        val novel = Novel.create().copy(
+            id = 10L,
+            title = "Novel",
+            source = 1L,
+            chapterFlags = Novel.CHAPTER_SORTING_NUMBER or Novel.CHAPTER_SORT_DESC,
+        )
+        coEvery {
+            chapterRepository.getChapterByNovelId(novelId = novel.id, applyScanlatorFilter = true)
+        } returns listOf(
+            novelChapter(
+                id = 101L,
+                novelId = novel.id,
+                sourceOrder = 0L,
+                chapterNumber = 100.0,
+                read = true,
+            ),
+            novelChapter(
+                id = 102L,
+                novelId = novel.id,
+                sourceOrder = 1L,
+                chapterNumber = 1.0,
+                read = false,
+            ),
+            novelChapter(
+                id = 103L,
+                novelId = novel.id,
+                sourceOrder = 2L,
+                chapterNumber = 2.0,
+                read = false,
+            ),
+        )
+
+        val screenModel = NovelLibraryScreenModel(
+            getLibraryNovel = getLibraryNovel,
+            chapterRepository = chapterRepository,
+            basePreferences = basePreferences,
+            libraryPreferences = libraryPreferences,
+            hasDownloadedChapters = { false },
+        )
+
+        screenModel.getNextUnreadChapter(novel)?.id shouldBe 102L
     }
 
     private fun libraryNovel(
@@ -203,6 +259,24 @@ class NovelLibraryScreenModelTest {
             latestUpload = 0L,
             chapterFetchedAt = 0L,
             lastRead = lastRead,
+        )
+    }
+
+    private fun novelChapter(
+        id: Long,
+        novelId: Long,
+        sourceOrder: Long,
+        chapterNumber: Double,
+        read: Boolean,
+    ): NovelChapter {
+        return NovelChapter.create().copy(
+            id = id,
+            novelId = novelId,
+            sourceOrder = sourceOrder,
+            chapterNumber = chapterNumber,
+            read = read,
+            url = "https://example.com/chapter/$id",
+            name = "Chapter $id",
         )
     }
 

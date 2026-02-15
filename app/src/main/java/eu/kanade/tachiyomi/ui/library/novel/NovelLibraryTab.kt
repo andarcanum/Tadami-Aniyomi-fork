@@ -98,7 +98,17 @@ data object NovelLibraryTab : Tab {
         val state by screenModel.state.collectAsState()
         val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
         val sourceManager = remember { Injekt.get<NovelSourceManager>() }
-        val displayMode by libraryPreferences.displayMode().collectAsState()
+        val useSeparateDisplayModePerMedia by libraryPreferences
+            .separateDisplayModePerMedia()
+            .collectAsState()
+        val displayModePreference = remember(useSeparateDisplayModePerMedia) {
+            if (useSeparateDisplayModePerMedia) {
+                libraryPreferences.novelDisplayMode()
+            } else {
+                libraryPreferences.displayMode()
+            }
+        }
+        val displayMode by displayModePreference.collectAsState()
         val showDownloadBadge by libraryPreferences.downloadBadge().collectAsState()
         val showUnreadBadge by libraryPreferences.unreadBadge().collectAsState()
         val showLanguageBadge by libraryPreferences.languageBadge().collectAsState()

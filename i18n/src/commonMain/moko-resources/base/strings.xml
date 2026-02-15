@@ -117,6 +117,7 @@
     <string name="action_web_view" translatable="false">WebView</string>
     <string name="action_migrate">Migrate</string>
     <string name="action_display_mode">Display mode</string>
+    <string name="pref_library_display_mode_per_media">Separate display mode for anime, manga, and novels</string>
     <string name="action_display">Display</string>
     <string name="action_display_grid">Compact grid</string>
     <string name="action_display_comfortable_grid">Comfortable grid</string>

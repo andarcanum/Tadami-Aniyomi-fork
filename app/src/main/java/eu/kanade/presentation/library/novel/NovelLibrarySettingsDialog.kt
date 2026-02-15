@@ -167,12 +167,27 @@ private fun ColumnScope.SortPage(
 private fun ColumnScope.DisplayPage(
     libraryPreferences: LibraryPreferences,
 ) {
-    val displayMode by libraryPreferences.displayMode().collectAsState()
+    val useSeparateDisplayModePerMedia by libraryPreferences
+        .separateDisplayModePerMedia()
+        .collectAsState()
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_library_display_mode_per_media),
+        pref = libraryPreferences.separateDisplayModePerMedia(),
+    )
+
+    val displayModePref = remember(useSeparateDisplayModePerMedia) {
+        if (useSeparateDisplayModePerMedia) {
+            libraryPreferences.novelDisplayMode()
+        } else {
+            libraryPreferences.displayMode()
+        }
+    }
+    val displayMode by displayModePref.collectAsState()
     SettingsChipRow(MR.strings.action_display_mode) {
         novelLibraryDisplayModes().map { (titleRes, mode) ->
             FilterChip(
                 selected = displayMode == mode,
-                onClick = { libraryPreferences.displayMode().set(mode) },
+                onClick = { libraryPreferences.setDisplayModeForNovel(mode) },
                 label = { Text(stringResource(titleRes)) },
             )
         }

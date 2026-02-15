@@ -875,4 +875,5 @@
     <string name="navigator_height_large">Большой</string>
     <string name="pref_use_theme_color">Использовать цвет темы</string>
     <string name="pref_navigator_show_tick_marks">Показывать маркеры страниц</string>
+    <string name="pref_library_display_mode_per_media">Раздельный режим отображения для аниме, манги и ранобэ</string>
 </resources>

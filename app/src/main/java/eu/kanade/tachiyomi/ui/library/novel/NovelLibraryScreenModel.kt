@@ -13,7 +13,10 @@ import kotlinx.coroutines.launch
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.util.lang.compareToWithCollator
 import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
+import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.library.manga.model.MangaLibrarySort
+import tachiyomi.domain.items.novelchapter.model.NovelChapter
+import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.library.novel.LibraryNovel
 import uy.kohesive.injekt.Injekt
@@ -22,6 +25,7 @@ import kotlin.random.Random
 
 class NovelLibraryScreenModel(
     private val getLibraryNovel: GetLibraryNovel = Injekt.get(),
+    private val chapterRepository: NovelChapterRepository = Injekt.get(),
     private val basePreferences: BasePreferences = Injekt.get(),
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
     private val hasDownloadedChapters: (tachiyomi.domain.entries.novel.model.Novel) -> Boolean = {
@@ -256,6 +260,26 @@ class NovelLibraryScreenModel(
         if (state.value.sort.type == MangaLibrarySort.Type.Random) {
             libraryPreferences.randomNovelSortSeed().set(Random.nextInt())
         }
+    }
+
+    suspend fun getNextUnreadChapter(novel: Novel): NovelChapter? {
+        val chapters = chapterRepository.getChapterByNovelId(
+            novelId = novel.id,
+            applyScanlatorFilter = true,
+        ).sortedBy { it.sourceOrder }
+        if (chapters.isEmpty()) return null
+
+        // Keep reading from an in-progress chapter first.
+        chapters.firstOrNull { it.lastPageRead > 0L && !it.read }?.let { return it }
+
+        // Continue from the next unread chapter in reader navigation order.
+        val lastReadIndex = chapters.indexOfLast { it.read || it.lastPageRead > 0L }
+        if (lastReadIndex >= 0) {
+            chapters.drop(lastReadIndex + 1).firstOrNull { !it.read }?.let { return it }
+        }
+
+        // Fallback for "nothing read yet".
+        return chapters.firstOrNull { !it.read }
     }
 
     private fun filterItems(
