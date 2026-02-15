@@ -35,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,11 +49,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
-import eu.kanade.presentation.components.AuroraTabRow
-import eu.kanade.presentation.components.LocalTabState
 import eu.kanade.presentation.components.relativeDateText
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.updates.aurora.AuroraUpdatesGroupCard
+import eu.kanade.presentation.updates.aurora.buildAuroraUpdatesGroups
 import eu.kanade.tachiyomi.ui.updates.anime.AnimeUpdatesItem
+import eu.kanade.tachiyomi.util.lang.toLocalDate
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import tachiyomi.i18n.aniyomi.AYMR
@@ -63,21 +65,28 @@ import kotlin.time.Duration.Companion.seconds
 
 @Composable
 fun AnimeUpdatesAuroraContent(
-    items: List<AnimeUpdatesUiModel>,
+    items: List<AnimeUpdatesItem>,
     onAnimeClicked: (Long) -> Unit,
-    onDownloadClicked: (AnimeUpdatesItem) -> Unit,
     onRefresh: () -> Unit,
     contentPadding: PaddingValues,
 ) {
     val colors = AuroraTheme.colors
     val scope = rememberCoroutineScope()
     var isRefreshing by remember { mutableStateOf(false) }
+    var expandedGroups by rememberSaveable { mutableStateOf(setOf<String>()) }
     val listState = rememberLazyListState()
+    val groupedItems = remember(items) {
+        buildAuroraUpdatesGroups(
+            items = items,
+            dateSelector = { it.update.dateFetch.toLocalDate() },
+            titleIdSelector = { it.update.animeId },
+            titleSelector = { it.update.animeTitle },
+        )
+    }
 
     Box(
         modifier = Modifier
-            .fillMaxSize()
-            .background(colors.backgroundGradient),
+            .fillMaxSize(),
     ) {
         PullRefresh(
             refreshing = isRefreshing,
@@ -98,40 +107,58 @@ fun AnimeUpdatesAuroraContent(
                 modifier = Modifier
                     .fillMaxSize(),
             ) {
-                item {
-                    UpdatesHeader(onRefresh = onRefresh)
-                }
-
                 if (items.isEmpty()) {
                     item {
                         EmptyUpdatesState(onRefresh = onRefresh)
                     }
                 } else {
-                    items(
-                        items = items,
-                        key = {
-                            when (it) {
-                                is AnimeUpdatesUiModel.Header -> "header_${it.date}"
-                                is AnimeUpdatesUiModel.Item -> "item_${it.item.update.episodeId}"
-                            }
-                        },
-                        contentType = {
-                            when (it) {
-                                is AnimeUpdatesUiModel.Header -> "header"
-                                is AnimeUpdatesUiModel.Item -> "item"
-                            }
-                        },
-                    ) { uiModel ->
-                        when (uiModel) {
-                            is AnimeUpdatesUiModel.Header -> {
-                                DateHeader(date = uiModel.date)
-                            }
-                            is AnimeUpdatesUiModel.Item -> {
+                    groupedItems.forEach { section ->
+                        item(key = "date_${section.date}") {
+                            DateHeader(date = section.date)
+                        }
+
+                        items(
+                            items = section.groups,
+                            key = { group -> "group_${group.key}" },
+                        ) { group ->
+                            if (group.itemCount <= 1) {
+                                val item = group.items.first()
                                 AuroraUpdateCard(
-                                    item = uiModel.item,
+                                    item = item,
                                     onClick = onAnimeClicked,
                                     modifier = Modifier.padding(bottom = 12.dp),
                                 )
+                            } else {
+                                val isExpanded = group.key in expandedGroups
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    AuroraUpdatesGroupCard(
+                                        title = group.title,
+                                        countText = stringResource(
+                                            AYMR.strings.aurora_new_episodes_count,
+                                            group.itemCount,
+                                        ),
+                                        coverData = group.items.firstOrNull()?.update?.coverData,
+                                        expanded = isExpanded,
+                                        onClick = {
+                                            expandedGroups = if (isExpanded) {
+                                                expandedGroups - group.key
+                                            } else {
+                                                expandedGroups + group.key
+                                            }
+                                        },
+                                    )
+
+                                    if (isExpanded) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        group.items.forEach { updateItem ->
+                                            AuroraUpdateCard(
+                                                item = updateItem,
+                                                onClick = onAnimeClicked,
+                                                modifier = Modifier.padding(bottom = 8.dp),
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -139,62 +166,6 @@ fun AnimeUpdatesAuroraContent(
 
                 item { Spacer(modifier = Modifier.height(24.dp)) }
             }
-        }
-    }
-}
-
-@Composable
-private fun UpdatesHeader(onRefresh: () -> Unit) {
-    val colors = AuroraTheme.colors
-    val tabState = LocalTabState.current
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column {
-                Text(
-                    text = stringResource(AYMR.strings.aurora_updates),
-                    fontSize = 22.sp,
-                    color = colors.textPrimary,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = stringResource(AYMR.strings.aurora_new_episodes_subtitle),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.textSecondary,
-                )
-            }
-
-            IconButton(
-                onClick = onRefresh,
-                modifier = Modifier
-                    .background(colors.glass, CircleShape)
-                    .size(48.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Refresh,
-                    contentDescription = stringResource(AYMR.strings.aurora_refresh_library),
-                    tint = colors.textPrimary,
-                )
-            }
-        }
-
-        // Tab Switcher
-        if (tabState != null && tabState.tabs.size > 1) {
-            Spacer(Modifier.height(16.dp))
-            AuroraTabRow(
-                tabs = tabState.tabs,
-                selectedIndex = tabState.selectedIndex,
-                onTabSelected = tabState.onTabSelected,
-                scrollable = false,
-            )
         }
     }
 }
@@ -406,3 +377,4 @@ fun AuroraUpdateCard(
         }
     }
 }
+

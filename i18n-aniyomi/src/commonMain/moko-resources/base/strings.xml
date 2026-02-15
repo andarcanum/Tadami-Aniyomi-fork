@@ -865,7 +865,14 @@
     <string name="aurora_library_up_to_date">Your library is up to date!\nTap refresh to check for new episodes.</string>
     <string name="aurora_update_library">Update Library</string>
     <string name="aurora_refresh_library">Refresh Library</string>
-    <string name="aurora_updating_library">Updating library...</string>
+    <string name="aurora_refresh_current_tab">Refresh current tab</string>
+    <string name="aurora_refresh_all_tabs">Refresh all tabs</string>
+    <string name="aurora_new_episodes_count">New episodes: %d</string>
+    <string name="aurora_new_chapters_count">New chapters: %d</string>
+    <string name="aurora_updating_anime">Updating anime</string>
+    <string name="aurora_updating_manga">Updating manga</string>
+    <string name="aurora_updating_novel">Updating novel</string>
+    <string name="aurora_updating_library">Updating whole library</string>
     <string name="aurora_update_already_running">Update already running</string>
 
     <!-- Statistics Screen -->

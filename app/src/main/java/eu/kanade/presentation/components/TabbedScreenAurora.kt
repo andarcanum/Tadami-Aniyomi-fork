@@ -151,18 +151,28 @@ fun TabbedScreenAurora(
             state.scrollToPage(lastIndex)
         }
     }
-    LaunchedEffect(instantTabSwitching) {
+    LaunchedEffect(instantTabSwitching, state.currentPage, tabs.size) {
         if (!instantTabSwitching || tabs.isEmpty()) return@LaunchedEffect
-        instantSelectedPage = state.currentPage.coerceIn(0, tabs.lastIndex)
+        val targetIndex = state.currentPage.coerceIn(0, tabs.lastIndex)
+        if (instantSelectedPage != targetIndex) {
+            instantSelectedPage = targetIndex
+        }
     }
-    LaunchedEffect(instantTabSwitching, instantSelectedPage, tabs.size) {
+    LaunchedEffect(instantTabSwitching, instantSelectedPage, state.currentPage, tabs.size) {
         if (tabs.isEmpty()) return@LaunchedEffect
 
-        // Sync pager only when transitioning from instant switching to pager mode.
-        if (previousInstantTabSwitching && !instantTabSwitching) {
+        if (instantTabSwitching) {
             val targetIndex = instantSelectedPage.coerceIn(0, tabs.lastIndex)
             if (state.currentPage != targetIndex) {
                 state.scrollToPage(targetIndex)
+            }
+        } else {
+            // Sync pager only when transitioning from instant switching to pager mode.
+            if (previousInstantTabSwitching) {
+                val targetIndex = instantSelectedPage.coerceIn(0, tabs.lastIndex)
+                if (state.currentPage != targetIndex) {
+                    state.scrollToPage(targetIndex)
+                }
             }
         }
 

@@ -782,7 +782,14 @@
     <string name="aurora_library_up_to_date">Ваша библиотека обновлена!\nНажмите обновить, чтобы проверить новые эпизоды.</string>
     <string name="aurora_update_library">Обновить библиотеку</string>
     <string name="aurora_refresh_library">Обновить библиотеку</string>
-    <string name="aurora_updating_library">Обновление библиотеки...</string>
+    <string name="aurora_refresh_current_tab">Обновить текущую вкладку</string>
+    <string name="aurora_refresh_all_tabs">Обновить все вкладки</string>
+    <string name="aurora_new_episodes_count">Новых серий: %d</string>
+    <string name="aurora_new_chapters_count">Новых глав: %d</string>
+    <string name="aurora_updating_anime">Обновление аниме</string>
+    <string name="aurora_updating_manga">Обновление манги</string>
+    <string name="aurora_updating_novel">Обновление ранобэ</string>
+    <string name="aurora_updating_library">Обновление всей библиотеки</string>
     <string name="aurora_update_already_running">Обновление уже запущено</string>
 
     <!-- Statistics Screen -->
