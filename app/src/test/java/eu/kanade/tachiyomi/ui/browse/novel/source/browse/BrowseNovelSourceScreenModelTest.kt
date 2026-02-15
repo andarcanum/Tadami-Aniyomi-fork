@@ -30,12 +30,14 @@ import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.domain.entries.novel.interactor.NetworkToLocalNovel
 import tachiyomi.domain.entries.novel.interactor.GetNovelByUrlAndSourceId
 import tachiyomi.domain.entries.novel.model.Novel
+import tachiyomi.domain.entries.novel.model.NovelUpdate
 import tachiyomi.domain.source.novel.interactor.GetRemoteNovel
 import tachiyomi.domain.source.novel.repository.NovelSourceRepository
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.fullType
 import uy.kohesive.injekt.api.get
+import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 
 class BrowseNovelSourceScreenModelTest {
 
@@ -78,6 +80,84 @@ class BrowseNovelSourceScreenModelTest {
             val result = screenModel.openNovel(remoteNovel)
 
             result shouldBe 42L
+        }
+    }
+
+    @Test
+    fun `addNovelToLibrary marks local novel as favorite`() {
+        runBlocking {
+            val source = FakeNovelCatalogueSource(id = 1L, name = "Novel", lang = "en")
+            val sourceManager = FakeNovelSourceManager(source)
+            val prefs = SourcePreferences(FakePreferenceStore())
+            val remoteNovel = SNovel.create().apply {
+                url = "/novel-library-add"
+                title = "Novel"
+            }
+            val novelRepository = FakeNovelRepository(insertId = 77L)
+            val networkToLocal = NetworkToLocalNovel(novelRepository)
+            val getRemoteNovel = GetRemoteNovel(
+                repository = FakeNovelSourceRepository(),
+            )
+
+            val screenModel = BrowseNovelSourceScreenModel(
+                sourceId = 1L,
+                listingQuery = null,
+                sourceManager = sourceManager,
+                getRemoteNovel = getRemoteNovel,
+                sourcePreferences = prefs,
+                getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(novelRepository),
+                networkToLocalNovel = networkToLocal,
+                updateNovel = UpdateNovel(novelRepository),
+            )
+
+            val result = screenModel.addNovelToLibrary(remoteNovel)
+
+            result shouldBe true
+            novelRepository.lastNovelUpdate?.id shouldBe 77L
+            novelRepository.lastNovelUpdate?.favorite shouldBe true
+        }
+    }
+
+    @Test
+    fun `getDuplicateLibraryNovel returns matching favorite novel`() {
+        runBlocking {
+            val source = FakeNovelCatalogueSource(id = 1L, name = "Novel", lang = "en")
+            val sourceManager = FakeNovelSourceManager(source)
+            val prefs = SourcePreferences(FakePreferenceStore())
+            val duplicate = Novel.create().copy(
+                id = 90L,
+                title = "Same Title",
+                favorite = true,
+            )
+            val novelRepository = FakeNovelRepository(
+                insertId = 77L,
+                favorites = listOf(duplicate),
+            )
+            val getRemoteNovel = GetRemoteNovel(
+                repository = FakeNovelSourceRepository(),
+            )
+
+            val screenModel = BrowseNovelSourceScreenModel(
+                sourceId = 1L,
+                listingQuery = null,
+                sourceManager = sourceManager,
+                getRemoteNovel = getRemoteNovel,
+                sourcePreferences = prefs,
+                getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(novelRepository),
+                networkToLocalNovel = NetworkToLocalNovel(novelRepository),
+                getNovelFavoritesInteractor = tachiyomi.domain.entries.novel.interactor.GetNovelFavorites(
+                    novelRepository,
+                ),
+            )
+
+            val localNovel = Novel.create().copy(
+                id = 77L,
+                title = "same title",
+                favorite = false,
+            )
+            val result = screenModel.getDuplicateLibraryNovel(localNovel)
+
+            result?.id shouldBe 90L
         }
     }
 
@@ -279,17 +359,23 @@ class BrowseNovelSourceScreenModelTest {
     }
 
     private class FakeNovelRepository : tachiyomi.domain.entries.novel.repository.NovelRepository {
-        constructor(insertId: Long? = null) {
+        constructor(
+            insertId: Long? = null,
+            favorites: List<Novel> = emptyList(),
+        ) {
             this.insertId = insertId
+            this.favorites = favorites
         }
 
         private val insertId: Long?
+        private val favorites: List<Novel>
+        var lastNovelUpdate: NovelUpdate? = null
         override suspend fun getNovelById(id: Long): Novel = Novel.create()
         override suspend fun getNovelByIdAsFlow(id: Long) = MutableStateFlow(Novel.create())
         override suspend fun getNovelByUrlAndSourceId(url: String, sourceId: Long): Novel? = null
         override fun getNovelByUrlAndSourceIdAsFlow(url: String, sourceId: Long) =
             MutableStateFlow<Novel?>(null)
-        override suspend fun getNovelFavorites(): List<Novel> = emptyList()
+        override suspend fun getNovelFavorites(): List<Novel> = favorites
         override suspend fun getReadNovelNotInLibrary(): List<Novel> = emptyList()
         override suspend fun getLibraryNovel() = emptyList<tachiyomi.domain.library.novel.LibraryNovel>()
         override fun getLibraryNovelAsFlow() = MutableStateFlow(
@@ -297,7 +383,10 @@ class BrowseNovelSourceScreenModelTest {
         )
         override fun getNovelFavoritesBySourceId(sourceId: Long) = MutableStateFlow(emptyList<Novel>())
         override suspend fun insertNovel(novel: Novel): Long? = insertId
-        override suspend fun updateNovel(update: tachiyomi.domain.entries.novel.model.NovelUpdate): Boolean = true
+        override suspend fun updateNovel(update: tachiyomi.domain.entries.novel.model.NovelUpdate): Boolean {
+            lastNovelUpdate = update
+            return true
+        }
         override suspend fun updateAllNovel(
             novelUpdates: List<tachiyomi.domain.entries.novel.model.NovelUpdate>,
         ): Boolean = true

@@ -1,44 +1,41 @@
 package eu.kanade.presentation.browse.novel
 
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import eu.kanade.presentation.browse.BrowseSourceLoadingItem
+import eu.kanade.presentation.browse.InLibraryBadge
 import eu.kanade.presentation.components.AppBar
-import eu.kanade.presentation.entries.components.ItemCover
+import eu.kanade.presentation.library.components.CommonEntryItemDefaults
+import eu.kanade.presentation.library.components.EntryCompactGridItem
+import eu.kanade.presentation.library.components.EntryComfortableGridItem
+import eu.kanade.presentation.library.components.EntryListItem
 import eu.kanade.presentation.util.formattedMessage
 import eu.kanade.tachiyomi.novelsource.NovelSource
-import eu.kanade.tachiyomi.novelsource.model.SNovel
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.flow.StateFlow
 import tachiyomi.core.common.i18n.stringResource
-import tachiyomi.domain.library.model.LibraryDisplayMode
+import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.entries.novel.model.NovelCover
+import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.source.novel.model.StubNovelSource
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
@@ -56,11 +53,12 @@ internal fun novelBrowseItemKey(url: String?, index: Int): String {
 @Composable
 fun BrowseNovelSourceContent(
     source: NovelSource?,
-    novels: LazyPagingItems<SNovel>,
+    novels: LazyPagingItems<StateFlow<Novel>>,
     displayMode: LibraryDisplayMode,
     snackbarHostState: SnackbarHostState,
     contentPadding: PaddingValues,
-    onNovelClick: (SNovel) -> Unit,
+    onNovelClick: (Novel) -> Unit,
+    onNovelLongClick: ((Novel) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val effectiveContentPadding = contentPadding
@@ -112,29 +110,38 @@ fun BrowseNovelSourceContent(
         LibraryDisplayMode.List -> {
             NovelListContent(
                 novels = novels,
-                sourceId = source?.id ?: -1L,
                 contentPadding = effectiveContentPadding,
                 onNovelClick = onNovelClick,
+                onNovelLongClick = onNovelLongClick,
             )
         }
         LibraryDisplayMode.ComfortableGrid -> {
-            NovelGridContent(
+            NovelComfortableGridContent(
                 novels = novels,
-                sourceId = source?.id ?: -1L,
                 columns = GridCells.Adaptive(120.dp),
+                contentPadding = effectiveContentPadding,
+                onNovelClick = onNovelClick,
+                onNovelLongClick = onNovelLongClick,
+            )
+        }
+        LibraryDisplayMode.CompactGrid -> {
+            NovelCompactGridContent(
+                novels = novels,
+                columns = GridCells.Adaptive(96.dp),
                 contentPadding = effectiveContentPadding,
                 showTitle = true,
                 onNovelClick = onNovelClick,
+                onNovelLongClick = onNovelLongClick,
             )
         }
-        LibraryDisplayMode.CompactGrid, LibraryDisplayMode.CoverOnlyGrid -> {
-            NovelGridContent(
+        LibraryDisplayMode.CoverOnlyGrid -> {
+            NovelCompactGridContent(
                 novels = novels,
-                sourceId = source?.id ?: -1L,
                 columns = GridCells.Adaptive(96.dp),
                 contentPadding = effectiveContentPadding,
-                showTitle = displayMode != LibraryDisplayMode.CoverOnlyGrid,
+                showTitle = false,
                 onNovelClick = onNovelClick,
+                onNovelLongClick = onNovelLongClick,
             )
         }
     }
@@ -142,69 +149,42 @@ fun BrowseNovelSourceContent(
 
 @Composable
 private fun NovelListContent(
-    novels: LazyPagingItems<SNovel>,
-    sourceId: Long,
+    novels: LazyPagingItems<StateFlow<Novel>>,
     contentPadding: PaddingValues,
-    onNovelClick: (SNovel) -> Unit,
+    onNovelClick: (Novel) -> Unit,
+    onNovelLongClick: ((Novel) -> Unit)?,
 ) {
     LazyColumn(contentPadding = contentPadding + PaddingValues(vertical = 8.dp)) {
-        itemsIndexed(
-            items = novels.itemSnapshotList.items,
-            key = { index, novel -> novelBrowseItemKey(novel.url, index) },
-        ) { _, novel ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .combinedClickable(onClick = { onNovelClick(novel) })
-                    .padding(
-                        horizontal = MaterialTheme.padding.medium,
-                        vertical = MaterialTheme.padding.small,
-                    ),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                ItemCover.Book(
-                    data = novel.asBrowseNovelCover(sourceId),
-                    modifier = Modifier.fillMaxWidth(0.2f),
-                )
-                Column(
-                    modifier = Modifier
-                        .padding(start = MaterialTheme.padding.medium)
-                        .weight(1f),
-                ) {
-                    Text(
-                        text = novel.title,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (!novel.author.isNullOrBlank()) {
-                        Text(
-                            text = novel.author.orEmpty(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
+        items(
+            count = novels.itemCount,
+            key = { index -> novelBrowseItemKey(novels[index]?.value?.url, index) },
+        ) { index ->
+            val novel by novels[index]?.collectAsState() ?: return@items
+            EntryListItem(
+                title = novel.title,
+                coverData = novel.asBrowseNovelCover(),
+                coverAlpha = if (novel.favorite) CommonEntryItemDefaults.BrowseFavoriteCoverAlpha else 1f,
+                badge = { InLibraryBadge(enabled = novel.favorite) },
+                onLongClick = onNovelLongClick?.let { callback -> { callback(novel) } } ?: {},
+                onClick = { onNovelClick(novel) },
+            )
         }
     }
 }
 
 @Composable
-private fun NovelGridContent(
-    novels: LazyPagingItems<SNovel>,
-    sourceId: Long,
+private fun NovelComfortableGridContent(
+    novels: LazyPagingItems<StateFlow<Novel>>,
     columns: GridCells,
     contentPadding: PaddingValues,
-    showTitle: Boolean,
-    onNovelClick: (SNovel) -> Unit,
+    onNovelClick: (Novel) -> Unit,
+    onNovelLongClick: ((Novel) -> Unit)?,
 ) {
     LazyVerticalGrid(
         columns = columns,
         contentPadding = contentPadding + PaddingValues(8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(CommonEntryItemDefaults.GridVerticalSpacer),
+        horizontalArrangement = Arrangement.spacedBy(CommonEntryItemDefaults.GridHorizontalSpacer),
     ) {
         if (novels.loadState.prepend is LoadState.Loading) {
             item(span = { GridItemSpan(maxLineSpan) }) {
@@ -214,27 +194,17 @@ private fun NovelGridContent(
 
         items(
             count = novels.itemCount,
-            key = { index -> novelBrowseItemKey(novels[index]?.url, index) },
+            key = { index -> novelBrowseItemKey(novels[index]?.value?.url, index) },
         ) { index ->
-            val novel = novels[index] ?: return@items
-            Column(
-                modifier = Modifier
-                    .combinedClickable(onClick = { onNovelClick(novel) }),
-            ) {
-                ItemCover.Book(
-                    data = novel.asBrowseNovelCover(sourceId),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                if (showTitle) {
-                    Text(
-                        text = novel.title,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                    )
-                }
-            }
+            val novel by novels[index]?.collectAsState() ?: return@items
+            EntryComfortableGridItem(
+                title = novel.title,
+                coverData = novel.asBrowseNovelCover(),
+                coverAlpha = if (novel.favorite) CommonEntryItemDefaults.BrowseFavoriteCoverAlpha else 1f,
+                coverBadgeStart = { InLibraryBadge(enabled = novel.favorite) },
+                onLongClick = onNovelLongClick?.let { callback -> { callback(novel) } } ?: {},
+                onClick = { onNovelClick(novel) },
+            )
         }
 
         if (novels.loadState.refresh is LoadState.Loading || novels.loadState.append is LoadState.Loading) {
@@ -245,13 +215,57 @@ private fun NovelGridContent(
     }
 }
 
-private fun SNovel.asBrowseNovelCover(sourceId: Long): NovelCover {
+@Composable
+private fun NovelCompactGridContent(
+    novels: LazyPagingItems<StateFlow<Novel>>,
+    columns: GridCells,
+    contentPadding: PaddingValues,
+    showTitle: Boolean,
+    onNovelClick: (Novel) -> Unit,
+    onNovelLongClick: ((Novel) -> Unit)?,
+) {
+    LazyVerticalGrid(
+        columns = columns,
+        contentPadding = contentPadding + PaddingValues(8.dp),
+        verticalArrangement = Arrangement.spacedBy(CommonEntryItemDefaults.GridVerticalSpacer),
+        horizontalArrangement = Arrangement.spacedBy(CommonEntryItemDefaults.GridHorizontalSpacer),
+    ) {
+        if (novels.loadState.prepend is LoadState.Loading) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                BrowseSourceLoadingItem()
+            }
+        }
+
+        items(
+            count = novels.itemCount,
+            key = { index -> novelBrowseItemKey(novels[index]?.value?.url, index) },
+        ) { index ->
+            val novel by novels[index]?.collectAsState() ?: return@items
+            EntryCompactGridItem(
+                title = novel.title.takeIf { showTitle },
+                coverData = novel.asBrowseNovelCover(),
+                coverAlpha = if (novel.favorite) CommonEntryItemDefaults.BrowseFavoriteCoverAlpha else 1f,
+                coverBadgeStart = { InLibraryBadge(enabled = novel.favorite) },
+                onLongClick = onNovelLongClick?.let { callback -> { callback(novel) } } ?: {},
+                onClick = { onNovelClick(novel) },
+            )
+        }
+
+        if (novels.loadState.refresh is LoadState.Loading || novels.loadState.append is LoadState.Loading) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                BrowseSourceLoadingItem()
+            }
+        }
+    }
+}
+
+internal fun Novel.asBrowseNovelCover(): NovelCover {
     return NovelCover(
-        novelId = -1L,
-        sourceId = sourceId,
-        isNovelFavorite = false,
-        url = thumbnail_url,
-        lastModified = 0L,
+        novelId = id,
+        sourceId = source,
+        isNovelFavorite = favorite,
+        url = thumbnailUrl,
+        lastModified = coverLastModified,
     )
 }
 

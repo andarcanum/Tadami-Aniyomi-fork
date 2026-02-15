@@ -10,4 +10,7 @@ class GetNovelCategories(
     fun subscribe(): Flow<List<NovelCategory>> = repository.getCategoriesAsFlow()
 
     suspend fun await(): List<NovelCategory> = repository.getCategories()
+
+    suspend fun await(novelId: Long): List<NovelCategory> =
+        repository.getCategoriesByNovelId(novelId)
 }
