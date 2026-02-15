@@ -73,3 +73,6 @@ app/cash/
 
 # Conductor tracks (local metadata)
 conductor/tracks/
+
+# Local docs workspace changes
+docs/
