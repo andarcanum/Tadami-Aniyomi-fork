@@ -14,7 +14,7 @@ import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.util.lang.compareToWithCollator
 import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
 import tachiyomi.domain.entries.novel.model.Novel
-import tachiyomi.domain.library.manga.model.MangaLibrarySort
+import tachiyomi.domain.library.novel.model.NovelLibrarySort
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.library.service.LibraryPreferences
@@ -249,15 +249,15 @@ class NovelLibraryScreenModel(
         libraryPreferences.filterIntervalCustom().set(filter)
     }
 
-    fun setSort(type: MangaLibrarySort.Type, direction: MangaLibrarySort.Direction) {
-        libraryPreferences.novelSortingMode().set(MangaLibrarySort(type, direction))
-        if (type == MangaLibrarySort.Type.Random) {
+    fun setSort(type: NovelLibrarySort.Type, direction: NovelLibrarySort.Direction) {
+        libraryPreferences.novelSortingMode().set(NovelLibrarySort(type, direction))
+        if (type == NovelLibrarySort.Type.Random) {
             libraryPreferences.randomNovelSortSeed().set(Random.nextInt())
         }
     }
 
     fun reshuffleRandomSort() {
-        if (state.value.sort.type == MangaLibrarySort.Type.Random) {
+        if (state.value.sort.type == NovelLibrarySort.Type.Random) {
             libraryPreferences.randomNovelSortSeed().set(Random.nextInt())
         }
     }
@@ -292,7 +292,7 @@ class NovelLibraryScreenModel(
         bookmarkedFilter: TriState,
         completedFilter: TriState,
         filterIntervalCustom: TriState,
-        sort: MangaLibrarySort,
+        sort: NovelLibrarySort,
         randomSortSeed: Int,
     ): List<LibraryNovel> {
         var filtered = novels
@@ -333,23 +333,23 @@ class NovelLibraryScreenModel(
 
     private fun sortItems(
         items: List<LibraryNovel>,
-        sort: MangaLibrarySort,
+        sort: NovelLibrarySort,
         randomSortSeed: Int,
     ): List<LibraryNovel> {
         if (items.isEmpty()) return items
-        if (sort.type == MangaLibrarySort.Type.Random) {
+        if (sort.type == NovelLibrarySort.Type.Random) {
             return items.shuffled(Random(randomSortSeed))
         }
 
         val sorted = items.sortedWith(
             Comparator<LibraryNovel> { left, right ->
                 when (sort.type) {
-                    MangaLibrarySort.Type.Alphabetical -> {
+                    NovelLibrarySort.Type.Alphabetical -> {
                         left.novel.title.lowercase().compareToWithCollator(right.novel.title.lowercase())
                     }
-                    MangaLibrarySort.Type.LastRead -> left.lastRead.compareTo(right.lastRead)
-                    MangaLibrarySort.Type.LastUpdate -> left.novel.lastUpdate.compareTo(right.novel.lastUpdate)
-                    MangaLibrarySort.Type.UnreadCount -> {
+                    NovelLibrarySort.Type.LastRead -> left.lastRead.compareTo(right.lastRead)
+                    NovelLibrarySort.Type.LastUpdate -> left.novel.lastUpdate.compareTo(right.novel.lastUpdate)
+                    NovelLibrarySort.Type.UnreadCount -> {
                         when {
                             left.unreadCount == right.unreadCount -> 0
                             left.unreadCount == 0L -> if (sort.isAscending) 1 else -1
@@ -357,12 +357,12 @@ class NovelLibraryScreenModel(
                             else -> left.unreadCount.compareTo(right.unreadCount)
                         }
                     }
-                    MangaLibrarySort.Type.TotalChapters -> left.totalChapters.compareTo(right.totalChapters)
-                    MangaLibrarySort.Type.LatestChapter -> left.latestUpload.compareTo(right.latestUpload)
-                    MangaLibrarySort.Type.ChapterFetchDate -> left.chapterFetchedAt.compareTo(right.chapterFetchedAt)
-                    MangaLibrarySort.Type.DateAdded -> left.novel.dateAdded.compareTo(right.novel.dateAdded)
-                    MangaLibrarySort.Type.TrackerMean -> 0
-                    MangaLibrarySort.Type.Random -> 0
+                    NovelLibrarySort.Type.TotalChapters -> left.totalChapters.compareTo(right.totalChapters)
+                    NovelLibrarySort.Type.LatestChapter -> left.latestUpload.compareTo(right.latestUpload)
+                    NovelLibrarySort.Type.ChapterFetchDate -> left.chapterFetchedAt.compareTo(right.chapterFetchedAt)
+                    NovelLibrarySort.Type.DateAdded -> left.novel.dateAdded.compareTo(right.novel.dateAdded)
+                    NovelLibrarySort.Type.TrackerMean -> 0
+                    NovelLibrarySort.Type.Random -> 0
                 }
             }
                 .let { if (sort.isAscending) it else it.reversed() }
@@ -388,7 +388,7 @@ class NovelLibraryScreenModel(
         val completedFilter: TriState = TriState.DISABLED,
         val filterIntervalCustom: TriState = TriState.DISABLED,
         val downloadedNovelIds: Set<Long> = emptySet(),
-        val sort: MangaLibrarySort = MangaLibrarySort.default,
+        val sort: NovelLibrarySort = NovelLibrarySort.default,
         val randomSortSeed: Int = 0,
         val dialog: Dialog? = null,
     ) {

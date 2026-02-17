@@ -394,6 +394,7 @@ object SettingsLibraryScreen : SearchableSettings {
     private fun getBehaviorGroup(
         libraryPreferences: LibraryPreferences,
     ): Preference.PreferenceGroup {
+        val novelLabel = stringResource(AYMR.strings.label_novel)
         return Preference.PreferenceGroup(
             title = stringResource(AYMR.strings.pref_behavior),
             preferenceItems = persistentListOf(
@@ -424,6 +425,34 @@ object SettingsLibraryScreen : SearchableSettings {
                             stringResource(MR.strings.action_download),
                     ),
                     title = stringResource(MR.strings.pref_chapter_swipe_end),
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = libraryPreferences.swipeNovelChapterStartAction(),
+                    entries = persistentMapOf(
+                        LibraryPreferences.NovelSwipeAction.Disabled to
+                            stringResource(MR.strings.disabled),
+                        LibraryPreferences.NovelSwipeAction.ToggleBookmark to
+                            stringResource(MR.strings.action_bookmark),
+                        LibraryPreferences.NovelSwipeAction.ToggleRead to
+                            stringResource(MR.strings.action_mark_as_read),
+                        LibraryPreferences.NovelSwipeAction.Download to
+                            stringResource(MR.strings.action_download),
+                    ),
+                    title = "${stringResource(MR.strings.pref_chapter_swipe_start)} ($novelLabel)",
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = libraryPreferences.swipeNovelChapterEndAction(),
+                    entries = persistentMapOf(
+                        LibraryPreferences.NovelSwipeAction.Disabled to
+                            stringResource(MR.strings.disabled),
+                        LibraryPreferences.NovelSwipeAction.ToggleBookmark to
+                            stringResource(MR.strings.action_bookmark),
+                        LibraryPreferences.NovelSwipeAction.ToggleRead to
+                            stringResource(MR.strings.action_mark_as_read),
+                        LibraryPreferences.NovelSwipeAction.Download to
+                            stringResource(MR.strings.action_download),
+                    ),
+                    title = "${stringResource(MR.strings.pref_chapter_swipe_end)} ($novelLabel)",
                 ),
                 Preference.PreferenceItem.MultiSelectListPreference(
                     preference = libraryPreferences.markDuplicateReadChapterAsRead(),

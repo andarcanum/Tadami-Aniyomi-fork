@@ -314,6 +314,7 @@
     <string name="pref_bottom_nav_no_history">Переместить вкладку «История» на вкладку «Больше»</string>
     <string name="pref_bottom_nav_no_updates">Переместить вкладку «Обновления» на вкладку «Больше»</string>
     <string name="pref_bottom_nav_no_manga">Переместить вкладку «Тайтлы» на вкладку «Больше»</string>
+    <string name="pref_bottom_nav_no_novel">Переместить вкладку «Ранобэ» на вкладку «Больше»</string>
     <string name="pref_bottom_nav_no_browse">Переместить вкладку «Обзор» на вкладку «Больше»</string>
     <string name="action_filter_unseen">Не просмотрено</string>
     <string name="action_global_manga_search">Глобальный поиск манги</string>

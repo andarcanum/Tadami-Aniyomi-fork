@@ -26,7 +26,7 @@ import eu.kanade.tachiyomi.util.system.isReleaseBuildType
 import eu.kanade.tachiyomi.ui.library.novel.NovelLibraryScreenModel
 import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.domain.library.model.LibraryDisplayMode
-import tachiyomi.domain.library.manga.model.MangaLibrarySort
+import tachiyomi.domain.library.novel.model.NovelLibrarySort
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
@@ -129,12 +129,12 @@ private fun ColumnScope.SortPage(
     val options = novelLibrarySortOptions()
 
     options.map { (titleRes, mode) ->
-        if (mode == MangaLibrarySort.Type.Random) {
+        if (mode == NovelLibrarySort.Type.Random) {
             BaseSortItem(
                 label = stringResource(titleRes),
-                icon = Icons.Default.Refresh.takeIf { sortingMode == MangaLibrarySort.Type.Random },
+                icon = Icons.Default.Refresh.takeIf { sortingMode == NovelLibrarySort.Type.Random },
                 onClick = {
-                    screenModel.setSort(mode, MangaLibrarySort.Direction.Ascending)
+                    screenModel.setSort(mode, NovelLibrarySort.Direction.Ascending)
                 },
             )
             return@map
@@ -147,14 +147,14 @@ private fun ColumnScope.SortPage(
                 val isTogglingDirection = sortingMode == mode
                 val direction = when {
                     isTogglingDirection -> if (sortDescending) {
-                        MangaLibrarySort.Direction.Ascending
+                        NovelLibrarySort.Direction.Ascending
                     } else {
-                        MangaLibrarySort.Direction.Descending
+                        NovelLibrarySort.Direction.Descending
                     }
                     else -> if (sortDescending) {
-                        MangaLibrarySort.Direction.Descending
+                        NovelLibrarySort.Direction.Descending
                     } else {
-                        MangaLibrarySort.Direction.Ascending
+                        NovelLibrarySort.Direction.Ascending
                     }
                 }
                 screenModel.setSort(mode, direction)
@@ -264,17 +264,17 @@ private fun ColumnScope.DisplayPage(
     )
 }
 
-internal fun novelLibrarySortOptions(): List<Pair<StringResource, MangaLibrarySort.Type>> {
+internal fun novelLibrarySortOptions(): List<Pair<StringResource, NovelLibrarySort.Type>> {
     return listOf(
-        MR.strings.action_sort_alpha to MangaLibrarySort.Type.Alphabetical,
-        MR.strings.action_sort_total to MangaLibrarySort.Type.TotalChapters,
-        MR.strings.action_sort_last_read to MangaLibrarySort.Type.LastRead,
-        AYMR.strings.action_sort_last_manga_update to MangaLibrarySort.Type.LastUpdate,
-        MR.strings.action_sort_unread_count to MangaLibrarySort.Type.UnreadCount,
-        MR.strings.action_sort_latest_chapter to MangaLibrarySort.Type.LatestChapter,
-        MR.strings.action_sort_chapter_fetch_date to MangaLibrarySort.Type.ChapterFetchDate,
-        MR.strings.action_sort_date_added to MangaLibrarySort.Type.DateAdded,
-        MR.strings.action_sort_random to MangaLibrarySort.Type.Random,
+        MR.strings.action_sort_alpha to NovelLibrarySort.Type.Alphabetical,
+        MR.strings.action_sort_total to NovelLibrarySort.Type.TotalChapters,
+        MR.strings.action_sort_last_read to NovelLibrarySort.Type.LastRead,
+        AYMR.strings.action_sort_last_manga_update to NovelLibrarySort.Type.LastUpdate,
+        MR.strings.action_sort_unread_count to NovelLibrarySort.Type.UnreadCount,
+        MR.strings.action_sort_latest_chapter to NovelLibrarySort.Type.LatestChapter,
+        MR.strings.action_sort_chapter_fetch_date to NovelLibrarySort.Type.ChapterFetchDate,
+        MR.strings.action_sort_date_added to NovelLibrarySort.Type.DateAdded,
+        MR.strings.action_sort_random to NovelLibrarySort.Type.Random,
     )
 }
 

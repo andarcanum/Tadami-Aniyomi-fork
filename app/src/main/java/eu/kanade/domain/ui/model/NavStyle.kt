@@ -23,6 +23,7 @@ enum class NavStyle(
     val moreTab: Tab,
 ) {
     MOVE_MANGA_TO_MORE(titleRes = AYMR.strings.pref_bottom_nav_no_manga, moreTab = AnimeLibraryTab),
+    MOVE_NOVEL_TO_MORE(titleRes = AYMR.strings.pref_bottom_nav_no_novel, moreTab = AnimeLibraryTab),
     MOVE_UPDATES_TO_MORE(titleRes = AYMR.strings.pref_bottom_nav_no_updates, moreTab = UpdatesTab),
     MOVE_HISTORY_TO_MORE(titleRes = AYMR.strings.pref_bottom_nav_no_history, moreTab = HistoriesTab),
     MOVE_BROWSE_TO_MORE(titleRes = AYMR.strings.pref_bottom_nav_no_browse, moreTab = BrowseTab),
@@ -32,6 +33,7 @@ enum class NavStyle(
         @Composable
         get() = when (this) {
             MOVE_MANGA_TO_MORE -> Icons.Outlined.CollectionsBookmark
+            MOVE_NOVEL_TO_MORE -> Icons.Outlined.CollectionsBookmark
             MOVE_UPDATES_TO_MORE -> ImageVector.vectorResource(id = R.drawable.ic_updates_outline_24dp)
             MOVE_HISTORY_TO_MORE -> Icons.Outlined.History
             MOVE_BROWSE_TO_MORE -> Icons.Outlined.Explore

@@ -92,6 +92,7 @@ data object UpdatesTab : Tab {
                 NavStyle.MOVE_HISTORY_TO_MORE -> 2u
                 NavStyle.MOVE_BROWSE_TO_MORE -> 2u
                 NavStyle.MOVE_MANGA_TO_MORE -> 1u
+                NavStyle.MOVE_NOVEL_TO_MORE -> 1u
             }
             return TabOptions(
                 index = index,

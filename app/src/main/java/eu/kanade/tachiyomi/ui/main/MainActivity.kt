@@ -572,6 +572,10 @@ class MainActivity : BaseActivity() {
                 navigator.popUntilRoot()
                 HomeScreen.Tab.Library(idToOpen)
             }
+            Constants.SHORTCUT_NOVEL -> {
+                navigator.popUntilRoot()
+                HomeScreen.Tab.NovelLib()
+            }
             Constants.SHORTCUT_ANIME -> {
                 val idToOpen = intent.extras?.getLong(Constants.ANIME_EXTRA) ?: return false
                 navigator.popUntilRoot()

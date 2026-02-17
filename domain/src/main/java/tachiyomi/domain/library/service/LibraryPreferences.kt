@@ -10,6 +10,7 @@ import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.library.anime.model.AnimeLibrarySort
 import tachiyomi.domain.library.manga.model.MangaLibrarySort
+import tachiyomi.domain.library.novel.model.NovelLibrarySort
 import tachiyomi.domain.library.model.LibraryDisplayMode
 
 class LibraryPreferences(
@@ -95,12 +96,12 @@ class LibraryPreferences(
 
     fun novelSortingMode() = preferenceStore.getObject(
         "novellib_sorting_mode",
-        MangaLibrarySort(
-            type = MangaLibrarySort.Type.LastRead,
-            direction = MangaLibrarySort.Direction.Descending,
+        NovelLibrarySort(
+            type = NovelLibrarySort.Type.LastRead,
+            direction = NovelLibrarySort.Direction.Descending,
         ),
-        MangaLibrarySort.Serializer::serialize,
-        MangaLibrarySort.Serializer::deserialize,
+        NovelLibrarySort.Serializer::serialize,
+        NovelLibrarySort.Serializer::deserialize,
     )
 
     fun lastUpdatedTimestamp() = preferenceStore.getLong(Preference.appStateKey("library_update_last_timestamp"), 0L)
@@ -504,6 +505,16 @@ class LibraryPreferences(
         ChapterSwipeAction.ToggleBookmark,
     )
 
+    fun swipeNovelChapterStartAction() = preferenceStore.getEnum(
+        "pref_novel_chapter_swipe_end_action",
+        NovelSwipeAction.ToggleRead,
+    )
+
+    fun swipeNovelChapterEndAction() = preferenceStore.getEnum(
+        "pref_novel_chapter_swipe_start_action",
+        NovelSwipeAction.ToggleBookmark,
+    )
+
     fun markDuplicateReadChapterAsRead() = preferenceStore.getStringSet("mark_duplicate_read_chapter_read", emptySet())
 
     fun markDuplicateSeenEpisodeAsSeen() = preferenceStore.getStringSet("mark_duplicate_seen_episode_seen", emptySet())
@@ -519,6 +530,13 @@ class LibraryPreferences(
     }
 
     enum class ChapterSwipeAction {
+        ToggleRead,
+        ToggleBookmark,
+        Download,
+        Disabled,
+    }
+
+    enum class NovelSwipeAction {
         ToggleRead,
         ToggleBookmark,
         Download,
