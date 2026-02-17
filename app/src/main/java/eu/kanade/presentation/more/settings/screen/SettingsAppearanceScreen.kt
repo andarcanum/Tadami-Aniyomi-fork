@@ -193,11 +193,6 @@ object SettingsAppearanceScreen : SearchableSettings {
                         newValue || showAnimeSection || showMangaSection
                     },
                 ),
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = uiPreferences.auroraInstantTabSwitching(),
-                    title = stringResource(AYMR.strings.pref_aurora_instant_tab_switching),
-                    subtitle = stringResource(AYMR.strings.pref_aurora_instant_tab_switching_summary),
-                ),
                 Preference.PreferenceItem.ListPreference(
                     preference = uiPreferences.navStyle(),
                     entries = NavStyle.entries

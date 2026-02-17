@@ -475,8 +475,6 @@
     <string name="pref_show_manga_section">Show manga section</string>
     <string name="pref_show_novel_section">Show novel section</string>
     <string name="pref_show_section_required">At least one section must stay enabled</string>
-    <string name="pref_aurora_instant_tab_switching">Aurora instant tab switching</string>
-    <string name="pref_aurora_instant_tab_switching_summary">Switch tabs without page swipe animation; swipe gesture changes tabs with a light edge bounce</string>
     <string name="pref_library_manga_columns">Manga items per row</string>
     <string name="pref_library_anime_columns">Anime items per row</string>
     <string name="pref_bottom_nav_no_history">Move History to the More tab</string>

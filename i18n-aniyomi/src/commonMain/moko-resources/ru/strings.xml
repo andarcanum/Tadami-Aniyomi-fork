@@ -384,8 +384,6 @@
     <string name="pref_show_manga_section">Показывать раздел манги</string>
     <string name="pref_show_novel_section">Показывать раздел ранобэ</string>
     <string name="pref_show_section_required">По крайней мере один раздел должен оставаться включенным</string>
-    <string name="pref_aurora_instant_tab_switching">Мгновенное переключение вкладок Aurora</string>
-    <string name="pref_aurora_instant_tab_switching_summary">Переключает вкладки без анимации перелистывания; свайп меняет вкладку с легким отскоком на краях</string>
     <string name="pref_default_home_tab_library">Сделать вкладку манги начальным экраном</string>
     <string name="default_manga_category">Категория манги по умолчанию</string>
     <string name="default_anime_category">Категория аниме по умолчанию</string>

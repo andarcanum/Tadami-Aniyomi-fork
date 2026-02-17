@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -110,7 +111,6 @@ data object UpdatesTab : Tab {
         val showAnimeSection by uiPreferences.showAnimeSection().collectAsState()
         val showMangaSection by uiPreferences.showMangaSection().collectAsState()
         val showNovelSection by uiPreferences.showNovelSection().collectAsState()
-        val instantTabSwitching by uiPreferences.auroraInstantTabSwitching().collectAsState()
         val fromMore = currentNavigationStyle() == NavStyle.MOVE_UPDATES_TO_MORE
 
         if (theme.isAuroraStyle) {
@@ -301,7 +301,6 @@ data object UpdatesTab : Tab {
                 state = state,
                 isMangaTab = { tabIds.getOrNull(it) == TAB_MANGA },
                 showTabs = false,
-                instantTabSwitching = instantTabSwitching,
                 extraHeaderContent = {
                     val currentPage = state.currentPage.coerceIn(0, (tabs.size - 1).coerceAtLeast(0))
                     val currentTabId = tabIds.getOrElse(currentPage) { TAB_ANIME }
@@ -315,7 +314,12 @@ data object UpdatesTab : Tab {
                         },
                         onTabSelected = { page ->
                             if (page in tabs.indices && state.currentPage != page) {
-                                scope.launch { state.animateScrollToPage(page) }
+                                scope.launch {
+                                    switchAuroraUpdatesPage(
+                                        state = state,
+                                        page = page,
+                                    )
+                                }
                             }
                         },
                         onRefreshCurrent = ::refreshCurrentTab,
@@ -362,6 +366,14 @@ internal fun resolveUpdateToastMessage(
     startedMessage: String,
     alreadyRunningMessage: String,
 ): String = if (started) startedMessage else alreadyRunningMessage
+
+internal suspend fun switchAuroraUpdatesPage(
+    state: PagerState,
+    page: Int,
+) {
+    if (state.currentPage == page) return
+    state.animateScrollToPage(page)
+}
 
 @Composable
 private fun AuroraUpdatesPinnedHeader(
