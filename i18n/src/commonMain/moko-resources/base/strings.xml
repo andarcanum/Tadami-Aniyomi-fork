@@ -497,6 +497,7 @@
     <string name="pref_low">Low</string>
     <string name="pref_lowest">Lowest</string>
     <string name="pref_webtoon_disable_zoom_out">Disable zoom out</string>
+    <string name="pref_save_long_page_position">Save position inside long pages</string>
 
     <!-- Navigator (Page slider) settings -->
     <string name="pref_navigator_settings">Page slider</string>

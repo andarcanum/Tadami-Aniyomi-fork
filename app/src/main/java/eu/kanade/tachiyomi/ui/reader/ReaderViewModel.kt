@@ -35,6 +35,7 @@ import eu.kanade.tachiyomi.ui.reader.setting.ReaderOrientation
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
 import eu.kanade.tachiyomi.ui.reader.viewer.Viewer
+import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonViewer
 import eu.kanade.tachiyomi.util.chapter.filterDownloadedChapters
 import eu.kanade.tachiyomi.util.chapter.removeDuplicates
 import eu.kanade.tachiyomi.util.editCover
@@ -44,7 +45,9 @@ import eu.kanade.tachiyomi.util.storage.DiskUtil
 import eu.kanade.tachiyomi.util.storage.cacheImageDir
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -229,6 +232,8 @@ class ReaderViewModel @JvmOverloads constructor(
 
     private val incognitoMode: Boolean by lazy { getIncognitoState.await(manga?.source) }
     private val downloadAheadAmount = downloadPreferences.autoDownloadWhileReading().get()
+    private var pendingWebtoonProgress: PendingWebtoonProgress? = null
+    private var webtoonProgressSaveJob: Job? = null
 
     init {
         // To save state
@@ -236,11 +241,14 @@ class ReaderViewModel @JvmOverloads constructor(
             .distinctUntilChanged()
             .filterNotNull()
             .onEach { currentChapter ->
+                flushPendingWebtoonScrollProgress()
                 if (chapterPageIndex >= 0) {
                     // Restore from SavedState
                     currentChapter.requestedPage = chapterPageIndex
-                } else if (!currentChapter.chapter.read) {
-                    currentChapter.requestedPage = currentChapter.chapter.last_page_read
+                    currentChapter.requestedPageOffset = 0
+                    currentChapter.requestedPageOffsetRatioPpm = null
+                } else if (!currentChapter.chapter.read || readerPreferences.preserveReadingPosition().get()) {
+                    applySavedProgress(currentChapter)
                 }
                 chapterId = currentChapter.chapter.id!!
             }
@@ -248,6 +256,9 @@ class ReaderViewModel @JvmOverloads constructor(
     }
 
     override fun onCleared() {
+        webtoonProgressSaveJob?.cancel()
+        flushPendingWebtoonScrollProgress()
+
         val currentChapters = state.value.viewerChapters
         if (currentChapters != null) {
             currentChapters.unref()
@@ -262,7 +273,83 @@ class ReaderViewModel @JvmOverloads constructor(
      * trigger deletion of the downloaded chapters.
      */
     fun onActivityFinish() {
+        flushPendingWebtoonScrollProgress()
         deletePendingChapters()
+    }
+
+    fun saveWebtoonScrollProgressOnExit(viewer: WebtoonViewer) {
+        if (!shouldHandleLongPageProgress()) return
+
+        viewer.getCurrentScrollProgress()?.let { progress ->
+            onWebtoonScrollProgressChanged(progress, flushImmediately = true)
+        }
+        flushPendingWebtoonScrollProgress()
+    }
+
+    internal fun onWebtoonScrollProgressChanged(
+        progress: WebtoonScrollProgress,
+        flushImmediately: Boolean = false,
+    ) {
+        if (!shouldHandleLongPageProgress()) return
+
+        val currentChapter = getCurrentChapter() ?: return
+        val chapterId = currentChapter.chapter.id ?: return
+        if (progress.chapterId != null && progress.chapterId != chapterId) return
+        val chapterKey = currentChapter.chapter.url.takeIf { it.isNotBlank() }
+        val pages = currentChapter.pages ?: return
+        if (pages.isEmpty()) return
+
+        val pageIndex = progress.index.coerceIn(0, pages.lastIndex)
+        val offsetPx = progress.offsetPx.coerceAtLeast(0)
+        val encodedProgress = encodeWebtoonScrollProgress(
+            index = pageIndex,
+            offsetPx = offsetPx,
+            pageHeightPx = progress.pageHeightPx,
+        )
+        val decodedProgress = decodeStoredChapterProgress(encodedProgress, restoreOffset = true)
+
+        currentChapter.requestedPage = decodedProgress.index
+        currentChapter.requestedPageOffset = decodedProgress.offsetPx
+        currentChapter.requestedPageOffsetRatioPpm = decodedProgress.offsetRatioPpm
+        chapterPageIndex = pageIndex
+
+        pendingWebtoonProgress = PendingWebtoonProgress(
+            chapterId = chapterId,
+            chapterKey = chapterKey,
+            encodedProgress = encodedProgress,
+        )
+
+        if (flushImmediately) {
+            webtoonProgressSaveJob?.cancel()
+            flushPendingWebtoonScrollProgress()
+        } else {
+            scheduleWebtoonProgressFlush()
+        }
+    }
+
+    private fun scheduleWebtoonProgressFlush() {
+        webtoonProgressSaveJob?.cancel()
+        webtoonProgressSaveJob = viewModelScope.launchIO {
+            delay(WEBTOON_PROGRESS_SAVE_DEBOUNCE_MILLIS)
+            flushPendingWebtoonScrollProgress()
+        }
+    }
+
+    private fun flushPendingWebtoonScrollProgress() {
+        val pending = pendingWebtoonProgress ?: return
+        pendingWebtoonProgress = null
+
+        val saved = readerPreferences.getLongPageProgressForChapter(
+            chapterId = pending.chapterId,
+            chapterKey = pending.chapterKey,
+        )
+        if (saved != pending.encodedProgress) {
+            readerPreferences.putLongPageProgressForChapter(
+                chapterId = pending.chapterId,
+                encodedProgress = pending.encodedProgress,
+                chapterKey = pending.chapterKey,
+            )
+        }
     }
 
     /**
@@ -537,10 +624,12 @@ class ReaderViewModel @JvmOverloads constructor(
             it.copy(currentPage = pageIndex + 1)
         }
         readerChapter.requestedPage = pageIndex
+        readerChapter.requestedPageOffset = 0
+        readerChapter.requestedPageOffsetRatioPpm = null
         chapterPageIndex = pageIndex
 
         if (!incognitoMode && page.status != Page.State.ERROR) {
-            readerChapter.chapter.last_page_read = pageIndex
+            readerChapter.chapter.last_page_read = pageIndex.toLong()
 
             if (readerChapter.pages?.lastIndex == pageIndex) {
                 updateChapterProgressOnComplete(readerChapter)
@@ -550,7 +639,7 @@ class ReaderViewModel @JvmOverloads constructor(
                 ChapterUpdate(
                     id = readerChapter.chapter.id!!,
                     read = readerChapter.chapter.read,
-                    lastPageRead = readerChapter.chapter.last_page_read.toLong(),
+                    lastPageRead = readerChapter.chapter.last_page_read,
                 ),
             )
         }
@@ -719,7 +808,7 @@ class ReaderViewModel @JvmOverloads constructor(
             if (currChapters != null) {
                 // Save current page
                 val currChapter = currChapters.currChapter
-                currChapter.requestedPage = currChapter.chapter.last_page_read
+                applySavedProgress(currChapter)
 
                 mutableState.update {
                     it.copy(
@@ -755,7 +844,7 @@ class ReaderViewModel @JvmOverloads constructor(
             if (currChapters != null) {
                 // Save current page
                 val currChapter = currChapters.currChapter
-                currChapter.requestedPage = currChapter.chapter.last_page_read
+                applySavedProgress(currChapter)
 
                 mutableState.update {
                     it.copy(
@@ -852,6 +941,69 @@ class ReaderViewModel @JvmOverloads constructor(
      */
     fun pauseAutoScroll() {
         mutableState.update { it.copy(autoScrollEnabled = false) }
+    }
+
+    private fun applySavedProgress(chapter: ReaderChapter) {
+        val decodedProgress = if (shouldHandleLongPageProgress()) {
+            resolveLongPageSavedProgress(chapter)
+        } else {
+            decodeStoredChapterProgress(
+                value = chapter.chapter.last_page_read,
+                restoreOffset = false,
+            )
+        }
+        chapter.requestedPage = decodedProgress.index
+        chapter.requestedPageOffset = if (shouldHandleLongPageProgress()) decodedProgress.offsetPx else 0
+        chapter.requestedPageOffsetRatioPpm = if (shouldHandleLongPageProgress()) decodedProgress.offsetRatioPpm else null
+    }
+
+    private fun resolveLongPageSavedProgress(chapter: ReaderChapter): ChapterScrollProgress {
+        val chapterId = chapter.chapter.id ?: return decodeStoredChapterProgress(
+            value = chapter.chapter.last_page_read,
+            restoreOffset = true,
+        )
+        val chapterKey = chapter.chapter.url.takeIf { it.isNotBlank() }
+
+        val cachedProgress = readerPreferences.getLongPageProgressForChapter(
+            chapterId = chapterId,
+            chapterKey = chapterKey,
+        )
+        if (cachedProgress != null) {
+            return decodeStoredChapterProgress(cachedProgress, restoreOffset = true)
+        }
+
+        val decodedLegacy = decodeStoredChapterProgress(
+            value = chapter.chapter.last_page_read,
+            restoreOffset = true,
+        )
+        if (shouldImportLegacyLongPageProgress(chapter.chapter.last_page_read, decodedLegacy)) {
+            val normalizedProgress = encodeWebtoonScrollProgress(decodedLegacy.index, decodedLegacy.offsetPx)
+            val importedProgress = readerPreferences.importLongPageProgressFromLegacyIfMissing(
+                chapterId = chapterId,
+                legacyProgress = normalizedProgress,
+                chapterKey = chapterKey,
+            )
+            return decodeStoredChapterProgress(importedProgress, restoreOffset = true)
+        }
+
+        return decodedLegacy
+    }
+
+    private fun shouldImportLegacyLongPageProgress(
+        legacyProgress: Long,
+        decodedProgress: ChapterScrollProgress,
+    ): Boolean {
+        return legacyProgress > 0L || decodedProgress.offsetPx > 0
+    }
+
+    private fun shouldHandleLongPageProgress(): Boolean {
+        if (incognitoMode || !readerPreferences.saveLongPagePosition().get()) return false
+        return when (ReadingMode.fromPreference(getMangaReadingMode())) {
+            ReadingMode.WEBTOON,
+            ReadingMode.CONTINUOUS_VERTICAL,
+            -> true
+            else -> false
+        }
     }
 
     /**
@@ -1056,4 +1208,12 @@ class ReaderViewModel @JvmOverloads constructor(
         data class ShareImage(val uri: Uri, val page: ReaderPage) : Event
         data class CopyImage(val uri: Uri) : Event
     }
+
+    private data class PendingWebtoonProgress(
+        val chapterId: Long,
+        val chapterKey: String?,
+        val encodedProgress: Long,
+    )
 }
+
+private const val WEBTOON_PROGRESS_SAVE_DEBOUNCE_MILLIS = 350L

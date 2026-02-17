@@ -18,7 +18,7 @@ class ChapterImpl : Chapter {
 
     override var bookmark: Boolean = false
 
-    override var last_page_read: Int = 0
+    override var last_page_read: Long = 0
 
     override var date_fetch: Long = 0
 

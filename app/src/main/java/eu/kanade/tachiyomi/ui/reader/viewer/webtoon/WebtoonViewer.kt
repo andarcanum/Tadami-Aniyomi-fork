@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.reader.viewer.webtoon
 
 import android.graphics.PointF
+import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
@@ -11,6 +12,11 @@ import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.WebtoonLayoutManager
+import eu.kanade.tachiyomi.source.model.Page
+import eu.kanade.tachiyomi.ui.reader.ChapterScrollProgress
+import eu.kanade.tachiyomi.ui.reader.WebtoonScrollProgress
+import eu.kanade.tachiyomi.ui.reader.evaluateWebtoonRestoreSettle
+import eu.kanade.tachiyomi.ui.reader.resolveWebtoonRestoreOffsetPx
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.model.ChapterTransition
@@ -74,6 +80,31 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
      * Currently active item. It can be a chapter page or a chapter transition.
      */
     private var currentPage: Any? = null
+    private var pendingRelativeRestore: PendingRelativeRestore? = null
+    private val pendingRelativeRestoreRunnable = object : Runnable {
+        override fun run() {
+            val pending = pendingRelativeRestore ?: run {
+                stopPendingRelativeRestoreLoop()
+                return
+            }
+            if (SystemClock.uptimeMillis() - pending.startedAtUptimeMs >= MAX_PENDING_RELATIVE_RESTORE_DURATION_MS) {
+                pendingRelativeRestore = null
+                stopPendingRelativeRestoreLoop()
+                return
+            }
+            applyPendingRelativeRestore(clearWhenApplied = false)
+            if (pendingRelativeRestore == null) {
+                stopPendingRelativeRestoreLoop()
+                return
+            }
+            if (pendingRelativeRestore != pending) {
+                // Pending target changed while retrying, restart from scratch for the new target.
+                startPendingRelativeRestoreLoop()
+                return
+            }
+            recycler.postOnAnimation(this)
+        }
+    }
 
     /**
      * Auto-scroll manager for automatic scrolling functionality.
@@ -100,6 +131,8 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
             object : RecyclerView.OnScrollListener() {
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                     onScrolled()
+                    applyPendingRelativeRestore(clearWhenApplied = false)
+                    getCurrentScrollProgress()?.let(activity.viewModel::onWebtoonScrollProgressChanged)
 
                     if ((dy > threshold || dy < -threshold) && activity.viewModel.state.value.menuVisible) {
                         activity.hideMenu()
@@ -220,6 +253,7 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
      */
     override fun destroy() {
         super.destroy()
+        stopPendingRelativeRestoreLoop()
         autoScrollManager.destroy()
         scope.cancel()
     }
@@ -328,13 +362,151 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
     override fun moveToPage(page: ReaderPage) {
         val position = adapter.items.indexOf(page)
         if (position != -1) {
-            layoutManager.scrollToPositionWithOffset(position, 0)
+            val shouldRestore = page.chapter.requestedPage == page.index
+            val ratioPpm = if (shouldRestore) page.chapter.requestedPageOffsetRatioPpm else null
+            val restoreOffset = if (ratioPpm == null && shouldRestore) {
+                page.chapter.requestedPageOffset.coerceAtLeast(0)
+            } else {
+                0
+            }
+
+            layoutManager.scrollToPositionWithOffset(position, -restoreOffset)
+            if (ratioPpm != null) {
+                pendingRelativeRestore = PendingRelativeRestore(
+                    adapterPosition = position,
+                    chapterId = page.chapter.chapter.id,
+                    pageIndex = page.index,
+                    ratioPpm = ratioPpm,
+                )
+                startPendingRelativeRestoreLoop()
+            } else {
+                pendingRelativeRestore = null
+                stopPendingRelativeRestoreLoop()
+                page.chapter.requestedPageOffset = 0
+                page.chapter.requestedPageOffsetRatioPpm = null
+            }
             if (layoutManager.findLastEndVisibleItemPosition() == -1) {
                 onScrolled(pos = position)
             }
         } else {
             logcat { "Page $page not found in adapter" }
         }
+    }
+
+    internal fun onPageImageReady(page: ReaderPage) {
+        val pending = pendingRelativeRestore ?: return
+        if (pending.pageIndex != page.index) return
+        if (pending.chapterId != null && pending.chapterId != page.chapter.chapter.id) return
+        pending.imageDecoded = true
+        startPendingRelativeRestoreLoop()
+    }
+
+    private fun applyPendingRelativeRestore(clearWhenApplied: Boolean): Boolean {
+        val pending = pendingRelativeRestore ?: return false
+        val (adapterPosition, item) = resolvePendingRestoreTarget(pending) ?: return false
+
+        val view = layoutManager.findViewByPosition(adapterPosition) ?: return false
+        val pageHeightPx = view.height.takeIf { it > 0 } ?: return false
+
+        val resolvedOffsetPx = resolveWebtoonRestoreOffsetPx(
+            progress = ChapterScrollProgress(
+                index = pending.pageIndex,
+                offsetPx = 0,
+                offsetRatioPpm = pending.ratioPpm,
+            ),
+            currentPageHeightPx = pageHeightPx,
+        )
+        val currentOffsetPx = (-view.top).coerceAtLeast(0)
+        val settle = evaluateWebtoonRestoreSettle(
+            currentOffsetPx = currentOffsetPx,
+            targetOffsetPx = resolvedOffsetPx,
+            currentPageHeightPx = pageHeightPx,
+            previousPageHeightPx = pending.lastMeasuredPageHeightPx,
+            previousStableHeightFrames = pending.stableHeightFrames,
+            isPageReady = item.status == Page.State.READY,
+            imageDecoded = pending.imageDecoded,
+            previousReadyFrames = pending.readyFrames,
+            minStableHeightFrames = MIN_STABLE_HEIGHT_FRAMES,
+            offsetTolerancePx = RESTORE_SETTLE_TOLERANCE_PX,
+            minReadyFramesFallback = MIN_READY_STATE_FRAMES_FALLBACK,
+        )
+        pending.stableHeightFrames = settle.stableHeightFrames
+        pending.readyFrames = settle.readyFrames
+        pending.lastMeasuredPageHeightPx = pageHeightPx
+
+        if (!settle.settled) {
+            layoutManager.scrollToPositionWithOffset(adapterPosition, -resolvedOffsetPx)
+        }
+
+        val shouldClear = clearWhenApplied || settle.canClearPending
+        if (shouldClear) {
+            pendingRelativeRestore = null
+            stopPendingRelativeRestoreLoop()
+            item.chapter.requestedPageOffset = resolvedOffsetPx
+            item.chapter.requestedPageOffsetRatioPpm = null
+        }
+        return true
+    }
+
+    private fun startPendingRelativeRestoreLoop() {
+        if (pendingRelativeRestore == null) return
+        stopPendingRelativeRestoreLoop()
+        recycler.post(pendingRelativeRestoreRunnable)
+    }
+
+    private fun stopPendingRelativeRestoreLoop() {
+        recycler.removeCallbacks(pendingRelativeRestoreRunnable)
+    }
+
+    private fun resolvePendingRestoreTarget(pending: PendingRelativeRestore): Pair<Int, ReaderPage>? {
+        val currentAtPosition = adapter.items.getOrNull(pending.adapterPosition) as? ReaderPage
+        if (currentAtPosition != null && matchesPendingRestoreTarget(currentAtPosition, pending)) {
+            return pending.adapterPosition to currentAtPosition
+        }
+
+        val resolvedPosition = adapter.items.indexOfFirst { item ->
+            val page = item as? ReaderPage ?: return@indexOfFirst false
+            matchesPendingRestoreTarget(page, pending)
+        }
+        if (resolvedPosition == -1) return null
+
+        pending.adapterPosition = resolvedPosition
+        return resolvedPosition to (adapter.items[resolvedPosition] as ReaderPage)
+    }
+
+    private fun matchesPendingRestoreTarget(
+        page: ReaderPage,
+        pending: PendingRelativeRestore,
+    ): Boolean {
+        if (page.index != pending.pageIndex) return false
+        val pendingChapterId = pending.chapterId
+        return pendingChapterId == null || pendingChapterId == page.chapter.chapter.id
+    }
+
+    internal fun getCurrentScrollProgress(): WebtoonScrollProgress? {
+        val firstVisible = layoutManager.findFirstVisibleItemPosition()
+        if (firstVisible == RecyclerView.NO_POSITION) return null
+
+        val currentChapter = adapter.currentChapter
+        val lastVisible = layoutManager.findLastVisibleItemPosition()
+            .takeIf { it != RecyclerView.NO_POSITION }
+            ?: layoutManager.findLastEndVisibleItemPosition()
+        if (lastVisible == RecyclerView.NO_POSITION) return null
+
+        var fallback: WebtoonScrollProgress? = null
+        for (position in firstVisible..min(lastVisible, adapter.items.lastIndex)) {
+            val item = adapter.items.getOrNull(position) as? ReaderPage ?: continue
+            val view = layoutManager.findViewByPosition(position) ?: continue
+            val progress = WebtoonScrollProgress(
+                index = item.index,
+                offsetPx = (-view.top).coerceAtLeast(0),
+                pageHeightPx = view.height.coerceAtLeast(0),
+                chapterId = item.chapter.chapter.id,
+            )
+            if (item.chapter == currentChapter) return progress
+            if (fallback == null) fallback = progress
+        }
+        return fallback
     }
 
     fun onScrolled(pos: Int? = null) {
@@ -434,3 +606,20 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
 
 // Double the cache size to reduce rebinds/recycles incurred by the extra layout space on scroll direction changes
 private const val RECYCLER_VIEW_CACHE_SIZE = 4
+
+private data class PendingRelativeRestore(
+    var adapterPosition: Int,
+    val chapterId: Long?,
+    val pageIndex: Int,
+    val ratioPpm: Int,
+    val startedAtUptimeMs: Long = SystemClock.uptimeMillis(),
+    var lastMeasuredPageHeightPx: Int = 0,
+    var stableHeightFrames: Int = 0,
+    var readyFrames: Int = 0,
+    var imageDecoded: Boolean = false,
+)
+
+private const val MAX_PENDING_RELATIVE_RESTORE_DURATION_MS = 30_000L
+private const val MIN_STABLE_HEIGHT_FRAMES = 2
+private const val RESTORE_SETTLE_TOLERANCE_PX = 2
+private const val MIN_READY_STATE_FRAMES_FALLBACK = 30

@@ -65,6 +65,11 @@ internal fun ColumnScope.ReadingModePage(screenModel: ReaderSettingsScreenModel)
     } else {
         PagerViewerSettings(screenModel)
     }
+
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_save_long_page_position),
+        pref = screenModel.preferences.saveLongPagePosition(),
+    )
 }
 
 @Composable

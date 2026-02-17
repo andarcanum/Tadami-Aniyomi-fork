@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="action_add">Добавить</string>
     <string name="action_add_category">Добавить категорию</string>
@@ -797,6 +797,7 @@
     <string name="ext_revoke_trust">Убрать доверие к ненадёжным расширениям</string>
     <string name="action_open_repo">Открыть репозиторий источника</string>
     <string name="pref_webtoon_disable_zoom_out">Отключить уменьшение масштаба</string>
+    <string name="pref_save_long_page_position">Сохранять позицию внутри длинных страниц</string>
     <string name="action_add_anyway">Добавить в любом случае</string>
     <string name="pref_display_profile">Пользовательский профиль отображения</string>
     <string name="action_migrate_duplicate">Перенести существующую серию</string>
