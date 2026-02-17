@@ -1,7 +1,10 @@
 package eu.kanade.presentation.more.settings.screen.browse
 
+import eu.kanade.tachiyomi.extension.novel.NovelExtensionManager
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +31,7 @@ class NovelExtensionReposScreenModelTest {
     private val deleteExtensionRepo: DeleteNovelExtensionRepo = mockk(relaxed = true)
     private val replaceExtensionRepo: ReplaceNovelExtensionRepo = mockk(relaxed = true)
     private val updateExtensionRepo: UpdateNovelExtensionRepo = mockk(relaxed = true)
+    private val extensionManager: NovelExtensionManager = mockk(relaxed = true)
 
     @BeforeEach
     fun setup() {
@@ -57,6 +61,7 @@ class NovelExtensionReposScreenModelTest {
                 deleteExtensionRepo = deleteExtensionRepo,
                 replaceExtensionRepo = replaceExtensionRepo,
                 updateExtensionRepo = updateExtensionRepo,
+                extensionManager = extensionManager,
             )
 
             withTimeout(1_000) {
@@ -68,6 +73,36 @@ class NovelExtensionReposScreenModelTest {
             val state = screenModel.state.value
             state.shouldBeInstanceOf<RepoScreenState.Success>()
             (state as RepoScreenState.Success).repos.first() shouldBe repo
+        }
+    }
+
+    @Test
+    fun `create repo refreshes available plugins`() {
+        runBlocking {
+            every { getExtensionRepo.subscribeAll() } returns flowOf(emptyList())
+            coEvery { createExtensionRepo.await("https://example.org/plugins.min.json") } returns
+                CreateNovelExtensionRepo.Result.Success
+            coEvery { extensionManager.refreshAvailablePlugins() } returns Unit
+
+            val screenModel = NovelExtensionReposScreenModel(
+                getExtensionRepo = getExtensionRepo,
+                createExtensionRepo = createExtensionRepo,
+                deleteExtensionRepo = deleteExtensionRepo,
+                replaceExtensionRepo = replaceExtensionRepo,
+                updateExtensionRepo = updateExtensionRepo,
+                extensionManager = extensionManager,
+            )
+
+            screenModel.createRepo("https://example.org/plugins.min.json")
+
+            withTimeout(1_000) {
+                while (true) {
+                    runCatching {
+                        coVerify(exactly = 1) { extensionManager.refreshAvailablePlugins() }
+                    }.onSuccess { return@withTimeout }
+                    yield()
+                }
+            }
         }
     }
 }

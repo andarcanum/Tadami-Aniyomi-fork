@@ -3,6 +3,7 @@ package eu.kanade.presentation.more.settings.screen.browse
 import androidx.compose.runtime.Immutable
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import eu.kanade.tachiyomi.extension.novel.NovelExtensionManager
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.channels.Channel
@@ -27,6 +28,7 @@ class NovelExtensionReposScreenModel(
     private val deleteExtensionRepo: DeleteNovelExtensionRepo = Injekt.get(),
     private val replaceExtensionRepo: ReplaceNovelExtensionRepo = Injekt.get(),
     private val updateExtensionRepo: UpdateNovelExtensionRepo = Injekt.get(),
+    private val extensionManager: NovelExtensionManager = Injekt.get(),
 ) : StateScreenModel<RepoScreenState>(RepoScreenState.Loading) {
 
     private val _events: Channel<RepoEvent> = Channel(Int.MAX_VALUE)
@@ -58,6 +60,7 @@ class NovelExtensionReposScreenModel(
                 is CreateNovelExtensionRepo.Result.DuplicateFingerprint -> {
                     showDialog(RepoDialog.Conflict(result.oldRepo, result.newRepo))
                 }
+                CreateNovelExtensionRepo.Result.Success -> refreshAvailablePlugins()
                 else -> {}
             }
         }
@@ -71,6 +74,7 @@ class NovelExtensionReposScreenModel(
     fun replaceRepo(newRepo: ExtensionRepo) {
         screenModelScope.launchIO {
             replaceExtensionRepo.await(newRepo)
+            refreshAvailablePlugins()
         }
     }
 
@@ -86,6 +90,9 @@ class NovelExtensionReposScreenModel(
                     .onFailure { error ->
                         logcat(LogPriority.WARN, error) { "Failed to refresh novel extension repositories" }
                     }
+                    .onSuccess {
+                        refreshAvailablePlugins()
+                    }
             }
         }
     }
@@ -96,7 +103,15 @@ class NovelExtensionReposScreenModel(
     fun deleteRepo(baseUrl: String) {
         screenModelScope.launchIO {
             deleteExtensionRepo.await(baseUrl)
+            refreshAvailablePlugins()
         }
+    }
+
+    private suspend fun refreshAvailablePlugins() {
+        runCatching { extensionManager.refreshAvailablePlugins() }
+            .onFailure { error ->
+                logcat(LogPriority.WARN, error) { "Failed to refresh available novel plugins" }
+            }
     }
 
     fun showDialog(dialog: RepoDialog) {
