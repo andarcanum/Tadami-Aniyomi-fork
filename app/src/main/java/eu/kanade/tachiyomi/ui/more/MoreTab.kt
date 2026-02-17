@@ -76,12 +76,15 @@ data object MoreTab : Tab {
 
         val uiPreferences = Injekt.get<UiPreferences>()
         val theme by uiPreferences.appTheme().preferenceCollectAsState()
+        val navStyle = currentNavigationStyle()
 
         if (theme.isAuroraStyle) {
             val downloadedOnly by screenModel.downloadedOnlyFlow.collectAsState()
             val incognitoMode by screenModel.incognitoModeFlow.collectAsState()
 
             MoreScreenAurora(
+                navStyle = navStyle,
+                onClickAlt = { navigator.push(navStyle.moreTab) },
                 downloadQueueStateProvider = { downloadQueueState },
                 downloadedOnly = downloadedOnly,
                 onDownloadedOnlyChange = { screenModel.toggleDownloadedOnly() },
@@ -99,7 +102,6 @@ data object MoreTab : Tab {
                 onHelpClick = { uriHandler.openUri(Constants.URL_HELP) },
             )
         } else {
-            val navStyle = currentNavigationStyle()
             MoreScreen(
                 downloadQueueStateProvider = { downloadQueueState },
                 downloadedOnly = screenModel.getDownloadedOnly(),

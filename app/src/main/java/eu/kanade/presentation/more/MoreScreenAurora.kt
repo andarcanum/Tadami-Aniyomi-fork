@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.ui.more.DownloadQueueState
 import tachiyomi.i18n.aniyomi.AYMR
@@ -48,6 +49,8 @@ import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
 fun MoreScreenAurora(
+    navStyle: NavStyle,
+    onClickAlt: () -> Unit,
     downloadQueueStateProvider: () -> DownloadQueueState,
     downloadedOnly: Boolean,
     onDownloadedOnlyChange: (Boolean) -> Unit,
@@ -88,6 +91,12 @@ fun MoreScreenAurora(
             }
 
             item {
+                AuroraSettingItem(
+                    title = navStyle.moreTab.options.title,
+                    icon = navStyle.moreIcon,
+                    onClick = onClickAlt,
+                )
+
                 AuroraSettingItem(
                     title = stringResource(AYMR.strings.aurora_settings),
                     icon = Icons.Filled.Settings,
