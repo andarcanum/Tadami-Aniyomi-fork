@@ -53,17 +53,18 @@ fun AnimeDownloadQueueScreen(
             AndroidView(
                 modifier = Modifier.fillMaxWidth(),
                 factory = { context ->
-                    screenModel.controllerBinding = DownloadListBinding.inflate(
+                    val binding = DownloadListBinding.inflate(
                         LayoutInflater.from(context),
                     )
+                    screenModel.controllerBinding = binding
                     screenModel.adapter = AnimeDownloadAdapter(screenModel.listener)
-                    screenModel.controllerBinding.root.adapter = screenModel.adapter
+                    binding.root.adapter = screenModel.adapter
                     screenModel.adapter?.isHandleDragEnabled = true
-                    screenModel.controllerBinding.root.layoutManager = LinearLayoutManager(
+                    binding.root.layoutManager = LinearLayoutManager(
                         context,
                     )
 
-                    ViewCompat.setNestedScrollingEnabled(screenModel.controllerBinding.root, true)
+                    ViewCompat.setNestedScrollingEnabled(binding.root, true)
 
                     scope.launchUI {
                         screenModel.getDownloadStatusFlow()
@@ -74,16 +75,15 @@ fun AnimeDownloadQueueScreen(
                             .collect(screenModel::onUpdateDownloadedPages)
                     }
 
-                    screenModel.controllerBinding.root
+                    binding.root
                 },
                 update = {
-                    screenModel.controllerBinding.root
-                        .updatePadding(
-                            left = left,
-                            top = top,
-                            right = right,
-                            bottom = bottom,
-                        )
+                    screenModel.controllerBinding?.root?.updatePadding(
+                        left = left,
+                        top = top,
+                        right = right,
+                        bottom = bottom,
+                    )
 
                     screenModel.adapter?.updateDataSet(downloadList)
                 },

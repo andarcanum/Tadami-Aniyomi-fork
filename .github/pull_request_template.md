@@ -10,3 +10,17 @@
 | ------- | ------- |
 | ![](https://github.githubassets.com/images/modules/logos_page/Octocat.png) | ![](https://github.githubassets.com/images/modules/logos_page/Octocat.png) |
 -->
+
+## Summary
+
+-
+
+## Validation
+
+- [ ] I ran the required automated checks for this change.
+- [ ] I self-reviewed the diff and validated critical user flows.
+
+## Reading Regression Gate (required for reading-critical changes)
+
+- [ ] I ran manual smoke checks for anime, manga, and novel viewing flows.
+- [ ] I verified there were no crashes, ANRs, or blank screens in those flows.

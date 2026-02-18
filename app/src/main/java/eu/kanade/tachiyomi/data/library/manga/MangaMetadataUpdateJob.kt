@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.library.manga
 import android.content.Context
 import android.content.pm.ServiceInfo
 import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
@@ -63,14 +64,11 @@ class MangaMetadataUpdateJob(private val context: Context, workerParams: WorkerP
             try {
                 updateMetadata()
                 Result.success()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                if (e is CancellationException) {
-                    // Assume success although cancelled
-                    Result.success()
-                } else {
-                    logcat(LogPriority.ERROR, e)
-                    Result.failure()
-                }
+                logcat(LogPriority.ERROR, e)
+                Result.failure()
             } finally {
                 notifier.cancelProgressNotification()
             }
@@ -129,6 +127,7 @@ class MangaMetadataUpdateJob(private val context: Context, workerParams: WorkerP
                                             logcat(LogPriority.ERROR) { "Manga doesn't exist anymore" }
                                         }
                                     } catch (e: Throwable) {
+                                        if (e is CancellationException) throw e
                                         // Ignore errors and continue
                                         logcat(LogPriority.ERROR, e)
                                     }
@@ -197,11 +196,15 @@ class MangaMetadataUpdateJob(private val context: Context, workerParams: WorkerP
             val workQuery = WorkQuery.Builder.fromTags(listOf(TAG))
                 .addStates(listOf(WorkInfo.State.RUNNING))
                 .build()
-            wm.getWorkInfos(workQuery).get()
-                // Should only return one work but just in case
-                .forEach {
-                    wm.cancelWorkById(it.id)
-                }
+            val future = wm.getWorkInfos(workQuery)
+            future.addListener(
+                {
+                    runCatching { future.get() }
+                        .getOrDefault(emptyList())
+                        .forEach { wm.cancelWorkById(it.id) }
+                },
+                ContextCompat.getMainExecutor(context),
+            )
         }
     }
 }

@@ -11,6 +11,12 @@ sealed class AchievementEvent {
         override val timestamp: Long = System.currentTimeMillis(),
     ) : AchievementEvent()
 
+    data class NovelChapterRead(
+        val novelId: Long,
+        val chapterNumber: Int,
+        override val timestamp: Long = System.currentTimeMillis(),
+    ) : AchievementEvent()
+
     data class EpisodeWatched(
         val animeId: Long,
         val episodeNumber: Int,
@@ -36,6 +42,11 @@ sealed class AchievementEvent {
 
     data class AnimeCompleted(
         val animeId: Long,
+        override val timestamp: Long = System.currentTimeMillis(),
+    ) : AchievementEvent()
+
+    data class NovelCompleted(
+        val novelId: Long,
         override val timestamp: Long = System.currentTimeMillis(),
     ) : AchievementEvent()
 

@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import logcat.LogPriority
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.data.achievement.handler.AchievementEventBus
+import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.library.service.LibraryPreferences
@@ -29,6 +31,7 @@ class NovelUpdatesScreenModel(
     private val getUpdates: GetNovelUpdates = Injekt.get(),
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
     private val chapterRepository: NovelChapterRepository = Injekt.get(),
+    private val eventBus: AchievementEventBus? = runCatching { Injekt.get<AchievementEventBus>() }.getOrNull(),
 ) : StateScreenModel<NovelUpdatesScreenModel.State>(State()) {
 
     val lastUpdated = libraryPreferences.lastUpdatedTimestamp().get()
@@ -88,6 +91,7 @@ class NovelUpdatesScreenModel(
     }
 
     fun markUpdatesRead(updates: List<NovelUpdatesItem>, read: Boolean) {
+        val updatesBecomingRead = if (read) updates.filter { !it.update.read } else emptyList()
         screenModelScope.launchIO {
             chapterRepository.updateAllChapters(
                 updates.map {
@@ -98,6 +102,14 @@ class NovelUpdatesScreenModel(
                     )
                 },
             )
+            updatesBecomingRead.forEach {
+                eventBus?.tryEmit(
+                    AchievementEvent.NovelChapterRead(
+                        novelId = it.update.novelId,
+                        chapterNumber = 0,
+                    ),
+                )
+            }
             toggleAllSelection(false)
         }
     }

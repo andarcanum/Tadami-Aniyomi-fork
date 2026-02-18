@@ -28,6 +28,8 @@ import kotlinx.serialization.json.intOrNull
 import logcat.LogPriority
 import org.jsoup.Jsoup
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.data.achievement.handler.AchievementEventBus
+import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.domain.entries.novel.interactor.GetNovel
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.history.novel.model.NovelHistoryUpdate
@@ -37,6 +39,7 @@ import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import eu.kanade.tachiyomi.source.novel.NovelSiteSource
+import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import uy.kohesive.injekt.Injekt
@@ -52,6 +55,7 @@ class NovelReaderScreenModel(
     private val pluginStorage: NovelPluginStorage = Injekt.get(),
     private val historyRepository: NovelHistoryRepository? = null,
     private val novelReaderPreferences: NovelReaderPreferences = Injekt.get(),
+    private val eventBus: AchievementEventBus? = runCatching { Injekt.get<AchievementEventBus>() }.getOrNull(),
     private val isSystemDark: () -> Boolean = { Injekt.get<Application>().isNightMode() },
 ) : StateScreenModel<NovelReaderScreenModel.State>(State.Loading) {
 
@@ -86,25 +90,35 @@ class NovelReaderScreenModel(
     }
 
     private suspend fun loadChapter() {
-        val chapter = novelChapterRepository.getChapterById(chapterId)
+        val chapter = withContext(Dispatchers.IO) {
+            novelChapterRepository.getChapterById(chapterId)
+        }
             ?: return setError("Chapter not found")
-        val novel = getNovel.await(chapter.novelId)
+        val novel = withContext(Dispatchers.IO) {
+            getNovel.await(chapter.novelId)
+        }
             ?: return setError("Novel not found")
         val source = sourceManager.get(novel.source)
             ?: return setError("Source not found")
-        chapterOrderList = novelChapterRepository.getChapterByNovelId(novel.id, applyScanlatorFilter = true)
-            .sortedBy { it.sourceOrder }
+        chapterOrderList = withContext(Dispatchers.IO) {
+            novelChapterRepository.getChapterByNovelId(novel.id, applyScanlatorFilter = true)
+                .sortedBy { it.sourceOrder }
+        }
 
-        val html = novelDownloadManager.getDownloadedChapterText(novel, chapter.id)
-            ?: try {
-                source.getChapterText(chapter.toSNovelChapter())
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to load novel chapter text" }
-                return setError(e.message)
+        val html = try {
+            withContext(Dispatchers.IO) {
+                novelDownloadManager.getDownloadedChapterText(novel, chapter.id)
+                    ?: source.getChapterText(chapter.toSNovelChapter())
             }
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e) { "Failed to load novel chapter text" }
+            return setError(e.message)
+        }
 
-        val pluginPackage = pluginStorage.getAll()
-            .firstOrNull { it.entry.id.hashCode().toLong() == novel.source }
+        val pluginPackage = withContext(Dispatchers.IO) {
+            pluginStorage.getAll()
+                .firstOrNull { it.entry.id.hashCode().toLong() == novel.source }
+        }
         val sourceSiteUrl = (source as? NovelSiteSource)?.siteUrl
         rawHtml = withContext(Dispatchers.Default) {
             html
@@ -126,12 +140,14 @@ class NovelReaderScreenModel(
         customCss = pluginPackage?.customCss?.toString(Charsets.UTF_8)
         customJs = pluginPackage?.customJs?.toString(Charsets.UTF_8)
         pluginSite = pluginPackage?.entry?.site ?: sourceSiteUrl
-        chapterWebUrl = resolveChapterWebUrl(
-            source = source,
-            chapterUrl = chapter.url,
-            novelUrl = novel.url,
-            pluginSite = pluginSite,
-        )
+        chapterWebUrl = withContext(Dispatchers.IO) {
+            resolveChapterWebUrl(
+                source = source,
+                chapterUrl = chapter.url,
+                novelUrl = novel.url,
+                pluginSite = pluginSite,
+            )
+        }
         parseAndCacheContentBlocks(
             rawHtml = rawHtml ?: return setError("Chapter content is empty"),
             chapterWebUrl = chapterWebUrl,
@@ -304,6 +320,7 @@ class NovelReaderScreenModel(
             return
         }
 
+        val becameRead = !chapter.read && shouldPersistRead
         lastSavedRead = shouldPersistRead
         lastSavedProgress = newProgress
         applyLocalChapterProgress(
@@ -311,6 +328,7 @@ class NovelReaderScreenModel(
             read = shouldPersistRead,
             progress = newProgress,
         )
+        val shouldEmitNovelCompleted = becameRead && chapterOrderList.all { it.read }
 
         screenModelScope.launch(NonCancellable) {
             novelChapterRepository.updateChapter(
@@ -320,6 +338,17 @@ class NovelReaderScreenModel(
                     lastPageRead = newProgress,
                 ),
             )
+            if (becameRead) {
+                eventBus?.tryEmit(
+                    AchievementEvent.NovelChapterRead(
+                        novelId = chapter.novelId,
+                        chapterNumber = chapter.chapterNumber.toInt(),
+                    ),
+                )
+                if (shouldEmitNovelCompleted) {
+                    eventBus?.tryEmit(AchievementEvent.NovelCompleted(chapter.novelId))
+                }
+            }
             val now = System.currentTimeMillis()
             saveHistorySnapshot(chapter.id, now - chapterReadStartTimeMs)
             chapterReadStartTimeMs = now
@@ -336,6 +365,16 @@ class NovelReaderScreenModel(
             lastPageRead = progress,
         )
         currentChapter = updatedChapter
+        chapterOrderList = chapterOrderList.map { existing ->
+            if (existing.id == chapter.id) {
+                existing.copy(
+                    read = read,
+                    lastPageRead = progress,
+                )
+            } else {
+                existing
+            }
+        }
         val currentState = mutableState.value
         if (currentState is State.Success) {
             val decodedNativeProgress = decodeNativeScrollProgress(progress)
@@ -519,6 +558,9 @@ class NovelReaderScreenModel(
         val trimmed = rawUrl.trim()
         if (trimmed.isBlank()) return null
         if (trimmed.startsWith("data:image/", ignoreCase = true)) {
+            return trimmed
+        }
+        if (NovelPluginImage.isSupported(trimmed)) {
             return trimmed
         }
         if (trimmed.startsWith("blob:", ignoreCase = true)) {

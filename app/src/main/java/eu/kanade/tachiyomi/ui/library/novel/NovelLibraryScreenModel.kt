@@ -6,10 +6,13 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.source.model.SManga
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.util.lang.compareToWithCollator
 import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
@@ -31,6 +34,7 @@ class NovelLibraryScreenModel(
     private val hasDownloadedChapters: (tachiyomi.domain.entries.novel.model.Novel) -> Boolean = {
         NovelDownloadManager().hasAnyDownloadedChapter(it)
     },
+    private val downloadedIdsDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : StateScreenModel<NovelLibraryScreenModel.State>(
     State(
         downloadedOnly = basePreferences.downloadedOnly().get(),
@@ -49,12 +53,11 @@ class NovelLibraryScreenModel(
         screenModelScope.launch {
             getLibraryNovel.subscribe()
                 .collectLatest { novels ->
+                    val downloadedNovelIds = resolveDownloadedNovelIdsForFilter(
+                        novels = novels,
+                        shouldResolve = state.value.effectiveDownloadedFilter != TriState.DISABLED,
+                    )
                     mutableState.update { current ->
-                        val downloadedNovelIds = if (current.effectiveDownloadedFilter != TriState.DISABLED) {
-                            resolveDownloadedNovelIds(novels)
-                        } else {
-                            emptySet()
-                        }
                         current.copy(
                             isLoading = false,
                             rawItems = novels,
@@ -102,17 +105,16 @@ class NovelLibraryScreenModel(
                     prefs.copy(completedFilter = completedFilter)
                 }
                 .collectLatest { prefs ->
+                    val effectiveDownloadedFilter = if (prefs.downloadedOnly) {
+                        TriState.ENABLED_IS
+                    } else {
+                        prefs.downloadedFilter
+                    }
+                    val downloadedNovelIds = resolveDownloadedNovelIdsForFilter(
+                        novels = state.value.rawItems,
+                        shouldResolve = effectiveDownloadedFilter != TriState.DISABLED,
+                    )
                     mutableState.update { current ->
-                        val effectiveDownloadedFilter = if (prefs.downloadedOnly) {
-                            TriState.ENABLED_IS
-                        } else {
-                            prefs.downloadedFilter
-                        }
-                        val downloadedNovelIds = if (effectiveDownloadedFilter != TriState.DISABLED) {
-                            resolveDownloadedNovelIds(current.rawItems)
-                        } else {
-                            emptySet()
-                        }
                         current.copy(
                             downloadedOnly = prefs.downloadedOnly,
                             downloadedFilter = prefs.downloadedFilter,
@@ -329,6 +331,16 @@ class NovelLibraryScreenModel(
                 libraryNovel.novel.id.takeIf { hasDownloadedChapters(libraryNovel.novel) }
             }
             .toSet()
+    }
+
+    private suspend fun resolveDownloadedNovelIdsForFilter(
+        novels: List<LibraryNovel>,
+        shouldResolve: Boolean,
+    ): Set<Long> {
+        if (!shouldResolve || novels.isEmpty()) return emptySet()
+        return withContext(downloadedIdsDispatcher) {
+            resolveDownloadedNovelIds(novels)
+        }
     }
 
     private fun sortItems(

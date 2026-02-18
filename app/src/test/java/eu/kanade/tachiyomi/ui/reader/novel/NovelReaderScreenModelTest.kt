@@ -105,6 +105,46 @@ class NovelReaderScreenModelTest {
     }
 
     @Test
+    fun `loads chapter text off caller thread to avoid main-thread blocking`() {
+        runBlocking {
+            val callerThreadId = Thread.currentThread().id
+            var sourceCallThreadId: Long? = null
+
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+
+            val sourceManager = FakeNovelSourceManager(
+                sourceId = novel.source,
+                chapterHtml = "<p>Hello</p>",
+                onGetChapterText = { sourceCallThreadId = Thread.currentThread().id },
+            )
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = sourceManager,
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            (sourceCallThreadId == callerThreadId) shouldBe false
+        }
+    }
+
+    @Test
     fun `injects chapter title heading when chapter html has no heading`() {
         runBlocking {
             val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
@@ -214,6 +254,47 @@ class NovelReaderScreenModelTest {
             state.contentBlocks[1].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Text>().text shouldBe "Intro"
             state.contentBlocks[2].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Image>().url shouldBe "https://example.org/images/pic.jpg"
             state.contentBlocks[3].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Text>().text shouldBe "Outro"
+        }
+    }
+
+    @Test
+    fun `keeps custom novel plugin image scheme urls for on demand loading`() {
+        runBlocking {
+            val novel = Novel.create().copy(
+                id = 1L,
+                source = 10L,
+                title = "Novel",
+                url = "https://example.org/book/slug",
+            )
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/book/ch1",
+            )
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(
+                    sourceId = novel.source,
+                    chapterHtml = "<p>Intro</p><img src=\"novelimg://hexnovels?ref=chapter%2Fimg-1\" /><p>Outro</p>",
+                ),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            state.contentBlocks[2].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Image>().url shouldBe
+                "novelimg://hexnovels?ref=chapter%2Fimg-1"
         }
     }
 
@@ -1330,6 +1411,7 @@ class NovelReaderScreenModelTest {
         private val sourceId: Long,
         private val chapterHtml: String,
         private val chapterWebUrlResolver: ((String, String?) -> String?)? = null,
+        private val onGetChapterText: (() -> Unit)? = null,
     ) : NovelSourceManager {
         override val isInitialized = MutableStateFlow(true)
         override val catalogueSources =
@@ -1340,6 +1422,7 @@ class NovelReaderScreenModelTest {
                     id = sourceId,
                     chapterHtml = chapterHtml,
                     chapterWebUrlResolver = chapterWebUrlResolver,
+                    onGetChapterText = onGetChapterText,
                 )
             } else {
                 null
@@ -1358,10 +1441,14 @@ class NovelReaderScreenModelTest {
         override val id: Long,
         private val chapterHtml: String,
         private val chapterWebUrlResolver: ((String, String?) -> String?)? = null,
+        private val onGetChapterText: (() -> Unit)? = null,
     ) : NovelSource, NovelWebUrlSource {
         override val name: String = "NovelSource"
 
-        override suspend fun getChapterText(chapter: SNovelChapter): String = chapterHtml
+        override suspend fun getChapterText(chapter: SNovelChapter): String {
+            onGetChapterText?.invoke()
+            return chapterHtml
+        }
 
         override suspend fun getNovelWebUrl(novelPath: String): String? = null
 

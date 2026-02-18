@@ -15,32 +15,44 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import tachiyomi.domain.source.manga.service.MangaSourceManager
+import tachiyomi.domain.source.novel.service.NovelSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
 class WebViewScreenModel(
     val sourceId: Long?,
-    private val MangaSourceManager: MangaSourceManager = Injekt.get(),
-    private val AnimeSourceManager: AnimeSourceManager = Injekt.get(),
+    private val mangaSourceManager: MangaSourceManager = Injekt.get(),
+    private val animeSourceManager: AnimeSourceManager = Injekt.get(),
+    private val novelSourceManager: NovelSourceManager = Injekt.get(),
     private val network: NetworkHelper = Injekt.get(),
 ) : StateScreenModel<StatsScreenState>(StatsScreenState.Loading) {
 
     var headers = emptyMap<String, String>()
 
     init {
-        sourceId?.let { MangaSourceManager.get(it) as? HttpSource }?.let { mangasource ->
+        sourceId?.let { mangaSourceManager.get(it) as? HttpSource }?.let { mangaSource ->
             try {
-                headers = mangasource.headers.toMultimap().mapValues { it.value.getOrNull(0) ?: "" }
+                headers = mangaSource.headers.toMultimap().mapValues { it.value.getOrNull(0) ?: "" }
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR, e) { "Failed to build headers" }
             }
         }
-        sourceId?.let { AnimeSourceManager.get(it) as? AnimeHttpSource }?.let { animesource ->
+        sourceId?.let { animeSourceManager.get(it) as? AnimeHttpSource }?.let { animeSource ->
             try {
-                headers = animesource.headers.toMultimap().mapValues { it.value.getOrNull(0) ?: "" }
+                headers = animeSource.headers.toMultimap().mapValues { it.value.getOrNull(0) ?: "" }
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR, e) { "Failed to build headers" }
             }
+        }
+
+        if (headers.isEmpty()) {
+            sourceId?.let { novelSourceManager.get(it) }?.let { novelSource ->
+                headers = extractHeadersViaReflection(novelSource)
+            }
+        }
+
+        if (headers.none { (name, _) -> name.equals("User-Agent", ignoreCase = true) }) {
+            headers = headers + ("User-Agent" to network.defaultUserAgentProvider())
         }
     }
 
@@ -61,5 +73,26 @@ class WebViewScreenModel(
             val cleared = network.cookieJar.remove(it)
             logcat { "Cleared $cleared cookies for: $url" }
         }
+    }
+
+    private fun extractHeadersViaReflection(source: Any): Map<String, String> {
+        return runCatching {
+            source.javaClass.methods
+                .firstOrNull { it.name == "getHeaders" && it.parameterCount == 0 }
+                ?.invoke(source)
+        }.getOrNull()
+            ?.let { raw ->
+                when (raw) {
+                    is okhttp3.Headers -> raw.toMultimap().mapValues { it.value.getOrNull(0) ?: "" }
+                    is Map<*, *> -> raw.entries
+                        .mapNotNull { (name, value) ->
+                            val key = name?.toString()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                            key to (value?.toString() ?: "")
+                        }
+                        .toMap()
+                    else -> emptyMap()
+                }
+            }
+            .orEmpty()
     }
 }

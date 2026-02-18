@@ -31,7 +31,7 @@ class MangaDownloadQueueScreenModel(
     private val _state = MutableStateFlow(emptyList<MangaDownloadHeaderItem>())
     val state = _state.asStateFlow()
 
-    lateinit var controllerBinding: DownloadListBinding
+    var controllerBinding: DownloadListBinding? = null
 
     /**
      * Adapter containing the active downloads.
@@ -137,6 +137,7 @@ class MangaDownloadQueueScreenModel(
         }
         progressJobs.clear()
         adapter = null
+        controllerBinding = null
     }
 
     val isDownloaderRunning = downloadManager.isDownloaderRunning
@@ -267,6 +268,7 @@ class MangaDownloadQueueScreenModel(
      * @return the holder of the download or null if it's not bound.
      */
     private fun getHolder(download: MangaDownload): MangaDownloadHolder? {
-        return controllerBinding.root.findViewHolderForItemId(download.chapter.id) as? MangaDownloadHolder
+        val binding = controllerBinding ?: return null
+        return binding.root.findViewHolderForItemId(download.chapter.id) as? MangaDownloadHolder
     }
 }

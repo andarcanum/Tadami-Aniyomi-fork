@@ -12,6 +12,18 @@ Pull requests are welcome!
 If you're interested in taking on [an open issue](https://github.com/aniyomiorg/aniyomi/issues), please comment on it so others are aware.
 You do not need to ask for permission nor an assignment.
 
+### Reading regression policy (anime/manga/novel)
+
+Changes that can affect viewing or reading flows are treated as `reading-critical`.
+
+For `reading-critical` pull requests:
+
+- A strict CI regression gate must pass before merge.
+- Required checks include formatting, release build, unit tests, focused reader/source regression tests, and debug assemble smoke gate.
+- CI auto-detects `reading-critical` changes from modified paths and blocks merge if the required manual smoke checklist is not checked in the PR template.
+- PR description must include checked manual smoke confirmations for anime, manga, and novel flows.
+- If any check shows regression risk (crash, ANR, blank screen, broken navigation), the change must not be merged until fixed and re-verified.
+
 ## Prerequisites
 
 Before you start, please note that the ability to use following technologies is **required** and that existing contributors will not actively teach them to you.

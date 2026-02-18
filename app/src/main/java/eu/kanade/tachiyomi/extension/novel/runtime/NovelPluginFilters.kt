@@ -20,17 +20,10 @@ internal object NovelPluginFilters {
         filterMapper: NovelPluginFilterMapper,
     ): JsonObject {
         val explicit = filterMapper.toFilterValues(filters)
-        val fallbackList = decodeFilterList(cachedFiltersPayload, filterMapper)
-        val fallbackValues = if (fallbackList.isEmpty()) {
-            buildJsonObject { }
-        } else {
-            filterMapper.toFilterValues(fallbackList)
-        }
-        if (fallbackValues.isEmpty()) return explicit
+        if (explicit.isNotEmpty()) return explicit
 
-        return buildJsonObject {
-            fallbackValues.forEach { (key, value) -> put(key, value) }
-            explicit.forEach { (key, value) -> put(key, value) }
-        }
+        val fallbackList = decodeFilterList(cachedFiltersPayload, filterMapper)
+        if (fallbackList.isEmpty()) return buildJsonObject { }
+        return filterMapper.toFilterValues(fallbackList)
     }
 }

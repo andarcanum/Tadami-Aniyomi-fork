@@ -7,6 +7,7 @@ import logcat.LogPriority
 import logcat.logcat
 import tachiyomi.data.extension.novel.NovelPluginStorage
 import tachiyomi.domain.extension.novel.model.NovelPlugin
+import java.lang.ref.WeakReference
 
 class NovelJsSourceFactory(
     private val runtimeFactory: NovelJsRuntimeFactory,
@@ -19,6 +20,7 @@ class NovelJsSourceFactory(
     private val filterMapper = NovelPluginFilterMapper(json)
     private val scriptOverridesApplier = NovelPluginScriptOverridesApplier(runtimeOverrides)
     private val resultNormalizer = NovelPluginResultNormalizer()
+    private val sources = mutableListOf<WeakReference<NovelJsSource>>()
 
     override fun create(plugin: NovelPlugin.Installed): NovelSource? {
         val scriptBytes = pluginStorage.readPluginScript(plugin.id)
@@ -31,7 +33,7 @@ class NovelJsSourceFactory(
             pluginId = plugin.id,
             script = scriptBytes.toString(Charsets.UTF_8),
         )
-        return NovelJsSource(
+        val source = NovelJsSource(
             plugin = plugin,
             script = script,
             runtimeFactory = runtimeFactory,
@@ -41,5 +43,24 @@ class NovelJsSourceFactory(
             resultNormalizer = resultNormalizer,
             runtimeOverride = runtimeOverride,
         )
+        synchronized(sources) {
+            sources.removeAll { it.get() == null }
+            sources.add(WeakReference(source))
+        }
+        return source
+    }
+
+    override fun clearRuntimeCaches() {
+        synchronized(sources) {
+            val iterator = sources.iterator()
+            while (iterator.hasNext()) {
+                val source = iterator.next().get()
+                if (source == null) {
+                    iterator.remove()
+                } else {
+                    source.clearInMemoryCaches()
+                }
+            }
+        }
     }
 }

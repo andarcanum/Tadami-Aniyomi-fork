@@ -29,6 +29,9 @@ import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
@@ -70,6 +73,7 @@ import java.time.Instant
 fun NovelScreenAuroraImpl(
     state: NovelScreenModel.State.Success,
     isFromSource: Boolean,
+    snackbarHostState: SnackbarHostState,
     nextUpdate: Instant?,
     onBack: () -> Unit,
     onStartReading: (() -> Unit)?,
@@ -414,6 +418,23 @@ fun NovelScreenAuroraImpl(
                 }
             }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            snackbar = { data ->
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = colors.surface.copy(alpha = 0.96f),
+                    contentColor = colors.textPrimary,
+                    actionColor = colors.accent,
+                    dismissActionContentColor = colors.textSecondary,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                )
+            },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 16.dp, vertical = 20.dp),
+        )
     }
 }
 

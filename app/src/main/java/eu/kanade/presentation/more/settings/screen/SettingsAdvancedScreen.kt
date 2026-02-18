@@ -42,6 +42,7 @@ import eu.kanade.tachiyomi.data.library.anime.AnimeMetadataUpdateJob
 import eu.kanade.tachiyomi.data.library.manga.MangaLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.manga.MangaMetadataUpdateJob
 import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
+import eu.kanade.tachiyomi.extension.novel.NovelPluginSourceFactory
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.NetworkPreferences
 import eu.kanade.tachiyomi.network.PREF_DOH_360
@@ -419,6 +420,7 @@ object SettingsAdvancedScreen : SearchableSettings {
         val trustAnimeExtension = remember { Injekt.get<TrustAnimeExtension>() }
         val trustMangaExtension = remember { Injekt.get<TrustMangaExtension>() }
         val novelPluginKeyValueStore = remember { Injekt.get<NovelPluginKeyValueStore>() }
+        val novelPluginSourceFactory = remember { Injekt.get<NovelPluginSourceFactory>() }
 
         if (shizukuMissing) {
             val dismiss = { shizukuMissing = false }
@@ -490,6 +492,7 @@ object SettingsAdvancedScreen : SearchableSettings {
                         scope.launchNonCancellable {
                             val success = runCatching {
                                 novelPluginKeyValueStore.clearAll()
+                                novelPluginSourceFactory.clearRuntimeCaches()
                             }.isSuccess
                             withUIContext {
                                 context.toast(

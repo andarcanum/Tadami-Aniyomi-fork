@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -66,6 +67,76 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
 
+internal object AchievementPopupSizeTokens {
+    const val COMPACT_SCALE = 0.75f
+
+    private fun scaledDp(base: Float) = (base * COMPACT_SCALE).dp
+    private fun scaledSp(base: Float) = (base * COMPACT_SCALE).sp
+
+    val overlayTopPadding = scaledDp(8f)
+
+    val unlockSlideHiddenOffset = -200f * COMPACT_SCALE
+    val unlockFireworksSize = scaledDp(300f)
+    val unlockFireworksYOffset = scaledDp(-20f)
+    val unlockOuterHorizontalPadding = scaledDp(16f)
+    val unlockOuterVerticalPadding = scaledDp(8f)
+    val unlockParticleHeight = scaledDp(200f)
+    val unlockContainerCornerRadius = scaledDp(20f)
+    val unlockRareShadowElevation = scaledDp(20f)
+    val unlockNormalShadowElevation = scaledDp(16f)
+    val unlockRareShadowElevationPx = 20f * COMPACT_SCALE
+    val unlockRareBorderWidth = scaledDp(2f)
+    val unlockNormalBorderWidth = scaledDp(1f)
+    val unlockContentPadding = scaledDp(20f)
+    val unlockRowSpacing = scaledDp(16f)
+    val unlockIconSize = scaledDp(56f)
+    val unlockRareBadgeSize = scaledDp(20f)
+    val unlockRareBadgeOffset = scaledDp(4f)
+    val unlockRareBadgeBorderWidth = scaledDp(1f)
+    val unlockRareBadgeStarSize = scaledDp(12f)
+    val unlockHeaderSpacing = scaledDp(6f)
+    val unlockHeaderIconSize = scaledDp(16f)
+    val unlockTitleTopSpacing = scaledDp(4f)
+    val unlockDescriptionTopSpacing = scaledDp(2f)
+    val unlockPointsTopSpacing = scaledDp(4f)
+    val unlockPointsRowSpacing = scaledDp(4f)
+    val unlockRarePointsIconSize = scaledDp(14f)
+    val unlockLabelRareFontSize = scaledSp(12f)
+    val unlockLabelNormalFontSize = scaledSp(11f)
+    val unlockLabelRareLetterSpacing = scaledSp(2f)
+    val unlockLabelNormalLetterSpacing = scaledSp(1.5f)
+    val unlockTitleRareFontSize = scaledSp(20f)
+    val unlockTitleNormalFontSize = scaledSp(18f)
+    val unlockDescriptionFontSize = scaledSp(12f)
+    val unlockPointsRareFontSize = scaledSp(14f)
+    val unlockPointsNormalFontSize = scaledSp(13f)
+
+    val groupOuterHorizontalPadding = scaledDp(16f)
+    val groupOuterVerticalPadding = scaledDp(8f)
+    val groupContainerCornerRadius = scaledDp(20f)
+    val groupShadowElevation = scaledDp(20f)
+    val groupShadowElevationPx = 20f * COMPACT_SCALE
+    val groupBorderWidth = scaledDp(2f)
+    val groupContentPadding = scaledDp(20f)
+    val groupRowSpacing = scaledDp(16f)
+    val groupIconSize = scaledDp(56f)
+    val groupStackedCircleSize = scaledDp(48f)
+    val groupStackedCircleOffset = scaledDp(4f)
+    val groupMainIconContainerSize = scaledDp(52f)
+    val groupMainIconSize = scaledDp(32f)
+    val groupCountBadgeSize = scaledDp(24f)
+    val groupCountBadgeOffset = scaledDp(2f)
+    val groupCountBadgeBorder = scaledDp(1.5f)
+    val groupCountTextSize = scaledSp(12f)
+    val groupHeaderFontSize = scaledSp(12f)
+    val groupHeaderLetterSpacing = scaledSp(1.5f)
+    val groupMiddleFontSize = scaledSp(18f)
+    val groupPointsFontSize = scaledSp(14f)
+    val groupSectionSpacing = scaledDp(4f)
+    val groupPointsRowSpacing = scaledDp(4f)
+    val groupArrowSize = scaledDp(32f)
+}
+
 /**
  * Aurora-themed Achievement Unlock Banner with slide-in animation, electric gradient,
  * Lottie fireworks for rare achievements, and particle burst effects
@@ -77,13 +148,13 @@ fun AchievementUnlockBanner(
     var currentAchievement by remember { mutableStateOf<Achievement?>(null) }
     var isVisible by remember { mutableStateOf(false) }
 
-    // Register callback with manager
-    LaunchedEffect(Unit) {
-        AchievementBannerManager.setOnShowCallback { achievement ->
+    DisposableEffect(Unit) {
+        val unregister = AchievementBannerManager.registerOnShowCallback { achievement ->
             if (!isVisible) {
                 currentAchievement = achievement
             }
         }
+        onDispose(unregister)
     }
 
     // Auto-dismiss after delay
@@ -109,7 +180,7 @@ fun AchievementUnlockBanner(
 
     // Slide from top with bounce
     val slideOffset by animateFloatAsState(
-        targetValue = if (isVisible) 0f else -200f,
+        targetValue = if (isVisible) 0f else AchievementPopupSizeTokens.unlockSlideHiddenOffset,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessLow,
@@ -148,8 +219,8 @@ fun AchievementUnlockBanner(
                 if (isRare) {
                     FireworksAnimation(
                         modifier = Modifier
-                            .size(300.dp)
-                            .offset(y = (-20).dp),
+                            .size(AchievementPopupSizeTokens.unlockFireworksSize)
+                            .offset(y = AchievementPopupSizeTokens.unlockFireworksYOffset),
                     )
                 }
 
@@ -166,7 +237,10 @@ fun AchievementUnlockBanner(
                     isRare = isRare,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .padding(
+                            horizontal = AchievementPopupSizeTokens.unlockOuterHorizontalPadding,
+                            vertical = AchievementPopupSizeTokens.unlockOuterVerticalPadding,
+                        )
                         .offset(y = slideOffset.dp)
                         .scale(scale),
                 )
@@ -265,7 +339,7 @@ private fun ParticleBurstEffect(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(200.dp)
+            .height(AchievementPopupSizeTokens.unlockParticleHeight)
             .drawBehind {
                 if (animationProgress <= 0f) return@drawBehind
 
@@ -330,14 +404,18 @@ private fun AchievementBannerItem(
         modifier = modifier
             .graphicsLayer {
                 if (isRare) {
-                    shadowElevation = 20f
+                    shadowElevation = AchievementPopupSizeTokens.unlockRareShadowElevationPx
                     spotShadowColor = colors.accent.copy(alpha = 0.6f)
                     ambientShadowColor = colors.progressCyan.copy(alpha = 0.4f)
                 }
             }
             .shadow(
-                elevation = if (isRare) 20.dp else 16.dp,
-                shape = RoundedCornerShape(20.dp),
+                elevation = if (isRare) {
+                    AchievementPopupSizeTokens.unlockRareShadowElevation
+                } else {
+                    AchievementPopupSizeTokens.unlockNormalShadowElevation
+                },
+                shape = RoundedCornerShape(AchievementPopupSizeTokens.unlockContainerCornerRadius),
                 ambientColor = if (isRare) colors.accent.copy(alpha = 0.6f) else colors.accent.copy(alpha = 0.5f),
                 spotColor = if (isRare) {
                     colors.progressCyan.copy(
@@ -347,7 +425,7 @@ private fun AchievementBannerItem(
                     colors.progressCyan.copy(alpha = 0.3f)
                 },
             )
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(AchievementPopupSizeTokens.unlockContainerCornerRadius))
             .background(
                 brush = Brush.linearGradient(
                     colors = if (isRare) {
@@ -371,24 +449,28 @@ private fun AchievementBannerItem(
                 ),
             )
             .border(
-                width = if (isRare) 2.dp else 1.dp,
+                width = if (isRare) {
+                    AchievementPopupSizeTokens.unlockRareBorderWidth
+                } else {
+                    AchievementPopupSizeTokens.unlockNormalBorderWidth
+                },
                 color = if (isRare) {
                     Color.White.copy(alpha = 0.5f)
                 } else {
                     Color.White.copy(alpha = 0.3f)
                 },
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(AchievementPopupSizeTokens.unlockContainerCornerRadius),
             )
-            .padding(20.dp),
+            .padding(AchievementPopupSizeTokens.unlockContentPadding),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(AchievementPopupSizeTokens.unlockRowSpacing),
         ) {
             // Achievement Icon with glow
             Box(
                 modifier = Modifier
-                    .size(56.dp)
+                    .size(AchievementPopupSizeTokens.unlockIconSize)
                     .drawBehind {
                         if (isRare) {
                             // Pulsing glow for rare achievements
@@ -416,8 +498,8 @@ private fun AchievementBannerItem(
                 AchievementIcon(
                     achievement = achievement,
                     isUnlocked = true,
-                    modifier = Modifier.size(56.dp),
-                    size = 56.dp,
+                    modifier = Modifier.size(AchievementPopupSizeTokens.unlockIconSize),
+                    size = AchievementPopupSizeTokens.unlockIconSize,
                     useHexagonShape = true,
                 )
 
@@ -425,15 +507,18 @@ private fun AchievementBannerItem(
                 if (isRare) {
                     Box(
                         modifier = Modifier
-                            .size(20.dp)
+                            .size(AchievementPopupSizeTokens.unlockRareBadgeSize)
                             .align(Alignment.TopEnd)
-                            .offset(x = 4.dp, y = (-4).dp)
+                            .offset(
+                                x = AchievementPopupSizeTokens.unlockRareBadgeOffset,
+                                y = -AchievementPopupSizeTokens.unlockRareBadgeOffset,
+                            )
                             .background(
                                 color = Color(0xFFFFD700),
                                 shape = CircleShape,
                             )
                             .border(
-                                width = 1.dp,
+                                width = AchievementPopupSizeTokens.unlockRareBadgeBorderWidth,
                                 color = Color.White,
                                 shape = CircleShape,
                             ),
@@ -443,7 +528,7 @@ private fun AchievementBannerItem(
                             imageVector = Icons.Default.Star,
                             contentDescription = null,
                             tint = Color(0xFFFF6B00),
-                            modifier = Modifier.size(12.dp),
+                            modifier = Modifier.size(AchievementPopupSizeTokens.unlockRareBadgeStarSize),
                         )
                     }
                 }
@@ -456,20 +541,28 @@ private fun AchievementBannerItem(
                 // "Achievement Unlocked!" label
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(AchievementPopupSizeTokens.unlockHeaderSpacing),
                 ) {
                     Icon(
                         imageVector = Icons.Default.EmojiEvents,
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(AchievementPopupSizeTokens.unlockHeaderIconSize),
                     )
                     Text(
                         text = if (isRare) "РЕДКОЕ ДОСТИЖЕНИЕ!" else "ДОСТИЖЕНИЕ РАЗБЛОКИРОВАНО!",
                         color = Color.White.copy(alpha = 0.95f),
-                        fontSize = if (isRare) 12.sp else 11.sp,
+                        fontSize = if (isRare) {
+                            AchievementPopupSizeTokens.unlockLabelRareFontSize
+                        } else {
+                            AchievementPopupSizeTokens.unlockLabelNormalFontSize
+                        },
                         fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = if (isRare) 2.sp else 1.5.sp,
+                        letterSpacing = if (isRare) {
+                            AchievementPopupSizeTokens.unlockLabelRareLetterSpacing
+                        } else {
+                            AchievementPopupSizeTokens.unlockLabelNormalLetterSpacing
+                        },
                         style = TextStyle(
                             shadow = Shadow(
                                 color = Color.Black.copy(alpha = 0.4f),
@@ -479,13 +572,17 @@ private fun AchievementBannerItem(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(AchievementPopupSizeTokens.unlockTitleTopSpacing))
 
                 // Achievement title with bold typography
                 Text(
                     text = achievement.title,
                     color = Color.White,
-                    fontSize = if (isRare) 20.sp else 18.sp,
+                    fontSize = if (isRare) {
+                        AchievementPopupSizeTokens.unlockTitleRareFontSize
+                    } else {
+                        AchievementPopupSizeTokens.unlockTitleNormalFontSize
+                    },
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = 0.5.sp,
                     style = TextStyle(
@@ -498,34 +595,38 @@ private fun AchievementBannerItem(
 
                 // Description
                 achievement.description?.let { description ->
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(AchievementPopupSizeTokens.unlockDescriptionTopSpacing))
                     Text(
                         text = description,
                         color = Color.White.copy(alpha = 0.9f),
-                        fontSize = 12.sp,
+                        fontSize = AchievementPopupSizeTokens.unlockDescriptionFontSize,
                         maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )
                 }
 
                 // Points with special styling for rare
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(AchievementPopupSizeTokens.unlockPointsTopSpacing))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(AchievementPopupSizeTokens.unlockPointsRowSpacing),
                 ) {
                     if (isRare) {
                         Icon(
                             imageVector = Icons.Default.Star,
                             contentDescription = null,
                             tint = Color(0xFFFFD700),
-                            modifier = Modifier.size(14.dp),
+                            modifier = Modifier.size(AchievementPopupSizeTokens.unlockRarePointsIconSize),
                         )
                     }
                     Text(
                         text = "+${achievement.points} очков",
                         color = if (isRare) Color(0xFFFFD700) else Color.White.copy(alpha = 0.95f),
-                        fontSize = if (isRare) 14.sp else 13.sp,
+                        fontSize = if (isRare) {
+                            AchievementPopupSizeTokens.unlockPointsRareFontSize
+                        } else {
+                            AchievementPopupSizeTokens.unlockPointsNormalFontSize
+                        },
                         fontWeight = FontWeight.ExtraBold,
                         letterSpacing = 0.5.sp,
                         style = TextStyle(
@@ -561,6 +662,24 @@ object AchievementBannerManager {
 
     fun setOnShowGroupCallback(callback: (List<Achievement>) -> Unit) {
         onShowGroupCallback = callback
+    }
+
+    fun registerOnShowCallback(callback: (Achievement) -> Unit): () -> Unit {
+        onShowCallback = callback
+        return {
+            if (onShowCallback === callback) {
+                onShowCallback = null
+            }
+        }
+    }
+
+    fun registerOnShowGroupCallback(callback: (List<Achievement>) -> Unit): () -> Unit {
+        onShowGroupCallback = callback
+        return {
+            if (onShowGroupCallback === callback) {
+                onShowGroupCallback = null
+            }
+        }
     }
 
     /**

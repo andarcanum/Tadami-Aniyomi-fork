@@ -87,7 +87,7 @@ class NovelPluginFiltersTest {
     }
 
     @Test
-    fun `merges cached defaults for missing explicit keys`() {
+    fun `does not merge stale cached keys when explicit filters are present`() {
         val cachedPayload = """
             {
               "sort": {
@@ -132,6 +132,6 @@ class NovelPluginFiltersTest {
         )
 
         values["sort"]!!.jsonObject["value"]!!.jsonPrimitive.content shouldBe "latest"
-        values["order"]!!.jsonObject["value"]!!.jsonPrimitive.content shouldBe "desc"
+        values.containsKey("order") shouldBe false
     }
 }

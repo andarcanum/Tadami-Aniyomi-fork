@@ -10,6 +10,8 @@ import java.io.Closeable
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 class NovelJsRuntime(
     private val pluginId: String,
@@ -30,8 +32,12 @@ class NovelJsRuntime(
         }
     }
 
-    fun evaluate(script: String, fileName: String = "novel-plugin.js"): Any? {
-        return runOnRuntimeThread {
+    fun evaluate(
+        script: String,
+        fileName: String = "novel-plugin.js",
+        timeoutMs: Long? = null,
+    ): Any? {
+        return runOnRuntimeThread(timeoutMs) {
             val value = v8.executeScript(script, fileName, 0)
             normalizeValue(value)
         }
@@ -440,10 +446,14 @@ class NovelJsRuntime(
         }
     }
 
-    private fun <T> runOnRuntimeThread(block: () -> T): T {
+    private fun <T> runOnRuntimeThread(timeoutMs: Long? = null, block: () -> T): T {
         val future = runtimeExecutor.submit<T> { block() }
         return try {
-            future.get()
+            if (timeoutMs != null) {
+                future.get(timeoutMs, TimeUnit.MILLISECONDS)
+            } else {
+                future.get()
+            }
         } catch (e: ExecutionException) {
             val cause = e.cause
             when (cause) {
@@ -451,6 +461,12 @@ class NovelJsRuntime(
                 is Error -> throw cause
                 else -> throw RuntimeException(cause)
             }
+        } catch (e: TimeoutException) {
+            future.cancel(true)
+            throw RuntimeException(
+                "J2V8 runtime call timed out after ${timeoutMs ?: 0L}ms for plugin id=$pluginId",
+                e,
+            )
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
             throw RuntimeException("J2V8 runtime call interrupted for plugin id=$pluginId", e)

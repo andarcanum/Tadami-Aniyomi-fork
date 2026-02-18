@@ -17,6 +17,7 @@ import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.data.achievement.repository.AchievementRepositoryImpl
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
 import tachiyomi.data.handlers.manga.MangaDatabaseHandler
+import tachiyomi.data.handlers.novel.NovelDatabaseHandler
 import tachiyomi.domain.achievement.repository.AchievementRepository
 import tachiyomi.domain.entries.anime.repository.AnimeRepository
 import tachiyomi.domain.entries.manga.repository.MangaRepository
@@ -49,6 +50,7 @@ class EventAchievementsTest : AchievementTestBase() {
         // Create mock dependencies
         val mangaHandler: MangaDatabaseHandler = mockk(relaxed = true)
         val animeHandler: AnimeDatabaseHandler = mockk(relaxed = true)
+        val novelHandler: NovelDatabaseHandler = mockk(relaxed = true)
         val diversityChecker: DiversityAchievementChecker = mockk(relaxed = true)
         val streakChecker: StreakAchievementChecker = mockk(relaxed = true) {
             coEvery { getCurrentStreak() } returns 0
@@ -71,10 +73,11 @@ class EventAchievementsTest : AchievementTestBase() {
             unlockableManager = mockk(relaxed = true),
             mangaHandler = mangaHandler,
             animeHandler = animeHandler,
+            novelHandler = novelHandler,
             mangaRepository = mangaRepository,
             animeRepository = animeRepository,
             userProfileManager = mockk(relaxed = true),
-            activityDataRepository = activityDataRepo as tachiyomi.domain.achievement.repository.ActivityDataRepository,
+            activityDataRepository = activityDataRepo,
         )
     }
 
@@ -92,6 +95,20 @@ class EventAchievementsTest : AchievementTestBase() {
         val event = AchievementEvent.ChapterRead(mangaId = 1L, chapterNumber = 1)
         val result = invokeIsEventMatch("read_10_chapters", event)
         result shouldBe true
+    }
+
+    @Test
+    fun `isEventMatch does NOT match first_novel_chapter on ChapterRead`() = runTest {
+        val event = AchievementEvent.ChapterRead(mangaId = 1L, chapterNumber = 1)
+        val result = invokeIsEventMatch("first_novel_chapter", event)
+        result shouldBe false
+    }
+
+    @Test
+    fun `isEventMatch does NOT match first_chapter on NovelChapterRead`() = runTest {
+        val event = AchievementEvent.NovelChapterRead(novelId = 1L, chapterNumber = 1)
+        val result = invokeIsEventMatch("first_chapter", event)
+        result shouldBe false
     }
 
     @Test
@@ -144,6 +161,13 @@ class EventAchievementsTest : AchievementTestBase() {
     fun `isEventMatch matches complete_1_anime on AnimeCompleted`() = runTest {
         val event = AchievementEvent.AnimeCompleted(animeId = 1L)
         val result = invokeIsEventMatch("complete_1_anime", event)
+        result shouldBe true
+    }
+
+    @Test
+    fun `isEventMatch matches complete_1_novel on NovelCompleted`() = runTest {
+        val event = AchievementEvent.NovelCompleted(novelId = 1L)
+        val result = invokeIsEventMatch("complete_1_novel", event)
         result shouldBe true
     }
 

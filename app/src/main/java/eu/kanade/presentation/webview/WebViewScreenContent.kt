@@ -264,7 +264,9 @@ fun WebViewScreenContent(
                     WebView.setWebContentsDebuggingEnabled(true)
                 }
 
-                headers["user-agent"]?.let {
+                headers.entries.firstOrNull { (name, _) ->
+                    name.equals("User-Agent", ignoreCase = true)
+                }?.value?.let {
                     webView.settings.userAgentString = it
                 }
             },

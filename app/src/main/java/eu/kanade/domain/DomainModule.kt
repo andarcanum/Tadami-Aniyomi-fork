@@ -377,7 +377,7 @@ class DomainModule : InjektModule {
         addFactory { GetExcludedScanlators(get()) }
         addFactory { SetExcludedScanlators(get()) }
 
-        addSingletonFactory<NovelRepository> { NovelRepositoryImpl(get()) }
+        addSingletonFactory<NovelRepository> { NovelRepositoryImpl(get(), get()) }
         addFactory { GetNovel(get()) }
         addFactory { GetNovelByUrlAndSourceId(get()) }
         addFactory { GetNovelFavorites(get()) }
@@ -595,12 +595,12 @@ class DomainModule : InjektModule {
         addSingletonFactory<tachiyomi.domain.achievement.repository.ActivityDataRepository> {
             tachiyomi.data.achievement.ActivityDataRepositoryImpl(get())
         }
-        addSingletonFactory { DiversityAchievementChecker(get(), get()) }
+        addSingletonFactory { DiversityAchievementChecker(get(), get(), get()) }
         addSingletonFactory { StreakAchievementChecker(get()) }
         addSingletonFactory { FeatureUsageCollector(get()) }
         addSingletonFactory { TimeBasedAchievementChecker(get(), get()) }
         addSingletonFactory { FeatureBasedAchievementChecker(get(), get()) }
-        addSingletonFactory { AchievementCalculator(get(), get(), get(), get(), get(), get()) }
+        addSingletonFactory { AchievementCalculator(get(), get(), get(), get(), get(), get(), get()) }
         addSingletonFactory { AchievementEventBus() }
         addSingletonFactory { SessionManager(get(), get()) }
         addSingletonFactory {
@@ -611,6 +611,7 @@ class DomainModule : InjektModule {
                 get(), get(), get(), get(), get(),
                 get(), get(), get(), get(), get(),
                 get(), get(), get(), get(), get(),
+                get(),
             )
         }
         // Note: AchievementLoader, PointsManager, UnlockableManager require Context

@@ -18,13 +18,17 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -55,9 +59,11 @@ import eu.kanade.tachiyomi.util.storage.getUriCompat
 import eu.kanade.tachiyomi.util.system.toShareIntent
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.launch
+import logcat.logcat
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.domain.entries.novel.model.Novel as DomainNovel
 import tachiyomi.core.common.i18n.stringResource as contextStringResource
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.LoadingScreen
@@ -99,6 +105,99 @@ class NovelScreen(
             isFavorite = successState.novel.favorite,
             isSourceConfigurable = successState.source is ConfigurableNovelSource,
         )
+        val openInWebViewAction: (() -> Unit)? = if (canOpenNovelWebView) {
+            {
+                coroutineScope.launch {
+                    val resolvedUrl = resolveNovelEntryWebUrl(
+                        novelUrl = rawNovelUrl,
+                        source = successState.source,
+                    )
+                    if (resolvedUrl == null) {
+                        context.toast("Unable to open title in WebView")
+                        return@launch
+                    }
+                    openNovelInWebView(
+                        navigator = navigator,
+                        url = resolvedUrl,
+                        title = successState.novel.title,
+                        sourceId = successState.novel.source,
+                    )
+                }
+            }
+        } else {
+            null
+        }
+        val openWebViewLoginAction: (() -> Unit)? = if (canOpenNovelWebView) {
+            {
+                coroutineScope.launch {
+                    val resolvedUrl = resolveNovelLoginWebUrl(
+                        novelUrl = rawNovelUrl,
+                        source = successState.source,
+                    )
+                    if (resolvedUrl == null) {
+                        context.toast("Unable to open source login page in WebView")
+                        return@launch
+                    }
+                    openNovelInWebView(
+                        navigator = navigator,
+                        url = resolvedUrl,
+                        title = successState.source.name,
+                        sourceId = successState.novel.source,
+                    )
+                }
+            }
+        } else {
+            null
+        }
+
+        val needsWebViewLoginHint = resolveNovelNeedsWebViewLoginHint(
+            novel = successState.novel,
+            source = successState.source,
+            chaptersCount = successState.chapters.size,
+            canOpenWebView = openInWebViewAction != null,
+            isRefreshing = successState.isRefreshingData,
+        )
+        val webViewLoginHintKey = resolveNovelWebViewLoginHintKey(
+            novelId = successState.novel.id,
+            chaptersCount = successState.chapters.size,
+            description = successState.novel.description,
+            needsLoginHint = needsWebViewLoginHint,
+        )
+        var lastShownWebViewLoginHintKey by rememberSaveable(successState.novel.id) { mutableStateOf<String?>(null) }
+        LaunchedEffect(webViewLoginHintKey, openWebViewLoginAction) {
+            if (webViewLoginHintKey == null) {
+                logcat {
+                    "Novel login hint skipped id=${successState.novel.id} source=${successState.source.name} " +
+                        "needsHint=false chapters=${successState.chapters.size} " +
+                        "initialized=${successState.novel.initialized} descBlank=${successState.novel.description.isNullOrBlank()}"
+                }
+                lastShownWebViewLoginHintKey = null
+                return@LaunchedEffect
+            }
+            if (lastShownWebViewLoginHintKey == webViewLoginHintKey) {
+                logcat {
+                    "Novel login hint suppressed duplicate id=${successState.novel.id} key=$webViewLoginHintKey"
+                }
+                return@LaunchedEffect
+            }
+            lastShownWebViewLoginHintKey = webViewLoginHintKey
+            logcat {
+                "Showing novel login hint id=${successState.novel.id} source=${successState.source.name} " +
+                    "url=${successState.novel.url}"
+            }
+            val result = screenModel.snackbarHostState.showSnackbar(
+                message = context.contextStringResource(MR.strings.login_title, successState.source.name),
+                actionLabel = context.contextStringResource(MR.strings.action_open_in_web_view),
+                withDismissAction = true,
+                duration = SnackbarDuration.Long,
+            )
+            logcat {
+                "Novel login hint result id=${successState.novel.id} source=${successState.source.name} result=$result"
+            }
+            if (result == SnackbarResult.ActionPerformed) {
+                openWebViewLoginAction?.invoke()
+            }
+        }
 
         NovelScreen(
             state = successState,
@@ -129,28 +228,7 @@ class NovelScreen(
             } else {
                 null
             },
-            onWebView = if (canOpenNovelWebView) {
-                {
-                    coroutineScope.launch {
-                        val resolvedUrl = resolveNovelEntryWebUrl(
-                            novelUrl = rawNovelUrl,
-                            source = successState.source,
-                        )
-                        if (resolvedUrl == null) {
-                            context.toast("Unable to open title in WebView")
-                            return@launch
-                        }
-                        openNovelInWebView(
-                            navigator = navigator,
-                            url = resolvedUrl,
-                            title = successState.novel.title,
-                            sourceId = successState.novel.source,
-                        )
-                    }
-                }
-            } else {
-                null
-            },
+            onWebView = openInWebViewAction,
             onSourceSettings = if (actionAvailability.showSourceSettings) {
                 { navigator.push(NovelSourcePreferencesScreen(successState.source.id)) }
             } else {
@@ -335,6 +413,35 @@ internal fun resolveNovelEntryActionAvailability(
         showSourceSettings = isSourceConfigurable,
         showMigrate = isFavorite,
     )
+}
+
+internal fun resolveNovelNeedsWebViewLoginHint(
+    novel: DomainNovel,
+    source: NovelSource,
+    chaptersCount: Int,
+    canOpenWebView: Boolean,
+    isRefreshing: Boolean,
+): Boolean {
+    if (!canOpenWebView || isRefreshing || chaptersCount > 0) return false
+    val sourceSupportsWeb = source is NovelWebUrlSource || source is NovelSiteSource
+    val hasAbsoluteUrl = novel.url.toHttpUrlOrNull() != null
+    val hasRelativePathUrl = novel.url.isNotBlank() && !hasAbsoluteUrl
+    if (!sourceSupportsWeb && !hasAbsoluteUrl) return false
+
+    return !novel.initialized ||
+        novel.description.isNullOrBlank() ||
+        hasRelativePathUrl
+}
+
+internal fun resolveNovelWebViewLoginHintKey(
+    novelId: Long,
+    chaptersCount: Int,
+    description: String?,
+    needsLoginHint: Boolean,
+): String? {
+    if (!needsLoginHint) return null
+    val normalizedDescriptionLength = description?.trim()?.length ?: 0
+    return "$novelId:$chaptersCount:$normalizedDescriptionLength"
 }
 
 @Composable
@@ -700,4 +807,20 @@ internal suspend fun resolveNovelEntryWebUrl(
     }
 
     return null
+}
+
+internal suspend fun resolveNovelLoginWebUrl(
+    novelUrl: String?,
+    source: NovelSource?,
+): String? {
+    val rawSiteUrl = (source as? NovelSiteSource)?.siteUrl?.trim().orEmpty()
+    if (rawSiteUrl.isNotBlank()) {
+        val normalizedSiteUrl = if (rawSiteUrl.startsWith("http://") || rawSiteUrl.startsWith("https://")) {
+            rawSiteUrl
+        } else {
+            "https://$rawSiteUrl"
+        }
+        normalizedSiteUrl.toHttpUrlOrNull()?.let { return it.toString() }
+    }
+    return resolveNovelEntryWebUrl(novelUrl, source)
 }

@@ -14,6 +14,8 @@ import android.text.format.DateFormat
 import android.view.GestureDetector
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.animation.AnimatedVisibility
@@ -117,6 +119,8 @@ import eu.kanade.tachiyomi.ui.reader.novel.encodeWebScrollProgressPercent
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
+import eu.kanade.tachiyomi.source.novel.NovelPluginImage
+import eu.kanade.tachiyomi.source.novel.NovelPluginImageResolver
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -124,6 +128,7 @@ import kotlinx.coroutines.isActive
 import tachiyomi.presentation.core.components.material.padding
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.io.ByteArrayInputStream
 import java.util.Date
 import java.util.Locale
 import org.json.JSONObject
@@ -782,8 +787,13 @@ fun NovelReaderScreen(
                                 )
                             }
                             is NovelReaderScreenModel.ContentBlock.Image -> {
+                                val imageModel = if (NovelPluginImage.isSupported(block.url)) {
+                                    NovelPluginImage(block.url)
+                                } else {
+                                    block.url
+                                }
                                 AsyncImage(
-                                    model = block.url,
+                                    model = imageModel,
                                     contentDescription = block.alt,
                                     contentScale = ContentScale.FillWidth,
                                     modifier = Modifier
@@ -806,7 +816,8 @@ fun NovelReaderScreen(
 
                 DisposableEffect(state.chapter.id) {
                     onDispose {
-                        val resolvedProgress = webViewInstance?.resolveCurrentWebViewProgressPercent()
+                        val webView = webViewInstance
+                        val resolvedProgress = webView?.resolveCurrentWebViewProgressPercent()
                         val finalProgress = resolveFinalWebViewProgressPercent(
                             resolvedPercent = resolvedProgress,
                             cachedPercent = webProgressPercent,
@@ -816,6 +827,14 @@ fun NovelReaderScreen(
                             100,
                             encodeWebScrollProgressPercent(finalProgress),
                         )
+                        webView?.apply {
+                            setOnTouchListener(null)
+                            setOnScrollChangeListener(null)
+                            webViewClient = object : WebViewClient() {}
+                            stopLoading()
+                            destroy()
+                        }
+                        webViewInstance = null
                     }
                 }
 
@@ -975,6 +994,24 @@ fun NovelReaderScreen(
                         val currentFontSize = state.readerSettings.fontSize
                         val currentLineHeight = state.readerSettings.lineHeight
                         webView.webViewClient = object : WebViewClient() {
+                            override fun shouldInterceptRequest(
+                                view: WebView?,
+                                request: WebResourceRequest?,
+                            ): WebResourceResponse? {
+                                val requestUrl = request?.url?.toString().orEmpty()
+                                if (!NovelPluginImage.isSupported(requestUrl)) {
+                                    return super.shouldInterceptRequest(view, request)
+                                }
+
+                                val image = NovelPluginImageResolver.resolveBlocking(requestUrl)
+                                    ?: return super.shouldInterceptRequest(view, request)
+                                return WebResourceResponse(
+                                    image.mimeType,
+                                    null,
+                                    ByteArrayInputStream(image.bytes),
+                                )
+                            }
+
                             override fun onPageFinished(view: WebView?, url: String?) {
                                 view?.applyReaderCss(
                                     fontFaceCss = fontFaceCss,

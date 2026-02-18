@@ -16,8 +16,11 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.data.achievement.handler.PointsManager
 import tachiyomi.data.achievement.loader.AchievementLoader
+import tachiyomi.domain.achievement.model.Achievement
+import tachiyomi.domain.achievement.model.AchievementCategory
 import tachiyomi.domain.achievement.model.DayActivity
 import tachiyomi.domain.achievement.model.MonthStats
+import tachiyomi.domain.achievement.model.AchievementType
 import tachiyomi.domain.achievement.model.UserPoints
 import tachiyomi.domain.achievement.repository.AchievementRepository
 import tachiyomi.domain.achievement.repository.ActivityDataRepository
@@ -68,5 +71,34 @@ class AchievementScreenModelTest {
             state.shouldBeInstanceOf<AchievementScreenState.Success>()
             (state as AchievementScreenState.Success).activityData shouldBe activity
         }
+    }
+
+    @Test
+    fun `filtered achievements include NOVEL and BOTH for NOVEL tab`() {
+        val novelAchievement = Achievement(
+            id = "novel_1",
+            type = AchievementType.EVENT,
+            category = AchievementCategory.NOVEL,
+            title = "Novel",
+        )
+        val bothAchievement = Achievement(
+            id = "both_1",
+            type = AchievementType.EVENT,
+            category = AchievementCategory.BOTH,
+            title = "Both",
+        )
+        val mangaAchievement = Achievement(
+            id = "manga_1",
+            type = AchievementType.EVENT,
+            category = AchievementCategory.MANGA,
+            title = "Manga",
+        )
+
+        val state = AchievementScreenState.Success(
+            achievements = listOf(novelAchievement, bothAchievement, mangaAchievement),
+            selectedCategory = AchievementCategory.NOVEL,
+        )
+
+        state.filteredAchievements shouldBe listOf(novelAchievement, bothAchievement)
     }
 }

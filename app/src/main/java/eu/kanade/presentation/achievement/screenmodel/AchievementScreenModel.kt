@@ -117,6 +117,10 @@ sealed interface AchievementScreenState {
                     it.category == AchievementCategory.MANGA ||
                         it.category == AchievementCategory.BOTH
                 }
+                AchievementCategory.NOVEL -> achievements.filter {
+                    it.category == AchievementCategory.NOVEL ||
+                        it.category == AchievementCategory.BOTH
+                }
                 AchievementCategory.SECRET -> achievements.filter { it.category == AchievementCategory.SECRET }
             }
 

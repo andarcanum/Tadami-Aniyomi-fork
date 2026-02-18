@@ -42,6 +42,8 @@ import eu.kanade.tachiyomi.data.coil.MangaCoverKeyer
 import eu.kanade.tachiyomi.data.coil.MangaKeyer
 import eu.kanade.tachiyomi.data.coil.NovelCoverFetcher
 import eu.kanade.tachiyomi.data.coil.NovelCoverKeyer
+import eu.kanade.tachiyomi.data.coil.NovelPluginImageFetcher
+import eu.kanade.tachiyomi.data.coil.NovelPluginImageKeyer
 import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.di.AppModule
@@ -278,12 +280,14 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
                 add(AnimeImageFetcher.AnimeFactory(callFactoryLazy))
                 add(AnimeImageFetcher.AnimeCoverFactory(callFactoryLazy))
                 add(NovelCoverFetcher.Factory(callFactoryLazy))
+                add(NovelPluginImageFetcher.Factory())
                 // Keyer
                 add(AnimeKeyer())
                 add(MangaKeyer())
                 add(AnimeCoverKeyer())
                 add(MangaCoverKeyer())
                 add(NovelCoverKeyer())
+                add(NovelPluginImageKeyer())
             }
 
             crossfade((300 * this@App.animatorDurationScale).toInt())

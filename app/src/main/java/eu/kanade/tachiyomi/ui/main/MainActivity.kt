@@ -66,6 +66,7 @@ import eu.kanade.domain.source.manga.interactor.GetMangaIncognitoState
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.achievement.components.AchievementGroupNotification
 import eu.kanade.presentation.achievement.components.AchievementListDialog
+import eu.kanade.presentation.achievement.components.AchievementPopupSizeTokens
 import eu.kanade.presentation.achievement.components.AchievementUnlockBanner
 import eu.kanade.presentation.components.AppStateBanners
 import eu.kanade.presentation.components.DownloadedOnlyBannerBackgroundColor
@@ -277,7 +278,7 @@ class MainActivity : BaseActivity() {
                         AchievementUnlockBanner(
                             modifier = Modifier
                                 .align(Alignment.TopCenter)
-                                .padding(top = 8.dp),
+                                .padding(top = AchievementPopupSizeTokens.overlayTopPadding),
                         )
                         // Achievement group notification (for multiple achievements after reader/player)
                         var showAchievementsList by remember { mutableStateOf(false) }
@@ -286,7 +287,7 @@ class MainActivity : BaseActivity() {
                         AchievementGroupNotification(
                             modifier = Modifier
                                 .align(Alignment.TopCenter)
-                                .padding(top = 8.dp),
+                                .padding(top = AchievementPopupSizeTokens.overlayTopPadding),
                             onViewAll = { achievements ->
                                 // Get achievements directly from notification
                                 pendingAchievements = achievements

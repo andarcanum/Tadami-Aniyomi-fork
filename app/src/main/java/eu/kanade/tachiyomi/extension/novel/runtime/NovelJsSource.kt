@@ -22,6 +22,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
@@ -29,10 +30,14 @@ import kotlinx.serialization.json.put
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import rx.Observable
+import java.net.URLDecoder
+import java.util.Base64
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+import eu.kanade.tachiyomi.source.novel.NovelPluginImagePayload
+import eu.kanade.tachiyomi.source.novel.NovelPluginImageSource
 import eu.kanade.tachiyomi.source.novel.NovelSiteSource
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
 
@@ -45,7 +50,7 @@ class NovelJsSource internal constructor(
     private val filterMapper: NovelPluginFilterMapper,
     private val resultNormalizer: NovelPluginResultNormalizer,
     private val runtimeOverride: NovelPluginRuntimeOverride,
-) : NovelCatalogueSource, NovelSiteSource, NovelWebUrlSource {
+) : NovelCatalogueSource, NovelSiteSource, NovelWebUrlSource, NovelPluginImageSource {
     override val id: Long = NovelPluginId.toSourceId(plugin.id)
     override val name: String = plugin.name
     override val lang: String = plugin.lang
@@ -56,6 +61,7 @@ class NovelJsSource internal constructor(
     private var runtime: NovelJsRuntime? = null
     private var hasParsePage: Boolean? = null
     private var hasResolveUrl: Boolean? = null
+    private var hasFetchImage: Boolean? = null
     private var cachedFiltersPayload: String? = null
 
     override fun getFilterList(): NovelFilterList {
@@ -326,6 +332,29 @@ class NovelJsSource internal constructor(
         }
     }
 
+    override suspend fun fetchImage(imageRef: String): NovelPluginImagePayload? {
+        return runPluginSafe(
+            operation = "fetchImage(ref=$imageRef)",
+            defaultValue = null,
+        ) {
+            mutex.withLock {
+                val runtime = ensureRuntimeLocked()
+                if (hasFetchImage != true) return@withLock null
+                val payload = callPluginWithTimeout(
+                    runtime = runtime,
+                    functionName = "fetchImage",
+                    timeoutMs = FETCH_IMAGE_RUNTIME_TIMEOUT_MS,
+                    toJsString(imageRef),
+                )
+                decodePluginImagePayload(payload)
+            }
+        }
+    }
+
+    internal fun clearInMemoryCaches() {
+        cachedFiltersPayload = null
+    }
+
     private fun loadFiltersLocked(): NovelFilterList {
         val payload = cachedFiltersPayload ?: run {
             val runtime = ensureRuntimeLocked()
@@ -373,6 +402,7 @@ class NovelJsSource internal constructor(
         )
         hasParsePage = (instance.evaluate("typeof __plugin.parsePage === \"function\"") as? Boolean) == true
         hasResolveUrl = (instance.evaluate("typeof __plugin.resolveUrl === \"function\"") as? Boolean) == true
+        hasFetchImage = (instance.evaluate("typeof __plugin.fetchImage === \"function\"") as? Boolean) == true
         runtime = instance
         return instance
     }
@@ -386,6 +416,27 @@ class NovelJsSource internal constructor(
             }
         }
         val result = runtime.evaluate(call, "novel-plugin-call.js")
+        return result as? String ?: ""
+    }
+
+    private fun callPluginWithTimeout(
+        runtime: NovelJsRuntime,
+        functionName: String,
+        timeoutMs: Long,
+        vararg args: String,
+    ): String {
+        val call = when (functionName) {
+            "filters" -> "JSON.stringify(__plugin && __plugin.filters ? __plugin.filters : {})"
+            else -> {
+                val joinedArgs = args.joinToString(", ")
+                "JSON.stringify(__resolve(__plugin.$functionName($joinedArgs)))"
+            }
+        }
+        val result = runtime.evaluate(
+            script = call,
+            fileName = "novel-plugin-call.js",
+            timeoutMs = timeoutMs,
+        )
         return result as? String ?: ""
     }
 
@@ -408,6 +459,86 @@ class NovelJsSource internal constructor(
             .getOrNull()
             ?.trim()
             ?.takeIf { it.isNotBlank() }
+    }
+
+    private fun decodePluginImagePayload(payload: String): NovelPluginImagePayload? {
+        if (payload.isBlank() || payload == "null") return null
+        val element = runCatching { json.decodeFromString<JsonElement>(payload) }.getOrNull() ?: return null
+
+        return when (element) {
+            is JsonPrimitive -> {
+                val rawValue = element.contentOrNull?.trim().orEmpty()
+                decodeImagePayloadFromDataUrl(rawValue)
+            }
+            is JsonObject -> {
+                val cacheKey = element["cacheKey"]?.asStringOrNull()
+                    ?: element["key"]?.asStringOrNull()
+                val dataUrl = element["dataUrl"]?.asStringOrNull()
+                    ?: element["data"]?.asStringOrNull()
+                if (!dataUrl.isNullOrBlank()) {
+                    decodeImagePayloadFromDataUrl(dataUrl)?.let { decoded ->
+                        return decoded.copy(cacheKey = cacheKey ?: decoded.cacheKey)
+                    }
+                }
+
+                val base64Value = element["base64"]?.asStringOrNull()
+                    ?: element["bytesBase64"]?.asStringOrNull()
+                    ?: element["bodyBase64"]?.asStringOrNull()
+                val mimeType = element["mimeType"]?.asStringOrNull()
+                    ?: element["contentType"]?.asStringOrNull()
+                    ?: "application/octet-stream"
+
+                decodeImagePayloadFromBase64(base64Value = base64Value, mimeType = mimeType)
+                    ?.copy(cacheKey = cacheKey)
+            }
+            else -> null
+        }
+    }
+
+    private fun decodeImagePayloadFromDataUrl(dataUrl: String): NovelPluginImagePayload? {
+        if (!dataUrl.startsWith("data:", ignoreCase = true)) return null
+        val commaIndex = dataUrl.indexOf(',')
+        if (commaIndex <= 5) return null
+
+        val metadata = dataUrl.substring(5, commaIndex)
+        val mimeType = metadata.substringBefore(';')
+            .trim()
+            .ifBlank { "application/octet-stream" }
+        val isBase64 = metadata.contains(";base64", ignoreCase = true)
+        val payloadBody = dataUrl.substring(commaIndex + 1)
+
+        val bytes = if (isBase64) {
+            runCatching { Base64.getDecoder().decode(payloadBody) }.getOrNull()
+        } else {
+            runCatching {
+                URLDecoder.decode(payloadBody, Charsets.UTF_8.name()).toByteArray(Charsets.UTF_8)
+            }.getOrNull()
+        } ?: return null
+
+        return NovelPluginImagePayload(
+            bytes = bytes,
+            mimeType = mimeType,
+            cacheKey = null,
+        )
+    }
+
+    private fun decodeImagePayloadFromBase64(base64Value: String?, mimeType: String): NovelPluginImagePayload? {
+        val normalizedBase64 = base64Value?.trim().orEmpty()
+        if (normalizedBase64.isBlank()) return null
+
+        val bytes = runCatching { Base64.getDecoder().decode(normalizedBase64) }
+            .getOrNull()
+            ?: return null
+
+        return NovelPluginImagePayload(
+            bytes = bytes,
+            mimeType = mimeType,
+            cacheKey = null,
+        )
+    }
+
+    private fun JsonElement.asStringOrNull(): String? {
+        return (this as? JsonPrimitive)?.contentOrNull
     }
 
     private fun List<PluginNovelItem>.toNovelsPage(): NovelsPage {
@@ -1018,6 +1149,7 @@ class NovelJsSource internal constructor(
 
     companion object {
         private const val LOG_TAG = "NovelJsSource"
+        private const val FETCH_IMAGE_RUNTIME_TIMEOUT_MS = 15_000L
     }
 
     private enum class WuxiaworldSort(val value: String) {

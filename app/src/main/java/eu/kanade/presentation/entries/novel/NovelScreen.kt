@@ -130,6 +130,7 @@ fun NovelScreen(
         NovelScreenAuroraImpl(
             state = state,
             isFromSource = isFromSource,
+            snackbarHostState = snackbarHostState,
             nextUpdate = state.novel.expectedNextUpdate,
             onBack = { if (state.selectedChapterIds.isNotEmpty()) onAllChapterSelected(false) else onBack() },
             onStartReading = onStartReading,

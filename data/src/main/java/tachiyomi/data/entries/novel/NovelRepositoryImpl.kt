@@ -5,7 +5,10 @@ import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.MangaUpdateStrategyColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
+import tachiyomi.data.achievement.handler.AchievementEventBus
+import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.data.handlers.novel.NovelDatabaseHandler
+import tachiyomi.domain.achievement.model.AchievementCategory
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.entries.novel.model.NovelUpdate
 import tachiyomi.domain.entries.novel.repository.NovelRepository
@@ -13,6 +16,7 @@ import tachiyomi.domain.library.novel.LibraryNovel
 
 class NovelRepositoryImpl(
     private val handler: NovelDatabaseHandler,
+    private val eventBus: AchievementEventBus,
 ) : NovelRepository {
 
     override suspend fun getNovelById(id: Long): Novel {
@@ -146,6 +150,15 @@ class NovelRepositoryImpl(
                     version = value.version,
                     isSyncing = 0,
                 )
+
+                value.favorite?.let { isFavorite ->
+                    val event = if (isFavorite) {
+                        AchievementEvent.LibraryAdded(value.id, AchievementCategory.NOVEL)
+                    } else {
+                        AchievementEvent.LibraryRemoved(value.id, AchievementCategory.NOVEL)
+                    }
+                    eventBus.tryEmit(event)
+                }
             }
         }
     }

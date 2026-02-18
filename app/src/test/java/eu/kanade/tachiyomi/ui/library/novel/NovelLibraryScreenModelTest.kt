@@ -68,6 +68,7 @@ class NovelLibraryScreenModelTest {
             basePreferences = basePreferences,
             libraryPreferences = libraryPreferences,
             hasDownloadedChapters = { false },
+            downloadedIdsDispatcher = testDispatcher,
         )
 
         testDispatcher.scheduler.advanceUntilIdle()
@@ -89,6 +90,7 @@ class NovelLibraryScreenModelTest {
             basePreferences = basePreferences,
             libraryPreferences = libraryPreferences,
             hasDownloadedChapters = { false },
+            downloadedIdsDispatcher = testDispatcher,
         )
 
         testDispatcher.scheduler.advanceUntilIdle()
@@ -111,6 +113,7 @@ class NovelLibraryScreenModelTest {
             basePreferences = basePreferences,
             libraryPreferences = libraryPreferences,
             hasDownloadedChapters = { false },
+            downloadedIdsDispatcher = testDispatcher,
         )
 
         testDispatcher.scheduler.advanceUntilIdle()
@@ -132,6 +135,7 @@ class NovelLibraryScreenModelTest {
             basePreferences = basePreferences,
             libraryPreferences = libraryPreferences,
             hasDownloadedChapters = { it.id == downloaded.id },
+            downloadedIdsDispatcher = testDispatcher,
         )
 
         testDispatcher.scheduler.advanceUntilIdle()
@@ -154,6 +158,7 @@ class NovelLibraryScreenModelTest {
             basePreferences = basePreferences,
             libraryPreferences = libraryPreferences,
             hasDownloadedChapters = { false },
+            downloadedIdsDispatcher = testDispatcher,
         )
 
         testDispatcher.scheduler.advanceUntilIdle()
@@ -178,6 +183,7 @@ class NovelLibraryScreenModelTest {
             basePreferences = basePreferences,
             libraryPreferences = libraryPreferences,
             hasDownloadedChapters = { false },
+            downloadedIdsDispatcher = testDispatcher,
         )
 
         testDispatcher.scheduler.advanceUntilIdle()
@@ -228,6 +234,7 @@ class NovelLibraryScreenModelTest {
             basePreferences = basePreferences,
             libraryPreferences = libraryPreferences,
             hasDownloadedChapters = { false },
+            downloadedIdsDispatcher = testDispatcher,
         )
 
         screenModel.getNextUnreadChapter(novel)?.id shouldBe 102L

@@ -5,6 +5,7 @@ import android.content.pm.ServiceInfo
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -123,14 +124,11 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
             try {
                 updateEpisodeList()
                 Result.success()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                if (e is CancellationException) {
-                    // Assume success although cancelled
-                    Result.success()
-                } else {
-                    logcat(LogPriority.ERROR, e)
-                    Result.failure()
-                }
+                logcat(LogPriority.ERROR, e)
+                Result.failure()
             } finally {
                 notifier.cancelProgressNotification()
             }
@@ -313,6 +311,7 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                                             newUpdates.add(anime to newEpisodes.toTypedArray())
                                         }
                                     } catch (e: Throwable) {
+                                        if (e is CancellationException) throw e
                                         val errorMessage = when (e) {
                                             is NoEpisodesException -> context.stringResource(
                                                 AYMR.strings.no_episodes_error,
@@ -535,16 +534,20 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
             val workQuery = WorkQuery.Builder.fromTags(listOf(TAG))
                 .addStates(listOf(WorkInfo.State.RUNNING))
                 .build()
-            wm.getWorkInfos(workQuery).get()
-                // Should only return one work but just in case
-                .forEach {
-                    wm.cancelWorkById(it.id)
-
-                    // Re-enqueue cancelled scheduled work
-                    if (it.tags.contains(WORK_NAME_AUTO)) {
-                        setupTask(context)
-                    }
-                }
+            val future = wm.getWorkInfos(workQuery)
+            future.addListener(
+                {
+                    runCatching { future.get() }
+                        .getOrDefault(emptyList())
+                        .forEach {
+                            wm.cancelWorkById(it.id)
+                            if (it.tags.contains(WORK_NAME_AUTO)) {
+                                setupTask(context)
+                            }
+                        }
+                },
+                ContextCompat.getMainExecutor(context),
+            )
         }
     }
 }

@@ -62,3 +62,77 @@ jobs:
         with:
           name: mapping-${{ github.sha }}
           path: app/build/outputs/mapping/release
+
+  reading_regression_gate:
+    name: Reading Regression Gate
+    needs: build
+    runs-on: 'ubuntu-24.04'
+
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.2.0
+        with:
+          node-version: '22'
+
+      - name: Collect changed files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" > changed_files.txt
+          echo "Changed files:"
+          cat changed_files.txt
+
+      - name: Detect reading-critical changes
+        id: reading_changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/ci/detect-reading-critical.js --input changed_files.txt --github-output "$GITHUB_OUTPUT"
+
+      - name: Print reading-critical matches
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "reading_critical=${{ steps.reading_changes.outputs.reading_critical }}"
+          if [ "${{ steps.reading_changes.outputs.reading_critical }}" = "true" ]; then
+            echo "Matched paths:"
+            printf '%s\n' "${{ steps.reading_changes.outputs.matched_paths }}"
+          fi
+
+      - name: Set up JDK
+        if: steps.reading_changes.outputs.reading_critical == 'true'
+        uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.7.0
+        with:
+          java-version: 17
+          distribution: temurin
+
+      - name: Set up gradle
+        if: steps.reading_changes.outputs.reading_critical == 'true'
+        uses: gradle/actions/setup-gradle@94baf225fe0a508e581a564467443d0e2379123b # v4.3.0
+
+      - name: Enforce manual reading smoke declaration
+        if: steps.reading_changes.outputs.reading_critical == 'true'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "${PR_BODY:-}" > pr_body.txt
+          node tools/ci/validate-reading-smoke.js --pr-body-file pr_body.txt
+
+      - name: Reading regression unit matrix
+        if: steps.reading_changes.outputs.reading_critical == 'true'
+        run: bash tools/ci/run-reading-regression-tests.sh
+
+      - name: Reading debug assemble smoke
+        if: steps.reading_changes.outputs.reading_critical == 'true'
+        run: ./gradlew :app:assembleDebug
+
+      - name: Reading gate skipped (non-reading change)
+        if: steps.reading_changes.outputs.reading_critical != 'true'
+        run: echo "reading_critical=false, strict reading regression matrix skipped."

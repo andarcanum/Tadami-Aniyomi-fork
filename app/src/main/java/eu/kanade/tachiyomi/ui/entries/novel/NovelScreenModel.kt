@@ -21,6 +21,8 @@ import eu.kanade.tachiyomi.data.export.novel.NovelEpubExporter
 import eu.kanade.tachiyomi.data.track.MangaTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.novelsource.NovelSource
+import eu.kanade.tachiyomi.source.novel.NovelSiteSource
+import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -37,6 +39,8 @@ import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.data.achievement.handler.AchievementEventBus
+import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.domain.category.novel.interactor.GetNovelCategories
 import tachiyomi.domain.category.novel.interactor.SetNovelCategories
 import tachiyomi.domain.entries.applyFilter
@@ -97,6 +101,7 @@ class NovelScreenModel(
     private val novelDownloadManager: NovelDownloadManager = NovelDownloadManager(),
     private val novelEpubExporter: NovelEpubExporter = NovelEpubExporter(),
     private val novelReaderPreferences: NovelReaderPreferences = Injekt.get(),
+    private val eventBus: AchievementEventBus? = runCatching { Injekt.get<AchievementEventBus>() }.getOrNull(),
     val snackbarHostState: SnackbarHostState = SnackbarHostState(),
 ) : StateScreenModel<NovelScreenModel.State>(State.Loading) {
 
@@ -238,10 +243,11 @@ class NovelScreenModel(
                 ?.downloadedChapterIds
                 ?.intersect(chapters.mapTo(mutableSetOf()) { it.id })
                 .orEmpty()
+            val source = sourceManager.getOrStub(novel.source)
             mutableState.update {
                 State.Success(
                     novel = novel,
-                    source = sourceManager.getOrStub(novel.source),
+                    source = source,
                     chapters = chapters,
                     availableScanlators = availableScanlators,
                     scanlatorChapterCounts = scanlatorChapterCounts,
@@ -252,6 +258,18 @@ class NovelScreenModel(
                     downloadedChapterIds = currentDownloadedIds,
                     downloadingChapterIds = emptySet(),
                 )
+            }
+            logRefreshSnapshot(
+                stage = "initial-state",
+                source = source,
+                novel = novel,
+                chapterCount = chapters.size,
+                manualFetch = false,
+            )
+            if (isLikelyWebViewLoginRequired(source, novel, chapters.size)) {
+                logcat(LogPriority.WARN) {
+                    "Novel ${novel.id} (${source.name}) likely requires WebView login: chapters=0, descriptionBlank=true"
+                }
             }
             cacheState(state.value as? State.Success)
             observeTrackers()
@@ -340,6 +358,32 @@ class NovelScreenModel(
         setNovelCategories.await(novelId, categoryIds)
     }
 
+    private fun isLikelyWebViewLoginRequired(
+        source: NovelSource,
+        novel: Novel,
+        chapterCount: Int,
+    ): Boolean {
+        val supportsWebLogin = source is NovelSiteSource || source is NovelWebUrlSource
+        return supportsWebLogin &&
+            chapterCount == 0 &&
+            novel.description.isNullOrBlank() &&
+            novel.url.isNotBlank()
+    }
+
+    private fun logRefreshSnapshot(
+        stage: String,
+        source: NovelSource,
+        novel: Novel,
+        chapterCount: Int,
+        manualFetch: Boolean,
+    ) {
+        logcat {
+            "Novel refresh snapshot stage=$stage id=${novel.id} source=${source.name} " +
+                "manualFetch=$manualFetch chapters=$chapterCount initialized=${novel.initialized} " +
+                "descriptionBlank=${novel.description.isNullOrBlank()}"
+        }
+    }
+
     fun refreshChapters(
         manualFetch: Boolean = true,
         refreshNovel: Boolean = true,
@@ -347,6 +391,13 @@ class NovelScreenModel(
     ) {
         val state = successState ?: return
         screenModelScope.launchIO {
+            logRefreshSnapshot(
+                stage = "refresh-start",
+                source = state.source,
+                novel = state.novel,
+                chapterCount = state.chapters.size,
+                manualFetch = manualFetch,
+            )
             updateSuccessState { it.copy(isRefreshingData = true) }
             try {
                 supervisorScope {
@@ -356,7 +407,7 @@ class NovelScreenModel(
                                 runCatching {
                                     fetchNovelFromSource(state, manualFetch)
                                 }.onFailure { error ->
-                                    handleRefreshError(error)
+                                    handleRefreshError(error, state)
                                 }
                             }
                         },
@@ -365,12 +416,21 @@ class NovelScreenModel(
                                 runCatching {
                                     fetchChaptersFromSource(state, manualFetch)
                                 }.onFailure { error ->
-                                    handleRefreshError(error)
+                                    handleRefreshError(error, state)
                                 }
                             }
                         },
                     )
                     tasks.awaitAll()
+                }
+                successState?.let { latest ->
+                    logRefreshSnapshot(
+                        stage = "refresh-end",
+                        source = latest.source,
+                        novel = latest.novel,
+                        chapterCount = latest.chapters.size,
+                        manualFetch = manualFetch,
+                    )
                 }
             } finally {
                 updateSuccessState { it.copy(isRefreshingData = false) }
@@ -378,11 +438,30 @@ class NovelScreenModel(
         }
     }
 
-    private suspend fun handleRefreshError(error: Throwable) {
+    private suspend fun handleRefreshError(
+        error: Throwable,
+        state: State.Success?,
+    ) {
         if (error is CancellationException) throw error
-        val message = when (error) {
-            is NoChaptersException -> "No chapters found"
-            else -> error.message ?: "Failed to refresh"
+        logcat(LogPriority.WARN, error) {
+            "Novel refresh failed for novelId=$novelId"
+        }
+        val likelyWebViewLoginRequired = state?.let {
+            isLikelyWebViewLoginRequired(
+                source = it.source,
+                novel = it.novel,
+                chapterCount = it.chapters.size,
+            )
+        } ?: false
+        val message = resolveNovelRefreshErrorMessage(
+            error = error,
+            likelyWebViewLoginRequired = likelyWebViewLoginRequired,
+        )
+        if (message == null) {
+            logcat {
+                "Suppressed refresh snackbar for novelId=$novelId due to likely WebView login requirement"
+            }
+            return
         }
         snackbarHostState.showSnackbar(message = message)
     }
@@ -392,6 +471,11 @@ class NovelScreenModel(
         manualFetch: Boolean,
     ) {
         val networkNovel = state.source.getNovelDetails(state.novel.toSNovel())
+        logcat {
+            "Fetched novel details for id=${state.novel.id} source=${state.source.name}, " +
+                "initialized=${networkNovel.initialized}, descriptionBlank=${networkNovel.description.isNullOrBlank()}, " +
+                "genreCount=${networkNovel.getGenres()?.size ?: 0}, manualFetch=$manualFetch"
+        }
         updateNovel.awaitUpdateFromSource(
             localNovel = state.novel,
             remoteNovel = networkNovel,
@@ -404,6 +488,15 @@ class NovelScreenModel(
         manualFetch: Boolean,
     ) {
         val sourceChapters = state.source.getChapterList(state.novel.toSNovel())
+        logcat {
+            "Fetched chapters for id=${state.novel.id} source=${state.source.name}, " +
+                "count=${sourceChapters.size}, manualFetch=$manualFetch"
+        }
+        if (isLikelyWebViewLoginRequired(state.source, state.novel, sourceChapters.size)) {
+            logcat(LogPriority.WARN) {
+                "Novel ${state.novel.id} (${state.source.name}) likely requires WebView login after fetch: chapters=0, descriptionBlank=true"
+            }
+        }
         syncNovelChaptersWithSource.await(
             rawSourceChapters = sourceChapters,
             novel = state.novel,
@@ -415,6 +508,9 @@ class NovelScreenModel(
     fun toggleChapterRead(chapterId: Long) {
         val chapter = successState?.chapters?.firstOrNull { it.id == chapterId } ?: return
         val newRead = !chapter.read
+        val shouldEmitReadEvent = !chapter.read && newRead
+        val shouldEmitCompletion = shouldEmitReadEvent &&
+            (successState?.chapters?.all { it.read || it.id == chapterId } == true)
         screenModelScope.launchIO {
             novelChapterRepository.updateChapter(
                 NovelChapterUpdate(
@@ -423,6 +519,17 @@ class NovelScreenModel(
                     lastPageRead = if (newRead) 0L else chapter.lastPageRead,
                 ),
             )
+            if (shouldEmitReadEvent) {
+                eventBus?.tryEmit(
+                    AchievementEvent.NovelChapterRead(
+                        novelId = chapter.novelId,
+                        chapterNumber = chapter.chapterNumber.toInt(),
+                    ),
+                )
+                if (shouldEmitCompletion) {
+                    eventBus?.tryEmit(AchievementEvent.NovelCompleted(chapter.novelId))
+                }
+            }
         }
     }
 
@@ -454,6 +561,7 @@ class NovelScreenModel(
         val chapters = successState?.chapters ?: return
         if (chapters.isEmpty()) return
         val markRead = chapters.any { !it.read }
+        val chaptersBecomingRead = if (markRead) chapters.filter { !it.read } else emptyList()
         screenModelScope.launchIO {
             novelChapterRepository.updateAllChapters(
                 chapters.map {
@@ -464,6 +572,17 @@ class NovelScreenModel(
                     )
                 },
             )
+            if (chaptersBecomingRead.isNotEmpty()) {
+                chaptersBecomingRead.forEach { chapter ->
+                    eventBus?.tryEmit(
+                        AchievementEvent.NovelChapterRead(
+                            novelId = chapter.novelId,
+                            chapterNumber = chapter.chapterNumber.toInt(),
+                        ),
+                    )
+                }
+                eventBus?.tryEmit(AchievementEvent.NovelCompleted(chaptersBecomingRead.first().novelId))
+            }
         }
     }
 
@@ -520,21 +639,44 @@ class NovelScreenModel(
         val state = successState ?: return
         val selected = state.selectedChapterIds
         if (selected.isEmpty()) return
+        val chaptersToMarkRead = if (markRead) {
+            state.chapters
+                .asSequence()
+                .filter { it.id in selected }
+                .filter { !it.read }
+                .toList()
+        } else {
+            emptyList()
+        }
+        val updates = state.chapters
+            .asSequence()
+            .filter { it.id in selected }
+            .filter { it.read != markRead || (!markRead && it.lastPageRead > 0L) }
+            .map {
+                NovelChapterUpdate(
+                    id = it.id,
+                    read = markRead,
+                    lastPageRead = if (markRead) 0L else it.lastPageRead,
+                )
+            }
+            .toList()
         screenModelScope.launchIO {
-            novelChapterRepository.updateAllChapters(
-                state.chapters
-                    .asSequence()
-                    .filter { it.id in selected }
-                    .filter { it.read != markRead || (!markRead && it.lastPageRead > 0L) }
-                    .map {
-                        NovelChapterUpdate(
-                            id = it.id,
-                            read = markRead,
-                            lastPageRead = if (markRead) 0L else it.lastPageRead,
-                        )
-                    }
-                    .toList(),
-            )
+            novelChapterRepository.updateAllChapters(updates)
+            if (chaptersToMarkRead.isNotEmpty()) {
+                chaptersToMarkRead.forEach { chapter ->
+                    eventBus?.tryEmit(
+                        AchievementEvent.NovelChapterRead(
+                            novelId = chapter.novelId,
+                            chapterNumber = chapter.chapterNumber.toInt(),
+                        ),
+                    )
+                }
+                val markedIds = chaptersToMarkRead.mapTo(hashSetOf()) { it.id }
+                val willComplete = state.chapters.all { it.read || it.id in markedIds }
+                if (willComplete) {
+                    eventBus?.tryEmit(AchievementEvent.NovelCompleted(chaptersToMarkRead.first().novelId))
+                }
+            }
             toggleAllSelection(false)
         }
     }
@@ -1034,4 +1176,18 @@ internal fun resolveNovelExcludedScanlatorsForSelection(
         .toSet()
     if (selection !in normalizedAvailable) return emptySet()
     return normalizedAvailable - selection
+}
+
+internal fun resolveNovelRefreshErrorMessage(
+    error: Throwable,
+    likelyWebViewLoginRequired: Boolean,
+): String? {
+    val isConnectivityLikeError = error.message?.contains("Could not reach", ignoreCase = true) == true
+    if (likelyWebViewLoginRequired && (error is NoChaptersException || isConnectivityLikeError)) {
+        return null
+    }
+    return when (error) {
+        is NoChaptersException -> "No chapters found"
+        else -> error.message ?: "Failed to refresh"
+    }
 }
