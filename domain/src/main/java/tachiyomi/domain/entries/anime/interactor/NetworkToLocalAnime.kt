@@ -13,8 +13,15 @@ class NetworkToLocalAnime(
         val localAnime = getAnime(anime.url, anime.source)
         return when {
             localAnime == null -> {
-                val id = insertAnime(anime)
-                anime.copy(id = id!!)
+                val insertedId = insertAnime(anime)
+                if (insertedId != null) {
+                    anime.copy(id = insertedId)
+                } else {
+                    getAnime(anime.url, anime.source)
+                        ?: throw IllegalStateException(
+                            "Failed to insert anime for source=${anime.source}, url=${anime.url}",
+                        )
+                }
             }
             !localAnime.favorite -> {
                 // if the anime isn't a favorite, set its display title from source

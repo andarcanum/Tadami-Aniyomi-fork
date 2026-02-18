@@ -11,8 +11,15 @@ class NetworkToLocalManga(
         val localManga = getManga(manga.url, manga.source)
         return when {
             localManga == null -> {
-                val id = insertManga(manga)
-                manga.copy(id = id!!)
+                val insertedId = insertManga(manga)
+                if (insertedId != null) {
+                    manga.copy(id = insertedId)
+                } else {
+                    getManga(manga.url, manga.source)
+                        ?: throw IllegalStateException(
+                            "Failed to insert manga for source=${manga.source}, url=${manga.url}",
+                        )
+                }
             }
             !localManga.favorite -> {
                 // if the manga isn't a favorite, set its display title from source

@@ -11,8 +11,15 @@ class NetworkToLocalNovel(
         val localNovel = getNovel(novel.url, novel.source)
         return when {
             localNovel == null -> {
-                val id = insertNovel(novel)
-                novel.copy(id = id!!)
+                val insertedId = insertNovel(novel)
+                if (insertedId != null) {
+                    novel.copy(id = insertedId)
+                } else {
+                    getNovel(novel.url, novel.source)
+                        ?: throw IllegalStateException(
+                            "Failed to insert novel for source=${novel.source}, url=${novel.url}",
+                        )
+                }
             }
             !localNovel.favorite -> {
                 // if the novel isn't a favorite, set its display title from source
