@@ -67,7 +67,13 @@ class NetworkToLocalAnimeTest {
     fun `returns local when favorite`() {
         runBlocking {
             val repository = FakeAnimeRepository(
-                existing = Anime.create().copy(id = 10L, url = "/anime/1", title = "Local", source = 1L, favorite = true),
+                existing = Anime.create().copy(
+                    id = 10L,
+                    url = "/anime/1",
+                    title = "Local",
+                    source = 1L,
+                    favorite = true,
+                ),
             )
             val interactor = NetworkToLocalAnime(repository, mockk<AnimeSourceManager>())
 
@@ -83,7 +89,13 @@ class NetworkToLocalAnimeTest {
     fun `updates title for non-favorite local`() {
         runBlocking {
             val repository = FakeAnimeRepository(
-                existing = Anime.create().copy(id = 10L, url = "/anime/1", title = "Local", source = 1L, favorite = false),
+                existing = Anime.create().copy(
+                    id = 10L,
+                    url = "/anime/1",
+                    title = "Local",
+                    source = 1L,
+                    favorite = false,
+                ),
             )
             val interactor = NetworkToLocalAnime(repository, mockk<AnimeSourceManager>())
 

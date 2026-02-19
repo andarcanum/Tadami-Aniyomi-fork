@@ -62,7 +62,13 @@ class NetworkToLocalNovelTest {
     fun `returns local when favorite`() {
         runBlocking {
             val repository = FakeNovelRepository(
-                existing = Novel.create().copy(id = 10L, url = "/novel/1", title = "Local", source = 1L, favorite = true),
+                existing = Novel.create().copy(
+                    id = 10L,
+                    url = "/novel/1",
+                    title = "Local",
+                    source = 1L,
+                    favorite = true,
+                ),
             )
             val interactor = NetworkToLocalNovel(repository)
 
@@ -78,7 +84,13 @@ class NetworkToLocalNovelTest {
     fun `updates title for non-favorite local`() {
         runBlocking {
             val repository = FakeNovelRepository(
-                existing = Novel.create().copy(id = 10L, url = "/novel/1", title = "Local", source = 1L, favorite = false),
+                existing = Novel.create().copy(
+                    id = 10L,
+                    url = "/novel/1",
+                    title = "Local",
+                    source = 1L,
+                    favorite = false,
+                ),
             )
             val interactor = NetworkToLocalNovel(repository)
 

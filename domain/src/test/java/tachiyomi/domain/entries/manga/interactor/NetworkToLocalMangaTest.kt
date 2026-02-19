@@ -63,7 +63,13 @@ class NetworkToLocalMangaTest {
     fun `returns local when favorite`() {
         runBlocking {
             val repository = FakeMangaRepository(
-                existing = Manga.create().copy(id = 10L, url = "/manga/1", title = "Local", source = 1L, favorite = true),
+                existing = Manga.create().copy(
+                    id = 10L,
+                    url = "/manga/1",
+                    title = "Local",
+                    source = 1L,
+                    favorite = true,
+                ),
             )
             val interactor = NetworkToLocalManga(repository)
 
@@ -79,7 +85,13 @@ class NetworkToLocalMangaTest {
     fun `updates title for non-favorite local`() {
         runBlocking {
             val repository = FakeMangaRepository(
-                existing = Manga.create().copy(id = 10L, url = "/manga/1", title = "Local", source = 1L, favorite = false),
+                existing = Manga.create().copy(
+                    id = 10L,
+                    url = "/manga/1",
+                    title = "Local",
+                    source = 1L,
+                    favorite = false,
+                ),
             )
             val interactor = NetworkToLocalManga(repository)
 

@@ -43,7 +43,9 @@ class UpdateNovelExtensionRepo(
             try {
                 repository.upsertRepo(refreshedRepo)
             } catch (e: SaveExtensionRepoException) {
-                logcat(LogPriority.WARN, e) { "SQL Conflict attempting to update novel repository ${refreshedRepo.baseUrl}" }
+                logcat(LogPriority.WARN, e) {
+                    "SQL Conflict attempting to update novel repository ${refreshedRepo.baseUrl}"
+                }
             }
         }
     }
