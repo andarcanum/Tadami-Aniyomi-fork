@@ -2,7 +2,6 @@ package eu.kanade.tachiyomi.ui.entries.novel
 
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LifecycleRegistry
 import eu.kanade.domain.entries.novel.interactor.GetNovelExcludedScanlators
 import eu.kanade.domain.entries.novel.interactor.SetNovelExcludedScanlators
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
@@ -19,12 +18,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import kotlinx.serialization.json.Json
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.data.handlers.novel.NovelDatabaseHandler
@@ -45,11 +42,6 @@ class NovelScreenModelTest {
     @BeforeEach
     fun setup() {
         Dispatchers.setMain(Dispatchers.Unconfined)
-    }
-
-    @AfterEach
-    fun tearDown() {
-        Dispatchers.resetMain()
     }
 
     @Test
@@ -265,17 +257,17 @@ class NovelScreenModelTest {
                     }
                 }
 
+                novelRepository.allUpdates.clear()
                 screenModel.toggleFavorite()
 
                 withTimeout(1_000) {
-                    while (novelRepository.allUpdates.isEmpty()) {
+                    while (novelRepository.allUpdates.none { it.favorite == true }) {
                         yield()
                     }
                 }
 
                 novelRepository.allUpdates.any { it.favorite == true } shouldBe true
             } finally {
-                lifecycleOwner.destroy()
                 screenModel.onDispose()
                 repeat(5) { yield() }
             }
@@ -284,15 +276,16 @@ class NovelScreenModelTest {
     }
 
     private class FakeLifecycleOwner : LifecycleOwner {
-        private val registry = LifecycleRegistry.createUnsafe(this).apply {
-            currentState = Lifecycle.State.STARTED
+        private class NoopStartedLifecycle : Lifecycle() {
+            override val currentState: State
+                get() = State.STARTED
+
+            override fun addObserver(observer: androidx.lifecycle.LifecycleObserver) = Unit
+
+            override fun removeObserver(observer: androidx.lifecycle.LifecycleObserver) = Unit
         }
 
-        override val lifecycle: Lifecycle = registry
-
-        fun destroy() {
-            registry.currentState = Lifecycle.State.DESTROYED
-        }
+        override val lifecycle: Lifecycle = NoopStartedLifecycle()
     }
 
     private class FakeNovelRepository(
