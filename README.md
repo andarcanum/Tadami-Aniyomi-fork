@@ -3,7 +3,6 @@
   <h1>Tadami</h1>
   <p><strong>A polished Aniyomi fork for anime, manga, and novels (ranobe).</strong></p>
   <p>
-    <a href="https://github.com/andarcanum/Tadami-Aniyomi-fork/actions/workflows/build_push.yml"></a>
     <a href="https://github.com/andarcanum/Tadami-Aniyomi-fork/releases"><img src="https://img.shields.io/github/v/release/andarcanum/Tadami-Aniyomi-fork?display_name=tag" alt="Latest Release"></a>
     <a href="LICENSE"><img src="https://img.shields.io/github/license/andarcanum/Tadami-Aniyomi-fork" alt="License"></a>
     <a href="https://developer.android.com/about/versions/oreo"><img src="https://img.shields.io/badge/Android-8.0%2B-brightgreen" alt="Android 8+"></a>
@@ -15,15 +14,14 @@
 Tadami is a community fork of Aniyomi with a stronger focus on UI quality and reading experience, including active novel/ranobe support.
 
 Current source version:
-- `versionName`: `0.23`
-- `versionCode`: `136`
+- `versionName`: `0.25`
+- `versionCode`: `137`
 
 ## What Is Different In This Fork
 
 - Aurora-inspired UI polish and cleaner navigation.
 - Full anime, manga, and novel support in one app.
 - Novel-oriented development (including compatibility tooling for LNReader plugin ecosystems).
-- Reading regression checks in CI for safer changes in anime/manga/novel flows.
 
 ## Features
 
@@ -50,7 +48,6 @@ Current source version:
 Requires Android 8.0+ (API 26+).
 
 - Stable builds and APKs: [Releases](https://github.com/andarcanum/Tadami-Aniyomi-fork/releases)
-- CI artifacts (for testing): [GitHub Actions](https://github.com/andarcanum/Tadami-Aniyomi-fork/actions)
 
 ## Build From Source
 
@@ -76,7 +73,7 @@ APK output:
 
 ## Contributing
 
-Pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow and quality gates.
+Pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
 ## Disclaimer
 
