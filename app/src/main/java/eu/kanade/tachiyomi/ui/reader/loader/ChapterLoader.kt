@@ -60,7 +60,10 @@ class ChapterLoader(
                 if (!chapter.chapter.read || readerPreferences.preserveReadingPosition().get()) {
                     // ReaderViewModel can precompute a more accurate resume target (including long-page cache).
                     // Don't override it once it's already set.
-                    if (chapter.requestedPage == 0 && chapter.requestedPageOffset == 0 && chapter.requestedPageOffsetRatioPpm == null) {
+                    if (chapter.requestedPage == 0 &&
+                        chapter.requestedPageOffset == 0 &&
+                        chapter.requestedPageOffsetRatioPpm == null
+                    ) {
                         val savedProgress = decodeStoredChapterProgress(
                             value = chapter.chapter.last_page_read,
                             restoreOffset = readerPreferences.saveLongPagePosition().get(),

@@ -1,14 +1,14 @@
 package eu.kanade.tachiyomi.ui.entries.novel
 
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
+import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.entries.novel.model.Novel
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
-import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 
 class NovelEpubStyleBuilderTest {
 

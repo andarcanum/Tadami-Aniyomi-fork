@@ -2,9 +2,9 @@ package eu.kanade.tachiyomi.extension.novel.runtime
 
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
-import java.io.File
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
+import java.io.File
 
 class NovelPluginScriptOverridesApplierTest {
 

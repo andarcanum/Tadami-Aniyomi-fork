@@ -45,7 +45,10 @@ class GetAvailableNovelScanlatorsTest {
         override suspend fun updateChapter(chapterUpdate: NovelChapterUpdate) = Unit
         override suspend fun updateAllChapters(chapterUpdates: List<NovelChapterUpdate>) = Unit
         override suspend fun removeChaptersWithIds(chapterIds: List<Long>) = Unit
-        override suspend fun getChapterByNovelId(novelId: Long, applyScanlatorFilter: Boolean): List<NovelChapter> = emptyList()
+        override suspend fun getChapterByNovelId(
+            novelId: Long,
+            applyScanlatorFilter: Boolean,
+        ): List<NovelChapter> = emptyList()
         override suspend fun getScanlatorsByNovelId(novelId: Long): List<String> = scanlatorFlow.value
         override fun getScanlatorsByNovelIdAsFlow(novelId: Long): Flow<List<String>> = scanlatorFlow
         override suspend fun getBookmarkedChaptersByNovelId(novelId: Long): List<NovelChapter> = emptyList()

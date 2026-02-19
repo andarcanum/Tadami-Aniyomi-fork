@@ -9,19 +9,19 @@ class BackupOptionsTest {
     fun `fromBooleanArray supports legacy arrays and defaults type flags to true`() {
         val legacy = booleanArrayOf(
             false, // libraryEntries
-            true,  // categories
+            true, // categories
             false, // chapters
-            true,  // tracking
+            true, // tracking
             false, // history
-            true,  // readEntries
+            true, // readEntries
             false, // appSettings
-            true,  // extensionRepoSettings
+            true, // extensionRepoSettings
             false, // customButton
-            true,  // sourceSettings
+            true, // sourceSettings
             false, // privateSettings
-            true,  // extensions
+            true, // extensions
             false, // achievements
-            true,  // stats
+            true, // stats
         )
 
         val options = BackupOptions.fromBooleanArray(legacy)

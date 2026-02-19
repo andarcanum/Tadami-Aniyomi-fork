@@ -11,4 +11,3 @@ class BrowseMangaSourceListingTest {
             .shouldBeInstanceOf<BrowseMangaSourceScreenModel.Listing.Popular>()
     }
 }
-

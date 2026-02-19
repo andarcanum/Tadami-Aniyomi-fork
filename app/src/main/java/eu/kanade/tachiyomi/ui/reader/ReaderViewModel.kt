@@ -954,7 +954,8 @@ class ReaderViewModel @JvmOverloads constructor(
         }
         chapter.requestedPage = decodedProgress.index
         chapter.requestedPageOffset = if (shouldHandleLongPageProgress()) decodedProgress.offsetPx else 0
-        chapter.requestedPageOffsetRatioPpm = if (shouldHandleLongPageProgress()) decodedProgress.offsetRatioPpm else null
+        chapter.requestedPageOffsetRatioPpm =
+            if (shouldHandleLongPageProgress()) decodedProgress.offsetRatioPpm else null
     }
 
     private fun resolveLongPageSavedProgress(chapter: ReaderChapter): ChapterScrollProgress {

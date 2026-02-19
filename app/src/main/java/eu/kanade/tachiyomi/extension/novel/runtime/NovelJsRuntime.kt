@@ -498,7 +498,10 @@ class NovelJsRuntime(
             is Int -> value
             is Number -> value.toInt()
             is String -> value.toIntOrNull() ?: 0
-            is V8Value -> { value.release(); 0 }
+            is V8Value -> {
+                value.release()
+                0
+            }
             else -> 0
         }
     }

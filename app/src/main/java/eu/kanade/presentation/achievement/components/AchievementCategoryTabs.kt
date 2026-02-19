@@ -127,4 +127,3 @@ fun AchievementCategoryTabs(
         }
     }
 }
-

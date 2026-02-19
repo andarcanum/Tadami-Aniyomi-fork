@@ -105,8 +105,8 @@ internal object NovelPluginImageUrlParser {
 }
 
 internal object HexNovelImageOnDemandDecoder {
-    private const val pluginId = "hexnovels"
-    private const val maxSourceBytes = 20L * 1024L * 1024L
+    private const val PLUGIN_ID = "hexnovels"
+    private const val MAX_SOURCE_BYTES = 20L * 1024L * 1024L
     private val parserJson = Json {
         ignoreUnknownKeys = true
         isLenient = true
@@ -124,7 +124,7 @@ internal object HexNovelImageOnDemandDecoder {
     }
 
     fun canHandle(request: NovelPluginImageRequest): Boolean {
-        return request.pluginId.equals(pluginId, ignoreCase = true)
+        return request.pluginId.equals(PLUGIN_ID, ignoreCase = true)
     }
 
     suspend fun decode(
@@ -147,7 +147,7 @@ internal object HexNovelImageOnDemandDecoder {
         response.use { safeResponse ->
             val sourceBytes = runCatching { safeResponse.body.bytes() }.getOrNull() ?: return null
             if (sourceBytes.isEmpty()) return null
-            if (sourceBytes.size.toLong() > maxSourceBytes) return null
+            if (sourceBytes.size.toLong() > MAX_SOURCE_BYTES) return null
 
             val decodedBytes = xorDecode(sourceBytes, parsedRef.secretKey)
             if (decodedBytes.isEmpty()) return null
@@ -281,17 +281,17 @@ internal object HexNovelImageOnDemandDecoder {
 }
 
 object NovelPluginImageResolver {
-    private const val timeoutMs = 20_000L
-    private const val maxParallelDecodes = 3
-    private const val maxMemoryBytes = 24L * 1024L * 1024L
-    private const val maxDiskBytes = 96L * 1024L * 1024L
-    private const val diskCacheDirName = "novel_plugin_image_cache"
-    private const val defaultMimeType = "application/octet-stream"
+    private const val TIMEOUT_MS = 20_000L
+    private const val MAX_PARALLEL_DECODES = 3
+    private const val MAX_MEMORY_BYTES = 24L * 1024L * 1024L
+    private const val MAX_DISK_BYTES = 96L * 1024L * 1024L
+    private const val DISK_CACHE_DIR_NAME = "novel_plugin_image_cache"
+    private const val DEFAULT_MIME_TYPE = "application/octet-stream"
 
     private val sourceManager by lazy { Injekt.get<NovelSourceManager>() }
     private val networkHelper by lazy { Injekt.get<NetworkHelper>() }
     private val app by lazy { Injekt.get<Application>() }
-    private val decodeLimiter = Semaphore(maxParallelDecodes)
+    private val decodeLimiter = Semaphore(MAX_PARALLEL_DECODES)
     private val resolverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val inFlightMutex = Mutex()
     private val inFlight = mutableMapOf<String, Deferred<NovelPluginImagePayload?>>()
@@ -302,7 +302,7 @@ object NovelPluginImageResolver {
 
     private val diskCacheLock = Any()
     private val diskCacheDir by lazy {
-        File(app.cacheDir, diskCacheDirName).apply { mkdirs() }
+        File(app.cacheDir, DISK_CACHE_DIR_NAME).apply { mkdirs() }
     }
 
     suspend fun resolve(url: String): NovelPluginImagePayload? {
@@ -332,7 +332,7 @@ object NovelPluginImageResolver {
             }
         }
 
-        return withTimeoutOrNull(timeoutMs) {
+        return withTimeoutOrNull(TIMEOUT_MS) {
             inFlightJob.await()
         }
     }
@@ -349,7 +349,7 @@ object NovelPluginImageResolver {
         val sourceId = NovelPluginId.toSourceId(request.pluginId)
         val source = sourceManager.get(sourceId) as? NovelPluginImageSource
 
-        val payload = withTimeoutOrNull(timeoutMs) {
+        val payload = withTimeoutOrNull(TIMEOUT_MS) {
             decodeLimiter.withPermit {
                 HexNovelImageOnDemandDecoder.decode(request, networkHelper)
                     ?: source?.fetchImage(request.imageRef)
@@ -357,7 +357,7 @@ object NovelPluginImageResolver {
         } ?: return null
 
         val normalized = payload.copy(
-            mimeType = payload.mimeType.trim().ifBlank { defaultMimeType },
+            mimeType = payload.mimeType.trim().ifBlank { DEFAULT_MIME_TYPE },
         )
 
         val keys = linkedSetOf(requestKey)
@@ -386,7 +386,7 @@ object NovelPluginImageResolver {
 
     private fun writeToMemoryCache(key: String, payload: NovelPluginImagePayload) {
         val payloadSize = payload.bytes.size.toLong()
-        if (payloadSize <= 0L || payloadSize > maxMemoryBytes) return
+        if (payloadSize <= 0L || payloadSize > MAX_MEMORY_BYTES) return
 
         synchronized(memoryCacheLock) {
             val previous = memoryCache.put(key, payload)
@@ -397,7 +397,7 @@ object NovelPluginImageResolver {
 
     private fun trimMemoryCacheLocked() {
         val iterator = memoryCache.entries.iterator()
-        while (memoryCacheBytes > maxMemoryBytes && iterator.hasNext()) {
+        while (memoryCacheBytes > MAX_MEMORY_BYTES && iterator.hasNext()) {
             val entry = iterator.next()
             memoryCacheBytes -= entry.value.bytes.size.toLong()
             iterator.remove()
@@ -424,7 +424,7 @@ object NovelPluginImageResolver {
             }.getOrNull()
                 ?.trim()
                 .orEmpty()
-                .ifBlank { defaultMimeType }
+                .ifBlank { DEFAULT_MIME_TYPE }
 
             val now = System.currentTimeMillis()
             payloadFile.setLastModified(now)
@@ -461,7 +461,7 @@ object NovelPluginImageResolver {
             ?: return
 
         var totalSize = files.sumOf { it.length() }
-        if (totalSize <= maxDiskBytes) return
+        if (totalSize <= MAX_DISK_BYTES) return
 
         files.sortBy { it.lastModified() }
         for (file in files) {
@@ -470,7 +470,7 @@ object NovelPluginImageResolver {
             file.delete()
             File(file.parentFile, "${file.nameWithoutExtension}.mime").delete()
             totalSize -= deletedSize
-            if (totalSize <= maxDiskBytes) break
+            if (totalSize <= MAX_DISK_BYTES) break
         }
     }
 

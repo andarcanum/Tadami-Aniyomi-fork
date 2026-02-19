@@ -60,9 +60,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -89,9 +89,9 @@ import eu.kanade.presentation.components.AuroraCard
 import eu.kanade.presentation.components.AuroraTabRow
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.components.TabbedScreenAurora
-import eu.kanade.presentation.more.settings.screen.browse.NovelExtensionReposScreen
 import eu.kanade.presentation.more.settings.screen.browse.AnimeExtensionReposScreen
 import eu.kanade.presentation.more.settings.screen.browse.MangaExtensionReposScreen
+import eu.kanade.presentation.more.settings.screen.browse.NovelExtensionReposScreen
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.R
@@ -553,86 +553,86 @@ private fun HomeHubPinnedHeader(
             .fillMaxWidth()
             .clipToBounds(),
         content = {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-        ) {
-            Spacer(Modifier.height(20.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
             ) {
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable(onClick = onNameClick)
-                        .padding(end = 16.dp),
+                Spacer(Modifier.height(20.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text(
-                        text = stringResource(greeting),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = colors.textSecondary,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = userName,
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = colors.textPrimary,
-                        fontWeight = FontWeight.Black,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-
-                Box(Modifier.size(48.dp).clickable(onClick = onAvatarClick)) {
-                    if (userAvatar.isNotEmpty()) {
-                        AsyncImage(
-                            model = userAvatar,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize().clip(CircleShape),
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(onClick = onNameClick)
+                            .padding(end = 16.dp),
+                    ) {
+                        Text(
+                            text = stringResource(greeting),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = colors.textSecondary,
+                            fontWeight = FontWeight.Medium,
                         )
-                    } else {
-                        Icon(
-                            Icons.Filled.AccountCircle,
-                            null,
-                            tint = colors.accent,
-                            modifier = Modifier.fillMaxSize(),
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = userName,
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = colors.textPrimary,
+                            fontWeight = FontWeight.Black,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    if (userAvatar.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .size(16.dp)
-                                .background(colors.accent, CircleShape),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                Icons.Filled.CameraAlt,
-                                null,
-                                tint = colors.textOnAccent,
-                                modifier = Modifier.size(10.dp),
+
+                    Box(Modifier.size(48.dp).clickable(onClick = onAvatarClick)) {
+                        if (userAvatar.isNotEmpty()) {
+                            AsyncImage(
+                                model = userAvatar,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize().clip(CircleShape),
                             )
+                        } else {
+                            Icon(
+                                Icons.Filled.AccountCircle,
+                                null,
+                                tint = colors.accent,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                        if (userAvatar.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .size(16.dp)
+                                    .background(colors.accent, CircleShape),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    Icons.Filled.CameraAlt,
+                                    null,
+                                    tint = colors.textOnAccent,
+                                    modifier = Modifier.size(10.dp),
+                                )
+                            }
                         }
                     }
                 }
-            }
 
-            Spacer(Modifier.height(16.dp))
-            if (tabs.size > 1) {
-                AuroraTabRow(
-                    tabs = tabs,
-                    selectedIndex = selectedIndex,
-                    onTabSelected = onTabSelected,
-                    scrollable = false,
-                )
+                Spacer(Modifier.height(16.dp))
+                if (tabs.size > 1) {
+                    AuroraTabRow(
+                        tabs = tabs,
+                        selectedIndex = selectedIndex,
+                        onTabSelected = onTabSelected,
+                        scrollable = false,
+                    )
+                }
+                Spacer(Modifier.height(16.dp))
             }
-            Spacer(Modifier.height(16.dp))
-        }
         },
     ) { measurables, constraints ->
         if (measurables.isEmpty()) {

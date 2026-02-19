@@ -21,8 +21,8 @@ import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.preference.plusAssign
 import tachiyomi.domain.category.anime.interactor.GetAnimeCategories
 import tachiyomi.domain.category.manga.interactor.GetMangaCategories
-import tachiyomi.domain.category.novel.interactor.GetNovelCategories
 import tachiyomi.domain.category.model.Category
+import tachiyomi.domain.category.novel.interactor.GetNovelCategories
 import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.library.service.LibraryPreferences
 import uy.kohesive.injekt.Injekt

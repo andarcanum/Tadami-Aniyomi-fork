@@ -47,4 +47,3 @@ class NovelCoverFetcherTest {
         assertEquals("no-cache, only-if-cached", offlineRequest.header("Cache-Control"))
     }
 }
-

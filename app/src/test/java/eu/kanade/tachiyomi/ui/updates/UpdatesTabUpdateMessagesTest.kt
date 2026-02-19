@@ -51,4 +51,3 @@ class UpdatesTabUpdateMessagesTest {
         ) shouldBe runningText
     }
 }
-

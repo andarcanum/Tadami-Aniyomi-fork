@@ -9,4 +9,3 @@ class NovelCoverKeyer : Keyer<NovelCover> {
         return "novel;${data.url};${data.lastModified}"
     }
 }
-

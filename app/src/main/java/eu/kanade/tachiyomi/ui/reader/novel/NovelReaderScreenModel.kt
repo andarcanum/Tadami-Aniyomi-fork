@@ -5,8 +5,11 @@ import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.items.novelchapter.model.toSNovelChapter
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
-import eu.kanade.tachiyomi.extension.novel.runtime.resolveUrl
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
+import eu.kanade.tachiyomi.extension.novel.runtime.resolveUrl
+import eu.kanade.tachiyomi.source.novel.NovelPluginImage
+import eu.kanade.tachiyomi.source.novel.NovelSiteSource
+import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
@@ -26,6 +29,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import logcat.LogPriority
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.jsoup.Jsoup
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.handler.AchievementEventBus
@@ -38,10 +42,6 @@ import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.source.novel.service.NovelSourceManager
-import eu.kanade.tachiyomi.source.novel.NovelSiteSource
-import eu.kanade.tachiyomi.source.novel.NovelPluginImage
-import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.Date
@@ -423,7 +423,10 @@ class NovelReaderScreenModel(
     private fun extractTextBlocks(rawHtml: String): List<String> {
         val document = Jsoup.parse(rawHtml)
         val paragraphLikeNodes = document.select("p, li, blockquote, h1, h2, h3, h4, h5, h6, pre")
-            .filterNot { node -> node.tagName().equals("p", ignoreCase = true) && node.parent()?.tagName()?.equals("li", ignoreCase = true) == true }
+            .filterNot { node ->
+                node.tagName().equals("p", ignoreCase = true) &&
+                    node.parent()?.tagName()?.equals("li", ignoreCase = true) == true
+            }
             .map { element -> element.text().sanitizeTextBlock() }
             .filter { it.isNotBlank() }
         if (paragraphLikeNodes.isNotEmpty()) {
@@ -449,7 +452,10 @@ class NovelReaderScreenModel(
         val document = Jsoup.parse(rawHtml)
         val blocks = mutableListOf<ContentBlock>()
         val candidates = document.body()?.select("p, li, blockquote, h1, h2, h3, h4, h5, h6, pre, img")
-            ?.filterNot { node -> node.tagName().equals("p", ignoreCase = true) && node.parent()?.tagName()?.equals("li", ignoreCase = true) == true }
+            ?.filterNot { node ->
+                node.tagName().equals("p", ignoreCase = true) &&
+                    node.parent()?.tagName()?.equals("li", ignoreCase = true) == true
+            }
             .orEmpty()
 
         for (element in candidates) {
@@ -515,7 +521,10 @@ class NovelReaderScreenModel(
 
         val renderedDoc = Jsoup.parse("<div>$renderedHtml</div>")
         val renderedCandidates = renderedDoc.select("p, li, blockquote, h1, h2, h3, h4, h5, h6, pre, img")
-            .filterNot { node -> node.tagName().equals("p", ignoreCase = true) && node.parent()?.tagName()?.equals("li", ignoreCase = true) == true }
+            .filterNot { node ->
+                node.tagName().equals("p", ignoreCase = true) &&
+                    node.parent()?.tagName()?.equals("li", ignoreCase = true) == true
+            }
 
         return renderedCandidates.mapNotNull { candidate ->
             if (candidate.tagName().equals("img", ignoreCase = true)) {
@@ -803,7 +812,8 @@ class NovelReaderScreenModel(
             }
         }
 
-        val objectStart = trimmed.indexOf('{').takeIf { it >= 0 } ?: trimmed.indexOf('[').takeIf { it >= 0 } ?: return null
+        val objectStart =
+            trimmed.indexOf('{').takeIf { it >= 0 } ?: trimmed.indexOf('[').takeIf { it >= 0 } ?: return null
         val objectEnd = trimmed.lastIndexOf('}').takeIf { it > objectStart }
             ?: trimmed.lastIndexOf(']').takeIf { it > objectStart }
             ?: return null
@@ -995,9 +1005,14 @@ class NovelReaderScreenModel(
             is JsonArray -> imagesNode.forEach { entry ->
                 when (entry) {
                     is JsonObject -> {
-                        entry["image"].asStringOrNull()?.trim()?.takeIf { it.isNotBlank() }?.let { imageReferences += it }
+                        entry["image"].asStringOrNull()?.trim()?.takeIf {
+                            it.isNotBlank()
+                        }?.let { imageReferences += it }
                     }
-                    is JsonPrimitive -> entry.contentOrNull?.trim()?.takeIf { it.isNotBlank() }?.let { imageReferences += it }
+                    is JsonPrimitive -> entry.contentOrNull?.trim()?.takeIf { it.isNotBlank() }?.let {
+                        imageReferences +=
+                            it
+                    }
                     else -> Unit
                 }
             }

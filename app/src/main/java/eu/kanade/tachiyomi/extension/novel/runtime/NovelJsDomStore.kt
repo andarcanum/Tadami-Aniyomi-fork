@@ -156,7 +156,7 @@ class NovelJsDomStore {
     // Predicates
     // ------------------------------------------------------------------
 
-    fun is_(handle: Int, selector: String): Boolean {
+    fun matches(handle: Int, selector: String): Boolean {
         val el = elementOrNull(handle) ?: return false
         return el.`is`(selector)
     }

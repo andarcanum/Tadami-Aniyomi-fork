@@ -8,6 +8,10 @@ import eu.kanade.tachiyomi.novelsource.model.NovelFilterList
 import eu.kanade.tachiyomi.novelsource.model.NovelsPage
 import eu.kanade.tachiyomi.novelsource.model.SNovel
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
+import eu.kanade.tachiyomi.source.novel.NovelPluginImagePayload
+import eu.kanade.tachiyomi.source.novel.NovelPluginImageSource
+import eu.kanade.tachiyomi.source.novel.NovelSiteSource
+import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
@@ -30,16 +34,12 @@ import kotlinx.serialization.json.put
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import rx.Observable
-import java.net.URLDecoder
-import java.util.Base64
 import tachiyomi.domain.extension.novel.model.NovelPlugin
+import java.net.URLDecoder
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
-import eu.kanade.tachiyomi.source.novel.NovelPluginImagePayload
-import eu.kanade.tachiyomi.source.novel.NovelPluginImageSource
-import eu.kanade.tachiyomi.source.novel.NovelSiteSource
-import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
+import java.util.Base64
 
 class NovelJsSource internal constructor(
     private val plugin: NovelPlugin.Installed,

@@ -72,8 +72,13 @@ class GetNovelScanlatorChapterCountsTest {
         override suspend fun updateChapter(chapterUpdate: NovelChapterUpdate) = Unit
         override suspend fun updateAllChapters(chapterUpdates: List<NovelChapterUpdate>) = Unit
         override suspend fun removeChaptersWithIds(chapterIds: List<Long>) = Unit
-        override suspend fun getChapterByNovelId(novelId: Long, applyScanlatorFilter: Boolean): List<NovelChapter> = flow.value
-        override suspend fun getScanlatorsByNovelId(novelId: Long): List<String> = flow.value.mapNotNull { it.scanlator }
+        override suspend fun getChapterByNovelId(
+            novelId: Long,
+            applyScanlatorFilter: Boolean,
+        ): List<NovelChapter> = flow.value
+        override suspend fun getScanlatorsByNovelId(
+            novelId: Long,
+        ): List<String> = flow.value.mapNotNull { it.scanlator }
         override fun getScanlatorsByNovelIdAsFlow(novelId: Long): Flow<List<String>> = MutableStateFlow(emptyList())
         override suspend fun getBookmarkedChaptersByNovelId(novelId: Long): List<NovelChapter> = emptyList()
         override suspend fun getChapterById(id: Long): NovelChapter? = flow.value.firstOrNull { it.id == id }

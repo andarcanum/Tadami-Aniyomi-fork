@@ -27,4 +27,3 @@ class NovelPluginScriptOverridesApplier(
         return result
     }
 }
-

@@ -138,9 +138,17 @@ class BackupRestorer(
         coroutineScope {
             if (options.categories) {
                 restoreCategories(
-                    backupAnimeCategories = if (shouldRestoreAnimeCategories) backup.backupAnimeCategories else emptyList(),
+                    backupAnimeCategories = if (shouldRestoreAnimeCategories) {
+                        backup.backupAnimeCategories
+                    } else {
+                        emptyList()
+                    },
                     backupMangaCategories = if (shouldRestoreMangaCategories) backup.backupCategories else emptyList(),
-                    backupNovelCategories = if (shouldRestoreNovelCategories) backup.backupNovelCategories else emptyList(),
+                    backupNovelCategories = if (shouldRestoreNovelCategories) {
+                        backup.backupNovelCategories
+                    } else {
+                        emptyList()
+                    },
                     restoreAnimeCategories = shouldRestoreAnimeCategories,
                     restoreMangaCategories = shouldRestoreMangaCategories,
                     restoreNovelCategories = shouldRestoreNovelCategories,
@@ -245,7 +253,6 @@ class BackupRestorer(
                 isSync,
             )
         }
-
     }
 
     private fun CoroutineScope.restoreAnime(

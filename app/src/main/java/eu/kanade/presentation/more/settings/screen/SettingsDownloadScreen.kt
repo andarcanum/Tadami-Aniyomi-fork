@@ -33,9 +33,9 @@ import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.collections.immutable.toPersistentMap
 import tachiyomi.domain.category.anime.interactor.GetAnimeCategories
 import tachiyomi.domain.category.manga.interactor.GetMangaCategories
+import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.category.novel.interactor.GetNovelCategories
 import tachiyomi.domain.category.novel.model.NovelCategory
-import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
@@ -261,7 +261,8 @@ object SettingsDownloadScreen : SearchableSettings {
         val downloadNewNovelChaptersPref = downloadPreferences.downloadNewNovelChapters()
         val downloadNewUnreadNovelChaptersOnlyPref = downloadPreferences.downloadNewUnreadNovelChaptersOnly()
         val downloadNewNovelChapterCategoriesPref = downloadPreferences.downloadNewNovelChapterCategories()
-        val downloadNewNovelChapterCategoriesExcludePref = downloadPreferences.downloadNewNovelChapterCategoriesExclude()
+        val downloadNewNovelChapterCategoriesExcludePref =
+            downloadPreferences.downloadNewNovelChapterCategoriesExclude()
 
         val downloadNewNovelChapters by downloadNewNovelChaptersPref.collectAsState()
 

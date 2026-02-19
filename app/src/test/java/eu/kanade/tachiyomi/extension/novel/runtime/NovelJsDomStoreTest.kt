@@ -219,7 +219,9 @@ class NovelJsDomStoreTest {
 
         @Test
         fun `nextAll with selector filters results`() {
-            val root = store.loadDocument("<ul><li id='s'>S</li><li class='x'>A</li><li>B</li><li class='x'>C</li></ul>")
+            val root = store.loadDocument(
+                "<ul><li id='s'>S</li><li class='x'>A</li><li>B</li><li class='x'>C</li></ul>",
+            )
             val s = store.select(root, "#s")[0]
             val filtered = store.nextAll(s, ".x")
             filtered.size shouldBe 2
@@ -240,7 +242,9 @@ class NovelJsDomStoreTest {
 
         @Test
         fun `siblings with selector filters`() {
-            val root = store.loadDocument("<ul><li class='a'>1</li><li id='me'>2</li><li class='a'>3</li><li>4</li></ul>")
+            val root = store.loadDocument(
+                "<ul><li class='a'>1</li><li id='me'>2</li><li class='a'>3</li><li>4</li></ul>",
+            )
             val me = store.select(root, "#me")[0]
             val filtered = store.siblings(me, ".a")
             filtered.size shouldBe 2
@@ -251,7 +255,9 @@ class NovelJsDomStoreTest {
     inner class Closest {
         @Test
         fun `walks ancestors to find matching element`() {
-            val root = store.loadDocument("<div class='outer'><div class='inner'><span id='target'>text</span></div></div>")
+            val root = store.loadDocument(
+                "<div class='outer'><div class='inner'><span id='target'>text</span></div></div>",
+            )
             val target = store.select(root, "#target")[0]
             val closest = store.closest(target, ".outer")
             closest shouldNotBe -1
@@ -291,9 +297,9 @@ class NovelJsDomStoreTest {
         fun `is_ returns true for matching selector`() {
             val root = store.loadDocument("<div class='foo bar'>x</div>")
             val div = store.select(root, "div")[0]
-            store.is_(div, ".foo") shouldBe true
-            store.is_(div, ".bar") shouldBe true
-            store.is_(div, ".baz") shouldBe false
+            store.matches(div, ".foo") shouldBe true
+            store.matches(div, ".bar") shouldBe true
+            store.matches(div, ".baz") shouldBe false
         }
 
         @Test

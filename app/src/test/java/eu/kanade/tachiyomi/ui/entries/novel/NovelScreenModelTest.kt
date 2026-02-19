@@ -3,9 +3,9 @@ package eu.kanade.tachiyomi.ui.entries.novel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
-import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.entries.novel.interactor.GetNovelExcludedScanlators
 import eu.kanade.domain.entries.novel.interactor.SetNovelExcludedScanlators
+import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.items.novelchapter.interactor.GetAvailableNovelScanlators
 import eu.kanade.domain.items.novelchapter.interactor.GetNovelScanlatorChapterCounts
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
@@ -27,18 +27,18 @@ import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import tachiyomi.domain.entries.novel.interactor.GetNovelWithChapters
+import tachiyomi.data.handlers.novel.NovelDatabaseHandler
+import tachiyomi.domain.category.novel.interactor.GetNovelCategories
+import tachiyomi.domain.category.novel.interactor.SetNovelCategories
 import tachiyomi.domain.entries.novel.interactor.GetNovelFavorites
+import tachiyomi.domain.entries.novel.interactor.GetNovelWithChapters
 import tachiyomi.domain.entries.novel.interactor.SetNovelChapterFlags
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.entries.novel.model.NovelUpdate
 import tachiyomi.domain.items.novelchapter.interactor.SetNovelDefaultChapterFlags
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
-import tachiyomi.domain.category.novel.interactor.GetNovelCategories
-import tachiyomi.domain.category.novel.interactor.SetNovelCategories
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.track.novel.interactor.GetNovelTracks
-import tachiyomi.data.handlers.novel.NovelDatabaseHandler
 
 class NovelScreenModelTest {
 
@@ -210,8 +210,12 @@ class NovelScreenModelTest {
                 override fun getVisibleCategoriesAsFlow() = MutableStateFlow(
                     emptyList<tachiyomi.domain.category.novel.model.NovelCategory>(),
                 )
-                override suspend fun insertCategory(category: tachiyomi.domain.category.novel.model.NovelCategory) = null
-                override suspend fun updatePartialCategory(update: tachiyomi.domain.category.novel.model.NovelCategoryUpdate) {
+                override suspend fun insertCategory(
+                    category: tachiyomi.domain.category.novel.model.NovelCategory,
+                ) = null
+                override suspend fun updatePartialCategory(
+                    update: tachiyomi.domain.category.novel.model.NovelCategoryUpdate,
+                ) {
                 }
                 override suspend fun updateAllFlags(flags: Long) {}
                 override suspend fun deleteCategory(categoryId: Long) {}

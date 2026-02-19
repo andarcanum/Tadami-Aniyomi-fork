@@ -153,7 +153,8 @@ class NovelExtensionListingInteractorTest {
                 sha256 = "unique",
             )
 
-            coEvery { repoService.fetch("https://example.org/index.min.json") } returns listOf(duplicateFromIndex, unique)
+            coEvery { repoService.fetch("https://example.org/index.min.json") } returns
+                listOf(duplicateFromIndex, unique)
             coEvery { repoService.fetch("https://example.org/plugins.min.json") } returns listOf(duplicateFromPlugins)
             coEvery { storage.getAll() } returns emptyList()
 

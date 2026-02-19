@@ -80,4 +80,3 @@ val novelReaderFonts: List<NovelReaderFontOption> = listOf(
         fontResId = R.font.open_dyslexic3_regular,
     ),
 )
-

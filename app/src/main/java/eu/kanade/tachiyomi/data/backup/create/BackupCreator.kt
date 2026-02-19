@@ -266,19 +266,28 @@ class BackupCreator(
         return preferenceBackupCreator.createApp(includePrivatePreferences = options.privateSettings)
     }
 
-    private suspend fun backupAnimeExtensionRepos(options: BackupOptions, includeType: Boolean): List<BackupExtensionRepos> {
+    private suspend fun backupAnimeExtensionRepos(
+        options: BackupOptions,
+        includeType: Boolean,
+    ): List<BackupExtensionRepos> {
         if (!options.extensionRepoSettings || !includeType) return emptyList()
 
         return animeExtensionRepoBackupCreator()
     }
 
-    private suspend fun backupMangaExtensionRepos(options: BackupOptions, includeType: Boolean): List<BackupExtensionRepos> {
+    private suspend fun backupMangaExtensionRepos(
+        options: BackupOptions,
+        includeType: Boolean,
+    ): List<BackupExtensionRepos> {
         if (!options.extensionRepoSettings || !includeType) return emptyList()
 
         return mangaExtensionRepoBackupCreator()
     }
 
-    private suspend fun backupNovelExtensionRepos(options: BackupOptions, includeType: Boolean): List<BackupExtensionRepos> {
+    private suspend fun backupNovelExtensionRepos(
+        options: BackupOptions,
+        includeType: Boolean,
+    ): List<BackupExtensionRepos> {
         if (!options.extensionRepoSettings || !includeType) return emptyList()
 
         return novelExtensionRepoBackupCreator()

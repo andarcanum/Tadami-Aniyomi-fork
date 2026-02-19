@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.lazy.grid.items as gridItems
-import androidx.compose.foundation.lazy.items as listItems
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,8 +13,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastAny
 import eu.kanade.presentation.components.AuroraCard
 import eu.kanade.presentation.library.components.GlobalSearchItem
 import eu.kanade.presentation.library.components.LazyLibraryGrid
@@ -34,6 +32,8 @@ import tachiyomi.presentation.core.components.FastScrollLazyColumn
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
 import tachiyomi.presentation.core.util.plus
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.items as listItems
 
 @Composable
 fun AnimeLibraryAuroraContent(
@@ -268,8 +268,11 @@ private fun AnimeLibraryAuroraCardGrid(
         gridItems(
             items = items,
             contentType = {
-                if (showMetadata) "anime_library_aurora_comfortable_grid_item"
-                else "anime_library_aurora_cover_only_grid_item"
+                if (showMetadata) {
+                    "anime_library_aurora_comfortable_grid_item"
+                } else {
+                    "anime_library_aurora_cover_only_grid_item"
+                }
             },
         ) { libraryItem ->
             val libraryAnime = libraryItem.libraryAnime

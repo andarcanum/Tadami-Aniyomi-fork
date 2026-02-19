@@ -1,6 +1,5 @@
 package eu.kanade.presentation.reader.novel
 
-import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -51,6 +50,7 @@ import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import android.graphics.Color as AndroidColor
 
 @Composable
 fun NovelReaderSettingsDialog(
@@ -158,40 +158,64 @@ private fun GeneralTab(
             subtitle = stringResource(AYMR.strings.novel_reader_prefer_webview_renderer_summary),
             checked = settings.preferWebViewRenderer,
             onCheckedChanged = {
-                update(it, { o, v -> o.copy(preferWebViewRenderer = v) }, { preferences.preferWebViewRenderer().set(it) })
+                update(
+                    it,
+                    { o, v -> o.copy(preferWebViewRenderer = v) },
+                    { preferences.preferWebViewRenderer().set(it) },
+                )
             },
         )
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_volume_buttons),
             subtitle = stringResource(AYMR.strings.novel_reader_volume_buttons_summary),
             checked = settings.useVolumeButtons,
-            onCheckedChanged = { update(it, { o, v -> o.copy(useVolumeButtons = v) }, { preferences.useVolumeButtons().set(it) }) },
+            onCheckedChanged = {
+                update(it, { o, v -> o.copy(useVolumeButtons = v) }, { preferences.useVolumeButtons().set(it) })
+            },
         )
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_vertical_seekbar),
             checked = settings.verticalSeekbar,
-            onCheckedChanged = { update(it, { o, v -> o.copy(verticalSeekbar = v) }, { preferences.verticalSeekbar().set(it) }) },
+            onCheckedChanged = {
+                update(it, { o, v -> o.copy(verticalSeekbar = v) }, { preferences.verticalSeekbar().set(it) })
+            },
         )
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_swipe_gestures),
             subtitle = stringResource(AYMR.strings.novel_reader_swipe_gestures_summary),
             checked = settings.swipeGestures,
-            onCheckedChanged = { update(it, { o, v -> o.copy(swipeGestures = v) }, { preferences.swipeGestures().set(it) }) },
+            onCheckedChanged = {
+                update(it, { o, v -> o.copy(swipeGestures = v) }, { preferences.swipeGestures().set(it) })
+            },
         )
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_swipe_to_next),
             checked = settings.swipeToNextChapter,
-            onCheckedChanged = { update(it, { o, v -> o.copy(swipeToNextChapter = v) }, { preferences.swipeToNextChapter().set(it) }) },
+            onCheckedChanged = {
+                update(
+                    it,
+                    { o, v -> o.copy(swipeToNextChapter = v) },
+                    { preferences.swipeToNextChapter().set(it) },
+                )
+            },
         )
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_swipe_to_prev),
             checked = settings.swipeToPrevChapter,
-            onCheckedChanged = { update(it, { o, v -> o.copy(swipeToPrevChapter = v) }, { preferences.swipeToPrevChapter().set(it) }) },
+            onCheckedChanged = {
+                update(
+                    it,
+                    { o, v -> o.copy(swipeToPrevChapter = v) },
+                    { preferences.swipeToPrevChapter().set(it) },
+                )
+            },
         )
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_tap_to_scroll),
             checked = settings.tapToScroll,
-            onCheckedChanged = { update(it, { o, v -> o.copy(tapToScroll = v) }, { preferences.tapToScroll().set(it) }) },
+            onCheckedChanged = {
+                update(it, { o, v -> o.copy(tapToScroll = v) }, { preferences.tapToScroll().set(it) })
+            },
         )
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_auto_scroll),
@@ -206,7 +230,11 @@ private fun GeneralTab(
             steps = 58,
             enabled = settings.autoScroll,
             onChange = {
-                update(it.toInt(), { o, v -> o.copy(autoScrollInterval = v) }, { preferences.autoScrollInterval().set(it) })
+                update(
+                    it.toInt(),
+                    { o, v -> o.copy(autoScrollInterval = v) },
+                    { preferences.autoScrollInterval().set(it) },
+                )
             },
         )
         LnReaderSliderRow(
@@ -225,13 +253,17 @@ private fun GeneralTab(
             title = stringResource(AYMR.strings.novel_reader_fullscreen),
             subtitle = stringResource(AYMR.strings.novel_reader_fullscreen_summary),
             checked = settings.fullScreenMode,
-            onCheckedChanged = { update(it, { o, v -> o.copy(fullScreenMode = v) }, { preferences.fullScreenMode().set(it) }) },
+            onCheckedChanged = {
+                update(it, { o, v -> o.copy(fullScreenMode = v) }, { preferences.fullScreenMode().set(it) })
+            },
         )
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_keep_screen_on),
             subtitle = stringResource(AYMR.strings.novel_reader_keep_screen_on_summary),
             checked = settings.keepScreenOn,
-            onCheckedChanged = { update(it, { o, v -> o.copy(keepScreenOn = v) }, { preferences.keepScreenOn().set(it) }) },
+            onCheckedChanged = {
+                update(it, { o, v -> o.copy(keepScreenOn = v) }, { preferences.keepScreenOn().set(it) })
+            },
         )
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_show_scroll_percentage),
@@ -250,7 +282,9 @@ private fun GeneralTab(
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_bionic_reading),
             checked = settings.bionicReading,
-            onCheckedChanged = { update(it, { o, v -> o.copy(bionicReading = v) }, { preferences.bionicReading().set(it) }) },
+            onCheckedChanged = {
+                update(it, { o, v -> o.copy(bionicReading = v) }, { preferences.bionicReading().set(it) })
+            },
         )
 
         EditTextPreferenceWidget(
@@ -342,12 +376,16 @@ private fun ReadingTab(
 
         AlignButtonsRow(
             selected = settings.textAlign,
-            onSelect = { align -> update(align, { o, v -> o.copy(textAlign = v) }, { preferences.textAlign().set(it) }) },
+            onSelect = { align ->
+                update(align, { o, v -> o.copy(textAlign = v) }, { preferences.textAlign().set(it) })
+            },
         )
 
         FontExamplesRow(
             selected = settings.fontFamily,
-            onSelect = { font -> update(font, { o, v -> o.copy(fontFamily = v) }, { preferences.fontFamily().set(it) }) },
+            onSelect = { font ->
+                update(font, { o, v -> o.copy(fontFamily = v) }, { preferences.fontFamily().set(it) })
+            },
         )
 
         ThemeModeRow(
@@ -460,7 +498,11 @@ private fun LnReaderSliderRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(text = label, style = MaterialTheme.typography.bodyMedium)
-            Text(text = valueText, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                text = valueText,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         Slider(
             value = value,
@@ -483,10 +525,26 @@ private fun AlignButtonsRow(
     onSelect: (TextAlign) -> Unit,
 ) {
     val options = listOf(
-        Triple(TextAlign.LEFT, Icons.AutoMirrored.Filled.FormatAlignLeft, stringResource(AYMR.strings.novel_reader_text_align_left)),
-        Triple(TextAlign.CENTER, Icons.Filled.FormatAlignCenter, stringResource(AYMR.strings.novel_reader_text_align_center)),
-        Triple(TextAlign.JUSTIFY, Icons.Filled.FormatAlignJustify, stringResource(AYMR.strings.novel_reader_text_align_justify)),
-        Triple(TextAlign.RIGHT, Icons.AutoMirrored.Filled.FormatAlignRight, stringResource(AYMR.strings.novel_reader_text_align_right)),
+        Triple(
+            TextAlign.LEFT,
+            Icons.AutoMirrored.Filled.FormatAlignLeft,
+            stringResource(AYMR.strings.novel_reader_text_align_left),
+        ),
+        Triple(
+            TextAlign.CENTER,
+            Icons.Filled.FormatAlignCenter,
+            stringResource(AYMR.strings.novel_reader_text_align_center),
+        ),
+        Triple(
+            TextAlign.JUSTIFY,
+            Icons.Filled.FormatAlignJustify,
+            stringResource(AYMR.strings.novel_reader_text_align_justify),
+        ),
+        Triple(
+            TextAlign.RIGHT,
+            Icons.AutoMirrored.Filled.FormatAlignRight,
+            stringResource(AYMR.strings.novel_reader_text_align_right),
+        ),
     )
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(text = stringResource(AYMR.strings.novel_reader_text_align), style = MaterialTheme.typography.bodyMedium)
@@ -498,7 +556,11 @@ private fun AlignButtonsRow(
                         .size(40.dp)
                         .clickable { onSelect(value) },
                     shape = RoundedCornerShape(10.dp),
-                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(imageVector = icon, contentDescription = description)
@@ -515,14 +577,21 @@ private fun FontExamplesRow(
     onSelect: (String) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(text = stringResource(AYMR.strings.novel_reader_font_family), style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text = stringResource(AYMR.strings.novel_reader_font_family),
+            style = MaterialTheme.typography.bodyMedium,
+        )
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(novelReaderFonts) { option ->
                 val fontFamily = option.fontResId?.let { FontFamily(Font(it)) }
                 val isSelected = option.id == selected
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
                     modifier = Modifier.clickable { onSelect(option.id) },
                 ) {
                     Text(
@@ -553,7 +622,11 @@ private fun ThemeModeRow(
                 val isSelected = value == selected
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
                     modifier = Modifier.clickable { onSelect(value) },
                 ) {
                     Text(

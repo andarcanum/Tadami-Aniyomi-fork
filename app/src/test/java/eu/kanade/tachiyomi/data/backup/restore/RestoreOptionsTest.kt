@@ -9,13 +9,13 @@ class RestoreOptionsTest {
     fun `fromBooleanArray supports legacy arrays and defaults type flags to true`() {
         val legacy = booleanArrayOf(
             false, // libraryEntries
-            true,  // categories
+            true, // categories
             false, // appSettings
-            true,  // extensionRepoSettings
+            true, // extensionRepoSettings
             false, // customButtons
-            true,  // sourceSettings
+            true, // sourceSettings
             false, // extensions
-            true,  // achievements
+            true, // achievements
             false, // stats
         )
 

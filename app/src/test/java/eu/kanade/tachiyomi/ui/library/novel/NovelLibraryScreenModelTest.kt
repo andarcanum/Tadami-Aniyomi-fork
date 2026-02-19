@@ -1,13 +1,13 @@
 package eu.kanade.tachiyomi.ui.library.novel
 
 import android.content.Context
+import eu.kanade.domain.base.BasePreferences
+import eu.kanade.tachiyomi.source.model.SManga
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
-import eu.kanade.domain.base.BasePreferences
-import eu.kanade.tachiyomi.source.model.SManga
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -25,9 +25,9 @@ import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
-import tachiyomi.domain.library.service.LibraryPreferences
-import tachiyomi.domain.library.novel.model.NovelLibrarySort
 import tachiyomi.domain.library.novel.LibraryNovel
+import tachiyomi.domain.library.novel.model.NovelLibrarySort
+import tachiyomi.domain.library.service.LibraryPreferences
 
 class NovelLibraryScreenModelTest {
 

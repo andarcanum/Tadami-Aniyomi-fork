@@ -3,8 +3,8 @@ package eu.kanade.tachiyomi.ui.browse.novel
 import eu.kanade.tachiyomi.novelsource.ConfigurableNovelSource
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.PreferenceScreen
-import eu.kanade.tachiyomi.ui.browse.novel.extension.novelExtensionDetailsScreen
 import eu.kanade.tachiyomi.ui.browse.novel.extension.details.novelSourcePreferencesScreen
+import eu.kanade.tachiyomi.ui.browse.novel.extension.novelExtensionDetailsScreen
 import eu.kanade.tachiyomi.ui.browse.novel.migration.sources.migrateNovelScreen
 import eu.kanade.tachiyomi.ui.browse.novel.source.browse.novelSourcePreferencesScreenOrNull
 import io.kotest.matchers.nulls.shouldBeNull

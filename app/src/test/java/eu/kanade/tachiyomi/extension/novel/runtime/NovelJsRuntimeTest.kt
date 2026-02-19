@@ -2,7 +2,6 @@ package eu.kanade.tachiyomi.extension.novel.runtime
 
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.string.shouldContain
-import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Test
 
 class NovelJsRuntimeTest {

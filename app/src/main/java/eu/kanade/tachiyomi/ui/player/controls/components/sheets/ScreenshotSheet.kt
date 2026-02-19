@@ -47,8 +47,13 @@ fun ScreenshotSheet(
     var setArtTypeAs: ArtType? by remember { mutableStateOf(null) }
     val screenshotProvider = remember(cachePath, showSubtitles, takeScreenshot) {
         {
-            val screenshotBytes = takeScreenshot(cachePath, showSubtitles)?.use { it.readBytes() } ?: return@remember null
-            { screenshotBytes.inputStream() }
+            takeScreenshot(cachePath, showSubtitles)
+                ?.use { screenshot ->
+                    screenshot.readBytes()
+                }
+                ?.let { screenshotBytes ->
+                    { screenshotBytes.inputStream() }
+                }
         }
     }
 

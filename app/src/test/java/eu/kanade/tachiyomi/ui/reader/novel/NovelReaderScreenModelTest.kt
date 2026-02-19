@@ -33,18 +33,17 @@ import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.domain.entries.novel.interactor.GetNovel
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.entries.novel.model.NovelUpdate
+import tachiyomi.domain.entries.novel.repository.NovelRepository
 import tachiyomi.domain.history.novel.model.NovelHistory
 import tachiyomi.domain.history.novel.model.NovelHistoryUpdate
 import tachiyomi.domain.history.novel.model.NovelHistoryWithRelations
 import tachiyomi.domain.history.novel.repository.NovelHistoryRepository
-import tachiyomi.domain.entries.novel.repository.NovelRepository
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.source.novel.model.StubNovelSource
 import tachiyomi.domain.source.novel.service.NovelSourceManager
-import java.util.Date
 
 class NovelReaderScreenModelTest {
     private val activeScreenModels = mutableListOf<NovelReaderScreenModel>()
@@ -172,7 +171,8 @@ class NovelReaderScreenModelTest {
             }
 
             val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
-            state.html.contains("<h1 class=\"an-reader-chapter-title\">Том 1 Глава 0 - Система сил(?)</h1>") shouldBe true
+            state.html.contains("<h1 class=\"an-reader-chapter-title\">Том 1 Глава 0 - Система сил(?)</h1>") shouldBe
+                true
             state.textBlocks.firstOrNull() shouldBe "Том 1 Глава 0 - Система сил(?)"
         }
     }
@@ -250,9 +250,11 @@ class NovelReaderScreenModelTest {
 
             val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
             state.contentBlocks.size shouldBe 4
-            state.contentBlocks[0].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Text>().text shouldBe "Chapter 1"
+            state.contentBlocks[0].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Text>().text shouldBe
+                "Chapter 1"
             state.contentBlocks[1].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Text>().text shouldBe "Intro"
-            state.contentBlocks[2].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Image>().url shouldBe "https://example.org/images/pic.jpg"
+            state.contentBlocks[2].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Image>().url shouldBe
+                "https://example.org/images/pic.jpg"
             state.contentBlocks[3].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Text>().text shouldBe "Outro"
         }
     }
@@ -506,7 +508,10 @@ class NovelReaderScreenModelTest {
                 chapterId = chapter.id,
                 novelChapterRepository = FakeNovelChapterRepository(chapter),
                 getNovel = GetNovel(FakeNovelRepository(novel)),
-                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = htmlWithMalformedFragment),
+                sourceManager = FakeNovelSourceManager(
+                    sourceId = novel.source,
+                    chapterHtml = htmlWithMalformedFragment,
+                ),
                 pluginStorage = FakeNovelPluginStorage(emptyList()),
                 novelReaderPreferences = createNovelReaderPreferences(),
                 isSystemDark = { false },
@@ -1335,7 +1340,10 @@ class NovelReaderScreenModelTest {
         private val values = mutableMapOf<String, Any?>()
         private val flows = mutableMapOf<String, MutableStateFlow<Any?>>()
 
-        override fun getString(key: String, defaultValue: String): Preference<String> = createPreference(key, defaultValue)
+        override fun getString(key: String, defaultValue: String): Preference<String> = createPreference(
+            key,
+            defaultValue,
+        )
 
         override fun getLong(key: String, defaultValue: Long): Preference<Long> = createPreference(key, defaultValue)
 
@@ -1343,7 +1351,10 @@ class NovelReaderScreenModelTest {
 
         override fun getFloat(key: String, defaultValue: Float): Preference<Float> = createPreference(key, defaultValue)
 
-        override fun getBoolean(key: String, defaultValue: Boolean): Preference<Boolean> = createPreference(key, defaultValue)
+        override fun getBoolean(key: String, defaultValue: Boolean): Preference<Boolean> = createPreference(
+            key,
+            defaultValue,
+        )
 
         override fun getStringSet(key: String, defaultValue: Set<String>): Preference<Set<String>> =
             createPreference(key, defaultValue)
@@ -1457,5 +1468,3 @@ class NovelReaderScreenModelTest {
         }
     }
 }
-
-

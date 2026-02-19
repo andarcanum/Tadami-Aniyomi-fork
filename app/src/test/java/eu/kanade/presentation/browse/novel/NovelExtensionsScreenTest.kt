@@ -20,4 +20,3 @@ class NovelExtensionsScreenTest {
         shouldLoadNovelPluginIcon("https://example.org/icon.png") shouldBe true
     }
 }
-

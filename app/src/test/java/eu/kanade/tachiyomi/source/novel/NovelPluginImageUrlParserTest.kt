@@ -27,7 +27,9 @@ class NovelPluginImageUrlParserTest {
 
     @Test
     fun `parses encoded json ref payload`() {
-        val rawRef = "{\"imageUrl\":\"https://static.inuko.me/rich/12345678-1234-s234-1234-123456789012.webp?token=a%2Bb\",\"secretKey\":\"k\",\"cacheKey\":\"chapter-0\"}"
+        val rawRef =
+            "{\"imageUrl\":\"https://static.inuko.me/rich/12345678-1234-s234-1234-123456789012.webp?token=a%2Bb\"," +
+                "\"secretKey\":\"k\",\"cacheKey\":\"chapter-0\"}"
         val url = "novelimg://hexnovels?ref=${java.net.URLEncoder.encode(rawRef, Charsets.UTF_8.name())}"
 
         val parsed = NovelPluginImageUrlParser.parse(url)

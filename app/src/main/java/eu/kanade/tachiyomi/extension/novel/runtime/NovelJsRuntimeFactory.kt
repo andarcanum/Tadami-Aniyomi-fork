@@ -14,14 +14,14 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.protobuf.ProtoIntegerType
 import kotlinx.serialization.protobuf.ProtoBuf
+import kotlinx.serialization.protobuf.ProtoIntegerType
 import kotlinx.serialization.protobuf.ProtoNumber
 import kotlinx.serialization.protobuf.ProtoType
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.jsoup.Jsoup
 import tachiyomi.data.extension.novel.NovelPluginKeyValueStore
 import java.util.Base64
@@ -176,7 +176,7 @@ class NovelJsRuntimeFactory(
         override fun domContents(handle: Int): String =
             json.encodeToString(domStore.contents(handle).toList())
 
-        override fun domIs(handle: Int, selector: String): Boolean = domStore.is_(handle, selector)
+        override fun domIs(handle: Int, selector: String): Boolean = domStore.matches(handle, selector)
 
         override fun domHas(handle: Int, selector: String): Boolean = domStore.has(handle, selector)
 
@@ -540,8 +540,10 @@ class NovelJsRuntimeFactory(
     private enum class BodyType {
         @SerialName("none")
         None,
+
         @SerialName("text")
         Text,
+
         @SerialName("form")
         Form,
     }

@@ -30,4 +30,3 @@ class NovelDomainAliasResolver(
         return value.trim().removeSuffix("/")
     }
 }
-

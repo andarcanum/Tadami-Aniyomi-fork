@@ -1,10 +1,10 @@
 package eu.kanade.tachiyomi.ui.reader.setting
 
+import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import io.kotest.matchers.shouldBe
-import io.kotest.matchers.nulls.shouldBeNull
 import org.junit.jupiter.api.Test
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore

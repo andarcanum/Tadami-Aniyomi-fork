@@ -8,9 +8,9 @@ import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.entries.novel.interactor.GetNovelExcludedScanlators
 import eu.kanade.domain.entries.novel.interactor.SetNovelExcludedScanlators
+import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.entries.novel.model.chaptersFiltered
 import eu.kanade.domain.entries.novel.model.downloadedFilter
-import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.entries.novel.model.toSNovel
 import eu.kanade.domain.items.novelchapter.interactor.GetAvailableNovelScanlators
 import eu.kanade.domain.items.novelchapter.interactor.GetNovelScanlatorChapterCounts
@@ -24,16 +24,16 @@ import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.source.novel.NovelSiteSource
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.supervisorScope
-import kotlinx.coroutines.Job
 import logcat.LogPriority
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.util.lang.launchIO
@@ -41,6 +41,7 @@ import tachiyomi.core.common.util.lang.launchNonCancellable
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.handler.AchievementEventBus
 import tachiyomi.data.achievement.model.AchievementEvent
+import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.category.novel.interactor.GetNovelCategories
 import tachiyomi.domain.category.novel.interactor.SetNovelCategories
 import tachiyomi.domain.entries.applyFilter
@@ -48,17 +49,16 @@ import tachiyomi.domain.entries.novel.interactor.GetNovelWithChapters
 import tachiyomi.domain.entries.novel.interactor.SetNovelChapterFlags
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.entries.novel.model.NovelUpdate
+import tachiyomi.domain.items.novelchapter.interactor.SetNovelDefaultChapterFlags
 import tachiyomi.domain.items.novelchapter.model.NoChaptersException
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
-import tachiyomi.domain.items.novelchapter.interactor.SetNovelDefaultChapterFlags
 import tachiyomi.domain.items.novelchapter.service.getNovelChapterSort
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.track.novel.interactor.GetNovelTracks
 import tachiyomi.domain.track.novel.model.NovelTrack
-import tachiyomi.domain.category.model.Category
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
@@ -268,7 +268,8 @@ class NovelScreenModel(
             )
             if (isLikelyWebViewLoginRequired(source, novel, chapters.size)) {
                 logcat(LogPriority.WARN) {
-                    "Novel ${novel.id} (${source.name}) likely requires WebView login: chapters=0, descriptionBlank=true"
+                    "Novel ${novel.id} (${source.name}) likely requires WebView login: " +
+                        "chapters=0, descriptionBlank=true"
                 }
             }
             cacheState(state.value as? State.Success)
@@ -473,7 +474,8 @@ class NovelScreenModel(
         val networkNovel = state.source.getNovelDetails(state.novel.toSNovel())
         logcat {
             "Fetched novel details for id=${state.novel.id} source=${state.source.name}, " +
-                "initialized=${networkNovel.initialized}, descriptionBlank=${networkNovel.description.isNullOrBlank()}, " +
+                "initialized=${networkNovel.initialized}, " +
+                "descriptionBlank=${networkNovel.description.isNullOrBlank()}, " +
                 "genreCount=${networkNovel.getGenres()?.size ?: 0}, manualFetch=$manualFetch"
         }
         updateNovel.awaitUpdateFromSource(
@@ -494,7 +496,8 @@ class NovelScreenModel(
         }
         if (isLikelyWebViewLoginRequired(state.source, state.novel, sourceChapters.size)) {
             logcat(LogPriority.WARN) {
-                "Novel ${state.novel.id} (${state.source.name}) likely requires WebView login after fetch: chapters=0, descriptionBlank=true"
+                "Novel ${state.novel.id} (${state.source.name}) likely requires " +
+                    "WebView login after fetch: chapters=0, descriptionBlank=true"
             }
         }
         syncNovelChaptersWithSource.await(

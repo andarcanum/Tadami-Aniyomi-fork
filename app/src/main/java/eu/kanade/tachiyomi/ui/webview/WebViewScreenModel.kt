@@ -84,12 +84,13 @@ class WebViewScreenModel(
             ?.let { raw ->
                 when (raw) {
                     is okhttp3.Headers -> raw.toMultimap().mapValues { it.value.getOrNull(0) ?: "" }
-                    is Map<*, *> -> raw.entries
-                        .mapNotNull { (name, value) ->
-                            val key = name?.toString()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                            key to (value?.toString() ?: "")
-                        }
-                        .toMap()
+                    is Map<*, *> ->
+                        raw.entries
+                            .mapNotNull { (name, value) ->
+                                val key = name?.toString()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                                key to (value?.toString() ?: "")
+                            }
+                            .toMap()
                     else -> emptyMap()
                 }
             }

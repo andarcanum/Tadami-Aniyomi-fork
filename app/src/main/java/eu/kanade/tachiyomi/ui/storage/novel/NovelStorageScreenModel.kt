@@ -16,7 +16,9 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
 class NovelStorageScreenModel(
-    private val downloadChanges: MutableSharedFlow<Unit> = MutableSharedFlow<Unit>(replay = 1).also { it.tryEmit(Unit) },
+    private val downloadChanges: MutableSharedFlow<Unit> = MutableSharedFlow<Unit>(replay = 1).also {
+        it.tryEmit(Unit)
+    },
     private val downloadInitializing: MutableStateFlow<Boolean> = MutableStateFlow(false),
     private val getLibraries: GetLibraryNovel = Injekt.get(),
     getCategories: GetNovelCategories = Injekt.get(),

@@ -46,9 +46,9 @@ import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoParser
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoService
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoServiceContract
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoUpdateInteractor
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelDomainAliasResolver
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelJsRuntimeFactory
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelJsSourceFactory
-import eu.kanade.tachiyomi.extension.novel.runtime.NovelDomainAliasResolver
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginRuntimeOverrides
 import eu.kanade.tachiyomi.network.JavaScriptEngine
 import eu.kanade.tachiyomi.network.NetworkHelper

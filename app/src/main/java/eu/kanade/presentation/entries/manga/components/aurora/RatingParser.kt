@@ -34,7 +34,10 @@ object RatingParser {
         Regex("""MyAnimeList:\s*(\d+\.?\d*)""", RegexOption.IGNORE_CASE),
 
         // GroupLe multisrc star format: ***** 9.8[9.4] (votes: 123)
-        Regex("""[\*\+\-]{5}\s*(\d+[.,]?\d*)\s*(?:\[[^\]]*])?\s*(?:\(votes:\s*(\d+(?:,\s*\d+)*)\))?""", RegexOption.IGNORE_CASE),
+        Regex(
+            """[\*\+\-]{5}\s*(\d+[.,]?\d*)\s*(?:\[[^\]]*])?\s*(?:\(votes:\s*(\d+(?:,\s*\d+)*)\))?""",
+            RegexOption.IGNORE_CASE,
+        ),
 
         // Star ratings - 5 star pattern (filled/empty/half mix) with rating
         Regex("""[★☆⭐✬✩]{5}\s*(\d+\.?\d*)\s*(?:\[ⓘ[^\]]*\])?\s*(?:\((\d+(?:,\s*\d+)*)\s*(?:голосов?|votes?)?\))?"""),

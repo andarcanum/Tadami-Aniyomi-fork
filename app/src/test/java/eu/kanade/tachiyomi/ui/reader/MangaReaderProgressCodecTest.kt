@@ -29,14 +29,16 @@ class MangaReaderProgressCodecTest {
     fun `decode chapter progress restores encoded offset when enabled`() {
         val encoded = encodeWebtoonScrollProgress(index = 3, offsetPx = 250)
 
-        decodeStoredChapterProgress(encoded, restoreOffset = true) shouldBe ChapterScrollProgress(index = 3, offsetPx = 250)
+        decodeStoredChapterProgress(encoded, restoreOffset = true) shouldBe
+            ChapterScrollProgress(index = 3, offsetPx = 250)
     }
 
     @Test
     fun `decode chapter progress strips encoded offset when disabled`() {
         val encoded = encodeWebtoonScrollProgress(index = 3, offsetPx = 250)
 
-        decodeStoredChapterProgress(encoded, restoreOffset = false) shouldBe ChapterScrollProgress(index = 3, offsetPx = 0)
+        decodeStoredChapterProgress(encoded, restoreOffset = false) shouldBe
+            ChapterScrollProgress(index = 3, offsetPx = 0)
     }
 
     @Test

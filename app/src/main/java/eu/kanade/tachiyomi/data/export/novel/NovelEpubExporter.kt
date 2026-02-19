@@ -201,8 +201,12 @@ class NovelEpubExporter(
                     <dc:identifier id="bookid">novel-${novel.id}</dc:identifier>
                     <dc:title>${escapeXml(novel.title)}</dc:title>
                     <dc:language>ru</dc:language>
-                    ${novel.author?.takeIf { it.isNotBlank() }?.let { "<dc:creator>${escapeXml(it)}</dc:creator>" }.orEmpty()}
-                    ${novel.description?.takeIf { it.isNotBlank() }?.let { "<dc:description>${escapeXml(it)}</dc:description>" }.orEmpty()}
+                    ${novel.author?.takeIf {
+            it.isNotBlank()
+        }?.let { "<dc:creator>${escapeXml(it)}</dc:creator>" }.orEmpty()}
+                    ${novel.description?.takeIf {
+            it.isNotBlank()
+        }?.let { "<dc:description>${escapeXml(it)}</dc:description>" }.orEmpty()}
                 </metadata>
                 <manifest>
                     $manifestItems

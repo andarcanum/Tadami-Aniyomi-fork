@@ -69,4 +69,3 @@ class NovelEpubExportRangeTest {
         result.endChapter shouldBe 5
     }
 }
-

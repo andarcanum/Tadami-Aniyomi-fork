@@ -29,10 +29,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.domain.entries.novel.model.normalizeNovelDescription
 import eu.kanade.presentation.entries.manga.components.aurora.GlassmorphismCard
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.source.model.SManga
-import eu.kanade.domain.entries.novel.model.normalizeNovelDescription
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
