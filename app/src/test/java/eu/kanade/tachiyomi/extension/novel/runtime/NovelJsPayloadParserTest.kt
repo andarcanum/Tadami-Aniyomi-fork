@@ -71,24 +71,25 @@ class NovelJsPayloadParserTest {
     fun `parseChaptersArray supports chapter endpoint payload`() {
         val payload = """
             [
-              { "id": 194938, "title": "Ğš. Ğ§Ğ°ÑÑ‚ÑŒ 1" },
-              { "id": 194939, "title": "Ğš. Ğ§Ğ°ÑÑ‚ÑŒ 2" }
+              { "id": 194938, "title": "Chapter Part 1" },
+              { "id": 194939, "title": "Chapter Part 2" }
             ]
         """.trimIndent()
 
         val parsed = NovelJsPayloadParser.parseChaptersArray(json, payload)
 
         parsed.shouldHaveSize(2)
-        parsed[0].name shouldBe "Ğš. Ğ§Ğ°ÑÑ‚ÑŒ 1"
+        parsed[0].name shouldBe "Chapter Part 1"
         parsed[0].path shouldBe null
         parsed[0].chapterNumber shouldBe null
     }
+
     @Test
     fun `parseRulateFamilyChapterEndpoint builds chapter paths`() {
         val payload = """
             [
-              { "id": 194938, "title": "Ê. ×àñòü 1" },
-              { "id": 194939, "title": "Ê. ×àñòü 2" }
+              { "id": 194938, "title": "Chapter Part 1" },
+              { "id": 194939, "title": "Chapter Part 2" }
             ]
         """.trimIndent()
 
@@ -99,7 +100,7 @@ class NovelJsPayloadParserTest {
         )
 
         parsed.shouldHaveSize(2)
-        parsed[0].name shouldBe "Ê. ×àñòü 1"
+        parsed[0].name shouldBe "Chapter Part 1"
         parsed[0].path shouldBe "/book/5558/194938"
         parsed[0].chapterNumber.shouldNotBeNull().shouldBeExactly(1.0)
         parsed[1].path shouldBe "/book/5558/194939"
