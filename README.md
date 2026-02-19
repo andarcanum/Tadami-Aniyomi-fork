@@ -3,7 +3,7 @@
   <h1>Tadami</h1>
   <p><strong>A polished Aniyomi fork for anime, manga, and novels (ranobe).</strong></p>
   <p>
-    <a href="https://github.com/andarcanum/Tadami-Aniyomi-fork/actions/workflows/build_push.yml"><img src="https://img.shields.io/github/actions/workflow/status/andarcanum/Tadami-Aniyomi-fork/build_push.yml?branch=main&label=CI" alt="CI"></a>
+    <a href="https://github.com/andarcanum/Tadami-Aniyomi-fork/actions/workflows/build_push.yml"></a>
     <a href="https://github.com/andarcanum/Tadami-Aniyomi-fork/releases"><img src="https://img.shields.io/github/v/release/andarcanum/Tadami-Aniyomi-fork?display_name=tag" alt="Latest Release"></a>
     <a href="LICENSE"><img src="https://img.shields.io/github/license/andarcanum/Tadami-Aniyomi-fork" alt="License"></a>
     <a href="https://developer.android.com/about/versions/oreo"><img src="https://img.shields.io/badge/Android-8.0%2B-brightgreen" alt="Android 8+"></a>
