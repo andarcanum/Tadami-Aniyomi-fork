@@ -6,6 +6,7 @@ import tachiyomi.core.common.preference.InMemoryPreferenceStore
 import tachiyomi.domain.library.anime.model.AnimeLibrarySort
 import tachiyomi.domain.library.manga.model.MangaLibrarySort
 import tachiyomi.domain.library.model.LibraryDisplayMode
+import tachiyomi.domain.library.novel.model.NovelLibrarySort
 
 class LibraryPreferencesDefaultsTest {
 
@@ -21,9 +22,9 @@ class LibraryPreferencesDefaultsTest {
             type = MangaLibrarySort.Type.LastRead,
             direction = MangaLibrarySort.Direction.Descending,
         )
-        prefs.novelSortingMode().get() shouldBe MangaLibrarySort(
-            type = MangaLibrarySort.Type.LastRead,
-            direction = MangaLibrarySort.Direction.Descending,
+        prefs.novelSortingMode().get() shouldBe NovelLibrarySort(
+            type = NovelLibrarySort.Type.LastRead,
+            direction = NovelLibrarySort.Direction.Descending,
         )
 
         prefs.displayMode().get() shouldBe LibraryDisplayMode.ComfortableGrid

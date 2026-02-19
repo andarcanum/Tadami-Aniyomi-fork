@@ -258,28 +258,40 @@ class NovelScreenModelTest {
                 ),
             )
 
-            withTimeout(1_000) {
-                while (screenModel.state.value is NovelScreenModel.State.Loading) {
-                    yield()
+            try {
+                withTimeout(1_000) {
+                    while (screenModel.state.value is NovelScreenModel.State.Loading) {
+                        yield()
+                    }
                 }
-            }
 
-            screenModel.toggleFavorite()
+                screenModel.toggleFavorite()
 
-            withTimeout(1_000) {
-                while (novelRepository.allUpdates.isEmpty()) {
-                    yield()
+                withTimeout(1_000) {
+                    while (novelRepository.allUpdates.isEmpty()) {
+                        yield()
+                    }
                 }
-            }
 
-            novelRepository.allUpdates.any { it.favorite == true } shouldBe true
+                novelRepository.allUpdates.any { it.favorite == true } shouldBe true
+            } finally {
+                lifecycleOwner.destroy()
+                screenModel.onDispose()
+                repeat(5) { yield() }
+            }
             Unit
         }
     }
 
     private class FakeLifecycleOwner : LifecycleOwner {
-        override val lifecycle: Lifecycle = LifecycleRegistry.createUnsafe(this).apply {
-            currentState = Lifecycle.State.RESUMED
+        private val registry = LifecycleRegistry.createUnsafe(this).apply {
+            currentState = Lifecycle.State.STARTED
+        }
+
+        override val lifecycle: Lifecycle = registry
+
+        fun destroy() {
+            registry.currentState = Lifecycle.State.DESTROYED
         }
     }
 

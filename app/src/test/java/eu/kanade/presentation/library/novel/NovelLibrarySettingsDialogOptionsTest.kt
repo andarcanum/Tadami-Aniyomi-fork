@@ -2,23 +2,23 @@ package eu.kanade.presentation.library.novel
 
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
-import tachiyomi.domain.library.manga.model.MangaLibrarySort
 import tachiyomi.domain.library.model.LibraryDisplayMode
+import tachiyomi.domain.library.novel.model.NovelLibrarySort
 
 class NovelLibrarySettingsDialogOptionsTest {
 
     @Test
     fun `novel sort options contain expected parity modes`() {
         novelLibrarySortOptions().map { it.second } shouldBe listOf(
-            MangaLibrarySort.Type.Alphabetical,
-            MangaLibrarySort.Type.TotalChapters,
-            MangaLibrarySort.Type.LastRead,
-            MangaLibrarySort.Type.LastUpdate,
-            MangaLibrarySort.Type.UnreadCount,
-            MangaLibrarySort.Type.LatestChapter,
-            MangaLibrarySort.Type.ChapterFetchDate,
-            MangaLibrarySort.Type.DateAdded,
-            MangaLibrarySort.Type.Random,
+            NovelLibrarySort.Type.Alphabetical,
+            NovelLibrarySort.Type.TotalChapters,
+            NovelLibrarySort.Type.LastRead,
+            NovelLibrarySort.Type.LastUpdate,
+            NovelLibrarySort.Type.UnreadCount,
+            NovelLibrarySort.Type.LatestChapter,
+            NovelLibrarySort.Type.ChapterFetchDate,
+            NovelLibrarySort.Type.DateAdded,
+            NovelLibrarySort.Type.Random,
         )
     }
 
