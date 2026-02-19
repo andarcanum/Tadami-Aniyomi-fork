@@ -109,7 +109,11 @@ class CloudflareInterceptor(
                     }
                 }
 
-                override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, errorResponse: WebResourceResponse) {
+                override fun onReceivedHttpError(
+                    view: WebView,
+                    request: WebResourceRequest,
+                    errorResponse: WebResourceResponse,
+                ) {
                     if (request.isForMainFrame) {
                         if (errorResponse.statusCode in ERROR_CODES) {
                             // Found the Cloudflare challenge page.

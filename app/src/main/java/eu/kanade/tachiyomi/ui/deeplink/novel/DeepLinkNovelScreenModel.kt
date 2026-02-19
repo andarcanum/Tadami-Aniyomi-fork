@@ -5,6 +5,7 @@ import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.entries.novel.model.toDomainNovel
 import eu.kanade.domain.entries.novel.model.toSNovel
+import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.domain.items.novelchapter.model.toSNovelChapter
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.SNovel
@@ -28,7 +29,7 @@ class DeepLinkNovelScreenModel(
     private val networkToLocalNovel: NetworkToLocalNovel = Injekt.get(),
     private val getNovelByUrlAndSourceId: GetNovelByUrlAndSourceId = Injekt.get(),
     private val novelChapterRepository: NovelChapterRepository = Injekt.get(),
-    private val syncNovelChaptersWithSource: eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource = Injekt.get(),
+    private val syncNovelChaptersWithSource: SyncNovelChaptersWithSource = Injekt.get(),
 ) : StateScreenModel<DeepLinkNovelScreenModel.State>(State.Loading) {
 
     init {
