@@ -20,7 +20,7 @@ data class Pins(val code: Int = Pin.Unpinned.code) {
 
     operator fun plus(pin: Pin): Pins = Pins(code or pin.code)
 
-    operator fun minus(pin: Pin): Pins = Pins(code xor pin.code)
+    operator fun minus(pin: Pin): Pins = Pins(code and pin.code.inv())
 
     companion object {
         val unpinned = Pins(Pin.Unpinned)

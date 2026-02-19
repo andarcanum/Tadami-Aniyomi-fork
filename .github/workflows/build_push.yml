@@ -22,6 +22,32 @@ jobs:
     steps:
       - name: Clone repo
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.2.0
+        with:
+          node-version: '22'
+
+      - name: Collect changed files
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+            git diff-tree --no-commit-id --name-only -r "${{ github.sha }}" > changed_files.txt
+          else
+            git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" > changed_files.txt
+          fi
+          echo "Changed files:"
+          cat changed_files.txt
+
+      - name: Detect reading-critical changes
+        id: reading_changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/ci/detect-reading-critical.js --input changed_files.txt --github-output "$GITHUB_OUTPUT"
 
       - name: Set up JDK
         uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.7.0
@@ -40,6 +66,18 @@ jobs:
 
       - name: Run unit tests
         run: ./gradlew testReleaseUnitTest
+
+      - name: Reading regression unit matrix
+        if: steps.reading_changes.outputs.reading_critical == 'true'
+        run: bash tools/ci/run-reading-regression-tests.sh
+
+      - name: Reading debug assemble smoke
+        if: steps.reading_changes.outputs.reading_critical == 'true'
+        run: ./gradlew :app:assembleDebug
+
+      - name: Reading gate skipped (non-reading change)
+        if: steps.reading_changes.outputs.reading_critical != 'true'
+        run: echo "reading_critical=false, strict reading regression matrix skipped."
 
       - name: Upload APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

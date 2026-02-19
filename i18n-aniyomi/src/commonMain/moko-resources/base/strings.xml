@@ -33,6 +33,7 @@
     <string name="pref_incognito_mode_summary">Pauses your history</string>
     <string name="manga_from_library">Manga from library</string>
     <string name="also_set_chapter_settings_for_library">Also apply to all manga in my library</string>
+    <string name="also_set_novel_chapter_settings_for_library">Also apply to all novels in my library</string>
     <string name="dialog_with_checkbox_reset">Reset all chapters for this manga</string>
     <string name="download_insufficient_space">Couldn\'t download due to low storage space</string>
     <string name="download_queue_size_warning">Warning: large bulk downloads may lead to sources becoming slower and/or blocking Aniyomi. Tap to learn more.</string>
@@ -379,6 +380,7 @@
     <string name="manga_categories">Manga Categories</string>
     <string name="general_categories">Categories</string>
     <string name="anime_categories">Anime Categories</string>
+    <string name="novel_categories">Novel Categories</string>
     <string name="entries">Library entries</string>
     <string name="chapters_episodes">Chapters and episodes</string>
     <string name="episodes">Episodes</string>
@@ -388,14 +390,90 @@
     <string name="label_titles">Titles</string>
     <string name="label_anime">Anime</string>
     <string name="label_manga">Manga</string>
+    <string name="label_novel">Novel</string>
+    <string name="label_novel_library">Novel library</string>
+    <string name="novel_reader_settings_title">Reader settings</string>
+    <string name="novel_reader_override_source">Override for this source</string>
+    <string name="novel_reader_override_summary">Use custom settings for this source only</string>
+    <string name="novel_reader_editing_global">Editing global settings</string>
+    <string name="novel_reader_editing_source">Editing source override</string>
+    <string name="novel_reader_font_size">Font size</string>
+    <string name="novel_reader_line_height">Line height</string>
+    <string name="novel_reader_margins">Margins</string>
+    <string name="novel_reader_theme">Theme</string>
+    <string name="novel_reader_theme_system">System</string>
+    <string name="novel_reader_theme_light">Light</string>
+    <string name="novel_reader_theme_dark">Dark</string>
+    <string name="novel_reader_font_family">Font family</string>
+    <string name="novel_reader_theme_presets">Theme presets</string>
+    <string name="novel_reader_theme_preset_none">None</string>
+    <string name="novel_reader_background_color">Background color</string>
+    <string name="novel_reader_text_color">Text color</string>
+    <string name="novel_reader_color_input_hint">Use #RRGGBB or #AARRGGBB</string>
+    <string name="novel_reader_save_custom_theme">Save custom theme</string>
+    <string name="novel_reader_delete_custom_theme">Delete custom theme</string>
+
+    <!-- Novel Reader Settings Screen -->
+    <string name="pref_category_novel_reader">Novel Reader</string>
+    <string name="pref_novel_reader_summary">Novel reading settings</string>
+    <string name="novel_reader_display">Display</string>
+    <string name="novel_reader_theme_settings">Theme</string>
+    <string name="novel_reader_navigation">Navigation</string>
+    <string name="novel_reader_accessibility">Accessibility</string>
+    <string name="novel_reader_advanced">Advanced</string>
+    <string name="novel_reader_tab_general">General</string>
+    <string name="novel_reader_tab_reading">Reading</string>
+
+    <!-- Text Align -->
+    <string name="novel_reader_text_align">Text alignment</string>
+    <string name="novel_reader_text_align_left">Left</string>
+    <string name="novel_reader_text_align_center">Center</string>
+    <string name="novel_reader_text_align_justify">Justify</string>
+    <string name="novel_reader_text_align_right">Right</string>
+
+    <!-- Navigation -->
+    <string name="novel_reader_volume_buttons">Volume button scroll</string>
+    <string name="novel_reader_volume_buttons_summary">Use volume buttons to scroll pages</string>
+    <string name="novel_reader_swipe_gestures">Swipe gestures</string>
+    <string name="novel_reader_swipe_gestures_summary">Enable swipe gestures for navigation</string>
+    <string name="novel_reader_vertical_seekbar">Vertical seekbar</string>
+    <string name="novel_reader_swipe_to_next">Swipe up to next chapter</string>
+    <string name="novel_reader_swipe_to_prev">Swipe down to previous chapter</string>
+    <string name="novel_reader_tap_to_scroll">Tap edges to navigate</string>
+    <string name="novel_reader_page_mode">Page mode</string>
+    <string name="novel_reader_page_mode_summary">Display content in pages instead of continuous scroll</string>
+    <string name="novel_reader_prefer_webview_renderer">Prefer WebView renderer</string>
+    <string name="novel_reader_prefer_webview_renderer_summary">Open chapter in WebView by default. Disable to use native renderer.</string>
+    <string name="novel_reader_auto_scroll">Auto-scroll</string>
+    <string name="novel_reader_auto_scroll_interval">Auto-scroll interval (sec)</string>
+    <string name="novel_reader_auto_scroll_offset">Auto-scroll offset (px)</string>
+
+    <!-- Accessibility -->
+    <string name="novel_reader_fullscreen">Fullscreen mode</string>
+    <string name="novel_reader_fullscreen_summary">Hide system bars while reading</string>
+    <string name="novel_reader_keep_screen_on">Keep screen on</string>
+    <string name="novel_reader_keep_screen_on_summary">Prevent screen from turning off while reading</string>
+    <string name="novel_reader_show_scroll_percentage">Show reading progress</string>
+    <string name="novel_reader_show_battery_time">Show battery and time</string>
+    <string name="novel_reader_bionic_reading">Bionic reading</string>
+
+    <!-- Advanced -->
+    <string name="novel_reader_custom_css">Custom CSS</string>
+    <string name="novel_reader_custom_css_hint">CSS applied to chapter content</string>
+    <string name="novel_reader_custom_css_set">%d characters</string>
+    <string name="novel_reader_custom_js">Custom JavaScript</string>
+    <string name="novel_reader_custom_js_hint">JavaScript executed after chapter loads</string>
+    <string name="novel_reader_custom_js_set">%d characters</string>
     <string name="label_recent_anime_updates">Anime Updates</string>
     <string name="label_manga_sources">Manga Sources</string>
     <string name="label_anime_sources">Anime Sources</string>
+    <string name="label_novel_sources">Novel Sources</string>
     <string name="label_watched_duration">Watched duration</string>
     <string name="label_watched_episodes">Watched</string>
     <string name="pref_start_screen">Start Screen</string>
     <string name="pref_show_anime_section">Show anime section</string>
     <string name="pref_show_manga_section">Show manga section</string>
+    <string name="pref_show_novel_section">Show novel section</string>
     <string name="pref_show_section_required">At least one section must stay enabled</string>
     <string name="pref_library_manga_columns">Manga items per row</string>
     <string name="pref_library_anime_columns">Anime items per row</string>
@@ -420,10 +498,35 @@
     <string name="action_play_externally">Play externally</string>
     <string name="action_download_unread">Download unread chapters</string>
     <string name="action_download_unseen">Download unseen episodes</string>
+    <string name="novel_batch_download_title">Batch download</string>
+    <string name="novel_download_next_1">Download next chapter</string>
+    <string name="novel_download_next_5">Download next 5 chapters</string>
+    <string name="novel_download_next_10">Download next 10 chapters</string>
+    <string name="novel_download_custom_count">Custom amount</string>
+    <string name="novel_download_all">Download all chapters</string>
+    <string name="novel_export_as_epub">Export as EPUB</string>
+    <string name="novel_epub_short">EPUB</string>
+    <string name="novel_export_downloaded_only">Downloaded chapters only</string>
+    <string name="novel_export_start_chapter">Start chapter (optional)</string>
+    <string name="novel_export_end_chapter">End chapter (optional)</string>
+    <string name="novel_export_start_chapter_short">Start chapter</string>
+    <string name="novel_export_end_chapter_short">End chapter</string>
+    <string name="novel_export_all_chapters">Export all chapters</string>
+    <string name="novel_export_destination_folder">Destination folder (optional)</string>
+    <string name="novel_export_select_folder">Select folder</string>
+    <string name="novel_export_apply_reader_theme">Apply reader theme to EPUB</string>
+    <string name="novel_export_include_custom_css">Include custom CSS</string>
+    <string name="novel_export_include_custom_js">Include custom JavaScript</string>
+    <string name="novel_export_custom_js_warning">Custom JavaScript may not be supported by all EPUB readers</string>
+    <string name="novel_export_invalid_range">Enter a valid chapter range</string>
+    <string name="novel_export_saved_to_folder">EPUB saved to selected folder</string>
+    <string name="novel_export_confirm">Export</string>
+    <string name="novel_export_failed">Failed to export EPUB</string>
     <string name="action_bookmark_episode">Bookmark episode</string>
     <string name="action_remove_bookmark_episode">Unbookmark episode</string>
     <string name="action_edit_anime_categories">Edit anime categories</string>
     <string name="action_edit_manga_categories">Edit manga categories</string>
+    <string name="action_edit_novel_categories">Edit novel categories</string>
     <string name="action_view_episodes">View episodes</string>
     <string name="action_previous_episode">Previous episode</string>
     <string name="action_play">Play</string>
@@ -439,6 +542,7 @@
     <string name="pref_search_pinned_anime_sources_only">Only search pinned anime sources in global search</string>
     <string name="pref_hide_in_manga_library_items">Hide manga entries already in library</string>
     <string name="pref_hide_in_anime_library_items">Hide anime entries already in library</string>
+    <string name="pref_hide_in_novel_library_items">Hide novel entries already in library</string>
     <string name="action_order_by_episode_number">By episode number</string>
     <string name="action_start_download_externally">Use external downloader</string>
     <string name="action_start_download_internally">Use internal downloader</string>
@@ -446,18 +550,23 @@
     <string name="pref_default_home_tab_library">Set start screen to Manga Tab</string>
     <string name="default_manga_category">Default manga category</string>
     <string name="default_anime_category">Default anime category</string>
+    <string name="default_novel_category">Default novel category</string>
     <string name="pref_manga_library_update_categories_details">Manga in excluded categories will not be updated even if they are also in included categories.</string>
     <string name="pref_anime_library_update_categories_details">Anime in excluded categories will not be updated even if they are also in included categories.</string>
+    <string name="pref_novel_library_update_categories_details">Novels in excluded categories will not be updated even if they are also in included categories.</string>
     <string name="unofficial_extension_message_aniyomi">This extension is not from the official list.</string>
     <string name="unofficial_anime_extension_message">This extension is not from the official list.</string>
     <string name="episode_download_progress">%1$d%%</string>
     <string name="pref_remove_exclude_categories_manga">Excluded manga categories</string>
     <string name="pref_remove_exclude_categories_anime">Excluded anime categories</string>
+    <string name="pref_remove_exclude_categories_novel">Excluded novel categories</string>
     <string name="pref_category_external_downloader">External downloader</string>
     <string name="pref_use_external_downloader">Always use external downloader for anime</string>
     <string name="pref_external_downloader_selection">Downloader app preference</string>
     <string name="pref_download_new_episodes">Download new episodes</string>
     <string name="pref_download_new_unseen_episodes_only">Skip downloading duplicate seen episodes</string>
+    <string name="pref_download_new_novel_chapters">Download new novel chapters</string>
+    <string name="pref_download_new_unread_novel_chapters_only">Skip downloading duplicate read novel chapters</string>
     <string name="auto_download_while_watching">Auto download while watching</string>
     <string name="download_ahead_info_anime">Only works on entries in library and if the current episode plus the next one are already downloaded</string>
     <string name="pref_track_on_add_library">Open track menu on adding to library</string>
@@ -468,8 +577,13 @@
     <string name="used_cache_both">Used by anime: %1$s, used by manga: %2$s</string>
     <string name="pref_clear_manga_database">Clear Manga database</string>
     <string name="pref_clear_anime_database">Clear Anime database</string>
+    <string name="pref_clear_novel_database">Clear Novel database</string>
     <string name="pref_clear_manga_database_summary">Delete history for manga that are not saved in your library</string>
     <string name="pref_clear_anime_database_summary">Delete history for anime that are not saved in your library</string>
+    <string name="pref_clear_novel_database_summary">Delete history for novels that are not saved in your library</string>
+    <string name="pref_clear_novel_plugin_cache">Clear novel plugin cache</string>
+    <string name="pref_clear_novel_plugin_cache_summary">Clear cached storage used by novel plugins</string>
+    <string name="novel_plugin_cache_cleared">Novel plugin cache cleared</string>
     <string name="anime_from_library">Anime from library</string>
     <string name="downloaded_episodes">Downloaded episodes</string>
     <string name="local_manga_source">Local manga source</string>
@@ -531,6 +645,7 @@
     <string name="pref_backup_flags">Backup options</string>
     <string name="label_manga_extensions">Manga Extensions</string>
     <string name="label_anime_extensions">Anime Extensions</string>
+    <string name="label_novel_extensions">Novel Extensions</string>
     <string name="label_migration_manga">Migrate Manga</string>
     <string name="label_migration_anime">Migrate Anime</string>
     <string name="settings">Settings</string>
@@ -572,6 +687,7 @@
     <string name="unseen">Unseen</string>
     <string name="label_manga_extension_repos">Manga extension repos</string>
     <string name="label_anime_extension_repos">Anime extension repos</string>
+    <string name="label_novel_extension_repos">Novel extension repos</string>
     <string name="onboarding_storage_action_create_folder">Create default Aniyomi folder</string>
     <string name="download_speed_limit">Chapter download speed limit</string>
     <string name="download_speed_limit_hint">Set to 0 to disable the speed limit.</string>
@@ -747,7 +863,14 @@
     <string name="aurora_library_up_to_date">Your library is up to date!\nTap refresh to check for new episodes.</string>
     <string name="aurora_update_library">Update Library</string>
     <string name="aurora_refresh_library">Refresh Library</string>
-    <string name="aurora_updating_library">Updating library...</string>
+    <string name="aurora_refresh_current_tab">Refresh current tab</string>
+    <string name="aurora_refresh_all_tabs">Refresh all tabs</string>
+    <string name="aurora_new_episodes_count">New episodes: %d</string>
+    <string name="aurora_new_chapters_count">New chapters: %d</string>
+    <string name="aurora_updating_anime">Updating anime</string>
+    <string name="aurora_updating_manga">Updating manga</string>
+    <string name="aurora_updating_novel">Updating novel</string>
+    <string name="aurora_updating_library">Updating whole library</string>
     <string name="aurora_update_already_running">Update already running</string>
 
     <!-- Statistics Screen -->

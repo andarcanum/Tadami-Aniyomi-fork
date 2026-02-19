@@ -9,7 +9,9 @@ class GetAvailableScanlators(
 ) {
 
     private fun List<String>.cleanupAvailableScanlators(): Set<String> {
-        return mapNotNull { it.ifBlank { null } }.toSet()
+        return mapNotNull { scanlator ->
+            scanlator.trim().ifBlank { null }
+        }.toSet()
     }
 
     suspend fun await(mangaId: Long): Set<String> {

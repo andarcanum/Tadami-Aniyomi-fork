@@ -45,6 +45,17 @@ fun ScreenshotSheet(
     modifier: Modifier = Modifier,
 ) {
     var setArtTypeAs: ArtType? by remember { mutableStateOf(null) }
+    val screenshotProvider = remember(cachePath, showSubtitles, takeScreenshot) {
+        {
+            takeScreenshot(cachePath, showSubtitles)
+                ?.use { screenshot ->
+                    screenshot.readBytes()
+                }
+                ?.let { screenshotBytes ->
+                    { screenshotBytes.inputStream() }
+                }
+        }
+    }
 
     PlayerSheet(
         onDismissRequest = onDismissRequest,
@@ -80,7 +91,8 @@ fun ScreenshotSheet(
                     title = stringResource(MR.strings.action_share),
                     icon = Icons.Outlined.Share,
                     onClick = {
-                        onShare { takeScreenshot(cachePath, showSubtitles)!! }
+                        val provider = screenshotProvider() ?: return@ActionButton
+                        onShare(provider)
                     },
                 )
                 ActionButton(
@@ -88,7 +100,8 @@ fun ScreenshotSheet(
                     title = stringResource(MR.strings.action_save),
                     icon = Icons.Outlined.Save,
                     onClick = {
-                        onSave { takeScreenshot(cachePath, showSubtitles)!! }
+                        val provider = screenshotProvider() ?: return@ActionButton
+                        onSave(provider)
                     },
                 )
             }
@@ -115,12 +128,10 @@ fun ScreenshotSheet(
             title = stringResource(MR.strings.confirm_set_image_as_cover),
             modifier = Modifier.fillMaxWidth(fraction = 0.6F).padding(MaterialTheme.padding.medium),
             onConfirmRequest = {
-                onSetAsArt(setArtTypeAs!!) {
-                    takeScreenshot(
-                        cachePath,
-                        showSubtitles,
-                    )!!
-                }
+                val artType = setArtTypeAs ?: return@PlayerDialog
+                val provider = screenshotProvider() ?: return@PlayerDialog
+                onSetAsArt(artType, provider)
+                setArtTypeAs = null
             },
             onDismissRequest = { setArtTypeAs = null },
         )

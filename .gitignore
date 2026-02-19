@@ -22,6 +22,10 @@ tasks_error.log
 local.properties
 .env
 
+# Local Android tooling
+.android/
+.gitconfig
+
 # macOS specific files
 .DS_Store
 
@@ -43,6 +47,7 @@ build_errors.txt
 build_errors_utf8.txt
 .agents/
 .omc/
+.worktrees/
 
 # MCP & AI tools
 .mcp.json
@@ -55,6 +60,19 @@ node_modules/
 # Temporary files
 temp_result.xml
 *.tmp
+build_*.log
+
+# Local planning scratch files
+/findings.md
+/plan_for_plugins.md
+/progress.md
+/task_plan.md
+
+# Local caches
+app/cash/
 
 # Conductor tracks (local metadata)
 conductor/tracks/
+
+# Local docs workspace changes
+docs/

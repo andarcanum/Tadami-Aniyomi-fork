@@ -262,6 +262,7 @@ class ReaderActivity : BaseActivity() {
     }
 
     override fun onPause() {
+        (viewModel.state.value.viewer as? WebtoonViewer)?.let(viewModel::saveWebtoonScrollProgressOnExit)
         viewModel.flushReadTimer()
         viewModel.pauseAutoScroll()
         super.onPause()

@@ -34,108 +34,120 @@ class MigratorTest {
     }
 
     @Test
-    fun initialVersion() = runBlocking {
-        val strategy = migrationStrategyFactory.create(0, 1)
-        assertInstanceOf(InitialMigrationStrategy::class.java, strategy)
+    fun initialVersion() {
+        runBlocking {
+            val strategy = migrationStrategyFactory.create(0, 1)
+            assertInstanceOf(InitialMigrationStrategy::class.java, strategy)
 
-        val migrations = slot<List<Migration>>()
-        val execute = strategy(listOf(Migration.of(Migration.ALWAYS) { true }, Migration.of(2f) { false }))
+            val migrations = slot<List<Migration>>()
+            val execute = strategy(listOf(Migration.of(Migration.ALWAYS) { true }, Migration.of(2f) { false }))
 
-        execute.await()
+            execute.await()
 
-        verify { migrationJobFactory.create(capture(migrations)) }
-        assertEquals(1, migrations.captured.size)
-        verify { migrationCompletedListener() }
+            verify { migrationJobFactory.create(capture(migrations)) }
+            assertEquals(1, migrations.captured.size)
+            verify { migrationCompletedListener() }
+        }
     }
 
     @Test
-    fun sameVersion() = runBlocking {
-        val strategy = migrationStrategyFactory.create(1, 1)
-        assertInstanceOf(NoopMigrationStrategy::class.java, strategy)
+    fun sameVersion() {
+        runBlocking {
+            val strategy = migrationStrategyFactory.create(1, 1)
+            assertInstanceOf(NoopMigrationStrategy::class.java, strategy)
 
-        val execute = strategy(listOf(Migration.of(Migration.ALWAYS) { true }, Migration.of(2f) { false }))
+            val execute = strategy(listOf(Migration.of(Migration.ALWAYS) { true }, Migration.of(2f) { false }))
 
-        val result = execute.await()
-        assertFalse(result)
+            val result = execute.await()
+            assertFalse(result)
 
-        verify(exactly = 0) { migrationJobFactory.create(any()) }
+            verify(exactly = 0) { migrationJobFactory.create(any()) }
+        }
     }
 
     @Test
-    fun noMigrations() = runBlocking {
-        val strategy = migrationStrategyFactory.create(1, 2)
-        assertInstanceOf(VersionRangeMigrationStrategy::class.java, strategy)
+    fun noMigrations() {
+        runBlocking {
+            val strategy = migrationStrategyFactory.create(1, 2)
+            assertInstanceOf(VersionRangeMigrationStrategy::class.java, strategy)
 
-        val execute = strategy(emptyList())
+            val execute = strategy(emptyList())
 
-        val result = execute.await()
-        assertFalse(result)
+            val result = execute.await()
+            assertFalse(result)
 
-        verify(exactly = 0) { migrationJobFactory.create(any()) }
+            verify(exactly = 0) { migrationJobFactory.create(any()) }
+        }
     }
 
     @Test
-    fun smallMigration() = runBlocking {
-        val strategy = migrationStrategyFactory.create(1, 2)
-        assertInstanceOf(VersionRangeMigrationStrategy::class.java, strategy)
+    fun smallMigration() {
+        runBlocking {
+            val strategy = migrationStrategyFactory.create(1, 2)
+            assertInstanceOf(VersionRangeMigrationStrategy::class.java, strategy)
 
-        val migrations = slot<List<Migration>>()
-        val execute = strategy(listOf(Migration.of(Migration.ALWAYS) { true }, Migration.of(2f) { true }))
+            val migrations = slot<List<Migration>>()
+            val execute = strategy(listOf(Migration.of(Migration.ALWAYS) { true }, Migration.of(2f) { true }))
 
-        execute.await()
+            execute.await()
 
-        verify { migrationJobFactory.create(capture(migrations)) }
-        assertEquals(2, migrations.captured.size)
-        verify { migrationCompletedListener() }
+            verify { migrationJobFactory.create(capture(migrations)) }
+            assertEquals(2, migrations.captured.size)
+            verify { migrationCompletedListener() }
+        }
     }
 
     @Test
-    fun largeMigration() = runBlocking {
-        val input = listOf(
-            Migration.of(Migration.ALWAYS) { true },
-            Migration.of(2f) { true },
-            Migration.of(3f) { true },
-            Migration.of(4f) { true },
-            Migration.of(5f) { true },
-            Migration.of(6f) { true },
-            Migration.of(7f) { true },
-            Migration.of(8f) { true },
-            Migration.of(9f) { true },
-            Migration.of(10f) { true },
-        )
-
-        val strategy = migrationStrategyFactory.create(1, 10)
-        assertInstanceOf(VersionRangeMigrationStrategy::class.java, strategy)
-
-        val migrations = slot<List<Migration>>()
-        val execute = strategy(input)
-
-        execute.await()
-
-        verify { migrationJobFactory.create(capture(migrations)) }
-        assertEquals(10, migrations.captured.size)
-        verify { migrationCompletedListener() }
-    }
-
-    @Test
-    fun withinRangeMigration() = runBlocking {
-        val strategy = migrationStrategyFactory.create(1, 2)
-        assertInstanceOf(VersionRangeMigrationStrategy::class.java, strategy)
-
-        val migrations = slot<List<Migration>>()
-        val execute = strategy(
-            listOf(
+    fun largeMigration() {
+        runBlocking {
+            val input = listOf(
                 Migration.of(Migration.ALWAYS) { true },
                 Migration.of(2f) { true },
-                Migration.of(3f) { false },
-            ),
-        )
+                Migration.of(3f) { true },
+                Migration.of(4f) { true },
+                Migration.of(5f) { true },
+                Migration.of(6f) { true },
+                Migration.of(7f) { true },
+                Migration.of(8f) { true },
+                Migration.of(9f) { true },
+                Migration.of(10f) { true },
+            )
 
-        execute.await()
+            val strategy = migrationStrategyFactory.create(1, 10)
+            assertInstanceOf(VersionRangeMigrationStrategy::class.java, strategy)
 
-        verify { migrationJobFactory.create(capture(migrations)) }
-        assertEquals(2, migrations.captured.size)
-        verify { migrationCompletedListener() }
+            val migrations = slot<List<Migration>>()
+            val execute = strategy(input)
+
+            execute.await()
+
+            verify { migrationJobFactory.create(capture(migrations)) }
+            assertEquals(10, migrations.captured.size)
+            verify { migrationCompletedListener() }
+        }
+    }
+
+    @Test
+    fun withinRangeMigration() {
+        runBlocking {
+            val strategy = migrationStrategyFactory.create(1, 2)
+            assertInstanceOf(VersionRangeMigrationStrategy::class.java, strategy)
+
+            val migrations = slot<List<Migration>>()
+            val execute = strategy(
+                listOf(
+                    Migration.of(Migration.ALWAYS) { true },
+                    Migration.of(2f) { true },
+                    Migration.of(3f) { false },
+                ),
+            )
+
+            execute.await()
+
+            verify { migrationJobFactory.create(capture(migrations)) }
+            assertEquals(2, migrations.captured.size)
+            verify { migrationCompletedListener() }
+        }
     }
 
     companion object {

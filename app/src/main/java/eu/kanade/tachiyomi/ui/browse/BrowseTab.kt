@@ -15,6 +15,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -40,6 +41,10 @@ import eu.kanade.tachiyomi.ui.browse.manga.extension.MangaExtensionsScreenModel
 import eu.kanade.tachiyomi.ui.browse.manga.extension.mangaExtensionsTab
 import eu.kanade.tachiyomi.ui.browse.manga.migration.sources.migrateMangaSourceTab
 import eu.kanade.tachiyomi.ui.browse.manga.source.mangaSourcesTab
+import eu.kanade.tachiyomi.ui.browse.novel.extension.NovelExtensionsScreenModel
+import eu.kanade.tachiyomi.ui.browse.novel.extension.novelExtensionsTab
+import eu.kanade.tachiyomi.ui.browse.novel.migration.sources.migrateNovelSourceTab
+import eu.kanade.tachiyomi.ui.browse.novel.source.novelSourcesTab
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.channels.BufferOverflow
@@ -74,6 +79,23 @@ data object BrowseTab : Tab {
 
     private val switchToTabNumberChannel = Channel<Int>(1, BufferOverflow.DROP_OLDEST)
 
+    internal enum class BrowseSection {
+        Anime,
+        Manga,
+        Novel,
+    }
+
+    internal fun buildBrowseSections(
+        showMangaSection: Boolean,
+        showNovelSection: Boolean,
+    ): List<BrowseSection> {
+        return buildList {
+            add(BrowseSection.Anime)
+            if (showMangaSection) add(BrowseSection.Manga)
+            if (showNovelSection) add(BrowseSection.Novel)
+        }
+    }
+
     fun showExtension() {
         switchToTabNumberChannel.trySend(TAB_MANGA_EXTENSIONS)
     }
@@ -82,13 +104,19 @@ data object BrowseTab : Tab {
         switchToTabNumberChannel.trySend(TAB_ANIME_EXTENSIONS)
     }
 
+    fun showNovelExtension() {
+        switchToTabNumberChannel.trySend(TAB_NOVEL_EXTENSIONS)
+    }
+
     private const val TAB_ANIME_EXTENSIONS = 1
     private const val TAB_MANGA_EXTENSIONS = 4
+    private const val TAB_NOVEL_EXTENSIONS = 7
 
     @Composable
     override fun Content() {
         val context = LocalContext.current
         val showMangaSection by uiPreferences.showMangaSection().collectAsState()
+        val showNovelSection by uiPreferences.showNovelSection().collectAsState()
         val colors = AuroraTheme.colors
 
         val animeExtensionsScreenModel = rememberScreenModel { AnimeExtensionsScreenModel() }
@@ -96,6 +124,9 @@ data object BrowseTab : Tab {
 
         val mangaExtensionsScreenModel = rememberScreenModel { MangaExtensionsScreenModel() }
         val mangaExtensionsState by mangaExtensionsScreenModel.state.collectAsState()
+
+        val novelExtensionsScreenModel = rememberScreenModel { NovelExtensionsScreenModel() }
+        val novelExtensionsState by novelExtensionsScreenModel.state.collectAsState()
 
         val animeTabs = buildList {
             add(animeSourcesTab())
@@ -109,9 +140,32 @@ data object BrowseTab : Tab {
             add(migrateMangaSourceTab())
         }.toPersistentList()
 
-        var isAnimeTab by rememberSaveable { mutableStateOf(true) }
-        val currentTabs = if (isAnimeTab) animeTabs else mangaTabs
+        val novelTabs = buildList {
+            add(novelSourcesTab())
+            add(novelExtensionsTab(novelExtensionsScreenModel))
+            add(migrateNovelSourceTab())
+        }.toPersistentList()
+
+        val sections = remember(showMangaSection, showNovelSection) {
+            buildBrowseSections(
+                showMangaSection = showMangaSection,
+                showNovelSection = showNovelSection,
+            )
+        }
+        var currentSection by rememberSaveable { mutableStateOf(sections.firstOrNull() ?: BrowseSection.Anime) }
+        LaunchedEffect(sections) {
+            if (currentSection !in sections) {
+                currentSection = sections.firstOrNull() ?: BrowseSection.Anime
+            }
+        }
+        val effectiveSection = currentSection
+        val currentTabs = when (effectiveSection) {
+            BrowseSection.Anime -> animeTabs
+            BrowseSection.Manga -> mangaTabs
+            BrowseSection.Novel -> novelTabs
+        }
         val state = rememberPagerState { currentTabs.size }
+        val isMangaSection = effectiveSection == BrowseSection.Manga
 
         Box(
             modifier = Modifier
@@ -123,23 +177,48 @@ data object BrowseTab : Tab {
                     titleRes = MR.strings.browse,
                     tabs = currentTabs,
                     state = state,
-                    mangaSearchQuery = if (!isAnimeTab) mangaExtensionsState.searchQuery else null,
+                    mangaSearchQuery = if (isMangaSection) mangaExtensionsState.searchQuery else null,
                     onChangeMangaSearchQuery = mangaExtensionsScreenModel::search,
-                    animeSearchQuery = if (isAnimeTab) animeExtensionsState.searchQuery else null,
-                    onChangeAnimeSearchQuery = animeExtensionsScreenModel::search,
-                    isMangaTab = { !isAnimeTab },
+                    animeSearchQuery = when (effectiveSection) {
+                        BrowseSection.Anime -> animeExtensionsState.searchQuery
+                        BrowseSection.Novel -> novelExtensionsState.searchQuery
+                        BrowseSection.Manga -> null
+                    },
+                    onChangeAnimeSearchQuery = { query ->
+                        when (effectiveSection) {
+                            BrowseSection.Anime -> animeExtensionsScreenModel.search(query)
+                            BrowseSection.Novel -> novelExtensionsScreenModel.search(query)
+                            BrowseSection.Manga -> Unit
+                        }
+                    },
+                    isMangaTab = { isMangaSection },
                     scrollable = true,
                     applyStatusBarsPadding = true,
                     extraHeaderContent = {
-                        if (showMangaSection) {
+                        if (sections.size > 1) {
                             Spacer(modifier = Modifier.height(8.dp))
                             AuroraTabRow(
-                                tabs = kotlinx.collections.immutable.persistentListOf(
-                                    TabContent(AYMR.strings.label_anime, content = { _, _ -> }),
-                                    TabContent(AYMR.strings.label_manga, content = { _, _ -> }),
-                                ),
-                                selectedIndex = if (isAnimeTab) 0 else 1,
-                                onTabSelected = { isAnimeTab = it == 0 },
+                                tabs = sections.map { section ->
+                                    when (section) {
+                                        BrowseSection.Anime -> {
+                                            TabContent(AYMR.strings.label_anime, content = { _, _ -> })
+                                        }
+                                        BrowseSection.Manga -> {
+                                            TabContent(AYMR.strings.label_manga, content = { _, _ -> })
+                                        }
+                                        BrowseSection.Novel -> {
+                                            TabContent(AYMR.strings.label_novel, content = { _, _ -> })
+                                        }
+                                    }
+                                }.toPersistentList(),
+                                selectedIndex = when (effectiveSection) {
+                                    BrowseSection.Anime -> sections.indexOf(BrowseSection.Anime)
+                                    BrowseSection.Manga -> sections.indexOf(BrowseSection.Manga)
+                                    BrowseSection.Novel -> sections.indexOf(BrowseSection.Novel)
+                                },
+                                onTabSelected = { index ->
+                                    currentSection = sections.getOrNull(index) ?: BrowseSection.Anime
+                                },
                                 scrollable = false,
                             )
                             Spacer(modifier = Modifier.height(16.dp))
@@ -160,12 +239,16 @@ data object BrowseTab : Tab {
             switchToTabNumberChannel.receiveAsFlow()
                 .collectLatest { targetIndex ->
                     if (targetIndex == TAB_MANGA_EXTENSIONS && showMangaSection) {
-                        isAnimeTab = false
+                        currentSection = BrowseSection.Manga
                         // Extensions is index 1 in the manga sub-list
                         state.scrollToPage(1)
                     } else if (targetIndex == TAB_ANIME_EXTENSIONS) {
-                        isAnimeTab = true
+                        currentSection = BrowseSection.Anime
                         // Extensions is index 1 in the anime sub-list
+                        state.scrollToPage(1)
+                    } else if (targetIndex == TAB_NOVEL_EXTENSIONS && showNovelSection) {
+                        currentSection = BrowseSection.Novel
+                        // Extensions is index 1 in the novel sub-list
                         state.scrollToPage(1)
                     }
                 }

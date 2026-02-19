@@ -19,6 +19,9 @@ import eu.kanade.tachiyomi.ui.category.anime.animeCategoryTab
 import eu.kanade.tachiyomi.ui.category.manga.MangaCategoryEvent
 import eu.kanade.tachiyomi.ui.category.manga.MangaCategoryScreenModel
 import eu.kanade.tachiyomi.ui.category.manga.mangaCategoryTab
+import eu.kanade.tachiyomi.ui.category.novel.NovelCategoryEvent
+import eu.kanade.tachiyomi.ui.category.novel.NovelCategoryScreenModel
+import eu.kanade.tachiyomi.ui.category.novel.novelCategoryTab
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.persistentListOf
@@ -26,6 +29,7 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 
@@ -44,9 +48,14 @@ data object CategoriesTab : Tab {
         }
 
     private val switchToMangaCategoryTabChannel = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
+    private val switchToNovelCategoryTabChannel = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
 
     fun showMangaCategory() {
         switchToMangaCategoryTabChannel.trySend(Unit)
+    }
+
+    fun showNovelCategory() {
+        switchToNovelCategoryTabChannel.trySend(Unit)
     }
 
     @Composable
@@ -55,10 +64,12 @@ data object CategoriesTab : Tab {
 
         val animeCategoryScreenModel = rememberScreenModel { AnimeCategoryScreenModel() }
         val mangaCategoryScreenModel = rememberScreenModel { MangaCategoryScreenModel() }
+        val novelCategoryScreenModel = rememberScreenModel { NovelCategoryScreenModel() }
 
         val tabs = persistentListOf(
             animeCategoryTab(),
             mangaCategoryTab(),
+            novelCategoryTab(),
         )
 
         val state = rememberPagerState { tabs.size }
@@ -72,20 +83,35 @@ data object CategoriesTab : Tab {
             switchToMangaCategoryTabChannel.receiveAsFlow()
                 .collectLatest { state.scrollToPage(1) }
         }
+        LaunchedEffect(Unit) {
+            switchToNovelCategoryTabChannel.receiveAsFlow()
+                .collectLatest { state.scrollToPage(2) }
+        }
 
         LaunchedEffect(Unit) {
             (context as? MainActivity)?.ready = true
         }
 
         LaunchedEffect(Unit) {
-            mangaCategoryScreenModel.events.collectLatest { event ->
-                if (event is MangaCategoryEvent.LocalizedMessage) {
-                    context.toast(event.stringRes)
+            launch {
+                mangaCategoryScreenModel.events.collectLatest { event ->
+                    if (event is MangaCategoryEvent.LocalizedMessage) {
+                        context.toast(event.stringRes)
+                    }
                 }
             }
-            animeCategoryScreenModel.events.collectLatest { event ->
-                if (event is AnimeCategoryEvent.LocalizedMessage) {
-                    context.toast(event.stringRes)
+            launch {
+                animeCategoryScreenModel.events.collectLatest { event ->
+                    if (event is AnimeCategoryEvent.LocalizedMessage) {
+                        context.toast(event.stringRes)
+                    }
+                }
+            }
+            launch {
+                novelCategoryScreenModel.events.collectLatest { event ->
+                    if (event is NovelCategoryEvent.LocalizedMessage) {
+                        context.toast(event.stringRes)
+                    }
                 }
             }
         }

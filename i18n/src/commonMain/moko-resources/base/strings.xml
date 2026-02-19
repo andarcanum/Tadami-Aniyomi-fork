@@ -117,6 +117,7 @@
     <string name="action_web_view" translatable="false">WebView</string>
     <string name="action_migrate">Migrate</string>
     <string name="action_display_mode">Display mode</string>
+    <string name="pref_library_display_mode_per_media">Separate display mode for anime, manga, and novels</string>
     <string name="action_display">Display</string>
     <string name="action_display_grid">Compact grid</string>
     <string name="action_display_comfortable_grid">Comfortable grid</string>
@@ -333,6 +334,7 @@
     <string name="ext_downloading">Downloading</string>
     <string name="ext_installing">Installing</string>
     <string name="ext_installed">Installed</string>
+    <string name="ext_available">Available</string>
     <string name="ext_trust">Trust</string>
     <string name="ext_untrusted">Untrusted</string>
     <string name="ext_uninstall">Uninstall</string>
@@ -495,6 +497,7 @@
     <string name="pref_low">Low</string>
     <string name="pref_lowest">Lowest</string>
     <string name="pref_webtoon_disable_zoom_out">Disable zoom out</string>
+    <string name="pref_save_long_page_position">Save position inside long pages</string>
 
     <!-- Navigator (Page slider) settings -->
     <string name="pref_navigator_settings">Page slider</string>

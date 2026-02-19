@@ -1,0 +1,64 @@
+CREATE VIEW novelhistoryView AS
+SELECT
+    novel_history._id AS id,
+    novels._id AS novelId,
+    novel_chapters._id AS chapterId,
+    novels.title,
+    novels.thumbnail_url AS thumbnailUrl,
+    novels.source,
+    novels.favorite,
+    novels.cover_last_modified,
+    novel_chapters.chapter_number AS chapterNumber,
+    novel_history.last_read AS readAt,
+    novel_history.time_read AS readDuration,
+    max_last_read.last_read AS maxReadAt,
+    max_last_read.chapter_id AS maxReadAtChapterId
+FROM novels
+JOIN novel_chapters
+ON novels._id = novel_chapters.novel_id
+JOIN novel_history
+ON novel_chapters._id = novel_history.chapter_id
+JOIN (
+    SELECT novel_chapters.novel_id, novel_chapters._id AS chapter_id, MAX(novel_history.last_read) AS last_read
+    FROM novel_chapters JOIN novel_history
+    ON novel_chapters._id = novel_history.chapter_id
+    GROUP BY novel_chapters.novel_id
+) AS max_last_read
+ON novel_chapters.novel_id = max_last_read.novel_id;
+
+history:
+SELECT
+id,
+novelId,
+chapterId,
+title,
+thumbnailUrl,
+source,
+favorite,
+cover_last_modified,
+chapterNumber,
+readAt,
+readDuration
+FROM novelhistoryView
+WHERE novelhistoryView.readAt > 0
+AND maxReadAtChapterId = novelhistoryView.chapterId
+AND lower(novelhistoryView.title) LIKE ('%' || :query || '%')
+ORDER BY readAt DESC;
+
+getLatestHistory:
+SELECT
+id,
+novelId,
+chapterId,
+title,
+thumbnailUrl,
+source,
+favorite,
+cover_last_modified,
+chapterNumber,
+readAt,
+readDuration
+FROM novelhistoryView
+WHERE novelhistoryView.readAt > 0
+ORDER BY readAt DESC
+LIMIT 1;

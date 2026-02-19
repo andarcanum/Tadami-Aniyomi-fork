@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="action_add">Добавить</string>
     <string name="action_add_category">Добавить категорию</string>
@@ -245,6 +245,7 @@
     <string name="ext_downloading">Загружается</string>
     <string name="ext_installing">Устанавливается</string>
     <string name="ext_installed">Установлено</string>
+    <string name="ext_available">Доступно</string>
     <string name="ext_untrusted">Ненадёжное</string>
     <string name="ext_uninstall">Удалить</string>
     <string name="untrusted_extension">Ненадёжное расширение</string>
@@ -796,6 +797,7 @@
     <string name="ext_revoke_trust">Убрать доверие к ненадёжным расширениям</string>
     <string name="action_open_repo">Открыть репозиторий источника</string>
     <string name="pref_webtoon_disable_zoom_out">Отключить уменьшение масштаба</string>
+    <string name="pref_save_long_page_position">Сохранять позицию внутри длинных страниц</string>
     <string name="action_add_anyway">Добавить в любом случае</string>
     <string name="pref_display_profile">Пользовательский профиль отображения</string>
     <string name="action_migrate_duplicate">Перенести существующую серию</string>
@@ -874,4 +876,5 @@
     <string name="navigator_height_large">Большой</string>
     <string name="pref_use_theme_color">Использовать цвет темы</string>
     <string name="pref_navigator_show_tick_marks">Показывать маркеры страниц</string>
+    <string name="pref_library_display_mode_per_media">Раздельный режим отображения для аниме, манги и ранобэ</string>
 </resources>

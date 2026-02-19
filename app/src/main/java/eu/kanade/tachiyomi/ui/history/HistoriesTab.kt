@@ -23,8 +23,9 @@ import eu.kanade.tachiyomi.ui.history.anime.animeHistoryTab
 import eu.kanade.tachiyomi.ui.history.anime.resumeLastEpisodeSeenEvent
 import eu.kanade.tachiyomi.ui.history.manga.MangaHistoryScreenModel
 import eu.kanade.tachiyomi.ui.history.manga.mangaHistoryTab
+import eu.kanade.tachiyomi.ui.history.novel.novelHistoryTab
 import eu.kanade.tachiyomi.ui.main.MainActivity
-import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toPersistentList
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
@@ -67,10 +68,15 @@ data object HistoriesTab : Tab {
         val animeHistoryScreenModel = rememberScreenModel { AnimeHistoryScreenModel() }
         val animeSearchQuery by animeHistoryScreenModel.query.collectAsState()
 
-        val tabs = persistentListOf(
-            animeHistoryTab(context, fromMore),
-            mangaHistoryTab(context, fromMore),
-        )
+        val tabs = historyContentTabs()
+            .map { tab ->
+                when (tab) {
+                    HistoryContentTab.ANIME -> animeHistoryTab(context, fromMore)
+                    HistoryContentTab.MANGA -> mangaHistoryTab(context, fromMore)
+                    HistoryContentTab.NOVEL -> novelHistoryTab(context, fromMore)
+                }
+            }
+            .toPersistentList()
 
         if (theme.isAuroraStyle) {
             TabbedScreenAurora(
@@ -100,3 +106,17 @@ data object HistoriesTab : Tab {
 
 private const val TAB_ANIME = 0
 private const val TAB_MANGA = 1
+
+internal enum class HistoryContentTab {
+    ANIME,
+    MANGA,
+    NOVEL,
+}
+
+internal fun historyContentTabs(): List<HistoryContentTab> {
+    return listOf(
+        HistoryContentTab.ANIME,
+        HistoryContentTab.MANGA,
+        HistoryContentTab.NOVEL,
+    )
+}

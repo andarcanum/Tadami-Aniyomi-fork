@@ -22,6 +22,10 @@ data class ReaderChapter(val chapter: Chapter) {
 
     var requestedPage: Int = 0
 
+    var requestedPageOffset: Int = 0
+
+    var requestedPageOffsetRatioPpm: Int? = null
+
     private var references = 0
 
     constructor(chapter: tachiyomi.domain.items.chapter.model.Chapter) : this(chapter.toDbChapter())

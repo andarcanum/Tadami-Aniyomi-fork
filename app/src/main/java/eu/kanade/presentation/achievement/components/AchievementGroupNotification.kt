@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,12 +65,12 @@ fun AchievementGroupNotification(
     var isVisible by remember { mutableStateOf(false) }
     var clicked by remember { mutableStateOf(false) }
 
-    // Register callback with manager
-    LaunchedEffect(Unit) {
-        AchievementBannerManager.setOnShowGroupCallback { list ->
+    DisposableEffect(Unit) {
+        val unregister = AchievementBannerManager.registerOnShowGroupCallback { list ->
             achievements = list
             clicked = false
         }
+        onDispose(unregister)
     }
 
     // Auto-dismiss after delay (only if not clicked)
@@ -95,7 +96,7 @@ fun AchievementGroupNotification(
     )
 
     val slideOffset by animateFloatAsState(
-        targetValue = if (isVisible) 0f else -200f,
+        targetValue = if (isVisible) 0f else AchievementPopupSizeTokens.unlockSlideHiddenOffset,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessLow,
@@ -132,7 +133,10 @@ fun AchievementGroupNotification(
                 onViewAll = onViewAll,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(
+                        horizontal = AchievementPopupSizeTokens.groupOuterHorizontalPadding,
+                        vertical = AchievementPopupSizeTokens.groupOuterVerticalPadding,
+                    )
                     .offset(y = slideOffset.dp)
                     .scale(scale),
             )
@@ -153,17 +157,17 @@ private fun AchievementGroupBannerItem(
     Box(
         modifier = modifier
             .graphicsLayer {
-                shadowElevation = 20f
+                shadowElevation = AchievementPopupSizeTokens.groupShadowElevationPx
                 spotShadowColor = colors.accent.copy(alpha = 0.6f)
                 ambientShadowColor = colors.progressCyan.copy(alpha = 0.4f)
             }
             .shadow(
-                elevation = 20.dp,
-                shape = RoundedCornerShape(20.dp),
+                elevation = AchievementPopupSizeTokens.groupShadowElevation,
+                shape = RoundedCornerShape(AchievementPopupSizeTokens.groupContainerCornerRadius),
                 ambientColor = colors.accent.copy(alpha = 0.6f),
                 spotColor = colors.progressCyan.copy(alpha = 0.5f),
             )
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(AchievementPopupSizeTokens.groupContainerCornerRadius))
             .background(
                 brush = Brush.linearGradient(
                     colors = listOf(
@@ -176,27 +180,30 @@ private fun AchievementGroupBannerItem(
                 ),
             )
             .border(
-                width = 2.dp,
+                width = AchievementPopupSizeTokens.groupBorderWidth,
                 color = Color.White.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(AchievementPopupSizeTokens.groupContainerCornerRadius),
             )
             .clickable { onViewAll(achievements) }
-            .padding(20.dp),
+            .padding(AchievementPopupSizeTokens.groupContentPadding),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(AchievementPopupSizeTokens.groupRowSpacing),
         ) {
             // Icon with stacked badges effect
             Box(
-                modifier = Modifier.size(56.dp),
+                modifier = Modifier.size(AchievementPopupSizeTokens.groupIconSize),
                 contentAlignment = Alignment.Center,
             ) {
                 // Background circles for stacked effect
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
-                        .offset(x = 4.dp, y = (-4).dp)
+                        .size(AchievementPopupSizeTokens.groupStackedCircleSize)
+                        .offset(
+                            x = AchievementPopupSizeTokens.groupStackedCircleOffset,
+                            y = -AchievementPopupSizeTokens.groupStackedCircleOffset,
+                        )
                         .background(
                             color = Color.White.copy(alpha = 0.2f),
                             shape = CircleShape,
@@ -204,8 +211,11 @@ private fun AchievementGroupBannerItem(
                 )
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
-                        .offset(x = (-4).dp, y = 4.dp)
+                        .size(AchievementPopupSizeTokens.groupStackedCircleSize)
+                        .offset(
+                            x = -AchievementPopupSizeTokens.groupStackedCircleOffset,
+                            y = AchievementPopupSizeTokens.groupStackedCircleOffset,
+                        )
                         .background(
                             color = Color.White.copy(alpha = 0.3f),
                             shape = CircleShape,
@@ -214,7 +224,7 @@ private fun AchievementGroupBannerItem(
                 // Main icon
                 Box(
                     modifier = Modifier
-                        .size(52.dp)
+                        .size(AchievementPopupSizeTokens.groupMainIconContainerSize)
                         .background(
                             color = Color.White.copy(alpha = 0.25f),
                             shape = CircleShape,
@@ -225,22 +235,25 @@ private fun AchievementGroupBannerItem(
                         imageVector = Icons.Default.EmojiEvents,
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(32.dp),
+                        modifier = Modifier.size(AchievementPopupSizeTokens.groupMainIconSize),
                     )
                 }
 
                 // Count badge
                 Box(
                     modifier = Modifier
-                        .size(24.dp)
+                        .size(AchievementPopupSizeTokens.groupCountBadgeSize)
                         .align(Alignment.TopEnd)
-                        .offset(x = 2.dp, y = (-2).dp)
+                        .offset(
+                            x = AchievementPopupSizeTokens.groupCountBadgeOffset,
+                            y = -AchievementPopupSizeTokens.groupCountBadgeOffset,
+                        )
                         .background(
                             color = Color(0xFFFFD700),
                             shape = CircleShape,
                         )
                         .border(
-                            width = 1.5.dp,
+                            width = AchievementPopupSizeTokens.groupCountBadgeBorder,
                             color = Color.White,
                             shape = CircleShape,
                         ),
@@ -249,7 +262,7 @@ private fun AchievementGroupBannerItem(
                     Text(
                         text = count.toString(),
                         color = Color(0xFFFF6B00),
-                        fontSize = 12.sp,
+                        fontSize = AchievementPopupSizeTokens.groupCountTextSize,
                         fontWeight = FontWeight.ExtraBold,
                     )
                 }
@@ -262,9 +275,9 @@ private fun AchievementGroupBannerItem(
                 Text(
                     text = "НОВЫЕ ДОСТИЖЕНИЯ!",
                     color = Color.White.copy(alpha = 0.95f),
-                    fontSize = 12.sp,
+                    fontSize = AchievementPopupSizeTokens.groupHeaderFontSize,
                     fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 1.5.sp,
+                    letterSpacing = AchievementPopupSizeTokens.groupHeaderLetterSpacing,
                     style = TextStyle(
                         shadow = Shadow(
                             color = Color.Black.copy(alpha = 0.4f),
@@ -273,12 +286,12 @@ private fun AchievementGroupBannerItem(
                     ),
                 )
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(AchievementPopupSizeTokens.groupSectionSpacing))
 
                 Text(
                     text = "Получено $count достижений",
                     color = Color.White,
-                    fontSize = 18.sp,
+                    fontSize = AchievementPopupSizeTokens.groupMiddleFontSize,
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = 0.5.sp,
                     style = TextStyle(
@@ -289,16 +302,16 @@ private fun AchievementGroupBannerItem(
                     ),
                 )
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(AchievementPopupSizeTokens.groupSectionSpacing))
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(AchievementPopupSizeTokens.groupPointsRowSpacing),
                 ) {
                     Text(
                         text = "+$totalPoints очков",
                         color = Color(0xFFFFD700),
-                        fontSize = 14.sp,
+                        fontSize = AchievementPopupSizeTokens.groupPointsFontSize,
                         fontWeight = FontWeight.ExtraBold,
                         style = TextStyle(
                             shadow = Shadow(
@@ -315,7 +328,7 @@ private fun AchievementGroupBannerItem(
                 imageVector = Icons.Default.KeyboardArrowDown,
                 contentDescription = "Смотреть",
                 tint = Color.White.copy(alpha = 0.8f),
-                modifier = Modifier.size(32.dp),
+                modifier = Modifier.size(AchievementPopupSizeTokens.groupArrowSize),
             )
         }
     }

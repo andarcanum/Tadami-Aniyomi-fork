@@ -28,9 +28,11 @@ object Notifications {
     private const val GROUP_LIBRARY = "group_library"
     const val CHANNEL_LIBRARY_PROGRESS = "library_progress_channel"
     const val ID_LIBRARY_PROGRESS = -101
+    const val ID_NOVEL_LIBRARY_PROGRESS = -111
     const val ID_LIBRARY_SIZE_WARNING = -103
     const val CHANNEL_LIBRARY_ERROR = "library_errors_channel"
     const val ID_LIBRARY_ERROR = -102
+    const val ID_NOVEL_LIBRARY_ERROR = -112
 
     /**
      * Notification channel and ids used by the downloader.
@@ -48,8 +50,10 @@ object Notifications {
      */
     const val CHANNEL_NEW_CHAPTERS_EPISODES = "new_chapters_episodes_channel"
     const val ID_NEW_CHAPTERS = -301
+    const val ID_NEW_NOVEL_CHAPTERS = -302
     const val ID_NEW_EPISODES = -1301
     const val GROUP_NEW_CHAPTERS = "eu.kanade.tachiyomi.NEW_CHAPTERS"
+    const val GROUP_NEW_NOVEL_CHAPTERS = "eu.kanade.tachiyomi.NEW_NOVEL_CHAPTERS"
     const val GROUP_NEW_EPISODES = "eu.kanade.tachiyomi.NEW_EPISODES"
 
     /**

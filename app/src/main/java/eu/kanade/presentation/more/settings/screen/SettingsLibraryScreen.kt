@@ -21,6 +21,7 @@ import eu.kanade.presentation.more.settings.PreferenceItem
 import eu.kanade.presentation.more.settings.widget.TriStateListDialog
 import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.manga.MangaLibraryUpdateJob
+import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
 import eu.kanade.tachiyomi.ui.category.CategoriesTab
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
@@ -30,6 +31,8 @@ import tachiyomi.domain.category.anime.interactor.GetAnimeCategories
 import tachiyomi.domain.category.manga.interactor.GetMangaCategories
 import tachiyomi.domain.category.manga.interactor.ResetMangaCategoryFlags
 import tachiyomi.domain.category.model.Category
+import tachiyomi.domain.category.novel.interactor.GetNovelCategories
+import tachiyomi.domain.category.novel.model.NovelCategory
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.DEVICE_CHARGING
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.DEVICE_NETWORK_NOT_METERED
@@ -62,6 +65,8 @@ object SettingsLibraryScreen : SearchableSettings {
         val allCategories by getCategories.subscribe().collectAsState(initial = emptyList())
         val getAnimeCategories = remember { Injekt.get<GetAnimeCategories>() }
         val allAnimeCategories by getAnimeCategories.subscribe().collectAsState(initial = emptyList())
+        val getNovelCategories = remember { Injekt.get<GetNovelCategories>() }
+        val allNovelCategories by getNovelCategories.subscribe().collectAsState(initial = emptyList())
         val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
 
         return listOf(
@@ -69,9 +74,15 @@ object SettingsLibraryScreen : SearchableSettings {
                 LocalNavigator.currentOrThrow,
                 allCategories,
                 allAnimeCategories,
+                allNovelCategories.toCategoryList(),
                 libraryPreferences,
             ),
-            getGlobalUpdateGroup(allCategories, allAnimeCategories, libraryPreferences),
+            getGlobalUpdateGroup(
+                allMangaCategories = allCategories,
+                allAnimeCategories = allAnimeCategories,
+                allNovelCategories = allNovelCategories.toCategoryList(),
+                libraryPreferences = libraryPreferences,
+            ),
             getSeasonBehaviorGroup(libraryPreferences),
             getAnimeBehaviorGroup(libraryPreferences),
             getBehaviorGroup(libraryPreferences),
@@ -83,22 +94,28 @@ object SettingsLibraryScreen : SearchableSettings {
         navigator: Navigator,
         allCategories: List<Category>,
         allAnimeCategories: List<Category>,
+        allNovelCategories: List<Category>,
         libraryPreferences: LibraryPreferences,
     ): Preference.PreferenceGroup {
         val scope = rememberCoroutineScope()
         val userCategoriesCount = allCategories.filterNot(Category::isSystemCategory).size
         val userAnimeCategoriesCount = allAnimeCategories.filterNot(Category::isSystemCategory).size
+        val userNovelCategoriesCount = allNovelCategories.filterNot(Category::isSystemCategory).size
 
         // For default category
         val mangaIds = listOf(libraryPreferences.defaultMangaCategory().defaultValue()) +
             allCategories.fastMap { it.id.toInt() }
         val animeIds = listOf(libraryPreferences.defaultAnimeCategory().defaultValue()) +
             allAnimeCategories.fastMap { it.id.toInt() }
+        val novelIds = listOf(libraryPreferences.defaultNovelCategory().defaultValue()) +
+            allNovelCategories.fastMap { it.id.toInt() }
 
         val mangaLabels = listOf(stringResource(MR.strings.default_category_summary)) +
             allCategories.fastMap { it.visualName }
         val animeLabels = listOf(stringResource(MR.strings.default_category_summary)) +
             allAnimeCategories.fastMap { it.visualName }
+        val novelLabels = listOf(stringResource(MR.strings.default_category_summary)) +
+            allNovelCategories.fastMap { it.visualName }
 
         return Preference.PreferenceGroup(
             title = stringResource(AYMR.strings.general_categories),
@@ -116,6 +133,23 @@ object SettingsLibraryScreen : SearchableSettings {
                     preference = libraryPreferences.defaultAnimeCategory(),
                     entries = animeIds.zip(animeLabels).toMap().toImmutableMap(),
                     title = stringResource(AYMR.strings.default_anime_category),
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(AYMR.strings.action_edit_novel_categories),
+                    subtitle = pluralStringResource(
+                        MR.plurals.num_categories,
+                        count = userNovelCategoriesCount,
+                        userNovelCategoriesCount,
+                    ),
+                    onClick = {
+                        navigator.push(CategoriesTab)
+                        CategoriesTab.showNovelCategory()
+                    },
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = libraryPreferences.defaultNovelCategory(),
+                    entries = novelIds.zip(novelLabels).toMap().toImmutableMap(),
+                    title = stringResource(AYMR.strings.default_novel_category),
                 ),
                 Preference.PreferenceItem.TextPreference(
                     title = stringResource(AYMR.strings.action_edit_manga_categories),
@@ -158,6 +192,7 @@ object SettingsLibraryScreen : SearchableSettings {
     private fun getGlobalUpdateGroup(
         allMangaCategories: List<Category>,
         allAnimeCategories: List<Category>,
+        allNovelCategories: List<Category>,
         libraryPreferences: LibraryPreferences,
     ): Preference.PreferenceGroup {
         val context = LocalContext.current
@@ -188,6 +223,32 @@ object SettingsLibraryScreen : SearchableSettings {
                             .toSet(),
                     )
                     showAnimeCategoriesDialog = false
+                },
+            )
+        }
+
+        val novelAutoUpdateCategoriesPref = libraryPreferences.novelUpdateCategories()
+        val novelAutoUpdateCategoriesExcludePref = libraryPreferences.novelUpdateCategoriesExclude()
+
+        val includedNovel by novelAutoUpdateCategoriesPref.collectAsState()
+        val excludedNovel by novelAutoUpdateCategoriesExcludePref.collectAsState()
+        var showNovelCategoriesDialog by rememberSaveable { mutableStateOf(false) }
+        if (showNovelCategoriesDialog) {
+            TriStateListDialog(
+                title = stringResource(AYMR.strings.novel_categories),
+                message = stringResource(AYMR.strings.pref_novel_library_update_categories_details),
+                items = allNovelCategories,
+                initialChecked = includedNovel.mapNotNull { id -> allNovelCategories.find { it.id.toString() == id } },
+                initialInversed = excludedNovel.mapNotNull { id -> allNovelCategories.find { it.id.toString() == id } },
+                itemLabel = { it.visualName },
+                onDismissRequest = { showNovelCategoriesDialog = false },
+                onValueChanged = { newIncluded, newExcluded ->
+                    novelAutoUpdateCategoriesPref.set(newIncluded.map { it.id.toString() }.toSet())
+                    novelAutoUpdateCategoriesExcludePref.set(
+                        newExcluded.map { it.id.toString() }
+                            .toSet(),
+                    )
+                    showNovelCategoriesDialog = false
                 },
             )
         }
@@ -236,6 +297,7 @@ object SettingsLibraryScreen : SearchableSettings {
                     onValueChanged = {
                         MangaLibraryUpdateJob.setupTask(context, it)
                         AnimeLibraryUpdateJob.setupTask(context, it)
+                        NovelLibraryUpdateJob.setupTask(context, it)
                         true
                     },
                 ),
@@ -254,6 +316,7 @@ object SettingsLibraryScreen : SearchableSettings {
                         ContextCompat.getMainExecutor(context).execute {
                             MangaLibraryUpdateJob.setupTask(context)
                             AnimeLibraryUpdateJob.setupTask(context)
+                            NovelLibraryUpdateJob.setupTask(context)
                         }
                         true
                     },
@@ -266,6 +329,15 @@ object SettingsLibraryScreen : SearchableSettings {
                         excluded = excludedAnime,
                     ),
                     onClick = { showAnimeCategoriesDialog = true },
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(AYMR.strings.novel_categories),
+                    subtitle = getCategoriesLabel(
+                        allCategories = allNovelCategories,
+                        included = includedNovel,
+                        excluded = excludedNovel,
+                    ),
+                    onClick = { showNovelCategoriesDialog = true },
                 ),
                 Preference.PreferenceItem.TextPreference(
                     title = stringResource(AYMR.strings.manga_categories),
@@ -322,6 +394,7 @@ object SettingsLibraryScreen : SearchableSettings {
     private fun getBehaviorGroup(
         libraryPreferences: LibraryPreferences,
     ): Preference.PreferenceGroup {
+        val novelLabel = stringResource(AYMR.strings.label_novel)
         return Preference.PreferenceGroup(
             title = stringResource(AYMR.strings.pref_behavior),
             preferenceItems = persistentListOf(
@@ -352,6 +425,34 @@ object SettingsLibraryScreen : SearchableSettings {
                             stringResource(MR.strings.action_download),
                     ),
                     title = stringResource(MR.strings.pref_chapter_swipe_end),
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = libraryPreferences.swipeNovelChapterStartAction(),
+                    entries = persistentMapOf(
+                        LibraryPreferences.NovelSwipeAction.Disabled to
+                            stringResource(MR.strings.disabled),
+                        LibraryPreferences.NovelSwipeAction.ToggleBookmark to
+                            stringResource(MR.strings.action_bookmark),
+                        LibraryPreferences.NovelSwipeAction.ToggleRead to
+                            stringResource(MR.strings.action_mark_as_read),
+                        LibraryPreferences.NovelSwipeAction.Download to
+                            stringResource(MR.strings.action_download),
+                    ),
+                    title = "${stringResource(MR.strings.pref_chapter_swipe_start)} ($novelLabel)",
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = libraryPreferences.swipeNovelChapterEndAction(),
+                    entries = persistentMapOf(
+                        LibraryPreferences.NovelSwipeAction.Disabled to
+                            stringResource(MR.strings.disabled),
+                        LibraryPreferences.NovelSwipeAction.ToggleBookmark to
+                            stringResource(MR.strings.action_bookmark),
+                        LibraryPreferences.NovelSwipeAction.ToggleRead to
+                            stringResource(MR.strings.action_mark_as_read),
+                        LibraryPreferences.NovelSwipeAction.Download to
+                            stringResource(MR.strings.action_download),
+                    ),
+                    title = "${stringResource(MR.strings.pref_chapter_swipe_end)} ($novelLabel)",
                 ),
                 Preference.PreferenceItem.MultiSelectListPreference(
                     preference = libraryPreferences.markDuplicateReadChapterAsRead(),
@@ -417,6 +518,18 @@ object SettingsLibraryScreen : SearchableSettings {
                     title = stringResource(AYMR.strings.pref_mark_duplicate_seen_episode_seen),
                 ),
             ),
+        )
+    }
+}
+
+private fun List<NovelCategory>.toCategoryList(): List<Category> {
+    return map {
+        Category(
+            id = it.id,
+            name = it.name,
+            order = it.order,
+            flags = it.flags,
+            hidden = it.hidden,
         )
     }
 }

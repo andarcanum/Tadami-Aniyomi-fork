@@ -13,18 +13,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.onStart
-import kotlinx.coroutines.flow.receiveAsFlow
-import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -44,7 +43,6 @@ import logcat.LogPriority
 import tachiyomi.core.common.storage.extension
 import tachiyomi.core.common.storage.nameWithoutExtension
 import tachiyomi.core.common.util.lang.launchIO
-import tachiyomi.core.common.util.lang.launchNonCancellable
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.items.episode.model.Episode
@@ -72,16 +70,19 @@ class AnimeDownloadCache(
 
     private val scope = CoroutineScope(Dispatchers.IO)
 
-    private val _changes: Channel<Unit> = Channel(Channel.UNLIMITED)
-    val changes = _changes.receiveAsFlow()
-        .onStart { emit(Unit) }
-        .shareIn(scope, SharingStarted.Lazily, 1)
+    private val _changes = MutableSharedFlow<Unit>(
+        replay = 1,
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val changes = _changes.asSharedFlow()
 
     /**
      * The interval after which this cache should be invalidated. 1 hour shouldn't cause major
      * issues, as the cache is only used for UI feedback.
      */
     private val renewInterval = 1.hours.inWholeMilliseconds
+    private val failedRenewRetryInterval = 30.seconds.inWholeMilliseconds
 
     /**
      * The last time the cache was refreshed.
@@ -101,6 +102,8 @@ class AnimeDownloadCache(
     private var rootDownloadsDir = RootDirectory(storageManager.getDownloadsDirectory())
 
     init {
+        _changes.tryEmit(Unit)
+
         // Attempt to read cache file
         scope.launch {
             rootDownloadsDirMutex.withLock {
@@ -332,18 +335,22 @@ class AnimeDownloadCache(
             return
         }
 
+        var renewalSucceeded = false
         renewalJob = scope.launchIO {
             if (lastRenew == 0L) {
                 _isInitializing.emit(true)
             }
 
             // Try to wait until extensions and sources have loaded
-            var sources = emptyList<AnimeSource>()
-            withTimeoutOrNull(30.seconds) {
+            val sources = withTimeoutOrNull(30.seconds) {
                 extensionManager.isInitialized.first { it }
                 sourceManager.isInitialized.first { it }
-
-                sources = getSources()
+                getSources()
+            }
+            if (sources == null || sources.isEmpty()) {
+                logcat(LogPriority.WARN) { "AnimeDownloadCache: sources unavailable, keeping previous cache snapshot" }
+                _isInitializing.emit(false)
+                return@launchIO
             }
 
             val sourceMap = sources.associate {
@@ -393,13 +400,20 @@ class AnimeDownloadCache(
                 rootDownloadsDir = updatedRootDir
             }
 
+            renewalSucceeded = true
             _isInitializing.emit(false)
         }.also {
             it.invokeOnCompletion(onCancelling = true) { exception ->
+                scope.launch { _isInitializing.emit(false) }
                 if (exception != null && exception !is CancellationException) {
                     logcat(LogPriority.ERROR, exception) { "Failed to create download cache" }
                 }
-                lastRenew = System.currentTimeMillis()
+                val now = System.currentTimeMillis()
+                lastRenew = if (exception == null && renewalSucceeded) {
+                    now
+                } else {
+                    now - renewInterval + failedRenewRetryInterval
+                }
                 notifyChanges()
             }
         }
@@ -413,9 +427,7 @@ class AnimeDownloadCache(
     }
 
     private fun notifyChanges() {
-        scope.launchNonCancellable {
-            _changes.send(Unit)
-        }
+        _changes.tryEmit(Unit)
         updateDiskCache()
     }
 

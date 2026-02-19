@@ -7,6 +7,9 @@ import tachiyomi.i18n.aniyomi.AYMR
 
 data class BackupOptions(
     val libraryEntries: Boolean = true,
+    val backupManga: Boolean = true,
+    val backupAnime: Boolean = true,
+    val backupNovel: Boolean = true,
     val categories: Boolean = true,
     val chapters: Boolean = true,
     val tracking: Boolean = true,
@@ -21,6 +24,10 @@ data class BackupOptions(
     val achievements: Boolean = true,
     val stats: Boolean = true,
 ) {
+
+    private fun hasAnySelectedLibraryType(): Boolean {
+        return backupManga || backupAnime || backupNovel
+    }
 
     fun asBooleanArray() = booleanArrayOf(
         libraryEntries,
@@ -37,16 +44,22 @@ data class BackupOptions(
         extensions,
         achievements,
         stats,
+        backupManga,
+        backupAnime,
+        backupNovel,
     )
 
-    fun canCreate() = libraryEntries ||
-        categories ||
-        appSettings ||
-        extensionRepoSettings ||
-        customButton ||
-        sourceSettings ||
-        achievements ||
-        stats
+    fun canCreate(): Boolean {
+        if (libraryEntries && !hasAnySelectedLibraryType()) return false
+        return libraryEntries ||
+            categories ||
+            appSettings ||
+            extensionRepoSettings ||
+            customButton ||
+            sourceSettings ||
+            achievements ||
+            stats
+    }
 
     companion object {
         val libraryOptions = persistentListOf(
@@ -54,6 +67,24 @@ data class BackupOptions(
                 label = AYMR.strings.entries,
                 getter = BackupOptions::libraryEntries,
                 setter = { options, enabled -> options.copy(libraryEntries = enabled) },
+            ),
+            Entry(
+                label = AYMR.strings.label_manga,
+                getter = BackupOptions::backupManga,
+                setter = { options, enabled -> options.copy(backupManga = enabled) },
+                enabled = { it.libraryEntries },
+            ),
+            Entry(
+                label = AYMR.strings.label_anime,
+                getter = BackupOptions::backupAnime,
+                setter = { options, enabled -> options.copy(backupAnime = enabled) },
+                enabled = { it.libraryEntries },
+            ),
+            Entry(
+                label = AYMR.strings.label_novel,
+                getter = BackupOptions::backupNovel,
+                setter = { options, enabled -> options.copy(backupNovel = enabled) },
+                enabled = { it.libraryEntries },
             ),
             Entry(
                 label = AYMR.strings.chapters_episodes,
@@ -151,6 +182,9 @@ data class BackupOptions(
             extensions = array.getOrNull(11) ?: false,
             achievements = array.getOrNull(12) ?: true,
             stats = array.getOrNull(13) ?: true,
+            backupManga = array.getOrNull(14) ?: true,
+            backupAnime = array.getOrNull(15) ?: true,
+            backupNovel = array.getOrNull(16) ?: true,
         )
     }
 

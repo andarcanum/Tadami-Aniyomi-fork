@@ -49,4 +49,5 @@ val migrations: List<Migration>
         CategoryPreferencesCleanupMigration(),
         PrefLangMigration(),
         AuroraSectionMigration(),
+        SetupNovelLibraryUpdateMigration(),
     )

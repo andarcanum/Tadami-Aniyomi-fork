@@ -123,8 +123,10 @@ object SettingsAppearanceScreen : SearchableSettings {
 
         val showAnimeSectionPref = uiPreferences.showAnimeSection()
         val showMangaSectionPref = uiPreferences.showMangaSection()
+        val showNovelSectionPref = uiPreferences.showNovelSection()
         val showAnimeSection by showAnimeSectionPref.collectAsState()
         val showMangaSection by showMangaSectionPref.collectAsState()
+        val showNovelSection by showNovelSectionPref.collectAsState()
 
         return Preference.PreferenceGroup(
             title = stringResource(MR.strings.pref_category_display),
@@ -158,25 +160,37 @@ object SettingsAppearanceScreen : SearchableSettings {
                 Preference.PreferenceItem.SwitchPreference(
                     preference = showAnimeSectionPref,
                     title = stringResource(AYMR.strings.pref_show_anime_section),
-                    subtitle = if (!showMangaSection) {
+                    subtitle = if (!showMangaSection && !showNovelSection) {
                         stringResource(AYMR.strings.pref_show_section_required)
                     } else {
                         null
                     },
                     onValueChanged = { newValue ->
-                        newValue || showMangaSection
+                        newValue || showMangaSection || showNovelSection
                     },
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = showMangaSectionPref,
                     title = stringResource(AYMR.strings.pref_show_manga_section),
-                    subtitle = if (!showAnimeSection) {
+                    subtitle = if (!showAnimeSection && !showNovelSection) {
                         stringResource(AYMR.strings.pref_show_section_required)
                     } else {
                         null
                     },
                     onValueChanged = { newValue ->
-                        newValue || showAnimeSection
+                        newValue || showAnimeSection || showNovelSection
+                    },
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = showNovelSectionPref,
+                    title = stringResource(AYMR.strings.pref_show_novel_section),
+                    subtitle = if (!showAnimeSection && !showMangaSection) {
+                        stringResource(AYMR.strings.pref_show_section_required)
+                    } else {
+                        null
+                    },
+                    onValueChanged = { newValue ->
+                        newValue || showAnimeSection || showMangaSection
                     },
                 ),
                 Preference.PreferenceItem.ListPreference(

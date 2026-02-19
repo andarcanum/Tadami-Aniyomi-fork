@@ -1,7 +1,9 @@
 package eu.kanade.presentation.components
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -38,27 +41,37 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.Hyphens
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.presentation.theme.AuroraTheme
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
+import kotlin.math.roundToInt
 
 data class TabState(
     val tabs: ImmutableList<TabContent>,
@@ -86,17 +99,85 @@ fun TabbedScreenAurora(
     onNameClick: (() -> Unit)? = null,
     applyStatusBarsPadding: Boolean = true,
     showTabs: Boolean = true,
+    instantTabSwitching: Boolean = false,
     extraHeaderContent: @Composable () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val density = LocalDensity.current
+    val switchThresholdPx = with(density) { 120.dp.toPx() }
+    val maxBouncePx = with(density) { 16.dp.toPx() }
+    var instantSelectedPage by rememberSaveable { mutableIntStateOf(0) }
+    var previousInstantTabSwitching by remember { mutableStateOf(instantTabSwitching) }
+    val currentPage = if (tabs.isEmpty()) {
+        0
+    } else if (instantTabSwitching) {
+        instantSelectedPage.coerceIn(0, tabs.lastIndex)
+    } else {
+        state.currentPage.coerceIn(0, tabs.lastIndex)
+    }
 
-    val isMangaPage = isMangaTab(state.currentPage)
+    val isMangaPage = isMangaTab(currentPage)
     val activeSearchQuery = if (isMangaPage) mangaSearchQuery else animeSearchQuery
     val onChangeSearchQuery = if (isMangaPage) onChangeMangaSearchQuery else onChangeAnimeSearchQuery
     val isSearchActive = activeSearchQuery != null
 
     val colors = AuroraTheme.colors
+    var edgeBounceTargetPx by remember { mutableFloatStateOf(0f) }
+    val edgeBounceOffsetPx by animateFloatAsState(
+        targetValue = edgeBounceTargetPx,
+        label = "auroraEdgeBounce",
+    )
+
+    val onTabSelected: (Int) -> Unit = { index ->
+        if (tabs.isNotEmpty()) {
+            val targetIndex = index.coerceIn(0, tabs.lastIndex)
+            if (instantTabSwitching) {
+                instantSelectedPage = targetIndex
+            } else {
+                scope.launch {
+                    state.animateScrollToPage(targetIndex)
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(instantTabSwitching, tabs.size) {
+        if (tabs.isEmpty()) return@LaunchedEffect
+        val lastIndex = tabs.lastIndex
+        if (instantTabSwitching) {
+            instantSelectedPage = state.currentPage.coerceIn(0, lastIndex)
+        } else if (state.currentPage > lastIndex) {
+            state.scrollToPage(lastIndex)
+        }
+    }
+    LaunchedEffect(instantTabSwitching, state.currentPage, tabs.size) {
+        if (!instantTabSwitching || tabs.isEmpty()) return@LaunchedEffect
+        val targetIndex = state.currentPage.coerceIn(0, tabs.lastIndex)
+        if (instantSelectedPage != targetIndex) {
+            instantSelectedPage = targetIndex
+        }
+    }
+    LaunchedEffect(instantTabSwitching, instantSelectedPage, state.currentPage, tabs.size) {
+        if (tabs.isEmpty()) return@LaunchedEffect
+
+        if (instantTabSwitching) {
+            val targetIndex = instantSelectedPage.coerceIn(0, tabs.lastIndex)
+            if (state.currentPage != targetIndex) {
+                state.scrollToPage(targetIndex)
+            }
+        } else {
+            // Sync pager only when transitioning from instant switching to pager mode.
+            if (previousInstantTabSwitching) {
+                val targetIndex = instantSelectedPage.coerceIn(0, tabs.lastIndex)
+                if (state.currentPage != targetIndex) {
+                    state.scrollToPage(targetIndex)
+                }
+            }
+        }
+
+        previousInstantTabSwitching = instantTabSwitching
+    }
 
     Box(
         modifier = modifier
@@ -117,7 +198,7 @@ fun TabbedScreenAurora(
                     onSearchClose = { onChangeSearchQuery(null) },
                     onSearchQueryChange = { onChangeSearchQuery(it) },
                     tabs = tabs,
-                    currentPage = state.currentPage,
+                    currentPage = currentPage,
                     navigateUp = null, // Top-level tabs generally don't have up navigation in this context
                 )
             }
@@ -128,27 +209,93 @@ fun TabbedScreenAurora(
             if (showTabs) {
                 AuroraTabRow(
                     tabs = tabs,
-                    selectedIndex = state.currentPage,
-                    onTabSelected = { index -> scope.launch { state.animateScrollToPage(index) } },
+                    selectedIndex = currentPage,
+                    onTabSelected = onTabSelected,
                     scrollable = scrollable,
                 )
             }
 
-            HorizontalPager(
-                modifier = Modifier.fillMaxSize(),
-                state = state,
-                verticalAlignment = Alignment.Top,
-            ) { page ->
+            if (instantTabSwitching) {
                 val tabState = TabState(
                     tabs = tabs,
-                    selectedIndex = state.currentPage,
-                    onTabSelected = { index -> scope.launch { state.animateScrollToPage(index) } },
+                    selectedIndex = currentPage,
+                    onTabSelected = onTabSelected,
                 )
-                CompositionLocalProvider(LocalTabState provides tabState) {
-                    tabs[page].content(
-                        PaddingValues(bottom = 16.dp),
-                        snackbarHostState,
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(currentPage, tabs.size, switchThresholdPx, maxBouncePx) {
+                            var totalDragPx = 0f
+                            detectHorizontalDragGestures(
+                                onDragStart = {
+                                    totalDragPx = 0f
+                                    edgeBounceTargetPx = 0f
+                                },
+                                onHorizontalDrag = { _, dragAmount ->
+                                    totalDragPx += dragAmount
+                                },
+                                onDragCancel = {
+                                    totalDragPx = 0f
+                                    edgeBounceTargetPx = 0f
+                                },
+                                onDragEnd = {
+                                    val decision = resolveInstantTabSwitch(
+                                        currentIndex = currentPage,
+                                        lastIndex = tabs.lastIndex,
+                                        totalDragPx = totalDragPx,
+                                        switchThresholdPx = switchThresholdPx,
+                                    )
+
+                                    if (decision.shouldBounceEdge) {
+                                        val direction = if (totalDragPx > 0f) 1f else -1f
+                                        scope.launch {
+                                            edgeBounceTargetPx = direction * maxBouncePx
+                                            delay(90)
+                                            edgeBounceTargetPx = 0f
+                                        }
+                                    } else {
+                                        edgeBounceTargetPx = 0f
+                                    }
+
+                                    if (decision.targetIndex != currentPage) {
+                                        onTabSelected(decision.targetIndex)
+                                    }
+
+                                    totalDragPx = 0f
+                                },
+                            )
+                        }
+                        .offset { IntOffset(edgeBounceOffsetPx.roundToInt(), 0) },
+                ) {
+                    if (tabs.isNotEmpty()) {
+                        val page = currentPage
+                        key(page) {
+                            CompositionLocalProvider(LocalTabState provides tabState) {
+                                tabs[page].content(
+                                    PaddingValues(bottom = 16.dp),
+                                    snackbarHostState,
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                HorizontalPager(
+                    modifier = Modifier.fillMaxSize(),
+                    state = state,
+                    verticalAlignment = Alignment.Top,
+                ) { page ->
+                    val tabState = TabState(
+                        tabs = tabs,
+                        selectedIndex = state.currentPage,
+                        onTabSelected = onTabSelected,
                     )
+                    CompositionLocalProvider(LocalTabState provides tabState) {
+                        tabs[page].content(
+                            PaddingValues(bottom = 16.dp),
+                            snackbarHostState,
+                        )
+                    }
                 }
             }
         }

@@ -14,6 +14,12 @@ sealed interface StatsData {
         val totalSeenDuration: Long,
     ) : StatsData
 
+    data class NovelOverview(
+        val libraryNovelCount: Int,
+        val completedNovelCount: Int,
+        val totalReadDuration: Long,
+    ) : StatsData
+
     data class MangaTitles(
         val globalUpdateItemCount: Int,
         val startedMangaCount: Int,
@@ -24,6 +30,12 @@ sealed interface StatsData {
         val globalUpdateItemCount: Int,
         val startedAnimeCount: Int,
         val localAnimeCount: Int,
+    ) : StatsData
+
+    data class NovelTitles(
+        val globalUpdateItemCount: Int,
+        val startedNovelCount: Int,
+        val localNovelCount: Int,
     ) : StatsData
 
     data class Chapters(

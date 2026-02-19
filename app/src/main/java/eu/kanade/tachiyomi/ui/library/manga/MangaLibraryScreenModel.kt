@@ -561,8 +561,14 @@ class MangaLibraryScreenModel(
         }
     }
 
-    fun getDisplayMode(): PreferenceMutableState<LibraryDisplayMode> {
-        return libraryPreferences.displayMode().asState(screenModelScope)
+    fun getDisplayMode(useSeparateDisplayModePerMedia: Boolean): PreferenceMutableState<LibraryDisplayMode> {
+        return (
+            if (useSeparateDisplayModePerMedia) {
+                libraryPreferences.mangaDisplayMode()
+            } else {
+                libraryPreferences.displayMode()
+            }
+            ).asState(screenModelScope)
     }
 
     fun getColumnsPreferenceForCurrentOrientation(isLandscape: Boolean): PreferenceMutableState<Int> {

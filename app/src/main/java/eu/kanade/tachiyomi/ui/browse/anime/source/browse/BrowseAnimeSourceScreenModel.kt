@@ -351,6 +351,7 @@ class BrowseAnimeSourceScreenModel(
         companion object {
             fun valueOf(query: String?): Listing {
                 return when (query) {
+                    null -> Popular
                     GetRemoteAnime.QUERY_POPULAR -> Popular
                     GetRemoteAnime.QUERY_LATEST -> Latest
                     else -> Search(query = query, filters = AnimeFilterList()) // filters are filled in later

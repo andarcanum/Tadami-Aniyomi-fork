@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.reader.setting
 import android.os.Build
 import androidx.compose.ui.graphics.BlendMode
 import dev.icerock.moko.resources.StringResource
+import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.preference.getEnum
 import tachiyomi.i18n.MR
@@ -91,6 +92,77 @@ class ReaderPreferences(
     fun autoScrollEnabled() = preferenceStore.getBoolean("pref_auto_scroll_enabled", false)
 
     fun autoScrollSpeed() = preferenceStore.getInt("pref_auto_scroll_speed", 50)
+
+    fun saveLongPagePosition() = preferenceStore.getBoolean("pref_save_long_page_position", true)
+
+    internal fun getLongPageProgressForChapter(chapterId: Long): Long? {
+        return getLongPageProgressForChapter(chapterId, chapterKey = null)
+    }
+
+    internal fun getLongPageProgressForChapter(
+        chapterId: Long,
+        chapterKey: String?,
+    ): Long? {
+        val normalizedKey = chapterKey?.takeIf { it.isNotBlank() }
+        return parseLongPageProgressCache(longPageProgressCache().get())
+            .firstOrNull { entry ->
+                entry.chapterId == chapterId &&
+                    (
+                        normalizedKey == null ||
+                            entry.chapterKey == normalizedKey
+                        )
+            }
+            ?.progress
+    }
+
+    internal fun putLongPageProgressForChapter(
+        chapterId: Long,
+        encodedProgress: Long,
+        chapterKey: String? = null,
+        maxEntries: Int = LONG_PAGE_PROGRESS_CACHE_LIMIT,
+    ) {
+        val pref = longPageProgressCache()
+        val entries = parseLongPageProgressCache(pref.get()).toMutableList()
+        entries.removeAll { it.chapterId == chapterId }
+        entries.add(
+            0,
+            LongPageProgressEntry(
+                chapterId = chapterId,
+                chapterKey = chapterKey?.takeIf { it.isNotBlank() },
+                progress = encodedProgress,
+            ),
+        )
+        val trimmed = entries.take(maxEntries.coerceAtLeast(1))
+        pref.set(serializeLongPageProgressCache(trimmed))
+    }
+
+    internal fun removeLongPageProgressForChapter(
+        chapterId: Long,
+        chapterKey: String? = null,
+    ) {
+        val pref = longPageProgressCache()
+        val normalizedKey = chapterKey?.takeIf { it.isNotBlank() }
+        val filtered = parseLongPageProgressCache(pref.get())
+            .filterNot { entry ->
+                entry.chapterId == chapterId &&
+                    (
+                        normalizedKey == null ||
+                            entry.chapterKey == normalizedKey
+                        )
+            }
+        pref.set(serializeLongPageProgressCache(filtered))
+    }
+
+    internal fun importLongPageProgressFromLegacyIfMissing(
+        chapterId: Long,
+        legacyProgress: Long,
+        chapterKey: String? = null,
+    ): Long {
+        val cached = getLongPageProgressForChapter(chapterId, chapterKey)
+        if (cached != null) return cached
+        putLongPageProgressForChapter(chapterId, legacyProgress, chapterKey = chapterKey)
+        return legacyProgress
+    }
 
     // endregion
 
@@ -249,6 +321,12 @@ class ReaderPreferences(
         const val WEBTOON_PADDING_MAX = 25
 
         const val MILLI_CONVERSION = 100
+        private const val LONG_PAGE_PROGRESS_CACHE_LIMIT = 1_000
+        private const val LONG_PAGE_PROGRESS_ENTRY_SEPARATOR = ';'
+        private const val LONG_PAGE_PROGRESS_KEY_VALUE_SEPARATOR = ':'
+        private const val LONG_PAGE_PROGRESS_ID_KEY_SEPARATOR = '|'
+        private val LONG_PAGE_PROGRESS_CACHE_KEY =
+            Preference.appStateKey("reader_manga_long_page_progress_cache")
 
         val TapZones = listOf(
             MR.strings.label_default,
@@ -294,4 +372,46 @@ class ReaderPreferences(
             }
         }
     }
+
+    private fun longPageProgressCache() = preferenceStore.getString(LONG_PAGE_PROGRESS_CACHE_KEY, "")
+
+    private fun parseLongPageProgressCache(raw: String): List<LongPageProgressEntry> {
+        if (raw.isBlank()) return emptyList()
+        return raw
+            .split(LONG_PAGE_PROGRESS_ENTRY_SEPARATOR)
+            .mapNotNull { entry ->
+                val separatorIndex = entry.indexOf(LONG_PAGE_PROGRESS_KEY_VALUE_SEPARATOR)
+                if (separatorIndex <= 0 || separatorIndex >= entry.lastIndex) {
+                    return@mapNotNull null
+                }
+                val idAndKey = entry.substring(0, separatorIndex)
+                val keySeparatorIndex = idAndKey.indexOf(LONG_PAGE_PROGRESS_ID_KEY_SEPARATOR)
+                val chapterId = idAndKey.substring(0, keySeparatorIndex.takeIf { it >= 0 } ?: idAndKey.length)
+                    .toLongOrNull() ?: return@mapNotNull null
+                val chapterKey = if (keySeparatorIndex >= 0 && keySeparatorIndex < idAndKey.lastIndex) {
+                    idAndKey.substring(keySeparatorIndex + 1).takeIf { it.isNotBlank() }
+                } else {
+                    null
+                }
+                val progress = entry.substring(separatorIndex + 1).toLongOrNull() ?: return@mapNotNull null
+                LongPageProgressEntry(chapterId = chapterId, chapterKey = chapterKey, progress = progress)
+            }
+    }
+
+    private fun serializeLongPageProgressCache(entries: List<LongPageProgressEntry>): String {
+        return entries.joinToString(separator = LONG_PAGE_PROGRESS_ENTRY_SEPARATOR.toString()) {
+            val idAndKey = if (it.chapterKey.isNullOrBlank()) {
+                it.chapterId.toString()
+            } else {
+                "${it.chapterId}$LONG_PAGE_PROGRESS_ID_KEY_SEPARATOR${it.chapterKey}"
+            }
+            "$idAndKey$LONG_PAGE_PROGRESS_KEY_VALUE_SEPARATOR${it.progress}"
+        }
+    }
+
+    private data class LongPageProgressEntry(
+        val chapterId: Long,
+        val chapterKey: String?,
+        val progress: Long,
+    )
 }

@@ -16,6 +16,9 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.data.achievement.handler.PointsManager
 import tachiyomi.data.achievement.loader.AchievementLoader
+import tachiyomi.domain.achievement.model.Achievement
+import tachiyomi.domain.achievement.model.AchievementCategory
+import tachiyomi.domain.achievement.model.AchievementType
 import tachiyomi.domain.achievement.model.DayActivity
 import tachiyomi.domain.achievement.model.MonthStats
 import tachiyomi.domain.achievement.model.UserPoints
@@ -51,19 +54,51 @@ class AchievementScreenModelTest {
     }
 
     @Test
-    fun `should load activity data into Success state`() = runTest {
-        // Given
-        val activity = listOf(DayActivity(LocalDate.now(), 1, tachiyomi.domain.achievement.model.ActivityType.APP_OPEN))
-        coEvery { activityDataRepository.getActivityData(365) } returns flowOf(activity)
+    fun `should load activity data into Success state`() {
+        runTest {
+            // Given
+            val activity =
+                listOf(DayActivity(LocalDate.now(), 1, tachiyomi.domain.achievement.model.ActivityType.APP_OPEN))
+            coEvery { activityDataRepository.getActivityData(365) } returns flowOf(activity)
 
-        val screenModel = AchievementScreenModel(repository, loader, pointsManager, activityDataRepository)
+            val screenModel = AchievementScreenModel(repository, loader, pointsManager, activityDataRepository)
 
-        // When
-        testDispatcher.scheduler.advanceUntilIdle()
+            // When
+            testDispatcher.scheduler.advanceUntilIdle()
 
-        // Then
-        val state = screenModel.state.value
-        state.shouldBeInstanceOf<AchievementScreenState.Success>()
-        (state as AchievementScreenState.Success).activityData shouldBe activity
+            // Then
+            val state = screenModel.state.value
+            state.shouldBeInstanceOf<AchievementScreenState.Success>()
+            (state as AchievementScreenState.Success).activityData shouldBe activity
+        }
+    }
+
+    @Test
+    fun `filtered achievements include NOVEL and BOTH for NOVEL tab`() {
+        val novelAchievement = Achievement(
+            id = "novel_1",
+            type = AchievementType.EVENT,
+            category = AchievementCategory.NOVEL,
+            title = "Novel",
+        )
+        val bothAchievement = Achievement(
+            id = "both_1",
+            type = AchievementType.EVENT,
+            category = AchievementCategory.BOTH,
+            title = "Both",
+        )
+        val mangaAchievement = Achievement(
+            id = "manga_1",
+            type = AchievementType.EVENT,
+            category = AchievementCategory.MANGA,
+            title = "Manga",
+        )
+
+        val state = AchievementScreenState.Success(
+            achievements = listOf(novelAchievement, bothAchievement, mangaAchievement),
+            selectedCategory = AchievementCategory.NOVEL,
+        )
+
+        state.filteredAchievements shouldBe listOf(novelAchievement, bothAchievement)
     }
 }

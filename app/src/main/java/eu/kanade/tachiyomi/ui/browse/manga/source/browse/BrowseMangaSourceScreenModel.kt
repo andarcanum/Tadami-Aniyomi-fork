@@ -343,6 +343,7 @@ class BrowseMangaSourceScreenModel(
         companion object {
             fun valueOf(query: String?): Listing {
                 return when (query) {
+                    null -> Popular
                     GetRemoteManga.QUERY_POPULAR -> Popular
                     GetRemoteManga.QUERY_LATEST -> Latest
                     else -> Search(query = query, filters = FilterList()) // filters are filled in later

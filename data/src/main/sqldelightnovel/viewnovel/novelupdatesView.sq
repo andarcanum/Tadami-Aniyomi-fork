@@ -1,0 +1,35 @@
+CREATE VIEW novelupdatesView AS
+SELECT
+    novels._id AS novelId,
+    novels.title AS novelTitle,
+    novel_chapters._id AS chapterId,
+    novel_chapters.name AS chapterName,
+    novel_chapters.scanlator,
+    novel_chapters.read,
+    novel_chapters.bookmark,
+    novel_chapters.last_page_read,
+    novels.source,
+    novels.favorite,
+    novels.thumbnail_url AS thumbnailUrl,
+    novels.cover_last_modified AS coverLastModified,
+    novel_chapters.date_upload AS dateUpload,
+    novel_chapters.date_fetch AS datefetch
+FROM novels JOIN novel_chapters
+ON novels._id = novel_chapters.novel_id
+WHERE favorite = 1
+AND date_fetch > date_added
+ORDER BY date_fetch DESC;
+
+getRecentUpdates:
+SELECT *
+FROM novelupdatesView
+WHERE dateUpload > :after
+LIMIT :limit;
+
+getUpdatesByReadStatus:
+SELECT *
+FROM novelupdatesView
+WHERE read = :read
+AND dateUpload > :after
+
+LIMIT :limit;

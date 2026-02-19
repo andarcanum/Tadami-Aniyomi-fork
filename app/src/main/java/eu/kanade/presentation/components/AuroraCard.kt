@@ -2,7 +2,7 @@ package eu.kanade.presentation.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -10,12 +10,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BrokenImage
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -40,22 +45,37 @@ fun AuroraCard(
     subtitle: String? = null,
     badge: @Composable (() -> Unit)? = null,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+    onClickContinueViewing: (() -> Unit)? = null,
+    isSelected: Boolean = false,
     aspectRatio: Float = 2f / 3f, // Default to portrait
     coverHeightFraction: Float = 0.65f, // Image takes 65% of height
     imagePadding: Dp = 0.dp,
+    titleMaxLines: Int = 2,
 ) {
     val colors = AuroraTheme.colors
+    val normalizedCoverHeightFraction = coverHeightFraction.coerceIn(0.01f, 1f)
+    val showTextContent = normalizedCoverHeightFraction < 1f
 
     Card(
         modifier = modifier
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            ),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = colors.glass,
         ),
         border = BorderStroke(
-            width = 1.dp,
-            color = if (colors.isDark) Color.Transparent else Color.LightGray.copy(alpha = 0.4f),
+            width = if (isSelected) 2.dp else 1.dp,
+            color = if (isSelected) {
+                colors.accent
+            } else if (colors.isDark) {
+                Color.Transparent
+            } else {
+                Color.LightGray.copy(alpha = 0.4f)
+            },
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
@@ -66,7 +86,7 @@ fun AuroraCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(coverHeightFraction) // Image takes proportional height
+                    .weight(if (showTextContent) normalizedCoverHeightFraction else 1f)
                     .background(Color.Black.copy(alpha = 0.1f)) // Placeholder bg
                     .padding(imagePadding),
             ) {
@@ -81,8 +101,10 @@ fun AuroraCard(
                                 0.dp
                             ) {
                                 RoundedCornerShape(8.dp)
-                            } else {
+                            } else if (showTextContent) {
                                 RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
+                            } else {
+                                RoundedCornerShape(12.dp)
                             },
                         ),
                     error = rememberVectorPainter(Icons.Default.BrokenImage),
@@ -98,34 +120,55 @@ fun AuroraCard(
                         badge()
                     }
                 }
+
+                if (onClickContinueViewing != null) {
+                    FilledIconButton(
+                        onClick = onClickContinueViewing,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(6.dp)
+                            .size(30.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = colors.accent.copy(alpha = 0.9f),
+                            contentColor = colors.textOnAccent,
+                        ),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
             }
 
-            // Text Content
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f - coverHeightFraction)
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-            ) {
-                Text(
-                    text = title,
-                    color = colors.textPrimary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 16.sp,
-                )
-
-                if (subtitle != null) {
-                    Spacer(modifier = Modifier.height(4.dp))
+            if (showTextContent) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight((1f - normalizedCoverHeightFraction).coerceAtLeast(0.01f))
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                ) {
                     Text(
-                        text = subtitle,
-                        color = colors.textSecondary,
-                        fontSize = 11.sp,
-                        maxLines = 1,
+                        text = title,
+                        color = colors.textPrimary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = titleMaxLines,
                         overflow = TextOverflow.Ellipsis,
+                        lineHeight = 16.sp,
                     )
+
+                    if (subtitle != null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = subtitle,
+                            color = colors.textSecondary,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
         }

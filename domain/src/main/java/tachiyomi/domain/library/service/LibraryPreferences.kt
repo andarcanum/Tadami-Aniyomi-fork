@@ -7,33 +7,101 @@ import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.preference.getEnum
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.entries.manga.model.Manga
+import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.library.anime.model.AnimeLibrarySort
 import tachiyomi.domain.library.manga.model.MangaLibrarySort
 import tachiyomi.domain.library.model.LibraryDisplayMode
+import tachiyomi.domain.library.novel.model.NovelLibrarySort
 
 class LibraryPreferences(
     private val preferenceStore: PreferenceStore,
 ) {
 
+    fun separateDisplayModePerMedia() = preferenceStore.getBoolean(
+        "pref_display_mode_library_per_media",
+        false,
+    )
+
     fun displayMode() = preferenceStore.getObject(
         "pref_display_mode_library",
-        LibraryDisplayMode.default,
+        LibraryDisplayMode.ComfortableGrid,
         LibraryDisplayMode.Serializer::serialize,
         LibraryDisplayMode.Serializer::deserialize,
     )
 
+    fun animeDisplayMode() = preferenceStore.getObject(
+        "pref_display_mode_animelib",
+        displayMode().get(),
+        LibraryDisplayMode.Serializer::serialize,
+        LibraryDisplayMode.Serializer::deserialize,
+    )
+
+    fun mangaDisplayMode() = preferenceStore.getObject(
+        "pref_display_mode_mangalib",
+        displayMode().get(),
+        LibraryDisplayMode.Serializer::serialize,
+        LibraryDisplayMode.Serializer::deserialize,
+    )
+
+    fun novelDisplayMode() = preferenceStore.getObject(
+        "pref_display_mode_novellib",
+        displayMode().get(),
+        LibraryDisplayMode.Serializer::serialize,
+        LibraryDisplayMode.Serializer::deserialize,
+    )
+
+    fun setDisplayModeForAnime(mode: LibraryDisplayMode) {
+        if (separateDisplayModePerMedia().get()) {
+            animeDisplayMode().set(mode)
+        } else {
+            displayMode().set(mode)
+        }
+    }
+
+    fun setDisplayModeForManga(mode: LibraryDisplayMode) {
+        if (separateDisplayModePerMedia().get()) {
+            mangaDisplayMode().set(mode)
+        } else {
+            displayMode().set(mode)
+        }
+    }
+
+    fun setDisplayModeForNovel(mode: LibraryDisplayMode) {
+        if (separateDisplayModePerMedia().get()) {
+            novelDisplayMode().set(mode)
+        } else {
+            displayMode().set(mode)
+        }
+    }
+
     fun mangaSortingMode() = preferenceStore.getObject(
         "library_sorting_mode",
-        MangaLibrarySort.default,
+        MangaLibrarySort(
+            type = MangaLibrarySort.Type.LastRead,
+            direction = MangaLibrarySort.Direction.Descending,
+        ),
         MangaLibrarySort.Serializer::serialize,
         MangaLibrarySort.Serializer::deserialize,
     )
 
     fun animeSortingMode() = preferenceStore.getObject(
         "animelib_sorting_mode",
-        AnimeLibrarySort.default,
+        AnimeLibrarySort(
+            type = AnimeLibrarySort.Type.LastSeen,
+            direction = AnimeLibrarySort.Direction.Descending,
+        ),
         AnimeLibrarySort.Serializer::serialize,
         AnimeLibrarySort.Serializer::deserialize,
+    )
+
+    fun novelSortingMode() = preferenceStore.getObject(
+        "novellib_sorting_mode",
+        NovelLibrarySort(
+            type = NovelLibrarySort.Type.LastRead,
+            direction = NovelLibrarySort.Direction.Descending,
+        ),
+        NovelLibrarySort.Serializer::serialize,
+        NovelLibrarySort.Serializer::deserialize,
     )
 
     fun lastUpdatedTimestamp() = preferenceStore.getLong(Preference.appStateKey("library_update_last_timestamp"), 0L)
@@ -59,7 +127,7 @@ class LibraryPreferences(
     fun autoUpdateMetadata() = preferenceStore.getBoolean("auto_update_metadata", false)
 
     fun showContinueViewingButton() =
-        preferenceStore.getBoolean("display_continue_reading_button", false)
+        preferenceStore.getBoolean("display_continue_reading_button", true)
 
     // Common Category
 
@@ -96,14 +164,17 @@ class LibraryPreferences(
 
     fun randomAnimeSortSeed() = preferenceStore.getInt("library_random_anime_sort_seed", 0)
     fun randomMangaSortSeed() = preferenceStore.getInt("library_random_manga_sort_seed", 0)
+    fun randomNovelSortSeed() = preferenceStore.getInt("library_random_novel_sort_seed", 0)
 
     // Mixture Columns
 
-    fun animePortraitColumns() = preferenceStore.getInt("pref_animelib_columns_portrait_key", 0)
-    fun mangaPortraitColumns() = preferenceStore.getInt("pref_library_columns_portrait_key", 0)
+    fun animePortraitColumns() = preferenceStore.getInt("pref_animelib_columns_portrait_key", 3)
+    fun mangaPortraitColumns() = preferenceStore.getInt("pref_library_columns_portrait_key", 3)
+    fun novelPortraitColumns() = preferenceStore.getInt("pref_novellib_columns_portrait_key", 3)
 
-    fun animeLandscapeColumns() = preferenceStore.getInt("pref_animelib_columns_landscape_key", 0)
-    fun mangaLandscapeColumns() = preferenceStore.getInt("pref_library_columns_landscape_key", 0)
+    fun animeLandscapeColumns() = preferenceStore.getInt("pref_animelib_columns_landscape_key", 3)
+    fun mangaLandscapeColumns() = preferenceStore.getInt("pref_library_columns_landscape_key", 3)
+    fun novelLandscapeColumns() = preferenceStore.getInt("pref_novellib_columns_landscape_key", 3)
 
     // Mixture Filter
 
@@ -137,6 +208,21 @@ class LibraryPreferences(
     fun filterCompletedManga() =
         preferenceStore.getEnum("pref_filter_library_completed_v2", TriState.DISABLED)
 
+    fun filterDownloadedNovel() =
+        preferenceStore.getEnum("pref_filter_novellib_downloaded_v2", TriState.DISABLED)
+
+    fun filterUnreadNovel() =
+        preferenceStore.getEnum("pref_filter_novellib_unread_v2", TriState.DISABLED)
+
+    fun filterStartedNovel() =
+        preferenceStore.getEnum("pref_filter_novellib_started_v2", TriState.DISABLED)
+
+    fun filterBookmarkedNovel() =
+        preferenceStore.getEnum("pref_filter_novellib_bookmarked_v2", TriState.DISABLED)
+
+    fun filterCompletedNovel() =
+        preferenceStore.getEnum("pref_filter_novellib_completed_v2", TriState.DISABLED)
+
     fun filterTrackedAnime(id: Int) =
         preferenceStore.getEnum("pref_filter_animelib_tracked_${id}_v2", TriState.DISABLED)
 
@@ -152,9 +238,11 @@ class LibraryPreferences(
 
     fun defaultAnimeCategory() = preferenceStore.getInt(DEFAULT_ANIME_CATEGORY_PREF_KEY, -1)
     fun defaultMangaCategory() = preferenceStore.getInt(DEFAULT_MANGA_CATEGORY_PREF_KEY, -1)
+    fun defaultNovelCategory() = preferenceStore.getInt(DEFAULT_NOVEL_CATEGORY_PREF_KEY, -1)
 
     fun lastUsedAnimeCategory() = preferenceStore.getInt(Preference.appStateKey("last_used_anime_category"), 0)
     fun lastUsedMangaCategory() = preferenceStore.getInt(Preference.appStateKey("last_used_category"), 0)
+    fun lastUsedNovelCategory() = preferenceStore.getInt(Preference.appStateKey("last_used_novel_category"), 0)
 
     fun animeUpdateCategories() =
         preferenceStore.getStringSet(LIBRARY_UPDATE_ANIME_CATEGORIES_PREF_KEY, emptySet())
@@ -162,11 +250,17 @@ class LibraryPreferences(
     fun mangaUpdateCategories() =
         preferenceStore.getStringSet(LIBRARY_UPDATE_MANGA_CATEGORIES_PREF_KEY, emptySet())
 
+    fun novelUpdateCategories() =
+        preferenceStore.getStringSet(LIBRARY_UPDATE_NOVEL_CATEGORIES_PREF_KEY, emptySet())
+
     fun animeUpdateCategoriesExclude() =
         preferenceStore.getStringSet(LIBRARY_UPDATE_ANIME_CATEGORIES_EXCLUDE_PREF_KEY, emptySet())
 
     fun mangaUpdateCategoriesExclude() =
         preferenceStore.getStringSet(LIBRARY_UPDATE_MANGA_CATEGORIES_EXCLUDE_PREF_KEY, emptySet())
+
+    fun novelUpdateCategoriesExclude() =
+        preferenceStore.getStringSet(LIBRARY_UPDATE_NOVEL_CATEGORIES_EXCLUDE_PREF_KEY, emptySet())
 
     // Mixture Item
 
@@ -254,6 +348,43 @@ class LibraryPreferences(
         displayChapterByNameOrNumber().set(manga.displayMode)
         sortChapterByAscendingOrDescending().set(
             if (manga.sortDescending()) Manga.CHAPTER_SORT_DESC else Manga.CHAPTER_SORT_ASC,
+        )
+    }
+
+    // Novel Item
+
+    fun filterNovelChapterByRead() =
+        preferenceStore.getLong("default_novel_chapter_filter_by_read", Novel.SHOW_ALL)
+
+    fun filterNovelChapterByDownloaded() =
+        preferenceStore.getLong("default_novel_chapter_filter_by_downloaded", Novel.SHOW_ALL)
+
+    fun filterNovelChapterByBookmarked() =
+        preferenceStore.getLong("default_novel_chapter_filter_by_bookmarked", Novel.SHOW_ALL)
+
+    fun sortNovelChapterBySourceOrNumber() = preferenceStore.getLong(
+        "default_novel_chapter_sort_by_source_or_number",
+        Novel.CHAPTER_SORTING_SOURCE,
+    )
+
+    fun displayNovelChapterByNameOrNumber() = preferenceStore.getLong(
+        "default_novel_chapter_display_by_name_or_number",
+        Novel.CHAPTER_DISPLAY_NAME,
+    )
+
+    fun sortNovelChapterByAscendingOrDescending() = preferenceStore.getLong(
+        "default_novel_chapter_sort_by_ascending_or_descending",
+        Novel.CHAPTER_SORT_DESC,
+    )
+
+    fun setNovelChapterSettingsDefault(novel: Novel) {
+        filterNovelChapterByRead().set(novel.unreadFilterRaw)
+        filterNovelChapterByDownloaded().set(novel.downloadedFilterRaw)
+        filterNovelChapterByBookmarked().set(novel.bookmarkedFilterRaw)
+        sortNovelChapterBySourceOrNumber().set(novel.sorting)
+        displayNovelChapterByNameOrNumber().set(novel.displayMode)
+        sortNovelChapterByAscendingOrDescending().set(
+            if (novel.sortDescending()) Novel.CHAPTER_SORT_DESC else Novel.CHAPTER_SORT_ASC,
         )
     }
 
@@ -374,6 +505,16 @@ class LibraryPreferences(
         ChapterSwipeAction.ToggleBookmark,
     )
 
+    fun swipeNovelChapterStartAction() = preferenceStore.getEnum(
+        "pref_novel_chapter_swipe_end_action",
+        NovelSwipeAction.ToggleRead,
+    )
+
+    fun swipeNovelChapterEndAction() = preferenceStore.getEnum(
+        "pref_novel_chapter_swipe_start_action",
+        NovelSwipeAction.ToggleBookmark,
+    )
+
     fun markDuplicateReadChapterAsRead() = preferenceStore.getStringSet("mark_duplicate_read_chapter_read", emptySet())
 
     fun markDuplicateSeenEpisodeAsSeen() = preferenceStore.getStringSet("mark_duplicate_seen_episode_seen", emptySet())
@@ -389,6 +530,13 @@ class LibraryPreferences(
     }
 
     enum class ChapterSwipeAction {
+        ToggleRead,
+        ToggleBookmark,
+        Download,
+        Disabled,
+    }
+
+    enum class NovelSwipeAction {
         ToggleRead,
         ToggleBookmark,
         Download,
@@ -412,17 +560,23 @@ class LibraryPreferences(
 
         const val DEFAULT_MANGA_CATEGORY_PREF_KEY = "default_category"
         const val DEFAULT_ANIME_CATEGORY_PREF_KEY = "default_anime_category"
+        const val DEFAULT_NOVEL_CATEGORY_PREF_KEY = "default_novel_category"
         private const val LIBRARY_UPDATE_MANGA_CATEGORIES_PREF_KEY = "library_update_categories"
         private const val LIBRARY_UPDATE_ANIME_CATEGORIES_PREF_KEY = "animelib_update_categories"
+        private const val LIBRARY_UPDATE_NOVEL_CATEGORIES_PREF_KEY = "novellib_update_categories"
         private const val LIBRARY_UPDATE_MANGA_CATEGORIES_EXCLUDE_PREF_KEY = "library_update_categories_exclude"
         private const val LIBRARY_UPDATE_ANIME_CATEGORIES_EXCLUDE_PREF_KEY = "animelib_update_categories_exclude"
+        private const val LIBRARY_UPDATE_NOVEL_CATEGORIES_EXCLUDE_PREF_KEY = "novellib_update_categories_exclude"
         val categoryPreferenceKeys = setOf(
             DEFAULT_MANGA_CATEGORY_PREF_KEY,
             DEFAULT_ANIME_CATEGORY_PREF_KEY,
+            DEFAULT_NOVEL_CATEGORY_PREF_KEY,
             LIBRARY_UPDATE_MANGA_CATEGORIES_PREF_KEY,
             LIBRARY_UPDATE_ANIME_CATEGORIES_PREF_KEY,
+            LIBRARY_UPDATE_NOVEL_CATEGORIES_PREF_KEY,
             LIBRARY_UPDATE_MANGA_CATEGORIES_EXCLUDE_PREF_KEY,
             LIBRARY_UPDATE_ANIME_CATEGORIES_EXCLUDE_PREF_KEY,
+            LIBRARY_UPDATE_NOVEL_CATEGORIES_EXCLUDE_PREF_KEY,
         )
     }
 }

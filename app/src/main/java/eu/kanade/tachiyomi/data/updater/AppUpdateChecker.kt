@@ -40,7 +40,7 @@ class AppUpdateChecker {
     }
 }
 
-val GITHUB_REPO = "andreykolesnikov/Tadami-Aniyomi-fork"
+val GITHUB_REPO = "andarcanum/Tadami-Aniyomi-fork"
 
 val RELEASE_TAG: String by lazy {
     if (isPreviewBuildType) {

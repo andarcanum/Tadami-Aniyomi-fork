@@ -117,7 +117,8 @@ class AchievementLoader(
         val jsonString = context.assets.open("achievements/achievements.json")
             .bufferedReader()
             .use { it.readText() }
-        json.decodeFromString<AchievementDefinitions>(jsonString)
+        val normalizedJson = jsonString.trimStart('\uFEFF')
+        json.decodeFromString<AchievementDefinitions>(normalizedJson)
     }
 
     private fun getCurrentVersion(): Int {

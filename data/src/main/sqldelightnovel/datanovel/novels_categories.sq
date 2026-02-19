@@ -1,0 +1,24 @@
+CREATE TABLE novels_categories(
+    _id INTEGER NOT NULL PRIMARY KEY,
+    novel_id INTEGER NOT NULL,
+    category_id INTEGER NOT NULL,
+    FOREIGN KEY(category_id) REFERENCES novel_categories (_id)
+    ON DELETE CASCADE,
+    FOREIGN KEY(novel_id) REFERENCES novels (_id)
+    ON DELETE CASCADE
+);
+
+CREATE TRIGGER insert_novel_category_update_version AFTER INSERT ON novels_categories
+BEGIN
+    UPDATE novels
+    SET version = version + 1
+    WHERE _id = new.novel_id AND (SELECT is_syncing FROM novels WHERE _id = new.novel_id) = 0;
+END;
+
+insert:
+INSERT INTO novels_categories(novel_id, category_id)
+VALUES (:novelId, :categoryId);
+
+deleteNovelCategoryByNovelId:
+DELETE FROM novels_categories
+WHERE novel_id = :novelId;

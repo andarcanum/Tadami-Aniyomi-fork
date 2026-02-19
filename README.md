@@ -1,89 +1,92 @@
 <div align="center">
-
-<img src="app/src/main/res/drawable-nodpi/ic_launcher_foreground.png" alt="Tadami logo" title="Tadami logo" width="160"/>
-
-# Tadami
-
-### A modern fork of Aniyomi with a focus on UI/UX.
-
-**Tadami** is a fork of the Aniyomi application, designed to provide a more refined and visually appealing user experience. Building upon the robust features of Aniyomi, Tadami introduces the **Aurora** theme, offering a cleaner, more modern interface for browsing and consuming your favorite anime and manga.
-
-[![License: Apache-2.0](https://img.shields.io/github/license/aniyomiorg/aniyomi?labelColor=27303D&color=818cf8)](/LICENSE)
-
+  <img src="app/src/main/res/drawable-nodpi/ic_launcher_foreground.png" alt="Tadami logo" width="160" />
+  <h1>Tadami</h1>
+  <p><strong>A polished Aniyomi fork for anime, manga, and novels (ranobe).</strong></p>
+  <p>
+    <a href="https://github.com/andarcanum/Tadami-Aniyomi-fork/actions/workflows/build_push.yml"><img src="https://img.shields.io/github/actions/workflow/status/andarcanum/Tadami-Aniyomi-fork/build_push.yml?branch=main&label=CI" alt="CI"></a>
+    <a href="https://github.com/andarcanum/Tadami-Aniyomi-fork/releases"><img src="https://img.shields.io/github/v/release/andarcanum/Tadami-Aniyomi-fork?display_name=tag" alt="Latest Release"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/github/license/andarcanum/Tadami-Aniyomi-fork" alt="License"></a>
+    <a href="https://developer.android.com/about/versions/oreo"><img src="https://img.shields.io/badge/Android-8.0%2B-brightgreen" alt="Android 8+"></a>
+  </p>
 </div>
 
-## Key Differences
+## About
 
-*   **Aurora UI:** A complete visual overhaul for a smoother and more immersive experience.
-*   **Focused Experience:** Streamlined menus and navigation (e.g., simplified Browse tab).
-*   **Continued Support:** Maintains compatibility with Aniyomi extensions while pushing for better usability.
+Tadami is a community fork of Aniyomi with a stronger focus on UI quality and reading experience, including active novel/ranobe support.
 
-## Screenshots
+Current source version:
+- `versionName`: `0.23`
+- `versionCode`: `136`
 
-<div align="center">
-<table>
-  <tr>
-    <td align="center"><b>Home (Aurora)</b></td>
-    <td align="center"><b>Anime Details</b></td>
-    <td align="center"><b>Library</b></td>
-  </tr>
-  <tr>
-    <td><img src="screenshots/main_screen.jpg" width="240"/></td>
-    <td><img src="screenshots/anime_card.jpg" width="240"/></td>
-    <td><img src="screenshots/Library.jpg" width="240"/></td>
-  </tr>
-  <tr>
-    <td align="center"><b>Browse</b></td>
-    <td align="center"><b>Updates</b></td>
-    <td align="center"><b>More / Settings</b></td>
-  </tr>
-  <tr>
-    <td><img src="screenshots/extensions.jpg" width="240"/></td>
-    <td><img src="screenshots/updates.jpg" width="240"/></td>
-    <td><img src="screenshots/more.jpg" width="240"/></td>
-  </tr>
-</table>
-</div>
+## What Is Different In This Fork
+
+- Aurora-inspired UI polish and cleaner navigation.
+- Full anime, manga, and novel support in one app.
+- Novel-oriented development (including compatibility tooling for LNReader plugin ecosystems).
+- Reading regression checks in CI for safer changes in anime/manga/novel flows.
 
 ## Features
 
-*   **Anime & Manga:** Unified library for all your media.
-*   **Extensions:** Support for Aniyomi anime and manga extensions.
-*   **Tracking:** Sync with MyAnimeList, AniList, Kitsu, Shikimori, and more.
-*   **Customizable:** Light/Dark themes and various player/reader settings.
-*   **Backups:** Secure your library locally or to the cloud.
+| Area | Details |
+| --- | --- |
+| Media types | Anime, manga, and novels in one app |
+| Sources and extensions | Separate browsing for anime, manga, and novel sources/extensions |
+| Library and updates | Unified library management, updates, history, and download queues |
+| Backup and restore | Backup/restore support across media types |
+| Customization | Theme and behavior settings for player/reader experience |
+
+## Screenshots
+
+| Home | Anime details | Library |
+| --- | --- | --- |
+| <img src="screenshots/main_screen.jpg" alt="Home" width="240" /> | <img src="screenshots/anime_card.jpg" alt="Anime details" width="240" /> | <img src="screenshots/Library.jpg" alt="Library" width="240" /> |
+
+| Browse | Updates | More |
+| --- | --- | --- |
+| <img src="screenshots/extensions.jpg" alt="Browse" width="240" /> | <img src="screenshots/updates.jpg" alt="Updates" width="240" /> | <img src="screenshots/more.jpg" alt="More" width="240" /> |
 
 ## Download
 
-*Requires Android 8.0 or higher.*
+Requires Android 8.0+ (API 26+).
 
-Check the [Releases](https://github.com/andreykolesnikov/Tadami-Aniyomi-fork/releases) page for the latest APKs.
+- Stable builds and APKs: [Releases](https://github.com/andarcanum/Tadami-Aniyomi-fork/releases)
+- CI artifacts (for testing): [GitHub Actions](https://github.com/andarcanum/Tadami-Aniyomi-fork/actions)
+
+## Build From Source
+
+Prerequisites:
+- JDK 17
+- Android SDK (compile SDK 35)
+- Android Studio (recommended)
+
+Build commands:
+
+```bash
+./gradlew assembleRelease
+```
+
+On Windows:
+
+```powershell
+.\gradlew.bat assembleRelease
+```
+
+APK output:
+- `app/build/outputs/apk/release/`
 
 ## Contributing
 
-Pull requests are welcome! If you're interested in improving the Aurora UI or adding new features, feel free to contribute.
+Pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow and quality gates.
 
 ## Disclaimer
 
-The developer(s) of this application does not have any affiliation with the content providers available, and this application hosts zero content.
+This project does not host or distribute copyrighted content. Content availability depends on third-party sources and extensions.
+
+## Credits
+
+- [Mihon](https://github.com/mihonapp/mihon)
+- [Aniyomi](https://github.com/aniyomiorg/aniyomi)
 
 ## License
 
-<pre>
-Copyright © 2015 Javier Tomás
-Copyright © 2024 Mihon Open Source Project
-Copyright © 2024 Aniyomi Open Source Project
-Copyright © 2026 Tadami Project
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-</pre>
+Licensed under the Apache License 2.0. See [LICENSE](LICENSE).

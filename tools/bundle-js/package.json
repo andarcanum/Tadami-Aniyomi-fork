@@ -1,0 +1,16 @@
+{
+  "name": "novel-js-bundler",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bundles JS libraries for NovelJsRuntime",
+  "dependencies": {
+    "dayjs": "^1.11.13",
+    "htmlparser2": "^9.1.0",
+    "domhandler": "^5.0.3",
+    "dom-serializer": "^2.0.0",
+    "domutils": "^3.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}

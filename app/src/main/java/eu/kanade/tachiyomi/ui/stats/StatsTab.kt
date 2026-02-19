@@ -19,7 +19,8 @@ import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.stats.anime.animeStatsTab
 import eu.kanade.tachiyomi.ui.stats.manga.mangaStatsTab
-import kotlinx.collections.immutable.persistentListOf
+import eu.kanade.tachiyomi.ui.stats.novel.novelStatsTab
+import kotlinx.collections.immutable.toPersistentList
 import tachiyomi.data.achievement.handler.AchievementHandler
 import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.i18n.MR
@@ -48,10 +49,15 @@ data object StatsTab : Tab {
         val uiPreferences = Injekt.get<UiPreferences>()
         val theme by uiPreferences.appTheme().collectAsState()
 
-        val tabs = persistentListOf(
-            animeStatsTab(),
-            mangaStatsTab(),
-        )
+        val tabs = statsContentTabs()
+            .map { tab ->
+                when (tab) {
+                    StatsContentTab.ANIME -> animeStatsTab()
+                    StatsContentTab.MANGA -> mangaStatsTab()
+                    StatsContentTab.NOVEL -> novelStatsTab()
+                }
+            }
+            .toPersistentList()
         val state = rememberPagerState { tabs.size }
 
         if (theme.isAuroraStyle) {
@@ -78,4 +84,18 @@ data object StatsTab : Tab {
             achievementHandler.trackFeatureUsed(AchievementEvent.Feature.STATS)
         }
     }
+}
+
+internal enum class StatsContentTab {
+    ANIME,
+    MANGA,
+    NOVEL,
+}
+
+internal fun statsContentTabs(): List<StatsContentTab> {
+    return listOf(
+        StatsContentTab.ANIME,
+        StatsContentTab.MANGA,
+        StatsContentTab.NOVEL,
+    )
 }

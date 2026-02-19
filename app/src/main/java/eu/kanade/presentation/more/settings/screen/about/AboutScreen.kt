@@ -256,7 +256,7 @@ object AboutScreen : Screen() {
                             LinkIcon(
                                 label = "Tadami",
                                 icon = CustomIcons.Github,
-                                url = "https://github.com/andreykolesnikov/Tadami-Aniyomi-fork",
+                                url = "https://github.com/andarcanum/Tadami-Aniyomi-fork",
                             )
                         }
                     }

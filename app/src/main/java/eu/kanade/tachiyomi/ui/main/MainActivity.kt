@@ -7,6 +7,7 @@ import android.app.SearchManager
 import android.app.assist.AssistContent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
@@ -46,7 +47,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.core.animation.doOnEnd
 import androidx.core.net.toUri
 import androidx.core.splashscreen.SplashScreen
@@ -65,6 +65,7 @@ import eu.kanade.domain.source.manga.interactor.GetMangaIncognitoState
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.achievement.components.AchievementGroupNotification
 import eu.kanade.presentation.achievement.components.AchievementListDialog
+import eu.kanade.presentation.achievement.components.AchievementPopupSizeTokens
 import eu.kanade.presentation.achievement.components.AchievementUnlockBanner
 import eu.kanade.presentation.components.AppStateBanners
 import eu.kanade.presentation.components.DownloadedOnlyBannerBackgroundColor
@@ -93,9 +94,11 @@ import eu.kanade.tachiyomi.ui.browse.anime.source.browse.BrowseAnimeSourceScreen
 import eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch.GlobalAnimeSearchScreen
 import eu.kanade.tachiyomi.ui.browse.manga.source.browse.BrowseMangaSourceScreen
 import eu.kanade.tachiyomi.ui.browse.manga.source.globalsearch.GlobalMangaSearchScreen
+import eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch.GlobalNovelSearchScreen
 import eu.kanade.tachiyomi.ui.deeplink.DeepLinkScreenType
 import eu.kanade.tachiyomi.ui.deeplink.anime.DeepLinkAnimeScreen
 import eu.kanade.tachiyomi.ui.deeplink.manga.DeepLinkMangaScreen
+import eu.kanade.tachiyomi.ui.deeplink.novel.DeepLinkNovelScreen
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreen
 import eu.kanade.tachiyomi.ui.home.HomeScreen
@@ -274,7 +277,7 @@ class MainActivity : BaseActivity() {
                         AchievementUnlockBanner(
                             modifier = Modifier
                                 .align(Alignment.TopCenter)
-                                .padding(top = 8.dp),
+                                .padding(top = AchievementPopupSizeTokens.overlayTopPadding),
                         )
                         // Achievement group notification (for multiple achievements after reader/player)
                         var showAchievementsList by remember { mutableStateOf(false) }
@@ -283,7 +286,7 @@ class MainActivity : BaseActivity() {
                         AchievementGroupNotification(
                             modifier = Modifier
                                 .align(Alignment.TopCenter)
-                                .padding(top = 8.dp),
+                                .padding(top = AchievementPopupSizeTokens.overlayTopPadding),
                             onViewAll = { achievements ->
                                 // Get achievements directly from notification
                                 pendingAchievements = achievements
@@ -399,6 +402,10 @@ class MainActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (restorePortraitAfterPlayerExit) {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            restorePortraitAfterPlayerExit = false
+        }
         // Start session time tracking
         appSessionStartTime = System.currentTimeMillis()
     }
@@ -481,12 +488,14 @@ class MainActivity : BaseActivity() {
 
         // Extensions updates
         LaunchedEffect(Unit) {
-            try {
-                AnimeExtensionApi().checkForUpdates(context)
-                MangaExtensionApi().checkForUpdates(context)
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e)
-            }
+            runCatching { AnimeExtensionApi().checkForUpdates(context) }
+                .onFailure { error ->
+                    logcat(LogPriority.WARN, error) { "Anime extension update check failed" }
+                }
+            runCatching { MangaExtensionApi().checkForUpdates(context) }
+                .onFailure { error ->
+                    logcat(LogPriority.WARN, error) { "Manga extension update check failed" }
+                }
         }
     }
 
@@ -556,12 +565,17 @@ class MainActivity : BaseActivity() {
         }
 
         val tabToOpen = when (intent.action) {
+            Constants.SHORTCUT_HOME -> HomeScreen.Tab.HomeHub
             Constants.SHORTCUT_ANIMELIB -> HomeScreen.Tab.AnimeLib()
             Constants.SHORTCUT_LIBRARY -> HomeScreen.Tab.Library()
             Constants.SHORTCUT_MANGA -> {
                 val idToOpen = intent.extras?.getLong(Constants.MANGA_EXTRA) ?: return false
                 navigator.popUntilRoot()
                 HomeScreen.Tab.Library(idToOpen)
+            }
+            Constants.SHORTCUT_NOVEL -> {
+                navigator.popUntilRoot()
+                HomeScreen.Tab.NovelLib()
             }
             Constants.SHORTCUT_ANIME -> {
                 val idToOpen = intent.extras?.getLong(Constants.ANIME_EXTRA) ?: return false
@@ -605,6 +619,10 @@ class MainActivity : BaseActivity() {
                             navigator.push(GlobalAnimeSearchScreen(query))
                             navigator.push(DeepLinkAnimeScreen(query))
                         }
+                        DeepLinkScreenType.NOVEL -> {
+                            navigator.push(GlobalNovelSearchScreen(query))
+                            navigator.push(DeepLinkNovelScreen(query))
+                        }
                     }
                 }
                 null
@@ -624,6 +642,14 @@ class MainActivity : BaseActivity() {
                     val filter = intent.getStringExtra(INTENT_SEARCH_FILTER)
                     navigator.popUntilRoot()
                     navigator.push(GlobalAnimeSearchScreen(query, filter))
+                }
+                null
+            }
+            INTENT_NOVELSEARCH -> { // Same as above
+                val query = intent.getStringExtra(INTENT_SEARCH_QUERY)
+                if (!query.isNullOrEmpty()) {
+                    navigator.popUntilRoot()
+                    navigator.push(GlobalNovelSearchScreen(query))
                 }
                 null
             }
@@ -676,6 +702,7 @@ class MainActivity : BaseActivity() {
     companion object {
         const val INTENT_SEARCH = "eu.kanade.tachiyomi.SEARCH"
         const val INTENT_ANIMESEARCH = "eu.kanade.tachiyomi.ANIMESEARCH"
+        const val INTENT_NOVELSEARCH = "eu.kanade.tachiyomi.NOVELSEARCH"
         const val INTENT_SEARCH_QUERY = "query"
         const val INTENT_SEARCH_FILTER = "filter"
         const val INTENT_SEARCH_TYPE = "type"
@@ -684,6 +711,7 @@ class MainActivity : BaseActivity() {
         const val SAVED_STATE_EPISODE_KEY = "saved_state_episode_key"
 
         private var externalPlayerResult: ActivityResultLauncher<Intent>? = null
+        private var restorePortraitAfterPlayerExit: Boolean = false
 
         suspend fun startPlayerActivity(
             context: Context,
@@ -705,6 +733,7 @@ class MainActivity : BaseActivity() {
                 } ?: return
                 externalPlayerResult?.launch(intent) ?: return
             } else {
+                restorePortraitAfterPlayerExit = true
                 context.startActivity(
                     PlayerActivity.newIntent(
                         context,

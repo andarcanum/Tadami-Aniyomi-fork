@@ -26,18 +26,22 @@ package tachiyomi.data.achievement.handler.checkers
  */
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
 import tachiyomi.data.handlers.manga.MangaDatabaseHandler
+import tachiyomi.data.handlers.novel.NovelDatabaseHandler
 
 class DiversityAchievementChecker(
     private val mangaHandler: MangaDatabaseHandler,
     private val animeHandler: AnimeDatabaseHandler,
+    private val novelHandler: NovelDatabaseHandler,
 ) {
     // Cache for diversity calculations
     private var genreCache: Pair<Int, Long>? = null
     private var sourceCache: Pair<Int, Long>? = null
     private var mangaGenreCache: Pair<Int, Long>? = null
     private var animeGenreCache: Pair<Int, Long>? = null
+    private var novelGenreCache: Pair<Int, Long>? = null
     private var mangaSourceCache: Pair<Int, Long>? = null
     private var animeSourceCache: Pair<Int, Long>? = null
+    private var novelSourceCache: Pair<Int, Long>? = null
 
     /** Продолжительность кэша в миллисекундах (5 минут) */
     private val cacheDuration = 5 * 60 * 1000 // 5 minutes
@@ -61,8 +65,12 @@ class DiversityAchievementChecker(
             animesQueries.getLibraryGenres()
         }
 
+        val novelGenres = novelHandler.awaitList {
+            novelsQueries.getLibraryGenres()
+        }
+
         // Combine and parse unique genres from both manga and anime
-        val allGenreStrings = mangaGenres + animeGenres
+        val allGenreStrings = mangaGenres + animeGenres + novelGenres
         val count = parseAndGetUniqueGenres(allGenreStrings)
         genreCache = Pair(count, now)
         return count
@@ -87,8 +95,12 @@ class DiversityAchievementChecker(
             animesQueries.getLibrarySources()
         }
 
+        val novelSources = novelHandler.awaitList {
+            novelsQueries.getLibrarySources()
+        }
+
         // Combine and get unique sources from both manga and anime
-        val count = (mangaSources + animeSources).distinct().size
+        val count = (mangaSources + animeSources + novelSources).distinct().size
         sourceCache = Pair(count, now)
         return count
     }
@@ -134,6 +146,26 @@ class DiversityAchievementChecker(
     }
 
     /**
+     * Get unique genres count from novel library only
+     */
+    suspend fun getNovelGenreDiversity(): Int {
+        val now = System.currentTimeMillis()
+        novelGenreCache?.let { (count, timestamp) ->
+            if (now - timestamp < cacheDuration) {
+                return count
+            }
+        }
+
+        val novelGenres = novelHandler.awaitList {
+            novelsQueries.getLibraryGenres()
+        }
+
+        val count = parseAndGetUniqueGenres(novelGenres)
+        novelGenreCache = Pair(count, now)
+        return count
+    }
+
+    /**
      * Get unique sources count from manga library only
      */
     suspend fun getMangaSourceDiversity(): Int {
@@ -174,6 +206,26 @@ class DiversityAchievementChecker(
     }
 
     /**
+     * Get unique sources count from novel library only
+     */
+    suspend fun getNovelSourceDiversity(): Int {
+        val now = System.currentTimeMillis()
+        novelSourceCache?.let { (count, timestamp) ->
+            if (now - timestamp < cacheDuration) {
+                return count
+            }
+        }
+
+        val novelSources = novelHandler.awaitList {
+            novelsQueries.getLibrarySources()
+        }
+
+        val count = novelSources.distinct().size
+        novelSourceCache = Pair(count, now)
+        return count
+    }
+
+    /**
      * Clear all caches (call when library changes)
      */
     fun clearCache() {
@@ -181,8 +233,10 @@ class DiversityAchievementChecker(
         sourceCache = null
         mangaGenreCache = null
         animeGenreCache = null
+        novelGenreCache = null
         mangaSourceCache = null
         animeSourceCache = null
+        novelSourceCache = null
     }
 
     /**

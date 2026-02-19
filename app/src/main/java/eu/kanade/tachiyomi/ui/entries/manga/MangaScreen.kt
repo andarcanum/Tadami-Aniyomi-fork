@@ -62,6 +62,7 @@ import eu.kanade.tachiyomi.util.system.toShareIntent
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.launch
 import logcat.LogPriority
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.system.logcat
@@ -153,6 +154,9 @@ class MangaScreen(
             },
             onTagSearch = { scope.launch { performGenreSearch(navigator, it, screenModel.source!!) } },
             onFilterButtonClicked = screenModel::showSettingsDialog,
+            scanlatorChapterCounts = successState.scanlatorChapterCounts,
+            selectedScanlator = successState.selectedScanlator,
+            onScanlatorSelected = screenModel::selectScanlator,
             onRefresh = screenModel::fetchAllFromSource,
             onContinueReading = { continueReading(context, screenModel.getNextUnreadChapter()) },
             onSearch = { query, global -> scope.launch { performSearch(navigator, query, global) } },
@@ -330,7 +334,7 @@ class MangaScreen(
         val source = source_ as? HttpSource ?: return null
 
         return try {
-            source.getMangaUrl(manga.toSManga())
+            normalizeMangaWebUrl(source.getMangaUrl(manga.toSManga()))
         } catch (e: Exception) {
             null
         }
@@ -418,9 +422,22 @@ class MangaScreen(
      * Copy Manga URL to Clipboard
      */
     private fun copyMangaUrl(context: Context, manga_: Manga?, source_: MangaSource?) {
-        val manga = manga_ ?: return
-        val source = source_ as? HttpSource ?: return
-        val url = source.getMangaUrl(manga.toSManga())
-        context.copyToClipboard(url, url)
+        getMangaUrl(manga_, source_)?.let { url ->
+            context.copyToClipboard(url, url)
+        }
     }
+}
+
+internal fun normalizeMangaWebUrl(url: String): String {
+    val parsedUrl = url.toHttpUrlOrNull() ?: return url
+    val isInkStoryHost = parsedUrl.host.equals("inkstory.net", ignoreCase = true) ||
+        parsedUrl.host.equals("api.inkstory.net", ignoreCase = true)
+    if (!isInkStoryHost) return url
+
+    val pathSegments = parsedUrl.pathSegments.filter { it.isNotBlank() }
+    if (pathSegments.size < 3) return url
+    if (pathSegments[0] != "v2" || pathSegments[1] != "books") return url
+
+    val slug = pathSegments[2].takeIf(String::isNotBlank) ?: return url
+    return "https://inkstory.net/content/$slug"
 }

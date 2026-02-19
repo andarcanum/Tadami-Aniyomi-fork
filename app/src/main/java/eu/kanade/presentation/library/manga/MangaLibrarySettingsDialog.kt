@@ -3,6 +3,7 @@ package eu.kanade.presentation.library.manga
 import android.content.res.Configuration
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -17,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.components.TabbedDialog
 import eu.kanade.presentation.components.TabbedDialogPaddings
 import eu.kanade.tachiyomi.ui.library.manga.MangaLibrarySettingsScreenModel
@@ -46,8 +48,12 @@ fun MangaLibrarySettingsDialog(
     screenModel: MangaLibrarySettingsScreenModel,
     category: Category?,
 ) {
+    val configuration = LocalConfiguration.current
+    val maxSheetHeight = (configuration.screenHeightDp * 0.72f).dp
+
     TabbedDialog(
         onDismissRequest = onDismissRequest,
+        modifier = Modifier.heightIn(max = maxSheetHeight),
         tabTitles = persistentListOf(
             stringResource(MR.strings.action_filter),
             stringResource(MR.strings.action_sort),
@@ -235,7 +241,23 @@ private val displayModes = listOf(
 private fun ColumnScope.DisplayPage(
     screenModel: MangaLibrarySettingsScreenModel,
 ) {
-    val displayMode by screenModel.libraryPreferences.displayMode().collectAsState()
+    val useSeparateDisplayModePerMedia by screenModel
+        .libraryPreferences
+        .separateDisplayModePerMedia()
+        .collectAsState()
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_library_display_mode_per_media),
+        pref = screenModel.libraryPreferences.separateDisplayModePerMedia(),
+    )
+
+    val displayModePref = remember(useSeparateDisplayModePerMedia) {
+        if (useSeparateDisplayModePerMedia) {
+            screenModel.libraryPreferences.mangaDisplayMode()
+        } else {
+            screenModel.libraryPreferences.displayMode()
+        }
+    }
+    val displayMode by displayModePref.collectAsState()
     SettingsChipRow(MR.strings.action_display_mode) {
         displayModes.map { (titleRes, mode) ->
             FilterChip(

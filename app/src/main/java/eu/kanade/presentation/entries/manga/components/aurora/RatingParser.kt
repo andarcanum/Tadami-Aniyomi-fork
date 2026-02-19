@@ -16,10 +16,6 @@ data class ParsedRating(
 object RatingParser {
     private const val TAG = "RatingParser"
 
-    init {
-        Log.d(TAG, "RatingParser initialized")
-    }
-
     private val ratingPatterns = listOf(
         // Russian patterns with colon - MOST COMMON, check first
         Regex("""(\d+\.?\d*)\s*\(голосов?:\s*(\d+(?:\s*\d+)*)\)""", RegexOption.IGNORE_CASE),
@@ -36,6 +32,12 @@ object RatingParser {
         // MangaUpdates/MAL formats
         Regex("""MAL:\s*(\d+\.?\d*)""", RegexOption.IGNORE_CASE),
         Regex("""MyAnimeList:\s*(\d+\.?\d*)""", RegexOption.IGNORE_CASE),
+
+        // GroupLe multisrc star format: ***** 9.8[9.4] (votes: 123)
+        Regex(
+            """[\*\+\-]{5}\s*(\d+[.,]?\d*)\s*(?:\[[^\]]*])?\s*(?:\(votes:\s*(\d+(?:,\s*\d+)*)\))?""",
+            RegexOption.IGNORE_CASE,
+        ),
 
         // Star ratings - 5 star pattern (filled/empty/half mix) with rating
         Regex("""[★☆⭐✬✩]{5}\s*(\d+\.?\d*)\s*(?:\[ⓘ[^\]]*\])?\s*(?:\((\d+(?:,\s*\d+)*)\s*(?:голосов?|votes?)?\))?"""),
@@ -54,17 +56,17 @@ object RatingParser {
      */
     fun parseRating(description: String?): ParsedRating? {
         if (description.isNullOrBlank()) {
-            Log.d(TAG, "parseRating: description is null or blank")
+            debugLog("parseRating: description is null or blank")
             return null
         }
 
-        Log.d(TAG, "parseRating: description = \"$description\"")
+        debugLog("parseRating: description = \"$description\"")
 
         for (pattern in ratingPatterns) {
             val match = pattern.find(description) ?: continue
 
             val ratingString = match.groupValues.getOrNull(1) ?: continue
-            val rating = ratingString.toFloatOrNull() ?: continue
+            val rating = ratingString.replace(',', '.').toFloatOrNull() ?: continue
 
             // Validate rating is in reasonable range (0-10)
             if (rating < 0 || rating > 10) continue
@@ -73,12 +75,16 @@ object RatingParser {
             val votesString = match.groupValues.getOrNull(2)
             val votes = votesString?.replace(Regex("""[,\s]"""), "")?.toIntOrNull()
 
-            Log.d(TAG, "parseRating: FOUND rating=$rating, votes=$votes, matched pattern: ${match.value}")
+            debugLog("parseRating: FOUND rating=$rating, votes=$votes, matched pattern: ${match.value}")
             return ParsedRating(rating, votes)
         }
 
-        Log.d(TAG, "parseRating: NO MATCH FOUND")
+        debugLog("parseRating: NO MATCH FOUND")
         return null
+    }
+
+    private fun debugLog(message: String) {
+        runCatching { Log.d(TAG, message) }
     }
 
     /**

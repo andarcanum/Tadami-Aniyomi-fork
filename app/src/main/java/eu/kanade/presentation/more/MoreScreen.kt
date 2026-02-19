@@ -2,6 +2,7 @@ package eu.kanade.presentation.more
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ChromeReaderMode
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.outlined.CloudOff
@@ -45,6 +46,7 @@ fun MoreScreen(
     onClickStorage: () -> Unit,
     onClickDataAndStorage: () -> Unit,
     onClickPlayerSettings: () -> Unit,
+    onClickNovelReaderSettings: () -> Unit,
     onClickSettings: () -> Unit,
     onClickAbout: () -> Unit,
 ) {
@@ -157,6 +159,14 @@ fun MoreScreen(
                     title = stringResource(AYMR.strings.label_player_settings),
                     icon = Icons.Outlined.VideoSettings,
                     onPreferenceClick = onClickPlayerSettings,
+                )
+            }
+            item {
+                TextPreferenceWidget(
+                    title = stringResource(AYMR.strings.pref_category_novel_reader),
+                    subtitle = stringResource(AYMR.strings.pref_novel_reader_summary),
+                    icon = Icons.AutoMirrored.Outlined.ChromeReaderMode,
+                    onPreferenceClick = onClickNovelReaderSettings,
                 )
             }
             item {

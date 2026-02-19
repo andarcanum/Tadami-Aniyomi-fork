@@ -81,250 +81,264 @@ class AchievementBackupRestoreIntegrationTest {
     }
 
     @Test
-    fun `full backup and restore cycle preserves data`() = runTest {
-        // Setup initial data
-        val achievement = createTestAchievement("test_1")
-        val progress = createTestProgress("test_1", unlocked = true)
+    fun `full backup and restore cycle preserves data`() {
+        runTest {
+            // Setup initial data
+            val achievement = createTestAchievement("test_1")
+            val progress = createTestProgress("test_1", unlocked = true)
 
-        achievementRepository.insertAchievement(achievement)
-        achievementRepository.insertOrUpdateProgress(progress)
+            achievementRepository.insertAchievement(achievement)
+            achievementRepository.insertOrUpdateProgress(progress)
 
-        val profile = UserProfile.createDefault().copy(
-            level = 10,
-            totalXP = 5000,
-            titles = listOf("Pro", "Master"),
-        )
-        userProfileRepository.saveProfile(profile)
+            val profile = UserProfile.createDefault().copy(
+                level = 10,
+                totalXP = 5000,
+                titles = listOf("Pro", "Master"),
+            )
+            userProfileRepository.saveProfile(profile)
 
-        // Create backup
-        val backupAchievements = listOf(BackupAchievement.fromAchievement(achievement, progress))
-        val backupProfile = BackupUserProfile.fromUserProfile(profile)
-        val backupActivity = generateTestActivityLog()
+            // Create backup
+            val backupAchievements = listOf(BackupAchievement.fromAchievement(achievement, progress))
+            val backupProfile = BackupUserProfile.fromUserProfile(profile)
+            val backupActivity = generateTestActivityLog()
 
-        // Clear database to simulate restore to clean state
-        achievementRepository.deleteAllAchievements()
-        activityRepository.deleteAllActivityData()
-        userProfileRepository.deleteProfile("default")
+            // Clear database to simulate restore to clean state
+            achievementRepository.deleteAllAchievements()
+            activityRepository.deleteAllActivityData()
+            userProfileRepository.deleteProfile("default")
 
-        // Restore
-        restorer.restoreAchievements(
-            backupAchievements = backupAchievements,
-            backupUserProfile = backupProfile,
-            backupActivityLog = backupActivity,
-            backupStats = null,
-        )
+            // Restore
+            restorer.restoreAchievements(
+                backupAchievements = backupAchievements,
+                backupUserProfile = backupProfile,
+                backupActivityLog = backupActivity,
+                backupStats = null,
+            )
 
-        // Verify achievement restored
-        val restoredAchievements = achievementRepository.getAll().first()
-        assertEquals(1, restoredAchievements.size)
-        assertEquals("test_1", restoredAchievements.first().id)
+            // Verify achievement restored
+            val restoredAchievements = achievementRepository.getAll().first()
+            assertEquals(1, restoredAchievements.size)
+            assertEquals("test_1", restoredAchievements.first().id)
 
-        val restoredProgress = achievementRepository.getProgress("test_1").first()
-        assertNotNull(restoredProgress)
-        assertTrue(restoredProgress.isUnlocked)
+            val restoredProgress = achievementRepository.getProgress("test_1").first()
+            assertNotNull(restoredProgress)
+            assertTrue(restoredProgress.isUnlocked)
 
-        // Verify profile restored
-        val restoredProfile = userProfileRepository.getProfileSync("default")
-        assertNotNull(restoredProfile)
-        assertEquals(10, restoredProfile.level)
-        assertEquals(5000, restoredProfile.totalXP)
-        assertEquals(2, restoredProfile.titles.size)
+            // Verify profile restored
+            val restoredProfile = userProfileRepository.getProfileSync("default")
+            assertNotNull(restoredProfile)
+            assertEquals(10, restoredProfile.level)
+            assertEquals(5000, restoredProfile.totalXP)
+            assertEquals(2, restoredProfile.titles.size)
 
-        // Verify activity restored
-        val restoredActivity = activityRepository.getActivityData(days = 30).first()
-        assertTrue(restoredActivity.isNotEmpty())
+            // Verify activity restored
+            val restoredActivity = activityRepository.getActivityData(days = 30).first()
+            assertTrue(restoredActivity.isNotEmpty())
+        }
     }
 
     @Test
-    fun `restore with merge preserves higher values`() = runTest {
-        // Existing data in database
-        val existingProfile = UserProfile.createDefault().copy(
-            level = 15,
-            totalXP = 8000,
-            titles = listOf("Veteran"),
-        )
-        userProfileRepository.saveProfile(existingProfile)
+    fun `restore with merge preserves higher values`() {
+        runTest {
+            // Existing data in database
+            val existingProfile = UserProfile.createDefault().copy(
+                level = 15,
+                totalXP = 8000,
+                titles = listOf("Veteran"),
+            )
+            userProfileRepository.saveProfile(existingProfile)
 
-        // Backup with lower values
-        val backupProfile = UserProfile.createDefault().copy(
-            level = 10,
-            totalXP = 5000,
-            titles = listOf("Newbie", "Pro"),
-        )
+            // Backup with lower values
+            val backupProfile = UserProfile.createDefault().copy(
+                level = 10,
+                totalXP = 5000,
+                titles = listOf("Newbie", "Pro"),
+            )
 
-        // Restore (should merge)
-        restorer.restoreAchievements(
-            backupAchievements = emptyList(),
-            backupUserProfile = BackupUserProfile.fromUserProfile(backupProfile),
-            backupActivityLog = emptyList(),
-            backupStats = null,
-        )
+            // Restore (should merge)
+            restorer.restoreAchievements(
+                backupAchievements = emptyList(),
+                backupUserProfile = BackupUserProfile.fromUserProfile(backupProfile),
+                backupActivityLog = emptyList(),
+                backupStats = null,
+            )
 
-        // Verify merge kept higher values
-        val merged = userProfileRepository.getProfileSync("default")
-        assertNotNull(merged)
-        assertEquals(15, merged.level) // Kept existing (higher)
-        assertEquals(8000, merged.totalXP) // Kept existing (higher)
-        assertEquals(3, merged.titles.size) // Merged lists: Veteran + Newbie + Pro
-        assertTrue(merged.titles.contains("Veteran"))
-        assertTrue(merged.titles.contains("Pro"))
+            // Verify merge kept higher values
+            val merged = userProfileRepository.getProfileSync("default")
+            assertNotNull(merged)
+            assertEquals(15, merged.level) // Kept existing (higher)
+            assertEquals(8000, merged.totalXP) // Kept existing (higher)
+            assertEquals(3, merged.titles.size) // Merged lists: Veteran + Newbie + Pro
+            assertTrue(merged.titles.contains("Veteran"))
+            assertTrue(merged.titles.contains("Pro"))
+        }
     }
 
     @Test
-    fun `legacy backup format restores correctly`() = runTest {
-        // Create legacy format backup (ProtoNumbers 1-3 only, no detailed metrics)
-        val legacyActivity = listOf(
-            BackupDayActivity(
-                date = LocalDate.now().toString(),
-                level = 3,
-                type = 1, // READING
-                // Legacy: no chaptersRead, episodesWatched, etc.
-            ),
-            BackupDayActivity(
-                date = LocalDate.now().minusDays(1).toString(),
-                level = 2,
-                type = 2, // WATCHING
-            ),
-        )
+    fun `legacy backup format restores correctly`() {
+        runTest {
+            // Create legacy format backup (ProtoNumbers 1-3 only, no detailed metrics)
+            val legacyActivity = listOf(
+                BackupDayActivity(
+                    date = LocalDate.now().toString(),
+                    level = 3,
+                    type = 1, // READING
+                    // Legacy: no chaptersRead, episodesWatched, etc.
+                ),
+                BackupDayActivity(
+                    date = LocalDate.now().minusDays(1).toString(),
+                    level = 2,
+                    type = 2, // WATCHING
+                ),
+            )
 
-        // Restore legacy format
-        restorer.restoreAchievements(
-            backupAchievements = emptyList(),
-            backupUserProfile = null,
-            backupActivityLog = legacyActivity,
-            backupStats = null,
-        )
+            // Restore legacy format
+            restorer.restoreAchievements(
+                backupAchievements = emptyList(),
+                backupUserProfile = null,
+                backupActivityLog = legacyActivity,
+                backupStats = null,
+            )
 
-        // Verify data restored (with zero metrics)
-        val restored = activityRepository.getActivityData(days = 2).first()
-        assertEquals(2, restored.size)
+            // Verify data restored (with zero metrics)
+            val restored = activityRepository.getActivityData(days = 2).first()
+            assertEquals(2, restored.size)
 
-        // Legacy format should restore with default metrics (0)
-        val record = database.activityLogQueries
-            .getActivityForDate(LocalDate.now().toString())
-            .executeAsOneOrNull()
+            // Legacy format should restore with default metrics (0)
+            val record = database.activityLogQueries
+                .getActivityForDate(LocalDate.now().toString())
+                .executeAsOneOrNull()
 
-        assertNotNull(record)
-        assertEquals(0, record.chapters_read.toInt()) // Default value for legacy format
-        assertEquals(0, record.episodes_watched.toInt())
+            assertNotNull(record)
+            assertEquals(0, record.chapters_read.toInt()) // Default value for legacy format
+            assertEquals(0, record.episodes_watched.toInt())
+        }
     }
 
     @Test
-    fun `new backup format with detailed metrics restores correctly`() = runTest {
-        // Create new format backup (ProtoNumbers 1-8)
-        val newActivity = listOf(
-            BackupDayActivity(
-                date = LocalDate.now().toString(),
-                level = 3,
-                type = 1,
-                chaptersRead = 25,
-                episodesWatched = 10,
-                appOpens = 1,
-                achievementsUnlocked = 2,
-                durationMs = 7200000,
-            ),
-        )
+    fun `new backup format with detailed metrics restores correctly`() {
+        runTest {
+            // Create new format backup (ProtoNumbers 1-8)
+            val newActivity = listOf(
+                BackupDayActivity(
+                    date = LocalDate.now().toString(),
+                    level = 3,
+                    type = 1,
+                    chaptersRead = 25,
+                    episodesWatched = 10,
+                    appOpens = 1,
+                    achievementsUnlocked = 2,
+                    durationMs = 7200000,
+                ),
+            )
 
-        // Restore
-        restorer.restoreAchievements(
-            backupAchievements = emptyList(),
-            backupUserProfile = null,
-            backupActivityLog = newActivity,
-            backupStats = null,
-        )
+            // Restore
+            restorer.restoreAchievements(
+                backupAchievements = emptyList(),
+                backupUserProfile = null,
+                backupActivityLog = newActivity,
+                backupStats = null,
+            )
 
-        // Verify all detailed metrics restored
-        val record = database.activityLogQueries
-            .getActivityForDate(LocalDate.now().toString())
-            .executeAsOne()
+            // Verify all detailed metrics restored
+            val record = database.activityLogQueries
+                .getActivityForDate(LocalDate.now().toString())
+                .executeAsOne()
 
-        assertEquals(25, record.chapters_read.toInt())
-        assertEquals(10, record.episodes_watched.toInt())
-        assertEquals(1, record.app_opens.toInt())
-        assertEquals(2, record.achievements_unlocked.toInt())
-        assertEquals(7200000L, record.duration_ms)
+            assertEquals(25, record.chapters_read.toInt())
+            assertEquals(10, record.episodes_watched.toInt())
+            assertEquals(1, record.app_opens.toInt())
+            assertEquals(2, record.achievements_unlocked.toInt())
+            assertEquals(7200000L, record.duration_ms)
+        }
     }
 
     @Test
-    fun `achievement progress merge keeps best progress`() = runTest {
-        // Existing achievement with some progress
-        val achievement = createTestAchievement("test_merge")
-        achievementRepository.insertAchievement(achievement)
+    fun `achievement progress merge keeps best progress`() {
+        runTest {
+            // Existing achievement with some progress
+            val achievement = createTestAchievement("test_merge")
+            achievementRepository.insertAchievement(achievement)
 
-        val existingProgress = createTestProgress("test_merge", unlocked = false).copy(
-            progress = 50,
-        )
-        achievementRepository.insertOrUpdateProgress(existingProgress)
+            val existingProgress = createTestProgress("test_merge", unlocked = false).copy(
+                progress = 50,
+            )
+            achievementRepository.insertOrUpdateProgress(existingProgress)
 
-        // Backup with higher progress
-        val backupProgress = existingProgress.copy(
-            progress = 75, // Higher than existing
-        )
-        val backup = BackupAchievement.fromAchievement(achievement, backupProgress)
+            // Backup with higher progress
+            val backupProgress = existingProgress.copy(
+                progress = 75, // Higher than existing
+            )
+            val backup = BackupAchievement.fromAchievement(achievement, backupProgress)
 
-        // Restore
-        restorer.restoreAchievements(
-            backupAchievements = listOf(backup),
-            backupUserProfile = null,
-            backupActivityLog = emptyList(),
-            backupStats = null,
-        )
+            // Restore
+            restorer.restoreAchievements(
+                backupAchievements = listOf(backup),
+                backupUserProfile = null,
+                backupActivityLog = emptyList(),
+                backupStats = null,
+            )
 
-        // Verify higher progress was kept
-        val merged = achievementRepository.getProgress("test_merge").first()
-        assertNotNull(merged)
-        assertEquals(75, merged.progress)
+            // Verify higher progress was kept
+            val merged = achievementRepository.getProgress("test_merge").first()
+            assertNotNull(merged)
+            assertEquals(75, merged.progress)
+        }
     }
 
     @Test
-    fun `tier progress is preserved during restore`() = runTest {
-        val achievement = createTestAchievement("test_tier")
-        achievementRepository.insertAchievement(achievement)
+    fun `tier progress is preserved during restore`() {
+        runTest {
+            val achievement = createTestAchievement("test_tier")
+            achievementRepository.insertAchievement(achievement)
 
-        // Backup with tier progress
-        val progress = createTestProgress("test_tier", unlocked = true).copy(
-            currentTier = 3,
-            maxTier = 5,
-            tierProgress = 450,
-            tierMaxProgress = 500,
-        )
-        val backup = BackupAchievement.fromAchievement(achievement, progress)
+            // Backup with tier progress
+            val progress = createTestProgress("test_tier", unlocked = true).copy(
+                currentTier = 3,
+                maxTier = 5,
+                tierProgress = 450,
+                tierMaxProgress = 500,
+            )
+            val backup = BackupAchievement.fromAchievement(achievement, progress)
 
-        // Restore
-        restorer.restoreAchievements(
-            backupAchievements = listOf(backup),
-            backupUserProfile = null,
-            backupActivityLog = emptyList(),
-            backupStats = null,
-        )
+            // Restore
+            restorer.restoreAchievements(
+                backupAchievements = listOf(backup),
+                backupUserProfile = null,
+                backupActivityLog = emptyList(),
+                backupStats = null,
+            )
 
-        // Verify tier data restored
-        val restored = achievementRepository.getProgress("test_tier").first()
-        assertNotNull(restored)
-        assertEquals(3, restored.currentTier)
-        assertEquals(5, restored.maxTier)
-        assertEquals(450, restored.tierProgress)
-        assertEquals(500, restored.tierMaxProgress)
+            // Verify tier data restored
+            val restored = achievementRepository.getProgress("test_tier").first()
+            assertNotNull(restored)
+            assertEquals(3, restored.currentTier)
+            assertEquals(5, restored.maxTier)
+            assertEquals(450, restored.tierProgress)
+            assertEquals(500, restored.tierMaxProgress)
+        }
     }
 
     @Test
-    fun `empty backup does not corrupt existing data`() = runTest {
-        // Setup existing data
-        val profile = UserProfile.createDefault().copy(level = 10)
-        userProfileRepository.saveProfile(profile)
+    fun `empty backup does not corrupt existing data`() {
+        runTest {
+            // Setup existing data
+            val profile = UserProfile.createDefault().copy(level = 10)
+            userProfileRepository.saveProfile(profile)
 
-        // Restore empty backup
-        restorer.restoreAchievements(
-            backupAchievements = emptyList(),
-            backupUserProfile = null,
-            backupActivityLog = emptyList(),
-            backupStats = null,
-        )
+            // Restore empty backup
+            restorer.restoreAchievements(
+                backupAchievements = emptyList(),
+                backupUserProfile = null,
+                backupActivityLog = emptyList(),
+                backupStats = null,
+            )
 
-        // Verify existing data unchanged
-        val existing = userProfileRepository.getProfileSync("default")
-        assertNotNull(existing)
-        assertEquals(10, existing.level)
+            // Verify existing data unchanged
+            val existing = userProfileRepository.getProfileSync("default")
+            assertNotNull(existing)
+            assertEquals(10, existing.level)
+        }
     }
 
     // Helper methods
@@ -337,7 +351,7 @@ class AchievementBackupRestoreIntegrationTest {
             points = 50,
             title = "Test Achievement",
             description = "Test description",
-            badgeIcon = "🏆",
+            badgeIcon = "рџЏ†",
             isHidden = false,
             isSecret = false,
             unlockableId = null,

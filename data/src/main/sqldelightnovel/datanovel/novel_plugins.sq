@@ -1,0 +1,102 @@
+CREATE TABLE novel_plugins (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    site TEXT NOT NULL,
+    lang TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    url TEXT NOT NULL,
+    icon_url TEXT,
+    custom_js TEXT,
+    custom_css TEXT,
+    has_settings INTEGER NOT NULL,
+    sha256 TEXT NOT NULL,
+    repo_url TEXT NOT NULL
+);
+
+findOne:
+SELECT *
+FROM novel_plugins
+WHERE id = :id;
+
+findAll:
+SELECT *
+FROM novel_plugins
+ORDER BY name COLLATE NOCASE;
+
+insert:
+INSERT INTO novel_plugins(
+    id,
+    name,
+    site,
+    lang,
+    version,
+    url,
+    icon_url,
+    custom_js,
+    custom_css,
+    has_settings,
+    sha256,
+    repo_url
+)
+VALUES (
+    :id,
+    :name,
+    :site,
+    :lang,
+    :version,
+    :url,
+    :icon_url,
+    :custom_js,
+    :custom_css,
+    :has_settings,
+    :sha256,
+    :repo_url
+);
+
+upsert:
+INSERT INTO novel_plugins(
+    id,
+    name,
+    site,
+    lang,
+    version,
+    url,
+    icon_url,
+    custom_js,
+    custom_css,
+    has_settings,
+    sha256,
+    repo_url
+)
+VALUES (
+    :id,
+    :name,
+    :site,
+    :lang,
+    :version,
+    :url,
+    :icon_url,
+    :custom_js,
+    :custom_css,
+    :has_settings,
+    :sha256,
+    :repo_url
+)
+ON CONFLICT(id)
+DO UPDATE SET
+    name = :name,
+    site = :site,
+    lang = :lang,
+    version = :version,
+    url = :url,
+    icon_url = :icon_url,
+    custom_js = :custom_js,
+    custom_css = :custom_css,
+    has_settings = :has_settings,
+    sha256 = :sha256,
+    repo_url = :repo_url
+WHERE id = id;
+
+delete:
+DELETE FROM novel_plugins
+WHERE id = :id;

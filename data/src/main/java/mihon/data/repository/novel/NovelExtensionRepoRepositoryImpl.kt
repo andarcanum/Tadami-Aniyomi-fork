@@ -1,0 +1,97 @@
+package mihon.data.repository.novel
+
+import android.database.sqlite.SQLiteException
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import mihon.domain.extensionrepo.exception.SaveExtensionRepoException
+import mihon.domain.extensionrepo.model.ExtensionRepo
+import mihon.domain.extensionrepo.novel.repository.NovelExtensionRepoRepository
+import tachiyomi.data.handlers.novel.NovelDatabaseHandler
+
+class NovelExtensionRepoRepositoryImpl(
+    private val handler: NovelDatabaseHandler,
+) : NovelExtensionRepoRepository {
+    override fun subscribeAll(): Flow<List<ExtensionRepo>> {
+        return handler.subscribeToList { novel_extension_reposQueries.findAll(::mapExtensionRepo) }
+    }
+
+    override suspend fun getAll(): List<ExtensionRepo> {
+        return handler.awaitList { novel_extension_reposQueries.findAll(::mapExtensionRepo) }
+    }
+
+    override suspend fun getRepo(baseUrl: String): ExtensionRepo? {
+        return handler.awaitOneOrNull { novel_extension_reposQueries.findOne(baseUrl, ::mapExtensionRepo) }
+    }
+
+    override suspend fun getRepoBySigningKeyFingerprint(fingerprint: String): ExtensionRepo? {
+        return handler.awaitOneOrNull {
+            novel_extension_reposQueries.findOneBySigningKeyFingerprint(fingerprint, ::mapExtensionRepo)
+        }
+    }
+
+    override fun getCount(): Flow<Int> {
+        return handler.subscribeToOne { novel_extension_reposQueries.count() }.map { it.toInt() }
+    }
+
+    override suspend fun insertRepo(
+        baseUrl: String,
+        name: String,
+        shortName: String?,
+        website: String,
+        signingKeyFingerprint: String,
+    ) {
+        try {
+            handler.await {
+                novel_extension_reposQueries.insert(baseUrl, name, shortName, website, signingKeyFingerprint)
+            }
+        } catch (ex: SQLiteException) {
+            throw SaveExtensionRepoException(ex)
+        }
+    }
+
+    override suspend fun upsertRepo(
+        baseUrl: String,
+        name: String,
+        shortName: String?,
+        website: String,
+        signingKeyFingerprint: String,
+    ) {
+        try {
+            handler.await {
+                novel_extension_reposQueries.upsert(baseUrl, name, shortName, website, signingKeyFingerprint)
+            }
+        } catch (ex: SQLiteException) {
+            throw SaveExtensionRepoException(ex)
+        }
+    }
+
+    override suspend fun replaceRepo(newRepo: ExtensionRepo) {
+        handler.await {
+            novel_extension_reposQueries.replace(
+                newRepo.baseUrl,
+                newRepo.name,
+                newRepo.shortName,
+                newRepo.website,
+                newRepo.signingKeyFingerprint,
+            )
+        }
+    }
+
+    override suspend fun deleteRepo(baseUrl: String) {
+        return handler.await { novel_extension_reposQueries.delete(baseUrl) }
+    }
+
+    private fun mapExtensionRepo(
+        baseUrl: String,
+        name: String,
+        shortName: String?,
+        website: String,
+        signingKeyFingerprint: String,
+    ): ExtensionRepo = ExtensionRepo(
+        baseUrl = baseUrl,
+        name = name,
+        shortName = shortName,
+        website = website,
+        signingKeyFingerprint = signingKeyFingerprint,
+    )
+}

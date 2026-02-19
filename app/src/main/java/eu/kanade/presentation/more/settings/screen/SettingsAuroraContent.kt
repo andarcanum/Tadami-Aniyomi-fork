@@ -81,6 +81,12 @@ fun SettingsAuroraContent(
             screen = SettingsReaderScreen,
         ),
         SettingsItem(
+            icon = Icons.AutoMirrored.Outlined.ChromeReaderMode,
+            title = stringResource(AYMR.strings.pref_category_novel_reader),
+            subtitle = stringResource(AYMR.strings.pref_novel_reader_summary),
+            screen = SettingsNovelReaderScreen,
+        ),
+        SettingsItem(
             icon = Icons.Outlined.VideoSettings,
             title = stringResource(AYMR.strings.label_player),
             subtitle = stringResource(AYMR.strings.pref_player_settings_summary),

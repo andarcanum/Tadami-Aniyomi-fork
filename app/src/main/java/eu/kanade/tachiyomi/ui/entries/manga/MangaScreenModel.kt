@@ -21,6 +21,7 @@ import eu.kanade.domain.entries.manga.model.chaptersFiltered
 import eu.kanade.domain.entries.manga.model.downloadedFilter
 import eu.kanade.domain.entries.manga.model.toSManga
 import eu.kanade.domain.items.chapter.interactor.GetAvailableScanlators
+import eu.kanade.domain.items.chapter.interactor.GetScanlatorChapterCounts
 import eu.kanade.domain.items.chapter.interactor.SetReadStatus
 import eu.kanade.domain.items.chapter.interactor.SyncChaptersWithSource
 import eu.kanade.domain.track.manga.interactor.AddMangaTracks
@@ -107,6 +108,7 @@ class MangaScreenModel(
     private val getMangaAndChapters: GetMangaWithChapters = Injekt.get(),
     private val getDuplicateLibraryManga: GetDuplicateLibraryManga = Injekt.get(),
     private val getAvailableScanlators: GetAvailableScanlators = Injekt.get(),
+    private val getScanlatorChapterCounts: GetScanlatorChapterCounts = Injekt.get(),
     private val getExcludedScanlators: GetExcludedScanlators = Injekt.get(),
     private val setExcludedScanlators: SetExcludedScanlators = Injekt.get(),
     private val setMangaChapterFlags: SetMangaChapterFlags = Injekt.get(),
@@ -211,16 +213,41 @@ class MangaScreenModel(
                 }
         }
 
+        screenModelScope.launchIO {
+            getScanlatorChapterCounts.subscribe(mangaId)
+                .flowWithLifecycle(lifecycle)
+                .distinctUntilChanged()
+                .collectLatest { scanlatorChapterCounts ->
+                    updateSuccessState {
+                        it.copy(scanlatorChapterCounts = scanlatorChapterCounts)
+                    }
+                }
+        }
+
         observeDownloads()
 
         screenModelScope.launchIO {
             val manga = getMangaAndChapters.awaitManga(mangaId)
-            val chapters = getMangaAndChapters.awaitChapters(mangaId, applyScanlatorFilter = true)
-                .toChapterListItems(manga)
 
             if (!manga.favorite) {
                 setMangaDefaultChapterFlags.await(manga)
             }
+
+            val availableScanlators = getAvailableScanlators.await(mangaId)
+            val scanlatorChapterCounts = getScanlatorChapterCounts.await(mangaId)
+            val storedExcludedScanlators = getExcludedScanlators.await(mangaId)
+            val initialExcludedScanlators = resolveDefaultExcludedScanlatorsByChapterCount(
+                scanlatorChapterCounts = scanlatorChapterCounts,
+                availableScanlators = availableScanlators,
+                excludedScanlators = storedExcludedScanlators,
+            ) ?: storedExcludedScanlators
+
+            if (initialExcludedScanlators != storedExcludedScanlators) {
+                setExcludedScanlators.await(mangaId, initialExcludedScanlators)
+            }
+
+            val chapters = getMangaAndChapters.awaitChapters(mangaId, applyScanlatorFilter = true)
+                .toChapterListItems(manga)
 
             val needRefreshInfo = !manga.initialized || isFromSource
             val needRefreshChapter = chapters.isEmpty()
@@ -232,8 +259,9 @@ class MangaScreenModel(
                     source = Injekt.get<MangaSourceManager>().getOrStub(manga.source),
                     isFromSource = isFromSource,
                     chapters = chapters,
-                    availableScanlators = getAvailableScanlators.await(mangaId),
-                    excludedScanlators = getExcludedScanlators.await(mangaId),
+                    availableScanlators = availableScanlators,
+                    scanlatorChapterCounts = scanlatorChapterCounts,
+                    excludedScanlators = initialExcludedScanlators,
                     isRefreshingData = needRefreshInfo || needRefreshChapter,
                     dialog = null,
                 )
@@ -1194,6 +1222,17 @@ class MangaScreenModel(
         }
     }
 
+    fun selectScanlator(scanlator: String?) {
+        val availableScanlators = successState?.availableScanlators.orEmpty()
+        val excluded = resolveExcludedScanlatorsForSelection(
+            selectedScanlator = scanlator,
+            availableScanlators = availableScanlators,
+        )
+        screenModelScope.launchIO {
+            setExcludedScanlators.await(mangaId, excluded)
+        }
+    }
+
     sealed interface State {
         @Immutable
         data object Loading : State
@@ -1205,6 +1244,7 @@ class MangaScreenModel(
             val isFromSource: Boolean,
             val chapters: List<ChapterList.Item>,
             val availableScanlators: Set<String>,
+            val scanlatorChapterCounts: Map<String, Int>,
             val excludedScanlators: Set<String>,
             val trackingCount: Int = 0,
             val hasLoggedInTrackers: Boolean = false,
@@ -1250,6 +1290,15 @@ class MangaScreenModel(
             val scanlatorFilterActive: Boolean
                 get() = excludedScanlators.intersect(availableScanlators).isNotEmpty()
 
+            val selectedScanlator: String?
+                get() = resolveSelectedScanlator(
+                    availableScanlators = availableScanlators,
+                    excludedScanlators = excludedScanlators,
+                )
+
+            val showScanlatorSelector: Boolean
+                get() = scanlatorChapterCounts.size > 1
+
             val filterActive: Boolean
                 get() = scanlatorFilterActive || manga.chaptersFiltered()
 
@@ -1278,6 +1327,63 @@ class MangaScreenModel(
             }
         }
     }
+}
+
+internal fun resolveSelectedScanlator(
+    availableScanlators: Set<String>,
+    excludedScanlators: Set<String>,
+): String? {
+    if (availableScanlators.isEmpty()) return null
+    val effectiveExcluded = excludedScanlators.intersect(availableScanlators)
+    val included = availableScanlators - effectiveExcluded
+    return included.singleOrNull()
+}
+
+internal fun resolveDefaultExcludedScanlatorsByChapterCount(
+    scanlatorChapterCounts: Map<String, Int>,
+    availableScanlators: Set<String>,
+    excludedScanlators: Set<String>,
+): Set<String>? {
+    if (availableScanlators.size < 2) return null
+    if (excludedScanlators.intersect(availableScanlators).isNotEmpty()) return null
+
+    val availableByNormalized = availableScanlators
+        .asSequence()
+        .map { it.trim() to it }
+        .filter { (normalized, _) -> normalized.isNotEmpty() }
+        .associate { it }
+    if (availableByNormalized.size < 2) return null
+
+    val preferredScanlator = scanlatorChapterCounts
+        .asSequence()
+        .map { it.key.trim() to it.value }
+        .filter { (normalized, _) -> normalized in availableByNormalized.keys }
+        .sortedWith(
+            compareByDescending<Pair<String, Int>> { it.second }
+                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.first },
+        )
+        .map { it.first }
+        .firstOrNull() ?: return null
+
+    return availableByNormalized
+        .filterKeys { it != preferredScanlator }
+        .values
+        .toSet()
+}
+
+internal fun resolveExcludedScanlatorsForSelection(
+    selectedScanlator: String?,
+    availableScanlators: Set<String>,
+): Set<String> {
+    val selection = selectedScanlator?.trim().orEmpty()
+    if (selection.isEmpty()) return emptySet()
+    val normalizedAvailable = availableScanlators
+        .asSequence()
+        .map { scanlator -> scanlator.trim() }
+        .filter { scanlator -> scanlator.isNotEmpty() }
+        .toSet()
+    if (selection !in normalizedAvailable) return emptySet()
+    return normalizedAvailable - selection
 }
 
 @Immutable

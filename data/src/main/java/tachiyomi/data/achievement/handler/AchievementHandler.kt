@@ -18,6 +18,7 @@ import tachiyomi.data.achievement.handler.checkers.TimeBasedAchievementChecker
 import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
 import tachiyomi.data.handlers.manga.MangaDatabaseHandler
+import tachiyomi.data.handlers.novel.NovelDatabaseHandler
 import tachiyomi.domain.achievement.model.Achievement
 import tachiyomi.domain.achievement.model.AchievementCategory
 import tachiyomi.domain.achievement.model.AchievementProgress
@@ -41,6 +42,7 @@ class AchievementHandler(
     private val unlockableManager: UnlockableManager,
     private val mangaHandler: MangaDatabaseHandler,
     private val animeHandler: AnimeDatabaseHandler,
+    private val novelHandler: NovelDatabaseHandler,
     private val mangaRepository: MangaRepository,
     private val animeRepository: AnimeRepository,
     private val userProfileManager: UserProfileManager,
@@ -60,6 +62,14 @@ class AchievementHandler(
             "[ACHIEVEMENTS] AchievementHandler.start() called - subscribing to event bus (${eventBus.hashCode()})"
         }
         scope.launch {
+            try {
+                sanitizeCrossCategoryFirstAchievements()
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR) {
+                    "[ACHIEVEMENTS] Failed to sanitize first achievements: ${e.message}"
+                }
+            }
+
             eventBus.events
                 .catch { e ->
                     logcat(LogPriority.ERROR) { "[ACHIEVEMENTS] Error in achievement event stream: ${e.message}" }
@@ -77,14 +87,52 @@ class AchievementHandler(
         }
     }
 
+    private suspend fun sanitizeCrossCategoryFirstAchievements() {
+        val mangaRead = (mangaHandler.awaitOneOrNull { historyQueries.getTotalChaptersRead() } ?: 0L) > 0L
+        val animeWatched = (animeHandler.awaitOneOrNull { animehistoryQueries.getTotalEpisodesWatched() } ?: 0L) > 0L
+        val novelRead = (novelHandler.awaitOneOrNull { novel_historyQueries.getTotalChaptersRead() } ?: 0L) > 0L
+
+        var corrected = false
+        corrected = sanitizeFirstAchievement("first_chapter", mangaRead) || corrected
+        corrected = sanitizeFirstAchievement("first_episode", animeWatched) || corrected
+        corrected = sanitizeFirstAchievement("first_novel_chapter", novelRead) || corrected
+
+        if (corrected) {
+            updateMetaAchievements()
+        }
+    }
+
+    private suspend fun sanitizeFirstAchievement(
+        achievementId: String,
+        hasRelevantHistory: Boolean,
+    ): Boolean {
+        val progress = repository.getProgress(achievementId).first() ?: return false
+        if (!progress.isUnlocked || hasRelevantHistory) return false
+
+        repository.insertOrUpdateProgress(
+            progress.copy(
+                progress = 0,
+                isUnlocked = false,
+                unlockedAt = null,
+                lastUpdated = System.currentTimeMillis(),
+            ),
+        )
+        logcat(LogPriority.WARN) {
+            "[ACHIEVEMENTS] Corrected invalid unlock for $achievementId (no relevant history found)"
+        }
+        return true
+    }
+
     private suspend fun processEvent(event: AchievementEvent) {
         when (event) {
             is AchievementEvent.ChapterRead -> handleChapterRead(event)
+            is AchievementEvent.NovelChapterRead -> handleNovelChapterRead(event)
             is AchievementEvent.EpisodeWatched -> handleEpisodeWatched(event)
             is AchievementEvent.LibraryAdded -> handleLibraryAdded(event)
             is AchievementEvent.LibraryRemoved -> handleLibraryRemoved(event)
             is AchievementEvent.MangaCompleted -> handleMangaCompleted(event)
             is AchievementEvent.AnimeCompleted -> handleAnimeCompleted(event)
+            is AchievementEvent.NovelCompleted -> handleNovelCompleted(event)
             is AchievementEvent.SessionEnd -> handleSessionEnd(event)
             is AchievementEvent.AppStart -> handleAppStart(event)
             is AchievementEvent.FeatureUsed -> handleFeatureUsed(event)
@@ -138,6 +186,24 @@ class AchievementHandler(
         }
     }
 
+    private suspend fun handleNovelChapterRead(event: AchievementEvent.NovelChapterRead) {
+        streakChecker.logChapterRead()
+
+        val achievements = getAchievementsForCategory(AchievementCategory.NOVEL)
+        val relevantAchievements = achievements.filter {
+            it.type == AchievementType.QUANTITY ||
+                it.type == AchievementType.EVENT ||
+                it.type == AchievementType.STREAK ||
+                it.type == AchievementType.DIVERSITY ||
+                it.type == AchievementType.LIBRARY ||
+                it.type == AchievementType.META
+        }.filter { it.id != "read_long_novel" }
+
+        relevantAchievements.forEach { achievement ->
+            checkAndUpdateProgress(achievement, event)
+        }
+    }
+
     private suspend fun handleLibraryAdded(event: AchievementEvent.LibraryAdded) {
         val achievements = getAchievementsForCategory(event.type)
             .filter {
@@ -180,6 +246,22 @@ class AchievementHandler(
 
         achievements.forEach { achievement ->
             checkAndUpdateProgress(achievement, event)
+        }
+    }
+
+    private suspend fun handleNovelCompleted(event: AchievementEvent.NovelCompleted) {
+        val achievements = getAchievementsForCategory(AchievementCategory.NOVEL)
+            .filter { it.type == AchievementType.EVENT }
+
+        achievements.forEach { achievement ->
+            if (achievement.id == "read_long_novel") {
+                if (checkLongNovelAchievement(event)) {
+                    val currentProgress = repository.getProgress(achievement.id).first()
+                    applyProgressUpdate(achievement, currentProgress, 1)
+                }
+            } else {
+                checkAndUpdateProgress(achievement, event)
+            }
         }
     }
 
@@ -456,6 +538,9 @@ class AchievementHandler(
                     achievement.id.startsWith("complete_") && achievement.id.endsWith("_anime") -> {
                         getCompletedAnimeCount()
                     }
+                    achievement.id.startsWith("complete_") && achievement.id.endsWith("_novel") -> {
+                        getCompletedNovelCount()
+                    }
                     else -> getTotalReadForCategory(achievement.category)
                 }
             }
@@ -471,6 +556,10 @@ class AchievementHandler(
                                 "anime",
                                 ignoreCase = true,
                             ) -> diversityChecker.getAnimeGenreDiversity()
+                            achievement.id.contains(
+                                "novel",
+                                ignoreCase = true,
+                            ) -> diversityChecker.getNovelGenreDiversity()
                             else -> diversityChecker.getGenreDiversity()
                         }
                     }
@@ -484,6 +573,10 @@ class AchievementHandler(
                                 "anime",
                                 ignoreCase = true,
                             ) -> diversityChecker.getAnimeSourceDiversity()
+                            achievement.id.contains(
+                                "novel",
+                                ignoreCase = true,
+                            ) -> diversityChecker.getNovelSourceDiversity()
                             else -> diversityChecker.getSourceDiversity()
                         }
                     }
@@ -525,8 +618,17 @@ class AchievementHandler(
     private fun isEventMatch(achievementId: String, event: AchievementEvent): Boolean {
         val id = achievementId.lowercase()
         return when (event) {
-            is AchievementEvent.ChapterRead ->
-                id.contains("chapter") || id.contains("read")
+            is AchievementEvent.ChapterRead -> {
+                val isMangaReadPattern = id.contains("chapter") || id.contains("read")
+                isMangaReadPattern &&
+                    !id.contains("novel") &&
+                    !id.contains("ranobe") &&
+                    !id.contains("episode") &&
+                    !id.contains("anime")
+            }
+            is AchievementEvent.NovelChapterRead ->
+                (id.contains("novel") || id.contains("ranobe")) &&
+                    (id.contains("chapter") || id.contains("read") || id.contains("first"))
             is AchievementEvent.EpisodeWatched ->
                 id.contains("episode") || id.contains("watch")
             is AchievementEvent.LibraryAdded ->
@@ -543,6 +645,12 @@ class AchievementHandler(
                     id.contains("completed_anime") ||
                     id.contains("anime_completed") ||
                     (id.contains("complete") && id.contains("_anime"))
+            is AchievementEvent.NovelCompleted ->
+                id.contains("novel_complete") ||
+                    id.contains("completed_novel") ||
+                    id.contains("novel_completed") ||
+                    (id.contains("complete") && id.contains("_novel")) ||
+                    id == "read_long_novel"
             is AchievementEvent.SessionEnd ->
                 id.contains("session") || id.contains("time")
             is AchievementEvent.AppStart -> {
@@ -583,6 +691,13 @@ class AchievementHandler(
         return chaptersRead >= 200
     }
 
+    private suspend fun checkLongNovelAchievement(event: AchievementEvent.NovelCompleted): Boolean {
+        val chaptersRead = novelHandler.awaitOneOrNull {
+            novel_historyQueries.getChaptersReadByNovelId(event.novelId)
+        } ?: 0L
+        return chaptersRead >= 200
+    }
+
     /**
      * Получить количество завершенных манг в библиотеке
      */
@@ -601,6 +716,12 @@ class AchievementHandler(
         }?.toInt() ?: 0
     }
 
+    private suspend fun getCompletedNovelCount(): Int {
+        return novelHandler.awaitOneOrNull {
+            novelsQueries.getCompletedNovelCount()
+        }?.toInt() ?: 0
+    }
+
     private suspend fun getAchievementsForCategory(category: AchievementCategory): List<Achievement> {
         val primary = repository.getByCategory(category).first()
         if (category == AchievementCategory.BOTH) return primary
@@ -616,10 +737,14 @@ class AchievementHandler(
             AchievementCategory.ANIME -> {
                 animeHandler.awaitOneOrNull { animehistoryQueries.getTotalEpisodesWatched() }?.toInt() ?: 0
             }
+            AchievementCategory.NOVEL -> {
+                novelHandler.awaitOneOrNull { novel_historyQueries.getTotalChaptersRead() }?.toInt() ?: 0
+            }
             AchievementCategory.BOTH, AchievementCategory.SECRET -> {
                 val mangaCount = mangaHandler.awaitOneOrNull { historyQueries.getTotalChaptersRead() } ?: 0L
                 val animeCount = animeHandler.awaitOneOrNull { animehistoryQueries.getTotalEpisodesWatched() } ?: 0L
-                (mangaCount + animeCount).toInt()
+                val novelCount = novelHandler.awaitOneOrNull { novel_historyQueries.getTotalChaptersRead() } ?: 0L
+                (mangaCount + animeCount + novelCount).toInt()
             }
         }
     }
@@ -627,10 +752,12 @@ class AchievementHandler(
     private suspend fun getLibraryCountForCategory(category: AchievementCategory): Int {
         val mangaCount = mangaHandler.awaitOneOrNull { mangasQueries.getLibraryCount() } ?: 0L
         val animeCount = animeHandler.awaitOneOrNull { animesQueries.getLibraryCount() } ?: 0L
+        val novelCount = novelHandler.awaitOneOrNull { novelsQueries.getLibraryCount() } ?: 0L
         return when (category) {
             AchievementCategory.MANGA -> mangaCount.toInt()
             AchievementCategory.ANIME -> animeCount.toInt()
-            AchievementCategory.BOTH, AchievementCategory.SECRET -> (mangaCount + animeCount).toInt()
+            AchievementCategory.NOVEL -> novelCount.toInt()
+            AchievementCategory.BOTH, AchievementCategory.SECRET -> (mangaCount + animeCount + novelCount).toInt()
         }
     }
 

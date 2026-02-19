@@ -96,7 +96,7 @@ class AppLanguageScreen : Screen() {
 
     private fun getLangs(context: Context): ImmutableList<Language> {
         val langs = mutableListOf<Language>()
-        val parser = context.resources.getXml(tachiyomi.i18n.R.xml.locales_config)
+        val parser = context.resources.getXml(R.xml.locales_config)
         var eventType = parser.eventType
         while (eventType != XmlPullParser.END_DOCUMENT) {
             if (eventType == XmlPullParser.START_TAG && parser.name == "locale") {

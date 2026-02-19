@@ -39,6 +39,7 @@ import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabNavigator
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.model.StartScreen
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.Screen
 import eu.kanade.presentation.util.isTabletUi
@@ -80,12 +81,13 @@ object HomeScreen : Screen() {
     private const val TAB_NAVIGATOR_KEY = "HomeTabs"
 
     private val uiPreferences: UiPreferences by injectLazy()
-    private val defaultTab = uiPreferences.startScreen().get().tab
-    private val moreTab = uiPreferences.navStyle().get().moreTab
+    private val startScreen = uiPreferences.startScreen().get()
+    private val defaultTab = startScreen.tab
 
     @Composable
     override fun Content() {
         val navStyle by uiPreferences.navStyle().collectAsState()
+        val currentMoreTab = navStyle.moreTab
         val theme by uiPreferences.appTheme().collectAsState()
         val isAurora = theme.isAuroraStyle
         val navigator = LocalNavigator.currentOrThrow
@@ -111,7 +113,7 @@ object HomeScreen : Screen() {
                                 showBottomNavEvent.receiveAsFlow().collectLatest { value = it }
                             }
                             AnimatedVisibility(
-                                visible = bottomNavVisible && tabNavigator.current != navStyle.moreTab,
+                                visible = bottomNavVisible && tabNavigator.current != currentMoreTab,
                                 enter = expandVertically(),
                                 exit = shrinkVertically(),
                             ) {
@@ -166,26 +168,36 @@ object HomeScreen : Screen() {
             }
 
             val goToStartScreen = {
-                if (defaultTab != moreTab) {
-                    tabNavigator.current = defaultTab
-                } else {
-                    tabNavigator.current = AnimeLibraryTab
-                }
+                tabNavigator.current = resolveHomeStartTab(
+                    defaultTab = defaultTab,
+                    currentMoreTab = currentMoreTab,
+                )
             }
             BackHandler(
-                enabled = (tabNavigator.current == moreTab || tabNavigator.current != defaultTab) &&
-                    (tabNavigator.current != AnimeLibraryTab || defaultTab != moreTab),
+                enabled = shouldHandleBackInHome(
+                    currentTab = tabNavigator.current,
+                    defaultTab = defaultTab,
+                    currentMoreTab = currentMoreTab,
+                ),
                 onBack = goToStartScreen,
             )
 
             LaunchedEffect(Unit) {
+                if (startScreen == StartScreen.NOVEL) {
+                    AnimeLibraryTab.showNovelSection()
+                }
                 launch {
                     librarySearchEvent.receiveAsFlow().collectLatest {
                         goToStartScreen()
-                        when (defaultTab) {
-                            AnimeLibraryTab -> AnimeLibraryTab.search(it)
-                            MangaLibraryTab -> MangaLibraryTab.search(it)
-                            else -> {}
+                        when {
+                            defaultTab == AnimeLibraryTab && startScreen == StartScreen.NOVEL -> {
+                                AnimeLibraryTab.searchNovel(it)
+                            }
+                            defaultTab == AnimeLibraryTab -> {
+                                AnimeLibraryTab.search(it)
+                            }
+                            defaultTab == MangaLibraryTab -> MangaLibraryTab.search(it)
+                            else -> Unit
                         }
                     }
                 }
@@ -194,6 +206,7 @@ object HomeScreen : Screen() {
                         tabNavigator.current = when (it) {
                             is Tab.AnimeLib -> AnimeLibraryTab
                             is Tab.Library -> MangaLibraryTab
+                            is Tab.NovelLib -> AnimeLibraryTab
                             is Tab.Updates -> UpdatesTab
                             is Tab.History -> HistoriesTab
                             is Tab.Browse -> {
@@ -209,12 +222,18 @@ object HomeScreen : Screen() {
                             is Tab.More -> MoreTab
                             is Tab.HomeHub -> HomeHubTab
                         }
+                        if (it is Tab.NovelLib) {
+                            AnimeLibraryTab.showNovelSection()
+                        }
 
                         if (it is Tab.AnimeLib && it.animeIdToOpen != null) {
                             navigator.push(AnimeScreen(it.animeIdToOpen))
                         }
                         if (it is Tab.Library && it.mangaIdToOpen != null) {
                             navigator.push(MangaScreen(it.mangaIdToOpen))
+                        }
+                        if (it is Tab.NovelLib && it.novelIdToOpen != null) {
+                            navigator.push(eu.kanade.tachiyomi.ui.entries.novel.NovelScreen(it.novelIdToOpen))
                         }
                         if (it is Tab.More && it.toDownloads) {
                             navigator.push(DownloadsTab)
@@ -348,7 +367,10 @@ object HomeScreen : Screen() {
                             combine(
                                 pref.mangaExtensionUpdatesCount().changes(),
                                 pref.animeExtensionUpdatesCount().changes(),
-                            ) { extCount, animeExtCount -> extCount + animeExtCount }
+                                pref.novelExtensionUpdatesCount().changes(),
+                            ) { mangaCount, animeCount, novelCount ->
+                                ExtensionUpdateCounts.sum(mangaCount, animeCount, novelCount)
+                            }
                                 .collectLatest { value = it }
                         }
                         if (count > 0) {
@@ -392,10 +414,27 @@ object HomeScreen : Screen() {
     sealed interface Tab {
         data class AnimeLib(val animeIdToOpen: Long? = null) : Tab
         data class Library(val mangaIdToOpen: Long? = null) : Tab
+        data class NovelLib(val novelIdToOpen: Long? = null) : Tab
         data object Updates : Tab
         data object History : Tab
         data class Browse(val toExtensions: Boolean = false, val anime: Boolean = false) : Tab
         data class More(val toDownloads: Boolean) : Tab
         data object HomeHub : Tab
     }
+}
+
+internal fun resolveHomeStartTab(
+    defaultTab: cafe.adriel.voyager.navigator.tab.Tab,
+    currentMoreTab: cafe.adriel.voyager.navigator.tab.Tab,
+): cafe.adriel.voyager.navigator.tab.Tab {
+    return if (defaultTab != currentMoreTab) defaultTab else AnimeLibraryTab
+}
+
+internal fun shouldHandleBackInHome(
+    currentTab: cafe.adriel.voyager.navigator.tab.Tab,
+    defaultTab: cafe.adriel.voyager.navigator.tab.Tab,
+    currentMoreTab: cafe.adriel.voyager.navigator.tab.Tab,
+): Boolean {
+    return (currentTab == currentMoreTab || currentTab != defaultTab) &&
+        (currentTab != AnimeLibraryTab || defaultTab != currentMoreTab)
 }

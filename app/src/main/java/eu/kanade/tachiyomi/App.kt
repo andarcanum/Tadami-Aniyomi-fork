@@ -8,7 +8,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
+import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.webkit.WebView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -38,6 +40,10 @@ import eu.kanade.tachiyomi.data.coil.BufferedSourceFetcher
 import eu.kanade.tachiyomi.data.coil.MangaCoverFetcher
 import eu.kanade.tachiyomi.data.coil.MangaCoverKeyer
 import eu.kanade.tachiyomi.data.coil.MangaKeyer
+import eu.kanade.tachiyomi.data.coil.NovelCoverFetcher
+import eu.kanade.tachiyomi.data.coil.NovelCoverKeyer
+import eu.kanade.tachiyomi.data.coil.NovelPluginImageFetcher
+import eu.kanade.tachiyomi.data.coil.NovelPluginImageKeyer
 import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.di.AppModule
@@ -58,7 +64,6 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import logcat.AndroidLogcatLogger
-import logcat.logcat
 import logcat.LogPriority
 import logcat.LogcatLogger
 import logcat.logcat
@@ -77,6 +82,7 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
 import java.security.Security
+import java.util.concurrent.atomic.AtomicLong
 
 class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factory {
 
@@ -94,6 +100,10 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         patchInjekt()
 
         GlobalExceptionHandler.initialize(applicationContext, CrashActivity::class.java)
+
+        if (BuildConfig.DEBUG) {
+            MainThreadWatchdog().start()
+        }
 
         // TLS 1.3 support for Android < 10
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
@@ -269,11 +279,15 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
                 add(MangaCoverFetcher.MangaCoverFactory(callFactoryLazy))
                 add(AnimeImageFetcher.AnimeFactory(callFactoryLazy))
                 add(AnimeImageFetcher.AnimeCoverFactory(callFactoryLazy))
+                add(NovelCoverFetcher.Factory(callFactoryLazy))
+                add(NovelPluginImageFetcher.Factory())
                 // Keyer
                 add(AnimeKeyer())
                 add(MangaKeyer())
                 add(AnimeCoverKeyer())
                 add(MangaCoverKeyer())
+                add(NovelCoverKeyer())
+                add(NovelPluginImageKeyer())
             }
 
             crossfade((300 * this@App.animatorDurationScale).toInt())
@@ -355,3 +369,42 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
 }
 
 private const val ACTION_DISABLE_INCOGNITO_MODE = "tachi.action.DISABLE_INCOGNITO_MODE"
+
+private class MainThreadWatchdog(
+    private val intervalMs: Long = 500,
+    private val timeoutMs: Long = 5_000,
+) {
+    private val handler = Handler(Looper.getMainLooper())
+    private val lastTick = AtomicLong(SystemClock.uptimeMillis())
+    private val lastReported = AtomicLong(0L)
+
+    private val ticker = object : Runnable {
+        override fun run() {
+            lastTick.set(SystemClock.uptimeMillis())
+            handler.postDelayed(this, intervalMs)
+        }
+    }
+
+    fun start() {
+        handler.post(ticker)
+        Thread {
+            while (true) {
+                SystemClock.sleep(intervalMs)
+                val now = SystemClock.uptimeMillis()
+                val delta = now - lastTick.get()
+                if (delta > timeoutMs && now - lastReported.get() > timeoutMs) {
+                    lastReported.set(now)
+                    val mainThread = Looper.getMainLooper().thread
+                    val stack = mainThread.stackTrace.joinToString(separator = "\n") { it.toString() }
+                    logcat(LogPriority.ERROR) {
+                        "ANR watchdog: main thread blocked ${delta}ms\n$stack"
+                    }
+                }
+            }
+        }.apply {
+            name = "main-thread-watchdog"
+            isDaemon = true
+            start()
+        }
+    }
+}

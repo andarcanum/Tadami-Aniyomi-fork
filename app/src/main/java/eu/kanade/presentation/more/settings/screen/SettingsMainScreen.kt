@@ -221,6 +221,12 @@ object SettingsMainScreen : Screen() {
             screen = SettingsReaderScreen,
         ),
         Item(
+            titleRes = AYMR.strings.pref_category_novel_reader,
+            subtitleRes = AYMR.strings.pref_novel_reader_summary,
+            icon = Icons.AutoMirrored.Outlined.ChromeReaderMode,
+            screen = SettingsNovelReaderScreen,
+        ),
+        Item(
             titleRes = AYMR.strings.label_player,
             subtitleRes = AYMR.strings.pref_player_settings_summary,
             icon = Icons.Outlined.VideoSettings,

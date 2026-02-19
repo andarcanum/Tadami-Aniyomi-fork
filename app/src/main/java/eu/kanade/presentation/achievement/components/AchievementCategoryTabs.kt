@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.theme.AuroraTheme
@@ -43,12 +44,13 @@ fun AchievementCategoryTabs(
         AchievementCategory.BOTH to "ВСЕ",
         AchievementCategory.ANIME to "АНИМЕ",
         AchievementCategory.MANGA to "МАНГА",
+        AchievementCategory.NOVEL to "РАНОБЭ",
         AchievementCategory.SECRET to "СКРЫТЫЕ",
     )
 
     BoxWithConstraints(
         modifier = modifier
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = 8.dp, vertical = 8.dp)
             .height(40.dp),
     ) {
         val segmentWidth = maxWidth / tabs.size
@@ -98,6 +100,9 @@ fun AchievementCategoryTabs(
                         label = "tab_text_color",
                     )
 
+                    val isSecret = category == AchievementCategory.SECRET
+                    val tabFontSize = if (isSecret) 10.sp else 12.sp
+                    val tabLetterSpacing = if (isSecret) 0.sp else 1.sp
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -109,9 +114,12 @@ fun AchievementCategoryTabs(
                         Text(
                             text = label,
                             color = textColor,
-                            fontSize = 12.sp,
+                            fontSize = tabFontSize,
                             fontWeight = FontWeight.SemiBold,
-                            letterSpacing = 1.sp,
+                            letterSpacing = tabLetterSpacing,
+                            softWrap = false,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }

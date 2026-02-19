@@ -85,6 +85,7 @@ class RestoreBackupScreen(
                                     onCheckedChange = {
                                         model.toggle(option.setter, it)
                                     },
+                                    enabled = option.enabled(state.options),
                                 )
                             }
                         }

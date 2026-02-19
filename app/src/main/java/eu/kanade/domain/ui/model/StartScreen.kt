@@ -15,6 +15,7 @@ enum class StartScreen(val titleRes: StringResource, val tab: Tab) {
     HOME(MR.strings.label_default, HomeHubTab),
     ANIME(AYMR.strings.label_anime, AnimeLibraryTab),
     MANGA(AYMR.strings.manga, MangaLibraryTab),
+    NOVEL(MR.strings.label_library, AnimeLibraryTab),
     UPDATES(MR.strings.label_recent_updates, UpdatesTab),
     HISTORY(MR.strings.label_recent_manga, HistoriesTab),
     BROWSE(MR.strings.browse, BrowseTab),

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ChromeReaderMode
 import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Download
@@ -40,6 +41,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.ui.more.DownloadQueueState
 import tachiyomi.i18n.aniyomi.AYMR
@@ -47,6 +49,8 @@ import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
 fun MoreScreenAurora(
+    navStyle: NavStyle,
+    onClickAlt: () -> Unit,
     downloadQueueStateProvider: () -> DownloadQueueState,
     downloadedOnly: Boolean,
     onDownloadedOnlyChange: (Boolean) -> Unit,
@@ -56,6 +60,7 @@ fun MoreScreenAurora(
     onCategoriesClick: () -> Unit,
     onDataStorageClick: () -> Unit,
     onPlayerSettingsClick: () -> Unit,
+    onNovelReaderSettingsClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onAboutClick: () -> Unit,
     onStatsClick: () -> Unit,
@@ -87,6 +92,12 @@ fun MoreScreenAurora(
 
             item {
                 AuroraSettingItem(
+                    title = navStyle.moreTab.options.title,
+                    icon = navStyle.moreIcon,
+                    onClick = onClickAlt,
+                )
+
+                AuroraSettingItem(
                     title = stringResource(AYMR.strings.aurora_settings),
                     icon = Icons.Filled.Settings,
                     onClick = onSettingsClick,
@@ -96,6 +107,12 @@ fun MoreScreenAurora(
                     title = stringResource(AYMR.strings.aurora_player_settings),
                     icon = Icons.Outlined.VideoSettings,
                     onClick = onPlayerSettingsClick,
+                )
+
+                AuroraSettingItem(
+                    title = stringResource(AYMR.strings.pref_category_novel_reader),
+                    icon = Icons.AutoMirrored.Outlined.ChromeReaderMode,
+                    onClick = onNovelReaderSettingsClick,
                 )
 
                 AuroraSettingItem(

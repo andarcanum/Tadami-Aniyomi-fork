@@ -73,6 +73,7 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.backup.service.BackupPreferences
 import tachiyomi.domain.entries.anime.interactor.GetAnimeFavorites
 import tachiyomi.domain.entries.manga.interactor.GetMangaFavorites
+import tachiyomi.domain.entries.novel.interactor.GetNovelFavorites
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.storage.service.StoragePreferences
 import tachiyomi.i18n.MR
@@ -361,11 +362,13 @@ object SettingsDataScreen : SearchableSettings {
 
         val getAnimeFavorites = remember { Injekt.get<GetAnimeFavorites>() }
         val getMangaFavorites = remember { Injekt.get<GetMangaFavorites>() }
+        val getNovelFavorites = remember { Injekt.get<GetNovelFavorites>() }
 
         var favorites by remember { mutableStateOf<List<ExportEntry>>(emptyList()) }
         LaunchedEffect(Unit) {
             favorites = getAnimeFavorites.await().map { it.toExportEntry() } +
-                getMangaFavorites.await().map { it.toExportEntry() }
+                getMangaFavorites.await().map { it.toExportEntry() } +
+                getNovelFavorites.await().map { it.toExportEntry() }
         }
 
         val saveFileLauncher = rememberLauncherForActivityResult(
