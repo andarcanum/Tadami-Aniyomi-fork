@@ -30,7 +30,6 @@ import androidx.compose.material.icons.outlined.VideoSettings
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -83,9 +82,9 @@ fun MoreScreenAurora(
                 Spacer(modifier = Modifier.height(80.dp))
                 Text(
                     text = stringResource(AYMR.strings.aurora_more),
-                    style = MaterialTheme.typography.headlineMedium,
+                    fontSize = 22.sp,
                     color = colors.textPrimary,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(bottom = 24.dp),
                 )
             }

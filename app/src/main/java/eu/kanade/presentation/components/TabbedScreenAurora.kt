@@ -100,6 +100,8 @@ fun TabbedScreenAurora(
     applyStatusBarsPadding: Boolean = true,
     showTabs: Boolean = true,
     instantTabSwitching: Boolean = false,
+    highlightSearchAction: Boolean = false,
+    highlightedActionTitle: String? = null,
     extraHeaderContent: @Composable () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
@@ -200,6 +202,8 @@ fun TabbedScreenAurora(
                     tabs = tabs,
                     currentPage = currentPage,
                     navigateUp = null, // Top-level tabs generally don't have up navigation in this context
+                    highlightSearchAction = highlightSearchAction,
+                    highlightedActionTitle = highlightedActionTitle,
                 )
             }
 
@@ -318,6 +322,8 @@ private fun AuroraTabHeader(
     tabs: ImmutableList<TabContent>,
     currentPage: Int,
     navigateUp: (() -> Unit)?,
+    highlightSearchAction: Boolean,
+    highlightedActionTitle: String?,
 ) {
     val colors = AuroraTheme.colors
     val currentTab = tabs.getOrNull(currentPage)
@@ -397,7 +403,7 @@ private fun AuroraTabHeader(
                     text = title,
                     fontSize = 22.sp,
                     color = colors.textPrimary,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
 
@@ -412,7 +418,7 @@ private fun AuroraTabHeader(
                         Icon(
                             imageVector = Icons.Filled.Search,
                             contentDescription = stringResource(MR.strings.action_search),
-                            tint = colors.textPrimary,
+                            tint = if (highlightSearchAction) colors.accent else colors.textPrimary,
                         )
                     }
                 }
@@ -427,7 +433,11 @@ private fun AuroraTabHeader(
                         Icon(
                             imageVector = appBarAction.icon,
                             contentDescription = appBarAction.title,
-                            tint = colors.textPrimary,
+                            tint = if (appBarAction.title == highlightedActionTitle) {
+                                colors.accent
+                            } else {
+                                colors.textPrimary
+                            },
                         )
                     }
                 }

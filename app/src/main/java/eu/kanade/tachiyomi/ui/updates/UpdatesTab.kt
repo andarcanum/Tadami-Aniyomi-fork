@@ -404,7 +404,7 @@ private fun AuroraUpdatesPinnedHeader(
                     text = stringResource(AYMR.strings.aurora_updates),
                     fontSize = 22.sp,
                     color = colors.textPrimary,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                 )
                 if (!subtitle.isNullOrBlank()) {
                     Text(

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -55,6 +56,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastAll
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -449,12 +451,6 @@ data object AnimeLibraryTab : Tab {
             Section.Novel -> novelState.searchQuery
             null -> null
         }
-        val auroraHasActiveFilters = when (auroraCurrentSection) {
-            Section.Anime -> state.hasActiveFilters
-            Section.Manga -> mangaState.hasActiveFilters
-            Section.Novel -> novelState.hasActiveFilters
-            null -> false
-        }
         val onAuroraSearchQueryChange: (String?) -> Unit = { query ->
             when (auroraCurrentSection) {
                 Section.Anime -> screenModel.search(query)
@@ -685,7 +681,6 @@ data object AnimeLibraryTab : Tab {
                                     },
                                     searchQuery = auroraSearchQuery,
                                     onSearchQueryChange = onAuroraSearchQueryChange,
-                                    hasActiveFilters = auroraHasActiveFilters,
                                     onFilterClick = onAuroraFilterClick,
                                     onRefreshCurrent = onAuroraRefreshCurrent,
                                     onRefreshGlobal = onAuroraRefreshGlobal,
@@ -930,7 +925,6 @@ private fun AuroraLibraryPinnedHeader(
     onSectionSelected: (Int) -> Unit,
     searchQuery: String?,
     onSearchQueryChange: (String?) -> Unit,
-    hasActiveFilters: Boolean,
     onFilterClick: () -> Unit,
     onRefreshCurrent: () -> Unit,
     onRefreshGlobal: () -> Unit,
@@ -1015,14 +1009,16 @@ private fun AuroraLibraryPinnedHeader(
                 Text(
                     text = title,
                     color = colors.textPrimary,
-                    style = androidx.compose.material3.MaterialTheme.typography.headlineMedium,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    fontSize = 22.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                 )
 
                 Row {
                     IconButton(
                         onClick = { isSearchExpanded = true },
-                        modifier = Modifier.background(colors.glass, CircleShape),
+                        modifier = Modifier
+                            .background(colors.glass, CircleShape)
+                            .size(44.dp),
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Search,
@@ -1033,24 +1029,28 @@ private fun AuroraLibraryPinnedHeader(
                     Spacer(modifier = Modifier.width(8.dp))
                     IconButton(
                         onClick = onFilterClick,
-                        modifier = Modifier.background(colors.glass, CircleShape),
+                        modifier = Modifier
+                            .background(colors.glass, CircleShape)
+                            .size(44.dp),
                     ) {
                         Icon(
                             imageVector = Icons.Filled.FilterList,
                             contentDescription = null,
-                            tint = if (hasActiveFilters) colors.accent else colors.textSecondary,
+                            tint = colors.textPrimary,
                         )
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     androidx.compose.foundation.layout.Box {
                         IconButton(
                             onClick = { showMenu = true },
-                            modifier = Modifier.background(colors.glass, CircleShape),
+                            modifier = Modifier
+                                .background(colors.glass, CircleShape)
+                                .size(44.dp),
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.MoreVert,
                                 contentDescription = null,
-                                tint = colors.textSecondary,
+                                tint = colors.textPrimary,
                             )
                         }
                         DropdownMenu(

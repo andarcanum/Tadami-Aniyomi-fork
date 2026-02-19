@@ -194,6 +194,7 @@ data object BrowseTab : Tab {
                     isMangaTab = { isMangaSection },
                     scrollable = true,
                     applyStatusBarsPadding = true,
+                    highlightedActionTitle = stringResource(MR.strings.action_global_search),
                     extraHeaderContent = {
                         if (sections.size > 1) {
                             Spacer(modifier = Modifier.height(8.dp))
