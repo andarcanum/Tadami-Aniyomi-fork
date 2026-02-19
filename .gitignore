@@ -76,3 +76,8 @@ conductor/tracks/
 
 # Local docs workspace changes
 docs/
+
+# Local release artifacts
+app/release/output-metadata.json
+app/release/baselineProfiles/
+update_reports_0.25_vs_0.23.md
