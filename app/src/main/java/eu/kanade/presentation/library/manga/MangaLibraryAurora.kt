@@ -90,7 +90,7 @@ fun AniviewMangaCard(
             // Progress bar embedded at bottom (Aniview style)
             if (progress > 0f) {
                 LinearProgressIndicator(
-                    progress = progress,
+                    progress = { progress },
                     color = colors.progressCyan, // Cyan progress bar
                     trackColor = Color.Black.copy(alpha = 0.3f),
                     modifier = Modifier

@@ -168,6 +168,7 @@ class AniyomiMPVView(context: Context, attributes: AttributeSet) : BaseMPVView(c
         }
     }
 
+    @Suppress("DEPRECATION")
     fun onKey(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_MULTIPLE || KeyEvent.isModifierKey(event.keyCode)) {
             return false

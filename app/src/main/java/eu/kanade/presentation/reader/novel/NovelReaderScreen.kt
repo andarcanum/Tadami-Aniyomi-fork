@@ -1485,6 +1485,7 @@ private fun WebView.resolveCurrentWebViewProgressPercent(
     )
 }
 
+@Suppress("DEPRECATION")
 private fun WebView.resolveWebViewContentHeightPx(): Int {
     val childHeight = getChildAt(0)?.height ?: 0
     val scaledContentHeight = (contentHeight * scale).roundToInt()

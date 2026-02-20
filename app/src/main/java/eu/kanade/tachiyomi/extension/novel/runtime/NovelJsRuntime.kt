@@ -102,6 +102,7 @@ class NovelJsRuntime(
         fun consoleWarn(message: String)
     }
 
+    @Suppress("DEPRECATION")
     private fun bindNativeApi(runtime: V8) {
         val nativeObject = V8Object(runtime)
 
@@ -437,6 +438,7 @@ class NovelJsRuntime(
         nativeObject.release()
     }
 
+    @Suppress("DEPRECATION")
     private fun normalizeValue(value: Any?): Any? {
         if (value !is V8Value) return value
         return try {
@@ -477,6 +479,7 @@ class NovelJsRuntime(
         return stringArgOrNull(index).orEmpty()
     }
 
+    @Suppress("DEPRECATION")
     private fun V8Array.stringArgOrNull(index: Int): String? {
         if (index >= length()) return null
         val value = runCatching { get(index) }.getOrNull()
@@ -491,6 +494,7 @@ class NovelJsRuntime(
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun V8Array.intArg(index: Int): Int {
         if (index >= length()) return 0
         val value = runCatching { get(index) }.getOrNull()

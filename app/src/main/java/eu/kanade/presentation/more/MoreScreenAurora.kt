@@ -18,10 +18,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ChromeReaderMode
 import androidx.compose.material.icons.automirrored.outlined.Label
+import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.Help
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.Settings
@@ -184,7 +184,7 @@ fun MoreScreenAurora(
 
                 AuroraSettingItem(
                     title = stringResource(AYMR.strings.aurora_help),
-                    icon = Icons.Filled.Help,
+                    icon = Icons.AutoMirrored.Filled.Help,
                     onClick = onHelpClick,
                 )
             }

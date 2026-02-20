@@ -111,7 +111,7 @@
     <string name="enable_auto_play">ஆட்டோ-பிளே இயக்கத்தில் உள்ளது</string>
     <string name="disable_auto_play">ஆட்டோ-பிளே முடக்கப்பட்டுள்ளது</string>
     <string name="player_aniskip_dontskip">தவிர்க்க வேண்டாம்</string>
-    <string name="player_aniskip_dontskip_toast">%s ஐ %d வினாடிகளில் தவிர்க்கவும்</string>
+    <string name="player_aniskip_dontskip_toast">%1$s ஐ %2$d வினாடிகளில் தவிர்க்கவும்</string>
     <string name="player_aniskip_skip">%s தவிர்க்கப்பட்டன</string>
     <string name="no_next_episode">அடுத்த அத்தியாயம் கிடைக்கவில்லை!</string>
     <string name="player_hwdec_mode">வன்பொருள் டிகோடிங் பயன்முறை</string>
@@ -255,7 +255,7 @@
     <string name="share_screenshot_info">%1$s: %2$s, %3$s</string>
     <string name="episode_progress">முன்னேற்றம்: %1$s/ %2$s</string>
     <string name="episode_progress_no_total">முன்னேற்றம்: %1$s</string>
-    <string name="recent_anime_time">ஈ.பி. %1 $ C - %$ 2 s</string>
+    <string name="recent_anime_time">ஈ.பி. %1$s - %2$s</string>
     <string name="video_list_empty_error">வீடியோ எதுவும் கிடைக்கவில்லை</string>
     <string name="notification_new_episodes">புதிய அத்தியாயங்கள் காணப்பட்டன</string>
     <string name="information_no_recent_anime">அண்மைக் காலத்தில் எதுவும் பார்க்கவில்லை</string>

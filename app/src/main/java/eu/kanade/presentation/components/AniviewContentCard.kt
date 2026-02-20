@@ -85,7 +85,7 @@ fun AniviewContentCard(
             // Progress bar (bottom)
             progress?.let {
                 LinearProgressIndicator(
-                    progress = it,
+                    progress = { it },
                     color = colors.progressCyan,
                     trackColor = Color.Black.copy(alpha = 0.3f),
                     modifier = Modifier
@@ -239,7 +239,7 @@ fun AniviewHeroCard(
 
         // Progress bar at bottom
         LinearProgressIndicator(
-            progress = progress,
+            progress = { progress },
             color = colors.progressCyan,
             trackColor = Color.Black.copy(alpha = 0.3f),
             modifier = Modifier

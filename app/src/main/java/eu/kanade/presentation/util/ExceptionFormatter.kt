@@ -11,22 +11,22 @@ import tachiyomi.domain.source.manga.model.SourceNotInstalledException
 import tachiyomi.i18n.MR
 import java.net.UnknownHostException
 
-context(Context)
+context(appContext: Context)
 val Throwable.formattedMessage: String
     get() {
         when (this) {
-            is HttpException -> return stringResource(MR.strings.exception_http, code)
+            is HttpException -> return appContext.stringResource(MR.strings.exception_http, code)
             is UnknownHostException -> {
-                return if (!isOnline()) {
-                    stringResource(MR.strings.exception_offline)
+                return if (!appContext.isOnline()) {
+                    appContext.stringResource(MR.strings.exception_offline)
                 } else {
-                    stringResource(MR.strings.exception_unknown_host, message ?: "")
+                    appContext.stringResource(MR.strings.exception_unknown_host, message ?: "")
                 }
             }
-            is NoChaptersException, is NoEpisodesException -> return stringResource(
+            is NoChaptersException, is NoEpisodesException -> return appContext.stringResource(
                 MR.strings.no_results_found,
             )
-            is SourceNotInstalledException, is AnimeSourceNotInstalledException -> return stringResource(
+            is SourceNotInstalledException, is AnimeSourceNotInstalledException -> return appContext.stringResource(
                 MR.strings.loader_not_implemented_error,
             )
         }

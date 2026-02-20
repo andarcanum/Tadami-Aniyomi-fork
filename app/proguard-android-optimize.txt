@@ -1,5 +1,4 @@
 -dontusemixedcaseclassnames
--ignorewarnings
 -verbose
 
 -keepattributes *Annotation*

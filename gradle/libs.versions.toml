@@ -1,5 +1,6 @@
 [versions]
-aboutlib_version = "11.6.3"
+aboutlib_plugin_version = "13.2.1"
+aboutlib_runtime_version = "11.6.3"
 leakcanary = "2.14"
 moko = "0.24.5"
 okhttp_version = "5.0.0-alpha.14"
@@ -76,7 +77,7 @@ moko-core = { module = "dev.icerock.moko:resources", version.ref = "moko" }
 
 logcat = "com.squareup.logcat:logcat:0.1"
 
-aboutLibraries-compose = { module = "com.mikepenz:aboutlibraries-compose-m3", version.ref = "aboutlib_version" }
+aboutLibraries-compose = { module = "com.mikepenz:aboutlibraries-compose-m3", version.ref = "aboutlib_runtime_version" }
 
 shizuku-api = { module = "dev.rikka.shizuku:api", version.ref = "shizuku_version" }
 shizuku-provider = { module = "dev.rikka.shizuku:provider", version.ref = "shizuku_version" }
@@ -107,7 +108,7 @@ ktlint-core = { module = "com.pinterest.ktlint:ktlint-cli", version.ref = "ktlin
 lottie-compose = { module = "com.airbnb.android:lottie-compose", version.ref = "lottie" }
 
 [plugins]
-aboutLibraries = { id = "com.mikepenz.aboutlibraries.plugin", version.ref = "aboutlib_version" }
+aboutLibraries = { id = "com.mikepenz.aboutlibraries.plugin", version.ref = "aboutlib_plugin_version" }
 sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
 moko = { id = "dev.icerock.mobile.multiplatform-resources", version.ref = "moko" }
 

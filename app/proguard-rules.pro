@@ -30,6 +30,15 @@
 -keep,allowoptimization class eu.kanade.tachiyomi.network.RequestsKt { public protected *; }
 -keep,allowoptimization class eu.kanade.tachiyomi.AppInfo { public protected *; }
 
+# Optional runtime APIs that are referenced by transitive libraries but are not
+# required on Android runtime targets we ship.
+-dontwarn androidx.window.extensions.**
+-dontwarn androidx.window.sidecar.**
+-dontwarn com.oracle.svm.core.annotate.**
+-dontwarn org.graalvm.nativeimage.hosted.**
+-dontwarn org.jspecify.annotations.NullMarked
+-dontwarn java.lang.Module
+
 ##---------------Begin: proguard configuration for RxJava 1.x  ----------
 -dontwarn sun.misc.**
 

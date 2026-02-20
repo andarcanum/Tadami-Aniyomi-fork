@@ -62,7 +62,10 @@ jobs:
         run: ./gradlew spotlessCheck
 
       - name: Build app
-        run: ./gradlew assembleRelease -Penable-updater
+        run: |
+          set -euo pipefail
+          ./gradlew assembleRelease -Penable-updater --console=plain 2>&1 | tee build_release.log
+          python3 tools/ci/report-release-warnings.py build_release.log --enforce
 
       - name: Run unit tests
         run: ./gradlew testReleaseUnitTest

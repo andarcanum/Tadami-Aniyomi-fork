@@ -88,14 +88,17 @@ class NovelJsSource internal constructor(
         }
     }
 
+    @Deprecated("Use the non-RxJava API instead.")
     override fun fetchPopularNovels(page: Int): Observable<NovelsPage> {
         return Observable.fromCallable { runBlocking { getPopularNovels(page) } }
     }
 
+    @Deprecated("Use the non-RxJava API instead.")
     override fun fetchSearchNovels(page: Int, query: String, filters: NovelFilterList): Observable<NovelsPage> {
         return Observable.fromCallable { runBlocking { getSearchNovels(page, query, filters) } }
     }
 
+    @Deprecated("Use the non-RxJava API instead.")
     override fun fetchLatestUpdates(page: Int): Observable<NovelsPage> {
         return Observable.fromCallable { runBlocking { getLatestUpdates(page) } }
     }

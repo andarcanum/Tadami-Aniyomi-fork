@@ -1,4 +1,4 @@
-@file:Suppress("PackageDirectoryMismatch")
+@file:Suppress("PackageDirectoryMismatch", "EXTENSION_SHADOWED_BY_MEMBER")
 
 package androidx.preference
 

@@ -288,6 +288,7 @@ class NovelReaderPreferences(
         )
     }
 
+    @Suppress("UNCHECKED_CAST")
     fun settingsFlow(sourceId: Long): Flow<NovelReaderSettings> {
         // Группируем настройки для избежания лимита combine()
         val displayFlow = combine(

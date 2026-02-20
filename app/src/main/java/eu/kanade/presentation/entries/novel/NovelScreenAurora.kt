@@ -21,7 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
@@ -332,7 +332,7 @@ fun NovelScreenAuroraImpl(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            AuroraActionButton(onClick = onBack, icon = Icons.Filled.ArrowBack, contentDescription = null)
+            AuroraActionButton(onClick = onBack, icon = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
 
             Spacer(modifier = Modifier.weight(1f))
 

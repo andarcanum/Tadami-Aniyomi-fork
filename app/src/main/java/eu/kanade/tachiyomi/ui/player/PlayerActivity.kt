@@ -351,11 +351,12 @@ class PlayerActivity : BaseActivity() {
 
     override fun onUserLeaveHint() {
         if (isPipSupportedAndEnabled && player.paused == false && playerPreferences.pipOnExit().get()) {
-            enterPictureInPictureMode()
+            enterPictureInPictureMode(createPipParams())
         }
         super.onUserLeaveHint()
     }
 
+    @Suppress("DEPRECATION")
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         if (isPipSupportedAndEnabled && player.paused == false && playerPreferences.pipOnExit().get()) {
@@ -363,13 +364,14 @@ class PlayerActivity : BaseActivity() {
                 viewModel.panelShown.value == Panels.None &&
                 viewModel.dialogShown.value == Dialogs.None
             ) {
-                enterPictureInPictureMode()
+                enterPictureInPictureMode(createPipParams())
             }
         } else {
             super.onBackPressed()
         }
     }
 
+    @Suppress("DEPRECATION")
     override fun onStart() {
         super.onStart()
         setPictureInPictureParams(createPipParams())

@@ -1,6 +1,7 @@
 package eu.kanade.domain.shikimori.interactor
 
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.model.AnimeMetadataSource
 import eu.kanade.tachiyomi.data.track.model.AnimeTrackSearch
 import eu.kanade.tachiyomi.data.track.shikimori.Shikimori
 import eu.kanade.tachiyomi.data.track.shikimori.ShikimoriApi
@@ -123,9 +124,7 @@ class GetShikimoriMetadata(
 
     suspend fun await(anime: Anime): ShikimoriMetadata? {
         // Check if disabled via settings
-        if (!preferences.useShikimoriRating().get() &&
-            !preferences.useShikimoriCovers().get()
-        ) {
+        if (preferences.animeMetadataSource().get() != AnimeMetadataSource.SHIKIMORI) {
             return null
         }
 

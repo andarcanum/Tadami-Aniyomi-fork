@@ -4,7 +4,6 @@ import eu.kanade.tachiyomi.source.model.SManga
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import logcat.LogPriority
@@ -70,11 +69,7 @@ class AchievementHandler(
                 }
             }
 
-            eventBus.events
-                .catch { e ->
-                    logcat(LogPriority.ERROR) { "[ACHIEVEMENTS] Error in achievement event stream: ${e.message}" }
-                }
-                .collect { event ->
+            eventBus.events.collect { event ->
                     try {
                         logcat(LogPriority.VERBOSE) { "[ACHIEVEMENTS] Event received: $event" }
                         processEvent(event)

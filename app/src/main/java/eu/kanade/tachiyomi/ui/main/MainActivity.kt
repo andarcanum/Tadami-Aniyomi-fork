@@ -216,14 +216,16 @@ class MainActivity : BaseActivity() {
                     val darkStyle = SystemBarStyle.dark(Color.TRANSPARENT)
                     val isHomeScreen = navigator.lastItem == HomeScreen
                     val isLightStatusBar = statusBarBackgroundColor.luminance() > 0.5
+                    val statusBarStyleMode = resolveMainStatusBarStyleMode(
+                        isHomeScreen = isHomeScreen,
+                        isAurora = isAurora,
+                        isLightStatusBarBackground = isLightStatusBar,
+                    )
                     enableEdgeToEdge(
-                        statusBarStyle = if (isHomeScreen && isAurora) {
-                            // For Aurora theme on home screen: fully transparent status bar with light icons
-                            transparentLightStyle
-                        } else if (isHomeScreen) {
-                            if (isLightStatusBar) transparentLightStyle else darkStyle
-                        } else {
-                            if (isLightStatusBar) lightStyle else darkStyle
+                        statusBarStyle = when (statusBarStyleMode) {
+                            MainStatusBarStyleMode.LIGHT -> lightStyle
+                            MainStatusBarStyleMode.TRANSPARENT_LIGHT -> transparentLightStyle
+                            MainStatusBarStyleMode.DARK -> darkStyle
                         },
                         navigationBarStyle = if (isSystemInDarkTheme) darkStyle else lightStyle,
                     )
@@ -746,6 +748,37 @@ class MainActivity : BaseActivity() {
                 )
             }
         }
+    }
+}
+
+internal enum class MainStatusBarStyleMode {
+    LIGHT,
+    TRANSPARENT_LIGHT,
+    DARK,
+}
+
+internal fun resolveMainStatusBarStyleMode(
+    isHomeScreen: Boolean,
+    isAurora: Boolean,
+    isLightStatusBarBackground: Boolean,
+): MainStatusBarStyleMode {
+    if (isHomeScreen && isAurora) {
+        // Aurora home surfaces are dark-toned, so status bar icons must stay light.
+        return MainStatusBarStyleMode.DARK
+    }
+
+    if (isHomeScreen) {
+        return if (isLightStatusBarBackground) {
+            MainStatusBarStyleMode.TRANSPARENT_LIGHT
+        } else {
+            MainStatusBarStyleMode.DARK
+        }
+    }
+
+    return if (isLightStatusBarBackground) {
+        MainStatusBarStyleMode.LIGHT
+    } else {
+        MainStatusBarStyleMode.DARK
     }
 }
 

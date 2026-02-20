@@ -144,6 +144,7 @@ import kotlin.coroutines.cancellation.CancellationException
 class PlayerViewModelProviderFactory(
     private val activity: PlayerActivity,
 ) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
         return PlayerViewModel(activity, extras.createSavedStateHandle()) as T
     }
@@ -899,10 +900,12 @@ class PlayerViewModel @JvmOverloads constructor(
     private operator fun <T> List<T>.component6(): T = get(5)
 
     private val inputMethodManager = activity.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+    @Suppress("DEPRECATION")
     private fun forceShowSoftwareKeyboard() {
         inputMethodManager.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0)
     }
 
+    @Suppress("DEPRECATION")
     private fun forceHideSoftwareKeyboard() {
         inputMethodManager.toggleSoftInput(InputMethodManager.SHOW_IMPLICIT, 0)
     }
