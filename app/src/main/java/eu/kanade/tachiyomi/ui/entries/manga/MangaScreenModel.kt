@@ -312,7 +312,7 @@ class MangaScreenModel(
             // Ignore early hints "errors" that aren't handled by OkHttp
             if (e is HttpException && e.code == 103) return
 
-            val formattedMessage = with(context) { e.formattedMessage }
+            val formattedMessage = e.formattedMessage(context)
             if (isAuthenticationError(e, formattedMessage)) {
                 updateSuccessState {
                     it.copy(
@@ -629,7 +629,7 @@ class MangaScreenModel(
                 }
             }
         } catch (e: Throwable) {
-            val formattedMessage = with(context) { e.formattedMessage }
+            val formattedMessage = e.formattedMessage(context)
             if (isAuthenticationError(e, formattedMessage)) {
                 updateSuccessState {
                     it.copy(

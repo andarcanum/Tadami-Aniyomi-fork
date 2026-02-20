@@ -1,4 +1,4 @@
-package eu.kanade.presentation.updates.novel
+﻿package eu.kanade.presentation.updates.novel
 
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
@@ -124,13 +124,13 @@ private fun LazyListScope.novelUpdatesUiItems(
         when (model) {
             is NovelUpdatesUiModel.Header -> {
                 ListGroupHeader(
-                    modifier = Modifier.animateItemFastScroll(),
+                    modifier = Modifier.animateItemFastScroll(this),
                     text = eu.kanade.presentation.components.relativeDateText(model.date),
                 )
             }
             is NovelUpdatesUiModel.Item -> {
                 NovelUpdatesItemRow(
-                    modifier = Modifier.animateItemFastScroll(),
+                    modifier = Modifier.animateItemFastScroll(this),
                     item = model.item,
                     selectionMode = selectionMode,
                     onNovelClick = onNovelClick,

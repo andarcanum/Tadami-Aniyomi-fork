@@ -1,4 +1,4 @@
-package eu.kanade.presentation.history.anime
+﻿package eu.kanade.presentation.history.anime
 
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
@@ -100,14 +100,14 @@ private fun AnimeHistoryScreenContent(
             when (item) {
                 is AnimeHistoryUiModel.Header -> {
                     ListGroupHeader(
-                        modifier = Modifier.animateItemFastScroll(),
+                        modifier = Modifier.animateItemFastScroll(this),
                         text = relativeDateText(item.date),
                     )
                 }
                 is AnimeHistoryUiModel.Item -> {
                     val value = item.item
                     AnimeHistoryItem(
-                        modifier = Modifier.animateItemFastScroll(),
+                        modifier = Modifier.animateItemFastScroll(this),
                         history = value,
                         onClickCover = { onClickCover(value) },
                         onClickResume = { onClickResume(value) },

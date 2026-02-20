@@ -93,7 +93,11 @@ fun AuroraUpdatesGroupCard(
             }
 
             Icon(
-                imageVector = if (expanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                imageVector = if (expanded) {
+                    Icons.Filled.KeyboardArrowDown
+                } else {
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight
+                },
                 contentDescription = null,
                 tint = colors.accent,
                 modifier = Modifier.size(22.dp),

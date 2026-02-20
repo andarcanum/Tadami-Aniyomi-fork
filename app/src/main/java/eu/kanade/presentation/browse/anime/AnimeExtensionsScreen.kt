@@ -1,4 +1,4 @@
-package eu.kanade.presentation.browse.anime
+﻿package eu.kanade.presentation.browse.anime
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.clickable
@@ -191,7 +191,7 @@ private fun AnimeExtensionContent(
                             }
                         ExtensionHeader(
                             textRes = header.textRes,
-                            modifier = Modifier.animateItemFastScroll(),
+                            modifier = Modifier.animateItemFastScroll(this),
                             action = action,
                         )
                     }
@@ -200,7 +200,7 @@ private fun AnimeExtensionContent(
                         ExtensionHeader(
                             text = header.text,
                             modifier = Modifier
-                                .animateItemFastScroll()
+                                .animateItemFastScroll(this)
                                 .clickable { onToggleSection(header) },
                             action = {
                                 IconButton(onClick = { onToggleSection(header) }) {
@@ -227,7 +227,7 @@ private fun AnimeExtensionContent(
                 ) { item ->
                     AnimeExtensionItem(
                         item = item,
-                        modifier = Modifier.animateItemFastScroll(),
+                        modifier = Modifier.animateItemFastScroll(this),
                         onClickItem = {
                             when (it) {
                                 is AnimeExtension.Available -> onInstallExtension(it)

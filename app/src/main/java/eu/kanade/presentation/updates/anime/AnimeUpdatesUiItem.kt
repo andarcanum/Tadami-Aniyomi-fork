@@ -1,4 +1,4 @@
-package eu.kanade.presentation.updates.anime
+﻿package eu.kanade.presentation.updates.anime
 
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
@@ -98,14 +98,14 @@ internal fun LazyListScope.animeUpdatesUiItems(
         when (item) {
             is AnimeUpdatesUiModel.Header -> {
                 ListGroupHeader(
-                    modifier = Modifier.animateItemFastScroll(),
+                    modifier = Modifier.animateItemFastScroll(this),
                     text = relativeDateText(item.date),
                 )
             }
             is AnimeUpdatesUiModel.Item -> {
                 val updatesItem = item.item
                 AnimeUpdatesUiItem(
-                    modifier = Modifier.animateItemFastScroll(),
+                    modifier = Modifier.animateItemFastScroll(this),
                     update = updatesItem.update,
                     selected = updatesItem.selected,
                     watchProgress = updatesItem.update.lastSecondSeen

@@ -11,27 +11,25 @@ import tachiyomi.domain.source.manga.model.SourceNotInstalledException
 import tachiyomi.i18n.MR
 import java.net.UnknownHostException
 
-context(appContext: Context)
-val Throwable.formattedMessage: String
-    get() {
-        when (this) {
-            is HttpException -> return appContext.stringResource(MR.strings.exception_http, code)
-            is UnknownHostException -> {
-                return if (!appContext.isOnline()) {
-                    appContext.stringResource(MR.strings.exception_offline)
-                } else {
-                    appContext.stringResource(MR.strings.exception_unknown_host, message ?: "")
-                }
+fun Throwable.formattedMessage(appContext: Context): String {
+    when (this) {
+        is HttpException -> return appContext.stringResource(MR.strings.exception_http, code)
+        is UnknownHostException -> {
+            return if (!appContext.isOnline()) {
+                appContext.stringResource(MR.strings.exception_offline)
+            } else {
+                appContext.stringResource(MR.strings.exception_unknown_host, message ?: "")
             }
-            is NoChaptersException, is NoEpisodesException -> return appContext.stringResource(
-                MR.strings.no_results_found,
-            )
-            is SourceNotInstalledException, is AnimeSourceNotInstalledException -> return appContext.stringResource(
-                MR.strings.loader_not_implemented_error,
-            )
         }
-        return when (val className = this::class.simpleName) {
-            "Exception", "IOException" -> message ?: className
-            else -> "$className: $message"
-        }
+        is NoChaptersException, is NoEpisodesException -> return appContext.stringResource(
+            MR.strings.no_results_found,
+        )
+        is SourceNotInstalledException, is AnimeSourceNotInstalledException -> return appContext.stringResource(
+            MR.strings.loader_not_implemented_error,
+        )
     }
+    return when (val className = this::class.simpleName) {
+        "Exception", "IOException" -> message ?: className
+        else -> "$className: $message"
+    }
+}

@@ -1,4 +1,4 @@
-package eu.kanade.presentation.browse.novel
+﻿package eu.kanade.presentation.browse.novel
 
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
@@ -69,7 +69,7 @@ private fun SourcesFilterContent(
                 contentType = "source-filter-header",
             ) {
                 SourcesFilterHeader(
-                    modifier = Modifier.animateItemFastScroll(),
+                    modifier = Modifier.animateItemFastScroll(this),
                     language = language,
                     enabled = enabled,
                     onClickItem = onClickLanguage,
@@ -82,7 +82,7 @@ private fun SourcesFilterContent(
                     contentType = { "source-filter-item" },
                 ) { source ->
                     SourcesFilterItem(
-                        modifier = Modifier.animateItemFastScroll(),
+                        modifier = Modifier.animateItemFastScroll(this),
                         source = source,
                         enabled = "${source.id}" !in state.disabledSources,
                         onClickItem = onClickSource,

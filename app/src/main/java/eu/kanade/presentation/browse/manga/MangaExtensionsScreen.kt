@@ -1,4 +1,4 @@
-package eu.kanade.presentation.browse.manga
+﻿package eu.kanade.presentation.browse.manga
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.clickable
@@ -193,7 +193,7 @@ private fun ExtensionContent(
                             }
                         ExtensionHeader(
                             textRes = header.textRes,
-                            modifier = Modifier.animateItemFastScroll(),
+                            modifier = Modifier.animateItemFastScroll(this),
                             action = action,
                         )
                     }
@@ -202,7 +202,7 @@ private fun ExtensionContent(
                         ExtensionHeader(
                             text = header.text,
                             modifier = Modifier
-                                .animateItemFastScroll()
+                                .animateItemFastScroll(this)
                                 .clickable { onToggleSection(header) },
                             action = {
                                 IconButton(onClick = { onToggleSection(header) }) {
@@ -227,7 +227,7 @@ private fun ExtensionContent(
                 key = { item -> "extension-${header.hashCode()}-${item.extension.pkgName}" },
             ) { item ->
                 ExtensionItem(
-                    modifier = Modifier.animateItemFastScroll(),
+                    modifier = Modifier.animateItemFastScroll(this),
                     item = item,
                     onClickItem = {
                         when (it) {

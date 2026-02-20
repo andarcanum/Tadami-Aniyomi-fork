@@ -4,7 +4,6 @@ import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.ui.Modifier
 
 // https://issuetracker.google.com/352584409
-context(lazyItemScope: LazyItemScope)
-fun Modifier.animateItemFastScroll() = with(lazyItemScope) {
+fun Modifier.animateItemFastScroll(lazyItemScope: LazyItemScope) = with(lazyItemScope) {
     this@animateItemFastScroll.animateItem(fadeInSpec = null, fadeOutSpec = null)
 }

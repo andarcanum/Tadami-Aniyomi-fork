@@ -900,6 +900,7 @@ class PlayerViewModel @JvmOverloads constructor(
     private operator fun <T> List<T>.component6(): T = get(5)
 
     private val inputMethodManager = activity.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+
     @Suppress("DEPRECATION")
     private fun forceShowSoftwareKeyboard() {
         inputMethodManager.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0)

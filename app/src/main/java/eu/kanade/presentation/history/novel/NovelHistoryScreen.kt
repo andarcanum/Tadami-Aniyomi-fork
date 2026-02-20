@@ -1,4 +1,4 @@
-package eu.kanade.presentation.history.novel
+﻿package eu.kanade.presentation.history.novel
 
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
@@ -85,14 +85,14 @@ private fun NovelHistoryScreenContent(
             when (item) {
                 is NovelHistoryUiModel.Header -> {
                     ListGroupHeader(
-                        modifier = Modifier.animateItemFastScroll(),
+                        modifier = Modifier.animateItemFastScroll(this),
                         text = relativeDateText(item.date),
                     )
                 }
                 is NovelHistoryUiModel.Item -> {
                     val value = item.item
                     NovelHistoryItem(
-                        modifier = Modifier.animateItemFastScroll(),
+                        modifier = Modifier.animateItemFastScroll(this),
                         history = value,
                         onClickCover = { onClickCover(value) },
                         onClickResume = { onClickResume(value) },

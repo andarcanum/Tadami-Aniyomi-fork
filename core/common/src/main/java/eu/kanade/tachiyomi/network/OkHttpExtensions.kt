@@ -21,6 +21,13 @@ import kotlin.coroutines.resumeWithException
 
 val jsonMime = "application/json; charset=utf-8".toMediaType()
 
+@PublishedApi
+internal val defaultJsonParser = Json {
+    ignoreUnknownKeys = true
+    explicitNulls = false
+    coerceInputValues = true
+}
+
 fun Call.asObservable(): Observable<Response> {
     return Observable.unsafeCreate { subscriber ->
         // Since Call is a one-shot type, clone it for each new subscriber.
@@ -132,15 +139,18 @@ fun OkHttpClient.newCachelessCallWithProgress(request: Request, listener: Progre
     return progressClient.newCall(request)
 }
 
-context(json: Json)
-inline fun <reified T> Response.parseAs(): T {
-    return decodeFromJsonResponse(serializer(), this)
+inline fun <reified T> Response.parseAs(json: Json = defaultJsonParser): T {
+    return decodeFromJsonResponse(
+        deserializer = serializer(),
+        response = this,
+        json = json,
+    )
 }
 
-context(json: Json)
 fun <T> decodeFromJsonResponse(
     deserializer: DeserializationStrategy<T>,
     response: Response,
+    json: Json = defaultJsonParser,
 ): T {
     return response.body.source().use {
         json.decodeFromBufferedSource(deserializer, it)

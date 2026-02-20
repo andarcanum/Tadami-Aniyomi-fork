@@ -1,4 +1,4 @@
-package eu.kanade.presentation.browse.anime
+﻿package eu.kanade.presentation.browse.anime
 
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
@@ -69,7 +69,7 @@ private fun AnimeSourcesFilterContent(
                 contentType = "source-filter-header",
             ) {
                 AnimeSourcesFilterHeader(
-                    modifier = Modifier.animateItemFastScroll(),
+                    modifier = Modifier.animateItemFastScroll(this),
                     language = language,
                     enabled = enabled,
                     onClickItem = onClickLanguage,
@@ -82,7 +82,7 @@ private fun AnimeSourcesFilterContent(
                     contentType = { "source-filter-item" },
                 ) { source ->
                     AnimeSourcesFilterItem(
-                        modifier = Modifier.animateItemFastScroll(),
+                        modifier = Modifier.animateItemFastScroll(this),
                         source = source,
                         isEnabled = "${source.id}" !in state.disabledSources,
                         onClickItem = onClickSource,

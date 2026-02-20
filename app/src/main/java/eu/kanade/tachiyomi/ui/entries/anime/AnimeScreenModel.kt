@@ -338,7 +338,7 @@ class AnimeScreenModel(
 
             logcat(LogPriority.ERROR, e)
             screenModelScope.launch {
-                snackbarHostState.showSnackbar(message = with(context) { e.formattedMessage })
+                snackbarHostState.showSnackbar(message = e.formattedMessage(context))
             }
         }
     }
@@ -639,7 +639,7 @@ class AnimeScreenModel(
                 context.stringResource(AYMR.strings.no_episodes_error)
             } else {
                 logcat(LogPriority.ERROR, e)
-                with(context) { e.formattedMessage }
+                e.formattedMessage(context)
             }
 
             screenModelScope.launch {
@@ -690,7 +690,7 @@ class AnimeScreenModel(
                 context.stringResource(AYMR.strings.no_seasons_error)
             } else {
                 logcat(LogPriority.ERROR, e)
-                with(context) { e.formattedMessage }
+                e.formattedMessage(context)
             }
 
             screenModelScope.launch {

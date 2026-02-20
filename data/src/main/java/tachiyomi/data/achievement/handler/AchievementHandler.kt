@@ -70,15 +70,15 @@ class AchievementHandler(
             }
 
             eventBus.events.collect { event ->
-                    try {
-                        logcat(LogPriority.VERBOSE) { "[ACHIEVEMENTS] Event received: $event" }
-                        processEvent(event)
-                    } catch (e: Exception) {
-                        logcat(LogPriority.ERROR) {
-                            "[ACHIEVEMENTS] Error processing achievement event: $event, ${e.message}"
-                        }
+                try {
+                    logcat(LogPriority.VERBOSE) { "[ACHIEVEMENTS] Event received: $event" }
+                    processEvent(event)
+                } catch (e: Exception) {
+                    logcat(LogPriority.ERROR) {
+                        "[ACHIEVEMENTS] Error processing achievement event: $event, ${e.message}"
                     }
                 }
+            }
         }
     }
 

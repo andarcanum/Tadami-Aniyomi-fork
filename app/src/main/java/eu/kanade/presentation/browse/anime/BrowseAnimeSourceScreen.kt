@@ -58,7 +58,7 @@ fun BrowseAnimeSourceContent(
         ?: animeList.loadState.append.takeIf { it is LoadState.Error }
 
     val getErrorMessage: (LoadState.Error) -> String = { state ->
-        with(context) { state.error.formattedMessage }
+        state.error.formattedMessage(context)
     }
 
     LaunchedEffect(errorState) {
