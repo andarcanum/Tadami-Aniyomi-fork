@@ -210,7 +210,7 @@ private fun AnimeLibraryAuroraList(
                             }
                             if (libraryItem.isLocal) {
                                 Badge(
-                                    text = "LOCAL",
+                                    text = stringResource(AYMR.strings.aurora_local),
                                     color = colors.accent,
                                     textColor = colors.textOnAccent,
                                     shape = RoundedCornerShape(4.dp),
@@ -319,7 +319,7 @@ private fun AnimeLibraryAuroraCardGrid(
                             }
                             if (libraryItem.isLocal) {
                                 Badge(
-                                    text = "LOCAL",
+                                    text = stringResource(AYMR.strings.aurora_local),
                                     color = colors.accent,
                                     textColor = colors.textOnAccent,
                                     shape = RoundedCornerShape(4.dp),
