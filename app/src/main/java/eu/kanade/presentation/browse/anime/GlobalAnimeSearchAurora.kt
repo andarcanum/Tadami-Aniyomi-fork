@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.entries.anime.model.Anime
+import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
 fun GlobalAnimeSearchAuroraContent(
@@ -54,7 +56,7 @@ fun GlobalAnimeSearchAuroraContent(
                 androidx.compose.foundation.layout.Column {
                     Spacer(modifier = Modifier.height(80.dp))
                     Text(
-                        text = "Search",
+                        text = stringResource(AYMR.strings.aurora_global_search),
                         style = MaterialTheme.typography.headlineMedium,
                         color = colors.textPrimary,
                         fontWeight = FontWeight.Bold,

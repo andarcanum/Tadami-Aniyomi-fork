@@ -288,7 +288,7 @@ private fun NovelLibraryCompactGridItem(
         coverBadgeStart = {
             if (badgeState.showDownloaded) {
                 Badge(
-                    text = "DL",
+                    text = stringResource(AYMR.strings.aurora_downloaded),
                     color = MaterialTheme.colorScheme.tertiary,
                     textColor = MaterialTheme.colorScheme.onTertiary,
                 )
@@ -344,7 +344,7 @@ private fun NovelLibraryAuroraCard(
                     BadgeGroup {
                         if (badgeState.showDownloaded) {
                             Badge(
-                                text = "DL",
+                                text = stringResource(AYMR.strings.aurora_downloaded),
                                 color = colors.accent,
                                 textColor = colors.textOnAccent,
                                 shape = RoundedCornerShape(4.dp),
@@ -437,7 +437,7 @@ private fun NovelLibraryAuroraCoverOnlyCard(
                 ) {
                     if (badgeState.showDownloaded) {
                         Badge(
-                            text = "DL",
+                            text = stringResource(AYMR.strings.aurora_downloaded),
                             color = colors.accent,
                             textColor = colors.textOnAccent,
                             shape = RoundedCornerShape(4.dp),

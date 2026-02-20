@@ -635,6 +635,7 @@
     <string name="aurora_continue_watching">Продолжить просмотр</string>
     <string name="aurora_continue_watching_header">ПРОДОЛЖИТЬ ПРОСМОТР</string>
     <string name="aurora_play">Смотреть</string>
+    <string name="aurora_read">Читать</string>
     <string name="aurora_details">Подробнее</string>
     <string name="aurora_view_all">Показать все</string>
     <string name="aurora_episode_number">Эпизод %s</string>
@@ -765,6 +766,7 @@
     <string name="aurora_browse">Обзор</string>
     <string name="aurora_discover_sources">Открыть источники</string>
     <string name="aurora_discover_titles">Найти тайтлы</string>
+    <string name="aurora_global_search">Глобальный поиск</string>
     <string name="aurora_extensions">Расширения</string>
     <string name="aurora_migrate">Миграция</string>
     <string name="aurora_pinned_sources">Закреплённые источники</string>
@@ -784,6 +786,7 @@
     <string name="aurora_refresh_all_tabs">Обновить все вкладки</string>
     <string name="aurora_new_episodes_count">Новых серий: %d</string>
     <string name="aurora_new_chapters_count">Новых глав: %d</string>
+    <string name="aurora_new_badge">НОВОЕ</string>
     <string name="aurora_updating_anime">Обновление аниме</string>
     <string name="aurora_updating_manga">Обновление манги</string>
     <string name="aurora_updating_novel">Обновление ранобэ</string>
@@ -832,6 +835,8 @@
     <string name="aurora_categories">Категории</string>
     <string name="aurora_data_storage">Данные и хранилище</string>
     <string name="aurora_player_settings">Настройки проигрывателя</string>
+    <string name="aurora_download_paused">Пауза</string>
+    <string name="aurora_download_pending">В ожидании: %d</string>
     
     <!-- Welcome Screen -->
     <string name="aurora_welcome_title">Начните смотреть</string>
@@ -1000,7 +1005,6 @@
     <string name="novel_reader_tab_general">Основные</string>
     <string name="novel_reader_tab_reading">Чтение</string>
 </resources>
-
 
 
 

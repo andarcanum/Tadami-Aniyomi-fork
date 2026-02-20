@@ -25,6 +25,7 @@ import tachiyomi.domain.entries.manga.model.MangaCover
 import tachiyomi.domain.library.manga.LibraryManga
 import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.Badge
 import tachiyomi.presentation.core.components.BadgeGroup
 import tachiyomi.presentation.core.components.FastScrollLazyColumn
@@ -209,7 +210,7 @@ private fun MangaLibraryAuroraList(
                             }
                             if (libraryItem.isLocal) {
                                 Badge(
-                                    text = "LOCAL",
+                                    text = stringResource(AYMR.strings.aurora_local),
                                     color = colors.accent,
                                     textColor = colors.textOnAccent,
                                     shape = RoundedCornerShape(4.dp),
@@ -318,7 +319,7 @@ private fun MangaLibraryAuroraCardGrid(
                             }
                             if (libraryItem.isLocal) {
                                 Badge(
-                                    text = "LOCAL",
+                                    text = stringResource(AYMR.strings.aurora_local),
                                     color = colors.accent,
                                     textColor = colors.textOnAccent,
                                     shape = RoundedCornerShape(4.dp),

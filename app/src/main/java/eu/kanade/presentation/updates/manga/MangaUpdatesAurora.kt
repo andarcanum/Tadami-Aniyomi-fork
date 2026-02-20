@@ -349,7 +349,7 @@ fun AniviewMangaUpdateCard(
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                 ) {
                     Text(
-                        text = "NEW",
+                        text = stringResource(AYMR.strings.aurora_new_badge),
                         color = colors.textOnAccent,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,

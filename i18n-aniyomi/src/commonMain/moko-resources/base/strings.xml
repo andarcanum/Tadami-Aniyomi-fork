@@ -716,7 +716,7 @@
     <string name="aurora_continue_watching">Continue Watching</string>
     <string name="aurora_continue_watching_header">CONTINUE WATCHING</string>
     <string name="aurora_play">Play</string>
-    <string name="aurora_read">Читать</string>
+    <string name="aurora_read">Read</string>
     <string name="aurora_details">Details</string>
     <string name="aurora_view_all">View All</string>
     <string name="aurora_episode_number">Episode %s</string>
@@ -867,6 +867,7 @@
     <string name="aurora_refresh_all_tabs">Refresh all tabs</string>
     <string name="aurora_new_episodes_count">New episodes: %d</string>
     <string name="aurora_new_chapters_count">New chapters: %d</string>
+    <string name="aurora_new_badge">NEW</string>
     <string name="aurora_updating_anime">Updating anime</string>
     <string name="aurora_updating_manga">Updating manga</string>
     <string name="aurora_updating_novel">Updating novel</string>
