@@ -156,7 +156,8 @@ object GreetingProvider {
         Calendar.THURSDAY to listOf(candidate("weekday_thursday", AYMR.strings.aurora_greeting_weekday_thursday)),
         Calendar.FRIDAY to listOf(candidate("weekday_friday", AYMR.strings.aurora_greeting_weekday_friday)),
     )
-    private val weekdayFallbackGreetings = listOf(candidate("weekday_generic", AYMR.strings.aurora_greeting_weekday_generic))
+    private val weekdayFallbackGreetings =
+        listOf(candidate("weekday_generic", AYMR.strings.aurora_greeting_weekday_generic))
 
     private val streakGreetings = listOf(
         candidate("streak_continues", AYMR.strings.aurora_greeting_streak_continues),
@@ -431,7 +432,9 @@ object GreetingProvider {
 
     private fun checkAchievementMilestone(count: Int): List<GreetingCandidate>? {
         return when {
-            count >= 100 -> listOf(candidate("achievement_legendary", AYMR.strings.aurora_greeting_achievement_legendary))
+            count >= 100 -> listOf(
+                candidate("achievement_legendary", AYMR.strings.aurora_greeting_achievement_legendary),
+            )
             count >= 50 -> listOf(
                 candidate("achievement_50", AYMR.strings.aurora_greeting_achievement_50),
                 candidate("achievement_master", AYMR.strings.aurora_greeting_achievement_master),
@@ -524,4 +527,3 @@ object GreetingProvider {
         return seed
     }
 }
-
