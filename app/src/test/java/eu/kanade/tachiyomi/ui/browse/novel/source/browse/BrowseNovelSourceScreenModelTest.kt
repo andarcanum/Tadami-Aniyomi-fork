@@ -72,13 +72,13 @@ class BrowseNovelSourceScreenModelTest {
 
             val screenModel = track(
                 BrowseNovelSourceScreenModel(
-                sourceId = 1L,
-                listingQuery = null,
-                sourceManager = sourceManager,
-                getRemoteNovel = getRemoteNovel,
-                sourcePreferences = prefs,
-                getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
-                networkToLocalNovel = networkToLocal,
+                    sourceId = 1L,
+                    listingQuery = null,
+                    sourceManager = sourceManager,
+                    getRemoteNovel = getRemoteNovel,
+                    sourcePreferences = prefs,
+                    getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
+                    networkToLocalNovel = networkToLocal,
                 ),
             )
 
@@ -106,14 +106,14 @@ class BrowseNovelSourceScreenModelTest {
 
             val screenModel = track(
                 BrowseNovelSourceScreenModel(
-                sourceId = 1L,
-                listingQuery = null,
-                sourceManager = sourceManager,
-                getRemoteNovel = getRemoteNovel,
-                sourcePreferences = prefs,
-                getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(novelRepository),
-                networkToLocalNovel = networkToLocal,
-                updateNovel = UpdateNovel(novelRepository),
+                    sourceId = 1L,
+                    listingQuery = null,
+                    sourceManager = sourceManager,
+                    getRemoteNovel = getRemoteNovel,
+                    sourcePreferences = prefs,
+                    getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(novelRepository),
+                    networkToLocalNovel = networkToLocal,
+                    updateNovel = UpdateNovel(novelRepository),
                 ),
             )
 
@@ -146,16 +146,16 @@ class BrowseNovelSourceScreenModelTest {
 
             val screenModel = track(
                 BrowseNovelSourceScreenModel(
-                sourceId = 1L,
-                listingQuery = null,
-                sourceManager = sourceManager,
-                getRemoteNovel = getRemoteNovel,
-                sourcePreferences = prefs,
-                getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(novelRepository),
-                networkToLocalNovel = NetworkToLocalNovel(novelRepository),
-                getNovelFavoritesInteractor = tachiyomi.domain.entries.novel.interactor.GetNovelFavorites(
-                    novelRepository,
-                ),
+                    sourceId = 1L,
+                    listingQuery = null,
+                    sourceManager = sourceManager,
+                    getRemoteNovel = getRemoteNovel,
+                    sourcePreferences = prefs,
+                    getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(novelRepository),
+                    networkToLocalNovel = NetworkToLocalNovel(novelRepository),
+                    getNovelFavoritesInteractor = tachiyomi.domain.entries.novel.interactor.GetNovelFavorites(
+                        novelRepository,
+                    ),
                 ),
             )
 
@@ -180,13 +180,13 @@ class BrowseNovelSourceScreenModelTest {
 
         val screenModel = track(
             BrowseNovelSourceScreenModel(
-            sourceId = 1L,
-            listingQuery = GetRemoteNovel.QUERY_POPULAR,
-            sourceManager = sourceManager,
-            getRemoteNovel = getRemoteNovel,
-            sourcePreferences = prefs,
-            getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
-            networkToLocalNovel = networkToLocal,
+                sourceId = 1L,
+                listingQuery = GetRemoteNovel.QUERY_POPULAR,
+                sourceManager = sourceManager,
+                getRemoteNovel = getRemoteNovel,
+                sourcePreferences = prefs,
+                getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
+                networkToLocalNovel = networkToLocal,
             ),
         )
 
@@ -207,13 +207,13 @@ class BrowseNovelSourceScreenModelTest {
 
         val screenModel = track(
             BrowseNovelSourceScreenModel(
-            sourceId = 1L,
-            listingQuery = null,
-            sourceManager = sourceManager,
-            getRemoteNovel = getRemoteNovel,
-            sourcePreferences = prefs,
-            getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
-            networkToLocalNovel = networkToLocal,
+                sourceId = 1L,
+                listingQuery = null,
+                sourceManager = sourceManager,
+                getRemoteNovel = getRemoteNovel,
+                sourcePreferences = prefs,
+                getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
+                networkToLocalNovel = networkToLocal,
             ),
         )
 
@@ -248,13 +248,13 @@ class BrowseNovelSourceScreenModelTest {
 
             val screenModel = track(
                 BrowseNovelSourceScreenModel(
-                sourceId = 1L,
-                listingQuery = GetRemoteNovel.QUERY_POPULAR,
-                sourceManager = sourceManager,
-                getRemoteNovel = getRemoteNovel,
-                sourcePreferences = prefs,
-                getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
-                networkToLocalNovel = networkToLocal,
+                    sourceId = 1L,
+                    listingQuery = GetRemoteNovel.QUERY_POPULAR,
+                    sourceManager = sourceManager,
+                    getRemoteNovel = getRemoteNovel,
+                    sourcePreferences = prefs,
+                    getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
+                    networkToLocalNovel = networkToLocal,
                 ),
             )
 
@@ -282,13 +282,13 @@ class BrowseNovelSourceScreenModelTest {
 
         val screenModel = track(
             BrowseNovelSourceScreenModel(
-            sourceId = 1L,
-            listingQuery = GetRemoteNovel.QUERY_LATEST,
-            sourceManager = sourceManager,
-            getRemoteNovel = getRemoteNovel,
-            sourcePreferences = prefs,
-            getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
-            networkToLocalNovel = networkToLocal,
+                sourceId = 1L,
+                listingQuery = GetRemoteNovel.QUERY_LATEST,
+                sourceManager = sourceManager,
+                getRemoteNovel = getRemoteNovel,
+                sourcePreferences = prefs,
+                getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
+                networkToLocalNovel = networkToLocal,
             ),
         )
 
@@ -317,13 +317,13 @@ class BrowseNovelSourceScreenModelTest {
         val elapsedMs = measureTimeMillis {
             track(
                 BrowseNovelSourceScreenModel(
-                sourceId = 1L,
-                listingQuery = null,
-                sourceManager = sourceManager,
-                getRemoteNovel = getRemoteNovel,
-                sourcePreferences = prefs,
-                getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
-                networkToLocalNovel = networkToLocal,
+                    sourceId = 1L,
+                    listingQuery = null,
+                    sourceManager = sourceManager,
+                    getRemoteNovel = getRemoteNovel,
+                    sourcePreferences = prefs,
+                    getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
+                    networkToLocalNovel = networkToLocal,
                 ),
             )
         }
@@ -352,13 +352,13 @@ class BrowseNovelSourceScreenModelTest {
 
             val screenModel = track(
                 BrowseNovelSourceScreenModel(
-                sourceId = 1L,
-                listingQuery = GetRemoteNovel.QUERY_POPULAR,
-                sourceManager = sourceManager,
-                getRemoteNovel = getRemoteNovel,
-                sourcePreferences = prefs,
-                getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
-                networkToLocalNovel = networkToLocal,
+                    sourceId = 1L,
+                    listingQuery = GetRemoteNovel.QUERY_POPULAR,
+                    sourceManager = sourceManager,
+                    getRemoteNovel = getRemoteNovel,
+                    sourcePreferences = prefs,
+                    getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
+                    networkToLocalNovel = networkToLocal,
                 ),
             )
 
