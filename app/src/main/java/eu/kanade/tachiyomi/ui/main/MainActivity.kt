@@ -117,6 +117,7 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -407,6 +408,17 @@ class MainActivity : BaseActivity() {
         if (restorePortraitAfterPlayerExit) {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             restorePortraitAfterPlayerExit = false
+        }
+        lifecycleScope.launch {
+            val todayLevel = activityDataRepository
+                .getActivityData(days = 1)
+                .first()
+                .lastOrNull()
+                ?.level
+                ?: 0
+            if (todayLevel == 0) {
+                activityDataRepository.recordAppOpen()
+            }
         }
         // Start session time tracking
         appSessionStartTime = System.currentTimeMillis()

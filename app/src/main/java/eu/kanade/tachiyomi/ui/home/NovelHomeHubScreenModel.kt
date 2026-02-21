@@ -81,15 +81,27 @@ class NovelHomeHubScreenModel(
 
     init {
         val lastOpened = userProfilePreferences.lastOpenedTime().get()
-        val greeting = GreetingProvider.getGreeting(lastOpened)
+        val totalLaunches = userProfilePreferences.totalLaunches().get()
+        val recentGreetingIds = userProfilePreferences.getRecentGreetingHistory()
+        val recentScenarioIds = userProfilePreferences.getRecentScenarioHistory()
+        val greetingSelection = GreetingProvider.selectGreeting(
+            lastOpenedTime = lastOpened,
+            isFirstTime = lastOpened == 0L,
+            totalLaunches = totalLaunches,
+            recentGreetingIds = recentGreetingIds,
+            recentScenarioIds = recentScenarioIds,
+        )
 
         userProfilePreferences.lastOpenedTime().set(System.currentTimeMillis())
+        userProfilePreferences.totalLaunches().set(totalLaunches + 1)
+        userProfilePreferences.appendRecentGreetingId(greetingSelection.greetingId)
+        userProfilePreferences.appendRecentScenarioId(greetingSelection.scenarioId)
 
         mutableState.update {
             it.copy(
                 userName = userProfilePreferences.name().get(),
                 userAvatar = userProfilePreferences.avatarUrl().get(),
-                greeting = greeting,
+                greeting = greetingSelection.greeting,
             )
         }
     }
@@ -156,7 +168,11 @@ class NovelHomeHubScreenModel(
     }
 
     fun updateUserName(name: String) {
+        val previousName = userProfilePreferences.name().get()
         userProfilePreferences.name().set(name)
+        if (name != previousName) {
+            userProfilePreferences.nameEdited().set(true)
+        }
         mutableState.update { it.copy(userName = name) }
     }
 
@@ -220,3 +236,4 @@ class NovelHomeHubScreenModel(
         readCount = readCount,
     )
 }
+

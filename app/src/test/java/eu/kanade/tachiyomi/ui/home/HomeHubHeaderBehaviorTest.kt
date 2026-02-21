@@ -2,6 +2,9 @@ package eu.kanade.tachiyomi.ui.home
 
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.achievement.model.ActivityType
+import tachiyomi.domain.achievement.model.DayActivity
+import java.time.LocalDate
 
 class HomeHubHeaderBehaviorTest {
 
@@ -128,5 +131,69 @@ class HomeHubHeaderBehaviorTest {
     @Test
     fun `shouldResetHomeHubScroll returns false on same section`() {
         shouldResetHomeHubScroll(previousPage = 1, currentPage = 1) shouldBe false
+    }
+
+    @Test
+    fun `calculateHomeOpenStreak counts today and yesterday when both active`() {
+        val today = LocalDate.now()
+        val activities = listOf(
+            DayActivity(date = today.minusDays(2), level = 0, type = ActivityType.APP_OPEN),
+            DayActivity(date = today.minusDays(1), level = 1, type = ActivityType.APP_OPEN),
+            DayActivity(date = today, level = 1, type = ActivityType.APP_OPEN),
+        )
+
+        calculateHomeOpenStreak(activities) shouldBe 2
+    }
+
+    @Test
+    fun `calculateHomeOpenStreak starts from yesterday when today has no activity`() {
+        val today = LocalDate.now()
+        val activities = listOf(
+            DayActivity(date = today.minusDays(2), level = 0, type = ActivityType.APP_OPEN),
+            DayActivity(date = today.minusDays(1), level = 1, type = ActivityType.APP_OPEN),
+            DayActivity(date = today, level = 0, type = ActivityType.APP_OPEN),
+        )
+
+        calculateHomeOpenStreak(activities) shouldBe 1
+    }
+
+    @Test
+    fun `calculateHomeOpenStreak returns zero when yesterday and today are inactive`() {
+        val today = LocalDate.now()
+        val activities = listOf(
+            DayActivity(date = today.minusDays(1), level = 0, type = ActivityType.APP_OPEN),
+            DayActivity(date = today, level = 0, type = ActivityType.APP_OPEN),
+        )
+
+        calculateHomeOpenStreak(activities) shouldBe 0
+    }
+
+    @Test
+    fun `calculateHomeOpenStreak returns zero for empty input`() {
+        calculateHomeOpenStreak(emptyList()) shouldBe 0
+    }
+
+    @Test
+    fun `shouldShowNicknameEditHint returns true for default untouched nickname`() {
+        shouldShowNicknameEditHint(
+            currentName = "\u0417\u0440\u0438\u0442\u0435\u043b\u044c",
+            isNameEdited = false,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `shouldShowNicknameEditHint returns false after nickname change`() {
+        shouldShowNicknameEditHint(
+            currentName = "MyName",
+            isNameEdited = true,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `shouldShowNicknameEditHint returns false for custom name even without edit flag`() {
+        shouldShowNicknameEditHint(
+            currentName = "Custom",
+            isNameEdited = false,
+        ) shouldBe false
     }
 }

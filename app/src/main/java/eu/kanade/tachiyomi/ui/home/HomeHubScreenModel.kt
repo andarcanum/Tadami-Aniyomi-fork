@@ -85,6 +85,9 @@ class HomeHubScreenModel(
     init {
         val cached = fastCache.load()
         val lastOpened = userProfilePreferences.lastOpenedTime().get()
+        val totalLaunches = userProfilePreferences.totalLaunches().get()
+        val recentGreetingIds = userProfilePreferences.getRecentGreetingHistory()
+        val recentScenarioIds = userProfilePreferences.getRecentScenarioHistory()
 
         // Собираем статистику для умного приветствия
         screenModelScope.launchIO {
@@ -98,16 +101,22 @@ class HomeHubScreenModel(
             val librarySize = libraryAnime.size
             val isFirstTime = lastOpened == 0L
 
-            val greeting = GreetingProvider.getGreeting(
+            val greetingSelection = GreetingProvider.selectGreeting(
                 lastOpenedTime = lastOpened,
                 achievementCount = achievementCount,
                 episodesWatched = episodesWatched,
                 librarySize = librarySize,
                 currentStreak = currentStreak,
                 isFirstTime = isFirstTime,
+                totalLaunches = totalLaunches,
+                recentGreetingIds = recentGreetingIds,
+                recentScenarioIds = recentScenarioIds,
             )
 
             userProfilePreferences.lastOpenedTime().set(System.currentTimeMillis())
+            userProfilePreferences.totalLaunches().set(totalLaunches + 1)
+            userProfilePreferences.appendRecentGreetingId(greetingSelection.greetingId)
+            userProfilePreferences.appendRecentScenarioId(greetingSelection.scenarioId)
 
             mutableState.update {
                 it.copy(
@@ -116,7 +125,7 @@ class HomeHubScreenModel(
                     recommendations = cached.recommendations.map { r -> r.toRecommendationData() },
                     userName = cached.userName,
                     userAvatar = cached.userAvatar,
-                    greeting = greeting,
+                    greeting = greetingSelection.greeting,
                     isInitialized = cached.isInitialized,
                     isLoading = false,
                 )
@@ -203,7 +212,11 @@ class HomeHubScreenModel(
     }
 
     fun updateUserName(name: String) {
+        val previousName = userProfilePreferences.name().get()
         userProfilePreferences.name().set(name)
+        if (name != previousName) {
+            userProfilePreferences.nameEdited().set(true)
+        }
         fastCache.updateUserName(name)
         mutableState.update { it.copy(userName = name) }
     }
@@ -324,3 +337,4 @@ class HomeHubScreenModel(
         }
     }
 }
+

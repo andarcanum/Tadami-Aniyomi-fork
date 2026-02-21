@@ -642,6 +642,40 @@
     <string name="aurora_recently_added">Недавно добавленные</string>
     <string name="aurora_more">Ещё</string>
     <string name="aurora_change_nickname">Изменить имя</string>
+    <string name="aurora_nickname_field_label">Никнейм</string>
+    <string name="aurora_nickname_preview">Предпросмотр</string>
+    <string name="aurora_nickname_font">Шрифт</string>
+    <string name="aurora_nickname_font_default">По умолчанию</string>
+    <string name="aurora_nickname_font_montserrat">Montserrat</string>
+    <string name="aurora_nickname_font_lora">Lora</string>
+    <string name="aurora_nickname_font_nunito">Nunito</string>
+    <string name="aurora_nickname_font_pt_serif">PT Serif</string>
+    <string name="aurora_nickname_color">Цвет</string>
+    <string name="aurora_nickname_color_theme">Тема</string>
+    <string name="aurora_nickname_color_accent">Акцент</string>
+    <string name="aurora_nickname_color_gold">Золото</string>
+    <string name="aurora_nickname_color_cyan">Голубой</string>
+    <string name="aurora_nickname_color_pink">Розовый</string>
+    <string name="aurora_nickname_color_custom">Свой</string>
+    <string name="aurora_nickname_custom_color">Свой цвет (HEX)</string>
+    <string name="aurora_nickname_custom_color_hint">Формат: #RRGGBB или #AARRGGBB</string>
+    <string name="aurora_nickname_outline">Обводка</string>
+    <string name="aurora_nickname_outline_thickness">Толщина обводки: %s</string>
+    <string name="aurora_nickname_glow">Свечение</string>
+    <string name="aurora_nickname_effect">Эффект</string>
+    <string name="aurora_nickname_effect_none">Без эффекта</string>
+    <string name="aurora_nickname_effect_sparkle">Искорки</string>
+    <string name="aurora_nickname_effect_hearts">Сердечки</string>
+    <string name="aurora_nickname_effect_stars">Звёзды</string>
+    <string name="aurora_nickname_effect_flowers">Цветочки</string>
+    <string name="aurora_nickname_effect_kawaii">Кавай</string>
+    <string name="aurora_nickname_effect_cat">Котик</string>
+    <string name="aurora_nickname_effect_moon">Луна</string>
+    <string name="aurora_nickname_effect_cloud">Облачко</string>
+    <string name="aurora_nickname_effect_ribbon">Ленточка</string>
+    <string name="aurora_nickname_effect_sakura">Сакура</string>
+    <string name="aurora_nickname_apply">Применить</string>
+    <string name="aurora_nickname_cancel">Отмена</string>
     <string name="aurora_recently_watched">Недавно просмотренные</string>
     <string name="aurora_open_source">Открыть источник</string>
     <string name="aurora_episode_progress">Эпизод %d</string>
@@ -668,6 +702,17 @@
     <string name="aurora_greeting_missed_you">Скучали!</string>
     <string name="aurora_greeting_youre_back">С возвращением!</string>
     <string name="aurora_greeting_back_for_more">За добавкой?</string>
+    <string name="aurora_greeting_absence_long_reunion">Перерыв закончился, сезон ждал тебя</string>
+    <string name="aurora_greeting_absence_mid_return">С возвращением, очередь уже начала паниковать</string>
+    <string name="aurora_greeting_frequent_hello_again">Снова ты? Отлично, запускаем.</string>
+    <string name="aurora_greeting_frequent_live_here">Ты тут уже почти на правах арендатора</string>
+    <string name="aurora_greeting_frequent_quick_return">Так быстро вернулся? Уважаем.</string>
+    <string name="aurora_greeting_weekday_monday">Понедельник легче пережить с серией</string>
+    <string name="aurora_greeting_weekday_tuesday">Вторник: понедельник, но с субтитрами</string>
+    <string name="aurora_greeting_weekday_wednesday">Экватор недели. Пора включать аниме.</string>
+    <string name="aurora_greeting_weekday_thursday">Четверг: почти выходные, точно аниме</string>
+    <string name="aurora_greeting_weekday_friday">Пятница открыта. Врубай лучшее.</string>
+    <string name="aurora_greeting_weekday_generic">Будни становятся лучше с аниме</string>
 
     <!-- Morning Greetings -->
     <string name="aurora_greeting_morning_rise">Подъём и аниме!</string>
@@ -1005,6 +1050,4 @@
     <string name="novel_reader_tab_general">Основные</string>
     <string name="novel_reader_tab_reading">Чтение</string>
 </resources>
-
-
 
