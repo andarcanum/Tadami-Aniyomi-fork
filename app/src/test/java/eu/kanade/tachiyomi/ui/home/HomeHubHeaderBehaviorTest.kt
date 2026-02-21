@@ -196,4 +196,28 @@ class HomeHubHeaderBehaviorTest {
             isNameEdited = false,
         ) shouldBe false
     }
+
+    @Test
+    fun `shouldFillNicknameRowSpace returns false when edit hint is visible`() {
+        shouldFillNicknameRowSpace(showNameEditHint = true) shouldBe false
+    }
+
+    @Test
+    fun `shouldFillNicknameRowSpace returns true when edit hint is hidden`() {
+        shouldFillNicknameRowSpace(showNameEditHint = false) shouldBe true
+    }
+
+    @Test
+    fun `decorateGreetingText wraps non-empty greeting with custom markers`() {
+        val decorated = decorateGreetingText("Привет, мир")
+
+        decorated.contains("Привет, мир") shouldBe true
+        decorated shouldBe decorated.trim()
+        (decorated != "Привет, мир") shouldBe true
+    }
+
+    @Test
+    fun `decorateGreetingText keeps blank greeting unchanged`() {
+        decorateGreetingText("   ") shouldBe "   "
+    }
 }

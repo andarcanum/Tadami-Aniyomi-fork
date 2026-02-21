@@ -85,6 +85,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
@@ -222,6 +223,20 @@ internal fun shouldShowNicknameEditHint(
     isNameEdited: Boolean,
 ): Boolean {
     return !isNameEdited && currentName == UserProfilePreferences.DEFAULT_NAME
+}
+
+internal fun shouldFillNicknameRowSpace(showNameEditHint: Boolean): Boolean {
+    // Keep the edit hint visually attached to the nickname instead of pushing it near the avatar.
+    return !showNameEditHint
+}
+
+private val greetingDecorators = listOf("✦", "✧", "◆", "◇")
+
+internal fun decorateGreetingText(text: String): String {
+    val trimmed = text.trim()
+    if (trimmed.isEmpty()) return text
+    val marker = greetingDecorators[Math.floorMod(trimmed.hashCode(), greetingDecorators.size)]
+    return "$marker $trimmed $marker"
 }
 
 private enum class NicknameFontPreset(val key: String, val fontRes: Int?) {
@@ -720,12 +735,18 @@ private fun HomeHubPinnedHeader(
                             .padding(end = 16.dp),
                     ) {
                         Text(
-                            text = stringResource(greeting),
-                            style = MaterialTheme.typography.titleSmall,
+                            text = decorateGreetingText(stringResource(greeting)),
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontSize = 13.sp,
+                                lineHeight = 17.sp,
+                                fontStyle = FontStyle.Italic,
+                            ),
                             color = colors.textSecondary,
                             fontWeight = FontWeight.Medium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                         )
-                        Spacer(Modifier.height(2.dp))
+                        Spacer(Modifier.height(12.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
@@ -733,7 +754,7 @@ private fun HomeHubPinnedHeader(
                             StyledNicknameText(
                                 text = userName,
                                 nicknameStyle = nicknameStyle,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f, fill = shouldFillNicknameRowSpace(showNameEditHint)),
                             )
                             if (showNameEditHint) {
                                 Spacer(Modifier.width(6.dp))

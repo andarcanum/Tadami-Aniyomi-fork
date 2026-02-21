@@ -90,4 +90,54 @@ class GreetingProviderTest {
         third.greetingId shouldNotBe first.greetingId
         third.greetingId shouldNotBe second.greetingId
     }
+
+    @Test
+    fun `selectGreetingForContext should never use sunday weekend greeting on saturday`() {
+        val baseNow = 1_700_000_000_000L
+        val weekendGreetingIds = mutableSetOf<String>()
+
+        repeat(240) { step ->
+            val context = GreetingProvider.GreetingContext(
+                nowMillis = baseNow + step * 3_600_000L,
+                hourOfDay = 18,
+                dayOfWeek = Calendar.SATURDAY,
+                lastOpenedTime = baseNow - (6L * 60 * 60 * 1000),
+                isFirstTime = false,
+                totalLaunches = 3L,
+            )
+
+            val selection = GreetingProvider.selectGreetingForContext(context)
+            if (selection.scenarioId == "weekend") {
+                weekendGreetingIds += selection.greetingId
+            }
+        }
+
+        weekendGreetingIds.isNotEmpty() shouldBe true
+        weekendGreetingIds.contains("sunday_marathon") shouldBe false
+    }
+
+    @Test
+    fun `selectGreetingForContext should never use saturday weekend greeting on sunday`() {
+        val baseNow = 1_700_000_000_000L
+        val weekendGreetingIds = mutableSetOf<String>()
+
+        repeat(240) { step ->
+            val context = GreetingProvider.GreetingContext(
+                nowMillis = baseNow + step * 3_600_000L,
+                hourOfDay = 18,
+                dayOfWeek = Calendar.SUNDAY,
+                lastOpenedTime = baseNow - (6L * 60 * 60 * 1000),
+                isFirstTime = false,
+                totalLaunches = 3L,
+            )
+
+            val selection = GreetingProvider.selectGreetingForContext(context)
+            if (selection.scenarioId == "weekend") {
+                weekendGreetingIds += selection.greetingId
+            }
+        }
+
+        weekendGreetingIds.isNotEmpty() shouldBe true
+        weekendGreetingIds.contains("saturday_perfect") shouldBe false
+    }
 }

@@ -123,7 +123,7 @@ object GreetingProvider {
     private val absenceMidGreetings = listOf(
         candidate("absence_mid_missed", AYMR.strings.aurora_greeting_missed_you),
         candidate("absence_mid_return", AYMR.strings.aurora_greeting_absence_mid_return),
-        candidate("absence_mid_back_more", AYMR.strings.aurora_greeting_back_for_more),
+        candidate("absence_mid_back_more", AYMR.strings.aurora_greeting_absence_mid_back_for_more),
     )
 
     private val frequentUserGreetings = listOf(
@@ -132,10 +132,20 @@ object GreetingProvider {
         candidate("frequent_quick_return", AYMR.strings.aurora_greeting_frequent_quick_return),
     )
 
-    private val weekendGreetings = listOf(
+    private val saturdayGreetings = listOf(
         candidate("weekend_time", AYMR.strings.aurora_greeting_weekend_time),
         candidate("saturday_perfect", AYMR.strings.aurora_greeting_saturday_perfect),
+        candidate("weekend_relax", AYMR.strings.aurora_greeting_weekend_relax),
+    )
+
+    private val sundayGreetings = listOf(
+        candidate("weekend_time", AYMR.strings.aurora_greeting_weekend_time),
         candidate("sunday_marathon", AYMR.strings.aurora_greeting_sunday_marathon),
+        candidate("weekend_relax", AYMR.strings.aurora_greeting_weekend_relax),
+    )
+
+    private val weekendFallbackGreetings = listOf(
+        candidate("weekend_time", AYMR.strings.aurora_greeting_weekend_time),
         candidate("weekend_relax", AYMR.strings.aurora_greeting_weekend_relax),
     )
 
@@ -296,7 +306,7 @@ object GreetingProvider {
             scenarios += GreetingScenario(
                 id = "weekend",
                 weight = 25,
-                candidates = weekendGreetings,
+                candidates = getWeekendCandidates(context.dayOfWeek),
             )
         } else {
             scenarios += GreetingScenario(
@@ -367,6 +377,14 @@ object GreetingProvider {
 
     private fun isWeekend(dayOfWeek: Int): Boolean {
         return dayOfWeek == Calendar.SATURDAY || dayOfWeek == Calendar.SUNDAY
+    }
+
+    private fun getWeekendCandidates(dayOfWeek: Int): List<GreetingCandidate> {
+        return when (dayOfWeek) {
+            Calendar.SATURDAY -> saturdayGreetings
+            Calendar.SUNDAY -> sundayGreetings
+            else -> weekendFallbackGreetings
+        }
     }
 
     private fun isFrequentUser(context: GreetingContext): Boolean {
