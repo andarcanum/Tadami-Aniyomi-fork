@@ -123,7 +123,7 @@ object GreetingProvider {
     private val absenceMidGreetings = listOf(
         candidate("absence_mid_missed", AYMR.strings.aurora_greeting_missed_you),
         candidate("absence_mid_return", AYMR.strings.aurora_greeting_absence_mid_return),
-        candidate("absence_mid_back_more", AYMR.strings.aurora_greeting_back_for_more),
+        candidate("absence_mid_back_more", AYMR.strings.aurora_greeting_absence_mid_back_for_more),
     )
 
     private val frequentUserGreetings = listOf(

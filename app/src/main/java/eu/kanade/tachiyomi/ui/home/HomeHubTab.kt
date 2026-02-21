@@ -729,8 +729,10 @@ private fun HomeHubPinnedHeader(
                             style = MaterialTheme.typography.titleSmall,
                             color = colors.textSecondary,
                             fontWeight = FontWeight.Medium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                         )
-                        Spacer(Modifier.height(2.dp))
+                        Spacer(Modifier.height(8.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
