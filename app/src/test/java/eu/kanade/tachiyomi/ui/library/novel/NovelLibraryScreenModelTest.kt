@@ -12,11 +12,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.yield
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -35,6 +37,7 @@ class NovelLibraryScreenModelTest {
     private val getLibraryNovel: GetLibraryNovel = mockk()
     private val chapterRepository: NovelChapterRepository = mockk()
     private val libraryFlow = MutableStateFlow<List<LibraryNovel>>(emptyList())
+    private val activeScreenModels = mutableListOf<NovelLibraryScreenModel>()
     private lateinit var testDispatcher: TestDispatcher
     private lateinit var basePreferences: BasePreferences
     private lateinit var libraryPreferences: LibraryPreferences
@@ -55,6 +58,11 @@ class NovelLibraryScreenModelTest {
 
     @AfterEach
     fun tearDown() {
+        activeScreenModels.forEach { it.onDispose() }
+        activeScreenModels.clear()
+        runBlocking {
+            repeat(5) { yield() }
+        }
         Dispatchers.resetMain()
     }
 
@@ -64,7 +72,7 @@ class NovelLibraryScreenModelTest {
         val second = libraryNovel(id = 2L, title = "Second Story")
         libraryFlow.value = listOf(first, second)
 
-        val screenModel = NovelLibraryScreenModel(
+        val screenModel = trackedNovelLibraryScreenModel(
             getLibraryNovel = getLibraryNovel,
             chapterRepository = chapterRepository,
             basePreferences = basePreferences,
@@ -86,7 +94,7 @@ class NovelLibraryScreenModelTest {
         val read = libraryNovel(id = 2L, title = "Read", total = 10L, read = 10L)
         libraryFlow.value = listOf(unread, read)
 
-        val screenModel = NovelLibraryScreenModel(
+        val screenModel = trackedNovelLibraryScreenModel(
             getLibraryNovel = getLibraryNovel,
             chapterRepository = chapterRepository,
             basePreferences = basePreferences,
@@ -109,7 +117,7 @@ class NovelLibraryScreenModelTest {
         val completed = libraryNovel(id = 2L, title = "Completed", status = SManga.COMPLETED.toLong())
         libraryFlow.value = listOf(ongoing, completed)
 
-        val screenModel = NovelLibraryScreenModel(
+        val screenModel = trackedNovelLibraryScreenModel(
             getLibraryNovel = getLibraryNovel,
             chapterRepository = chapterRepository,
             basePreferences = basePreferences,
@@ -131,7 +139,7 @@ class NovelLibraryScreenModelTest {
         val notDownloaded = libraryNovel(id = 2L, title = "Not Downloaded")
         libraryFlow.value = listOf(downloaded, notDownloaded)
 
-        val screenModel = NovelLibraryScreenModel(
+        val screenModel = trackedNovelLibraryScreenModel(
             getLibraryNovel = getLibraryNovel,
             chapterRepository = chapterRepository,
             basePreferences = basePreferences,
@@ -154,7 +162,7 @@ class NovelLibraryScreenModelTest {
         val newer = libraryNovel(id = 2L, title = "Newer", lastRead = 50L)
         libraryFlow.value = listOf(older, newer)
 
-        val screenModel = NovelLibraryScreenModel(
+        val screenModel = trackedNovelLibraryScreenModel(
             getLibraryNovel = getLibraryNovel,
             chapterRepository = chapterRepository,
             basePreferences = basePreferences,
@@ -179,7 +187,7 @@ class NovelLibraryScreenModelTest {
         val regular = libraryNovel(id = 2L, title = "Regular Interval", fetchInterval = 0)
         libraryFlow.value = listOf(custom, regular)
 
-        val screenModel = NovelLibraryScreenModel(
+        val screenModel = trackedNovelLibraryScreenModel(
             getLibraryNovel = getLibraryNovel,
             chapterRepository = chapterRepository,
             basePreferences = basePreferences,
@@ -230,7 +238,7 @@ class NovelLibraryScreenModelTest {
             ),
         )
 
-        val screenModel = NovelLibraryScreenModel(
+        val screenModel = trackedNovelLibraryScreenModel(
             getLibraryNovel = getLibraryNovel,
             chapterRepository = chapterRepository,
             basePreferences = basePreferences,
@@ -240,6 +248,24 @@ class NovelLibraryScreenModelTest {
         )
 
         screenModel.getNextUnreadChapter(novel)?.id shouldBe 102L
+    }
+
+    private fun trackedNovelLibraryScreenModel(
+        getLibraryNovel: GetLibraryNovel,
+        chapterRepository: NovelChapterRepository,
+        basePreferences: BasePreferences,
+        libraryPreferences: LibraryPreferences,
+        hasDownloadedChapters: (Novel) -> Boolean,
+        downloadedIdsDispatcher: TestDispatcher,
+    ): NovelLibraryScreenModel {
+        return NovelLibraryScreenModel(
+            getLibraryNovel = getLibraryNovel,
+            chapterRepository = chapterRepository,
+            basePreferences = basePreferences,
+            libraryPreferences = libraryPreferences,
+            hasDownloadedChapters = hasDownloadedChapters,
+            downloadedIdsDispatcher = downloadedIdsDispatcher,
+        ).also(activeScreenModels::add)
     }
 
     private fun libraryNovel(
