@@ -25,40 +25,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Node
-        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.2.0
-        with:
-          node-version: '22'
-
-      - name: Collect changed files
-        shell: bash
-        run: |
-          set -euo pipefail
-          before_sha="${{ github.event.before }}"
-          head_sha="${{ github.sha }}"
-
-          if [ "$before_sha" = "0000000000000000000000000000000000000000" ]; then
-            git diff-tree --no-commit-id --name-only -r "$head_sha" > changed_files.txt
-          elif git cat-file -e "${before_sha}^{commit}" 2>/dev/null; then
-            git diff --name-only "$before_sha" "$head_sha" > changed_files.txt
-          else
-            echo "Base commit $before_sha is unavailable (likely force-push)."
-            if git rev-parse --verify "${head_sha}^" >/dev/null 2>&1; then
-              git diff --name-only "${head_sha}^" "$head_sha" > changed_files.txt
-            else
-              git diff-tree --no-commit-id --name-only -r "$head_sha" > changed_files.txt
-            fi
-          fi
-          echo "Changed files:"
-          cat changed_files.txt
-
-      - name: Detect reading-critical changes
-        id: reading_changes
-        shell: bash
-        run: |
-          set -euo pipefail
-          node tools/ci/detect-reading-critical.js --input changed_files.txt --github-output "$GITHUB_OUTPUT"
-
       - name: Set up JDK
         uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.7.0
         with:
@@ -71,31 +37,26 @@ jobs:
       - name: Check code format
         run: ./gradlew spotlessCheck
 
-      - name: Build app
+      - name: Build app (quick)
+        if: github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')
+        run: ./gradlew assembleDebug --console=plain
+
+      - name: Build app (release for main/tags)
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
         run: |
           set -euo pipefail
           ./gradlew assembleRelease -Penable-updater --console=plain 2>&1 | tee build_release.log
           python3 tools/ci/report-release-warnings.py build_release.log --enforce
 
-      - name: Reading regression unit matrix
-        if: steps.reading_changes.outputs.reading_critical == 'true'
-        run: echo "Auto unit tests disabled in CI push workflow. Use manual workflow when needed."
-
-      - name: Reading debug assemble smoke
-        if: steps.reading_changes.outputs.reading_critical == 'true'
-        run: ./gradlew :app:assembleDebug
-
-      - name: Reading gate skipped (non-reading change)
-        if: steps.reading_changes.outputs.reading_critical != 'true'
-        run: echo "reading_critical=false, strict reading regression matrix skipped."
-
       - name: Upload APK
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: arm64-v8a-${{ github.sha }}
           path: app/build/outputs/apk/release/app-arm64-v8a-release-unsigned.apk
 
       - name: Upload mapping
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: mapping-${{ github.sha }}

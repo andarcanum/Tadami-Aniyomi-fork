@@ -8,6 +8,8 @@ on:
         required: false
         default: false
         type: boolean
+  schedule:
+    - cron: "30 2 * * *"
 
 permissions:
   contents: read
@@ -101,5 +103,5 @@ jobs:
             app/build/test-results/testReleaseUnitTest
 
       - name: Reading regression unit matrix
-        if: inputs.run_reading_regression_matrix == true
+        if: github.event_name == 'workflow_dispatch' && inputs.run_reading_regression_matrix == true
         run: bash tools/ci/run-reading-regression-tests.sh
