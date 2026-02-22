@@ -1,0 +1,105 @@
+name: Manual Unit Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_reading_regression_matrix:
+        description: "Run reading regression unit matrix"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Run release unit tests (manual)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.2.0
+        with:
+          node-version: "22"
+
+      - name: Set up JDK
+        uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.7.0
+        with:
+          java-version: 17
+          distribution: temurin
+
+      - name: Set up gradle
+        uses: gradle/actions/setup-gradle@94baf225fe0a508e581a564467443d0e2379123b # v4.3.0
+
+      - name: Run unit tests
+        run: ./gradlew testReleaseUnitTest --stacktrace --console=plain
+
+      - name: Print unit test failures
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          results_dir="app/build/test-results/testReleaseUnitTest"
+          if [ ! -d "$results_dir" ]; then
+            echo "No test results directory found: $results_dir"
+            exit 0
+          fi
+          python3 - <<'PY'
+          import glob
+          import xml.etree.ElementTree as ET
+
+          files = sorted(glob.glob("app/build/test-results/testReleaseUnitTest/*.xml"))
+          if not files:
+              print("No JUnit XML files found in app/build/test-results/testReleaseUnitTest")
+              raise SystemExit(0)
+
+          failures = []
+          total_tests = total_failures = total_errors = 0
+
+          for path in files:
+              root = ET.parse(path).getroot()
+              total_tests += int(root.attrib.get("tests", 0))
+              total_failures += int(root.attrib.get("failures", 0))
+              total_errors += int(root.attrib.get("errors", 0))
+              suite_name = root.attrib.get("name", "")
+              for case in root.findall("testcase"):
+                  failure = case.find("failure")
+                  error = case.find("error")
+                  if failure is None and error is None:
+                      continue
+                  node = failure if failure is not None else error
+                  classname = case.attrib.get("classname", suite_name)
+                  testname = case.attrib.get("name", "<unknown>")
+                  message = (node.attrib.get("message") or "").strip()
+                  text = (node.text or "").strip().splitlines()
+                  detail = message or (text[0].strip() if text else "No details")
+                  failures.append((classname, testname, detail))
+
+          print(f"Unit test summary: tests={total_tests}, failures={total_failures}, errors={total_errors}")
+          if not failures:
+              print("No failed tests found in JUnit XML.")
+          else:
+              print("Failed tests:")
+              for classname, testname, detail in failures:
+                  print(f"- {classname} > {testname}: {detail}")
+          PY
+
+      - name: Upload unit test reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: unit-test-release-report-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            app/build/reports/tests/testReleaseUnitTest
+            app/build/test-results/testReleaseUnitTest
+
+      - name: Reading regression unit matrix
+        if: inputs.run_reading_regression_matrix == true
+        run: bash tools/ci/run-reading-regression-tests.sh
