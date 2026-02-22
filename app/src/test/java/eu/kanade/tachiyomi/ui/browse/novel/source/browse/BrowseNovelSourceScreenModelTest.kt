@@ -38,6 +38,8 @@ import tachiyomi.domain.source.novel.service.NovelSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.fullType
 import uy.kohesive.injekt.api.get
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.system.measureTimeMillis
 
 class BrowseNovelSourceScreenModelTest {
@@ -336,6 +338,10 @@ class BrowseNovelSourceScreenModelTest {
             elapsedMs < 300L,
             "ScreenModel init blocked for ${elapsedMs}ms while loading filters",
         )
+        assertTrue(
+            source.awaitFilterLoad(timeoutMillis = 2_000L),
+            "Slow filter loading did not finish in time",
+        )
     }
 
     @Test
@@ -463,6 +469,12 @@ class BrowseNovelSourceScreenModelTest {
         override val lang: String,
         private val delayMillis: Long,
     ) : NovelHttpSource {
+        private val filterLoaded = CountDownLatch(1)
+
+        fun awaitFilterLoad(timeoutMillis: Long): Boolean {
+            return filterLoaded.await(timeoutMillis, TimeUnit.MILLISECONDS)
+        }
+
         override val supportsLatest: Boolean = true
         override fun fetchPopularNovels(page: Int): Observable<NovelsPage> =
             Observable.just(NovelsPage(emptyList(), false))
@@ -475,8 +487,12 @@ class BrowseNovelSourceScreenModelTest {
         override fun fetchLatestUpdates(page: Int): Observable<NovelsPage> =
             Observable.just(NovelsPage(emptyList(), false))
         override fun getFilterList(): NovelFilterList {
-            Thread.sleep(delayMillis)
-            return NovelFilterList()
+            return try {
+                Thread.sleep(delayMillis)
+                NovelFilterList()
+            } finally {
+                filterLoaded.countDown()
+            }
         }
         override fun fetchNovelDetails(novel: SNovel): Observable<SNovel> = Observable.just(novel)
         override fun fetchChapterList(novel: SNovel): Observable<List<SNovelChapter>> =
