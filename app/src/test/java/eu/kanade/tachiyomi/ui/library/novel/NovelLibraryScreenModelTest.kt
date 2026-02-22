@@ -12,13 +12,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import kotlinx.coroutines.yield
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -34,9 +32,9 @@ import tachiyomi.domain.library.service.LibraryPreferences
 
 class NovelLibraryScreenModelTest {
 
-    private val getLibraryNovel: GetLibraryNovel = mockk()
-    private val chapterRepository: NovelChapterRepository = mockk()
-    private val libraryFlow = MutableStateFlow<List<LibraryNovel>>(emptyList())
+    private lateinit var getLibraryNovel: GetLibraryNovel
+    private lateinit var chapterRepository: NovelChapterRepository
+    private lateinit var libraryFlow: MutableStateFlow<List<LibraryNovel>>
     private val activeScreenModels = mutableListOf<NovelLibraryScreenModel>()
     private lateinit var testDispatcher: TestDispatcher
     private lateinit var basePreferences: BasePreferences
@@ -46,6 +44,9 @@ class NovelLibraryScreenModelTest {
     fun setup() {
         testDispatcher = StandardTestDispatcher()
         Dispatchers.setMain(testDispatcher)
+        getLibraryNovel = mockk()
+        chapterRepository = mockk()
+        libraryFlow = MutableStateFlow(emptyList())
         every { getLibraryNovel.subscribe() } returns libraryFlow
         coEvery { chapterRepository.getChapterByNovelId(any(), any()) } returns emptyList()
         val preferenceStore = FakePreferenceStore()
@@ -59,10 +60,8 @@ class NovelLibraryScreenModelTest {
     @AfterEach
     fun tearDown() {
         activeScreenModels.forEach { it.onDispose() }
+        testDispatcher.scheduler.advanceUntilIdle()
         activeScreenModels.clear()
-        runBlocking {
-            repeat(5) { yield() }
-        }
         Dispatchers.resetMain()
     }
 
