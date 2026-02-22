@@ -95,6 +95,10 @@ class ReaderPreferences(
 
     fun saveLongPagePosition() = preferenceStore.getBoolean("pref_save_long_page_position", true)
 
+    fun pageActionButtonColor() = preferenceStore.getInt("reader_page_action_button_color", 0)
+
+    fun pageActionLabelColor() = preferenceStore.getInt("reader_page_action_label_color", 0)
+
     internal fun getLongPageProgressForChapter(chapterId: Long): Long? {
         return getLongPageProgressForChapter(chapterId, chapterKey = null)
     }

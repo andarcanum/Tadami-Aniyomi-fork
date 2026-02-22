@@ -840,6 +840,9 @@
     <string name="no_next_chapter">Next chapter not found</string>
     <string name="decode_image_error">The image couldn\'t be loaded</string>
     <string name="confirm_set_image_as_cover">Use this image as cover art?</string>
+    <string name="reader_page_actions_customize_colors">Customize action colors</string>
+    <string name="reader_page_actions_button_color">Button color</string>
+    <string name="reader_page_actions_label_color">Title color</string>
     <string name="pref_category_for_this_series">For this series</string>
     <string name="viewer">Reading mode</string>
     <string name="transition_finished">Finished:</string>

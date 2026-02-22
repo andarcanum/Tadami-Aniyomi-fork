@@ -398,6 +398,10 @@ class ReaderActivity : BaseActivity() {
             val navigatorHeight by readerPreferences.navigatorHeight().collectAsState()
             val navigatorCornerRadius by readerPreferences.navigatorCornerRadius().collectAsState()
             val navigatorShowTickMarks by readerPreferences.navigatorShowTickMarks().collectAsState()
+            val pageActionButtonColorPref = remember { readerPreferences.pageActionButtonColor() }
+            val pageActionButtonColor by pageActionButtonColorPref.collectAsState()
+            val pageActionLabelColorPref = remember { readerPreferences.pageActionLabelColor() }
+            val pageActionLabelColor by pageActionLabelColorPref.collectAsState()
 
             // Auto-scroll effect - start/stop based on state
             LaunchedEffect(state.autoScrollEnabled, state.autoScrollSpeed, state.viewer) {
@@ -544,6 +548,10 @@ class ReaderActivity : BaseActivity() {
                         onSetAsCover = viewModel::setAsCover,
                         onShare = viewModel::shareImage,
                         onSave = viewModel::saveImage,
+                        buttonColorValue = pageActionButtonColor,
+                        labelColorValue = pageActionLabelColor,
+                        onButtonColorChange = pageActionButtonColorPref::set,
+                        onLabelColorChange = pageActionLabelColorPref::set,
                     )
                 }
                 null -> {}

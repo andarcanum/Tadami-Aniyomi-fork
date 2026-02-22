@@ -161,6 +161,9 @@
     <string name="second_to_last">Предпоследняя прочитанная глава</string>
     <string name="services">Сервисы отслеживания</string>
     <string name="set_as_cover">Установить как обложку</string>
+    <string name="reader_page_actions_customize_colors">Настроить цвета действий</string>
+    <string name="reader_page_actions_button_color">Цвет кнопок</string>
+    <string name="reader_page_actions_label_color">Цвет названий</string>
     <string name="show_chapter_number">Номер главы</string>
     <string name="show_title">Название источника</string>
     <string name="snack_add_to_library">Добавить в библиотеку?</string>

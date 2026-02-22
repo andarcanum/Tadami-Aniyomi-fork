@@ -837,54 +837,66 @@ private fun HomeHubPinnedHeader(
                             .weight(1f)
                             .padding(end = 16.dp),
                     ) {
-                        if (showGreeting) {
-                            Text(
-                                text = decorateGreetingText(stringResource(greeting), greetingStyle.decoration),
-                                modifier = Modifier.clickable(onClick = onGreetingClick),
-                                style = MaterialTheme.typography.titleSmall.copy(
-                                    fontSize = greetingStyle.fontSize.sp,
-                                    lineHeight = (greetingStyle.fontSize + 4).sp,
-                                    fontStyle = if (greetingStyle.italic) FontStyle.Italic else FontStyle.Normal,
-                                    fontFamily = greetingFontFamily,
-                                ),
-                                color = greetingColor,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Spacer(Modifier.height(12.dp))
-                        }
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable(onClick = onNameClick),
-                            verticalAlignment = Alignment.CenterVertically,
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
-                            StyledNicknameText(
-                                text = userName,
-                                nicknameStyle = nicknameStyle,
-                                modifier = Modifier.weight(1f, fill = shouldFillNicknameRowSpace(showNameEditHint)),
-                            )
-                            if (showNameEditHint) {
-                                Spacer(Modifier.width(6.dp))
-                                Box(
+                            if (showGreeting) {
+                                Text(
+                                    text = decorateGreetingText(stringResource(greeting), greetingStyle.decoration),
                                     modifier = Modifier
-                                        .size(20.dp)
-                                        .clip(CircleShape)
-                                        .background(colors.accent.copy(alpha = 0.2f))
-                                        .border(
-                                            width = 1.dp,
-                                            color = colors.accent.copy(alpha = 0.45f),
-                                            shape = CircleShape,
-                                        ),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Edit,
-                                        contentDescription = null,
-                                        tint = colors.accent,
-                                        modifier = Modifier.size(12.dp),
-                                    )
+                                        .align(Alignment.TopStart)
+                                        .offset(y = (-6).dp)
+                                        .clickable(onClick = onGreetingClick),
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontSize = greetingStyle.fontSize.sp,
+                                        lineHeight = (greetingStyle.fontSize + 3).sp,
+                                        fontStyle = if (greetingStyle.italic) {
+                                            FontStyle.Italic
+                                        } else {
+                                            FontStyle.Normal
+                                        },
+                                        fontFamily = greetingFontFamily,
+                                        lineBreak = LineBreak.Heading,
+                                    ),
+                                    color = greetingColor,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = if (showGreeting) 22.dp else 0.dp)
+                                    .clickable(onClick = onNameClick),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                StyledNicknameText(
+                                    text = userName,
+                                    nicknameStyle = nicknameStyle,
+                                    modifier = Modifier.weight(1f, fill = shouldFillNicknameRowSpace(showNameEditHint)),
+                                )
+                                if (showNameEditHint) {
+                                    Spacer(Modifier.width(6.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .clip(CircleShape)
+                                            .background(colors.accent.copy(alpha = 0.2f))
+                                            .border(
+                                                width = 1.dp,
+                                                color = colors.accent.copy(alpha = 0.45f),
+                                                shape = CircleShape,
+                                            ),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Edit,
+                                            contentDescription = null,
+                                            tint = colors.accent,
+                                            modifier = Modifier.size(12.dp),
+                                        )
+                                    }
                                 }
                             }
                         }
