@@ -23,6 +23,7 @@ class UserProfilePreferences(
 
     fun showHomeGreeting() = preferenceStore.getBoolean("user_profile_show_home_greeting", true)
     fun showHomeStreak() = preferenceStore.getBoolean("user_profile_show_home_streak", true)
+    fun homeHubLastSection() = preferenceStore.getString("user_profile_home_hub_last_section", "anime")
     fun greetingFont() = preferenceStore.getString("user_profile_greeting_font", "default")
     fun greetingFontSize() = preferenceStore.getInt("user_profile_greeting_font_size", 12)
     fun greetingColor() = preferenceStore.getString("user_profile_greeting_color", "theme")

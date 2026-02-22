@@ -136,6 +136,16 @@ private enum class HomeHubSection {
     Anime,
     Manga,
     Novel,
+    ;
+
+    val key: String
+        get() = name.lowercase()
+
+    companion object {
+        fun fromKey(key: String): HomeHubSection {
+            return entries.firstOrNull { it.key == key } ?: Anime
+        }
+    }
 }
 
 internal data class HomeHubScrollSnapshot(
@@ -402,10 +412,24 @@ object HomeHubTab : Tab {
             }.ifEmpty { listOf(HomeHubSection.Anime) }
         }
 
-        var selectedSection by rememberSaveable { mutableStateOf(sections.first()) }
+        val homeHubLastSectionPreference = remember { userProfilePreferences.homeHubLastSection() }
+        val initialSelectedSection = remember(sections) {
+            HomeHubSection.fromKey(homeHubLastSectionPreference.get())
+                .takeIf { it in sections }
+                ?: sections.first()
+        }
+        var selectedSection by rememberSaveable { mutableStateOf(initialSelectedSection) }
         LaunchedEffect(sections) {
             if (selectedSection !in sections) {
-                selectedSection = sections.first()
+                selectedSection = HomeHubSection.fromKey(homeHubLastSectionPreference.get())
+                    .takeIf { it in sections }
+                    ?: sections.first()
+            }
+        }
+        LaunchedEffect(selectedSection) {
+            val key = selectedSection.key
+            if (homeHubLastSectionPreference.get() != key) {
+                homeHubLastSectionPreference.set(key)
             }
         }
 

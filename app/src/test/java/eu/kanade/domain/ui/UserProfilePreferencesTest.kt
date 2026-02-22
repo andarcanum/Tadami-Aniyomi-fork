@@ -12,6 +12,7 @@ class UserProfilePreferencesTest {
 
         prefs.showHomeGreeting().get() shouldBe true
         prefs.showHomeStreak().get() shouldBe true
+        prefs.homeHubLastSection().get() shouldBe "anime"
         prefs.greetingFont().get() shouldBe "default"
         prefs.greetingFontSize().get() shouldBe 12
         prefs.greetingColor().get() shouldBe "theme"
