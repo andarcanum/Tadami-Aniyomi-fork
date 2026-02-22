@@ -45,6 +45,7 @@ import tachiyomi.presentation.core.i18n.stringResource
 fun MangaHeroContent(
     manga: Manga,
     chapterCount: Int,
+    hasReadingProgress: Boolean,
     onContinueReading: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -182,7 +183,9 @@ fun MangaHeroContent(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = stringResource(MR.strings.action_resume),
+                    text = stringResource(
+                        if (hasReadingProgress) MR.strings.action_resume else MR.strings.action_start,
+                    ),
                     color = colors.textOnAccent,
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,

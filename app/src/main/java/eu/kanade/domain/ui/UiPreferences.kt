@@ -39,6 +39,8 @@ class UiPreferences(
 
     fun showNovelSection() = preferenceStore.getBoolean("aurora_show_novel_section", true)
 
+    fun showMangaScanlatorBranches() = preferenceStore.getBoolean("show_manga_scanlator_branches", false)
+
     fun navStyle() = preferenceStore.getEnum("bottom_rail_nav_style", NavStyle.MOVE_HISTORY_TO_MORE)
 
     /**

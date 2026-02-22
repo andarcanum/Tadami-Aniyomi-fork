@@ -21,6 +21,15 @@ class UserProfilePreferences(
     fun nicknameGlow() = preferenceStore.getBoolean("user_profile_name_glow", false)
     fun nicknameEffect() = preferenceStore.getString("user_profile_name_effect", "none")
 
+    fun showHomeGreeting() = preferenceStore.getBoolean("user_profile_show_home_greeting", true)
+    fun showHomeStreak() = preferenceStore.getBoolean("user_profile_show_home_streak", true)
+    fun greetingFont() = preferenceStore.getString("user_profile_greeting_font", "default")
+    fun greetingFontSize() = preferenceStore.getInt("user_profile_greeting_font_size", 12)
+    fun greetingColor() = preferenceStore.getString("user_profile_greeting_color", "theme")
+    fun greetingCustomColorHex() = preferenceStore.getString("user_profile_greeting_custom_color_hex", "#FFFFFF")
+    fun greetingDecoration() = preferenceStore.getString("user_profile_greeting_decoration", "none")
+    fun greetingItalic() = preferenceStore.getBoolean("user_profile_greeting_italic", false)
+
     fun getRecentGreetingHistory(limit: Int = RECENT_HISTORY_LIMIT): List<String> {
         return decodeHistory(recentGreetingIds().get(), limit)
     }

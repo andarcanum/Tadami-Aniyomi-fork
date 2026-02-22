@@ -540,7 +540,7 @@ private fun AnimeScreenSmallImpl(
                     ExtendedFloatingActionButton(
                         text = {
                             val isWatching = remember(state.episodes) {
-                                state.episodes.fastAny { it.episode.seen }
+                                state.episodes.fastAny { it.episode.seen || it.episode.lastSecondSeen > 0L }
                             }
                             Text(
                                 text = stringResource(
@@ -907,7 +907,7 @@ fun AnimeScreenLargeImpl(
                     ExtendedFloatingActionButton(
                         text = {
                             val isWatching = remember(state.episodes) {
-                                state.episodes.fastAny { it.episode.seen }
+                                state.episodes.fastAny { it.episode.seen || it.episode.lastSecondSeen > 0L }
                             }
                             Text(
                                 text = stringResource(

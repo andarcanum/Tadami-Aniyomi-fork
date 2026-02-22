@@ -290,6 +290,16 @@ class NovelScreenModel(
                     refreshNovel = shouldAutoRefreshNovel,
                     refreshChapters = shouldAutoRefreshChapters,
                 )
+
+                val deferredExcludedScanlators = resolveDeferredDefaultNovelExcludedScanlators(
+                    shouldAttemptAutoSelection = true,
+                    storedExcludedScanlators = storedExcludedScanlators,
+                    availableScanlators = getAvailableNovelScanlators.await(novelId),
+                    scanlatorChapterCounts = getNovelScanlatorChapterCounts.await(novelId),
+                )
+                if (deferredExcludedScanlators != null && deferredExcludedScanlators != initialExcludedScanlators) {
+                    setNovelExcludedScanlators.await(novelId, deferredExcludedScanlators)
+                }
             }
         }
     }
@@ -1154,6 +1164,21 @@ internal fun resolveDefaultNovelExcludedScanlatorsByChapterCount(
         .filterKeys { it != preferredScanlator }
         .values
         .toSet()
+}
+
+internal fun resolveDeferredDefaultNovelExcludedScanlators(
+    shouldAttemptAutoSelection: Boolean,
+    storedExcludedScanlators: Set<String>,
+    availableScanlators: Set<String>,
+    scanlatorChapterCounts: Map<String, Int>,
+): Set<String>? {
+    if (!shouldAttemptAutoSelection) return null
+    if (storedExcludedScanlators.isNotEmpty()) return null
+    return resolveDefaultNovelExcludedScanlatorsByChapterCount(
+        scanlatorChapterCounts = scanlatorChapterCounts,
+        availableScanlators = availableScanlators,
+        excludedScanlators = emptySet(),
+    )
 }
 
 internal fun resolveSelectedNovelScanlator(

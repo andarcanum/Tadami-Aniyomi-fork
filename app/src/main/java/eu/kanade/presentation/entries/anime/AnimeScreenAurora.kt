@@ -198,9 +198,12 @@ fun AnimeScreenAuroraImpl(
         }
     }
 
-    // Check if there are unseen episodes
-    val hasUnseenEpisodes = remember(episodes) {
-        episodes.any { (it as? EpisodeList.Item)?.episode?.seen == false }
+    // Check if user already has any watching progress
+    val hasWatchingProgress = remember(episodes) {
+        episodes.any { episodeItem ->
+            val episode = (episodeItem as? EpisodeList.Item)?.episode ?: return@any false
+            episode.seen || episode.lastSecondSeen > 0L
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -376,7 +379,7 @@ fun AnimeScreenAuroraImpl(
                     AnimeHeroContent(
                         anime = anime,
                         episodeCount = episodes.size,
-                        hasUnseenEpisodes = hasUnseenEpisodes,
+                        hasWatchingProgress = hasWatchingProgress,
                         onContinueWatching = onContinueWatching,
                         onDubbingClicked = onDubbingClicked,
                         selectedDubbing = selectedDubbing,

@@ -163,6 +163,7 @@ class ReaderActivity : BaseActivity() {
 
         binding = ReaderActivityBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        applyReaderSystemBarIconStyle(viewModel.state.value.menuVisible)
 
         if (viewModel.needsInit()) {
             val manga = intent.extras?.getLong("manga", -1) ?: -1L
@@ -558,6 +559,7 @@ class ReaderActivity : BaseActivity() {
      */
     private fun setMenuVisibility(visible: Boolean) {
         viewModel.showMenus(visible)
+        applyReaderSystemBarIconStyle(visible)
         if (visible) {
             windowInsetsController.show(WindowInsetsCompat.Type.systemBars())
             window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
@@ -919,6 +921,7 @@ class ReaderActivity : BaseActivity() {
                 .onEach {
                     WindowCompat.setDecorFitsSystemWindows(window, !it)
                     updateViewerInset(it)
+                    setMenuVisibility(viewModel.state.value.menuVisible)
                 }
                 .launchIn(lifecycleScope)
         }
@@ -1016,4 +1019,25 @@ class ReaderActivity : BaseActivity() {
             binding.viewerContainer.setLayerType(LAYER_TYPE_HARDWARE, paint)
         }
     }
+
+    private fun applyReaderSystemBarIconStyle(menuVisible: Boolean) {
+        val lightStatusBars = resolveReaderLightStatusBars(
+            menuVisible = menuVisible,
+            fullscreen = readerPreferences.fullscreen().get(),
+            defaultLightStatusBars = resources.getBoolean(R.bool.lightStatusBar),
+        )
+        windowInsetsController.isAppearanceLightStatusBars = lightStatusBars
+    }
+}
+
+internal fun resolveReaderLightStatusBars(
+    menuVisible: Boolean,
+    fullscreen: Boolean,
+    defaultLightStatusBars: Boolean,
+): Boolean {
+    if (!menuVisible && fullscreen) {
+        // Reader content is predominantly dark in immersive mode; keep icons light.
+        return false
+    }
+    return defaultLightStatusBars
 }

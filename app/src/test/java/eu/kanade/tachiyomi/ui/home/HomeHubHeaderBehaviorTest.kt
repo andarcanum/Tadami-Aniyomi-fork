@@ -220,4 +220,14 @@ class HomeHubHeaderBehaviorTest {
     fun `decorateGreetingText keeps blank greeting unchanged`() {
         decorateGreetingText("   ") shouldBe "   "
     }
+
+    @Test
+    fun `decorateGreetingText with no decoration returns trimmed text`() {
+        decorateGreetingText("  Hello there  ", GreetingDecorationPreset.None) shouldBe "Hello there"
+    }
+
+    @Test
+    fun `decorateGreetingText with sparkle decoration wraps greeting`() {
+        decorateGreetingText("Hello", GreetingDecorationPreset.Sparkle) shouldBe "✦ Hello ✦"
+    }
 }

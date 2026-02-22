@@ -384,6 +384,10 @@
     <string name="pref_show_manga_section">Показывать раздел манги</string>
     <string name="pref_show_novel_section">Показывать раздел ранобэ</string>
     <string name="pref_show_section_required">По крайней мере один раздел должен оставаться включенным</string>
+    <string name="pref_show_manga_scanlator_branches">Показывать ветки перевода в манге</string>
+    <string name="pref_show_manga_scanlator_branches_summary">Для Inkstory ветки всегда показываются</string>
+    <string name="pref_show_home_greeting">Показывать приветствие на главной</string>
+    <string name="pref_show_home_streak">Показывать счетчик стрика на главной</string>
     <string name="pref_default_home_tab_library">Сделать вкладку манги начальным экраном</string>
     <string name="default_manga_category">Категория манги по умолчанию</string>
     <string name="default_anime_category">Категория аниме по умолчанию</string>
@@ -676,6 +680,21 @@
     <string name="aurora_nickname_effect_sakura">Сакура</string>
     <string name="aurora_nickname_apply">Применить</string>
     <string name="aurora_nickname_cancel">Отмена</string>
+    <string name="aurora_change_greeting_style">Кастомизация приветствия</string>
+    <string name="aurora_greeting_preview">Предпросмотр приветствия</string>
+    <string name="aurora_greeting_font">Шрифт приветствия</string>
+    <string name="aurora_greeting_font_size">Размер приветствия: %s</string>
+    <string name="aurora_greeting_color">Цвет приветствия</string>
+    <string name="aurora_greeting_custom_color">Свой цвет приветствия (HEX)</string>
+    <string name="aurora_greeting_custom_color_hint">Формат: #RRGGBB или #AARRGGBB</string>
+    <string name="aurora_greeting_decoration">Украшение приветствия</string>
+    <string name="aurora_greeting_decoration_auto">Авто</string>
+    <string name="aurora_greeting_decoration_none">Без украшений</string>
+    <string name="aurora_greeting_decoration_sparkle">Искорки</string>
+    <string name="aurora_greeting_decoration_hearts">Сердечки</string>
+    <string name="aurora_greeting_decoration_stars">Звезды</string>
+    <string name="aurora_greeting_decoration_flowers">Цветочки</string>
+    <string name="aurora_greeting_italic">Курсив для приветствия</string>
     <string name="aurora_recently_watched">Недавно просмотренные</string>
     <string name="aurora_open_source">Открыть источник</string>
     <string name="aurora_episode_progress">Эпизод %d</string>
@@ -1051,4 +1070,3 @@
     <string name="novel_reader_tab_general">Основные</string>
     <string name="novel_reader_tab_reading">Чтение</string>
 </resources>
-

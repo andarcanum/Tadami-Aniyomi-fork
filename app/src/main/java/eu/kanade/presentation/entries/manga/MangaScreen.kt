@@ -111,6 +111,7 @@ fun MangaScreen(
     onTagSearch: (String) -> Unit,
 
     onFilterButtonClicked: () -> Unit,
+    showScanlatorSelector: Boolean,
     scanlatorChapterCounts: Map<String, Int>,
     selectedScanlator: String?,
     onScanlatorSelected: (String?) -> Unit,
@@ -167,6 +168,7 @@ fun MangaScreen(
             onTrackingClicked = onTrackingClicked,
             onTagSearch = onTagSearch,
             onFilterButtonClicked = onFilterButtonClicked,
+            showScanlatorSelector = showScanlatorSelector,
             scanlatorChapterCounts = scanlatorChapterCounts,
             selectedScanlator = selectedScanlator,
             onScanlatorSelected = onScanlatorSelected,
@@ -216,6 +218,7 @@ fun MangaScreen(
             onTagSearch = onTagSearch,
             onCopyTagToClipboard = onCopyTagToClipboard,
             onFilterClicked = onFilterButtonClicked,
+            showScanlatorSelector = showScanlatorSelector,
             scanlatorChapterCounts = scanlatorChapterCounts,
             selectedScanlator = selectedScanlator,
             onScanlatorSelected = onScanlatorSelected,
@@ -255,6 +258,7 @@ fun MangaScreen(
             onTagSearch = onTagSearch,
             onCopyTagToClipboard = onCopyTagToClipboard,
             onFilterButtonClicked = onFilterButtonClicked,
+            showScanlatorSelector = showScanlatorSelector,
             scanlatorChapterCounts = scanlatorChapterCounts,
             selectedScanlator = selectedScanlator,
             onScanlatorSelected = onScanlatorSelected,
@@ -300,6 +304,7 @@ private fun MangaScreenSmallImpl(
     onCopyTagToClipboard: (tag: String) -> Unit,
 
     onFilterClicked: () -> Unit,
+    showScanlatorSelector: Boolean,
     scanlatorChapterCounts: Map<String, Int>,
     selectedScanlator: String?,
     onScanlatorSelected: (String?) -> Unit,
@@ -417,7 +422,7 @@ private fun MangaScreenSmallImpl(
                 ExtendedFloatingActionButton(
                     text = {
                         val isReading = remember(state.chapters) {
-                            state.chapters.fastAny { it.chapter.read }
+                            state.chapters.fastAny { it.chapter.read || it.chapter.lastPageRead > 0L }
                         }
                         Text(
                             text = stringResource(if (isReading) MR.strings.action_resume else MR.strings.action_start),
@@ -515,7 +520,7 @@ private fun MangaScreenSmallImpl(
                         )
                     }
 
-                    if (state.showScanlatorSelector) {
+                    if (showScanlatorSelector) {
                         item(
                             key = "scanlator-selector",
                             contentType = "scanlator-selector",
@@ -566,6 +571,7 @@ fun MangaScreenLargeImpl(
     onCopyTagToClipboard: (tag: String) -> Unit,
 
     onFilterButtonClicked: () -> Unit,
+    showScanlatorSelector: Boolean,
     scanlatorChapterCounts: Map<String, Int>,
     selectedScanlator: String?,
     onScanlatorSelected: (String?) -> Unit,
@@ -681,7 +687,7 @@ fun MangaScreenLargeImpl(
                 ExtendedFloatingActionButton(
                     text = {
                         val isReading = remember(state.chapters) {
-                            state.chapters.fastAny { it.chapter.read }
+                            state.chapters.fastAny { it.chapter.read || it.chapter.lastPageRead > 0L }
                         }
                         Text(
                             text = stringResource(
@@ -776,7 +782,7 @@ fun MangaScreenLargeImpl(
                                 )
                             }
 
-                            if (state.showScanlatorSelector) {
+                            if (showScanlatorSelector) {
                                 item(
                                     key = "scanlator-selector",
                                     contentType = "scanlator-selector",

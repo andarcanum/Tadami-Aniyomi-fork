@@ -232,11 +232,39 @@ internal fun shouldFillNicknameRowSpace(showNameEditHint: Boolean): Boolean {
 
 private val greetingDecorators = listOf("✦", "✧", "◆", "◇")
 
-internal fun decorateGreetingText(text: String): String {
+internal enum class GreetingDecorationPreset(val key: String) {
+    Auto("auto"),
+    None("none"),
+    Sparkle("sparkle"),
+    Hearts("hearts"),
+    Stars("stars"),
+    Flowers("flowers"),
+    ;
+
+    companion object {
+        fun fromKey(key: String): GreetingDecorationPreset {
+            return entries.firstOrNull { it.key == key } ?: Auto
+        }
+    }
+}
+
+internal fun decorateGreetingText(
+    text: String,
+    decoration: GreetingDecorationPreset = GreetingDecorationPreset.Auto,
+): String {
     val trimmed = text.trim()
     if (trimmed.isEmpty()) return text
-    val marker = greetingDecorators[Math.floorMod(trimmed.hashCode(), greetingDecorators.size)]
-    return "$marker $trimmed $marker"
+    return when (decoration) {
+        GreetingDecorationPreset.Auto -> {
+            val marker = greetingDecorators[Math.floorMod(trimmed.hashCode(), greetingDecorators.size)]
+            "$marker $trimmed $marker"
+        }
+        GreetingDecorationPreset.None -> trimmed
+        GreetingDecorationPreset.Sparkle -> "✦ $trimmed ✦"
+        GreetingDecorationPreset.Hearts -> "♡ $trimmed ♡"
+        GreetingDecorationPreset.Stars -> "★ $trimmed ★"
+        GreetingDecorationPreset.Flowers -> "✿ $trimmed ✿"
+    }
 }
 
 private enum class NicknameFontPreset(val key: String, val fontRes: Int?) {
@@ -299,6 +327,15 @@ private data class NicknameStyle(
     val glow: Boolean,
     val effect: NicknameEffectPreset,
     val customColorHex: String,
+)
+
+private data class GreetingStyle(
+    val font: NicknameFontPreset,
+    val color: NicknameColorPreset,
+    val customColorHex: String,
+    val fontSize: Int,
+    val decoration: GreetingDecorationPreset,
+    val italic: Boolean,
 )
 
 private data class HomeHubUiState(
@@ -380,6 +417,8 @@ object HomeHubTab : Tab {
         val activityData by activityDataFlow.collectAsState(initial = emptyList())
         val currentStreak = calculateHomeOpenStreak(activityData)
         val isNameEdited by userProfilePreferences.nameEdited().collectAsState()
+        val showHomeGreeting by userProfilePreferences.showHomeGreeting().collectAsState()
+        val showHomeStreak by userProfilePreferences.showHomeStreak().collectAsState()
         val nicknameFontKey by userProfilePreferences.nicknameFont().collectAsState()
         val nicknameColorKey by userProfilePreferences.nicknameColor().collectAsState()
         val nicknameCustomColorHex by userProfilePreferences.nicknameCustomColorHex().collectAsState()
@@ -395,6 +434,20 @@ object HomeHubTab : Tab {
             glow = nicknameGlow,
             effect = NicknameEffectPreset.fromKey(nicknameEffectKey),
             customColorHex = nicknameCustomColorHex,
+        )
+        val greetingFontKey by userProfilePreferences.greetingFont().collectAsState()
+        val greetingColorKey by userProfilePreferences.greetingColor().collectAsState()
+        val greetingCustomColorHex by userProfilePreferences.greetingCustomColorHex().collectAsState()
+        val greetingFontSize by userProfilePreferences.greetingFontSize().collectAsState()
+        val greetingDecorationKey by userProfilePreferences.greetingDecoration().collectAsState()
+        val greetingItalic by userProfilePreferences.greetingItalic().collectAsState()
+        val greetingStyle = GreetingStyle(
+            font = NicknameFontPreset.fromKey(greetingFontKey),
+            color = NicknameColorPreset.fromKey(greetingColorKey),
+            customColorHex = greetingCustomColorHex,
+            fontSize = greetingFontSize.coerceIn(10, 26),
+            decoration = GreetingDecorationPreset.fromKey(greetingDecorationKey),
+            italic = greetingItalic,
         )
 
         val animeScreenModel = HomeHubTab.rememberScreenModel { HomeHubScreenModel() }
@@ -454,6 +507,23 @@ object HomeHubTab : Tab {
                     userProfilePreferences.nicknameGlow().set(newStyle.glow)
                     userProfilePreferences.nicknameEffect().set(newStyle.effect.key)
                     showNameDialog = false
+                },
+            )
+        }
+        var showGreetingDialog by remember { mutableStateOf(false) }
+        if (showGreetingDialog) {
+            GreetingStyleDialog(
+                currentGreeting = stringResource(headerGreeting),
+                currentStyle = greetingStyle,
+                onDismiss = { showGreetingDialog = false },
+                onConfirm = { newStyle ->
+                    userProfilePreferences.greetingFont().set(newStyle.font.key)
+                    userProfilePreferences.greetingColor().set(newStyle.color.key)
+                    userProfilePreferences.greetingCustomColorHex().set(newStyle.customColorHex)
+                    userProfilePreferences.greetingFontSize().set(newStyle.fontSize.coerceIn(10, 26))
+                    userProfilePreferences.greetingDecoration().set(newStyle.decoration.key)
+                    userProfilePreferences.greetingItalic().set(newStyle.italic)
+                    showGreetingDialog = false
                 },
             )
         }
@@ -580,13 +650,17 @@ object HomeHubTab : Tab {
                     userName = headerUserName,
                     userAvatar = headerUserAvatar,
                     nicknameStyle = nicknameStyle,
+                    greetingStyle = greetingStyle,
+                    showGreeting = showHomeGreeting,
                     showNameEditHint = showNameEditHint,
                     currentStreak = currentStreak,
+                    showStreak = showHomeStreak,
                     tabs = tabs,
                     selectedIndex = pagerState.currentPage.coerceIn(0, (tabs.size - 1).coerceAtLeast(0)),
                     onTabSelected = onSectionSelected,
                     onAvatarClick = { photoPickerLauncher.launch("image/*") },
                     onNameClick = { showNameDialog = true },
+                    onGreetingClick = { showGreetingDialog = true },
                 )
             },
         )
@@ -701,13 +775,17 @@ private fun HomeHubPinnedHeader(
     userName: String,
     userAvatar: String,
     nicknameStyle: NicknameStyle,
+    greetingStyle: GreetingStyle,
+    showGreeting: Boolean,
     showNameEditHint: Boolean,
     currentStreak: Int,
+    showStreak: Boolean,
     tabs: kotlinx.collections.immutable.ImmutableList<TabContent>,
     selectedIndex: Int,
     onTabSelected: (Int) -> Unit,
     onAvatarClick: () -> Unit,
     onNameClick: () -> Unit,
+    onGreetingClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
 
@@ -728,27 +806,34 @@ private fun HomeHubPinnedHeader(
                     verticalAlignment = Alignment.Bottom,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
+                    val greetingFontFamily = greetingStyle.font.fontRes?.let { FontFamily(Font(it)) }
+                    val greetingColor = resolveNicknameColor(greetingStyle.color, greetingStyle.customColorHex, colors)
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .clickable(onClick = onNameClick)
                             .padding(end = 16.dp),
                     ) {
-                        Text(
-                            text = decorateGreetingText(stringResource(greeting)),
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontSize = 13.sp,
-                                lineHeight = 17.sp,
-                                fontStyle = FontStyle.Italic,
-                            ),
-                            color = colors.textSecondary,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Spacer(Modifier.height(12.dp))
+                        if (showGreeting) {
+                            Text(
+                                text = decorateGreetingText(stringResource(greeting), greetingStyle.decoration),
+                                modifier = Modifier.clickable(onClick = onGreetingClick),
+                                style = MaterialTheme.typography.titleSmall.copy(
+                                    fontSize = greetingStyle.fontSize.sp,
+                                    lineHeight = (greetingStyle.fontSize + 4).sp,
+                                    fontStyle = if (greetingStyle.italic) FontStyle.Italic else FontStyle.Normal,
+                                    fontFamily = greetingFontFamily,
+                                ),
+                                color = greetingColor,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Spacer(Modifier.height(12.dp))
+                        }
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(onClick = onNameClick),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             StyledNicknameText(
@@ -782,39 +867,41 @@ private fun HomeHubPinnedHeader(
                     }
 
                     Box(
-                        modifier = Modifier.height(72.dp),
+                        modifier = Modifier.height(if (showStreak) 72.dp else 48.dp),
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .clip(RoundedCornerShape(50))
-                                .background(colors.accent.copy(alpha = 0.14f))
-                                .border(
-                                    width = 1.dp,
-                                    color = colors.accent.copy(alpha = 0.35f),
-                                    shape = RoundedCornerShape(50),
+                        if (showStreak) {
+                            Row(
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .clip(RoundedCornerShape(50))
+                                    .background(colors.accent.copy(alpha = 0.14f))
+                                    .border(
+                                        width = 1.dp,
+                                        color = colors.accent.copy(alpha = 0.35f),
+                                        shape = RoundedCornerShape(50),
+                                    )
+                                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.LocalFireDepartment,
+                                    contentDescription = null,
+                                    tint = colors.accent,
+                                    modifier = Modifier.size(12.dp),
                                 )
-                                .padding(horizontal = 8.dp, vertical = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.LocalFireDepartment,
-                                contentDescription = null,
-                                tint = colors.accent,
-                                modifier = Modifier.size(12.dp),
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = currentStreak.toString(),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = colors.textPrimary,
-                                fontWeight = FontWeight.Bold,
-                            )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = currentStreak.toString(),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = colors.textPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
                         }
 
                         Box(
                             Modifier
-                                .align(Alignment.BottomCenter)
+                                .align(if (showStreak) Alignment.BottomCenter else Alignment.Center)
                                 .size(48.dp)
                                 .clickable(onClick = onAvatarClick),
                         ) {
@@ -1512,6 +1599,18 @@ private fun NicknameEffectPreset.label(): String {
 }
 
 @Composable
+private fun GreetingDecorationPreset.label(): String {
+    return when (this) {
+        GreetingDecorationPreset.Auto -> stringResource(AYMR.strings.aurora_greeting_decoration_auto)
+        GreetingDecorationPreset.None -> stringResource(AYMR.strings.aurora_greeting_decoration_none)
+        GreetingDecorationPreset.Sparkle -> stringResource(AYMR.strings.aurora_greeting_decoration_sparkle)
+        GreetingDecorationPreset.Hearts -> stringResource(AYMR.strings.aurora_greeting_decoration_hearts)
+        GreetingDecorationPreset.Stars -> stringResource(AYMR.strings.aurora_greeting_decoration_stars)
+        GreetingDecorationPreset.Flowers -> stringResource(AYMR.strings.aurora_greeting_decoration_flowers)
+    }
+}
+
+@Composable
 private fun StyledNicknameText(
     text: String,
     nicknameStyle: NicknameStyle,
@@ -1814,6 +1913,194 @@ private fun NameDialog(
                     onConfirm(
                         text.trim().ifEmpty { currentName },
                         previewStyle.copy(customColorHex = safeCustomColor),
+                    )
+                },
+            ) {
+                Text(stringResource(AYMR.strings.aurora_nickname_apply))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(AYMR.strings.aurora_nickname_cancel))
+            }
+        },
+    )
+}
+
+@Composable
+private fun GreetingStyleDialog(
+    currentGreeting: String,
+    currentStyle: GreetingStyle,
+    onDismiss: () -> Unit,
+    onConfirm: (GreetingStyle) -> Unit,
+) {
+    var selectedFont by remember(currentStyle) { mutableStateOf(currentStyle.font) }
+    var selectedColor by remember(currentStyle) { mutableStateOf(currentStyle.color) }
+    var customColorHex by remember(currentStyle) { mutableStateOf(currentStyle.customColorHex) }
+    var selectedDecoration by remember(currentStyle) { mutableStateOf(currentStyle.decoration) }
+    var italicEnabled by remember(currentStyle) { mutableStateOf(currentStyle.italic) }
+    var fontSize by remember(currentStyle) { mutableIntStateOf(currentStyle.fontSize.coerceIn(10, 26)) }
+
+    val previewStyle = GreetingStyle(
+        font = selectedFont,
+        color = selectedColor,
+        customColorHex = customColorHex,
+        fontSize = fontSize.coerceIn(10, 26),
+        decoration = selectedDecoration,
+        italic = italicEnabled,
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(AYMR.strings.aurora_change_greeting_style)) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    text = stringResource(AYMR.strings.aurora_greeting_preview),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Spacer(Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(AuroraTheme.colors.glass)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                ) {
+                    val greetingFontFamily = previewStyle.font.fontRes?.let { FontFamily(Font(it)) }
+                    val greetingColor = resolveNicknameColor(previewStyle.color, previewStyle.customColorHex, AuroraTheme.colors)
+                    Text(
+                        text = decorateGreetingText(currentGreeting, previewStyle.decoration),
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontSize = previewStyle.fontSize.sp,
+                            lineHeight = (previewStyle.fontSize + 4).sp,
+                            fontStyle = if (previewStyle.italic) FontStyle.Italic else FontStyle.Normal,
+                            fontFamily = greetingFontFamily,
+                        ),
+                        color = greetingColor,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    text = stringResource(AYMR.strings.aurora_greeting_font),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Spacer(Modifier.height(8.dp))
+                NicknameFontPreset.entries.chunked(3).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { preset ->
+                            NameStyleChip(
+                                title = preset.label(),
+                                selected = selectedFont == preset,
+                                onClick = { selectedFont = preset },
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                Text(
+                    text = stringResource(AYMR.strings.aurora_greeting_font_size, fontSize.toString()),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AuroraTheme.colors.textSecondary,
+                )
+                Slider(
+                    value = fontSize.toFloat(),
+                    onValueChange = { fontSize = it.roundToInt().coerceIn(10, 26) },
+                    valueRange = 10f..26f,
+                    steps = 15,
+                )
+
+                Text(
+                    text = stringResource(AYMR.strings.aurora_greeting_color),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Spacer(Modifier.height(8.dp))
+                NicknameColorPreset.entries.chunked(3).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { preset ->
+                            NameStyleChip(
+                                title = preset.label(),
+                                selected = selectedColor == preset,
+                                onClick = { selectedColor = preset },
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                if (selectedColor == NicknameColorPreset.Custom) {
+                    val customColorValid = parseNicknameHexColor(customColorHex) != null
+                    OutlinedTextField(
+                        value = customColorHex,
+                        onValueChange = { value ->
+                            val compact = value.replace(" ", "")
+                            customColorHex = when {
+                                compact.isEmpty() -> "#"
+                                compact.startsWith("#") -> compact
+                                else -> "#$compact"
+                            }
+                        },
+                        singleLine = true,
+                        label = { Text(stringResource(AYMR.strings.aurora_greeting_custom_color)) },
+                        supportingText = { Text(stringResource(AYMR.strings.aurora_greeting_custom_color_hint)) },
+                        isError = !customColorValid,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                Text(
+                    text = stringResource(AYMR.strings.aurora_greeting_decoration),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Spacer(Modifier.height(8.dp))
+                GreetingDecorationPreset.entries.chunked(3).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { preset ->
+                            NameStyleChip(
+                                title = preset.label(),
+                                selected = selectedDecoration == preset,
+                                onClick = { selectedDecoration = preset },
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        stringResource(AYMR.strings.aurora_greeting_italic),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Switch(checked = italicEnabled, onCheckedChange = { italicEnabled = it })
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val normalizedCustomColor = customColorHex.trim().let { raw ->
+                        if (raw.startsWith("#")) raw else "#$raw"
+                    }.uppercase()
+                    val safeCustomColor = normalizedCustomColor.takeIf {
+                        parseNicknameHexColor(it) != null
+                    } ?: currentStyle.customColorHex
+                    onConfirm(
+                        previewStyle.copy(
+                            customColorHex = safeCustomColor,
+                            fontSize = previewStyle.fontSize.coerceIn(10, 26),
+                        ),
                     )
                 },
             ) {

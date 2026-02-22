@@ -25,6 +25,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.core.util.ifMangaSourcesLoaded
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.entries.manga.model.hasCustomCover
 import eu.kanade.domain.entries.manga.model.toSManga
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
@@ -70,6 +71,9 @@ import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.screens.LoadingScreen
+import tachiyomi.presentation.core.util.collectAsState as collectPreferenceAsState
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 class MangaScreen(
     private val mangaId: Long,
@@ -92,10 +96,12 @@ class MangaScreen(
         val haptic = LocalHapticFeedback.current
         val scope = rememberCoroutineScope()
         val lifecycleOwner = LocalLifecycleOwner.current
+        val uiPreferences = remember { Injekt.get<UiPreferences>() }
         val screenModel =
             rememberScreenModel { MangaScreenModel(context, lifecycleOwner.lifecycle, mangaId, fromSource) }
 
         val state by screenModel.state.collectAsStateWithLifecycle()
+        val showMangaScanlatorBranches by uiPreferences.showMangaScanlatorBranches().collectPreferenceAsState()
 
         if (state is MangaScreenModel.State.Loading) {
             LoadingScreen()
@@ -104,6 +110,11 @@ class MangaScreen(
 
         val successState = state as MangaScreenModel.State.Success
         val isHttpSource = remember { successState.source is HttpSource }
+        val showScanlatorSelector = successState.showScanlatorSelector &&
+            shouldShowMangaScanlatorSelector(
+                isPreferenceEnabled = showMangaScanlatorBranches,
+                sourceBaseUrl = (successState.source as? HttpSource)?.baseUrl,
+            )
 
         LaunchedEffect(successState.manga, screenModel.source) {
             if (isHttpSource) {
@@ -154,6 +165,7 @@ class MangaScreen(
             },
             onTagSearch = { scope.launch { performGenreSearch(navigator, it, screenModel.source!!) } },
             onFilterButtonClicked = screenModel::showSettingsDialog,
+            showScanlatorSelector = showScanlatorSelector,
             scanlatorChapterCounts = successState.scanlatorChapterCounts,
             selectedScanlator = successState.selectedScanlator,
             onScanlatorSelected = screenModel::selectScanlator,
@@ -440,4 +452,20 @@ internal fun normalizeMangaWebUrl(url: String): String {
 
     val slug = pathSegments[2].takeIf(String::isNotBlank) ?: return url
     return "https://inkstory.net/content/$slug"
+}
+
+internal fun shouldShowMangaScanlatorSelector(
+    isPreferenceEnabled: Boolean,
+    sourceBaseUrl: String?,
+): Boolean {
+    return isPreferenceEnabled || isInkStoryBaseUrl(sourceBaseUrl)
+}
+
+internal fun isInkStoryBaseUrl(sourceBaseUrl: String?): Boolean {
+    val host = sourceBaseUrl
+        ?.toHttpUrlOrNull()
+        ?.host
+        ?: return false
+    return host.equals("inkstory.net", ignoreCase = true) ||
+        host.equals("api.inkstory.net", ignoreCase = true)
 }

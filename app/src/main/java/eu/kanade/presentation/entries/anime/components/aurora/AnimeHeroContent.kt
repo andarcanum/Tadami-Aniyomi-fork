@@ -78,7 +78,7 @@ private fun parseOriginalTitle(description: String?): String? {
 fun AnimeHeroContent(
     anime: Anime,
     episodeCount: Int,
-    hasUnseenEpisodes: Boolean,
+    hasWatchingProgress: Boolean,
     onContinueWatching: () -> Unit,
     onDubbingClicked: (() -> Unit)?,
     selectedDubbing: String?,
@@ -229,7 +229,7 @@ fun AnimeHeroContent(
                         modifier = Modifier.size(20.dp),
                     )
                     Text(
-                        text = if (hasUnseenEpisodes) {
+                        text = if (hasWatchingProgress) {
                             stringResource(MR.strings.action_resume)
                         } else {
                             stringResource(MR.strings.action_start)

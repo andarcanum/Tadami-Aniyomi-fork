@@ -94,6 +94,7 @@ fun MangaScreenAuroraImpl(
     onTrackingClicked: (() -> Unit)?,
     onTagSearch: (String) -> Unit,
     onFilterButtonClicked: () -> Unit,
+    showScanlatorSelector: Boolean,
     scanlatorChapterCounts: Map<String, Int>,
     selectedScanlator: String?,
     onScanlatorSelected: (String?) -> Unit,
@@ -131,6 +132,12 @@ fun MangaScreenAuroraImpl(
     // State for chapters expansion
     var chaptersExpanded by remember { mutableStateOf(false) }
     val chaptersToShow = if (chaptersExpanded) chapters else chapters.take(5)
+    val hasReadingProgress = remember(chapters) {
+        chapters.any { chapterItem ->
+            val chapter = (chapterItem as? ChapterList.Item)?.chapter ?: return@any false
+            chapter.read || chapter.lastPageRead > 0L
+        }
+    }
 
     // State for description and genres expansion
     var descriptionExpanded by remember { mutableStateOf(false) }
@@ -215,7 +222,7 @@ fun MangaScreenAuroraImpl(
                 ChaptersHeader(chapterCount = chapters.size)
             }
 
-            if (state.showScanlatorSelector) {
+            if (showScanlatorSelector) {
                 item {
                     ScanlatorBranchSelector(
                         scanlatorChapterCounts = scanlatorChapterCounts,
@@ -316,6 +323,7 @@ fun MangaScreenAuroraImpl(
                     MangaHeroContent(
                         manga = manga,
                         chapterCount = chapters.size,
+                        hasReadingProgress = hasReadingProgress,
                         onContinueReading = onContinueReading,
                     )
                 }
