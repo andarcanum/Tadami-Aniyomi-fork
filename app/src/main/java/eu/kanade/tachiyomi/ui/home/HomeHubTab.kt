@@ -1972,7 +1972,8 @@ private fun GreetingStyleDialog(
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                 ) {
                     val greetingFontFamily = previewStyle.font.fontRes?.let { FontFamily(Font(it)) }
-                    val greetingColor = resolveNicknameColor(previewStyle.color, previewStyle.customColorHex, AuroraTheme.colors)
+                    val greetingColor =
+                        resolveNicknameColor(previewStyle.color, previewStyle.customColorHex, AuroraTheme.colors)
                     Text(
                         text = decorateGreetingText(currentGreeting, previewStyle.decoration),
                         style = MaterialTheme.typography.titleSmall.copy(

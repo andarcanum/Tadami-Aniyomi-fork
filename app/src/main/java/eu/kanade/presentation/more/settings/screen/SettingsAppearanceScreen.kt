@@ -27,8 +27,8 @@ import eu.kanade.presentation.more.settings.widget.AppThemeModePreferenceWidget
 import eu.kanade.presentation.more.settings.widget.AppThemePreferenceWidget
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.persistentListOf
-import kotlinx.collections.immutable.toPersistentList
 import kotlinx.collections.immutable.toImmutableMap
+import kotlinx.collections.immutable.toPersistentList
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.data.achievement.handler.AchievementHandler
 import tachiyomi.data.achievement.model.AchievementEvent
