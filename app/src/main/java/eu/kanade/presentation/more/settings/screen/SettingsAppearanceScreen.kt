@@ -25,6 +25,7 @@ import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.screen.appearance.AppLanguageScreen
 import eu.kanade.presentation.more.settings.widget.AppThemeModePreferenceWidget
 import eu.kanade.presentation.more.settings.widget.AppThemePreferenceWidget
+import eu.kanade.tachiyomi.ui.home.HomeHeaderLayoutEditorScreen
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableMap
@@ -361,6 +362,13 @@ object SettingsAppearanceScreen : SearchableSettings {
                     Preference.PreferenceItem.SwitchPreference(
                         preference = userProfilePreferences.showHomeStreak(),
                         title = stringResource(AYMR.strings.pref_show_home_streak),
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(AYMR.strings.pref_customize_home_header_layout),
+                        subtitle = stringResource(AYMR.strings.pref_customize_home_header_layout_summary),
+                        onClick = { navigator.push(HomeHeaderLayoutEditorScreen()) },
                     ),
                 )
                 add(

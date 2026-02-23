@@ -1069,4 +1069,24 @@
     <string name="novel_reader_bionic_reading">Бионическое чтение</string>
     <string name="novel_reader_tab_general">Основные</string>
     <string name="novel_reader_tab_reading">Чтение</string>
+    <string name="pref_customize_home_header_layout">Кастомизация расположения шапки Home</string>
+    <string name="pref_customize_home_header_layout_summary">Перетаскивайте приветствие, ник, аватар и счетчик стрика</string>
+    <string name="home_header_layout_editor_title">Расположение шапки Home</string>
+    <string name="home_header_layout_editor_description">Перетаскивайте элементы, чтобы изменить их положение в шапке Home.</string>
+    <string name="home_header_layout_editor_show_grid">Показывать сетку</string>
+    <string name="home_header_layout_editor_nickname_align_right">Выравнивать никнейм по правому краю блока</string>
+    <string name="home_header_layout_editor_selected">Выбрано: %s</string>
+    <string name="home_header_layout_editor_reset">Сбросить</string>
+    <string name="home_header_layout_editor_cancel">Отмена</string>
+    <string name="home_header_layout_editor_save">Сохранить</string>
+    <string name="home_header_layout_element_greeting">Приветствие</string>
+    <string name="home_header_layout_element_nickname">Ник</string>
+    <string name="home_header_layout_element_avatar">Аватар</string>
+    <string name="home_header_layout_element_streak">Стрик</string>
+    <string name="home_header_layout_editor_preview_greeting">Привет, добро пожаловать</string>
+    <string name="home_header_layout_editor_preview_nickname">Зритель</string>
+    <string name="home_header_layout_editor_only_selected_overlay">Показывать только рамку выбранного элемента</string>
+    <string name="home_header_layout_editor_reset_confirm_title">Сбросить раскладку?</string>
+    <string name="home_header_layout_editor_reset_confirm_message">Это восстановит стандартные позиции элементов шапки.</string>
+    <string name="home_header_layout_editor_reset_confirm_action">Сбросить раскладку</string>
 </resources>

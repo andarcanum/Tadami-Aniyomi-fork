@@ -1,5 +1,6 @@
 package eu.kanade.domain.ui
 
+import eu.kanade.domain.ui.model.HomeHeaderLayoutSpec
 import tachiyomi.core.common.preference.PreferenceStore
 
 class UserProfilePreferences(
@@ -23,6 +24,10 @@ class UserProfilePreferences(
 
     fun showHomeGreeting() = preferenceStore.getBoolean("user_profile_show_home_greeting", true)
     fun showHomeStreak() = preferenceStore.getBoolean("user_profile_show_home_streak", true)
+    fun homeHeaderNicknameAlignRight() = preferenceStore.getBoolean(
+        "user_profile_home_header_nickname_align_right",
+        false,
+    )
     fun homeHubLastSection() = preferenceStore.getString("user_profile_home_hub_last_section", "anime")
     fun greetingFont() = preferenceStore.getString("user_profile_greeting_font", "default")
     fun greetingFontSize() = preferenceStore.getInt("user_profile_greeting_font_size", 12)
@@ -30,6 +35,19 @@ class UserProfilePreferences(
     fun greetingCustomColorHex() = preferenceStore.getString("user_profile_greeting_custom_color_hex", "#FFFFFF")
     fun greetingDecoration() = preferenceStore.getString("user_profile_greeting_decoration", "none")
     fun greetingItalic() = preferenceStore.getBoolean("user_profile_greeting_italic", false)
+    fun homeHeaderLayoutJson() = preferenceStore.getString("user_profile_home_header_layout_json", "")
+
+    fun getHomeHeaderLayoutOrNull(): HomeHeaderLayoutSpec? {
+        return HomeHeaderLayoutSpec.fromJsonOrNull(homeHeaderLayoutJson().get())
+    }
+
+    fun getHomeHeaderLayoutOrDefault(): HomeHeaderLayoutSpec {
+        return getHomeHeaderLayoutOrNull() ?: HomeHeaderLayoutSpec.default()
+    }
+
+    fun setHomeHeaderLayout(layout: HomeHeaderLayoutSpec) {
+        homeHeaderLayoutJson().set(layout.toJson())
+    }
 
     fun getRecentGreetingHistory(limit: Int = RECENT_HISTORY_LIMIT): List<String> {
         return decodeHistory(recentGreetingIds().get(), limit)

@@ -440,6 +440,7 @@ class BrowseNovelSourceScreenModelTest {
         override fun getStubSources() = emptyList<tachiyomi.domain.source.novel.model.StubNovelSource>()
     }
 
+    @Suppress("OVERRIDE_DEPRECATION")
     private class FakeNovelCatalogueSource(
         override val id: Long,
         override val name: String,
@@ -463,6 +464,7 @@ class BrowseNovelSourceScreenModelTest {
         override fun fetchChapterText(chapter: SNovelChapter): Observable<String> = Observable.just("")
     }
 
+    @Suppress("OVERRIDE_DEPRECATION")
     private class SlowFilterNovelCatalogueSource(
         override val id: Long,
         override val name: String,
@@ -500,6 +502,7 @@ class BrowseNovelSourceScreenModelTest {
         override fun fetchChapterText(chapter: SNovelChapter): Observable<String> = Observable.just("")
     }
 
+    @Suppress("OVERRIDE_DEPRECATION")
     private class FakeNovelCatalogueSourceWithFilters(
         override val id: Long,
         override val name: String,

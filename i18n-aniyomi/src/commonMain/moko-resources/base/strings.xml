@@ -1030,4 +1030,24 @@
     <!-- Backup Options -->
     <string name="achievements">Achievements</string>
     <string name="stats">Statistics</string>
+    <string name="pref_customize_home_header_layout">Customize Home header layout</string>
+    <string name="pref_customize_home_header_layout_summary">Drag greeting, nickname, avatar, and streak positions</string>
+    <string name="home_header_layout_editor_title">Home Header Layout</string>
+    <string name="home_header_layout_editor_description">Drag elements to reposition them inside the Home header.</string>
+    <string name="home_header_layout_editor_show_grid">Show grid</string>
+    <string name="home_header_layout_editor_nickname_align_right">Align nickname to right side</string>
+    <string name="home_header_layout_editor_only_selected_overlay">Show only selected outline</string>
+    <string name="home_header_layout_editor_selected">Selected: %s</string>
+    <string name="home_header_layout_editor_reset">Reset</string>
+    <string name="home_header_layout_editor_reset_confirm_title">Reset layout?</string>
+    <string name="home_header_layout_editor_reset_confirm_message">This will restore the default positions for header elements.</string>
+    <string name="home_header_layout_editor_reset_confirm_action">Reset layout</string>
+    <string name="home_header_layout_editor_cancel">Cancel</string>
+    <string name="home_header_layout_editor_save">Save</string>
+    <string name="home_header_layout_element_greeting">Greeting</string>
+    <string name="home_header_layout_element_nickname">Nickname</string>
+    <string name="home_header_layout_element_avatar">Avatar</string>
+    <string name="home_header_layout_element_streak">Streak</string>
+    <string name="home_header_layout_editor_preview_greeting">Hello, welcome</string>
+    <string name="home_header_layout_editor_preview_nickname">Viewer</string>
 </resources>

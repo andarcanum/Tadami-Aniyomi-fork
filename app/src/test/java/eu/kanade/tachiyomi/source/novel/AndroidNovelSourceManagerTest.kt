@@ -119,6 +119,7 @@ class AndroidNovelSourceManagerTest {
         }
     }
 
+    @Suppress("OVERRIDE_DEPRECATION")
     private class FakeNovelCatalogueSource(
         override val id: Long,
         override val name: String,
