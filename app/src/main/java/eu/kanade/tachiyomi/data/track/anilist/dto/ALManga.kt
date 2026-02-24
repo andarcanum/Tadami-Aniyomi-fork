@@ -77,6 +77,6 @@ data class ALUserManga(
         "DROPPED" -> Anilist.DROPPED
         "PLANNING" -> Anilist.PLAN_TO_READ
         "REPEATING" -> Anilist.REREADING
-        else -> throw NotImplementedError("Unknown status: $listStatus")
+        else -> Anilist.PLAN_TO_READ
     }
 }

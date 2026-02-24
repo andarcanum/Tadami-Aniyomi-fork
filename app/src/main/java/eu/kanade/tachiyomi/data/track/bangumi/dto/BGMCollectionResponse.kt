@@ -21,7 +21,7 @@ data class BGMCollectionResponse(
         3 -> Bangumi.READING
         4 -> Bangumi.ON_HOLD
         5 -> Bangumi.DROPPED
-        else -> throw NotImplementedError("Unknown status: $type")
+        else -> Bangumi.PLAN_TO_READ
     }
 }
 

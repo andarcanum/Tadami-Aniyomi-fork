@@ -14,7 +14,7 @@ fun MangaTrack.toApiStatus() = when (status) {
     Anilist.DROPPED -> "DROPPED"
     Anilist.PLAN_TO_READ -> "PLANNING"
     Anilist.REREADING -> "REPEATING"
-    else -> throw NotImplementedError("Unknown status: $status")
+    else -> "PLANNING"
 }
 
 fun AnimeTrack.toApiStatus() = when (status) {
@@ -24,7 +24,7 @@ fun AnimeTrack.toApiStatus() = when (status) {
     Anilist.DROPPED -> "DROPPED"
     Anilist.PLAN_TO_WATCH -> "PLANNING"
     Anilist.REWATCHING -> "REPEATING"
-    else -> throw NotImplementedError("Unknown status: $status")
+    else -> "PLANNING"
 }
 
 private val preferences: TrackPreferences by injectLazy()
@@ -52,7 +52,7 @@ private fun Double.toApiScore(): String = when (preferences.anilistScoreType().g
     }
     // 10 point decimal
     "POINT_10_DECIMAL" -> (this / 10).toString()
-    else -> throw NotImplementedError("Unknown score type")
+    else -> (this.toInt() / 10).toString()
 }
 
 fun DomainMangaTrack.toApiScore(): String = this.score.toApiScore()

@@ -27,6 +27,9 @@ fun getNovelChapterSort(novel: Novel, sortDescending: Boolean = novel.sortDescen
             true -> { c1, c2 -> c2.name.compareToWithCollator(c1.name) }
             false -> { c1, c2 -> c1.name.compareToWithCollator(c2.name) }
         }
-        else -> throw NotImplementedError("Invalid novel chapter sorting method: ${novel.sorting}")
+        else -> when (sortDescending) {
+            true -> { c1, c2 -> c1.sourceOrder.compareTo(c2.sourceOrder) }
+            false -> { c1, c2 -> c2.sourceOrder.compareTo(c1.sourceOrder) }
+        }
     }
 }

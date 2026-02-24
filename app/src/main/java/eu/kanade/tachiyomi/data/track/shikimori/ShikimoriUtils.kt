@@ -10,7 +10,7 @@ fun MangaTrack.toShikimoriStatus() = when (status) {
     Shikimori.DROPPED -> "dropped"
     Shikimori.PLAN_TO_READ -> "planned"
     Shikimori.REREADING -> "rewatching"
-    else -> throw NotImplementedError("Unknown status: $status")
+    else -> "planned"
 }
 
 fun AnimeTrack.toShikimoriStatus() = when (status) {
@@ -20,7 +20,7 @@ fun AnimeTrack.toShikimoriStatus() = when (status) {
     Shikimori.DROPPED -> "dropped"
     Shikimori.PLAN_TO_READ -> "planned"
     Shikimori.REREADING -> "rewatching"
-    else -> throw NotImplementedError("Unknown status: $status")
+    else -> "planned"
 }
 
 fun toTrackStatus(status: String) = when (status) {
@@ -30,5 +30,5 @@ fun toTrackStatus(status: String) = when (status) {
     "dropped" -> Shikimori.DROPPED
     "planned" -> Shikimori.PLAN_TO_READ
     "rewatching" -> Shikimori.REREADING
-    else -> throw NotImplementedError("Unknown status: $status")
+    else -> Shikimori.PLAN_TO_READ
 }

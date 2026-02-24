@@ -9,7 +9,7 @@ fun MangaTrack.toApiStatus() = when (status) {
     Bangumi.READING -> 3
     Bangumi.ON_HOLD -> 4
     Bangumi.DROPPED -> 5
-    else -> throw NotImplementedError("Unknown status: $status")
+    else -> 1
 }
 
 fun AnimeTrack.toApiStatus() = when (status) {
@@ -18,5 +18,5 @@ fun AnimeTrack.toApiStatus() = when (status) {
     Bangumi.READING -> 3
     Bangumi.ON_HOLD -> 4
     Bangumi.DROPPED -> 5
-    else -> throw NotImplementedError("Unknown status: $status")
+    else -> 1
 }

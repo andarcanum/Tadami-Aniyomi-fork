@@ -483,7 +483,7 @@ class ExternalIntents {
             Anime.EPISODE_SORTING_SOURCE -> { c1, c2 -> c2.sourceOrder.compareTo(c1.sourceOrder) }
             Anime.EPISODE_SORTING_NUMBER -> { c1, c2 -> c1.episodeNumber.compareTo(c2.episodeNumber) }
             Anime.EPISODE_SORTING_UPLOAD_DATE -> { c1, c2 -> c1.dateUpload.compareTo(c2.dateUpload) }
-            else -> throw NotImplementedError("Unknown sorting method")
+            else -> { c1, c2 -> c2.sourceOrder.compareTo(c1.sourceOrder) }
         }
 
         val episodes = getEpisodesByAnimeId.await(anime.id)

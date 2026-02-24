@@ -86,6 +86,6 @@ data class ALUserAnime(
         "DROPPED" -> Anilist.DROPPED
         "PLANNING" -> Anilist.PLAN_TO_WATCH
         "REPEATING" -> Anilist.REWATCHING
-        else -> throw NotImplementedError("Unknown status: $listStatus")
+        else -> Anilist.PLAN_TO_WATCH
     }
 }

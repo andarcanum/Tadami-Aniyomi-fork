@@ -8,7 +8,7 @@ fun AnimeTrack.toSimklStatus() = when (status) {
     Simkl.ON_HOLD -> "hold"
     Simkl.NOT_INTERESTING -> "notinteresting"
     Simkl.PLAN_TO_WATCH -> "plantowatch"
-    else -> throw NotImplementedError("Unknown status: $status")
+    else -> "plantowatch"
 }
 
 fun toTrackStatus(status: String) = when (status) {
@@ -17,5 +17,5 @@ fun toTrackStatus(status: String) = when (status) {
     "hold" -> Simkl.ON_HOLD
     "dropped", "notinteresting" -> Simkl.NOT_INTERESTING
     "plantowatch" -> Simkl.PLAN_TO_WATCH
-    else -> throw NotImplementedError("Unknown status: $status")
+    else -> Simkl.PLAN_TO_WATCH
 }
