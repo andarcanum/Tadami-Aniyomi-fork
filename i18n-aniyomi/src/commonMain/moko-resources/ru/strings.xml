@@ -649,6 +649,7 @@
     <string name="aurora_nickname_field_label">Никнейм</string>
     <string name="aurora_nickname_preview">Предпросмотр</string>
     <string name="aurora_nickname_font">Шрифт</string>
+    <string name="aurora_nickname_font_size">Размер никнейма: %s</string>
     <string name="aurora_nickname_font_default">По умолчанию</string>
     <string name="aurora_nickname_font_montserrat">Montserrat</string>
     <string name="aurora_nickname_font_lora">Lora</string>

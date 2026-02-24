@@ -48,6 +48,7 @@ object GreetingProvider {
     private const val ABSENCE_MID_DAYS = 3
     private const val ABSENCE_LONG_DAYS = 7
     private const val FREQUENT_USER_MIN_LAUNCHES = 25L
+    private const val RECENT_SCENARIO_AVOID_COUNT = 2
 
     private fun candidate(id: String, value: StringResource) = GreetingCandidate(id = id, value = value)
 
@@ -118,18 +119,24 @@ object GreetingProvider {
         candidate("absence_long_time", AYMR.strings.aurora_greeting_long_time),
         candidate("absence_long_reunion", AYMR.strings.aurora_greeting_absence_long_reunion),
         candidate("absence_long_you_back", AYMR.strings.aurora_greeting_youre_back),
+        candidate("absence_long_back_for_more", AYMR.strings.aurora_greeting_back_for_more),
+        candidate("absence_long_whats_next", AYMR.strings.aurora_greeting_whats_next),
     )
 
     private val absenceMidGreetings = listOf(
         candidate("absence_mid_missed", AYMR.strings.aurora_greeting_missed_you),
         candidate("absence_mid_return", AYMR.strings.aurora_greeting_absence_mid_return),
         candidate("absence_mid_back_more", AYMR.strings.aurora_greeting_absence_mid_back_for_more),
+        candidate("absence_mid_you_back", AYMR.strings.aurora_greeting_youre_back),
+        candidate("absence_mid_ready", AYMR.strings.aurora_greeting_ready),
     )
 
     private val frequentUserGreetings = listOf(
         candidate("frequent_hello_again", AYMR.strings.aurora_greeting_frequent_hello_again),
         candidate("frequent_live_here", AYMR.strings.aurora_greeting_frequent_live_here),
         candidate("frequent_quick_return", AYMR.strings.aurora_greeting_frequent_quick_return),
+        candidate("frequent_back_for_more", AYMR.strings.aurora_greeting_back_for_more),
+        candidate("frequent_queue_awaits", AYMR.strings.aurora_greeting_queue_awaits),
     )
 
     private val saturdayGreetings = listOf(
@@ -149,15 +156,49 @@ object GreetingProvider {
         candidate("weekend_relax", AYMR.strings.aurora_greeting_weekend_relax),
     )
 
-    private val weekdayGreetingsByDay = mapOf(
-        Calendar.MONDAY to listOf(candidate("weekday_monday", AYMR.strings.aurora_greeting_weekday_monday)),
-        Calendar.TUESDAY to listOf(candidate("weekday_tuesday", AYMR.strings.aurora_greeting_weekday_tuesday)),
-        Calendar.WEDNESDAY to listOf(candidate("weekday_wednesday", AYMR.strings.aurora_greeting_weekday_wednesday)),
-        Calendar.THURSDAY to listOf(candidate("weekday_thursday", AYMR.strings.aurora_greeting_weekday_thursday)),
-        Calendar.FRIDAY to listOf(candidate("weekday_friday", AYMR.strings.aurora_greeting_weekday_friday)),
+    private val weekdayMondayGreetings = listOf(
+        candidate("weekday_monday", AYMR.strings.aurora_greeting_weekday_monday),
+        candidate("weekday_generic", AYMR.strings.aurora_greeting_weekday_generic),
+        candidate("weekday_monday_lets_go", AYMR.strings.aurora_greeting_lets_go),
+        candidate("weekday_monday_pick_good", AYMR.strings.aurora_greeting_pick_good),
     )
-    private val weekdayFallbackGreetings =
-        listOf(candidate("weekday_generic", AYMR.strings.aurora_greeting_weekday_generic))
+    private val weekdayTuesdayGreetings = listOf(
+        candidate("weekday_tuesday", AYMR.strings.aurora_greeting_weekday_tuesday),
+        candidate("weekday_generic", AYMR.strings.aurora_greeting_weekday_generic),
+        candidate("weekday_tuesday_got_minute", AYMR.strings.aurora_greeting_got_minute),
+        candidate("weekday_tuesday_queue", AYMR.strings.aurora_greeting_queue_awaits),
+    )
+    private val weekdayWednesdayGreetings = listOf(
+        candidate("weekday_wednesday", AYMR.strings.aurora_greeting_weekday_wednesday),
+        candidate("weekday_generic", AYMR.strings.aurora_greeting_weekday_generic),
+        candidate("weekday_wednesday_ready", AYMR.strings.aurora_greeting_ready),
+        candidate("weekday_wednesday_whats_next", AYMR.strings.aurora_greeting_whats_next),
+    )
+    private val weekdayThursdayGreetings = listOf(
+        candidate("weekday_thursday", AYMR.strings.aurora_greeting_weekday_thursday),
+        candidate("weekday_generic", AYMR.strings.aurora_greeting_weekday_generic),
+        candidate("weekday_thursday_binge", AYMR.strings.aurora_greeting_binge_time),
+        candidate("weekday_thursday_dive_in", AYMR.strings.aurora_greeting_dive_in),
+    )
+    private val weekdayFridayGreetings = listOf(
+        candidate("weekday_friday", AYMR.strings.aurora_greeting_weekday_friday),
+        candidate("weekday_generic", AYMR.strings.aurora_greeting_weekday_generic),
+        candidate("weekday_friday_anime_time", AYMR.strings.aurora_greeting_anime_time),
+        candidate("weekday_friday_main_character", AYMR.strings.aurora_greeting_main_character),
+        candidate("weekday_friday_new_episodes", AYMR.strings.aurora_greeting_new_episodes),
+    )
+    private val weekdayGreetingsByDay = mapOf(
+        Calendar.MONDAY to weekdayMondayGreetings,
+        Calendar.TUESDAY to weekdayTuesdayGreetings,
+        Calendar.WEDNESDAY to weekdayWednesdayGreetings,
+        Calendar.THURSDAY to weekdayThursdayGreetings,
+        Calendar.FRIDAY to weekdayFridayGreetings,
+    )
+    private val weekdayFallbackGreetings = listOf(
+        candidate("weekday_generic", AYMR.strings.aurora_greeting_weekday_generic),
+        candidate("weekday_fallback_ready", AYMR.strings.aurora_greeting_ready),
+        candidate("weekday_fallback_whats_next", AYMR.strings.aurora_greeting_whats_next),
+    )
 
     private val streakGreetings = listOf(
         candidate("streak_continues", AYMR.strings.aurora_greeting_streak_continues),
@@ -370,10 +411,17 @@ object GreetingProvider {
         scenarios: List<GreetingScenario>,
         recentScenarioIds: List<String>,
     ): List<GreetingScenario> {
-        val lastScenarioId = recentScenarioIds.firstOrNull() ?: return scenarios
+        if (recentScenarioIds.isEmpty()) return scenarios
         if (scenarios.size <= 1) return scenarios
-        val alternatives = scenarios.filterNot { it.id == lastScenarioId }
-        return alternatives.ifEmpty { scenarios }
+        val recentToAvoid = recentScenarioIds.take(RECENT_SCENARIO_AVOID_COUNT).toSet()
+        val alternatives = scenarios.filterNot { it.id in recentToAvoid }
+        return when {
+            alternatives.isNotEmpty() -> alternatives
+            else -> {
+                val fallback = scenarios.filterNot { it.id == recentScenarioIds.first() }
+                fallback.ifEmpty { scenarios }
+            }
+        }
     }
 
     private fun isWeekend(dayOfWeek: Int): Boolean {

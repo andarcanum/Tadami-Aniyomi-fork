@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tablet Home Header Layout Editor</title>
+  <style>
+    :root {
+      --bg: #0e1318;
+      --panel: #151d25;
+      --panel2: #1b2530;
+      --line: #2a3948;
+      --text: #e8f0f7;
+      --muted: #99aaba;
+      --accent: #61c6ff;
+      --ok: #8ce99a;
+      --err: #ff7676;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background: radial-gradient(circle at top, #182330, #0e1318 55%);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    .app {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 16px;
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 14px;
+    }
+    .panel {
+      background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0)), var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 12px 28px rgba(0,0,0,.22);
+    }
+    h2 { margin: 0 0 10px; font-size: 15px; }
+    .controls { display: grid; gap: 10px; }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 110px;
+      align-items: center;
+      gap: 8px;
+    }
+    .row label, .row-wide label { color: var(--muted); font-size: 13px; }
+    .row-wide { display: grid; gap: 6px; }
+    input, textarea, button {
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--panel2);
+      color: var(--text);
+      font-size: 13px;
+    }
+    input, textarea { padding: 8px 10px; width: 100%; }
+    textarea {
+      min-height: 150px;
+      resize: vertical;
+      line-height: 1.3;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .row-wide textarea.small { min-height: 74px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+    button { padding: 8px 10px; cursor: pointer; }
+    button.primary {
+      border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+      background: color-mix(in srgb, var(--accent) 14%, var(--panel2));
+    }
+    button:hover { filter: brightness(1.05); }
+    .hint { color: var(--muted); font-size: 12px; line-height: 1.35; }
+    .status { min-height: 18px; color: var(--muted); font-size: 12px; }
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--err); }
+
+    .workspace { display: grid; gap: 12px; align-content: start; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .badge {
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.02);
+      color: var(--text);
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+    .preview-shell {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #111822;
+      padding: 12px;
+      overflow: auto;
+    }
+    .preview-wrap { width: max-content; min-width: 100%; }
+    .stage {
+      position: relative;
+      border: 1px solid #2b3a49;
+      border-radius: 12px;
+      overflow: hidden;
+      user-select: none;
+      touch-action: none;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015)),
+        radial-gradient(circle at 15% 50%, rgba(97,198,255,.08), rgba(97,198,255,0) 46%),
+        #131c26;
+    }
+    .grid {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);
+      background-size: 8px 8px;
+    }
+    .center-line {
+      position: absolute;
+      top: 0; bottom: 0; left: 50%; width: 1px;
+      background: rgba(255,255,255,.10);
+      pointer-events: none;
+    }
+    .element {
+      position: absolute;
+      border: 1px dashed rgba(255,255,255,.25);
+      background: rgba(255,255,255,.03);
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: move;
+      display: flex;
+      align-items: stretch;
+      justify-content: stretch;
+    }
+    .element.selected {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(97,198,255,.25), inset 0 0 0 1px rgba(97,198,255,.15);
+      background: rgba(97,198,255,.05);
+    }
+    .tag {
+      position: absolute;
+      top: 0; left: 0;
+      font-size: 10px;
+      line-height: 1.1;
+      padding: 2px 5px;
+      color: #fff;
+      background: rgba(0,0,0,.46);
+      border-bottom-right-radius: 6px;
+      pointer-events: none;
+    }
+    .content { width: 100%; height: 100%; pointer-events: none; }
+
+    .greeting {
+      display: flex; align-items: center; justify-content: center;
+      padding: 0 8px;
+      text-align: center;
+      white-space: normal;
+      word-break: break-word;
+      line-height: 1.15;
+      color: #d2ebff;
+      font-weight: 600;
+    }
+    .nickname {
+      display: flex; align-items: center; gap: 0;
+      padding: 0 8px;
+      color: #fff;
+      font-weight: 800;
+      text-shadow: 0 1px 3px rgba(0,0,0,.35);
+    }
+    .nickname .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .nickname .edit { color: var(--accent); margin-left: 0; }
+    .avatar { display: grid; place-items: center; width: 100%; height: 100%; }
+    .avatar .circle {
+      width: 48px; height: 48px; border-radius: 50%; position: relative;
+      background: radial-gradient(circle at 35% 30%, #4f9bd3, #1d3f57 70%);
+      border: 1px solid rgba(255,255,255,.18);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+    }
+    .avatar .cam {
+      position: absolute; right: -1px; bottom: -1px;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: var(--accent); color: #092537;
+      font-weight: 700; font-size: 9px;
+      display: grid; place-items: center;
+      border: 1px solid rgba(0,0,0,.18);
+    }
+    .streak { display: grid; place-items: center; width: 100%; height: 100%; }
+    .streak .pill {
+      min-width: 42px; height: 22px; padding: 0 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(97,198,255,.35);
+      background: rgba(97,198,255,.11);
+      display: flex; align-items: center; gap: 4px;
+      color: #eaf5ff; font-weight: 700; line-height: 1; font-size: 12px;
+    }
+    .streak .fire { color: var(--accent); }
+
+    .coords { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; }
+    .card {
+      border: 1px solid var(--line); border-radius: 10px;
+      background: rgba(255,255,255,.015);
+      padding: 8px; display: grid; gap: 6px;
+    }
+    .card h3 { margin: 0; font-size: 12px; }
+    .coord-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-items: center;
+    }
+    .coord-grid label { color: var(--muted); font-size: 11px; }
+    .coord-grid input {
+      width: 100%; min-width: 0; padding: 5px 6px;
+      border-radius: 6px; border: 1px solid var(--line);
+      background: var(--panel2); color: var(--text); font-size: 12px;
+    }
+
+    @media (max-width: 980px) {
+      .app { grid-template-columns: 1fr; }
+      .coords { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 640px) {
+      .coords { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <section class="panel">
+      <h2>Tablet Home Header Editor</h2>
+      <div class="controls">
+        <div class="row"><label for="headerWidth">Header width (tablet preview)</label><input id="headerWidth" type="number" min="360" max="1400" step="1" value="720" /></div>
+        <div class="row"><label for="fontScale">Font scale (system)</label><input id="fontScale" type="number" min="1" max="1.6" step="0.05" value="1.00" /></div>
+        <div class="row"><label for="greetingFontSize">Greeting font size (preview)</label><input id="greetingFontSize" type="number" min="10" max="26" step="1" value="12" /></div>
+        <div class="row"><label for="zoom">Zoom preview</label><input id="zoom" type="number" min="1" max="3" step="0.1" value="1.6" /></div>
+
+        <div class="row-wide">
+          <label for="greetingText">Greeting text (preview)</label>
+          <textarea id="greetingText" class="small" spellcheck="false">* Hello, welcome back *</textarea>
+        </div>
+        <div class="row-wide">
+          <label for="nicknameText">Nickname text (preview)</label>
+          <input id="nicknameText" type="text" value="Andarcanum" />
+        </div>
+        <div class="row"><label for="streakText">Streak text (preview)</label><input id="streakText" type="text" value="7" /></div>
+
+        <div class="grid2">
+          <button id="longTextBtn">Long text preset</button>
+          <button id="shortTextBtn">Short text preset</button>
+        </div>
+        <div class="grid2">
+          <button id="resetBtn">Reset tablet base</button>
+          <button id="resetJsonBtn">Reset app default JSON</button>
+        </div>
+
+        <div class="buttons">
+          <button id="exportBtn" class="primary">Export LayoutSpec JSON</button>
+          <button id="exportPayloadBtn">Export payload</button>
+          <button id="copyBtn">Copy JSON</button>
+          <button id="importBtn">Import JSON/payload</button>
+        </div>
+
+        <div id="status" class="status"></div>
+        <div class="hint">
+          Drag blocks inside the tablet header preview. Edit X/Y/W/H in the cards below. Export `LayoutSpec JSON` for app-ready coordinates, or `payload` to send me positions + sizes + texts in one block.
+        </div>
+        <textarea id="jsonArea" spellcheck="false"></textarea>
+      </div>
+    </section>
+
+    <section class="workspace">
+      <div class="toolbar">
+        <span class="badge" id="dimsBadge"></span>
+        <span class="badge">JSON canvas 360x72</span>
+        <span class="badge">Tablet preview only</span>
+      </div>
+
+      <div class="preview-shell">
+        <div class="preview-wrap">
+          <div id="stage" class="stage" aria-label="Tablet header preview">
+            <div class="grid"></div>
+            <div class="center-line"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="coords" id="coords"></div>
+    </section>
+  </div>
+
+  <script>
+  (() => {
+    const JSON_CANVAS = { width: 360, height: 72 };
+    const DEFAULT_JSON_POS = {
+      greeting: { x: 0, y: 0 },
+      nickname: { x: 0, y: 32 },
+      avatar: { x: 302, y: 24 },
+      streak: { x: 292, y: 0 },
+    };
+    const DEFAULT_SIZES = {
+      greeting: { w: 236, h: 32 },
+      nickname: { w: 248, h: 30 },
+      avatar: { w: 48, h: 48 },
+      streak: { w: 68, h: 22 },
+    };
+    const MIN_SIZES = {
+      greeting: { w: 120, h: 20 },
+      nickname: { w: 120, h: 20 },
+      avatar: { w: 32, h: 32 },
+      streak: { w: 36, h: 18 },
+    };
+    const MAX_SIZES = {
+      greeting: { w: 1000, h: 80 },
+      nickname: { w: 1000, h: 80 },
+      avatar: { w: 80, h: 80 },
+      streak: { w: 180, h: 40 },
+    };
+    const ORDER = ["greeting", "nickname", "streak", "avatar"];
+    const LABELS = { greeting: "Greeting", nickname: "Nickname", streak: "Streak", avatar: "Avatar" };
+
+    const state = {
+      headerWidth: 720,
+      headerHeight: 72,
+      fontScale: 1,
+      greetingFontSize: 12,
+      zoom: 1.6,
+      selected: null,
+      dragging: null,
+      elements: {},
+      texts: {
+        greeting: "* Hello, welcome back *",
+        nickname: "Andarcanum",
+        streak: "7",
+      },
+    };
+
+    const el = {
+      headerWidth: document.getElementById("headerWidth"),
+      fontScale: document.getElementById("fontScale"),
+      greetingFontSize: document.getElementById("greetingFontSize"),
+      zoom: document.getElementById("zoom"),
+      greetingText: document.getElementById("greetingText"),
+      nicknameText: document.getElementById("nicknameText"),
+      streakText: document.getElementById("streakText"),
+      longTextBtn: document.getElementById("longTextBtn"),
+      shortTextBtn: document.getElementById("shortTextBtn"),
+      resetBtn: document.getElementById("resetBtn"),
+      resetJsonBtn: document.getElementById("resetJsonBtn"),
+      exportBtn: document.getElementById("exportBtn"),
+      exportPayloadBtn: document.getElementById("exportPayloadBtn"),
+      copyBtn: document.getElementById("copyBtn"),
+      importBtn: document.getElementById("importBtn"),
+      jsonArea: document.getElementById("jsonArea"),
+      status: document.getElementById("status"),
+      stage: document.getElementById("stage"),
+      coords: document.getElementById("coords"),
+      dimsBadge: document.getElementById("dimsBadge"),
+    };
+
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+    const round1 = (v) => Math.round(v * 10) / 10;
+
+    function setStatus(text, kind = "") {
+      el.status.textContent = text;
+      el.status.className = `status ${kind}`.trim();
+    }
+
+    function readControls() {
+      state.headerWidth = clamp(Number(el.headerWidth.value) || 720, 360, 1400);
+      state.fontScale = clamp(Number(el.fontScale.value) || 1, 1, 1.6);
+      state.greetingFontSize = clamp(Number(el.greetingFontSize.value) || 12, 10, 26);
+      state.zoom = clamp(Number(el.zoom.value) || 1.6, 1, 3);
+    }
+
+    function readTexts() {
+      state.texts.greeting = (el.greetingText.value || " ").trim() || " ";
+      state.texts.nickname = (el.nicknameText.value || " ").trim() || " ";
+      state.texts.streak = (el.streakText.value || "0").trim() || "0";
+    }
+
+    function getTabletBaseLayout(headerWidth, fontScale) {
+      const pad = 8;
+      const avatarW = 48, avatarH = 48;
+      const streakW = 68, streakH = 22;
+      const nicknameH = clamp(30 * clamp(fontScale, 1, 1.25), 30, 40);
+      const greetingH = clamp(32 * clamp(fontScale, 1, 1.4), 32, 56);
+
+      const avatarX = Math.max(0, headerWidth - avatarW - pad);
+      const avatarY = Math.max(0, state.headerHeight - avatarH - 4);
+      const streakX = Math.max(0, avatarX + (avatarW - streakW) / 2);
+      const streakY = 0;
+
+      const nicknameX = pad;
+      const nicknameY = 28;
+      const greetingW = clamp(headerWidth - pad * 2, 220, 320);
+
+      let nicknameW = clamp(avatarX - nicknameX - 12, 160, 520);
+      nicknameW = Math.min(nicknameW, Math.max(160, headerWidth - nicknameX));
+      nicknameW = Math.min(nicknameW, greetingW);
+
+      const greetingX = Math.max(0, (headerWidth - greetingW) / 2);
+      const greetingY = Math.max(0, nicknameY + (nicknameH - greetingH) / 2);
+
+      return {
+        greeting: { x: greetingX, y: greetingY, w: greetingW, h: greetingH },
+        nickname: { x: nicknameX, y: nicknameY, w: nicknameW, h: nicknameH },
+        avatar: { x: avatarX, y: avatarY, w: avatarW, h: avatarH },
+        streak: { x: streakX, y: streakY, w: streakW, h: streakH },
+      };
+    }
+
+    function applyJsonSpecToPreview(layoutSpec, preserveSizes = true) {
+      const base = getTabletBaseLayout(state.headerWidth, state.fontScale);
+      for (const key of ORDER) {
+        const p = layoutSpec?.elements?.[key] ?? DEFAULT_JSON_POS[key];
+        const dx = (p.x ?? DEFAULT_JSON_POS[key].x) - DEFAULT_JSON_POS[key].x;
+        const dy = (p.y ?? DEFAULT_JSON_POS[key].y) - DEFAULT_JSON_POS[key].y;
+        const bf = base[key];
+        const prev = state.elements[key];
+        const w = preserveSizes && prev ? prev.w : bf.w;
+        const h = preserveSizes && prev ? prev.h : bf.h;
+        state.elements[key] = {
+          x: clamp(bf.x + dx, 0, state.headerWidth - w),
+          y: clamp(bf.y + dy, 0, state.headerHeight - h),
+          w,
+          h,
+        };
+      }
+    }
+
+    function exportLayoutSpec() {
+      const base = getTabletBaseLayout(state.headerWidth, state.fontScale);
+      const out = {};
+      for (const key of ORDER) {
+        const f = state.elements[key];
+        const b = base[key];
+        const dx = f.x - b.x;
+        const dy = f.y - b.y;
+        const s = DEFAULT_SIZES[key];
+        out[key] = {
+          x: round1(clamp(DEFAULT_JSON_POS[key].x + dx, 0, JSON_CANVAS.width - s.w)),
+          y: round1(clamp(DEFAULT_JSON_POS[key].y + dy, 0, JSON_CANVAS.height - s.h)),
+        };
+      }
+      return { version: 2, canvas: { width: 360, height: 72 }, elements: out };
+    }
+
+    function exportPayload() {
+      return {
+        layoutSpec: exportLayoutSpec(),
+        tabletPreview: {
+          headerWidth: state.headerWidth,
+          headerHeight: state.headerHeight,
+          fontScale: round1(state.fontScale),
+          greetingFontSize: state.greetingFontSize,
+          zoom: round1(state.zoom),
+          texts: { ...state.texts },
+          elements: Object.fromEntries(ORDER.map((k) => [k, {
+            x: round1(state.elements[k].x), y: round1(state.elements[k].y),
+            w: round1(state.elements[k].w), h: round1(state.elements[k].h),
+          }]))
+        }
+      };
+    }
+
+    function applyPayloadOrSpec(parsed) {
+      const payload = parsed.layoutSpec ? parsed : { layoutSpec: parsed };
+      const preview = payload.tabletPreview || {};
+
+      if (Number.isFinite(preview.headerWidth)) el.headerWidth.value = String(clamp(preview.headerWidth, 360, 1400));
+      if (Number.isFinite(preview.fontScale)) el.fontScale.value = String(clamp(preview.fontScale, 1, 1.6));
+      if (Number.isFinite(preview.greetingFontSize)) el.greetingFontSize.value = String(clamp(preview.greetingFontSize, 10, 26));
+      if (Number.isFinite(preview.zoom)) el.zoom.value = String(clamp(preview.zoom, 1, 3));
+      if (preview.texts) {
+        if (typeof preview.texts.greeting === 'string') el.greetingText.value = preview.texts.greeting;
+        if (typeof preview.texts.nickname === 'string') el.nicknameText.value = preview.texts.nickname;
+        if (typeof preview.texts.streak === 'string') el.streakText.value = preview.texts.streak;
+      }
+
+      readControls();
+      readTexts();
+      applyJsonSpecToPreview(payload.layoutSpec, false);
+
+      if (preview.elements) {
+        for (const key of ORDER) {
+          const src = preview.elements[key];
+          if (!src) continue;
+          const f = state.elements[key];
+          if (Number.isFinite(src.w)) f.w = clamp(src.w, MIN_SIZES[key].w, Math.min(MAX_SIZES[key].w, state.headerWidth));
+          if (Number.isFinite(src.h)) f.h = clamp(src.h, MIN_SIZES[key].h, Math.min(MAX_SIZES[key].h, state.headerHeight));
+          if (Number.isFinite(src.x)) f.x = clamp(src.x, 0, state.headerWidth - f.w);
+          if (Number.isFinite(src.y)) f.y = clamp(src.y, 0, state.headerHeight - f.h);
+        }
+      }
+    }
+
+    function makeElementNode(key) {
+      const node = document.createElement('div');
+      node.className = 'element';
+      node.dataset.key = key;
+      const tag = document.createElement('div');
+      tag.className = 'tag';
+      tag.textContent = LABELS[key];
+      node.appendChild(tag);
+      const content = document.createElement('div');
+      content.className = 'content';
+      if (key === 'greeting') content.innerHTML = '<div class="greeting"><span></span></div>';
+      if (key === 'nickname') content.innerHTML = '<div class="nickname"><span class="name"></span><span class="edit">?</span></div>';
+      if (key === 'avatar') content.innerHTML = '<div class="avatar"><div class="circle"><div class="cam">C</div></div></div>';
+      if (key === 'streak') content.innerHTML = '<div class="streak"><div class="pill"><span class="fire">F</span><span class="streak-text"></span></div></div>';
+      node.appendChild(content);
+
+      node.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        select(key);
+        const f = state.elements[key];
+        state.dragging = {
+          key, pointerId: e.pointerId,
+          startX: e.clientX, startY: e.clientY,
+          originX: f.x, originY: f.y,
+        };
+        node.setPointerCapture(e.pointerId);
+      });
+      node.addEventListener('pointermove', (e) => {
+        if (!state.dragging || state.dragging.key !== key) return;
+        const f = state.elements[key];
+        const dx = (e.clientX - state.dragging.startX) / state.zoom;
+        const dy = (e.clientY - state.dragging.startY) / state.zoom;
+        f.x = clamp(state.dragging.originX + dx, 0, state.headerWidth - f.w);
+        f.y = clamp(state.dragging.originY + dy, 0, state.headerHeight - f.h);
+        render();
+      });
+      const stop = () => { state.dragging = null; };
+      node.addEventListener('pointerup', stop);
+      node.addEventListener('pointercancel', stop);
+      return node;
+    }
+
+    function select(key) {
+      state.selected = key;
+      render();
+    }
+
+    function renderCoords() {
+      el.coords.innerHTML = '';
+      for (const key of ORDER) {
+        const f = state.elements[key];
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <h3>${LABELS[key]}</h3>
+          <div class="coord-grid">
+            <label>X</label><input type="number" step="0.5" data-key="${key}" data-field="x" value="${round1(f.x)}" />
+            <label>Y</label><input type="number" step="0.5" data-key="${key}" data-field="y" value="${round1(f.y)}" />
+            <label>W</label><input type="number" step="0.5" data-key="${key}" data-field="w" value="${round1(f.w)}" />
+            <label>H</label><input type="number" step="0.5" data-key="${key}" data-field="h" value="${round1(f.h)}" />
+          </div>`;
+        el.coords.appendChild(card);
+      }
+      const applyCoordInput = (inp) => {
+          const key = inp.dataset.key;
+          const field = inp.dataset.field;
+          const f = state.elements[key];
+          let v = Number(inp.value);
+          if (!Number.isFinite(v)) return;
+          if (field === 'w') {
+            f.w = clamp(v, MIN_SIZES[key].w, Math.min(MAX_SIZES[key].w, state.headerWidth));
+            f.x = clamp(f.x, 0, state.headerWidth - f.w);
+          } else if (field === 'h') {
+            f.h = clamp(v, MIN_SIZES[key].h, Math.min(MAX_SIZES[key].h, state.headerHeight));
+            f.y = clamp(f.y, 0, state.headerHeight - f.h);
+          } else if (field === 'x') {
+            f.x = clamp(v, 0, state.headerWidth - f.w);
+          } else if (field === 'y') {
+            f.y = clamp(v, 0, state.headerHeight - f.h);
+          }
+          render();
+      };
+      el.coords.querySelectorAll('input[data-key]').forEach((inp) => {
+        // Do not re-render on every keystroke, otherwise the input is recreated
+        // and keyboard editing becomes unusable.
+        inp.addEventListener('change', () => applyCoordInput(inp));
+        inp.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            applyCoordInput(inp);
+            inp.blur();
+          }
+        });
+      });
+    }
+
+    function render() {
+      el.stage.style.width = `${state.headerWidth * state.zoom}px`;
+      el.stage.style.height = `${state.headerHeight * state.zoom}px`;
+      el.stage.querySelectorAll('.element').forEach((n) => n.remove());
+
+      for (const key of ORDER) {
+        const f = state.elements[key];
+        const node = makeElementNode(key);
+        if (state.selected === key) node.classList.add('selected');
+        node.style.left = `${f.x * state.zoom}px`;
+        node.style.top = `${f.y * state.zoom}px`;
+        node.style.width = `${f.w * state.zoom}px`;
+        node.style.height = `${f.h * state.zoom}px`;
+
+        if (key === 'greeting') {
+          const box = node.querySelector('.greeting');
+          box.querySelector('span').textContent = state.texts.greeting;
+          box.style.fontSize = `${Math.max(12, state.greetingFontSize) * state.zoom * 0.95}px`;
+        }
+        if (key === 'nickname') {
+          const box = node.querySelector('.nickname');
+          box.style.fontSize = `${18 * state.zoom}px`;
+          box.querySelector('.name').textContent = state.texts.nickname;
+          const edit = box.querySelector('.edit');
+          edit.style.fontSize = `${14 * state.zoom}px`;
+          edit.style.transform = `translateY(${4 * state.zoom}px)`;
+        }
+        if (key === 'avatar') {
+          const circle = node.querySelector('.circle');
+          circle.style.width = `${Math.min(f.w, f.h) * state.zoom}px`;
+          circle.style.height = `${Math.min(f.w, f.h) * state.zoom}px`;
+          const cam = node.querySelector('.cam');
+          cam.style.width = `${Math.max(12, Math.min(f.w, f.h) * 0.33) * state.zoom}px`;
+          cam.style.height = `${Math.max(12, Math.min(f.w, f.h) * 0.33) * state.zoom}px`;
+          cam.style.fontSize = `${8 * state.zoom}px`;
+        }
+        if (key === 'streak') {
+          const pill = node.querySelector('.pill');
+          node.querySelector('.streak-text').textContent = state.texts.streak;
+          pill.style.height = `${Math.max(18, Math.min(22, f.h)) * state.zoom}px`;
+          pill.style.minWidth = `${Math.max(36, f.w * 0.6) * state.zoom}px`;
+          pill.style.fontSize = `${12 * state.zoom}px`;
+          pill.style.padding = `0 ${8 * state.zoom}px`;
+          pill.style.gap = `${4 * state.zoom}px`;
+        }
+        el.stage.appendChild(node);
+      }
+
+      el.dimsBadge.textContent = `Preview ${state.headerWidth}x${state.headerHeight}, zoom ${state.zoom.toFixed(1)}x`;
+      renderCoords();
+    }
+
+    function resetTabletBase() {
+      applyJsonSpecToPreview({ version: 2, canvas: JSON_CANVAS, elements: structuredClone(DEFAULT_JSON_POS) }, false);
+      render();
+    }
+
+    function resetAppDefaultJson() {
+      el.jsonArea.value = JSON.stringify({ version: 2, canvas: JSON_CANVAS, elements: DEFAULT_JSON_POS }, null, 2);
+      resetTabletBase();
+      setStatus('Reset to app default JSON', 'ok');
+    }
+
+    function exportLayoutToArea() {
+      el.jsonArea.value = JSON.stringify(exportLayoutSpec(), null, 2);
+      setStatus('LayoutSpec JSON generated', 'ok');
+    }
+
+    function exportPayloadToArea() {
+      el.jsonArea.value = JSON.stringify(exportPayload(), null, 2);
+      setStatus('Payload generated (positions + sizes + texts)', 'ok');
+    }
+
+    async function copyJson() {
+      try {
+        if (!el.jsonArea.value.trim()) exportLayoutToArea();
+        await navigator.clipboard.writeText(el.jsonArea.value);
+        setStatus('JSON copied', 'ok');
+      } catch {
+        el.jsonArea.select();
+        document.execCommand('copy');
+        setStatus('JSON copied (fallback)', 'ok');
+      }
+    }
+
+    function importFromArea() {
+      try {
+        const parsed = JSON.parse(el.jsonArea.value.trim());
+        if (!parsed || typeof parsed !== 'object') throw new Error('object expected');
+        applyPayloadOrSpec(parsed);
+        render();
+        setStatus('JSON/payload imported', 'ok');
+      } catch (e) {
+        setStatus(`Import error: ${e.message}`, 'err');
+      }
+    }
+
+    function clampElementsToCanvas() {
+      for (const key of ORDER) {
+        const f = state.elements[key];
+        f.w = clamp(f.w, MIN_SIZES[key].w, Math.min(MAX_SIZES[key].w, state.headerWidth));
+        f.h = clamp(f.h, MIN_SIZES[key].h, Math.min(MAX_SIZES[key].h, state.headerHeight));
+        f.x = clamp(f.x, 0, state.headerWidth - f.w);
+        f.y = clamp(f.y, 0, state.headerHeight - f.h);
+      }
+    }
+
+    function reflowKeepDeltas() {
+      // Export only the logical layout deltas before controls change.
+      const layoutSpec = exportLayoutSpec();
+      readControls();
+      readTexts();
+      applyJsonSpecToPreview(layoutSpec, true);
+      clampElementsToCanvas();
+      render();
+    }
+
+    function bindUi() {
+      ['headerWidth','fontScale','greetingFontSize','zoom'].forEach((id) => {
+        el[id].addEventListener('change', reflowKeepDeltas);
+        el[id].addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            reflowKeepDeltas();
+            el[id].blur();
+          }
+        });
+      });
+      ['greetingText','nicknameText','streakText'].forEach((id) => {
+        el[id].addEventListener('input', () => { readTexts(); render(); });
+      });
+
+      el.longTextBtn.addEventListener('click', () => {
+        el.greetingText.value = '* Welcome back, today is a perfect moment to continue your favorite story and start something new *';
+        el.nicknameText.value = 'Andarcanum The Legendary Reader';
+        el.streakText.value = '128';
+        readTexts();
+        render();
+        setStatus('Long text preset applied', 'ok');
+      });
+      el.shortTextBtn.addEventListener('click', () => {
+        el.greetingText.value = '* Hello, welcome back *';
+        el.nicknameText.value = 'Andarcanum';
+        el.streakText.value = '7';
+        readTexts();
+        render();
+        setStatus('Short text preset applied', 'ok');
+      });
+
+      el.resetBtn.addEventListener('click', () => {
+        readControls();
+        resetTabletBase();
+        setStatus('Reset to tablet base', 'ok');
+      });
+      el.resetJsonBtn.addEventListener('click', resetAppDefaultJson);
+      el.exportBtn.addEventListener('click', exportLayoutToArea);
+      el.exportPayloadBtn.addEventListener('click', exportPayloadToArea);
+      el.copyBtn.addEventListener('click', copyJson);
+      el.importBtn.addEventListener('click', importFromArea);
+    }
+
+    function init() {
+      bindUi();
+      readControls();
+      readTexts();
+      resetTabletBase();
+      exportLayoutToArea();
+      setStatus('Ready. Drag blocks and send me JSON or payload.', 'ok');
+    }
+
+    init();
+  })();
+  </script>
+</body>
+</html>

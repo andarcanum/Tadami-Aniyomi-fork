@@ -15,6 +15,7 @@ class UserProfilePreferences(
     fun nameEdited() = preferenceStore.getBoolean("user_profile_name_edited", false)
 
     fun nicknameFont() = preferenceStore.getString("user_profile_name_font", "default")
+    fun nicknameFontSize() = preferenceStore.getInt("user_profile_name_font_size", 24)
     fun nicknameColor() = preferenceStore.getString("user_profile_name_color", "theme")
     fun nicknameCustomColorHex() = preferenceStore.getString("user_profile_name_custom_color_hex", "#FFFFFF")
     fun nicknameOutline() = preferenceStore.getBoolean("user_profile_name_outline", false)
@@ -30,7 +31,7 @@ class UserProfilePreferences(
     )
     fun homeHubLastSection() = preferenceStore.getString("user_profile_home_hub_last_section", "anime")
     fun greetingFont() = preferenceStore.getString("user_profile_greeting_font", "default")
-    fun greetingFontSize() = preferenceStore.getInt("user_profile_greeting_font_size", 12)
+    fun greetingFontSize() = preferenceStore.getInt("user_profile_greeting_font_size", 16)
     fun greetingColor() = preferenceStore.getString("user_profile_greeting_color", "theme")
     fun greetingCustomColorHex() = preferenceStore.getString("user_profile_greeting_custom_color_hex", "#FFFFFF")
     fun greetingDecoration() = preferenceStore.getString("user_profile_greeting_decoration", "none")

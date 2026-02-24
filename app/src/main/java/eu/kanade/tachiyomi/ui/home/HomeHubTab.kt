@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -345,6 +346,7 @@ private enum class NicknameEffectPreset(val key: String) {
 
 private data class NicknameStyle(
     val font: NicknameFontPreset,
+    val fontSize: Int,
     val color: NicknameColorPreset,
     val outline: Boolean,
     val outlineWidth: Int,
@@ -463,6 +465,7 @@ object HomeHubTab : Tab {
             userProfilePreferences.getHomeHeaderLayoutOrDefault()
         }
         val nicknameFontKey by userProfilePreferences.nicknameFont().collectAsState()
+        val nicknameFontSize by userProfilePreferences.nicknameFontSize().collectAsState()
         val nicknameColorKey by userProfilePreferences.nicknameColor().collectAsState()
         val nicknameCustomColorHex by userProfilePreferences.nicknameCustomColorHex().collectAsState()
         val nicknameOutline by userProfilePreferences.nicknameOutline().collectAsState()
@@ -471,6 +474,7 @@ object HomeHubTab : Tab {
         val nicknameEffectKey by userProfilePreferences.nicknameEffect().collectAsState()
         val nicknameStyle = NicknameStyle(
             font = NicknameFontPreset.fromKey(nicknameFontKey),
+            fontSize = nicknameFontSize.coerceIn(14, 36),
             color = NicknameColorPreset.fromKey(nicknameColorKey),
             outline = nicknameOutline,
             outlineWidth = nicknameOutlineWidth,
@@ -543,6 +547,7 @@ object HomeHubTab : Tab {
                         }
                     }
                     userProfilePreferences.nicknameFont().set(newStyle.font.key)
+                    userProfilePreferences.nicknameFontSize().set(newStyle.fontSize.coerceIn(14, 36))
                     userProfilePreferences.nicknameColor().set(newStyle.color.key)
                     userProfilePreferences.nicknameCustomColorHex().set(newStyle.customColorHex)
                     userProfilePreferences.nicknameOutline().set(newStyle.outline)
@@ -918,8 +923,10 @@ private fun HomeHubProfileHeaderCanvas(
 ) {
     val colors = AuroraTheme.colors
     val density = LocalDensity.current
+    val fontScale = density.fontScale.coerceIn(1f, 1.6f)
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
-    val isTabletHeaderLayout = auroraAdaptiveSpec.deviceClass != AuroraDeviceClass.Phone
+    // Use the classic (phone) header layout on tablets too.
+    val isTabletHeaderLayout = false
     val elementSizes = remember { defaultHomeHeaderElementPixelSizes() }
 
     BoxWithConstraints(
@@ -978,18 +985,41 @@ private fun HomeHubProfileHeaderCanvas(
                 val streakSize = elementSizes.getValue(HomeHeaderLayoutElement.Streak)
 
                 val horizontalPadding = 8.dp
+                // Tablet preset tuned from the visual editor payload (720x72 baseline),
+                // while still allowing user layout deltas on top.
+                val tabletGreetingRightPadding = 102.5.dp
+                val tabletGreetingHeightBase = 39.5.dp
+                val tabletGreetingYBase = 30.6.dp
+                val tabletNicknameXBase = 0.dp
+                val tabletNicknameYBase = 37.6.dp
+                val tabletNicknameWidthBase = 270.5.dp
+                val tabletStreakXAdjust = (-2).dp
                 val avatarWidthDp = avatarSize.width.dp
                 val avatarHeightDp = avatarSize.height.dp
                 val streakWidthDp = streakSize.width.dp
                 val streakHeightDp = streakSize.height.dp
-                val nicknameHeightDp = nicknameSize.height.dp
-                val greetingHeightDp = greetingSize.height.dp
+                val nicknameHeightDp = if (isTabletHeaderLayout) {
+                    (nicknameSize.height.dp * fontScale.coerceIn(1f, 1.25f))
+                        .coerceAtLeast(nicknameSize.height.dp)
+                        .coerceAtMost(40.dp)
+                } else {
+                    nicknameSize.height.dp
+                }
+                val greetingHeightDp = if (isTabletHeaderLayout) {
+                    (tabletGreetingHeightBase * fontScale.coerceIn(1f, 1.4f))
+                        .coerceAtLeast(tabletGreetingHeightBase)
+                        .coerceAtMost(56.dp)
+                } else {
+                    greetingSize.height.dp
+                }
 
                 val baseAvatarXDp = (maxWidth - avatarWidthDp - horizontalPadding).coerceAtLeast(0.dp)
-                val baseAvatarYDp = (maxHeight - avatarHeightDp).coerceAtLeast(0.dp)
-                val baseStreakXDp = (baseAvatarXDp + (avatarWidthDp - streakWidthDp) / 2f).coerceAtLeast(0.dp)
-                // Keep the streak chip visually clear of the status bar on tablets.
-                val baseStreakYDp = 4.dp
+                // Lift avatar slightly on tablets so it aligns better with nickname/greeting row.
+                val baseAvatarYDp = (maxHeight - avatarHeightDp - 4.dp).coerceAtLeast(0.dp)
+                val baseStreakXDp = ((baseAvatarXDp + (avatarWidthDp - streakWidthDp) / 2f) + tabletStreakXAdjust)
+                    .coerceAtLeast(0.dp)
+                // Keep the streak chip as high as possible on tablets to add separation from avatar.
+                val baseStreakYDp = 0.dp
 
                 val (avatarDeltaX, avatarDeltaY) = tabletCustomDeltaFor(HomeHeaderLayoutElement.Avatar)
                 val (streakDeltaX, streakDeltaY) = tabletCustomDeltaFor(HomeHeaderLayoutElement.Streak)
@@ -1009,20 +1039,39 @@ private fun HomeHubProfileHeaderCanvas(
                     height = streakHeightDp,
                 )
 
-                val baseNicknameXDp = horizontalPadding
-                val baseNicknameYDp = 32.dp
+                val baseNicknameXDp = if (isTabletHeaderLayout) tabletNicknameXBase else horizontalPadding
+                val baseNicknameYDp = if (isTabletHeaderLayout) tabletNicknameYBase else 28.dp
+                val greetingWidthDp = if (isTabletHeaderLayout) {
+                    320.dp.coerceAtMost((maxWidth - horizontalPadding).coerceAtLeast(220.dp))
+                } else {
+                    (maxWidth - (horizontalPadding * 2)).coerceIn(220.dp, 520.dp)
+                }
                 val nicknameXDpRaw = baseNicknameXDp + nicknameDeltaX
                 val nicknameYDpRaw = baseNicknameYDp + nicknameDeltaY
                 val nicknameXDp = nicknameXDpRaw.coerceAtLeast(0.dp)
                 val nicknameYDp = nicknameYDpRaw.coerceIn(0.dp, (maxHeight - nicknameHeightDp).coerceAtLeast(0.dp))
-                val nicknameWidthDp = (avatarXDp - nicknameXDp - 12.dp)
-                    .coerceIn(160.dp, 520.dp)
-                    .coerceAtMost((maxWidth - nicknameXDp).coerceAtLeast(160.dp))
-
-                val greetingWidthDp = (maxWidth - (horizontalPadding * 2))
-                    .coerceIn(220.dp, 520.dp)
-                val baseGreetingXDp = ((maxWidth - greetingWidthDp) / 2f).coerceAtLeast(0.dp)
-                val baseGreetingYDp = (baseNicknameYDp + (nicknameHeightDp - greetingHeightDp) / 2f).coerceAtLeast(0.dp)
+                val nicknameWidthDp = if (isTabletHeaderLayout) {
+                    tabletNicknameWidthBase
+                        .coerceAtMost((maxWidth - nicknameXDp).coerceAtLeast(160.dp))
+                        .coerceAtMost((avatarXDp - nicknameXDp - 12.dp).coerceAtLeast(160.dp))
+                        .coerceAtMost(greetingWidthDp)
+                        .coerceAtLeast(160.dp)
+                } else {
+                    (avatarXDp - nicknameXDp - 12.dp)
+                        .coerceIn(160.dp, 520.dp)
+                        .coerceAtMost((maxWidth - nicknameXDp).coerceAtLeast(160.dp))
+                        .coerceAtMost(520.dp)
+                }
+                val baseGreetingXDp = if (isTabletHeaderLayout) {
+                    (maxWidth - greetingWidthDp - tabletGreetingRightPadding).coerceAtLeast(0.dp)
+                } else {
+                    ((maxWidth - greetingWidthDp) / 2f).coerceAtLeast(0.dp)
+                }
+                val baseGreetingYDp = if (isTabletHeaderLayout) {
+                    tabletGreetingYBase.coerceIn(0.dp, (maxHeight - greetingHeightDp).coerceAtLeast(0.dp))
+                } else {
+                    (baseNicknameYDp + (nicknameHeightDp - greetingHeightDp) / 2f).coerceAtLeast(0.dp)
+                }
                 val (greetingXDp, greetingYDp) = clampDpFramePosition(
                     x = baseGreetingXDp + greetingDeltaX,
                     y = baseGreetingYDp + greetingDeltaY,
@@ -1103,7 +1152,7 @@ private fun HomeHubProfileHeaderCanvas(
                     ),
                     color = greetingColor,
                     fontWeight = FontWeight.Medium,
-                    maxLines = if (isTabletHeaderLayout) 1 else 2,
+                    maxLines = if (isTabletHeaderLayout) 2 else 2,
                     textAlign = if (isTabletHeaderLayout) TextAlign.Center else TextAlign.Start,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -1138,25 +1187,43 @@ private fun HomeHubProfileHeaderCanvas(
                         )
                     }
                     if (showNameEditHint) {
-                        Spacer(Modifier.width(6.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(20.dp)
-                                .clip(CircleShape)
-                                .background(colors.accent.copy(alpha = 0.2f))
-                                .border(
-                                    width = 1.dp,
-                                    color = colors.accent.copy(alpha = 0.45f),
-                                    shape = CircleShape,
-                                ),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Edit,
-                                contentDescription = null,
-                                tint = colors.accent,
-                                modifier = Modifier.size(12.dp),
-                            )
+                        if (isTabletHeaderLayout) {
+                            Spacer(Modifier.width(0.dp))
+                            Box(
+                                modifier = Modifier
+                                    .offset(x = 0.dp, y = 9.dp)
+                                    .size(18.dp)
+                                    .clickable(onClick = onNameClick),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Edit,
+                                    contentDescription = null,
+                                    tint = colors.accent,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                            }
+                        } else {
+                            Spacer(Modifier.width(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clip(CircleShape)
+                                    .background(colors.accent.copy(alpha = 0.2f))
+                                    .border(
+                                        width = 1.dp,
+                                        color = colors.accent.copy(alpha = 0.45f),
+                                        shape = CircleShape,
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Edit,
+                                    contentDescription = null,
+                                    tint = colors.accent,
+                                    modifier = Modifier.size(12.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -1171,6 +1238,7 @@ private fun HomeHubProfileHeaderCanvas(
                 Box(contentModifier, contentAlignment = Alignment.Center) {
                     Row(
                         modifier = Modifier
+                            .offset(y = if (isTabletHeaderLayout) (-3).dp else 0.dp)
                             .clip(RoundedCornerShape(50))
                             .background(colors.accent.copy(alpha = 0.14f))
                             .border(
@@ -1292,6 +1360,7 @@ internal fun HomeHeaderLayoutLivePreview(
     val nicknameStyle = remember {
         NicknameStyle(
             font = NicknameFontPreset.Default,
+            fontSize = 24,
             color = NicknameColorPreset.Theme,
             outline = false,
             outlineWidth = 2,
@@ -2094,6 +2163,8 @@ private fun StyledNicknameText(
     val baseStyle = MaterialTheme.typography.headlineSmall.copy(
         fontFamily = fontFamily,
         fontWeight = FontWeight.Black,
+        fontSize = nicknameStyle.fontSize.coerceIn(14, 36).sp,
+        lineHeight = (nicknameStyle.fontSize.coerceIn(14, 36) + 2).sp,
     )
     val shadow = if (nicknameStyle.glow) {
         Shadow(
@@ -2177,6 +2248,7 @@ private fun NameDialog(
 ) {
     var text by remember(currentName) { mutableStateOf(currentName) }
     var selectedFont by remember(currentStyle) { mutableStateOf(currentStyle.font) }
+    var fontSize by remember(currentStyle) { mutableIntStateOf(currentStyle.fontSize.coerceIn(14, 36)) }
     var selectedColor by remember(currentStyle) { mutableStateOf(currentStyle.color) }
     var customColorHex by remember(currentStyle) { mutableStateOf(currentStyle.customColorHex) }
     var outlineEnabled by remember(currentStyle) { mutableStateOf(currentStyle.outline) }
@@ -2187,6 +2259,7 @@ private fun NameDialog(
 
     val previewStyle = NicknameStyle(
         font = selectedFont,
+        fontSize = fontSize.coerceIn(14, 36),
         color = selectedColor,
         outline = outlineEnabled,
         outlineWidth = outlineWidth,
@@ -2202,6 +2275,7 @@ private fun NameDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(max = 520.dp)
                     .verticalScroll(rememberScrollState()),
             ) {
                 OutlinedTextField(
@@ -2249,6 +2323,18 @@ private fun NameDialog(
                     }
                     Spacer(Modifier.height(8.dp))
                 }
+
+                Text(
+                    text = stringResource(AYMR.strings.aurora_nickname_font_size, fontSize.toString()),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AuroraTheme.colors.textSecondary,
+                )
+                Slider(
+                    value = fontSize.toFloat(),
+                    onValueChange = { fontSize = it.roundToInt().coerceIn(14, 36) },
+                    valueRange = 14f..36f,
+                    steps = 21,
+                )
 
                 Text(
                     text = stringResource(AYMR.strings.aurora_nickname_color),
@@ -2422,6 +2508,7 @@ private fun GreetingStyleDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(max = 520.dp)
                     .verticalScroll(rememberScrollState()),
             ) {
                 Text(

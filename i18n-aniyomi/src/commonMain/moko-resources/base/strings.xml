@@ -730,6 +730,7 @@
     <string name="aurora_nickname_field_label">Nickname</string>
     <string name="aurora_nickname_preview">Preview</string>
     <string name="aurora_nickname_font">Font</string>
+    <string name="aurora_nickname_font_size">Nickname size: %s</string>
     <string name="aurora_nickname_font_default">Default</string>
     <string name="aurora_nickname_font_montserrat">Montserrat</string>
     <string name="aurora_nickname_font_lora">Lora</string>

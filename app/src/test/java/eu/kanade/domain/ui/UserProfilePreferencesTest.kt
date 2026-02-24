@@ -24,7 +24,8 @@ class UserProfilePreferencesTest {
         prefs.homeHeaderNicknameAlignRight().get() shouldBe false
         prefs.homeHubLastSection().get() shouldBe "anime"
         prefs.greetingFont().get() shouldBe "default"
-        prefs.greetingFontSize().get() shouldBe 12
+        prefs.nicknameFontSize().get() shouldBe 24
+        prefs.greetingFontSize().get() shouldBe 16
         prefs.greetingColor().get() shouldBe "theme"
         prefs.greetingCustomColorHex().get() shouldBe "#FFFFFF"
         prefs.greetingDecoration().get() shouldBe "none"
