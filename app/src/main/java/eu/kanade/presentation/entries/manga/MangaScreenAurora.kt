@@ -320,9 +320,9 @@ fun MangaScreenAuroraImpl(
                                     ) {
                                         Text(
                                             text = if (chaptersExpanded) {
-                                                "РџРѕРєР°Р·Р°С‚СЊ РјРµРЅСЊС€Рµ"
+                                                "Показать меньше"
                                             } else {
-                                                "РџРѕРєР°Р·Р°С‚СЊ РІСЃРµ ${chapters.size} РіР»Р°РІ"
+                                                "Показать все ${chapters.size} глав"
                                             },
                                             color = colors.accent,
                                             fontSize = 14.sp,

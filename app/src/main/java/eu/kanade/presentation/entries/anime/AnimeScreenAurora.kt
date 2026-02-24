@@ -372,9 +372,9 @@ fun AnimeScreenAuroraImpl(
                                     ) {
                                         Text(
                                             text = if (episodesExpanded) {
-                                                "РџРѕРєР°Р·Р°С‚СЊ РјРµРЅСЊС€Рµ"
+                                                "Показать меньше"
                                             } else {
-                                                "РџРѕРєР°Р·Р°С‚СЊ РІСЃРµ ${episodes.size} СЌРїРёР·РѕРґРѕРІ"
+                                                "Показать все ${episodes.size} эпизодов"
                                             },
                                             color = colors.accent,
                                             fontSize = 14.sp,
