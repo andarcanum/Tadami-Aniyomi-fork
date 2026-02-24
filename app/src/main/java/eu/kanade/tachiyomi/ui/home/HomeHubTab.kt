@@ -416,6 +416,10 @@ object HomeHubTab : Tab {
 
     @Composable
     override fun Content() {
+        LaunchedEffect(Unit) {
+            userProfilePreferences.migrateGreetingDefaultsV026IfNeeded()
+        }
+
         val showAnimeSection by uiPreferences.showAnimeSection().collectAsState()
         val showMangaSection by uiPreferences.showMangaSection().collectAsState()
         val showNovelSection by uiPreferences.showNovelSection().collectAsState()

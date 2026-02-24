@@ -25,11 +25,11 @@ class UserProfilePreferencesTest {
         prefs.homeHubLastSection().get() shouldBe "anime"
         prefs.greetingFont().get() shouldBe "default"
         prefs.nicknameFontSize().get() shouldBe 24
-        prefs.greetingFontSize().get() shouldBe 16
-        prefs.greetingColor().get() shouldBe "theme"
+        prefs.greetingFontSize().get() shouldBe 12
+        prefs.greetingColor().get() shouldBe "accent"
         prefs.greetingCustomColorHex().get() shouldBe "#FFFFFF"
-        prefs.greetingDecoration().get() shouldBe "none"
-        prefs.greetingItalic().get() shouldBe false
+        prefs.greetingDecoration().get() shouldBe "sparkle"
+        prefs.greetingItalic().get() shouldBe true
         prefs.homeHeaderLayoutJson().get() shouldBe ""
         prefs.getHomeHeaderLayoutOrDefault() shouldBe HomeHeaderLayoutSpec.default()
     }

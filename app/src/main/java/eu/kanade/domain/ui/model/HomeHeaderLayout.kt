@@ -60,7 +60,7 @@ data class HomeHeaderLayoutSpec(
     companion object {
         const val CURRENT_VERSION = 2
 
-        private const val DEFAULT_GREETING_X = 0f
+        private const val DEFAULT_GREETING_X = 10f
         private const val DEFAULT_GREETING_Y = 0f
         private const val DEFAULT_NICKNAME_X = 0f
         private const val DEFAULT_NICKNAME_Y = 32f

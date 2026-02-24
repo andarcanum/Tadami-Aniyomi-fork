@@ -31,11 +31,11 @@ class UserProfilePreferences(
     )
     fun homeHubLastSection() = preferenceStore.getString("user_profile_home_hub_last_section", "anime")
     fun greetingFont() = preferenceStore.getString("user_profile_greeting_font", "default")
-    fun greetingFontSize() = preferenceStore.getInt("user_profile_greeting_font_size", 16)
-    fun greetingColor() = preferenceStore.getString("user_profile_greeting_color", "theme")
+    fun greetingFontSize() = preferenceStore.getInt("user_profile_greeting_font_size", 12)
+    fun greetingColor() = preferenceStore.getString("user_profile_greeting_color", "accent")
     fun greetingCustomColorHex() = preferenceStore.getString("user_profile_greeting_custom_color_hex", "#FFFFFF")
-    fun greetingDecoration() = preferenceStore.getString("user_profile_greeting_decoration", "none")
-    fun greetingItalic() = preferenceStore.getBoolean("user_profile_greeting_italic", false)
+    fun greetingDecoration() = preferenceStore.getString("user_profile_greeting_decoration", "sparkle")
+    fun greetingItalic() = preferenceStore.getBoolean("user_profile_greeting_italic", true)
     fun homeHeaderLayoutJson() = preferenceStore.getString("user_profile_home_header_layout_json", "")
 
     fun getHomeHeaderLayoutOrNull(): HomeHeaderLayoutSpec? {
@@ -48,6 +48,27 @@ class UserProfilePreferences(
 
     fun setHomeHeaderLayout(layout: HomeHeaderLayoutSpec) {
         homeHeaderLayoutJson().set(layout.toJson())
+    }
+
+    fun migrateGreetingDefaultsV026IfNeeded() {
+        val migration = preferenceStore.getBoolean("user_profile_greeting_defaults_v026_migrated", false)
+        if (migration.get()) return
+
+        val isLegacyDefaultGreetingStyle =
+            greetingFont().get() == "default" &&
+                greetingFontSize().get() == 12 &&
+                greetingColor().get() == "theme" &&
+                greetingCustomColorHex().get() == "#FFFFFF" &&
+                greetingDecoration().get() == "none" &&
+                !greetingItalic().get()
+
+        if (isLegacyDefaultGreetingStyle) {
+            greetingColor().set("accent")
+            greetingDecoration().set("sparkle")
+            greetingItalic().set(true)
+        }
+
+        migration.set(true)
     }
 
     fun getRecentGreetingHistory(limit: Int = RECENT_HISTORY_LIMIT): List<String> {
