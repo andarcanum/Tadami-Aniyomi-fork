@@ -64,6 +64,8 @@ import eu.kanade.presentation.library.components.LanguageBadge
 import eu.kanade.presentation.library.components.LazyLibraryGrid
 import eu.kanade.presentation.library.components.UnviewedBadge
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
+import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import tachiyomi.domain.entries.novel.model.asNovelCover
 import tachiyomi.domain.library.novel.LibraryNovel
@@ -120,10 +122,12 @@ fun NovelLibraryAuroraContent(
         }
     }
     val columns by columnPreference.collectAsState()
-    val displaySpec = remember(displayMode, columns) {
+    val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
+    val displaySpec = remember(displayMode, columns, auroraAdaptiveSpec) {
         resolveNovelLibraryAuroraDisplaySpec(
             displayMode = displayMode,
             columns = columns,
+            auroraAdaptiveSpec = auroraAdaptiveSpec,
         )
     }
     val showDownloadBadge by libraryPreferences.downloadBadge().collectAsState()
@@ -162,7 +166,10 @@ fun NovelLibraryAuroraContent(
         if (displaySpec.isList) {
             FastScrollLazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = contentPadding + PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                contentPadding = contentPadding + PaddingValues(
+                    horizontal = auroraAdaptiveSpec.contentHorizontalPaddingDp.dp,
+                    vertical = 12.dp,
+                ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 if (showInlineHeader) {
@@ -181,6 +188,7 @@ fun NovelLibraryAuroraContent(
                             onRefresh = onRefresh,
                             onGlobalUpdate = onGlobalUpdate,
                             onOpenRandomEntry = onOpenRandomEntry,
+                            modifier = Modifier.auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),
                         )
                     }
                 }
@@ -201,6 +209,7 @@ fun NovelLibraryAuroraContent(
                         showMetadata = true,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp)
                             .aspectRatio(2.2f),
                         coverHeightFraction = 0.62f,
                         onNovelClicked = onNovelClicked,
@@ -210,8 +219,11 @@ fun NovelLibraryAuroraContent(
             }
         } else {
             LazyLibraryGrid(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),
                 columns = columns.coerceAtLeast(0),
+                adaptiveMinCellDp = displaySpec.adaptiveMinCellDp,
                 contentPadding = contentPadding,
             ) {
                 if (showInlineHeader) {
@@ -230,6 +242,7 @@ fun NovelLibraryAuroraContent(
                             onRefresh = onRefresh,
                             onGlobalUpdate = onGlobalUpdate,
                             onOpenRandomEntry = onOpenRandomEntry,
+                            modifier = Modifier.auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),
                         )
                     }
                 }
@@ -501,13 +514,14 @@ private fun InlineNovelLibraryHeader(
     onRefresh: () -> Unit,
     onGlobalUpdate: () -> Unit,
     onOpenRandomEntry: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
     val tabState = LocalTabState.current
     var showMenu by remember { mutableStateOf(false) }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 16.dp),
     ) {

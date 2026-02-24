@@ -16,6 +16,8 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.relativeDateText
 import eu.kanade.presentation.history.manga.components.MangaHistoryItem
 import eu.kanade.presentation.theme.TachiyomiPreviewTheme
+import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
+import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.presentation.util.animateItemFastScroll
 import eu.kanade.tachiyomi.ui.history.manga.MangaHistoryScreenModel
 import tachiyomi.domain.history.manga.model.MangaHistoryWithRelations
@@ -83,7 +85,10 @@ private fun MangaHistoryScreenContent(
     onClickDelete: (MangaHistoryWithRelations) -> Unit,
     onClickFavorite: (MangaHistoryWithRelations) -> Unit,
 ) {
+    val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     FastScrollLazyColumn(
+        modifier = Modifier
+            .auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),
         contentPadding = contentPadding,
     ) {
         items(

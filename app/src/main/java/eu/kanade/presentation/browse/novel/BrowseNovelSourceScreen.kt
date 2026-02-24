@@ -28,6 +28,8 @@ import eu.kanade.presentation.library.components.CommonEntryItemDefaults
 import eu.kanade.presentation.library.components.EntryComfortableGridItem
 import eu.kanade.presentation.library.components.EntryCompactGridItem
 import eu.kanade.presentation.library.components.EntryListItem
+import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
+import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.presentation.util.formattedMessage
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import kotlinx.collections.immutable.persistentListOf
@@ -154,7 +156,13 @@ private fun NovelListContent(
     onNovelClick: (Novel) -> Unit,
     onNovelLongClick: ((Novel) -> Unit)?,
 ) {
-    LazyColumn(contentPadding = contentPadding + PaddingValues(vertical = 8.dp)) {
+    val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
+    LazyColumn(
+        modifier = Modifier.auroraCenteredMaxWidth(
+            auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp,
+        ),
+        contentPadding = contentPadding + PaddingValues(vertical = 8.dp),
+    ) {
         items(
             count = novels.itemCount,
             key = { index -> novelBrowseItemKey(novels[index]?.value?.url, index) },
@@ -180,8 +188,12 @@ private fun NovelComfortableGridContent(
     onNovelClick: (Novel) -> Unit,
     onNovelLongClick: ((Novel) -> Unit)?,
 ) {
+    val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     LazyVerticalGrid(
         columns = columns,
+        modifier = Modifier.auroraCenteredMaxWidth(
+            auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp,
+        ),
         contentPadding = contentPadding + PaddingValues(8.dp),
         verticalArrangement = Arrangement.spacedBy(CommonEntryItemDefaults.GridVerticalSpacer),
         horizontalArrangement = Arrangement.spacedBy(CommonEntryItemDefaults.GridHorizontalSpacer),
@@ -224,8 +236,12 @@ private fun NovelCompactGridContent(
     onNovelClick: (Novel) -> Unit,
     onNovelLongClick: ((Novel) -> Unit)?,
 ) {
+    val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     LazyVerticalGrid(
         columns = columns,
+        modifier = Modifier.auroraCenteredMaxWidth(
+            auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp,
+        ),
         contentPadding = contentPadding + PaddingValues(8.dp),
         verticalArrangement = Arrangement.spacedBy(CommonEntryItemDefaults.GridVerticalSpacer),
         horizontalArrangement = Arrangement.spacedBy(CommonEntryItemDefaults.GridHorizontalSpacer),

@@ -17,6 +17,8 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.browse.InLibraryBadge
 import eu.kanade.presentation.library.components.CommonEntryItemDefaults
 import eu.kanade.presentation.library.components.EntryComfortableGridItem
+import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
+import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.entries.anime.model.AnimeCover
 import tachiyomi.domain.entries.anime.model.asAnimeCover
@@ -35,8 +37,12 @@ fun GlobalAnimeSearchCardRow(
         EmptyResultItem()
         return
     }
+    val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
 
     LazyRow(
+        modifier = Modifier.auroraCenteredMaxWidth(
+            auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp,
+        ),
         contentPadding = PaddingValues(MaterialTheme.padding.small),
         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
     ) {

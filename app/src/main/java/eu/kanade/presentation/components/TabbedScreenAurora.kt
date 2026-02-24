@@ -66,6 +66,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
+import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -104,6 +106,8 @@ fun TabbedScreenAurora(
     highlightedActionTitle: String? = null,
     extraHeaderContent: @Composable () -> Unit = {},
 ) {
+    val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
+    val contentMaxWidthDp = auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val density = LocalDensity.current
@@ -189,34 +193,53 @@ fun TabbedScreenAurora(
         Column(modifier = Modifier.fillMaxSize()) {
             if (applyStatusBarsPadding) {
                 Spacer(modifier = Modifier.statusBarsPadding())
+                Spacer(modifier = Modifier.height(5.dp))
             }
 
             if (!showCompactHeader && titleRes != null) {
-                AuroraTabHeader(
-                    title = stringResource(titleRes),
-                    isSearchActive = isSearchActive,
-                    searchQuery = activeSearchQuery ?: "",
-                    onSearchClick = { onChangeSearchQuery("") },
-                    onSearchClose = { onChangeSearchQuery(null) },
-                    onSearchQueryChange = { onChangeSearchQuery(it) },
-                    tabs = tabs,
-                    currentPage = currentPage,
-                    navigateUp = null, // Top-level tabs generally don't have up navigation in this context
-                    highlightSearchAction = highlightSearchAction,
-                    highlightedActionTitle = highlightedActionTitle,
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .auroraCenteredMaxWidth(contentMaxWidthDp),
+                ) {
+                    AuroraTabHeader(
+                        title = stringResource(titleRes),
+                        isSearchActive = isSearchActive,
+                        searchQuery = activeSearchQuery ?: "",
+                        onSearchClick = { onChangeSearchQuery("") },
+                        onSearchClose = { onChangeSearchQuery(null) },
+                        onSearchQueryChange = { onChangeSearchQuery(it) },
+                        tabs = tabs,
+                        currentPage = currentPage,
+                        navigateUp = null, // Top-level tabs generally don't have up navigation in this context
+                        highlightSearchAction = highlightSearchAction,
+                        highlightedActionTitle = highlightedActionTitle,
+                    )
+                }
             }
 
-            extraHeaderContent()
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .auroraCenteredMaxWidth(contentMaxWidthDp),
+            ) {
+                extraHeaderContent()
+            }
 
             // Add tabs for Browse
             if (showTabs) {
-                AuroraTabRow(
-                    tabs = tabs,
-                    selectedIndex = currentPage,
-                    onTabSelected = onTabSelected,
-                    scrollable = scrollable,
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .auroraCenteredMaxWidth(contentMaxWidthDp),
+                ) {
+                    AuroraTabRow(
+                        tabs = tabs,
+                        selectedIndex = currentPage,
+                        onTabSelected = onTabSelected,
+                        scrollable = scrollable,
+                    )
+                }
             }
 
             if (instantTabSwitching) {
@@ -228,6 +251,7 @@ fun TabbedScreenAurora(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .auroraCenteredMaxWidth(contentMaxWidthDp)
                         .pointerInput(currentPage, tabs.size, switchThresholdPx, maxBouncePx) {
                             var totalDragPx = 0f
                             detectHorizontalDragGestures(
@@ -295,10 +319,16 @@ fun TabbedScreenAurora(
                         onTabSelected = onTabSelected,
                     )
                     CompositionLocalProvider(LocalTabState provides tabState) {
-                        tabs[page].content(
-                            PaddingValues(bottom = 16.dp),
-                            snackbarHostState,
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .auroraCenteredMaxWidth(contentMaxWidthDp),
+                        ) {
+                            tabs[page].content(
+                                PaddingValues(bottom = 16.dp),
+                                snackbarHostState,
+                            )
+                        }
                     }
                 }
             }

@@ -30,6 +30,8 @@ import eu.kanade.presentation.components.AuroraTabRow
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.components.TabbedScreenAurora
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
+import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.browse.anime.extension.AnimeExtensionsScreenModel
@@ -166,6 +168,8 @@ data object BrowseTab : Tab {
         }
         val state = rememberPagerState { currentTabs.size }
         val isMangaSection = effectiveSection == BrowseSection.Manga
+        val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
+        val useWideBrowseTabs = auroraAdaptiveSpec.deviceClass != AuroraDeviceClass.Phone
 
         Box(
             modifier = Modifier
@@ -192,37 +196,39 @@ data object BrowseTab : Tab {
                         }
                     },
                     isMangaTab = { isMangaSection },
-                    scrollable = true,
+                    scrollable = !useWideBrowseTabs,
                     applyStatusBarsPadding = true,
                     highlightedActionTitle = stringResource(MR.strings.action_global_search),
                     extraHeaderContent = {
                         if (sections.size > 1) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            AuroraTabRow(
-                                tabs = sections.map { section ->
-                                    when (section) {
-                                        BrowseSection.Anime -> {
-                                            TabContent(AYMR.strings.label_anime, content = { _, _ -> })
+                            Column {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                AuroraTabRow(
+                                    tabs = sections.map { section ->
+                                        when (section) {
+                                            BrowseSection.Anime -> {
+                                                TabContent(AYMR.strings.label_anime, content = { _, _ -> })
+                                            }
+                                            BrowseSection.Manga -> {
+                                                TabContent(AYMR.strings.label_manga, content = { _, _ -> })
+                                            }
+                                            BrowseSection.Novel -> {
+                                                TabContent(AYMR.strings.label_novel, content = { _, _ -> })
+                                            }
                                         }
-                                        BrowseSection.Manga -> {
-                                            TabContent(AYMR.strings.label_manga, content = { _, _ -> })
-                                        }
-                                        BrowseSection.Novel -> {
-                                            TabContent(AYMR.strings.label_novel, content = { _, _ -> })
-                                        }
-                                    }
-                                }.toPersistentList(),
-                                selectedIndex = when (effectiveSection) {
-                                    BrowseSection.Anime -> sections.indexOf(BrowseSection.Anime)
-                                    BrowseSection.Manga -> sections.indexOf(BrowseSection.Manga)
-                                    BrowseSection.Novel -> sections.indexOf(BrowseSection.Novel)
-                                },
-                                onTabSelected = { index ->
-                                    currentSection = sections.getOrNull(index) ?: BrowseSection.Anime
-                                },
-                                scrollable = false,
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
+                                    }.toPersistentList(),
+                                    selectedIndex = when (effectiveSection) {
+                                        BrowseSection.Anime -> sections.indexOf(BrowseSection.Anime)
+                                        BrowseSection.Manga -> sections.indexOf(BrowseSection.Manga)
+                                        BrowseSection.Novel -> sections.indexOf(BrowseSection.Novel)
+                                    },
+                                    onTabSelected = { index ->
+                                        currentSection = sections.getOrNull(index) ?: BrowseSection.Anime
+                                    },
+                                    scrollable = false,
+                                )
+                                Spacer(modifier = Modifier.height(if (useWideBrowseTabs) 15.dp else 16.dp))
+                            }
                         }
                     },
                 )

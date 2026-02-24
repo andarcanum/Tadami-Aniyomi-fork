@@ -61,10 +61,12 @@ fun AdaptiveSheet(
 ) {
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
-    val maxWidth = if (LocalConfiguration.current.orientation == ORIENTATION_LANDSCAPE) {
-        600.dp
-    } else {
-        460.dp
+    val isLandscape = LocalConfiguration.current.orientation == ORIENTATION_LANDSCAPE
+    val maxWidth = when {
+        isTabletUi && isLandscape -> 760.dp
+        isTabletUi -> 640.dp
+        isLandscape -> 600.dp
+        else -> 460.dp
     }
 
     if (isTabletUi) {

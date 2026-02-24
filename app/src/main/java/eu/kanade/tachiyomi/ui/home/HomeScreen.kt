@@ -90,6 +90,7 @@ object HomeScreen : Screen() {
         val currentMoreTab = navStyle.moreTab
         val theme by uiPreferences.appTheme().collectAsState()
         val isAurora = theme.isAuroraStyle
+        val useNavigationRail = isTabletUi() && !isAurora
         val navigator = LocalNavigator.currentOrThrow
         TabNavigator(
             tab = defaultTab,
@@ -99,7 +100,7 @@ object HomeScreen : Screen() {
             CompositionLocalProvider(LocalNavigator provides navigator) {
                 Scaffold(
                     startBar = {
-                        if (isTabletUi()) {
+                        if (useNavigationRail) {
                             NavigationRail {
                                 navStyle.tabs.fastForEach {
                                     NavigationRailItem(it)
@@ -108,7 +109,7 @@ object HomeScreen : Screen() {
                         }
                     },
                     bottomBar = {
-                        if (!isTabletUi()) {
+                        if (!useNavigationRail) {
                             val bottomNavVisible by produceState(initialValue = true) {
                                 showBottomNavEvent.receiveAsFlow().collectLatest { value = it }
                             }

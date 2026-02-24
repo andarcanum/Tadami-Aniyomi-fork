@@ -151,7 +151,7 @@ fun MangaScreen(
     val uiPreferences = Injekt.get<eu.kanade.domain.ui.UiPreferences>()
     val theme by uiPreferences.appTheme().collectAsState()
 
-    if (theme.isAuroraStyle && !isTabletUi) {
+    if (theme.isAuroraStyle) {
         MangaScreenAuroraImpl(
             state = state,
             snackbarHostState = snackbarHostState,

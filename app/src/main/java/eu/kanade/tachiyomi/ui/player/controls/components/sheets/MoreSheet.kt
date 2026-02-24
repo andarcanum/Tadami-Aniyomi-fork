@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -60,6 +61,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -95,6 +97,7 @@ fun MoreSheet(
     val advancedPreferences = remember { Injekt.get<AdvancedPlayerPreferences>() }
     val audioPreferences = remember { Injekt.get<AudioPreferences>() }
     val statisticsPage by advancedPreferences.playerStatisticsPage().collectAsState()
+    val wrapFilterChips = shouldWrapMoreSheetFilterChips(LocalConfiguration.current.screenWidthDp)
 
     PlayerSheet(
         onDismissRequest = onDismissRequest,
@@ -160,49 +163,98 @@ fun MoreSheet(
             }
 
             Text(stringResource(AYMR.strings.player_hwdec_mode))
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
-            ) {
-                items(Decoder.entries.minus(Decoder.Auto)) { decoder ->
-                    FilterChip(
-                        selected = decoder == selectedDecoder,
-                        onClick = { onSelectDecoder(decoder) },
-                        label = { Text(text = decoder.title) },
-                    )
+            if (wrapFilterChips) {
+                FlowRow(
+                    verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
+                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
+                ) {
+                    Decoder.entries.minus(Decoder.Auto).forEach { decoder ->
+                        FilterChip(
+                            selected = decoder == selectedDecoder,
+                            onClick = { onSelectDecoder(decoder) },
+                            label = { Text(text = decoder.title) },
+                        )
+                    }
+                }
+            } else {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
+                ) {
+                    items(Decoder.entries.minus(Decoder.Auto)) { decoder ->
+                        FilterChip(
+                            selected = decoder == selectedDecoder,
+                            onClick = { onSelectDecoder(decoder) },
+                            label = { Text(text = decoder.title) },
+                        )
+                    }
                 }
             }
 
             Text(stringResource(AYMR.strings.player_sheets_stats_page_title))
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
-            ) {
-                items(6) { page ->
-                    FilterChip(
-                        label = {
-                            Text(
-                                stringResource(
-                                    if (page ==
-                                        0
-                                    ) {
-                                        AYMR.strings.player_sheets_tracks_off
-                                    } else {
-                                        AYMR.strings.player_sheets_stats_page_chip
-                                    },
-                                    page,
-                                ),
-                            )
-                        },
-                        onClick = {
-                            if ((page == 0) xor (statisticsPage == 0)) {
-                                MPVLib.command(arrayOf("script-binding", "stats/display-stats-toggle"))
-                            }
-                            if (page != 0) {
-                                MPVLib.command(arrayOf("script-binding", "stats/display-page-$page"))
-                            }
-                            advancedPreferences.playerStatisticsPage().set(page)
-                        },
-                        selected = statisticsPage == page,
-                    )
+            if (wrapFilterChips) {
+                FlowRow(
+                    verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
+                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
+                ) {
+                    for (page in 0 until 6) {
+                        FilterChip(
+                            label = {
+                                Text(
+                                    stringResource(
+                                        if (page == 0) {
+                                            AYMR.strings.player_sheets_tracks_off
+                                        } else {
+                                            AYMR.strings.player_sheets_stats_page_chip
+                                        },
+                                        page,
+                                    ),
+                                )
+                            },
+                            onClick = {
+                                if ((page == 0) xor (statisticsPage == 0)) {
+                                    MPVLib.command(arrayOf("script-binding", "stats/display-stats-toggle"))
+                                }
+                                if (page != 0) {
+                                    MPVLib.command(arrayOf("script-binding", "stats/display-page-$page"))
+                                }
+                                advancedPreferences.playerStatisticsPage().set(page)
+                            },
+                            selected = statisticsPage == page,
+                        )
+                    }
+                }
+            } else {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
+                ) {
+                    items(6) { page ->
+                        FilterChip(
+                            label = {
+                                Text(
+                                    stringResource(
+                                        if (page ==
+                                            0
+                                        ) {
+                                            AYMR.strings.player_sheets_tracks_off
+                                        } else {
+                                            AYMR.strings.player_sheets_stats_page_chip
+                                        },
+                                        page,
+                                    ),
+                                )
+                            },
+                            onClick = {
+                                if ((page == 0) xor (statisticsPage == 0)) {
+                                    MPVLib.command(arrayOf("script-binding", "stats/display-stats-toggle"))
+                                }
+                                if (page != 0) {
+                                    MPVLib.command(arrayOf("script-binding", "stats/display-page-$page"))
+                                }
+                                advancedPreferences.playerStatisticsPage().set(page)
+                            },
+                            selected = statisticsPage == page,
+                        )
+                    }
                 }
             }
 
@@ -240,27 +292,60 @@ fun MoreSheet(
             }
             Text(text = stringResource(AYMR.strings.pref_audio_channels))
             val audioChannels by audioPreferences.audioChannels().collectAsState()
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
-            ) {
-                items(AudioChannels.entries) {
-                    FilterChip(
-                        selected = audioChannels == it,
-                        onClick = {
-                            audioPreferences.audioChannels().set(it)
-                            if (it == AudioChannels.ReverseStereo) {
-                                MPVLib.setPropertyString(AudioChannels.AutoSafe.property, AudioChannels.AutoSafe.value)
-                            } else {
-                                MPVLib.setPropertyString(AudioChannels.ReverseStereo.property, "")
-                            }
-                            MPVLib.setPropertyString(it.property, it.value)
-                        },
-                        label = { Text(text = stringResource(it.titleRes)) },
-                    )
+            if (wrapFilterChips) {
+                FlowRow(
+                    verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
+                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
+                ) {
+                    AudioChannels.entries.forEach {
+                        FilterChip(
+                            selected = audioChannels == it,
+                            onClick = {
+                                audioPreferences.audioChannels().set(it)
+                                if (it == AudioChannels.ReverseStereo) {
+                                    MPVLib.setPropertyString(
+                                        AudioChannels.AutoSafe.property,
+                                        AudioChannels.AutoSafe.value,
+                                    )
+                                } else {
+                                    MPVLib.setPropertyString(AudioChannels.ReverseStereo.property, "")
+                                }
+                                MPVLib.setPropertyString(it.property, it.value)
+                            },
+                            label = { Text(text = stringResource(it.titleRes)) },
+                        )
+                    }
+                }
+            } else {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
+                ) {
+                    items(AudioChannels.entries) {
+                        FilterChip(
+                            selected = audioChannels == it,
+                            onClick = {
+                                audioPreferences.audioChannels().set(it)
+                                if (it == AudioChannels.ReverseStereo) {
+                                    MPVLib.setPropertyString(
+                                        AudioChannels.AutoSafe.property,
+                                        AudioChannels.AutoSafe.value,
+                                    )
+                                } else {
+                                    MPVLib.setPropertyString(AudioChannels.ReverseStereo.property, "")
+                                }
+                                MPVLib.setPropertyString(it.property, it.value)
+                            },
+                            label = { Text(text = stringResource(it.titleRes)) },
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+internal fun shouldWrapMoreSheetFilterChips(screenWidthDp: Int): Boolean {
+    return screenWidthDp >= 600
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -278,7 +363,10 @@ fun TimePickerDialog(
         Surface(
             shape = MaterialTheme.shapes.medium,
             color = MaterialTheme.colorScheme.surface,
-            modifier = modifier.padding(MaterialTheme.padding.medium),
+            modifier = modifier
+                .fillMaxWidth(0.95f)
+                .widthIn(max = 480.dp)
+                .padding(MaterialTheme.padding.medium),
         ) {
             Column(
                 modifier = Modifier

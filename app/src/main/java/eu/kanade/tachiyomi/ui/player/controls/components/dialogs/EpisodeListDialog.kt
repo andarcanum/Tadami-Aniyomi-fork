@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -27,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontStyle
@@ -61,12 +63,16 @@ fun EpisodeListDialog(
     onDismissRequest: () -> Unit,
 ) {
     val context = LocalContext.current
+    val dialogLayoutSpec = resolveEpisodeListDialogLayoutSpec(LocalConfiguration.current.screenWidthDp)
     val itemScrollIndex = (episodeList.size - currentEpisodeIndex) - 1
     val episodeListState = rememberLazyListState(initialFirstVisibleItemIndex = itemScrollIndex)
 
     PlayerDialog(
         title = stringResource(AYMR.strings.episodes),
-        modifier = Modifier.fillMaxHeight(fraction = 0.8F).fillMaxWidth(fraction = 0.8F),
+        modifier = Modifier
+            .fillMaxHeight(fraction = dialogLayoutSpec.heightFraction)
+            .fillMaxWidth(fraction = dialogLayoutSpec.widthFraction)
+            .widthIn(max = dialogLayoutSpec.maxWidthDp.dp),
         onDismissRequest = onDismissRequest,
     ) {
         VerticalFastScroller(
@@ -118,6 +124,32 @@ fun EpisodeListDialog(
                 }
             }
         }
+    }
+}
+
+internal data class EpisodeListDialogLayoutSpec(
+    val widthFraction: Float,
+    val heightFraction: Float,
+    val maxWidthDp: Int,
+)
+
+internal fun resolveEpisodeListDialogLayoutSpec(screenWidthDp: Int): EpisodeListDialogLayoutSpec {
+    return when {
+        screenWidthDp >= 840 -> EpisodeListDialogLayoutSpec(
+            widthFraction = 0.75f,
+            heightFraction = 0.8f,
+            maxWidthDp = 960,
+        )
+        screenWidthDp >= 600 -> EpisodeListDialogLayoutSpec(
+            widthFraction = 0.85f,
+            heightFraction = 0.8f,
+            maxWidthDp = 760,
+        )
+        else -> EpisodeListDialogLayoutSpec(
+            widthFraction = 0.9f,
+            heightFraction = 0.85f,
+            maxWidthDp = 560,
+        )
     }
 }
 

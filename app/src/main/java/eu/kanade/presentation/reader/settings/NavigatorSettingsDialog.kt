@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -38,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsScreenModel
@@ -68,6 +71,9 @@ fun NavigatorSettingsDialog(
     onDismissRequest: () -> Unit,
     screenModel: ReaderSettingsScreenModel,
 ) {
+    val useAdaptivePaletteLayout = shouldUseAdaptiveNavigatorPaletteLayout(
+        LocalConfiguration.current.screenWidthDp,
+    )
     val showNavigator by screenModel.preferences.showNavigator().collectAsState()
     val showPageNumbers by screenModel.preferences.navigatorShowPageNumbers().collectAsState()
     val showChapterButtons by screenModel.preferences.navigatorShowChapterButtons().collectAsState()
@@ -159,43 +165,50 @@ fun NavigatorSettingsDialog(
                         modifier = Modifier.padding(horizontal = 16.dp),
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        sliderColors.take(6).forEach { (colorValue, _) ->
-                            ColorCircle(
-                                color = if (colorValue == 0) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    Color(colorValue)
-                                },
-                                isSelected = sliderColor == colorValue,
-                                isThemeColor = colorValue == 0,
-                                onClick = { sliderColorPref.set(colorValue) },
-                            )
+                    if (useAdaptivePaletteLayout) {
+                        AdaptiveNavigatorColorPalette(
+                            sliderColor = sliderColor,
+                            onColorSelected = { sliderColorPref.set(it) },
+                        )
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            sliderColors.take(6).forEach { (colorValue, _) ->
+                                ColorCircle(
+                                    color = if (colorValue == 0) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        Color(colorValue)
+                                    },
+                                    isSelected = sliderColor == colorValue,
+                                    isThemeColor = colorValue == 0,
+                                    onClick = { sliderColorPref.set(colorValue) },
+                                )
+                            }
                         }
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        sliderColors.drop(6).forEach { (colorValue, _) ->
-                            ColorCircle(
-                                color = if (colorValue == 0) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    Color(colorValue)
-                                },
-                                isSelected = sliderColor == colorValue,
-                                isThemeColor = colorValue == 0,
-                                onClick = { sliderColorPref.set(colorValue) },
-                            )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            sliderColors.drop(6).forEach { (colorValue, _) ->
+                                ColorCircle(
+                                    color = if (colorValue == 0) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        Color(colorValue)
+                                    },
+                                    isSelected = sliderColor == colorValue,
+                                    isThemeColor = colorValue == 0,
+                                    onClick = { sliderColorPref.set(colorValue) },
+                                )
+                            }
                         }
                     }
 
@@ -239,6 +252,37 @@ fun NavigatorSettingsDialog(
             }
         },
     )
+}
+
+internal fun shouldUseAdaptiveNavigatorPaletteLayout(screenWidthDp: Int): Boolean = screenWidthDp >= 600
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AdaptiveNavigatorColorPalette(
+    sliderColor: Int,
+    onColorSelected: (Int) -> Unit,
+) {
+    FlowRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        maxItemsInEachRow = 6,
+    ) {
+        sliderColors.forEach { (colorValue, _) ->
+            ColorCircle(
+                color = if (colorValue == 0) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    Color(colorValue)
+                },
+                isSelected = sliderColor == colorValue,
+                isThemeColor = colorValue == 0,
+                onClick = { onColorSelected(colorValue) },
+            )
+        }
+    }
 }
 
 @Composable

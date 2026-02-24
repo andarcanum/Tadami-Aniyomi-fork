@@ -5,6 +5,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -26,12 +28,15 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import eu.kanade.presentation.browse.components.shouldWrapGlobalSearchToolbarFilters
 import eu.kanade.presentation.components.SearchToolbar
 import eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch.AnimeSourceFilter
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun GlobalAnimeSearchToolbar(
     searchQuery: String?,
@@ -46,6 +51,7 @@ fun GlobalAnimeSearchToolbar(
     onToggleResults: () -> Unit,
     scrollBehavior: TopAppBarScrollBehavior,
 ) {
+    val useWrappedFilters = shouldWrapGlobalSearchToolbarFilters(LocalConfiguration.current.screenWidthDp)
     Column(modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
         Box {
             SearchToolbar(
@@ -66,63 +72,93 @@ fun GlobalAnimeSearchToolbar(
             }
         }
 
-        Row(
-            modifier = Modifier
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = MaterialTheme.padding.small),
-            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
-        ) {
-            // TODO: make this UX better; it only applies when triggering a new search
-            FilterChip(
-                selected = sourceFilter == AnimeSourceFilter.PinnedOnly,
-                onClick = { onChangeSearchFilter(AnimeSourceFilter.PinnedOnly) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Outlined.PushPin,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(FilterChipDefaults.IconSize),
-                    )
-                },
-                label = {
-                    Text(text = stringResource(MR.strings.pinned_sources))
-                },
-            )
-            FilterChip(
-                selected = sourceFilter == AnimeSourceFilter.All,
-                onClick = { onChangeSearchFilter(AnimeSourceFilter.All) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Outlined.DoneAll,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(FilterChipDefaults.IconSize),
-                    )
-                },
-                label = {
-                    Text(text = stringResource(MR.strings.all))
-                },
-            )
-
-            VerticalDivider()
-
-            FilterChip(
-                selected = onlyShowHasResults,
-                onClick = { onToggleResults() },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Outlined.FilterList,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(FilterChipDefaults.IconSize),
-                    )
-                },
-                label = {
-                    Text(text = stringResource(MR.strings.has_results))
-                },
-            )
+        if (useWrappedFilters) {
+            FlowRow(
+                modifier = Modifier.padding(horizontal = MaterialTheme.padding.small),
+                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
+                verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
+            ) {
+                GlobalAnimeSearchToolbarFilterChips(
+                    sourceFilter = sourceFilter,
+                    onChangeSearchFilter = onChangeSearchFilter,
+                    onlyShowHasResults = onlyShowHasResults,
+                    onToggleResults = onToggleResults,
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = MaterialTheme.padding.small),
+                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
+            ) {
+                GlobalAnimeSearchToolbarFilterChips(
+                    sourceFilter = sourceFilter,
+                    onChangeSearchFilter = onChangeSearchFilter,
+                    onlyShowHasResults = onlyShowHasResults,
+                    onToggleResults = onToggleResults,
+                )
+            }
         }
 
         HorizontalDivider()
     }
+}
+
+@Composable
+private fun GlobalAnimeSearchToolbarFilterChips(
+    sourceFilter: AnimeSourceFilter,
+    onChangeSearchFilter: (AnimeSourceFilter) -> Unit,
+    onlyShowHasResults: Boolean,
+    onToggleResults: () -> Unit,
+) {
+    // TODO: make this UX better; it only applies when triggering a new search
+    FilterChip(
+        selected = sourceFilter == AnimeSourceFilter.PinnedOnly,
+        onClick = { onChangeSearchFilter(AnimeSourceFilter.PinnedOnly) },
+        leadingIcon = {
+            Icon(
+                imageVector = Icons.Outlined.PushPin,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(FilterChipDefaults.IconSize),
+            )
+        },
+        label = {
+            Text(text = stringResource(MR.strings.pinned_sources))
+        },
+    )
+    FilterChip(
+        selected = sourceFilter == AnimeSourceFilter.All,
+        onClick = { onChangeSearchFilter(AnimeSourceFilter.All) },
+        leadingIcon = {
+            Icon(
+                imageVector = Icons.Outlined.DoneAll,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(FilterChipDefaults.IconSize),
+            )
+        },
+        label = {
+            Text(text = stringResource(MR.strings.all))
+        },
+    )
+
+    VerticalDivider()
+
+    FilterChip(
+        selected = onlyShowHasResults,
+        onClick = { onToggleResults() },
+        leadingIcon = {
+            Icon(
+                imageVector = Icons.Outlined.FilterList,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(FilterChipDefaults.IconSize),
+            )
+        },
+        label = {
+            Text(text = stringResource(MR.strings.has_results))
+        },
+    )
 }

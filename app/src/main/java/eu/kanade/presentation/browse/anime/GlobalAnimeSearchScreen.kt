@@ -10,6 +10,8 @@ import eu.kanade.presentation.browse.GlobalSearchLoadingResultItem
 import eu.kanade.presentation.browse.GlobalSearchResultItem
 import eu.kanade.presentation.browse.anime.components.GlobalAnimeSearchCardRow
 import eu.kanade.presentation.browse.anime.components.GlobalAnimeSearchToolbar
+import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
+import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch.AnimeSearchItemResult
 import eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch.AnimeSearchScreenModel
@@ -69,7 +71,11 @@ internal fun GlobalSearchContent(
     onLongClickItem: (Anime) -> Unit,
     fromSourceId: Long? = null,
 ) {
+    val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     LazyColumn(
+        modifier = Modifier.auroraCenteredMaxWidth(
+            auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp,
+        ),
         contentPadding = contentPadding,
     ) {
         items.forEach { (source, result) ->
@@ -80,7 +86,11 @@ internal fun GlobalSearchContent(
                     } ?: source.name,
                     subtitle = LocaleHelper.getLocalizedDisplayName(source.lang),
                     onClick = { onClickSource(source) },
-                    modifier = Modifier.animateItem(),
+                    modifier = Modifier
+                        .animateItem()
+                        .auroraCenteredMaxWidth(
+                            auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp,
+                        ),
                 ) {
                     when (result) {
                         AnimeSearchItemResult.Loading -> {

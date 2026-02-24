@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -47,6 +48,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.browse.anime.AnimeSourceUiModel
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
+import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
+import eu.kanade.presentation.theme.aurora.adaptive.resolveAuroraAdaptiveSpec
+import eu.kanade.presentation.util.isTabletUi
 import kotlinx.collections.immutable.ImmutableList
 import tachiyomi.domain.source.anime.model.AnimeSource
 import tachiyomi.domain.source.anime.model.Pin
@@ -63,31 +68,43 @@ fun BrowseScreenAurora(
     onMigrateClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
-
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.backgroundGradient),
     ) {
+        val auroraAdaptiveSpec = resolveAuroraAdaptiveSpec(
+            isTabletUi = isTabletUi(),
+            containerWidthDp = maxWidth.value.toInt(),
+        )
+        val columnCount = when (auroraAdaptiveSpec.deviceClass) {
+            AuroraDeviceClass.Phone -> 2
+            AuroraDeviceClass.TabletCompact -> 3
+            AuroraDeviceClass.TabletExpanded -> 4
+        }
+
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            modifier = Modifier.fillMaxSize(),
+            columns = GridCells.Fixed(columnCount),
+            modifier = Modifier
+                .fillMaxSize()
+                .auroraCenteredMaxWidth(auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp),
             contentPadding = PaddingValues(bottom = 100.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item(span = { GridItemSpan(2) }) {
+            item(span = { GridItemSpan(columnCount) }) {
                 Spacer(modifier = Modifier.height(20.dp))
             }
 
-            item(span = { GridItemSpan(2) }) {
+            item(span = { GridItemSpan(columnCount) }) {
                 BrowseAuroraHeader(
                     onSearchClick = onGlobalSearchClick,
                 )
             }
 
-            item(span = { GridItemSpan(2) }) {
+            item(span = { GridItemSpan(columnCount) }) {
                 QuickActionsSection(
+                    useFullWidthActions = auroraAdaptiveSpec.deviceClass != AuroraDeviceClass.Phone,
                     onGlobalSearchClick = onGlobalSearchClick,
                     onExtensionsClick = onExtensionsClick,
                     onMigrateClick = onMigrateClick,
@@ -98,10 +115,10 @@ fun BrowseScreenAurora(
                 .filter { Pin.Actual in it.source.pin }
 
             if (pinnedSources.isNotEmpty()) {
-                item(span = { GridItemSpan(2) }) {
+                item(span = { GridItemSpan(columnCount) }) {
                     SourcesSectionHeader(title = stringResource(AYMR.strings.aurora_pinned_sources))
                 }
-                item(span = { GridItemSpan(2) }) {
+                item(span = { GridItemSpan(columnCount) }) {
                     PinnedSourcesRow(
                         sources = pinnedSources.map { it.source },
                         onSourceClick = onAnimeSourceClick,
@@ -116,7 +133,7 @@ fun BrowseScreenAurora(
                 when (item) {
                     is AnimeSourceUiModel.Header -> {
                         item(
-                            span = { GridItemSpan(2) },
+                            span = { GridItemSpan(columnCount) },
                             key = "header_${item.language}",
                         ) {
                             SourcesSectionHeader(
@@ -139,7 +156,7 @@ fun BrowseScreenAurora(
                 }
             }
 
-            item(span = { GridItemSpan(2) }) { Spacer(modifier = Modifier.height(24.dp)) }
+            item(span = { GridItemSpan(columnCount) }) { Spacer(modifier = Modifier.height(24.dp)) }
         }
     }
 }
@@ -188,34 +205,63 @@ private fun BrowseAuroraHeader(
 
 @Composable
 private fun QuickActionsSection(
+    useFullWidthActions: Boolean,
     onGlobalSearchClick: () -> Unit,
     onExtensionsClick: () -> Unit,
     onMigrateClick: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        QuickActionCard(
-            icon = Icons.Outlined.Explore,
-            title = stringResource(AYMR.strings.aurora_global_search),
-            modifier = Modifier.weight(1f),
-            onClick = onGlobalSearchClick,
-        )
-        QuickActionCard(
-            icon = Icons.Filled.Extension,
-            title = stringResource(AYMR.strings.aurora_extensions),
-            modifier = Modifier.weight(1f),
-            onClick = onExtensionsClick,
-        )
-        QuickActionCard(
-            icon = Icons.Filled.SwapHoriz,
-            title = stringResource(AYMR.strings.aurora_migrate),
-            modifier = Modifier.weight(1f),
-            onClick = onMigrateClick,
-        )
+    if (useFullWidthActions) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 24.dp, end = 24.dp, top = 18.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            QuickActionCard(
+                icon = Icons.Outlined.Explore,
+                title = stringResource(AYMR.strings.aurora_global_search),
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onGlobalSearchClick,
+            )
+            QuickActionCard(
+                icon = Icons.Filled.Extension,
+                title = stringResource(AYMR.strings.aurora_extensions),
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onExtensionsClick,
+            )
+            QuickActionCard(
+                icon = Icons.Filled.SwapHoriz,
+                title = stringResource(AYMR.strings.aurora_migrate),
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onMigrateClick,
+            )
+        }
+    } else {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            QuickActionCard(
+                icon = Icons.Outlined.Explore,
+                title = stringResource(AYMR.strings.aurora_global_search),
+                modifier = Modifier.weight(1f),
+                onClick = onGlobalSearchClick,
+            )
+            QuickActionCard(
+                icon = Icons.Filled.Extension,
+                title = stringResource(AYMR.strings.aurora_extensions),
+                modifier = Modifier.weight(1f),
+                onClick = onExtensionsClick,
+            )
+            QuickActionCard(
+                icon = Icons.Filled.SwapHoriz,
+                title = stringResource(AYMR.strings.aurora_migrate),
+                modifier = Modifier.weight(1f),
+                onClick = onMigrateClick,
+            )
+        }
     }
 }
 

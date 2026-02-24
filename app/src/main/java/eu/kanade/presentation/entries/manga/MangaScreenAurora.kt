@@ -24,8 +24,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Download
@@ -67,12 +69,16 @@ import eu.kanade.presentation.entries.manga.components.aurora.MangaChapterCardCo
 import eu.kanade.presentation.entries.manga.components.aurora.MangaHeroContent
 import eu.kanade.presentation.entries.manga.components.aurora.MangaInfoCard
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
+import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
+import eu.kanade.presentation.theme.aurora.adaptive.resolveAuroraAdaptiveSpec
 import eu.kanade.tachiyomi.ui.entries.manga.ChapterList
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreenModel
 import kotlinx.coroutines.launch
 import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.components.TwoPanelBox
 import tachiyomi.presentation.core.i18n.stringResource
 import java.time.Instant
 
@@ -122,6 +128,14 @@ fun MangaScreenAuroraImpl(
     val colors = AuroraTheme.colors
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
+    val auroraAdaptiveSpec = remember(isTabletUi, configuration.screenWidthDp) {
+        resolveAuroraAdaptiveSpec(
+            isTabletUi = isTabletUi,
+            containerWidthDp = configuration.screenWidthDp,
+        )
+    }
+    val contentMaxWidthDp = auroraAdaptiveSpec.entryMaxWidthDp
+    val useTwoPaneLayout = shouldUseMangaAuroraTwoPane(auroraAdaptiveSpec.deviceClass)
 
     val lazyListState = rememberLazyListState()
     val scrollOffset by remember { derivedStateOf { lazyListState.firstVisibleItemScrollOffset } }
@@ -159,147 +173,325 @@ fun MangaScreenAuroraImpl(
             )
         }
 
-        // Scrollable content
-        LazyColumn(
-            state = lazyListState,
-            contentPadding = PaddingValues(bottom = 100.dp),
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            // Spacer for poster/hero area
-            item {
-                Spacer(modifier = Modifier.height(screenHeight))
-            }
+        if (useTwoPaneLayout) {
+            val topContentPadding = 96.dp
+            TwoPanelBox(
+                modifier = Modifier.fillMaxSize(),
+                startContent = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(start = 12.dp, end = 6.dp, top = topContentPadding, bottom = 20.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .auroraCenteredMaxWidth(420)
+                                .animateContentSize(
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                        stiffness = Spring.StiffnessLow,
+                                    ),
+                                    alignment = Alignment.TopStart,
+                                ),
+                        ) {
+                            MangaHeroContent(
+                                manga = manga,
+                                chapterCount = chapters.size,
+                                hasReadingProgress = hasReadingProgress,
+                                onContinueReading = onContinueReading,
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            MangaInfoCard(
+                                manga = manga,
+                                chapterCount = chapters.size,
+                                nextUpdate = nextUpdate,
+                                onTagSearch = onTagSearch,
+                                descriptionExpanded = descriptionExpanded,
+                                genresExpanded = genresExpanded,
+                                onToggleDescription = {
+                                    descriptionExpanded = !descriptionExpanded
+                                    if (descriptionExpanded) {
+                                        scope.launch {
+                                            statsBringIntoViewRequester.bringIntoView()
+                                        }
+                                    }
+                                },
+                                onToggleGenres = { genresExpanded = !genresExpanded },
+                                statsRequester = statsBringIntoViewRequester,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            MangaActionCard(
+                                manga = manga,
+                                trackingCount = state.trackingCount,
+                                onAddToLibraryClicked = onAddToLibraryClicked,
+                                onWebViewClicked = onWebViewClicked,
+                                onTrackingClicked = onTrackingClicked,
+                                onShareClicked = onShareClicked,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Spacer(modifier = Modifier.height(24.dp))
+                        }
+                    }
+                },
+                endContent = {
+                    LazyColumn(
+                        state = lazyListState,
+                        contentPadding = PaddingValues(top = topContentPadding, bottom = 100.dp),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(start = 6.dp, end = 12.dp),
+                    ) {
+                        item {
+                            ChaptersHeader(chapterCount = chapters.size)
+                        }
 
-            // Info and Action cards merged into one item for layout stability
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .animateContentSize(
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioNoBouncy,
-                                stiffness = Spring.StiffnessLow,
-                            ),
-                            alignment = Alignment.TopStart,
-                        ),
-                ) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    MangaInfoCard(
-                        manga = manga,
-                        chapterCount = chapters.size,
-                        nextUpdate = nextUpdate,
-                        onTagSearch = onTagSearch,
-                        descriptionExpanded = descriptionExpanded,
-                        genresExpanded = genresExpanded,
-                        onToggleDescription = {
-                            descriptionExpanded = !descriptionExpanded
-                            if (descriptionExpanded) {
-                                scope.launch {
-                                    statsBringIntoViewRequester.bringIntoView()
+                        if (showScanlatorSelector) {
+                            item {
+                                ScanlatorBranchSelector(
+                                    scanlatorChapterCounts = scanlatorChapterCounts,
+                                    selectedScanlator = selectedScanlator,
+                                    onScanlatorSelected = onScanlatorSelected,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                )
+                            }
+                        }
+
+                        if (chapters.isEmpty()) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(32.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = stringResource(MR.strings.no_chapters_error),
+                                        color = Color.White.copy(alpha = 0.7f),
+                                        fontSize = 14.sp,
+                                    )
                                 }
                             }
-                        },
-                        onToggleGenres = { genresExpanded = !genresExpanded },
-                        statsRequester = statsBringIntoViewRequester,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                        }
 
-                    Spacer(modifier = Modifier.height(12.dp))
-                    MangaActionCard(
-                        manga = manga,
-                        trackingCount = state.trackingCount,
-                        onAddToLibraryClicked = onAddToLibraryClicked,
-                        onWebViewClicked = onWebViewClicked,
-                        onTrackingClicked = onTrackingClicked,
-                        onShareClicked = onShareClicked,
-                    )
-                }
-            }
+                        items(
+                            items = chaptersToShow,
+                            key = { (it as? ChapterList.Item)?.chapter?.id ?: it.hashCode() },
+                            contentType = { "chapter" },
+                        ) { item ->
+                            if (item is ChapterList.Item) {
+                                MangaChapterCardCompact(
+                                    manga = manga,
+                                    item = item,
+                                    onChapterClicked = onChapterClicked,
+                                    onDownloadChapter = onDownloadChapter,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                )
+                            }
+                        }
 
-            // Chapters header
-            item {
-                Spacer(modifier = Modifier.height(20.dp))
-                ChaptersHeader(chapterCount = chapters.size)
-            }
-
-            if (showScanlatorSelector) {
+                        if (chapters.size > 5) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(
+                                                brush = Brush.linearGradient(
+                                                    colors = listOf(
+                                                        Color.White.copy(alpha = 0.12f),
+                                                        Color.White.copy(alpha = 0.08f),
+                                                    ),
+                                                ),
+                                            )
+                                            .clickable { chaptersExpanded = !chaptersExpanded }
+                                            .padding(horizontal = 24.dp, vertical = 12.dp),
+                                    ) {
+                                        Text(
+                                            text = if (chaptersExpanded) {
+                                                "РџРѕРєР°Р·Р°С‚СЊ РјРµРЅСЊС€Рµ"
+                                            } else {
+                                                "РџРѕРєР°Р·Р°С‚СЊ РІСЃРµ ${chapters.size} РіР»Р°РІ"
+                                            },
+                                            color = colors.accent,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+            )
+        } else {
+            // Scrollable content
+            LazyColumn(
+                state = lazyListState,
+                contentPadding = PaddingValues(bottom = 100.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                // Spacer for poster/hero area
                 item {
-                    ScanlatorBranchSelector(
-                        scanlatorChapterCounts = scanlatorChapterCounts,
-                        selectedScanlator = selectedScanlator,
-                        onScanlatorSelected = onScanlatorSelected,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    )
+                    Spacer(modifier = Modifier.height(screenHeight))
                 }
-            }
 
-            // Empty state for chapters
-            if (chapters.isEmpty()) {
+                // Info and Action cards merged into one item for layout stability
                 item {
-                    Box(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(32.dp),
-                        contentAlignment = Alignment.Center,
+                            .auroraCenteredMaxWidth(contentMaxWidthDp)
+                            .animateContentSize(
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessLow,
+                                ),
+                                alignment = Alignment.TopStart,
+                            ),
                     ) {
-                        Text(
-                            text = stringResource(MR.strings.no_chapters_error),
-                            color = Color.White.copy(alpha = 0.7f),
-                            fontSize = 14.sp,
+                        Spacer(modifier = Modifier.height(16.dp))
+                        MangaInfoCard(
+                            manga = manga,
+                            chapterCount = chapters.size,
+                            nextUpdate = nextUpdate,
+                            onTagSearch = onTagSearch,
+                            descriptionExpanded = descriptionExpanded,
+                            genresExpanded = genresExpanded,
+                            onToggleDescription = {
+                                descriptionExpanded = !descriptionExpanded
+                                if (descriptionExpanded) {
+                                    scope.launch {
+                                        statsBringIntoViewRequester.bringIntoView()
+                                    }
+                                }
+                            },
+                            onToggleGenres = { genresExpanded = !genresExpanded },
+                            statsRequester = statsBringIntoViewRequester,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        MangaActionCard(
+                            manga = manga,
+                            trackingCount = state.trackingCount,
+                            onAddToLibraryClicked = onAddToLibraryClicked,
+                            onWebViewClicked = onWebViewClicked,
+                            onTrackingClicked = onTrackingClicked,
+                            onShareClicked = onShareClicked,
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
                 }
-            }
 
-            // Chapter list
-            items(
-                items = chaptersToShow,
-                key = { (it as? ChapterList.Item)?.chapter?.id ?: it.hashCode() },
-                contentType = { "chapter" },
-            ) { item ->
-                if (item is ChapterList.Item) {
-                    MangaChapterCardCompact(
-                        manga = manga,
-                        item = item,
-                        onChapterClicked = onChapterClicked,
-                        onDownloadChapter = onDownloadChapter,
+                // Chapters header
+                item {
+                    Spacer(modifier = Modifier.height(20.dp))
+                    ChaptersHeader(
+                        chapterCount = chapters.size,
+                        modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
                     )
                 }
-            }
 
-            // Show More button if there are more than 5 chapters
-            if (chapters.size > 5) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
+                if (showScanlatorSelector) {
+                    item {
+                        ScanlatorBranchSelector(
+                            scanlatorChapterCounts = scanlatorChapterCounts,
+                            selectedScanlator = selectedScanlator,
+                            onScanlatorSelected = onScanlatorSelected,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                    }
+                }
+
+                // Empty state for chapters
+                if (chapters.isEmpty()) {
+                    item {
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(
-                                    brush = Brush.linearGradient(
-                                        colors = listOf(
-                                            Color.White.copy(alpha = 0.12f),
-                                            Color.White.copy(alpha = 0.08f),
-                                        ),
-                                    ),
-                                )
-                                .clickable { chaptersExpanded = !chaptersExpanded }
-                                .padding(horizontal = 24.dp, vertical = 12.dp),
+                                .fillMaxWidth()
+                                .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                .padding(32.dp),
+                            contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = if (chaptersExpanded) {
-                                    "Показать меньше"
-                                } else {
-                                    "Показать все ${chapters.size} глав"
-                                },
-                                color = colors.accent,
+                                text = stringResource(MR.strings.no_chapters_error),
+                                color = Color.White.copy(alpha = 0.7f),
                                 fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
                             )
+                        }
+                    }
+                }
+
+                // Chapter list
+                items(
+                    items = chaptersToShow,
+                    key = { (it as? ChapterList.Item)?.chapter?.id ?: it.hashCode() },
+                    contentType = { "chapter" },
+                ) { item ->
+                    if (item is ChapterList.Item) {
+                        MangaChapterCardCompact(
+                            manga = manga,
+                            item = item,
+                            onChapterClicked = onChapterClicked,
+                            onDownloadChapter = onDownloadChapter,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+
+                // Show More button if there are more than 5 chapters
+                if (chapters.size > 5) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(
+                                        brush = Brush.linearGradient(
+                                            colors = listOf(
+                                                Color.White.copy(alpha = 0.12f),
+                                                Color.White.copy(alpha = 0.08f),
+                                            ),
+                                        ),
+                                    )
+                                    .clickable { chaptersExpanded = !chaptersExpanded }
+                                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                            ) {
+                                Text(
+                                    text = if (chaptersExpanded) {
+                                        "Показать меньше"
+                                    } else {
+                                        "Показать все ${chapters.size} глав"
+                                    },
+                                    color = colors.accent,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
                         }
                     }
                 }
@@ -309,7 +501,7 @@ fun MangaScreenAuroraImpl(
         // Hero content (fixed at bottom of first screen) - fades out on scroll
         // Show when we haven't scrolled much (index 0 with scroll less than 70% of screen height)
         val heroThreshold = (screenHeight.value * 0.7f).toInt()
-        if (firstVisibleItemIndex == 0 && scrollOffset < heroThreshold) {
+        if (!useTwoPaneLayout && firstVisibleItemIndex == 0 && scrollOffset < heroThreshold) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -332,7 +524,7 @@ fun MangaScreenAuroraImpl(
 
         // Floating Play button (shows after Hero Content is hidden)
         val showFab = firstVisibleItemIndex > 0 || scrollOffset > heroThreshold
-        if (showFab) {
+        if (!useTwoPaneLayout && showFab) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -439,6 +631,10 @@ fun MangaScreenAuroraImpl(
             }
         }
     }
+}
+
+internal fun shouldUseMangaAuroraTwoPane(deviceClass: AuroraDeviceClass): Boolean {
+    return deviceClass == AuroraDeviceClass.TabletExpanded
 }
 
 /**

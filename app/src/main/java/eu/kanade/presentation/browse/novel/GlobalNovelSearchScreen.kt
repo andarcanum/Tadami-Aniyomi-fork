@@ -10,6 +10,8 @@ import eu.kanade.presentation.browse.GlobalSearchLoadingResultItem
 import eu.kanade.presentation.browse.GlobalSearchResultItem
 import eu.kanade.presentation.browse.novel.components.GlobalNovelSearchCardRow
 import eu.kanade.presentation.browse.novel.components.GlobalNovelSearchToolbar
+import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
+import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
 import eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch.NovelSearchItemResult
 import eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch.NovelSearchScreenModel
@@ -68,7 +70,11 @@ internal fun GlobalSearchContent(
     onClickItem: (Novel) -> Unit,
     onLongClickItem: (Novel) -> Unit,
 ) {
+    val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     LazyColumn(
+        modifier = Modifier.auroraCenteredMaxWidth(
+            auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp,
+        ),
         contentPadding = contentPadding,
     ) {
         items.forEach { (source, result) ->
@@ -77,7 +83,11 @@ internal fun GlobalSearchContent(
                     title = source.name,
                     subtitle = LocaleHelper.getLocalizedDisplayName(source.lang),
                     onClick = { onClickSource(source) },
-                    modifier = Modifier.animateItem(),
+                    modifier = Modifier
+                        .animateItem()
+                        .auroraCenteredMaxWidth(
+                            auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp,
+                        ),
                 ) {
                     when (result) {
                         NovelSearchItemResult.Loading -> {

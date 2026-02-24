@@ -13,6 +13,8 @@ import androidx.compose.ui.graphics.Color
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.relativeDateText
 import eu.kanade.presentation.history.novel.components.NovelHistoryItem
+import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
+import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.presentation.util.animateItemFastScroll
 import eu.kanade.tachiyomi.ui.history.novel.NovelHistoryScreenModel
 import tachiyomi.domain.history.novel.model.NovelHistoryWithRelations
@@ -71,7 +73,11 @@ private fun NovelHistoryScreenContent(
     onClickResume: (NovelHistoryWithRelations) -> Unit,
     onClickDelete: (NovelHistoryWithRelations) -> Unit,
 ) {
-    FastScrollLazyColumn(contentPadding = contentPadding) {
+    val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
+    FastScrollLazyColumn(
+        modifier = Modifier.auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),
+        contentPadding = contentPadding,
+    ) {
         items(
             items = history,
             key = { "novel-history-${it.hashCode()}" },

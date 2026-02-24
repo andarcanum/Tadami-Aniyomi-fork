@@ -63,7 +63,7 @@ fun NavigatorAdaptiveSheet(
  * Sheet with adaptive position aligned to bottom on small screen, otherwise aligned to center
  * and will not be able to dismissed with swipe gesture.
  *
- * Max width of the content is set to 460 dp.
+ * Max width is handled by the core adaptive sheet implementation and scales up on tablets.
  */
 @Composable
 fun AdaptiveSheet(

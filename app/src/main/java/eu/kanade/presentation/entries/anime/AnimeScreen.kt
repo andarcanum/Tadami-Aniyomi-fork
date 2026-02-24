@@ -204,7 +204,7 @@ fun AnimeScreen(
         navigator.push(AnimeSourcePreferencesScreen(state.source.id))
     }.takeIf { state.source is ConfigurableAnimeSource }
 
-    if (theme.isAuroraStyle && !isTabletUi) {
+    if (theme.isAuroraStyle) {
         AnimeScreenAuroraImpl(
             state = state,
             snackbarHostState = snackbarHostState,

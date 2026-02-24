@@ -15,6 +15,8 @@ import eu.kanade.presentation.browse.BrowseSourceLoadingItem
 import eu.kanade.presentation.browse.InLibraryBadge
 import eu.kanade.presentation.library.components.CommonEntryItemDefaults
 import eu.kanade.presentation.library.components.EntryListItem
+import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
+import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import kotlinx.coroutines.flow.StateFlow
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.entries.manga.model.MangaCover
@@ -30,11 +32,13 @@ fun BrowseMangaSourceList(
     onMangaLongClick: (Manga) -> Unit,
 ) {
     val sourceListState = rememberLazyListState()
+    val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     BoxWithConstraints {
         val density = LocalDensity.current
         val containerHeightPx = with(density) { this@BoxWithConstraints.maxHeight.roundToPx() }
 
         LazyColumn(
+            modifier = androidx.compose.ui.Modifier.auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),
             state = sourceListState,
             contentPadding = contentPadding + PaddingValues(vertical = 8.dp),
         ) {

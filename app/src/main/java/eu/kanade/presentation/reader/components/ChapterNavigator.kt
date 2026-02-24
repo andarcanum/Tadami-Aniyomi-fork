@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.SkipNext
@@ -99,6 +101,14 @@ fun ChapterNavigator(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .wrapContentWidth(Alignment.CenterHorizontally)
+                .then(
+                    if (isTabletUi) {
+                        Modifier.widthIn(max = 960.dp)
+                    } else {
+                        Modifier
+                    },
+                )
                 .height(navigatorHeight.heightDp.dp)
                 .padding(horizontal = horizontalPadding),
             verticalAlignment = Alignment.CenterVertically,

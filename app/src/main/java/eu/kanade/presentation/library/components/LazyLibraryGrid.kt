@@ -15,11 +15,16 @@ import tachiyomi.presentation.core.util.plus
 internal fun LazyLibraryGrid(
     modifier: Modifier = Modifier,
     columns: Int,
+    adaptiveMinCellDp: Int? = null,
     contentPadding: PaddingValues,
     content: LazyGridScope.() -> Unit,
 ) {
     FastScrollLazyVerticalGrid(
-        columns = if (columns == 0) GridCells.Adaptive(128.dp) else GridCells.Fixed(columns),
+        columns = if (columns == 0) {
+            GridCells.Adaptive((adaptiveMinCellDp ?: 128).dp)
+        } else {
+            GridCells.Fixed(columns)
+        },
         modifier = modifier,
         contentPadding = contentPadding + PaddingValues(8.dp),
         verticalArrangement = Arrangement.spacedBy(CommonEntryItemDefaults.GridVerticalSpacer),

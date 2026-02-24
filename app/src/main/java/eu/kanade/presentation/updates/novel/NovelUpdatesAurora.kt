@@ -50,6 +50,8 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.components.relativeDateText
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
+import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.presentation.updates.aurora.AuroraUpdatesGroupCard
 import eu.kanade.presentation.updates.aurora.buildAuroraUpdatesGroups
 import eu.kanade.tachiyomi.ui.updates.novel.NovelUpdatesItem
@@ -71,6 +73,7 @@ fun NovelUpdatesAuroraContent(
     contentPadding: PaddingValues,
 ) {
     val colors = AuroraTheme.colors
+    val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val scope = rememberCoroutineScope()
     var isRefreshing by remember { mutableStateOf(false) }
     var expandedGroups by rememberSaveable { mutableStateOf(setOf<String>()) }
@@ -104,7 +107,9 @@ fun NovelUpdatesAuroraContent(
             LazyColumn(
                 state = listState,
                 contentPadding = contentPadding,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .auroraCenteredMaxWidth(auroraAdaptiveSpec.updatesMaxWidthDp),
             ) {
                 if (items.isEmpty()) {
                     item {

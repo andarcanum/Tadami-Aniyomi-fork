@@ -1,5 +1,6 @@
 package eu.kanade.presentation.library.novel
 
+import eu.kanade.presentation.theme.aurora.adaptive.AuroraAdaptiveSpec
 import tachiyomi.domain.library.model.LibraryDisplayMode
 
 internal data class NovelLibraryAuroraDisplaySpec(
@@ -17,6 +18,7 @@ internal data class NovelLibraryAuroraDisplaySpec(
 internal fun resolveNovelLibraryAuroraDisplaySpec(
     displayMode: LibraryDisplayMode,
     columns: Int,
+    auroraAdaptiveSpec: AuroraAdaptiveSpec? = null,
 ): NovelLibraryAuroraDisplaySpec {
     return when (displayMode) {
         LibraryDisplayMode.List -> NovelLibraryAuroraDisplaySpec(
@@ -33,7 +35,7 @@ internal fun resolveNovelLibraryAuroraDisplaySpec(
         LibraryDisplayMode.ComfortableGrid -> NovelLibraryAuroraDisplaySpec(
             isList = false,
             fixedColumns = columns.takeIf { it > 0 },
-            adaptiveMinCellDp = 180.takeIf { columns <= 0 },
+            adaptiveMinCellDp = (auroraAdaptiveSpec?.comfortableGridAdaptiveMinCellDp ?: 180).takeIf { columns <= 0 },
             showMetadata = true,
             useCompactGridEntryStyle = false,
             gridCardAspectRatio = 0.66f,
@@ -44,7 +46,7 @@ internal fun resolveNovelLibraryAuroraDisplaySpec(
         LibraryDisplayMode.CoverOnlyGrid -> NovelLibraryAuroraDisplaySpec(
             isList = false,
             fixedColumns = columns.takeIf { it > 0 },
-            adaptiveMinCellDp = 140.takeIf { columns <= 0 },
+            adaptiveMinCellDp = (auroraAdaptiveSpec?.coverOnlyGridAdaptiveMinCellDp ?: 140).takeIf { columns <= 0 },
             showMetadata = false,
             useCompactGridEntryStyle = false,
             gridCardAspectRatio = 0.6f,
@@ -55,7 +57,7 @@ internal fun resolveNovelLibraryAuroraDisplaySpec(
         LibraryDisplayMode.CompactGrid -> NovelLibraryAuroraDisplaySpec(
             isList = false,
             fixedColumns = columns.takeIf { it > 0 },
-            adaptiveMinCellDp = 140.takeIf { columns <= 0 },
+            adaptiveMinCellDp = (auroraAdaptiveSpec?.compactGridAdaptiveMinCellDp ?: 140).takeIf { columns <= 0 },
             showMetadata = true,
             useCompactGridEntryStyle = true,
             gridCardAspectRatio = 0.56f,

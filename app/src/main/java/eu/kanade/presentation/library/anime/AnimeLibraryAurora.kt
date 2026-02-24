@@ -20,6 +20,8 @@ import eu.kanade.presentation.library.components.GlobalSearchItem
 import eu.kanade.presentation.library.components.LazyLibraryGrid
 import eu.kanade.presentation.library.components.globalSearchItem
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
+import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.tachiyomi.ui.library.anime.AnimeLibraryItem
 import tachiyomi.domain.entries.anime.model.AnimeCover
 import tachiyomi.domain.library.anime.LibraryAnime
@@ -50,6 +52,8 @@ fun AnimeLibraryAuroraContent(
     onGlobalSearchClicked: () -> Unit,
     contentPadding: PaddingValues,
 ) {
+    val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
+
     if (items.isEmpty()) {
         AnimeLibraryAuroraEmptyScreen(
             searchQuery = searchQuery,
@@ -60,7 +64,7 @@ fun AnimeLibraryAuroraContent(
         return
     }
 
-    val safeColumns = columns.coerceAtLeast(1)
+    val safeColumns = columns.coerceAtLeast(0)
     val isSelectionMode = selection.isNotEmpty()
     val onClickAnime = { anime: LibraryAnime ->
         if (isSelectionMode) {
@@ -81,6 +85,8 @@ fun AnimeLibraryAuroraContent(
                 onClick = onClickAnime,
                 onLongClick = onToggleRangeSelection,
                 onClickContinueWatching = onContinueWatchingClicked,
+                listMaxWidthDp = auroraAdaptiveSpec.listMaxWidthDp,
+                horizontalPaddingDp = auroraAdaptiveSpec.contentHorizontalPaddingDp,
             )
         }
 
@@ -112,6 +118,8 @@ fun AnimeLibraryAuroraContent(
                 onClick = onClickAnime,
                 onLongClick = onToggleRangeSelection,
                 onClickContinueWatching = onContinueWatchingClicked,
+                listMaxWidthDp = auroraAdaptiveSpec.listMaxWidthDp,
+                adaptiveMinCellDp = auroraAdaptiveSpec.coverOnlyGridAdaptiveMinCellDp,
             )
         }
 
@@ -127,6 +135,8 @@ fun AnimeLibraryAuroraContent(
                 onClick = onClickAnime,
                 onLongClick = onToggleRangeSelection,
                 onClickContinueWatching = onContinueWatchingClicked,
+                listMaxWidthDp = auroraAdaptiveSpec.listMaxWidthDp,
+                adaptiveMinCellDp = auroraAdaptiveSpec.comfortableGridAdaptiveMinCellDp,
             )
         }
     }
@@ -142,18 +152,22 @@ private fun AnimeLibraryAuroraList(
     onClick: (LibraryAnime) -> Unit,
     onLongClick: (LibraryAnime) -> Unit,
     onClickContinueWatching: ((LibraryAnime) -> Unit)?,
+    listMaxWidthDp: Int?,
+    horizontalPaddingDp: Int,
 ) {
     val colors = AuroraTheme.colors
 
     FastScrollLazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = contentPadding + PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        contentPadding = contentPadding + PaddingValues(horizontal = horizontalPaddingDp.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
             if (!searchQuery.isNullOrEmpty()) {
                 GlobalSearchItem(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .auroraCenteredMaxWidth(listMaxWidthDp),
                     searchQuery = searchQuery,
                     onClick = onGlobalSearchClicked,
                 )
@@ -179,6 +193,7 @@ private fun AnimeLibraryAuroraList(
             AuroraCard(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .auroraCenteredMaxWidth(listMaxWidthDp)
                     .aspectRatio(2.2f),
                 title = anime.title,
                 coverData = AnimeCover(
@@ -255,12 +270,17 @@ private fun AnimeLibraryAuroraCardGrid(
     onClick: (LibraryAnime) -> Unit,
     onLongClick: (LibraryAnime) -> Unit,
     onClickContinueWatching: ((LibraryAnime) -> Unit)?,
+    listMaxWidthDp: Int?,
+    adaptiveMinCellDp: Int,
 ) {
     val colors = AuroraTheme.colors
 
     LazyLibraryGrid(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .auroraCenteredMaxWidth(listMaxWidthDp),
         columns = columns,
+        adaptiveMinCellDp = adaptiveMinCellDp,
         contentPadding = contentPadding,
     ) {
         globalSearchItem(searchQuery, onGlobalSearchClicked)

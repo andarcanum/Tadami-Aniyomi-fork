@@ -20,6 +20,8 @@ import eu.kanade.presentation.library.components.GlobalSearchItem
 import eu.kanade.presentation.library.components.LazyLibraryGrid
 import eu.kanade.presentation.library.components.globalSearchItem
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
+import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.tachiyomi.ui.library.manga.MangaLibraryItem
 import tachiyomi.domain.entries.manga.model.MangaCover
 import tachiyomi.domain.library.manga.LibraryManga
@@ -50,6 +52,8 @@ fun MangaLibraryAuroraContent(
     onGlobalSearchClicked: () -> Unit,
     contentPadding: PaddingValues,
 ) {
+    val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
+
     if (items.isEmpty()) {
         MangaLibraryAuroraEmptyScreen(
             searchQuery = searchQuery,
@@ -60,7 +64,7 @@ fun MangaLibraryAuroraContent(
         return
     }
 
-    val safeColumns = columns.coerceAtLeast(1)
+    val safeColumns = columns.coerceAtLeast(0)
     val isSelectionMode = selection.isNotEmpty()
     val onClickManga = { manga: LibraryManga ->
         if (isSelectionMode) {
@@ -81,6 +85,8 @@ fun MangaLibraryAuroraContent(
                 onClick = onClickManga,
                 onLongClick = onToggleRangeSelection,
                 onClickContinueReading = onContinueReadingClicked,
+                listMaxWidthDp = auroraAdaptiveSpec.listMaxWidthDp,
+                horizontalPaddingDp = auroraAdaptiveSpec.contentHorizontalPaddingDp,
             )
         }
 
@@ -112,6 +118,8 @@ fun MangaLibraryAuroraContent(
                 onClick = onClickManga,
                 onLongClick = onToggleRangeSelection,
                 onClickContinueReading = onContinueReadingClicked,
+                listMaxWidthDp = auroraAdaptiveSpec.listMaxWidthDp,
+                adaptiveMinCellDp = auroraAdaptiveSpec.coverOnlyGridAdaptiveMinCellDp,
             )
         }
 
@@ -127,6 +135,8 @@ fun MangaLibraryAuroraContent(
                 onClick = onClickManga,
                 onLongClick = onToggleRangeSelection,
                 onClickContinueReading = onContinueReadingClicked,
+                listMaxWidthDp = auroraAdaptiveSpec.listMaxWidthDp,
+                adaptiveMinCellDp = auroraAdaptiveSpec.comfortableGridAdaptiveMinCellDp,
             )
         }
     }
@@ -142,18 +152,22 @@ private fun MangaLibraryAuroraList(
     onClick: (LibraryManga) -> Unit,
     onLongClick: (LibraryManga) -> Unit,
     onClickContinueReading: ((LibraryManga) -> Unit)?,
+    listMaxWidthDp: Int?,
+    horizontalPaddingDp: Int,
 ) {
     val colors = AuroraTheme.colors
 
     FastScrollLazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = contentPadding + PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        contentPadding = contentPadding + PaddingValues(horizontal = horizontalPaddingDp.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
             if (!searchQuery.isNullOrEmpty()) {
                 GlobalSearchItem(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .auroraCenteredMaxWidth(listMaxWidthDp),
                     searchQuery = searchQuery,
                     onClick = onGlobalSearchClicked,
                 )
@@ -179,6 +193,7 @@ private fun MangaLibraryAuroraList(
             AuroraCard(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .auroraCenteredMaxWidth(listMaxWidthDp)
                     .aspectRatio(2.2f),
                 title = manga.title,
                 coverData = MangaCover(
@@ -255,12 +270,17 @@ private fun MangaLibraryAuroraCardGrid(
     onClick: (LibraryManga) -> Unit,
     onLongClick: (LibraryManga) -> Unit,
     onClickContinueReading: ((LibraryManga) -> Unit)?,
+    listMaxWidthDp: Int?,
+    adaptiveMinCellDp: Int,
 ) {
     val colors = AuroraTheme.colors
 
     LazyLibraryGrid(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .auroraCenteredMaxWidth(listMaxWidthDp),
         columns = columns,
+        adaptiveMinCellDp = adaptiveMinCellDp,
         contentPadding = contentPadding,
     ) {
         globalSearchItem(searchQuery, onGlobalSearchClicked)

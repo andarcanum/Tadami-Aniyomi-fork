@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -32,7 +33,7 @@ fun PlayerDialog(
 
     BasicAlertDialog(
         onDismissRequest = onDismissRequest,
-        modifier = modifier,
+        modifier = modifier.widthIn(max = 960.dp),
         properties = DialogProperties(
             dismissOnBackPress = true,
             dismissOnClickOutside = true,
