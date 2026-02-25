@@ -494,6 +494,7 @@ class NovelReaderUiVisibilityTest {
         assertTrue(
             shouldStartInWebView(
                 preferWebViewRenderer = true,
+                pageReaderEnabled = false,
                 contentBlocksCount = 10,
             ),
         )
@@ -504,14 +505,74 @@ class NovelReaderUiVisibilityTest {
         assertFalse(
             shouldStartInWebView(
                 preferWebViewRenderer = false,
+                pageReaderEnabled = false,
                 contentBlocksCount = 2,
             ),
         )
         assertTrue(
             shouldStartInWebView(
                 preferWebViewRenderer = false,
+                pageReaderEnabled = false,
                 contentBlocksCount = 0,
             ),
+        )
+    }
+
+    @Test
+    fun `page reader preference overrides webview when parsed content exists`() {
+        assertFalse(
+            shouldStartInWebView(
+                preferWebViewRenderer = true,
+                pageReaderEnabled = true,
+                contentBlocksCount = 5,
+            ),
+        )
+        assertTrue(
+            shouldStartInWebView(
+                preferWebViewRenderer = true,
+                pageReaderEnabled = true,
+                contentBlocksCount = 0,
+            ),
+        )
+    }
+
+    @Test
+    fun `tap edge navigation respects tap to scroll setting`() {
+        assertTrue(
+            resolveReaderTapAction(
+                tapX = 5f,
+                width = 100f,
+                tapToScrollEnabled = false,
+            ) == ReaderTapAction.TOGGLE_UI,
+        )
+        assertTrue(
+            resolveReaderTapAction(
+                tapX = 5f,
+                width = 100f,
+                tapToScrollEnabled = true,
+            ) == ReaderTapAction.BACKWARD,
+        )
+    }
+
+    @Test
+    fun `horizontal chapter swipe helper supports webview gestures`() {
+        assertTrue(
+            resolveHorizontalChapterSwipeAction(
+                swipeGesturesEnabled = true,
+                deltaX = -220f,
+                thresholdPx = 160f,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ) == HorizontalChapterSwipeAction.NEXT,
+        )
+        assertTrue(
+            resolveHorizontalChapterSwipeAction(
+                swipeGesturesEnabled = false,
+                deltaX = -220f,
+                thresholdPx = 160f,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ) == HorizontalChapterSwipeAction.NONE,
         )
     }
 

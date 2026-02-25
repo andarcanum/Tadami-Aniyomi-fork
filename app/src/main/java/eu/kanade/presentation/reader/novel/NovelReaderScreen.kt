@@ -157,6 +157,7 @@ fun NovelReaderScreen(
         mutableStateOf(
             shouldStartInWebView(
                 preferWebViewRenderer = state.readerSettings.preferWebViewRenderer,
+                pageReaderEnabled = state.readerSettings.pageReader,
                 contentBlocksCount = state.contentBlocks.size,
             ),
         )
@@ -357,7 +358,14 @@ fun NovelReaderScreen(
     // Volume Buttons Handler
     val coroutineScope = rememberCoroutineScope()
     suspend fun moveBackwardByReaderAction() {
-        if (usePageReader) {
+        if (showWebView) {
+            val webView = webViewInstance
+            if (webView != null && webView.canScrollVertically(-1)) {
+                webView.scrollBy(0, -tapScrollStepPx.roundToInt())
+            } else if (state.readerSettings.swipeToPrevChapter && state.previousChapterId != null) {
+                onOpenPreviousChapter?.invoke(state.previousChapterId)
+            }
+        } else if (usePageReader) {
             val currentPage = pagerState.currentPage
             if (currentPage > 0) {
                 pagerState.animateScrollToPage(currentPage - 1)
@@ -372,7 +380,14 @@ fun NovelReaderScreen(
     }
 
     suspend fun moveForwardByReaderAction() {
-        if (usePageReader) {
+        if (showWebView) {
+            val webView = webViewInstance
+            if (webView != null && webView.canScrollVertically(1)) {
+                webView.scrollBy(0, tapScrollStepPx.roundToInt())
+            } else if (state.readerSettings.swipeToNextChapter && state.nextChapterId != null) {
+                onOpenNextChapter?.invoke(state.nextChapterId)
+            }
+        } else if (usePageReader) {
             val currentPage = pagerState.currentPage
             if (currentPage < pageReaderBlocks.lastIndex) {
                 pagerState.animateScrollToPage(currentPage + 1)
@@ -393,7 +408,7 @@ fun NovelReaderScreen(
         }
         if (event.action == KeyEvent.ACTION_DOWN) return true
         if (event.action != KeyEvent.ACTION_UP) return false
-        if (showWebView || showReaderUI) return true
+        if (showReaderUI) return true
         return when (event.keyCode) {
             KeyEvent.KEYCODE_VOLUME_UP -> {
                 coroutineScope.launch { moveBackwardByReaderAction() }
@@ -435,18 +450,36 @@ fun NovelReaderScreen(
         usePageReader,
         showReaderUI,
         showWebView,
+        webViewInstance,
         state.nextChapterId,
         state.readerSettings.swipeToNextChapter,
         pageReaderBlocks.size,
     ) {
-        if (!autoScrollEnabled || showWebView) return@LaunchedEffect
+        if (!autoScrollEnabled) return@LaunchedEffect
         while (isActive && autoScrollEnabled) {
-            if (showWebView) {
+            if (showReaderUI) {
                 delay(120)
                 continue
             }
-            if (showReaderUI) {
-                delay(120)
+            if (showWebView) {
+                delay(16)
+                val webView = webViewInstance
+                if (webView == null) {
+                    delay(120)
+                    continue
+                }
+                val stepPx = autoScrollScrollStepPx(autoScrollSpeed).roundToInt().coerceAtLeast(1)
+                val canScrollBefore = webView.canScrollVertically(1)
+                if (canScrollBefore) {
+                    webView.scrollBy(0, stepPx)
+                }
+                val reachedEnd = !webView.canScrollVertically(1)
+                if (reachedEnd && state.readerSettings.swipeToNextChapter && state.nextChapterId != null) {
+                    autoScrollEnabled = false
+                    onOpenNextChapter?.invoke(state.nextChapterId)
+                } else if (reachedEnd && !canScrollBefore) {
+                    autoScrollEnabled = false
+                }
                 continue
             }
             if (usePageReader) {
@@ -558,16 +591,19 @@ fun NovelReaderScreen(
                             ) {
                                 detectTapGestures(
                                     onTap = { offset ->
-                                        val tapX = offset.x
-                                        if (tapX > size.width * 0.3f && tapX < size.width * 0.7f) {
-                                            showReaderUI = !showReaderUI
-                                        } else {
-                                            coroutineScope.launch {
-                                                if (tapX <= size.width * 0.3f) {
-                                                    moveBackwardByReaderAction()
-                                                } else if (tapX >= size.width * 0.7f) {
-                                                    moveForwardByReaderAction()
-                                                }
+                                        when (
+                                            resolveReaderTapAction(
+                                                tapX = offset.x,
+                                                width = size.width.toFloat(),
+                                                tapToScrollEnabled = state.readerSettings.tapToScroll,
+                                            )
+                                        ) {
+                                            ReaderTapAction.TOGGLE_UI -> showReaderUI = !showReaderUI
+                                            ReaderTapAction.BACKWARD -> coroutineScope.launch {
+                                                moveBackwardByReaderAction()
+                                            }
+                                            ReaderTapAction.FORWARD -> coroutineScope.launch {
+                                                moveForwardByReaderAction()
                                             }
                                         }
                                     },
@@ -621,17 +657,19 @@ fun NovelReaderScreen(
                             ) {
                                 detectTapGestures(
                                     onTap = { offset ->
-                                        // Тап в центральной зоне (30-70% ширины) - переключить UI
-                                        val tapX = offset.x
-                                        if (tapX > size.width * 0.3f && tapX < size.width * 0.7f) {
-                                            showReaderUI = !showReaderUI
-                                        } else {
-                                            coroutineScope.launch {
-                                                if (tapX <= size.width * 0.3f) {
-                                                    moveBackwardByReaderAction()
-                                                } else if (tapX >= size.width * 0.7f) {
-                                                    moveForwardByReaderAction()
-                                                }
+                                        when (
+                                            resolveReaderTapAction(
+                                                tapX = offset.x,
+                                                width = size.width.toFloat(),
+                                                tapToScrollEnabled = state.readerSettings.tapToScroll,
+                                            )
+                                        ) {
+                                            ReaderTapAction.TOGGLE_UI -> showReaderUI = !showReaderUI
+                                            ReaderTapAction.BACKWARD -> coroutineScope.launch {
+                                                moveBackwardByReaderAction()
+                                            }
+                                            ReaderTapAction.FORWARD -> coroutineScope.launch {
+                                                moveForwardByReaderAction()
                                             }
                                         }
                                     },
@@ -954,16 +992,32 @@ fun NovelReaderScreen(
                         var touchStartEventTime = 0L
                         var wasNearChapterEndAtDown = false
                         var wasNearChapterStartAtDown = false
+                        var horizontalSwipeHandled = false
                         val gestureDetector = GestureDetector(
                             webView.context,
                             object : GestureDetector.SimpleOnGestureListener() {
                                 override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                                     val viewWidth = webView.width.takeIf { it > 0 } ?: return false
-                                    val tapX = e.x
-                                    if (tapX > viewWidth * 0.3f && tapX < viewWidth * 0.7f) {
-                                        showReaderUI = !showReaderUI
+                                    return when (
+                                        resolveReaderTapAction(
+                                            tapX = e.x,
+                                            width = viewWidth.toFloat(),
+                                            tapToScrollEnabled = state.readerSettings.tapToScroll,
+                                        )
+                                    ) {
+                                        ReaderTapAction.TOGGLE_UI -> {
+                                            showReaderUI = !showReaderUI
+                                            true
+                                        }
+                                        ReaderTapAction.BACKWARD -> {
+                                            coroutineScope.launch { moveBackwardByReaderAction() }
+                                            true
+                                        }
+                                        ReaderTapAction.FORWARD -> {
+                                            coroutineScope.launch { moveForwardByReaderAction() }
+                                            true
+                                        }
                                     }
-                                    return false
                                 }
                             },
                         )
@@ -975,9 +1029,31 @@ fun NovelReaderScreen(
                                     touchStartEventTime = event.eventTime
                                     wasNearChapterEndAtDown = !webView.canScrollVertically(1)
                                     wasNearChapterStartAtDown = !webView.canScrollVertically(-1)
+                                    horizontalSwipeHandled = false
                                 }
                                 MotionEvent.ACTION_UP -> {
-                                    if (!showReaderUI) {
+                                    if (!showReaderUI && !horizontalSwipeHandled) {
+                                        when (
+                                            resolveHorizontalChapterSwipeAction(
+                                                swipeGesturesEnabled = state.readerSettings.swipeGestures,
+                                                deltaX = event.x - touchStartX,
+                                                thresholdPx = 160f,
+                                                hasPreviousChapter = state.previousChapterId != null,
+                                                hasNextChapter = state.nextChapterId != null,
+                                            )
+                                        ) {
+                                            HorizontalChapterSwipeAction.PREVIOUS -> {
+                                                horizontalSwipeHandled = true
+                                                state.previousChapterId?.let { onOpenPreviousChapter?.invoke(it) }
+                                            }
+                                            HorizontalChapterSwipeAction.NEXT -> {
+                                                horizontalSwipeHandled = true
+                                                state.nextChapterId?.let { onOpenNextChapter?.invoke(it) }
+                                            }
+                                            HorizontalChapterSwipeAction.NONE -> Unit
+                                        }
+                                    }
+                                    if (!showReaderUI && !horizontalSwipeHandled) {
                                         val deltaX = event.x - touchStartX
                                         val deltaY = event.y - touchStartY
                                         val gestureDurationMillis = (event.eventTime - touchStartEventTime)
@@ -1014,7 +1090,9 @@ fun NovelReaderScreen(
                                     }
                                 }
                             }
-                            gestureDetector.onTouchEvent(event)
+                            if (!horizontalSwipeHandled) {
+                                gestureDetector.onTouchEvent(event)
+                            }
                             false
                         }
 
@@ -2030,9 +2108,32 @@ internal fun shouldShowVerticalSeekbar(
 
 internal fun shouldStartInWebView(
     preferWebViewRenderer: Boolean,
+    pageReaderEnabled: Boolean,
     contentBlocksCount: Int,
 ): Boolean {
-    return preferWebViewRenderer || contentBlocksCount <= 0
+    if (contentBlocksCount <= 0) return true
+    if (pageReaderEnabled) return false
+    return preferWebViewRenderer
+}
+
+internal enum class ReaderTapAction {
+    TOGGLE_UI,
+    BACKWARD,
+    FORWARD,
+}
+
+internal fun resolveReaderTapAction(
+    tapX: Float,
+    width: Float,
+    tapToScrollEnabled: Boolean,
+): ReaderTapAction {
+    val safeWidth = width.coerceAtLeast(1f)
+    val leftBoundary = safeWidth * 0.3f
+    val rightBoundary = safeWidth * 0.7f
+    val clampedTapX = tapX.coerceIn(0f, safeWidth)
+    val inCenter = clampedTapX > leftBoundary && clampedTapX < rightBoundary
+    if (inCenter || !tapToScrollEnabled) return ReaderTapAction.TOGGLE_UI
+    return if (clampedTapX <= leftBoundary) ReaderTapAction.BACKWARD else ReaderTapAction.FORWARD
 }
 
 internal fun resolvePageReaderBlocks(
@@ -2097,6 +2198,25 @@ internal enum class VerticalChapterSwipeAction {
     NONE,
     NEXT,
     PREVIOUS,
+}
+
+internal enum class HorizontalChapterSwipeAction {
+    NONE,
+    NEXT,
+    PREVIOUS,
+}
+
+internal fun resolveHorizontalChapterSwipeAction(
+    swipeGesturesEnabled: Boolean,
+    deltaX: Float,
+    thresholdPx: Float,
+    hasPreviousChapter: Boolean,
+    hasNextChapter: Boolean,
+): HorizontalChapterSwipeAction {
+    if (!swipeGesturesEnabled) return HorizontalChapterSwipeAction.NONE
+    if (deltaX > thresholdPx && hasPreviousChapter) return HorizontalChapterSwipeAction.PREVIOUS
+    if (deltaX < -thresholdPx && hasNextChapter) return HorizontalChapterSwipeAction.NEXT
+    return HorizontalChapterSwipeAction.NONE
 }
 
 internal fun resolveVerticalChapterSwipeAction(
