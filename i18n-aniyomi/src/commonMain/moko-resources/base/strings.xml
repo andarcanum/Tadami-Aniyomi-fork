@@ -430,12 +430,14 @@
     <string name="novel_reader_text_align_center">Center</string>
     <string name="novel_reader_text_align_justify">Justify</string>
     <string name="novel_reader_text_align_right">Right</string>
+    <string name="novel_reader_preserve_source_text_align_native">Preserve source text alignment in native reader</string>
+    <string name="novel_reader_preserve_source_text_align_native_summary">Do not force the global text alignment in native mode; keep source alignment where supported</string>
 
     <!-- Navigation -->
     <string name="novel_reader_volume_buttons">Volume button scroll</string>
     <string name="novel_reader_volume_buttons_summary">Use volume buttons to scroll pages</string>
     <string name="novel_reader_swipe_gestures">Swipe gestures</string>
-    <string name="novel_reader_swipe_gestures_summary">Enable swipe gestures for navigation</string>
+    <string name="novel_reader_swipe_gestures_summary">Enable horizontal swipe gestures for navigation</string>
     <string name="novel_reader_vertical_seekbar">Vertical seekbar</string>
     <string name="novel_reader_swipe_to_next">Swipe up to next chapter</string>
     <string name="novel_reader_swipe_to_prev">Swipe down to previous chapter</string>
@@ -444,6 +446,8 @@
     <string name="novel_reader_page_mode_summary">Display content in pages instead of continuous scroll</string>
     <string name="novel_reader_prefer_webview_renderer">Prefer WebView renderer</string>
     <string name="novel_reader_prefer_webview_renderer_summary">Open chapter in WebView by default. Disable to use native renderer.</string>
+    <string name="novel_reader_rich_native_renderer_experimental">Use rich native rendering (experimental)</string>
+    <string name="novel_reader_rich_native_renderer_experimental_summary">Preserve common HTML styles in the native renderer with automatic WebView fallback for unsupported content.</string>
     <string name="novel_reader_auto_scroll">Auto-scroll</string>
     <string name="novel_reader_auto_scroll_interval">Auto-scroll interval (sec)</string>
     <string name="novel_reader_auto_scroll_offset">Auto-scroll offset (px)</string>
@@ -456,6 +460,9 @@
     <string name="novel_reader_chapter_cache_size">Chapter cache usage</string>
     <string name="novel_reader_chapter_cache_size_summary_limited">%1$s • %2$s entries • limit %3$s / %4$s chapters</string>
     <string name="novel_reader_chapter_cache_size_summary_unlimited">%1$s • %2$s entries • unlimited</string>
+
+    <string name="novel_reader_clear_chapter_cache">Clear chapter cache</string>
+    <string name="novel_reader_clear_chapter_cache_summary">Delete all cached read chapters (does not affect downloads)</string>
 
     <!-- Accessibility -->
     <string name="novel_reader_fullscreen">Fullscreen mode</string>

@@ -278,16 +278,22 @@
     <string name="novel_reader_text_align_center">По центру</string>
     <string name="novel_reader_text_align_justify">По ширине</string>
     <string name="novel_reader_text_align_right">По правому краю</string>
+    <string name="novel_reader_preserve_source_text_align_native">Сохранять выравнивание источника в нативном ридере</string>
+    <string name="novel_reader_preserve_source_text_align_native_summary">Не применять глобальное выравнивание в нативном режиме и сохранять выравнивание источника, где поддерживается</string>
 
     <!-- Navigation -->
     <string name="novel_reader_volume_buttons">Прокрутка кнопками громкости</string>
     <string name="novel_reader_volume_buttons_summary">Использовать кнопки громкости для прокрутки страниц</string>
     <string name="novel_reader_swipe_gestures">Свайп жесты</string>
-    <string name="novel_reader_swipe_gestures_summary">Включить свайп жесты для навигации</string>
+    <string name="novel_reader_swipe_gestures_summary">Включить горизонтальные свайпы жестами для навигации</string>
     <string name="novel_reader_page_mode">Постраничный режим</string>
     <string name="novel_reader_page_mode_summary">Отображать содержимое постранично вместо непрерывной прокрутки</string>
     <string name="novel_reader_prefer_webview_renderer">Предпочитать WebView-рендерер</string>
     <string name="novel_reader_prefer_webview_renderer_summary">По умолчанию открывать главу в WebView. Отключите, чтобы вернуться к нативному рендереру.</string>
+    <string name="novel_reader_rich_native_renderer_experimental">Расширенный нативный рендер (экспериментально)</string>
+    <string name="novel_reader_rich_native_renderer_experimental_summary">Сохранять базовые HTML-стили в нативном ридере с автоматическим переходом в WebView для неподдерживаемого содержимого.</string>
+    <string name="novel_reader_clear_chapter_cache">Очистить кэш глав</string>
+    <string name="novel_reader_clear_chapter_cache_summary">Удалить весь кэш прочитанных глав (не влияет на загрузки)</string>
 
     <!-- Accessibility -->
     <string name="novel_reader_fullscreen">Полноэкранный режим</string>

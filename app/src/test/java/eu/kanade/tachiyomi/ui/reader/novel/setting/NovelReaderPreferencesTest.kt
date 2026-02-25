@@ -22,7 +22,9 @@ class NovelReaderPreferencesTest {
     fun `defaults include lnreader parity options`() {
         val prefs = createPrefs()
 
-        prefs.preferWebViewRenderer().get() shouldBe true
+        prefs.preferWebViewRenderer().get() shouldBe false
+        prefs.richNativeRendererExperimental().get() shouldBe true
+        prefs.preserveSourceTextAlignInNative().get() shouldBe true
         prefs.showScrollPercentage().get() shouldBe true
         prefs.showBatteryAndTime().get() shouldBe false
         prefs.verticalSeekbar().get() shouldBe true
@@ -48,6 +50,8 @@ class NovelReaderPreferencesTest {
         prefs.showScrollPercentage().set(false)
         prefs.showBatteryAndTime().set(true)
         prefs.preferWebViewRenderer().set(false)
+        prefs.richNativeRendererExperimental().set(true)
+        prefs.preserveSourceTextAlignInNative().set(false)
         prefs.verticalSeekbar().set(false)
         prefs.swipeToNextChapter().set(true)
         prefs.swipeToPrevChapter().set(true)
@@ -69,6 +73,8 @@ class NovelReaderPreferencesTest {
         override?.showScrollPercentage shouldBe false
         override?.showBatteryAndTime shouldBe true
         override?.preferWebViewRenderer shouldBe false
+        override?.richNativeRendererExperimental shouldBe true
+        override?.preserveSourceTextAlignInNative shouldBe false
         override?.verticalSeekbar shouldBe false
         override?.swipeToNextChapter shouldBe true
         override?.swipeToPrevChapter shouldBe true
@@ -91,6 +97,8 @@ class NovelReaderPreferencesTest {
         prefs.showScrollPercentage().set(true)
         prefs.showBatteryAndTime().set(false)
         prefs.preferWebViewRenderer().set(true)
+        prefs.richNativeRendererExperimental().set(false)
+        prefs.preserveSourceTextAlignInNative().set(true)
         prefs.verticalSeekbar().set(true)
         prefs.swipeToNextChapter().set(false)
         prefs.swipeToPrevChapter().set(false)
@@ -112,6 +120,8 @@ class NovelReaderPreferencesTest {
                 showScrollPercentage = false,
                 showBatteryAndTime = true,
                 preferWebViewRenderer = false,
+                richNativeRendererExperimental = true,
+                preserveSourceTextAlignInNative = false,
                 verticalSeekbar = false,
                 swipeToNextChapter = true,
                 swipeToPrevChapter = true,
@@ -132,6 +142,8 @@ class NovelReaderPreferencesTest {
         settings.showScrollPercentage shouldBe false
         settings.showBatteryAndTime shouldBe true
         settings.preferWebViewRenderer shouldBe false
+        settings.richNativeRendererExperimental shouldBe true
+        settings.preserveSourceTextAlignInNative shouldBe false
         settings.verticalSeekbar shouldBe false
         settings.swipeToNextChapter shouldBe true
         settings.swipeToPrevChapter shouldBe true

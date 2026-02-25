@@ -166,6 +166,18 @@ private fun GeneralTab(
             },
         )
         SwitchPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_rich_native_renderer_experimental),
+            subtitle = stringResource(AYMR.strings.novel_reader_rich_native_renderer_experimental_summary),
+            checked = settings.richNativeRendererExperimental,
+            onCheckedChanged = {
+                update(
+                    it,
+                    { o, v -> o.copy(richNativeRendererExperimental = v) },
+                    { preferences.richNativeRendererExperimental().set(it) },
+                )
+            },
+        )
+        SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_volume_buttons),
             subtitle = stringResource(AYMR.strings.novel_reader_volume_buttons_summary),
             checked = settings.useVolumeButtons,

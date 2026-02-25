@@ -20,6 +20,7 @@ data class NovelReaderSettings(
     val lineHeight: Float,
     val margin: Int,
     val textAlign: TextAlign,
+    val preserveSourceTextAlignInNative: Boolean,
     val fontFamily: String,
 
     // Theme
@@ -33,6 +34,7 @@ data class NovelReaderSettings(
     val swipeGestures: Boolean,
     val pageReader: Boolean,
     val preferWebViewRenderer: Boolean,
+    val richNativeRendererExperimental: Boolean,
     val verticalSeekbar: Boolean,
     val swipeToNextChapter: Boolean,
     val swipeToPrevChapter: Boolean,
@@ -80,6 +82,7 @@ data class NovelReaderOverride(
     val lineHeight: Float? = null,
     val margin: Int? = null,
     val textAlign: TextAlign? = null,
+    val preserveSourceTextAlignInNative: Boolean? = null,
     val fontFamily: String? = null,
 
     // Theme
@@ -93,6 +96,7 @@ data class NovelReaderOverride(
     val swipeGestures: Boolean? = null,
     val pageReader: Boolean? = null,
     val preferWebViewRenderer: Boolean? = null,
+    val richNativeRendererExperimental: Boolean? = null,
     val verticalSeekbar: Boolean? = null,
     val swipeToNextChapter: Boolean? = null,
     val swipeToPrevChapter: Boolean? = null,
@@ -150,7 +154,13 @@ class NovelReaderPreferences(
 
     fun pageReader() = preferenceStore.getBoolean("novel_reader_page_mode", false)
 
-    fun preferWebViewRenderer() = preferenceStore.getBoolean("novel_reader_prefer_webview_renderer", true)
+    fun preferWebViewRenderer() = preferenceStore.getBoolean("novel_reader_prefer_webview_renderer", false)
+
+    fun richNativeRendererExperimental() =
+        preferenceStore.getBoolean("novel_reader_rich_native_renderer_experimental", true)
+
+    fun preserveSourceTextAlignInNative() =
+        preferenceStore.getBoolean("novel_reader_preserve_source_text_align_in_native", true)
 
     fun verticalSeekbar() = preferenceStore.getBoolean("novel_reader_vertical_seekbar", true)
 
@@ -228,6 +238,7 @@ class NovelReaderPreferences(
                 lineHeight = lineHeight().get(),
                 margin = margin().get(),
                 textAlign = textAlign().get(),
+                preserveSourceTextAlignInNative = preserveSourceTextAlignInNative().get(),
                 fontFamily = fontFamily().get(),
                 theme = theme().get(),
                 backgroundColor = backgroundColor().get(),
@@ -237,6 +248,7 @@ class NovelReaderPreferences(
                 swipeGestures = swipeGestures().get(),
                 pageReader = pageReader().get(),
                 preferWebViewRenderer = preferWebViewRenderer().get(),
+                richNativeRendererExperimental = richNativeRendererExperimental().get(),
                 verticalSeekbar = verticalSeekbar().get(),
                 swipeToNextChapter = swipeToNextChapter().get(),
                 swipeToPrevChapter = swipeToPrevChapter().get(),
@@ -271,6 +283,8 @@ class NovelReaderPreferences(
             lineHeight = override?.lineHeight ?: lineHeight().get(),
             margin = override?.margin ?: margin().get(),
             textAlign = override?.textAlign ?: textAlign().get(),
+            preserveSourceTextAlignInNative =
+            override?.preserveSourceTextAlignInNative ?: preserveSourceTextAlignInNative().get(),
             fontFamily = override?.fontFamily ?: fontFamily().get(),
             theme = override?.theme ?: theme().get(),
             backgroundColor = override?.backgroundColor ?: backgroundColor().get(),
@@ -280,6 +294,8 @@ class NovelReaderPreferences(
             swipeGestures = override?.swipeGestures ?: swipeGestures().get(),
             pageReader = override?.pageReader ?: pageReader().get(),
             preferWebViewRenderer = override?.preferWebViewRenderer ?: preferWebViewRenderer().get(),
+            richNativeRendererExperimental =
+            override?.richNativeRendererExperimental ?: richNativeRendererExperimental().get(),
             verticalSeekbar = override?.verticalSeekbar ?: verticalSeekbar().get(),
             swipeToNextChapter = override?.swipeToNextChapter ?: swipeToNextChapter().get(),
             swipeToPrevChapter = override?.swipeToPrevChapter ?: swipeToPrevChapter().get(),
@@ -306,6 +322,7 @@ class NovelReaderPreferences(
             lineHeight().changes(),
             margin().changes(),
             textAlign().changes(),
+            preserveSourceTextAlignInNative().changes(),
             fontFamily().changes(),
         ) { values: Array<Any?> ->
             DisplaySettings(
@@ -313,7 +330,8 @@ class NovelReaderPreferences(
                 values[1] as Float,
                 values[2] as Int,
                 values[3] as TextAlign,
-                values[4] as String,
+                values[4] as Boolean,
+                values[5] as String,
             )
         }
 
@@ -336,6 +354,7 @@ class NovelReaderPreferences(
             swipeGestures().changes(),
             pageReader().changes(),
             preferWebViewRenderer().changes(),
+            richNativeRendererExperimental().changes(),
             verticalSeekbar().changes(),
             swipeToNextChapter().changes(),
             swipeToPrevChapter().changes(),
@@ -355,9 +374,10 @@ class NovelReaderPreferences(
                 values[6] as Boolean,
                 values[7] as Boolean,
                 values[8] as Boolean,
-                values[9] as Int,
+                values[9] as Boolean,
                 values[10] as Int,
-                values[11] as Boolean,
+                values[11] as Int,
+                values[12] as Boolean,
             )
         }
 
@@ -405,6 +425,8 @@ class NovelReaderPreferences(
                 lineHeight = override?.lineHeight ?: display.lineHeight,
                 margin = override?.margin ?: display.margin,
                 textAlign = override?.textAlign ?: display.textAlign,
+                preserveSourceTextAlignInNative =
+                override?.preserveSourceTextAlignInNative ?: display.preserveSourceTextAlignInNative,
                 fontFamily = override?.fontFamily ?: display.fontFamily,
                 theme = override?.theme ?: theme.theme,
                 backgroundColor = override?.backgroundColor ?: theme.backgroundColor,
@@ -414,6 +436,8 @@ class NovelReaderPreferences(
                 swipeGestures = override?.swipeGestures ?: navigation.swipeGestures,
                 pageReader = override?.pageReader ?: navigation.pageReader,
                 preferWebViewRenderer = override?.preferWebViewRenderer ?: navigation.preferWebViewRenderer,
+                richNativeRendererExperimental =
+                override?.richNativeRendererExperimental ?: navigation.richNativeRendererExperimental,
                 verticalSeekbar = override?.verticalSeekbar ?: navigation.verticalSeekbar,
                 swipeToNextChapter = override?.swipeToNextChapter ?: navigation.swipeToNextChapter,
                 swipeToPrevChapter = override?.swipeToPrevChapter ?: navigation.swipeToPrevChapter,
@@ -439,6 +463,7 @@ class NovelReaderPreferences(
         val lineHeight: Float,
         val margin: Int,
         val textAlign: TextAlign,
+        val preserveSourceTextAlignInNative: Boolean,
         val fontFamily: String,
     )
 
@@ -454,6 +479,7 @@ class NovelReaderPreferences(
         val swipeGestures: Boolean,
         val pageReader: Boolean,
         val preferWebViewRenderer: Boolean,
+        val richNativeRendererExperimental: Boolean,
         val verticalSeekbar: Boolean,
         val swipeToNextChapter: Boolean,
         val swipeToPrevChapter: Boolean,
