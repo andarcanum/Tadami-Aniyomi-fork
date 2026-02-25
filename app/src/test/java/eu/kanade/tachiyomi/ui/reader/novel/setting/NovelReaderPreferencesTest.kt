@@ -32,6 +32,7 @@ class NovelReaderPreferencesTest {
         prefs.autoScroll().get() shouldBe false
         prefs.autoScrollInterval().get() shouldBe 10
         prefs.autoScrollOffset().get() shouldBe 0
+        prefs.prefetchNextChapter().get() shouldBe false
         prefs.bionicReading().get() shouldBe false
         prefs.swipeGestures().get() shouldBe false
         prefs.customThemes().get() shouldBe emptyList()
@@ -52,6 +53,7 @@ class NovelReaderPreferencesTest {
         prefs.autoScroll().set(true)
         prefs.autoScrollInterval().set(7)
         prefs.autoScrollOffset().set(480)
+        prefs.prefetchNextChapter().set(true)
         prefs.bionicReading().set(true)
         prefs.customThemes().set(
             listOf(
@@ -72,6 +74,7 @@ class NovelReaderPreferencesTest {
         override?.autoScroll shouldBe true
         override?.autoScrollInterval shouldBe 7
         override?.autoScrollOffset shouldBe 480
+        override?.prefetchNextChapter shouldBe true
         override?.bionicReading shouldBe true
         override?.customThemes shouldBe listOf(
             NovelReaderColorTheme(backgroundColor = "#111111", textColor = "#eeeeee"),
@@ -93,6 +96,7 @@ class NovelReaderPreferencesTest {
         prefs.autoScroll().set(false)
         prefs.autoScrollInterval().set(10)
         prefs.autoScrollOffset().set(0)
+        prefs.prefetchNextChapter().set(false)
         prefs.bionicReading().set(false)
         prefs.customThemes().set(
             listOf(
@@ -113,6 +117,7 @@ class NovelReaderPreferencesTest {
                 autoScroll = true,
                 autoScrollInterval = 3,
                 autoScrollOffset = 240,
+                prefetchNextChapter = true,
                 bionicReading = true,
                 customThemes = listOf(
                     NovelReaderColorTheme(backgroundColor = "#000000", textColor = "#ffffff"),
@@ -132,6 +137,7 @@ class NovelReaderPreferencesTest {
         settings.autoScroll shouldBe true
         settings.autoScrollInterval shouldBe 3
         settings.autoScrollOffset shouldBe 240
+        settings.prefetchNextChapter shouldBe true
         settings.bionicReading shouldBe true
         settings.customThemes shouldBe listOf(
             NovelReaderColorTheme(backgroundColor = "#000000", textColor = "#ffffff"),

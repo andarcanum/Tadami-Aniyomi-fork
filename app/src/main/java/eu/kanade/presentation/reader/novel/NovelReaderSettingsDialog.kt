@@ -248,6 +248,18 @@ private fun GeneralTab(
                 update(it.toInt(), { o, v -> o.copy(autoScrollOffset = v) }, { preferences.autoScrollOffset().set(it) })
             },
         )
+        SwitchPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_prefetch_next_chapter),
+            subtitle = stringResource(AYMR.strings.novel_reader_prefetch_next_chapter_summary),
+            checked = settings.prefetchNextChapter,
+            onCheckedChanged = {
+                update(
+                    it,
+                    { o, v -> o.copy(prefetchNextChapter = v) },
+                    { preferences.prefetchNextChapter().set(it) },
+                )
+            },
+        )
 
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_fullscreen),

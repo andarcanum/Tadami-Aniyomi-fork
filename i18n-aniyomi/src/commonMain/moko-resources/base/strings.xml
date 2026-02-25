@@ -447,6 +447,8 @@
     <string name="novel_reader_auto_scroll">Auto-scroll</string>
     <string name="novel_reader_auto_scroll_interval">Auto-scroll interval (sec)</string>
     <string name="novel_reader_auto_scroll_offset">Auto-scroll offset (px)</string>
+    <string name="novel_reader_prefetch_next_chapter">Prefetch next chapter</string>
+    <string name="novel_reader_prefetch_next_chapter_summary">Silently prefetch next chapter after reaching 50% progress</string>
 
     <!-- Accessibility -->
     <string name="novel_reader_fullscreen">Fullscreen mode</string>

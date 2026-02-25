@@ -128,6 +128,7 @@ class NovelEpubStyleBuilderTest {
             autoScroll = false,
             autoScrollInterval = 10,
             autoScrollOffset = 0,
+            prefetchNextChapter = false,
             fullScreenMode = true,
             keepScreenOn = false,
             showScrollPercentage = true,

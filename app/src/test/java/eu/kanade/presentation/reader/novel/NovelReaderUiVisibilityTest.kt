@@ -519,4 +519,32 @@ class NovelReaderUiVisibilityTest {
         assertTrue(shouldEnableJavaScriptInReaderWebView(pluginRequestsJavaScript = false))
         assertTrue(shouldEnableJavaScriptInReaderWebView(pluginRequestsJavaScript = true))
     }
+
+    @Test
+    fun `initial webview html injects reader and bootstrap styles into head`() {
+        val html = "<html><head><title>t</title></head><body><p>Hello</p></body></html>"
+
+        val result = buildInitialWebReaderHtml(
+            rawHtml = html,
+            readerCss = "body { color: red; }",
+        )
+
+        assertTrue(result.contains("__an_reader_style__"))
+        assertTrue(result.contains("__an_reader_bootstrap_style__"))
+        assertTrue(result.indexOf("__an_reader_style__") < result.indexOf("</head>"))
+        assertTrue(result.contains("<p>Hello</p>"))
+    }
+
+    @Test
+    fun `initial webview html escapes closing style sequences in css`() {
+        val html = "<html><head></head><body></body></html>"
+
+        val result = buildInitialWebReaderHtml(
+            rawHtml = html,
+            readerCss = "body { color: red; } </style><script>alert(1)</script>",
+        )
+
+        assertFalse(result.contains("</style><script>alert(1)</script>"))
+        assertTrue(result.contains("<script>alert(1)</script>"))
+    }
 }

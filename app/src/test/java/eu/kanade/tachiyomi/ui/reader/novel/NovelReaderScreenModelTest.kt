@@ -44,6 +44,7 @@ import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.source.novel.model.StubNovelSource
 import tachiyomi.domain.source.novel.service.NovelSourceManager
+import java.util.Collections
 
 class NovelReaderScreenModelTest {
     private val activeScreenModels = mutableListOf<NovelReaderScreenModel>()
@@ -52,6 +53,7 @@ class NovelReaderScreenModelTest {
     fun tearDown() {
         activeScreenModels.forEach { it.onDispose() }
         activeScreenModels.clear()
+        NovelReaderChapterPrefetchCache.clear()
     }
 
     companion object {
@@ -1162,19 +1164,19 @@ class NovelReaderScreenModelTest {
     @Test
     fun `computes previous and next chapter ids from source order`() {
         runBlocking {
-            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val novel = Novel.create().copy(id = 991001L, source = 991010L, title = "Novel")
             val chapter1 = NovelChapter.create().copy(
-                id = 1L,
-                novelId = 1L,
+                id = 991101L,
+                novelId = novel.id,
                 name = "Chapter 1",
-                url = "https://example.org/ch1",
+                url = "https://example.org/ch1-prefetch-threshold",
                 sourceOrder = 0L,
             )
             val chapter2 = NovelChapter.create().copy(
-                id = 2L,
-                novelId = 1L,
+                id = 991102L,
+                novelId = novel.id,
                 name = "Chapter 2",
-                url = "https://example.org/ch2",
+                url = "https://example.org/ch2-prefetch-threshold",
                 sourceOrder = 1L,
             )
             val chapter3 = NovelChapter.create().copy(
@@ -1207,6 +1209,75 @@ class NovelReaderScreenModelTest {
             state.previousChapterId shouldBe chapter1.id
             state.nextChapterId shouldBe chapter3.id
             chapterRepo.lastApplyScanlatorFilter shouldBe true
+        }
+    }
+
+    @Test
+    fun `prefetches next chapter after reaching 50 percent progress when enabled`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 991001L, source = 991010L, title = "Novel")
+            val chapter1 = NovelChapter.create().copy(
+                id = 991101L,
+                novelId = novel.id,
+                name = "Chapter 1",
+                url = "https://example.org/ch1-prefetch-threshold",
+                sourceOrder = 0L,
+            )
+            val chapter2 = NovelChapter.create().copy(
+                id = 991102L,
+                novelId = novel.id,
+                name = "Chapter 2",
+                url = "https://example.org/ch2-prefetch-threshold",
+                sourceOrder = 1L,
+            )
+            val chapterRepo = FakeNovelChapterRepository(chapter1, listOf(chapter1, chapter2))
+            val requestedUrls = Collections.synchronizedList(mutableListOf<String>())
+            val prefs = createNovelReaderPreferences().also {
+                it.prefetchNextChapter().set(true)
+            }
+            prefs.prefetchNextChapter().get() shouldBe true
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter1.id,
+                novelChapterRepository = chapterRepo,
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(
+                    sourceId = novel.source,
+                    chapterHtml = "<p>fallback</p>",
+                    chapterHtmlByUrl = mapOf(
+                        chapter1.url to "<p>One</p>",
+                        chapter2.url to "<p>Two</p>",
+                    ),
+                    requestedChapterUrls = requestedUrls,
+                ),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = prefs,
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+            screenModel.state.value
+                .shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+                .readerSettings
+                .prefetchNextChapter shouldBe true
+
+            requestedUrls.size shouldBe 1
+            requestedUrls.contains(chapter2.url) shouldBe false
+
+            screenModel.updateReadingProgress(currentIndex = 4, totalItems = 10)
+            yield()
+
+            withTimeout(1_000) {
+                while (!requestedUrls.contains(chapter2.url)) {
+                    yield()
+                }
+            }
+            requestedUrls.contains(chapter1.url) shouldBe true
+            requestedUrls.contains(chapter2.url) shouldBe true
         }
     }
 
@@ -1309,7 +1380,7 @@ class NovelReaderScreenModelTest {
 
     private fun createNovelReaderPreferences(): NovelReaderPreferences {
         return NovelReaderPreferences(
-            preferenceStore = InMemoryPreferenceStore(),
+            preferenceStore = ReactivePreferenceStore(),
             json = Json { encodeDefaults = true },
         )
     }
@@ -1421,6 +1492,8 @@ class NovelReaderScreenModelTest {
     private class FakeNovelSourceManager(
         private val sourceId: Long,
         private val chapterHtml: String,
+        private val chapterHtmlByUrl: Map<String, String> = emptyMap(),
+        private val requestedChapterUrls: MutableList<String>? = null,
         private val chapterWebUrlResolver: ((String, String?) -> String?)? = null,
         private val onGetChapterText: (() -> Unit)? = null,
     ) : NovelSourceManager {
@@ -1432,6 +1505,8 @@ class NovelReaderScreenModelTest {
                 FakeNovelSource(
                     id = sourceId,
                     chapterHtml = chapterHtml,
+                    chapterHtmlByUrl = chapterHtmlByUrl,
+                    requestedChapterUrls = requestedChapterUrls,
                     chapterWebUrlResolver = chapterWebUrlResolver,
                     onGetChapterText = onGetChapterText,
                 )
@@ -1451,6 +1526,8 @@ class NovelReaderScreenModelTest {
     private class FakeNovelSource(
         override val id: Long,
         private val chapterHtml: String,
+        private val chapterHtmlByUrl: Map<String, String> = emptyMap(),
+        private val requestedChapterUrls: MutableList<String>? = null,
         private val chapterWebUrlResolver: ((String, String?) -> String?)? = null,
         private val onGetChapterText: (() -> Unit)? = null,
     ) : NovelSource, NovelWebUrlSource {
@@ -1458,7 +1535,8 @@ class NovelReaderScreenModelTest {
 
         override suspend fun getChapterText(chapter: SNovelChapter): String {
             onGetChapterText?.invoke()
-            return chapterHtml
+            requestedChapterUrls?.add(chapter.url)
+            return chapterHtmlByUrl[chapter.url] ?: chapterHtml
         }
 
         override suspend fun getNovelWebUrl(novelPath: String): String? = null

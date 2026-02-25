@@ -1065,6 +1065,8 @@
     <string name="novel_reader_auto_scroll">Автопрокрутка</string>
     <string name="novel_reader_auto_scroll_interval">Интервал автопрокрутки (сек)</string>
     <string name="novel_reader_auto_scroll_offset">Смещение автопрокрутки (px)</string>
+    <string name="novel_reader_prefetch_next_chapter">Предзагрузка следующей главы</string>
+    <string name="novel_reader_prefetch_next_chapter_summary">Тихо предзагружать следующую главу после достижения 50% прогресса</string>
     <string name="novel_reader_show_scroll_percentage">Показывать процент чтения</string>
     <string name="novel_reader_show_battery_time">Показывать батарею и время</string>
     <string name="novel_reader_bionic_reading">Бионическое чтение</string>

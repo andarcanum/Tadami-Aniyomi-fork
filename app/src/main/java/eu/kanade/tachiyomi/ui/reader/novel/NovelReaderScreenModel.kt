@@ -45,6 +45,7 @@ import tachiyomi.domain.source.novel.service.NovelSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.Date
+import java.util.LinkedHashMap
 
 class NovelReaderScreenModel(
     private val chapterId: Long,
@@ -75,6 +76,8 @@ class NovelReaderScreenModel(
     private var initialProgressIndex: Int = 0
     private var hasProgressChanged: Boolean = false
     private var chapterReadStartTimeMs: Long = System.currentTimeMillis()
+    private var nextChapterPrefetchJob: Job? = null
+    private var hasTriggeredNextChapterPrefetch: Boolean = false
     private val structuredJson = Json {
         ignoreUnknownKeys = true
         isLenient = true
@@ -108,6 +111,7 @@ class NovelReaderScreenModel(
         val html = try {
             withContext(Dispatchers.IO) {
                 novelDownloadManager.getDownloadedChapterText(novel, chapter.id)
+                    ?: NovelReaderChapterPrefetchCache.get(chapter.id)
                     ?: source.getChapterText(chapter.toSNovelChapter())
             }
         } catch (e: Exception) {
@@ -137,6 +141,7 @@ class NovelReaderScreenModel(
             ?: savedWebProgress
             ?: chapter.lastPageRead.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
         hasProgressChanged = false
+        hasTriggeredNextChapterPrefetch = false
         customCss = pluginPackage?.customCss?.toString(Charsets.UTF_8)
         customJs = pluginPackage?.customJs?.toString(Charsets.UTF_8)
         pluginSite = pluginPackage?.entry?.site ?: sourceSiteUrl
@@ -177,6 +182,35 @@ class NovelReaderScreenModel(
 
     private fun setError(message: String?) {
         mutableState.value = State.Error(message)
+    }
+
+    private fun scheduleNextChapterPrefetch(
+        novel: Novel,
+        currentChapter: NovelChapter,
+        source: eu.kanade.tachiyomi.novelsource.NovelSource,
+    ) {
+        val nextChapter = chapterOrderList
+            .indexOfFirst { it.id == currentChapter.id }
+            .takeIf { it >= 0 }
+            ?.let { chapterOrderList.getOrNull(it + 1) }
+            ?: return
+
+        if (NovelReaderChapterPrefetchCache.contains(nextChapter.id)) {
+            return
+        }
+
+        nextChapterPrefetchJob?.cancel()
+        nextChapterPrefetchJob = screenModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                if (novelDownloadManager.getDownloadedChapterText(novel, nextChapter.id) != null) return@runCatching
+                if (NovelReaderChapterPrefetchCache.contains(nextChapter.id)) return@runCatching
+
+                val nextHtml = source.getChapterText(nextChapter.toSNovelChapter())
+                NovelReaderChapterPrefetchCache.put(nextChapter.id, nextHtml)
+            }.onFailure { error ->
+                logcat(LogPriority.WARN, error) { "Failed to prefetch next novel chapter" }
+            }
+        }
     }
 
     private fun updateContent(settings: NovelReaderSettings) {
@@ -316,6 +350,11 @@ class NovelReaderScreenModel(
         val shouldPersistRead = (lastSavedRead == true) || chapter.read || reachedReadThreshold
         val newProgress = if (shouldPersistRead) 0L else resolvedPersistedProgress
 
+        maybePrefetchNextChapterOnProgress(
+            currentIndex = currentIndex,
+            totalItems = totalItems,
+        )
+
         if (lastSavedRead == shouldPersistRead && lastSavedProgress == newProgress) {
             return
         }
@@ -352,6 +391,40 @@ class NovelReaderScreenModel(
             val now = System.currentTimeMillis()
             saveHistorySnapshot(chapter.id, now - chapterReadStartTimeMs)
             chapterReadStartTimeMs = now
+        }
+    }
+
+    private fun maybePrefetchNextChapterOnProgress(
+        currentIndex: Int,
+        totalItems: Int,
+    ) {
+        if (hasTriggeredNextChapterPrefetch) return
+        if (!hasReachedNextChapterPrefetchThreshold(currentIndex, totalItems)) return
+
+        val state = mutableState.value as? State.Success ?: return
+        if (!state.readerSettings.prefetchNextChapter) return
+
+        val novel = currentNovel ?: return
+        val chapter = currentChapter ?: return
+        val source = sourceManager.get(novel.source) ?: return
+
+        hasTriggeredNextChapterPrefetch = true
+        scheduleNextChapterPrefetch(
+            novel = novel,
+            currentChapter = chapter,
+            source = source,
+        )
+    }
+
+    private fun hasReachedNextChapterPrefetchThreshold(
+        currentIndex: Int,
+        totalItems: Int,
+    ): Boolean {
+        if (totalItems <= 0 || currentIndex < 0) return false
+        return if (totalItems == 100) {
+            currentIndex >= 50
+        } else {
+            totalItems > 1 && ((currentIndex + 1).toFloat() / totalItems.toFloat()) >= 0.5f
         }
     }
 
@@ -1222,5 +1295,39 @@ class NovelReaderScreenModel(
             "image",
             "text",
         )
+    }
+}
+
+internal object NovelReaderChapterPrefetchCache {
+    private const val MAX_ENTRIES = 4
+
+    private val cache = object : LinkedHashMap<Long, String>(MAX_ENTRIES, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, String>?): Boolean {
+            return size > MAX_ENTRIES
+        }
+    }
+
+    fun get(chapterId: Long): String? {
+        return synchronized(cache) {
+            cache[chapterId]
+        }
+    }
+
+    fun put(chapterId: Long, html: String) {
+        synchronized(cache) {
+            cache[chapterId] = html
+        }
+    }
+
+    fun contains(chapterId: Long): Boolean {
+        return synchronized(cache) {
+            cache.containsKey(chapterId)
+        }
+    }
+
+    fun clear() {
+        synchronized(cache) {
+            cache.clear()
+        }
     }
 }

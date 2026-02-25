@@ -287,6 +287,11 @@ object SettingsNovelReaderScreen : SearchableSettings {
                         true
                     },
                 ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = prefs.prefetchNextChapter(),
+                    title = stringResource(AYMR.strings.novel_reader_prefetch_next_chapter),
+                    subtitle = stringResource(AYMR.strings.novel_reader_prefetch_next_chapter_summary),
+                ),
             ),
         )
     }
