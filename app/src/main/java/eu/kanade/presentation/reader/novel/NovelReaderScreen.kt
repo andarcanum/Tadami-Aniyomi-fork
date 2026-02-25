@@ -79,6 +79,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -2449,21 +2450,46 @@ private fun SystemUIController(
     showReaderUi: Boolean,
 ) {
     val view = LocalView.current
-    DisposableEffect(view, fullScreenMode, showReaderUi) {
+    val capturedSystemBarsState = remember(view) { mutableStateOf<ReaderSystemBarsState?>(null) }
+    DisposableEffect(view) {
+        val activity = view.context.findActivity()
+        val window = activity?.window
+        val insetsController = if (window != null) {
+            WindowCompat.getInsetsController(window, view)
+        } else {
+            null
+        }
+        if (capturedSystemBarsState.value == null && insetsController != null) {
+            capturedSystemBarsState.value = insetsController.captureReaderSystemBarsState()
+        }
         onDispose {
             val activity = view.context.findActivity() ?: return@onDispose
             val window = activity.window
             val insetsController = WindowCompat.getInsetsController(window, view)
+            val restoredState = resolveReaderExitSystemBarsState(
+                captured = capturedSystemBarsState.value,
+                current = insetsController.captureReaderSystemBarsState(),
+            )
             if (shouldRestoreSystemBarsOnDispose(fullScreenMode)) {
                 insetsController.show(WindowInsetsCompat.Type.systemBars())
             }
+            insetsController.restoreReaderSystemBarsState(restoredState)
             window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
-    LaunchedEffect(fullScreenMode, keepScreenOn, showReaderUi) {
-        val activity = view.context.findActivity() ?: return@LaunchedEffect
+    SideEffect {
+        val activity = view.context.findActivity() ?: return@SideEffect
         val window = activity.window
         val insetsController = WindowCompat.getInsetsController(window, view)
+        if (capturedSystemBarsState.value == null) {
+            capturedSystemBarsState.value = insetsController.captureReaderSystemBarsState()
+        }
+        val baseSystemBarsState = capturedSystemBarsState.value ?: insetsController.captureReaderSystemBarsState()
+        val activeSystemBarsState = resolveActiveReaderSystemBarsState(
+            showReaderUi = showReaderUi,
+            fullScreenMode = fullScreenMode,
+            base = baseSystemBarsState,
+        )
 
         // Keep Screen On
         if (keepScreenOn) {
@@ -2472,15 +2498,57 @@ private fun SystemUIController(
             window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
 
+        insetsController.restoreReaderSystemBarsState(activeSystemBarsState)
+
         // Fullscreen Mode
         if (shouldHideSystemBars(fullScreenMode = fullScreenMode, showReaderUi = showReaderUi)) {
             insetsController.hide(WindowInsetsCompat.Type.systemBars())
-            insetsController.systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         } else {
             insetsController.show(WindowInsetsCompat.Type.systemBars())
         }
     }
+}
+
+internal data class ReaderSystemBarsState(
+    val isLightStatusBars: Boolean,
+    val isLightNavigationBars: Boolean,
+    val systemBarsBehavior: Int,
+)
+
+internal fun resolveReaderExitSystemBarsState(
+    captured: ReaderSystemBarsState?,
+    current: ReaderSystemBarsState,
+): ReaderSystemBarsState {
+    return captured ?: current
+}
+
+internal fun resolveActiveReaderSystemBarsState(
+    showReaderUi: Boolean,
+    fullScreenMode: Boolean,
+    base: ReaderSystemBarsState,
+): ReaderSystemBarsState {
+    if (!fullScreenMode || showReaderUi) return base
+    return base.copy(
+        isLightStatusBars = false,
+        isLightNavigationBars = false,
+        systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE,
+    )
+}
+
+private fun WindowInsetsControllerCompat.captureReaderSystemBarsState(): ReaderSystemBarsState {
+    return ReaderSystemBarsState(
+        isLightStatusBars = isAppearanceLightStatusBars,
+        isLightNavigationBars = isAppearanceLightNavigationBars,
+        systemBarsBehavior = systemBarsBehavior,
+    )
+}
+
+private fun WindowInsetsControllerCompat.restoreReaderSystemBarsState(
+    state: ReaderSystemBarsState,
+) {
+    isAppearanceLightStatusBars = state.isLightStatusBars
+    isAppearanceLightNavigationBars = state.isLightNavigationBars
+    systemBarsBehavior = state.systemBarsBehavior
 }
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
