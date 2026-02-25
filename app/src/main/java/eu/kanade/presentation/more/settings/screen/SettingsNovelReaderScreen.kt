@@ -34,9 +34,9 @@ import eu.kanade.presentation.more.settings.widget.BasePreferenceWidget
 import eu.kanade.presentation.more.settings.widget.PrefsHorizontalPadding
 import eu.kanade.presentation.reader.novel.novelReaderFonts
 import eu.kanade.presentation.reader.novel.novelReaderPresetThemes
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderChapterDiskCache
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderChapterDiskCacheStore
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign

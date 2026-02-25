@@ -1,9 +1,9 @@
 package eu.kanade.tachiyomi.ui.reader.novel
 
 import android.app.Application
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.ByteArrayInputStream
@@ -86,7 +86,7 @@ internal class NovelReaderChapterDiskCache(
         synchronized(lock) {
             ensureDirectory()
             val file = fileFor(chapterId)
-            val tempFile = File(directory, "${chapterId}.tmp")
+            val tempFile = File(directory, "$chapterId.tmp")
             runCatching {
                 tempFile.outputStream().buffered().use { output ->
                     output.write(compressed)
