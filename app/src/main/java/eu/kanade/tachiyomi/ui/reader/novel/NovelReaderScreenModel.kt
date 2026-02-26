@@ -10,15 +10,31 @@ import eu.kanade.tachiyomi.extension.novel.runtime.resolveUrl
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelSiteSource
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderOverride
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
+import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptModifiers
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptResolver
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationCacheEntry
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationParams
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import eu.kanade.tachiyomi.util.system.isNightMode
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
@@ -58,6 +74,16 @@ class NovelReaderScreenModel(
     private val novelReaderPreferences: NovelReaderPreferences = Injekt.get(),
     private val eventBus: AchievementEventBus? = runCatching { Injekt.get<AchievementEventBus>() }.getOrNull(),
     private val isSystemDark: () -> Boolean = { Injekt.get<Application>().isNightMode() },
+    private val geminiTranslationService: GeminiTranslationService = run {
+        val app = Injekt.get<Application>()
+        val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
+        val json = Injekt.get<Json>()
+        GeminiTranslationService(
+            client = networkHelper.client,
+            json = json,
+            promptResolver = GeminiPromptResolver(app),
+        )
+    },
 ) : StateScreenModel<NovelReaderScreenModel.State>(State.Loading) {
 
     private var settingsJob: Job? = null
@@ -79,6 +105,13 @@ class NovelReaderScreenModel(
     private var chapterReadStartTimeMs: Long = System.currentTimeMillis()
     private var nextChapterPrefetchJob: Job? = null
     private var hasTriggeredNextChapterPrefetch: Boolean = false
+    private var geminiTranslationJob: Job? = null
+    private var geminiTranslatedByIndex: Map<Int, String> = emptyMap()
+    private var isGeminiTranslating: Boolean = false
+    private var geminiTranslationProgress: Int = 0
+    private var isGeminiTranslationVisible: Boolean = false
+    private var hasGeminiTranslationCache: Boolean = false
+    private var geminiLogs: List<String> = emptyList()
     private val structuredJson = Json {
         ignoreUnknownKeys = true
         isLenient = true
@@ -147,6 +180,14 @@ class NovelReaderScreenModel(
         parsedContentBlocks = null
         parsedTextBlocks = null
         parsedRichContentResult = null
+        geminiTranslationJob?.cancel()
+        geminiTranslationJob = null
+        geminiTranslatedByIndex = emptyMap()
+        isGeminiTranslating = false
+        geminiTranslationProgress = 0
+        isGeminiTranslationVisible = false
+        hasGeminiTranslationCache = false
+        geminiLogs = emptyList()
         lastSavedProgress = chapter.lastPageRead
         lastSavedRead = chapter.read
         val savedNativeProgress = decodeNativeScrollProgress(chapter.lastPageRead)
@@ -175,6 +216,10 @@ class NovelReaderScreenModel(
         )
         chapterReadStartTimeMs = System.currentTimeMillis()
         val initialSettings = novelReaderPreferences.resolveSettings(novel.source)
+        restoreGeminiTranslationFromCache(
+            chapterId = chapter.id,
+            settings = initialSettings,
+        )
 
         settingsJob?.cancel()
         settingsJob = screenModelScope.launch {
@@ -236,6 +281,16 @@ class NovelReaderScreenModel(
         val html = rawHtml ?: return
         val novel = currentNovel ?: return
         val chapter = currentChapter ?: return
+        if (!settings.geminiEnabled && isGeminiTranslating) {
+            geminiTranslationJob?.cancel()
+            geminiTranslationJob = null
+            isGeminiTranslating = false
+            isGeminiTranslationVisible = false
+            geminiTranslationProgress = 0
+            addGeminiLog("⛔ Gemini переводчик отключен в настройках")
+        }
+        val geminiVisibleInUi = settings.geminiEnabled && isGeminiTranslationVisible
+        val geminiCacheAvailableInUi = settings.geminiEnabled && hasGeminiTranslationCache
         val decodedNativeProgress = decodeNativeScrollProgress(chapter.lastPageRead)
         val decodedWebProgressPercent = decodeWebScrollProgressPercent(chapter.lastPageRead)
         val lastSavedIndex = when {
@@ -257,13 +312,13 @@ class NovelReaderScreenModel(
         }
         val pluginCss = customCss
         val pluginJs = customJs
-        val content = normalizeHtml(
+        val baseContent = normalizeHtml(
             rawHtml = html,
             settings = settings,
             customCss = pluginCss,
             customJs = pluginJs,
         )
-        val contentBlocks = parsedContentBlocks
+        val baseContentBlocks = parsedContentBlocks
             ?: extractContentBlocks(
                 rawHtml = html,
                 chapterWebUrl = chapterWebUrl,
@@ -274,13 +329,13 @@ class NovelReaderScreenModel(
             }.also {
                 parsedContentBlocks = it
             }
-        val textBlocks = parsedTextBlocks
-            ?: contentBlocks
+        val baseTextBlocks = parsedTextBlocks
+            ?: baseContentBlocks
                 .filterIsInstance<ContentBlock.Text>()
                 .map { it.text }
                 .also { parsedTextBlocks = it }
         val richContentResult = parsedRichContentResult
-            ?: parseNovelRichContent(content)
+            ?: parseNovelRichContent(baseContent)
                 .let { parsed ->
                     parsed.copy(
                         blocks = resolveRichContentBlocks(
@@ -292,15 +347,40 @@ class NovelReaderScreenModel(
                     )
                 }
                 .also { parsedRichContentResult = it }
+
+        val displayContentBlocks = if (geminiVisibleInUi) {
+            applyGeminiTranslationToContentBlocks(baseContentBlocks)
+        } else {
+            baseContentBlocks
+        }
+        val displayTextBlocks = displayContentBlocks
+            .filterIsInstance<ContentBlock.Text>()
+            .map { it.text }
+        val displayRichBlocks = if (geminiVisibleInUi) {
+            applyGeminiTranslationToRichContentBlocks(richContentResult.blocks)
+        } else {
+            richContentResult.blocks
+        }
+        val displayContent = if (geminiVisibleInUi && geminiTranslatedByIndex.isNotEmpty()) {
+            normalizeHtml(
+                rawHtml = buildRawHtmlFromContentBlocks(displayContentBlocks),
+                settings = settings,
+                customCss = pluginCss,
+                customJs = pluginJs,
+            )
+        } else {
+            baseContent
+        }
+
         mutableState.value = State.Success(
             novel = novel,
             chapter = chapter,
-            html = content,
+            html = displayContent,
             enableJs = !pluginJs.isNullOrBlank(),
             readerSettings = settings,
-            contentBlocks = contentBlocks,
-            textBlocks = textBlocks,
-            richContentBlocks = richContentResult.blocks,
+            contentBlocks = displayContentBlocks,
+            textBlocks = displayTextBlocks,
+            richContentBlocks = displayRichBlocks,
             richContentUnsupportedFeaturesDetected = richContentResult.unsupportedFeaturesDetected,
             lastSavedIndex = lastSavedIndex,
             lastSavedScrollOffsetPx = lastSavedScrollOffsetPx,
@@ -308,6 +388,11 @@ class NovelReaderScreenModel(
             previousChapterId = chapterNavigation.first,
             nextChapterId = chapterNavigation.second,
             chapterWebUrl = chapterWebUrl,
+            isGeminiTranslating = isGeminiTranslating,
+            geminiTranslationProgress = geminiTranslationProgress,
+            isGeminiTranslationVisible = geminiVisibleInUi,
+            hasGeminiTranslationCache = geminiCacheAvailableInUi,
+            geminiLogs = geminiLogs,
         )
     }
 
@@ -526,6 +611,418 @@ class NovelReaderScreenModel(
                     bookmark = bookmarked,
                 ),
             )
+        }
+    }
+
+    override fun onDispose() {
+        settingsJob?.cancel()
+        nextChapterPrefetchJob?.cancel()
+        geminiTranslationJob?.cancel()
+        super.onDispose()
+    }
+
+    fun addGeminiLog(message: String) {
+        val text = message.trim()
+        if (text.isBlank()) return
+        geminiLogs = (listOf(text) + geminiLogs).take(100)
+        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
+        updateContent(settings)
+    }
+
+    fun clearGeminiLogs() {
+        geminiLogs = emptyList()
+        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
+        updateContent(settings)
+    }
+
+    fun clearAllGeminiTranslationCache() {
+        NovelReaderTranslationDiskCacheStore.clear()
+        addGeminiLog("🗑️ Clear ALL cache")
+        val chapter = currentChapter ?: return
+        if (NovelReaderTranslationDiskCacheStore.get(chapter.id) == null) {
+            hasGeminiTranslationCache = false
+            val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
+            updateContent(settings)
+        }
+    }
+
+    fun setGeminiApiKey(value: String) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.geminiApiKey().set(value) },
+        setOverride = { it.copy(geminiApiKey = value) },
+    )
+
+    fun setGeminiModel(value: String) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.geminiModel().set(value) },
+        setOverride = { it.copy(geminiModel = value) },
+    )
+
+    fun setGeminiBatchSize(value: Int) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.geminiBatchSize().set(value) },
+        setOverride = { it.copy(geminiBatchSize = value) },
+    )
+
+    fun setGeminiConcurrency(value: Int) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.geminiConcurrency().set(value) },
+        setOverride = { it.copy(geminiConcurrency = value) },
+    )
+
+    fun setGeminiRelaxedMode(value: Boolean) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.geminiRelaxedMode().set(value) },
+        setOverride = { it.copy(geminiRelaxedMode = value) },
+    )
+
+    fun setGeminiDisableCache(value: Boolean) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.geminiDisableCache().set(value) },
+        setOverride = { it.copy(geminiDisableCache = value) },
+    )
+
+    fun setGeminiReasoningEffort(value: String) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.geminiReasoningEffort().set(value) },
+        setOverride = { it.copy(geminiReasoningEffort = value) },
+    )
+
+    fun setGeminiBudgetTokens(value: Int) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.geminiBudgetTokens().set(value) },
+        setOverride = { it.copy(geminiBudgetTokens = value) },
+    )
+
+    fun setGeminiTemperature(value: Float) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.geminiTemperature().set(value) },
+        setOverride = { it.copy(geminiTemperature = value) },
+    )
+
+    fun setGeminiTopP(value: Float) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.geminiTopP().set(value) },
+        setOverride = { it.copy(geminiTopP = value) },
+    )
+
+    fun setGeminiTopK(value: Int) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.geminiTopK().set(value) },
+        setOverride = { it.copy(geminiTopK = value) },
+    )
+
+    fun setGeminiPromptMode(value: GeminiPromptMode) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.geminiPromptMode().set(value) },
+        setOverride = { it.copy(geminiPromptMode = value) },
+    )
+
+    fun setGeminiEnabledPromptModifiers(value: List<String>) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.geminiEnabledPromptModifiers().set(value) },
+        setOverride = { it.copy(geminiEnabledPromptModifiers = value) },
+    )
+
+    fun setGeminiCustomPromptModifier(value: String) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.geminiCustomPromptModifier().set(value) },
+        setOverride = { it.copy(geminiCustomPromptModifier = value) },
+    )
+
+    private fun updateGeminiSetting(
+        setGlobal: () -> Unit,
+        setOverride: (NovelReaderOverride) -> NovelReaderOverride,
+    ) {
+        val sourceId = currentNovel?.source ?: return
+        if (novelReaderPreferences.getSourceOverride(sourceId) != null) {
+            novelReaderPreferences.updateSourceOverride(sourceId, setOverride)
+        } else {
+            setGlobal()
+        }
+    }
+
+    fun startGeminiTranslation() {
+        if (isGeminiTranslating) return
+        val currentState = mutableState.value as? State.Success ?: return
+        val chapter = currentChapter ?: return
+        val baseTextBlocks = parsedTextBlocks.orEmpty()
+        if (baseTextBlocks.isEmpty()) return
+
+        val settings = currentState.readerSettings
+        if (!settings.geminiEnabled) {
+            addGeminiLog("⛔ Gemini переводчик отключен")
+            return
+        }
+        if (settings.geminiApiKey.isBlank()) {
+            addGeminiLog("❌ Gemini API key is empty")
+            return
+        }
+
+        geminiTranslatedByIndex = emptyMap()
+        isGeminiTranslationVisible = false
+        hasGeminiTranslationCache = false
+        isGeminiTranslating = true
+        geminiTranslationProgress = 0
+        addGeminiLog("🎯 Gemini start. Model: ${settings.geminiModel.normalizeGeminiModelId()}")
+        updateContent(settings)
+
+        geminiTranslationJob?.cancel()
+        geminiTranslationJob = screenModelScope.launch {
+            val translated = mutableMapOf<Int, String>()
+            val indexedBlocks = baseTextBlocks.mapIndexed { index, text -> index to text }
+            val chunkSize = settings.geminiBatchSize.coerceIn(1, 80)
+            val chunks = indexedBlocks.chunked(chunkSize)
+            val semaphore = Semaphore(settings.geminiConcurrency.coerceIn(1, 8))
+            val updateMutex = Mutex()
+            var completedChunks = 0
+            val translationParams = settings.toGeminiTranslationParams()
+            val boundedConcurrency = settings.geminiConcurrency.coerceIn(1, 8)
+            addGeminiLog(
+                "📦 Split into ${chunks.size} chunks. Batch: $chunkSize, Concurrency: $boundedConcurrency",
+            )
+
+            try {
+                coroutineScope {
+                    chunks.mapIndexed { chunkIndex, chunk ->
+                        async {
+                            semaphore.withPermit {
+                                addGeminiLog("🌐 Requesting chunk ${chunkIndex + 1}/${chunks.size}")
+                                val result = geminiTranslationService.translateBatch(
+                                    segments = chunk.map { it.second },
+                                    params = translationParams,
+                                    onLog = { message -> addGeminiLog(message) },
+                                )
+                                if (result == null && !settings.geminiRelaxedMode) {
+                                    throw IllegalStateException(
+                                        "Gemini returned empty response for chunk ${chunkIndex + 1}",
+                                    )
+                                }
+
+                                updateMutex.withLock {
+                                    if (result != null) {
+                                        var successCount = 0
+                                        result.forEachIndexed { localIndex, text ->
+                                            val originalIndex =
+                                                chunk.getOrNull(localIndex)?.first ?: return@forEachIndexed
+                                            if (!text.isNullOrBlank()) {
+                                                translated[originalIndex] = text
+                                                successCount += 1
+                                            }
+                                        }
+                                        addGeminiLog("✅ Chunk ${chunkIndex + 1} applied ($successCount/${chunk.size})")
+                                    } else {
+                                        addGeminiLog("⚠️ Chunk ${chunkIndex + 1} returned empty result")
+                                    }
+
+                                    completedChunks += 1
+                                    geminiTranslationProgress =
+                                        (((completedChunks).toFloat() / chunks.size.toFloat()) * 100f)
+                                            .toInt()
+                                            .coerceIn(0, 100)
+                                    if (translated.isNotEmpty()) {
+                                        geminiTranslatedByIndex = translated.toMap()
+                                    }
+                                    updateContent(settings)
+                                }
+                            }
+                        }
+                    }.awaitAll()
+                }
+
+                if (translated.isNotEmpty()) {
+                    geminiTranslatedByIndex = translated.toMap()
+                    hasGeminiTranslationCache = true
+                    isGeminiTranslationVisible = true
+                    geminiTranslationProgress = 100
+                    if (!settings.geminiDisableCache) {
+                        NovelReaderTranslationDiskCacheStore.put(
+                            GeminiTranslationCacheEntry(
+                                chapterId = chapter.id,
+                                translatedByIndex = geminiTranslatedByIndex,
+                                model = settings.geminiModel.normalizeGeminiModelId(),
+                                sourceLang = settings.geminiSourceLang,
+                                targetLang = settings.geminiTargetLang,
+                                promptMode = settings.geminiPromptMode,
+                            ),
+                        )
+                        addGeminiLog("💾 Cache saved for chapter ${chapter.id}")
+                    }
+                    addGeminiLog("🎉 Gemini complete. Translated blocks: ${translated.size}")
+                } else {
+                    geminiTranslationProgress = 0
+                    addGeminiLog("⚠️ Gemini finished with no translated blocks")
+                }
+            } catch (_: CancellationException) {
+                // Job cancelled intentionally by user.
+                addGeminiLog("🛑 Gemini translation cancelled")
+            } catch (error: Exception) {
+                logcat(LogPriority.WARN, error) { "Gemini translation failed for chapter=${chapter.id}" }
+                addGeminiLog("❌ Gemini failed: ${error.message.orEmpty()}")
+                if (translated.isEmpty()) {
+                    geminiTranslatedByIndex = emptyMap()
+                    hasGeminiTranslationCache = false
+                    isGeminiTranslationVisible = false
+                    geminiTranslationProgress = 0
+                }
+            } finally {
+                isGeminiTranslating = false
+                updateContent(settings)
+            }
+        }
+    }
+
+    fun stopGeminiTranslation() {
+        geminiTranslationJob?.cancel()
+        geminiTranslationJob = null
+        isGeminiTranslating = false
+        isGeminiTranslationVisible = false
+        addGeminiLog("🛑 Stop requested")
+        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
+        updateContent(settings)
+    }
+
+    fun toggleGeminiTranslationVisibility() {
+        if (geminiTranslatedByIndex.isEmpty()) return
+        isGeminiTranslationVisible = !isGeminiTranslationVisible
+        addGeminiLog("👁️ Visibility: ${if (isGeminiTranslationVisible) "ON" else "OFF"}")
+        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
+        updateContent(settings)
+    }
+
+    fun clearGeminiTranslation() {
+        val chapter = currentChapter ?: return
+        geminiTranslationJob?.cancel()
+        geminiTranslationJob = null
+        geminiTranslatedByIndex = emptyMap()
+        isGeminiTranslating = false
+        isGeminiTranslationVisible = false
+        geminiTranslationProgress = 0
+        hasGeminiTranslationCache = false
+        NovelReaderTranslationDiskCacheStore.remove(chapter.id)
+        addGeminiLog("🗑️ Cleared chapter cache")
+        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
+        updateContent(settings)
+    }
+
+    private fun restoreGeminiTranslationFromCache(
+        chapterId: Long,
+        settings: NovelReaderSettings,
+    ) {
+        if (!settings.geminiEnabled) {
+            hasGeminiTranslationCache = false
+            return
+        }
+        if (settings.geminiDisableCache) {
+            hasGeminiTranslationCache = false
+            return
+        }
+        val cached = NovelReaderTranslationDiskCacheStore.get(chapterId)
+        if (cached == null) {
+            hasGeminiTranslationCache = false
+            return
+        }
+        val settingsMatch = cached.model.normalizeGeminiModelId() == settings.geminiModel.normalizeGeminiModelId() &&
+            cached.sourceLang == settings.geminiSourceLang &&
+            cached.targetLang == settings.geminiTargetLang &&
+            cached.promptMode == settings.geminiPromptMode
+        if (!settingsMatch || cached.translatedByIndex.isEmpty()) {
+            hasGeminiTranslationCache = false
+            return
+        }
+        geminiTranslatedByIndex = cached.translatedByIndex
+        hasGeminiTranslationCache = true
+        geminiTranslationProgress = 100
+        isGeminiTranslationVisible = true
+        addGeminiLog("💾 Restored cached translation")
+    }
+
+    private fun applyGeminiTranslationToContentBlocks(
+        blocks: List<ContentBlock>,
+    ): List<ContentBlock> {
+        if (!isGeminiTranslationVisible || geminiTranslatedByIndex.isEmpty()) return blocks
+        var textIndex = 0
+        return blocks.map { block ->
+            when (block) {
+                is ContentBlock.Image -> block
+                is ContentBlock.Text -> {
+                    val translated = geminiTranslatedByIndex[textIndex]
+                    textIndex += 1
+                    if (translated.isNullOrBlank()) {
+                        block
+                    } else {
+                        ContentBlock.Text(translated)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun applyGeminiTranslationToRichContentBlocks(
+        blocks: List<NovelRichContentBlock>,
+    ): List<NovelRichContentBlock> {
+        if (!isGeminiTranslationVisible || geminiTranslatedByIndex.isEmpty()) return blocks
+        var textIndex = 0
+        return blocks.map { block ->
+            when (block) {
+                is NovelRichContentBlock.BlockQuote -> {
+                    val replacement = geminiTranslatedByIndex[textIndex] ?: block.segments.joinToString("") { it.text }
+                    textIndex += 1
+                    block.copy(segments = listOf(NovelRichTextSegment(replacement)))
+                }
+                is NovelRichContentBlock.Heading -> {
+                    val replacement = geminiTranslatedByIndex[textIndex] ?: block.segments.joinToString("") { it.text }
+                    textIndex += 1
+                    block.copy(segments = listOf(NovelRichTextSegment(replacement)))
+                }
+                is NovelRichContentBlock.Image -> block
+                is NovelRichContentBlock.HorizontalRule -> block
+                is NovelRichContentBlock.Paragraph -> {
+                    val replacement = geminiTranslatedByIndex[textIndex] ?: block.segments.joinToString("") { it.text }
+                    textIndex += 1
+                    block.copy(segments = listOf(NovelRichTextSegment(replacement)))
+                }
+            }
+        }
+    }
+
+    private fun buildRawHtmlFromContentBlocks(blocks: List<ContentBlock>): String {
+        return buildString {
+            blocks.forEach { block ->
+                when (block) {
+                    is ContentBlock.Image -> {
+                        append("<img src=\"")
+                        append(block.url.escapeHtmlAttribute())
+                        append("\" alt=\"")
+                        append((block.alt ?: "").escapeHtmlAttribute())
+                        append("\" />")
+                    }
+                    is ContentBlock.Text -> {
+                        append("<p>")
+                        append(block.text.escapeHtml())
+                        append("</p>")
+                    }
+                }
+            }
+        }
+    }
+
+    private fun NovelReaderSettings.toGeminiTranslationParams(): GeminiTranslationParams {
+        val modifierText = GeminiPromptModifiers.buildPromptText(
+            enabledIds = geminiEnabledPromptModifiers,
+            customModifier = geminiCustomPromptModifier,
+        )
+        val finalPromptModifiers = listOf(
+            modifierText,
+            geminiPromptModifiers.trim(),
+        ).filter { it.isNotBlank() }
+            .joinToString("\n\n")
+        return GeminiTranslationParams(
+            apiKey = geminiApiKey,
+            model = geminiModel.normalizeGeminiModelId(),
+            sourceLang = geminiSourceLang,
+            targetLang = geminiTargetLang,
+            reasoningEffort = geminiReasoningEffort,
+            budgetTokens = geminiBudgetTokens,
+            temperature = geminiTemperature,
+            topP = geminiTopP,
+            topK = geminiTopK,
+            promptMode = geminiPromptMode,
+            promptModifiers = finalPromptModifiers,
+        )
+    }
+
+    private fun String.normalizeGeminiModelId(): String {
+        return when (trim()) {
+            // Legacy key kept for backward compatibility with old settings.
+            "gemini-3-flash" -> "gemini-3-flash-preview"
+            else -> this
         }
     }
 
@@ -1333,6 +1830,11 @@ class NovelReaderScreenModel(
             val previousChapterId: Long?,
             val nextChapterId: Long?,
             val chapterWebUrl: String?,
+            val isGeminiTranslating: Boolean = false,
+            val geminiTranslationProgress: Int = 0,
+            val isGeminiTranslationVisible: Boolean = false,
+            val hasGeminiTranslationCache: Boolean = false,
+            val geminiLogs: List<String> = emptyList(),
         ) : State
     }
 

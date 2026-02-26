@@ -25,7 +25,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -37,6 +39,7 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,11 +49,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -63,12 +71,20 @@ import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -128,14 +144,19 @@ import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
 import eu.kanade.tachiyomi.ui.reader.novel.encodeNativeScrollProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodeWebScrollProgressPercent
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
+import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptModifiers
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.json.JSONObject
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.padding
+import tachiyomi.presentation.core.i18n.stringResource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.ByteArrayInputStream
@@ -153,6 +174,27 @@ fun NovelReaderScreen(
     onBack: () -> Unit,
     onReadingProgress: (currentIndex: Int, totalItems: Int, persistedProgress: Long?) -> Unit,
     onToggleBookmark: () -> Unit = {},
+    onStartGeminiTranslation: () -> Unit = {},
+    onStopGeminiTranslation: () -> Unit = {},
+    onToggleGeminiTranslationVisibility: () -> Unit = {},
+    onClearGeminiTranslation: () -> Unit = {},
+    onClearAllGeminiTranslationCache: () -> Unit = {},
+    onAddGeminiLog: (String) -> Unit = {},
+    onClearGeminiLogs: () -> Unit = {},
+    onSetGeminiApiKey: (String) -> Unit = {},
+    onSetGeminiModel: (String) -> Unit = {},
+    onSetGeminiBatchSize: (Int) -> Unit = {},
+    onSetGeminiConcurrency: (Int) -> Unit = {},
+    onSetGeminiRelaxedMode: (Boolean) -> Unit = {},
+    onSetGeminiDisableCache: (Boolean) -> Unit = {},
+    onSetGeminiReasoningEffort: (String) -> Unit = {},
+    onSetGeminiBudgetTokens: (Int) -> Unit = {},
+    onSetGeminiTemperature: (Float) -> Unit = {},
+    onSetGeminiTopP: (Float) -> Unit = {},
+    onSetGeminiTopK: (Int) -> Unit = {},
+    onSetGeminiPromptMode: (GeminiPromptMode) -> Unit = {},
+    onSetGeminiEnabledPromptModifiers: (List<String>) -> Unit = {},
+    onSetGeminiCustomPromptModifier: (String) -> Unit = {},
     onOpenPreviousChapter: ((Long) -> Unit)? = null,
     onOpenNextChapter: ((Long) -> Unit)? = null,
 ) {
@@ -182,6 +224,7 @@ fun NovelReaderScreen(
         mutableIntStateOf(intervalToAutoScrollSpeed(state.readerSettings.autoScrollInterval))
     }
     var autoScrollExpanded by remember(state.chapter.id) { mutableStateOf(false) }
+    var showGeminiDialog by remember(state.chapter.id) { mutableStateOf(false) }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     var webProgressPercent by remember(state.chapter.id) {
         mutableIntStateOf(state.lastSavedWebProgressPercent.coerceIn(0, 100))
@@ -1512,6 +1555,80 @@ fun NovelReaderScreen(
                     .size(width = 30.dp, height = 270.dp),
                 horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
             ) {
+                if (state.readerSettings.geminiEnabled) {
+                    val hasTranslationResult = state.hasGeminiTranslationCache || state.geminiTranslationProgress == 100
+                    val quickActionIcon = when {
+                        state.isGeminiTranslating -> Icons.Outlined.Pause
+                        hasTranslationResult && state.isGeminiTranslationVisible -> Icons.Outlined.Public
+                        else -> Icons.Outlined.PlayArrow
+                    }
+                    val quickActionDescription = when {
+                        state.isGeminiTranslating -> "Остановить перевод"
+                        hasTranslationResult && state.isGeminiTranslationVisible -> "Показать оригинал"
+                        hasTranslationResult -> "Показать перевод"
+                        else -> "Запустить перевод"
+                    }
+                    val quickActionContainerColor = when {
+                        state.isGeminiTranslating -> MaterialTheme.colorScheme.errorContainer
+                        hasTranslationResult && state.isGeminiTranslationVisible -> MaterialTheme.colorScheme.tertiaryContainer
+                        hasTranslationResult -> MaterialTheme.colorScheme.secondaryContainer
+                        else -> MaterialTheme.colorScheme.primaryContainer
+                    }
+                    val quickActionContentColor = when {
+                        state.isGeminiTranslating -> MaterialTheme.colorScheme.onErrorContainer
+                        hasTranslationResult && state.isGeminiTranslationVisible -> MaterialTheme.colorScheme.onTertiaryContainer
+                        hasTranslationResult -> MaterialTheme.colorScheme.onSecondaryContainer
+                        else -> MaterialTheme.colorScheme.onPrimaryContainer
+                    }
+
+                    Column(
+                        modifier = Modifier.padding(bottom = 6.dp),
+                        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = quickActionContainerColor,
+                            contentColor = quickActionContentColor,
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
+                            ),
+                            tonalElevation = 2.dp,
+                            shadowElevation = 2.dp,
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clickable {
+                                    when {
+                                        state.isGeminiTranslating -> onStopGeminiTranslation()
+                                        hasTranslationResult -> onToggleGeminiTranslationVisibility()
+                                        else -> onStartGeminiTranslation()
+                                    }
+                                },
+                        ) {
+                            androidx.compose.foundation.layout.Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = androidx.compose.ui.Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = quickActionIcon,
+                                    contentDescription = quickActionDescription,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        }
+
+                        if (state.isGeminiTranslating) {
+                            LinearProgressIndicator(
+                                progress = { state.geminiTranslationProgress.coerceIn(0, 100) / 100f },
+                                modifier = Modifier
+                                    .size(width = 24.dp, height = 3.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                            )
+                        }
+                    }
+                }
                 LnReaderVerticalSeekbar(
                     progress = seekbarValue,
                     topLabel = seekbarTopLabel,
@@ -1731,6 +1848,18 @@ fun NovelReaderScreen(
                     IconButton(onClick = { showSettings = true }) {
                         Icon(imageVector = Icons.Outlined.Settings, contentDescription = null)
                     }
+                    if (state.readerSettings.geminiEnabled) {
+                        IconButton(onClick = { showGeminiDialog = true }) {
+                            Text(
+                                text = if (state.isGeminiTranslating) {
+                                    stringResource(AYMR.strings.novel_reader_gemini_button_active)
+                                } else {
+                                    stringResource(AYMR.strings.novel_reader_gemini_button)
+                                },
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                        }
+                    }
                     IconButton(
                         onClick = { state.nextChapterId?.let { onOpenNextChapter?.invoke(it) } },
                         enabled = state.nextChapterId != null && onOpenNextChapter != null,
@@ -1751,6 +1880,693 @@ fun NovelReaderScreen(
                 onDismissRequest = { showSettings = false },
             )
         }
+        if (showGeminiDialog && state.readerSettings.geminiEnabled) {
+            GeminiTranslationDialog(
+                readerSettings = state.readerSettings,
+                isTranslating = state.isGeminiTranslating,
+                translationProgress = state.geminiTranslationProgress,
+                isVisible = state.isGeminiTranslationVisible,
+                hasCache = state.hasGeminiTranslationCache,
+                logs = state.geminiLogs,
+                onStart = onStartGeminiTranslation,
+                onStop = onStopGeminiTranslation,
+                onToggleVisibility = onToggleGeminiTranslationVisibility,
+                onClear = onClearGeminiTranslation,
+                onClearAllCache = onClearAllGeminiTranslationCache,
+                onAddLog = onAddGeminiLog,
+                onClearLogs = onClearGeminiLogs,
+                onSetGeminiApiKey = onSetGeminiApiKey,
+                onSetGeminiModel = onSetGeminiModel,
+                onSetGeminiBatchSize = onSetGeminiBatchSize,
+                onSetGeminiConcurrency = onSetGeminiConcurrency,
+                onSetGeminiRelaxedMode = onSetGeminiRelaxedMode,
+                onSetGeminiDisableCache = onSetGeminiDisableCache,
+                onSetGeminiReasoningEffort = onSetGeminiReasoningEffort,
+                onSetGeminiBudgetTokens = onSetGeminiBudgetTokens,
+                onSetGeminiTemperature = onSetGeminiTemperature,
+                onSetGeminiTopP = onSetGeminiTopP,
+                onSetGeminiTopK = onSetGeminiTopK,
+                onSetGeminiPromptMode = onSetGeminiPromptMode,
+                onSetGeminiEnabledPromptModifiers = onSetGeminiEnabledPromptModifiers,
+                onSetGeminiCustomPromptModifier = onSetGeminiCustomPromptModifier,
+                onDismiss = { showGeminiDialog = false },
+            )
+        }
+    }
+}
+
+@Composable
+private fun GeminiTranslationDialog(
+    readerSettings: NovelReaderSettings,
+    isTranslating: Boolean,
+    translationProgress: Int,
+    isVisible: Boolean,
+    hasCache: Boolean,
+    logs: List<String>,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    onToggleVisibility: () -> Unit,
+    onClear: () -> Unit,
+    onClearAllCache: () -> Unit,
+    onAddLog: (String) -> Unit,
+    onClearLogs: () -> Unit,
+    onSetGeminiApiKey: (String) -> Unit,
+    onSetGeminiModel: (String) -> Unit,
+    onSetGeminiBatchSize: (Int) -> Unit,
+    onSetGeminiConcurrency: (Int) -> Unit,
+    onSetGeminiRelaxedMode: (Boolean) -> Unit,
+    onSetGeminiDisableCache: (Boolean) -> Unit,
+    onSetGeminiReasoningEffort: (String) -> Unit,
+    onSetGeminiBudgetTokens: (Int) -> Unit,
+    onSetGeminiTemperature: (Float) -> Unit,
+    onSetGeminiTopP: (Float) -> Unit,
+    onSetGeminiTopK: (Int) -> Unit,
+    onSetGeminiPromptMode: (GeminiPromptMode) -> Unit,
+    onSetGeminiEnabledPromptModifiers: (List<String>) -> Unit,
+    onSetGeminiCustomPromptModifier: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val modelEntries = remember {
+        listOf(
+            "gemini-3-flash-preview" to "Gemini 3 Flash",
+            "gemini-3-pro-preview" to "Gemini 3 Pro",
+            "gemini-2.5-flash" to "Gemini 2.5 Flash",
+        )
+    }
+    val modelMap = remember(modelEntries) { modelEntries.toMap() }
+    val speedPresets = remember {
+        listOf(
+            "100-1" to (100 to 1),
+            "40-2" to (40 to 2),
+            "50-2" to (50 to 2),
+            "30-3" to (30 to 3),
+        )
+    }
+
+    var tempKey by remember(readerSettings.geminiApiKey) { mutableStateOf(readerSettings.geminiApiKey) }
+    var tempModel by remember(readerSettings.geminiModel) {
+        mutableStateOf(
+            if (readerSettings.geminiModel == "gemini-3-flash") {
+                "gemini-3-flash-preview"
+            } else {
+                readerSettings.geminiModel
+            },
+        )
+    }
+    var tempBatch by remember(readerSettings.geminiBatchSize) {
+        mutableStateOf(readerSettings.geminiBatchSize.toString())
+    }
+    var tempConcurrency by remember(readerSettings.geminiConcurrency) {
+        mutableStateOf(readerSettings.geminiConcurrency.toString())
+    }
+    var tempRelaxed by remember(readerSettings.geminiRelaxedMode) { mutableStateOf(readerSettings.geminiRelaxedMode) }
+    var tempDisableCache by remember(readerSettings.geminiDisableCache) {
+        mutableStateOf(readerSettings.geminiDisableCache)
+    }
+    var tempReasoning by remember(readerSettings.geminiReasoningEffort) {
+        mutableStateOf(readerSettings.geminiReasoningEffort)
+    }
+    var tempBudget by remember(readerSettings.geminiBudgetTokens) { mutableStateOf(readerSettings.geminiBudgetTokens) }
+    var tempTemperature by remember(readerSettings.geminiTemperature) {
+        mutableStateOf(readerSettings.geminiTemperature.toString())
+    }
+    var tempTopP by remember(readerSettings.geminiTopP) { mutableStateOf(readerSettings.geminiTopP.toString()) }
+    var tempTopK by remember(readerSettings.geminiTopK) { mutableStateOf(readerSettings.geminiTopK.toString()) }
+    var tempPromptMode by remember(readerSettings.geminiPromptMode) { mutableStateOf(readerSettings.geminiPromptMode) }
+    var tempEnabledModifiers by remember(readerSettings.geminiEnabledPromptModifiers) {
+        mutableStateOf(readerSettings.geminiEnabledPromptModifiers.toSet())
+    }
+    var tempCustomModifier by remember(readerSettings.geminiCustomPromptModifier) {
+        mutableStateOf(readerSettings.geminiCustomPromptModifier)
+    }
+    var showAdvanced by remember { mutableStateOf(false) }
+    var showGenerationConfig by remember { mutableStateOf(false) }
+    var showLogs by remember { mutableStateOf(false) }
+    var showCustomPromptDialog by remember { mutableStateOf(false) }
+
+    fun applyBatchAndConcurrency() {
+        tempBatch.toIntOrNull()?.let {
+            onSetGeminiBatchSize(it.coerceIn(1, 100))
+        }
+        tempConcurrency.toIntOrNull()?.let {
+            onSetGeminiConcurrency(it.coerceIn(1, 8))
+        }
+    }
+
+    val progressValue = translationProgress.coerceIn(0, 100) / 100f
+    val statusTitle = when {
+        isTranslating -> "Перевод выполняется"
+        hasCache && isVisible -> "Показывается перевод"
+        hasCache -> "Кэш готов"
+        else -> "Готов к запуску"
+    }
+    val statusSubtitle = when {
+        isTranslating -> "Обновление текста в реальном времени"
+        hasCache -> "Можно быстро переключать оригинал и перевод"
+        else -> "Выберите модель и запустите перевод главы"
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Gemini Переводчик") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                GeminiSettingsBlock(
+                    title = "Статус и действия",
+                    subtitle = "Запуск, остановка и переключение отображения",
+                ) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = statusTitle,
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                Text(
+                                    text = "$translationProgress%",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            Text(
+                                text = statusSubtitle,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            LinearProgressIndicator(
+                                progress = { progressValue },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Button(
+                            onClick = {
+                                if (isTranslating) {
+                                    onStop()
+                                } else {
+                                    onStart()
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(if (isTranslating) "Остановить" else "Запустить")
+                        }
+                        OutlinedButton(
+                            onClick = onToggleVisibility,
+                            enabled = hasCache,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(if (isVisible) "Оригинал" else "Перевод")
+                        }
+                    }
+
+                    if (hasCache) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            TextButton(onClick = onClear) {
+                                Text("Очистить кэш главы")
+                            }
+                        }
+                    }
+                }
+
+                GeminiSettingsBlock(
+                    title = "Основные параметры",
+                    subtitle = "Модель, режим промпта и производительность",
+                ) {
+                    Text(
+                        "Модель",
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
+                        value = tempModel,
+                        title = "Текущая модель",
+                        subtitle = modelMap[tempModel] ?: tempModel,
+                        icon = null,
+                        entries = modelMap,
+                        onValueChange = { selected ->
+                            tempModel = selected
+                            onSetGeminiModel(selected)
+                            onAddLog("⚙️ Model: ${modelMap[selected] ?: selected}")
+                        },
+                    )
+
+                    Text(
+                        "Режим промпта",
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(
+                            listOf(
+                                GeminiPromptMode.CLASSIC to "Классический",
+                                GeminiPromptMode.ADULT_18 to "18+",
+                            ),
+                        ) { option ->
+                            val selected = tempPromptMode == option.first
+                            OutlinedButton(
+                                onClick = {
+                                    tempPromptMode = option.first
+                                    onSetGeminiPromptMode(option.first)
+                                    onAddLog("⚙️ Prompt mode: ${option.second}")
+                                },
+                            ) {
+                                Text(if (selected) "• ${option.second}" else option.second)
+                            }
+                        }
+                    }
+
+                    Text(
+                        "Модификаторы промпта",
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(GeminiPromptModifiers.all) { modifier ->
+                            val selected = tempEnabledModifiers.contains(modifier.id)
+                            Surface(
+                                color = if (selected) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                },
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.clickable {
+                                    tempEnabledModifiers = if (selected) {
+                                        tempEnabledModifiers - modifier.id
+                                    } else {
+                                        tempEnabledModifiers + modifier.id
+                                    }
+                                    onSetGeminiEnabledPromptModifiers(
+                                        tempEnabledModifiers.toList(),
+                                    )
+                                },
+                            ) {
+                                Text(
+                                    text = modifier.label,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    style = MaterialTheme.typography.labelMedium,
+                                )
+                            }
+                        }
+                        item {
+                            Surface(
+                                color = if (tempCustomModifier.isNotBlank()) {
+                                    MaterialTheme.colorScheme.tertiaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                },
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.clickable { showCustomPromptDialog = true },
+                            ) {
+                                Text(
+                                    text = if (tempCustomModifier.isBlank()) "+ Свой" else "Свой",
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    style = MaterialTheme.typography.labelMedium,
+                                )
+                            }
+                        }
+                    }
+
+                    Text(
+                        "Скорость (батч-параллельность)",
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(speedPresets) { preset ->
+                            val label = preset.first
+                            val batch = preset.second.first
+                            val concurrency = preset.second.second
+                            val selected = tempBatch == batch.toString() && tempConcurrency == concurrency.toString()
+                            OutlinedButton(
+                                onClick = {
+                                    tempBatch = batch.toString()
+                                    tempConcurrency = concurrency.toString()
+                                    onSetGeminiBatchSize(batch)
+                                    onSetGeminiConcurrency(concurrency)
+                                    onAddLog("🚀 Speed: $label")
+                                },
+                            ) {
+                                Text(if (selected) "• $label" else label)
+                            }
+                        }
+                    }
+
+                    if (tempModel == "gemini-3-flash-preview" || tempModel == "gemini-3-pro-preview") {
+                        Text(
+                            "Уровень размышления",
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        val reasoningOptions = if (tempModel == "gemini-3-pro-preview") {
+                            listOf("low", "high")
+                        } else {
+                            listOf("minimal", "low", "medium", "high")
+                        }
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(reasoningOptions) { option ->
+                                OutlinedButton(
+                                    onClick = {
+                                        tempReasoning = option
+                                        onSetGeminiReasoningEffort(option)
+                                        onAddLog("⚙️ Reasoning: ${option.uppercase()}")
+                                    },
+                                ) {
+                                    Text(if (tempReasoning == option) "• ${option.uppercase()}" else option.uppercase())
+                                }
+                            }
+                        }
+                    }
+
+                    if (tempModel == "gemini-2.5-flash") {
+                        Text(
+                            "Бюджет токенов (Gemini 2.5)",
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(listOf(-1, 2048, 4096, 8192, 16384)) { value ->
+                                OutlinedButton(
+                                    onClick = {
+                                        tempBudget = value
+                                        onSetGeminiBudgetTokens(value)
+                                        onAddLog("⚙️ Бюджет: ${if (value == -1) "AUTO" else value}")
+                                    },
+                                ) {
+                                    val title = if (value == -1) "AUTO" else value.toString()
+                                    Text(if (tempBudget == value) "• $title" else title)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                GeminiSettingsBlock(
+                    title = "Система и кэш",
+                    subtitle = "API ключ, кэш и ручной контроль потоков",
+                ) {
+                    TextButton(onClick = { showAdvanced = !showAdvanced }) {
+                        Text(if (showAdvanced) "Скрыть доп. настройки" else "Доп. настройки")
+                    }
+                    if (showAdvanced) {
+                        OutlinedTextField(
+                            value = tempKey,
+                            onValueChange = { tempKey = it },
+                            label = { Text("API ключ") },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    onSetGeminiApiKey(tempKey)
+                                    onAddLog("⚙️ API ключ сохранен")
+                                },
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text("Сохранить")
+                            }
+                            TextButton(
+                                onClick = {
+                                    tempRelaxed = !tempRelaxed
+                                    onSetGeminiRelaxedMode(tempRelaxed)
+                                    onAddLog("⚙️ Relaxed: ${if (tempRelaxed) "ON" else "OFF"}")
+                                },
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text("Relaxed: ${if (tempRelaxed) "ON" else "OFF"}")
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "Кэш: ${if (tempDisableCache) "OFF" else "ON"}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Switch(
+                                checked = !tempDisableCache,
+                                onCheckedChange = { enabled ->
+                                    tempDisableCache = !enabled
+                                    onSetGeminiDisableCache(tempDisableCache)
+                                    onAddLog("⚙️ Кэш: ${if (tempDisableCache) "OFF" else "ON"}")
+                                },
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = tempBatch,
+                                onValueChange = {
+                                    tempBatch = it
+                                    applyBatchAndConcurrency()
+                                },
+                                label = { Text("Батч") },
+                                modifier = Modifier.weight(1f),
+                            )
+                            OutlinedTextField(
+                                value = tempConcurrency,
+                                onValueChange = {
+                                    tempConcurrency = it
+                                    applyBatchAndConcurrency()
+                                },
+                                label = { Text("Потоки") },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        TextButton(onClick = {
+                            onClearAllCache()
+                            onAddLog("🗑️ Очищен весь кэш")
+                        }) {
+                            Text("Очистить весь кэш")
+                        }
+                    }
+                }
+
+                GeminiSettingsBlock(
+                    title = "Генерация",
+                    subtitle = "Пресеты и ручные параметры sampling",
+                ) {
+                    TextButton(onClick = { showGenerationConfig = !showGenerationConfig }) {
+                        Text(if (showGenerationConfig) "Скрыть генерацию" else "Генерация")
+                    }
+                    if (showGenerationConfig) {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(
+                                listOf(
+                                    Triple("Stable", 0.3f, 0.8f to 20),
+                                    Triple("Safety", 0.45f, 0.85f to 30),
+                                    Triple("Default", 0.7f, 0.9f to 40),
+                                    Triple("Vivid", 0.9f, 0.95f to 40),
+                                    Triple("Ultra", 1.0f, 0.98f to 64),
+                                ),
+                            ) { preset ->
+                                OutlinedButton(
+                                    onClick = {
+                                        val name = preset.first
+                                        val t = preset.second
+                                        val p = preset.third.first
+                                        val k = preset.third.second
+                                        tempTemperature = t.toString()
+                                        tempTopP = p.toString()
+                                        tempTopK = k.toString()
+                                        onSetGeminiTemperature(t)
+                                        onSetGeminiTopP(p)
+                                        onSetGeminiTopK(k)
+                                        onAddLog("🎭 Preset: $name (T:$t P:$p K:$k)")
+                                    },
+                                ) {
+                                    Text(preset.first)
+                                }
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = tempTemperature,
+                                onValueChange = {
+                                    tempTemperature = it
+                                    it.toFloatOrNull()?.let { value ->
+                                        onSetGeminiTemperature(value)
+                                        onAddLog("⚙️ Temp: $value")
+                                    }
+                                },
+                                label = { Text("Temperature") },
+                                modifier = Modifier.weight(1f),
+                            )
+                            OutlinedTextField(
+                                value = tempTopP,
+                                onValueChange = {
+                                    tempTopP = it
+                                    it.toFloatOrNull()?.let { value ->
+                                        onSetGeminiTopP(value)
+                                        onAddLog("⚙️ TopP: $value")
+                                    }
+                                },
+                                label = { Text("TopP") },
+                                modifier = Modifier.weight(1f),
+                            )
+                            OutlinedTextField(
+                                value = tempTopK,
+                                onValueChange = {
+                                    tempTopK = it
+                                    it.toIntOrNull()?.let { value ->
+                                        onSetGeminiTopK(value)
+                                        onAddLog("⚙️ TopK: $value")
+                                    }
+                                },
+                                label = { Text("TopK") },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+
+                GeminiSettingsBlock(
+                    title = "Логи",
+                    subtitle = "Диагностика запросов и ответа модели",
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "Логи (${logs.size})",
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { showLogs = !showLogs }) {
+                                Text(if (showLogs) "Скрыть" else "Показать")
+                            }
+                            TextButton(onClick = onClearLogs) {
+                                Text("Очистить")
+                            }
+                        }
+                    }
+                    if (showLogs) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+                                .padding(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            if (logs.isEmpty()) {
+                                Text("Логи пока пусты", style = MaterialTheme.typography.bodySmall)
+                            } else {
+                                logs.forEach { log ->
+                                    Text(log, style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Закрыть") }
+        },
+    )
+
+    if (showCustomPromptDialog) {
+        AlertDialog(
+            onDismissRequest = { showCustomPromptDialog = false },
+            title = { Text("Свой модификатор промпта") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = tempCustomModifier,
+                        onValueChange = { tempCustomModifier = it },
+                        label = { Text("Свои инструкции") },
+                        minLines = 4,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        "Текст будет добавлен в системный промпт как дополнительная инструкция.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onSetGeminiCustomPromptModifier(tempCustomModifier)
+                    onAddLog("⚙️ Обновлен свой промпт")
+                    showCustomPromptDialog = false
+                }) {
+                    Text("Сохранить")
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = {
+                        tempCustomModifier = ""
+                        onSetGeminiCustomPromptModifier("")
+                        showCustomPromptDialog = false
+                    }) { Text("Очистить") }
+                    TextButton(onClick = { showCustomPromptDialog = false }) { Text("Отмена") }
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun GeminiSettingsBlock(
+    title: String,
+    subtitle: String? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+        ),
+        tonalElevation = 1.dp,
+        shadowElevation = 2.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            content = {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                subtitle?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                content()
+            },
+        )
     }
 }
 
