@@ -171,9 +171,10 @@ class NovelReaderScreenModel(
         }
         val sourceSiteUrl = (source as? NovelSiteSource)?.siteUrl
         rawHtml = withContext(Dispatchers.Default) {
-            html
-                .normalizeStructuredChapterPayload()
-                .prependChapterHeadingIfMissing(chapter.name)
+            prependChapterHeadingIfMissing(
+                rawHtml = html.normalizeStructuredChapterPayload(),
+                chapterName = chapter.name,
+            )
         }
         currentNovel = novel
         currentChapter = chapter
@@ -1315,24 +1316,6 @@ class NovelReaderScreenModel(
             .replace('\u00A0', ' ')
             .replace("\r", "")
             .trim()
-    }
-
-    private fun String.prependChapterHeadingIfMissing(chapterName: String?): String {
-        val headingText = chapterName.orEmpty().sanitizeTextBlock()
-        if (headingText.isBlank()) return this
-
-        return runCatching {
-            val document = Jsoup.parseBodyFragment(this)
-            val body = document.body() ?: return this
-            if (body.select("h1, h2, h3").isNotEmpty()) {
-                return body.html()
-            }
-
-            body.prependElement("h1")
-                .addClass("an-reader-chapter-title")
-                .text(headingText)
-            body.html()
-        }.getOrDefault(this)
     }
 
     private fun String.normalizeStructuredChapterPayload(): String {
