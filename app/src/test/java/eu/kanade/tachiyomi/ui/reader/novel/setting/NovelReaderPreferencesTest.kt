@@ -42,6 +42,13 @@ class NovelReaderPreferencesTest {
         prefs.bionicReading().get() shouldBe false
         prefs.swipeGestures().get() shouldBe false
         prefs.customThemes().get() shouldBe emptyList()
+        prefs.geminiPromptMode().get() shouldBe GeminiPromptMode.ADULT_18
+        prefs.geminiModel().get() shouldBe "gemini-2.5-flash"
+        prefs.geminiTemperature().get() shouldBe 0.7f
+        prefs.geminiReasoningEffort().get() shouldBe "minimal"
+        prefs.geminiBudgetTokens().get() shouldBe 8192
+        prefs.geminiTopP().get() shouldBe 0.95f
+        prefs.geminiTopK().get() shouldBe 40
     }
 
     @Test
@@ -64,6 +71,21 @@ class NovelReaderPreferencesTest {
         prefs.autoScrollOffset().set(480)
         prefs.prefetchNextChapter().set(true)
         prefs.bionicReading().set(true)
+        prefs.geminiApiKey().set("test-key")
+        prefs.geminiModel().set("gemini-2.5-pro")
+        prefs.geminiBatchSize().set(30)
+        prefs.geminiConcurrency().set(2)
+        prefs.geminiDisableCache().set(true)
+        prefs.geminiRelaxedMode().set(false)
+        prefs.geminiReasoningEffort().set("high")
+        prefs.geminiBudgetTokens().set(2048)
+        prefs.geminiTemperature().set(0.7f)
+        prefs.geminiTopP().set(0.85f)
+        prefs.geminiTopK().set(64)
+        prefs.geminiSourceLang().set("English")
+        prefs.geminiTargetLang().set("Russian")
+        prefs.geminiPromptMode().set(GeminiPromptMode.ADULT_18)
+        prefs.geminiPromptModifiers().set("modifiers")
         prefs.customThemes().set(
             listOf(
                 NovelReaderColorTheme(backgroundColor = "#111111", textColor = "#eeeeee"),
@@ -88,6 +110,21 @@ class NovelReaderPreferencesTest {
         override?.autoScrollOffset shouldBe 480
         override?.prefetchNextChapter shouldBe true
         override?.bionicReading shouldBe true
+        override?.geminiApiKey shouldBe "test-key"
+        override?.geminiModel shouldBe "gemini-2.5-pro"
+        override?.geminiBatchSize shouldBe 30
+        override?.geminiConcurrency shouldBe 2
+        override?.geminiDisableCache shouldBe true
+        override?.geminiRelaxedMode shouldBe false
+        override?.geminiReasoningEffort shouldBe "high"
+        override?.geminiBudgetTokens shouldBe 2048
+        override?.geminiTemperature shouldBe 0.7f
+        override?.geminiTopP shouldBe 0.85f
+        override?.geminiTopK shouldBe 64
+        override?.geminiSourceLang shouldBe "English"
+        override?.geminiTargetLang shouldBe "Russian"
+        override?.geminiPromptMode shouldBe GeminiPromptMode.ADULT_18
+        override?.geminiPromptModifiers shouldBe "modifiers"
         override?.customThemes shouldBe listOf(
             NovelReaderColorTheme(backgroundColor = "#111111", textColor = "#eeeeee"),
         )
@@ -113,6 +150,21 @@ class NovelReaderPreferencesTest {
         prefs.autoScrollOffset().set(0)
         prefs.prefetchNextChapter().set(false)
         prefs.bionicReading().set(false)
+        prefs.geminiApiKey().set("")
+        prefs.geminiModel().set("gemini-2.5-flash")
+        prefs.geminiBatchSize().set(40)
+        prefs.geminiConcurrency().set(2)
+        prefs.geminiDisableCache().set(false)
+        prefs.geminiRelaxedMode().set(true)
+        prefs.geminiReasoningEffort().set("low")
+        prefs.geminiBudgetTokens().set(4096)
+        prefs.geminiTemperature().set(0.9f)
+        prefs.geminiTopP().set(0.95f)
+        prefs.geminiTopK().set(40)
+        prefs.geminiSourceLang().set("English")
+        prefs.geminiTargetLang().set("Russian")
+        prefs.geminiPromptMode().set(GeminiPromptMode.CLASSIC)
+        prefs.geminiPromptModifiers().set("")
         prefs.customThemes().set(
             listOf(
                 NovelReaderColorTheme(backgroundColor = "#f5f5fa", textColor = "#111111"),
@@ -137,6 +189,21 @@ class NovelReaderPreferencesTest {
                 autoScrollOffset = 240,
                 prefetchNextChapter = true,
                 bionicReading = true,
+                geminiApiKey = "override-key",
+                geminiModel = "gemini-2.5-pro",
+                geminiBatchSize = 20,
+                geminiConcurrency = 1,
+                geminiDisableCache = true,
+                geminiRelaxedMode = false,
+                geminiReasoningEffort = "medium",
+                geminiBudgetTokens = 1024,
+                geminiTemperature = 0.6f,
+                geminiTopP = 0.8f,
+                geminiTopK = 50,
+                geminiSourceLang = "Japanese",
+                geminiTargetLang = "Russian",
+                geminiPromptMode = GeminiPromptMode.ADULT_18,
+                geminiPromptModifiers = "override-mod",
                 customThemes = listOf(
                     NovelReaderColorTheme(backgroundColor = "#000000", textColor = "#ffffff"),
                 ),
@@ -160,6 +227,21 @@ class NovelReaderPreferencesTest {
         settings.autoScrollOffset shouldBe 240
         settings.prefetchNextChapter shouldBe true
         settings.bionicReading shouldBe true
+        settings.geminiApiKey shouldBe "override-key"
+        settings.geminiModel shouldBe "gemini-2.5-pro"
+        settings.geminiBatchSize shouldBe 20
+        settings.geminiConcurrency shouldBe 1
+        settings.geminiDisableCache shouldBe true
+        settings.geminiRelaxedMode shouldBe false
+        settings.geminiReasoningEffort shouldBe "medium"
+        settings.geminiBudgetTokens shouldBe 1024
+        settings.geminiTemperature shouldBe 0.6f
+        settings.geminiTopP shouldBe 0.8f
+        settings.geminiTopK shouldBe 50
+        settings.geminiSourceLang shouldBe "Japanese"
+        settings.geminiTargetLang shouldBe "Russian"
+        settings.geminiPromptMode shouldBe GeminiPromptMode.ADULT_18
+        settings.geminiPromptModifiers shouldBe "override-mod"
         settings.customThemes shouldBe listOf(
             NovelReaderColorTheme(backgroundColor = "#000000", textColor = "#ffffff"),
         )

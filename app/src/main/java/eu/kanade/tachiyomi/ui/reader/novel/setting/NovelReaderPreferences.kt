@@ -55,6 +55,26 @@ data class NovelReaderSettings(
     // Advanced
     val customCSS: String,
     val customJS: String,
+
+    // Gemini Translation
+    val geminiEnabled: Boolean = true,
+    val geminiApiKey: String = "",
+    val geminiModel: String = "gemini-2.5-flash",
+    val geminiBatchSize: Int = 40,
+    val geminiConcurrency: Int = 2,
+    val geminiDisableCache: Boolean = false,
+    val geminiRelaxedMode: Boolean = true,
+    val geminiReasoningEffort: String = "minimal",
+    val geminiBudgetTokens: Int = 8192,
+    val geminiTemperature: Float = 0.7f,
+    val geminiTopP: Float = 0.95f,
+    val geminiTopK: Int = 40,
+    val geminiSourceLang: String = "English",
+    val geminiTargetLang: String = "Russian",
+    val geminiPromptMode: GeminiPromptMode = GeminiPromptMode.ADULT_18,
+    val geminiEnabledPromptModifiers: List<String> = emptyList(),
+    val geminiCustomPromptModifier: String = "",
+    val geminiPromptModifiers: String = "",
 )
 
 enum class NovelReaderTheme {
@@ -69,6 +89,11 @@ enum class TextAlign {
     CENTER,
     JUSTIFY,
     RIGHT,
+}
+
+enum class GeminiPromptMode {
+    CLASSIC,
+    ADULT_18,
 }
 
 @Serializable
@@ -119,6 +144,26 @@ data class NovelReaderOverride(
     // Advanced
     val customCSS: String? = null,
     val customJS: String? = null,
+
+    // Gemini Translation
+    val geminiEnabled: Boolean? = null,
+    val geminiApiKey: String? = null,
+    val geminiModel: String? = null,
+    val geminiBatchSize: Int? = null,
+    val geminiConcurrency: Int? = null,
+    val geminiDisableCache: Boolean? = null,
+    val geminiRelaxedMode: Boolean? = null,
+    val geminiReasoningEffort: String? = null,
+    val geminiBudgetTokens: Int? = null,
+    val geminiTemperature: Float? = null,
+    val geminiTopP: Float? = null,
+    val geminiTopK: Int? = null,
+    val geminiSourceLang: String? = null,
+    val geminiTargetLang: String? = null,
+    val geminiPromptMode: GeminiPromptMode? = null,
+    val geminiEnabledPromptModifiers: List<String>? = null,
+    val geminiCustomPromptModifier: String? = null,
+    val geminiPromptModifiers: String? = null,
 )
 
 class NovelReaderPreferences(
@@ -206,6 +251,48 @@ class NovelReaderPreferences(
 
     fun customJS() = preferenceStore.getString("novel_reader_custom_js", "")
 
+    // Gemini Translation
+    fun geminiEnabled() = preferenceStore.getBoolean("novel_reader_gemini_enabled", true)
+
+    fun geminiApiKey() = preferenceStore.getString("novel_reader_gemini_api_key", "")
+
+    fun geminiModel() = preferenceStore.getString("novel_reader_gemini_model", "gemini-2.5-flash")
+
+    fun geminiBatchSize() = preferenceStore.getInt("novel_reader_gemini_batch_size", 40)
+
+    fun geminiConcurrency() = preferenceStore.getInt("novel_reader_gemini_concurrency", 2)
+
+    fun geminiDisableCache() = preferenceStore.getBoolean("novel_reader_gemini_disable_cache", false)
+
+    fun geminiRelaxedMode() = preferenceStore.getBoolean("novel_reader_gemini_relaxed_mode", true)
+
+    fun geminiReasoningEffort() = preferenceStore.getString("novel_reader_gemini_reasoning_effort", "minimal")
+
+    fun geminiBudgetTokens() = preferenceStore.getInt("novel_reader_gemini_budget_tokens", 8192)
+
+    fun geminiTemperature() = preferenceStore.getFloat("novel_reader_gemini_temperature", 0.7f)
+
+    fun geminiTopP() = preferenceStore.getFloat("novel_reader_gemini_top_p", 0.95f)
+
+    fun geminiTopK() = preferenceStore.getInt("novel_reader_gemini_top_k", 40)
+
+    fun geminiSourceLang() = preferenceStore.getString("novel_reader_gemini_source_lang", "English")
+
+    fun geminiTargetLang() = preferenceStore.getString("novel_reader_gemini_target_lang", "Russian")
+
+    fun geminiPromptMode() = preferenceStore.getEnum("novel_reader_gemini_prompt_mode", GeminiPromptMode.ADULT_18)
+
+    fun geminiEnabledPromptModifiers() = preferenceStore.getObject(
+        "novel_reader_gemini_enabled_prompt_modifiers",
+        emptyList(),
+        serializer = { json.encodeToString(stringListSerializer, it) },
+        deserializer = { json.decodeFromString(stringListSerializer, it) },
+    )
+
+    fun geminiCustomPromptModifier() = preferenceStore.getString("novel_reader_gemini_custom_prompt_modifier", "")
+
+    fun geminiPromptModifiers() = preferenceStore.getString("novel_reader_gemini_prompt_modifiers", "")
+
     // EPUB export
     fun epubExportLocation() = preferenceStore.getString("novel_epub_export_location", "")
 
@@ -270,6 +357,23 @@ class NovelReaderPreferences(
                 bionicReading = bionicReading().get(),
                 customCSS = customCSS().get(),
                 customJS = customJS().get(),
+                geminiApiKey = geminiApiKey().get(),
+                geminiModel = geminiModel().get(),
+                geminiBatchSize = geminiBatchSize().get(),
+                geminiConcurrency = geminiConcurrency().get(),
+                geminiDisableCache = geminiDisableCache().get(),
+                geminiRelaxedMode = geminiRelaxedMode().get(),
+                geminiReasoningEffort = geminiReasoningEffort().get(),
+                geminiBudgetTokens = geminiBudgetTokens().get(),
+                geminiTemperature = geminiTemperature().get(),
+                geminiTopP = geminiTopP().get(),
+                geminiTopK = geminiTopK().get(),
+                geminiSourceLang = geminiSourceLang().get(),
+                geminiTargetLang = geminiTargetLang().get(),
+                geminiPromptMode = geminiPromptMode().get(),
+                geminiEnabledPromptModifiers = geminiEnabledPromptModifiers().get(),
+                geminiCustomPromptModifier = geminiCustomPromptModifier().get(),
+                geminiPromptModifiers = geminiPromptModifiers().get(),
             ),
         )
     }
@@ -318,6 +422,25 @@ class NovelReaderPreferences(
             bionicReading = override?.bionicReading ?: bionicReading().get(),
             customCSS = override?.customCSS ?: customCSS().get(),
             customJS = override?.customJS ?: customJS().get(),
+            geminiEnabled = geminiEnabled().get(),
+            geminiApiKey = override?.geminiApiKey ?: geminiApiKey().get(),
+            geminiModel = override?.geminiModel ?: geminiModel().get(),
+            geminiBatchSize = override?.geminiBatchSize ?: geminiBatchSize().get(),
+            geminiConcurrency = override?.geminiConcurrency ?: geminiConcurrency().get(),
+            geminiDisableCache = override?.geminiDisableCache ?: geminiDisableCache().get(),
+            geminiRelaxedMode = override?.geminiRelaxedMode ?: geminiRelaxedMode().get(),
+            geminiReasoningEffort = override?.geminiReasoningEffort ?: geminiReasoningEffort().get(),
+            geminiBudgetTokens = override?.geminiBudgetTokens ?: geminiBudgetTokens().get(),
+            geminiTemperature = override?.geminiTemperature ?: geminiTemperature().get(),
+            geminiTopP = override?.geminiTopP ?: geminiTopP().get(),
+            geminiTopK = override?.geminiTopK ?: geminiTopK().get(),
+            geminiSourceLang = override?.geminiSourceLang ?: geminiSourceLang().get(),
+            geminiTargetLang = override?.geminiTargetLang ?: geminiTargetLang().get(),
+            geminiPromptMode = override?.geminiPromptMode ?: geminiPromptMode().get(),
+            geminiEnabledPromptModifiers =
+            override?.geminiEnabledPromptModifiers ?: geminiEnabledPromptModifiers().get(),
+            geminiCustomPromptModifier = override?.geminiCustomPromptModifier ?: geminiCustomPromptModifier().get(),
+            geminiPromptModifiers = override?.geminiPromptModifiers ?: geminiPromptModifiers().get(),
         )
     }
 
@@ -413,12 +536,55 @@ class NovelReaderPreferences(
             AdvancedSettings(customCSS, customJS)
         }
 
+        val geminiFlow = combine(
+            geminiEnabled().changes(),
+            geminiApiKey().changes(),
+            geminiModel().changes(),
+            geminiBatchSize().changes(),
+            geminiConcurrency().changes(),
+            geminiDisableCache().changes(),
+            geminiRelaxedMode().changes(),
+            geminiReasoningEffort().changes(),
+            geminiBudgetTokens().changes(),
+            geminiTemperature().changes(),
+            geminiTopP().changes(),
+            geminiTopK().changes(),
+            geminiSourceLang().changes(),
+            geminiTargetLang().changes(),
+            geminiPromptMode().changes(),
+            geminiEnabledPromptModifiers().changes(),
+            geminiCustomPromptModifier().changes(),
+            geminiPromptModifiers().changes(),
+        ) { values: Array<Any?> ->
+            GeminiSettings(
+                enabled = values[0] as Boolean,
+                apiKey = values[1] as String,
+                model = values[2] as String,
+                batchSize = values[3] as Int,
+                concurrency = values[4] as Int,
+                disableCache = values[5] as Boolean,
+                relaxedMode = values[6] as Boolean,
+                reasoningEffort = values[7] as String,
+                budgetTokens = values[8] as Int,
+                temperature = values[9] as Float,
+                topP = values[10] as Float,
+                topK = values[11] as Int,
+                sourceLang = values[12] as String,
+                targetLang = values[13] as String,
+                promptMode = values[14] as GeminiPromptMode,
+                enabledPromptModifiers = values[15] as List<String>,
+                customPromptModifier = values[16] as String,
+                promptModifiers = values[17] as String,
+            )
+        }
+
         return combine(
             displayFlow,
             themeFlow,
             navigationFlow,
             accessibilityFlow,
             advancedFlow,
+            geminiFlow,
             sourceOverrides().changes(),
         ) { values: Array<Any?> ->
             val display = values[0] as DisplaySettings
@@ -426,7 +592,8 @@ class NovelReaderPreferences(
             val navigation = values[2] as NavigationSettings
             val accessibility = values[3] as AccessibilitySettings
             val advanced = values[4] as AdvancedSettings
-            val overrides = values[5] as Map<Long, NovelReaderOverride>
+            val gemini = values[5] as GeminiSettings
+            val overrides = values[6] as Map<Long, NovelReaderOverride>
 
             val override = overrides[sourceId]
             NovelReaderSettings(
@@ -463,6 +630,24 @@ class NovelReaderPreferences(
                 bionicReading = override?.bionicReading ?: accessibility.bionicReading,
                 customCSS = override?.customCSS ?: advanced.customCSS,
                 customJS = override?.customJS ?: advanced.customJS,
+                geminiEnabled = gemini.enabled,
+                geminiApiKey = override?.geminiApiKey ?: gemini.apiKey,
+                geminiModel = override?.geminiModel ?: gemini.model,
+                geminiBatchSize = override?.geminiBatchSize ?: gemini.batchSize,
+                geminiConcurrency = override?.geminiConcurrency ?: gemini.concurrency,
+                geminiDisableCache = override?.geminiDisableCache ?: gemini.disableCache,
+                geminiRelaxedMode = override?.geminiRelaxedMode ?: gemini.relaxedMode,
+                geminiReasoningEffort = override?.geminiReasoningEffort ?: gemini.reasoningEffort,
+                geminiBudgetTokens = override?.geminiBudgetTokens ?: gemini.budgetTokens,
+                geminiTemperature = override?.geminiTemperature ?: gemini.temperature,
+                geminiTopP = override?.geminiTopP ?: gemini.topP,
+                geminiTopK = override?.geminiTopK ?: gemini.topK,
+                geminiSourceLang = override?.geminiSourceLang ?: gemini.sourceLang,
+                geminiTargetLang = override?.geminiTargetLang ?: gemini.targetLang,
+                geminiPromptMode = override?.geminiPromptMode ?: gemini.promptMode,
+                geminiEnabledPromptModifiers = override?.geminiEnabledPromptModifiers ?: gemini.enabledPromptModifiers,
+                geminiCustomPromptModifier = override?.geminiCustomPromptModifier ?: gemini.customPromptModifier,
+                geminiPromptModifiers = override?.geminiPromptModifiers ?: gemini.promptModifiers,
             )
         }
     }
@@ -514,6 +699,27 @@ class NovelReaderPreferences(
         val customJS: String,
     )
 
+    private data class GeminiSettings(
+        val enabled: Boolean,
+        val apiKey: String,
+        val model: String,
+        val batchSize: Int,
+        val concurrency: Int,
+        val disableCache: Boolean,
+        val relaxedMode: Boolean,
+        val reasoningEffort: String,
+        val budgetTokens: Int,
+        val temperature: Float,
+        val topP: Float,
+        val topK: Int,
+        val sourceLang: String,
+        val targetLang: String,
+        val promptMode: GeminiPromptMode,
+        val enabledPromptModifiers: List<String>,
+        val customPromptModifier: String,
+        val promptModifiers: String,
+    )
+
     companion object {
         const val DEFAULT_FONT_SIZE = 16
         const val DEFAULT_LINE_HEIGHT = 1.6f
@@ -526,5 +732,6 @@ class NovelReaderPreferences(
             NovelReaderOverride.serializer(),
         )
         private val customThemesSerializer = ListSerializer(NovelReaderColorTheme.serializer())
+        private val stringListSerializer = ListSerializer(String.serializer())
     }
 }
