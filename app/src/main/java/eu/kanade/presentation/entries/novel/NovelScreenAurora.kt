@@ -92,6 +92,7 @@ fun NovelScreenAuroraImpl(
     onTrackingClicked: () -> Unit,
     trackingCount: Int,
     onOpenBatchDownloadDialog: (() -> Unit)?,
+    onOpenTranslatedDownloadDialog: (() -> Unit)?,
     onOpenEpubExportDialog: (() -> Unit)?,
     onChapterClick: (Long) -> Unit,
     onChapterLongClick: (Long) -> Unit,
@@ -200,6 +201,7 @@ fun NovelScreenAuroraImpl(
                                 onAddToLibraryClicked = onToggleFavorite,
                                 onTrackingClicked = onTrackingClicked,
                                 onBatchDownloadClicked = onOpenBatchDownloadDialog,
+                                onTranslatedDownloadClicked = onOpenTranslatedDownloadDialog,
                                 onExportEpubClicked = onOpenEpubExportDialog,
                                 modifier = Modifier.fillMaxWidth(),
                             )
@@ -480,6 +482,7 @@ fun NovelScreenAuroraImpl(
                         onAddToLibraryClicked = onToggleFavorite,
                         onTrackingClicked = onTrackingClicked,
                         onBatchDownloadClicked = onOpenBatchDownloadDialog,
+                        onTranslatedDownloadClicked = onOpenTranslatedDownloadDialog,
                         onExportEpubClicked = onOpenEpubExportDialog,
                         modifier = Modifier.fillMaxWidth(),
                     )

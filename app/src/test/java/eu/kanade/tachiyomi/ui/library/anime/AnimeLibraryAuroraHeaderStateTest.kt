@@ -24,14 +24,14 @@ class AnimeLibraryAuroraHeaderStateTest {
     }
 
     @Test
-    fun `shouldShowAuroraLibraryCategoryTabs is true for anime and manga sections`() {
+    fun `shouldShowAuroraLibraryCategoryTabs is true for anime manga and novel sections`() {
         shouldShowAuroraLibraryCategoryTabs(AnimeLibraryTab.Section.Anime) shouldBe true
         shouldShowAuroraLibraryCategoryTabs(AnimeLibraryTab.Section.Manga) shouldBe true
+        shouldShowAuroraLibraryCategoryTabs(AnimeLibraryTab.Section.Novel) shouldBe true
     }
 
     @Test
-    fun `shouldShowAuroraLibraryCategoryTabs is false for novel and null section`() {
-        shouldShowAuroraLibraryCategoryTabs(AnimeLibraryTab.Section.Novel) shouldBe false
+    fun `shouldShowAuroraLibraryCategoryTabs is false for null section`() {
         shouldShowAuroraLibraryCategoryTabs(null) shouldBe false
     }
 
@@ -74,7 +74,7 @@ class AnimeLibraryAuroraHeaderStateTest {
             categoryCount = 3,
             showCategoryTabs = true,
             searchQuery = "test",
-        ) shouldBe false
+        ) shouldBe true
     }
 
     @Test

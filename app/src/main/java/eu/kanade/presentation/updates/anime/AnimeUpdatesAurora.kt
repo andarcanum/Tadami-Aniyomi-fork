@@ -68,6 +68,7 @@ import kotlin.time.Duration.Companion.seconds
 fun AnimeUpdatesAuroraContent(
     items: List<AnimeUpdatesItem>,
     onAnimeClicked: (Long) -> Unit,
+    onEpisodeClicked: (Long, Long) -> Unit,
     onRefresh: () -> Unit,
     contentPadding: PaddingValues,
 ) {
@@ -128,7 +129,8 @@ fun AnimeUpdatesAuroraContent(
                                 val item = group.items.first()
                                 AuroraUpdateCard(
                                     item = item,
-                                    onClick = onAnimeClicked,
+                                    onAnimeClick = onAnimeClicked,
+                                    onEpisodeClick = onEpisodeClicked,
                                     modifier = Modifier.padding(bottom = 12.dp),
                                 )
                             } else {
@@ -156,7 +158,8 @@ fun AnimeUpdatesAuroraContent(
                                         group.items.forEach { updateItem ->
                                             AuroraUpdateCard(
                                                 item = updateItem,
-                                                onClick = onAnimeClicked,
+                                                onAnimeClick = onAnimeClicked,
+                                                onEpisodeClick = onEpisodeClicked,
                                                 modifier = Modifier.padding(bottom = 8.dp),
                                             )
                                         }
@@ -289,7 +292,8 @@ private fun EmptyUpdatesState(onRefresh: () -> Unit) {
 @Composable
 fun AuroraUpdateCard(
     item: AnimeUpdatesItem,
-    onClick: (Long) -> Unit,
+    onAnimeClick: (Long) -> Unit,
+    onEpisodeClick: (Long, Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
@@ -297,7 +301,7 @@ fun AuroraUpdateCard(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clickable { onClick(item.update.animeId) }
+            .clickable { onAnimeClick(item.update.animeId) }
             .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -368,7 +372,10 @@ fun AuroraUpdateCard(
         Box(
             modifier = Modifier
                 .size(36.dp)
-                .background(colors.accent, CircleShape),
+                .background(colors.accent, CircleShape)
+                .clickable {
+                    onEpisodeClick(item.update.animeId, item.update.episodeId)
+                },
             contentAlignment = Alignment.Center,
         ) {
             Icon(

@@ -41,9 +41,34 @@ class NovelCategoryRepositoryImplTest {
             ),
         )!!
 
+        database.novel_categoriesQueries.getCategories().executeAsList().size shouldBe 2
+
         categoryRepository.setNovelCategories(novelId, listOf(categoryId))
         val categories = categoryRepository.getCategoriesByNovelId(novelId)
         categories.size shouldBe 1
         categories.first().name shouldBe "Favorites"
+    }
+
+    @Test
+    fun `migrates legacy categories table into novel categories table`() = runTest {
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        val database = createTestNovelDatabase(driver)
+        val handler = AndroidNovelDatabaseHandler(database, driver)
+        val categoryRepository = NovelCategoryRepositoryImpl(handler)
+
+        database.categoriesQueries.insert(
+            name = "Legacy",
+            order = 5,
+            flags = 11,
+        )
+        val legacyCategoryId = database.categoriesQueries.selectLastInsertedRowId()
+            .executeAsOne()
+
+        database.novel_categoriesQueries.getCategory(legacyCategoryId).executeAsOneOrNull() shouldBe null
+
+        val categories = categoryRepository.getCategories()
+
+        categories.any { it.id == legacyCategoryId && it.name == "Legacy" } shouldBe true
+        database.novel_categoriesQueries.getCategory(legacyCategoryId).executeAsOneOrNull()?.name shouldBe "Legacy"
     }
 }

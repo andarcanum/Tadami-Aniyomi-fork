@@ -289,130 +289,6 @@ private fun GeneralTab(
                 )
             },
         )
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { showGeminiSettings = !showGeminiSettings },
-        ) {
-            Text(
-                text = if (showGeminiSettings) {
-                    "AI translator: hide"
-                } else {
-                    "AI translator: show"
-                },
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                style = MaterialTheme.typography.labelLarge,
-            )
-        }
-        if (showGeminiSettings) {
-            Text(
-                text = "Provider",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(
-                    NovelTranslationProvider.GEMINI to "Gemini",
-                    NovelTranslationProvider.OPENROUTER to "OpenRouter",
-                ).forEach { option ->
-                    val selected = settings.translationProvider == option.first
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (selected) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant
-                        },
-                        modifier = Modifier.clickable {
-                            update(
-                                option.first,
-                                { o, v -> o.copy(translationProvider = v) },
-                                { preferences.translationProvider().set(it) },
-                            )
-                        },
-                    ) {
-                        Text(
-                            text = if (selected) "* ${option.second}" else option.second,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                    }
-                }
-            }
-            SwitchPreferenceWidget(
-                title = "Auto-start translation for English",
-                subtitle = "Automatically start translation when source language is English",
-                checked = settings.geminiAutoTranslateEnglishSource,
-                onCheckedChanged = {
-                    update(
-                        it,
-                        { o, v -> o.copy(geminiAutoTranslateEnglishSource = v) },
-                        { preferences.geminiAutoTranslateEnglishSource().set(it) },
-                    )
-                },
-            )
-            SwitchPreferenceWidget(
-                title = "Pre-translate next chapter (30%)",
-                subtitle = "Start next chapter translation in background after 30% reading progress",
-                checked = settings.geminiPrefetchNextChapterTranslation,
-                onCheckedChanged = {
-                    update(
-                        it,
-                        { o, v -> o.copy(geminiPrefetchNextChapterTranslation = v) },
-                        { preferences.geminiPrefetchNextChapterTranslation().set(it) },
-                    )
-                },
-            )
-            if (settings.translationProvider == NovelTranslationProvider.OPENROUTER) {
-                EditTextPreferenceWidget(
-                    title = "OpenRouter Base URL",
-                    subtitle = "%s",
-                    icon = null,
-                    value = settings.openRouterBaseUrl,
-                    onConfirm = {
-                        update(
-                            it,
-                            { o, v -> o.copy(openRouterBaseUrl = v) },
-                            { preferences.openRouterBaseUrl().set(it) },
-                        )
-                        true
-                    },
-                    canBeBlank = false,
-                )
-                EditTextPreferenceWidget(
-                    title = "OpenRouter API key",
-                    subtitle = "%s",
-                    icon = null,
-                    value = settings.openRouterApiKey,
-                    onConfirm = {
-                        update(
-                            it,
-                            { o, v -> o.copy(openRouterApiKey = v) },
-                            { preferences.openRouterApiKey().set(it) },
-                        )
-                        true
-                    },
-                    canBeBlank = false,
-                )
-                EditTextPreferenceWidget(
-                    title = "OpenRouter model (:free only)",
-                    subtitle = "%s",
-                    icon = null,
-                    value = settings.openRouterModel,
-                    onConfirm = {
-                        update(
-                            it,
-                            { o, v -> o.copy(openRouterModel = v) },
-                            { preferences.openRouterModel().set(it) },
-                        )
-                        true
-                    },
-                    canBeBlank = false,
-                )
-            }
-        }
-
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_fullscreen),
             subtitle = stringResource(AYMR.strings.novel_reader_fullscreen_summary),
@@ -450,6 +326,129 @@ private fun GeneralTab(
                 update(it, { o, v -> o.copy(bionicReading = v) }, { preferences.bionicReading().set(it) })
             },
         )
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { showGeminiSettings = !showGeminiSettings },
+        ) {
+            Text(
+                text = if (showGeminiSettings) {
+                    stringResource(AYMR.strings.novel_reader_ai_translator_hide)
+                } else {
+                    stringResource(AYMR.strings.novel_reader_ai_translator_show)
+                },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
+        if (showGeminiSettings) {
+            Text(
+                text = stringResource(AYMR.strings.novel_reader_translation_provider),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    NovelTranslationProvider.GEMINI to stringResource(AYMR.strings.novel_reader_translation_provider_gemini),
+                    NovelTranslationProvider.OPENROUTER to stringResource(AYMR.strings.novel_reader_translation_provider_openrouter),
+                ).forEach { option ->
+                    val selected = settings.translationProvider == option.first
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                        modifier = Modifier.clickable {
+                            update(
+                                option.first,
+                                { o, v -> o.copy(translationProvider = v) },
+                                { preferences.translationProvider().set(it) },
+                            )
+                        },
+                    ) {
+                        Text(
+                            text = if (selected) "* ${option.second}" else option.second,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
+                }
+            }
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_translation_auto_english_title),
+                subtitle = stringResource(AYMR.strings.novel_reader_translation_auto_english_summary),
+                checked = settings.geminiAutoTranslateEnglishSource,
+                onCheckedChanged = {
+                    update(
+                        it,
+                        { o, v -> o.copy(geminiAutoTranslateEnglishSource = v) },
+                        { preferences.geminiAutoTranslateEnglishSource().set(it) },
+                    )
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_translation_prefetch_next_title),
+                subtitle = stringResource(AYMR.strings.novel_reader_translation_prefetch_next_summary),
+                checked = settings.geminiPrefetchNextChapterTranslation,
+                onCheckedChanged = {
+                    update(
+                        it,
+                        { o, v -> o.copy(geminiPrefetchNextChapterTranslation = v) },
+                        { preferences.geminiPrefetchNextChapterTranslation().set(it) },
+                    )
+                },
+            )
+            if (settings.translationProvider == NovelTranslationProvider.OPENROUTER) {
+                EditTextPreferenceWidget(
+                    title = stringResource(AYMR.strings.novel_reader_openrouter_base_url),
+                    subtitle = "%s",
+                    icon = null,
+                    value = settings.openRouterBaseUrl,
+                    onConfirm = {
+                        update(
+                            it,
+                            { o, v -> o.copy(openRouterBaseUrl = v) },
+                            { preferences.openRouterBaseUrl().set(it) },
+                        )
+                        true
+                    },
+                    canBeBlank = false,
+                )
+                EditTextPreferenceWidget(
+                    title = stringResource(AYMR.strings.novel_reader_openrouter_api_key),
+                    subtitle = "%s",
+                    icon = null,
+                    value = settings.openRouterApiKey,
+                    onConfirm = {
+                        update(
+                            it,
+                            { o, v -> o.copy(openRouterApiKey = v) },
+                            { preferences.openRouterApiKey().set(it) },
+                        )
+                        true
+                    },
+                    canBeBlank = false,
+                )
+                EditTextPreferenceWidget(
+                    title = stringResource(AYMR.strings.novel_reader_openrouter_model),
+                    subtitle = "%s",
+                    icon = null,
+                    value = settings.openRouterModel,
+                    onConfirm = {
+                        update(
+                            it,
+                            { o, v -> o.copy(openRouterModel = v) },
+                            { preferences.openRouterModel().set(it) },
+                        )
+                        true
+                    },
+                    canBeBlank = false,
+                )
+            }
+        }
 
         EditTextPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_custom_css),

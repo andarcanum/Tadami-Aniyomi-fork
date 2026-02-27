@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Delete
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -101,6 +103,7 @@ fun NovelScreen(
     onTrackingClicked: () -> Unit,
     trackingCount: Int,
     onOpenBatchDownloadDialog: (() -> Unit)?,
+    onOpenTranslatedDownloadDialog: (() -> Unit)?,
     onOpenEpubExportDialog: (() -> Unit)?,
     onChapterClick: (Long) -> Unit,
     onChapterReadToggle: (Long) -> Unit,
@@ -142,6 +145,7 @@ fun NovelScreen(
             onTrackingClicked = onTrackingClicked,
             trackingCount = trackingCount,
             onOpenBatchDownloadDialog = onOpenBatchDownloadDialog,
+            onOpenTranslatedDownloadDialog = onOpenTranslatedDownloadDialog,
             onOpenEpubExportDialog = onOpenEpubExportDialog,
             onChapterClick = onChapterClick,
             onChapterLongClick = onChapterLongClick,
@@ -450,9 +454,18 @@ fun NovelScreen(
                             )
                         }
                     }
+                    if (onOpenTranslatedDownloadDialog != null) {
+                        TextButton(onClick = onOpenTranslatedDownloadDialog) {
+                            Icon(imageVector = Icons.Outlined.Translate, contentDescription = null)
+                            Text(
+                                text = stringResource(AYMR.strings.novel_translated_download_short),
+                                modifier = Modifier.padding(start = 4.dp),
+                            )
+                        }
+                    }
                     if (onOpenEpubExportDialog != null) {
                         TextButton(onClick = onOpenEpubExportDialog) {
-                            Icon(imageVector = Icons.Outlined.Share, contentDescription = null)
+                            Icon(imageVector = Icons.AutoMirrored.Outlined.MenuBook, contentDescription = null)
                             Text(
                                 text = stringResource(AYMR.strings.novel_epub_short),
                                 modifier = Modifier.padding(start = 4.dp),

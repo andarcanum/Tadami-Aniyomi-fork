@@ -63,6 +63,8 @@ import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
 import eu.kanade.tachiyomi.ui.download.DownloadsTab
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
 import eu.kanade.tachiyomi.ui.main.MainActivity
+import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences
+import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
 import eu.kanade.tachiyomi.ui.updates.anime.AnimeUpdatesScreenModel
 import eu.kanade.tachiyomi.ui.updates.anime.animeUpdatesTab
@@ -73,6 +75,7 @@ import eu.kanade.tachiyomi.ui.updates.novel.novelUpdatesTab
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.launch
+import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -122,6 +125,7 @@ data object UpdatesTab : Tab {
             val updatingAllLibraryMessage = stringResource(AYMR.strings.aurora_updating_library)
             val updateAlreadyRunningMessage = stringResource(AYMR.strings.aurora_update_already_running)
             val scope = rememberCoroutineScope()
+            val playerPreferences = remember { Injekt.get<PlayerPreferences>() }
 
             val animeScreenModel = rememberScreenModel { AnimeUpdatesScreenModel() }
             val animeState by animeScreenModel.state.collectAsState()
@@ -166,6 +170,16 @@ data object UpdatesTab : Tab {
                                     onAnimeClicked = {
                                         navigator.push(eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen(it))
                                     },
+                                    onEpisodeClicked = { animeId, episodeId ->
+                                        scope.launchIO {
+                                            MainActivity.startPlayerActivity(
+                                                context = context,
+                                                animeId = animeId,
+                                                episodeId = episodeId,
+                                                extPlayer = playerPreferences.alwaysUseExternalPlayer().get(),
+                                            )
+                                        }
+                                    },
                                     onRefresh = animeScreenModel::updateLibrary,
                                     contentPadding = PaddingValues(
                                         bottom = contentPadding.calculateBottomPadding(),
@@ -184,6 +198,10 @@ data object UpdatesTab : Tab {
                                     items = mangaState.items,
                                     onMangaClicked = {
                                         navigator.push(eu.kanade.tachiyomi.ui.entries.manga.MangaScreen(it))
+                                    },
+                                    onChapterClicked = { mangaId, chapterId ->
+                                        val intent = ReaderActivity.newIntent(context, mangaId, chapterId)
+                                        context.startActivity(intent)
                                     },
                                     onRefresh = mangaScreenModel::updateLibrary,
                                     contentPadding = PaddingValues(

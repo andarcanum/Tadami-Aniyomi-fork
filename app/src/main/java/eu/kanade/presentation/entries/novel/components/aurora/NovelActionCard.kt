@@ -13,11 +13,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -46,6 +48,7 @@ fun NovelActionCard(
     onAddToLibraryClicked: () -> Unit,
     onTrackingClicked: (() -> Unit)?,
     onBatchDownloadClicked: (() -> Unit)?,
+    onTranslatedDownloadClicked: (() -> Unit)?,
     onExportEpubClicked: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
@@ -118,11 +121,26 @@ fun NovelActionCard(
                 )
             }
 
+            if (onTranslatedDownloadClicked != null) {
+                ActionButton(
+                    icon = {
+                        Icon(
+                            Icons.Outlined.Translate,
+                            contentDescription = null,
+                            tint = colors.accent,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    },
+                    label = stringResource(AYMR.strings.novel_translated_download_short),
+                    onClick = onTranslatedDownloadClicked,
+                    modifier = Modifier.weight(1f),
+                )
+            }
             if (onExportEpubClicked != null) {
                 ActionButton(
                     icon = {
                         Icon(
-                            Icons.Outlined.Download,
+                            Icons.AutoMirrored.Outlined.MenuBook,
                             contentDescription = null,
                             tint = colors.accent,
                             modifier = Modifier.size(24.dp),

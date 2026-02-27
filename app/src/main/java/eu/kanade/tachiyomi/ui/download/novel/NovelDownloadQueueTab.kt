@@ -26,11 +26,11 @@ fun Screen.novelDownloadTab(
             NovelDownloadQueueScreen(
                 contentPadding = contentPadding,
                 state = state,
-                onRefresh = screenModel::refresh,
+                onRefresh = screenModel::refreshStorage,
                 nestedScrollConnection = nestedScrollConnection,
             )
         },
-        numberTitle = state.downloadCount,
+        numberTitle = state.queueCount,
         navigateUp = navigator::pop,
     )
 }

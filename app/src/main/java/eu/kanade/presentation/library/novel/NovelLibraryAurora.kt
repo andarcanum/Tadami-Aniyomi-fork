@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.Configuration
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -54,6 +55,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastAny
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import eu.kanade.presentation.components.AuroraCard
@@ -87,15 +89,19 @@ import androidx.compose.foundation.lazy.items as listItems
 @Composable
 fun NovelLibraryAuroraContent(
     items: List<LibraryNovel>,
+    selection: List<LibraryNovel> = emptyList(),
     searchQuery: String?,
     onSearchQueryChange: (String?) -> Unit,
     onNovelClicked: (Long) -> Unit,
+    onToggleSelection: ((LibraryNovel) -> Unit)? = null,
+    onToggleRangeSelection: ((LibraryNovel) -> Unit)? = null,
     contentPadding: PaddingValues,
     hasActiveFilters: Boolean,
     onFilterClicked: () -> Unit,
     onRefresh: () -> Unit,
     onGlobalUpdate: () -> Unit,
     onOpenRandomEntry: () -> Unit,
+    onLongClickNovel: ((LibraryNovel) -> Unit)? = null,
     onContinueReadingClicked: ((LibraryNovel) -> Unit)? = null,
     showInlineHeader: Boolean = true,
 ) {
@@ -158,6 +164,19 @@ fun NovelLibraryAuroraContent(
     } else {
         items.filter { it.novel.title.contains(query, ignoreCase = true) }
     }
+    val isSelectionMode = selection.isNotEmpty() && onToggleSelection != null
+    val onClickNovelItem: (LibraryNovel) -> Unit = { libraryNovel ->
+        if (isSelectionMode) {
+            onToggleSelection?.invoke(libraryNovel)
+        } else {
+            onNovelClicked(libraryNovel.novel.id)
+        }
+    }
+    val onLongClickNovelItem: ((LibraryNovel) -> Unit)? = when {
+        onToggleRangeSelection != null -> onToggleRangeSelection
+        onLongClickNovel != null -> onLongClickNovel
+        else -> null
+    }
 
     Box(
         modifier = Modifier
@@ -202,21 +221,23 @@ fun NovelLibraryAuroraContent(
                         showLanguageBadge = showLanguageBadge,
                         sourceLanguage = sourceLanguageByNovelId[item.novel.id].orEmpty(),
                     )
-                    NovelLibraryAuroraCard(
-                        item = item,
-                        context = context,
-                        badgeState = badgeState,
-                        showMetadata = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp)
-                            .aspectRatio(2.2f),
-                        coverHeightFraction = 0.62f,
-                        onNovelClicked = onNovelClicked,
-                        onClickContinueReading = onContinueReadingClicked,
-                    )
+                        NovelLibraryAuroraCard(
+                            item = item,
+                            context = context,
+                            badgeState = badgeState,
+                            showMetadata = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp)
+                                .aspectRatio(2.2f),
+                            coverHeightFraction = 0.62f,
+                            onNovelClicked = { onClickNovelItem(item) },
+                            onLongClick = onLongClickNovelItem?.let { { it(item) } },
+                            onClickContinueReading = onContinueReadingClicked,
+                            isSelected = selection.fastAny { it.id == item.id },
+                        )
+                    }
                 }
-            }
         } else {
             LazyLibraryGrid(
                 modifier = Modifier
@@ -260,7 +281,9 @@ fun NovelLibraryAuroraContent(
                         NovelLibraryCompactGridItem(
                             item = item,
                             badgeState = badgeState,
-                            onNovelClicked = onNovelClicked,
+                            selection = selection,
+                            onNovelClicked = onClickNovelItem,
+                            onLongClickNovel = onLongClickNovelItem,
                             onClickContinueReading = onContinueReadingClicked,
                         )
                     } else {
@@ -271,8 +294,10 @@ fun NovelLibraryAuroraContent(
                             showMetadata = displaySpec.showMetadata,
                             modifier = Modifier.aspectRatio(displaySpec.gridCardAspectRatio),
                             coverHeightFraction = displaySpec.gridCoverHeightFraction,
-                            onNovelClicked = onNovelClicked,
+                            onNovelClicked = { onClickNovelItem(item) },
+                            onLongClick = onLongClickNovelItem?.let { { it(item) } },
                             onClickContinueReading = onContinueReadingClicked,
+                            isSelected = selection.fastAny { it.id == item.id },
                         )
                     }
                 }
@@ -285,14 +310,17 @@ fun NovelLibraryAuroraContent(
 private fun NovelLibraryCompactGridItem(
     item: LibraryNovel,
     badgeState: NovelLibraryBadgeState,
-    onNovelClicked: (Long) -> Unit,
+    selection: List<LibraryNovel>,
+    onNovelClicked: (LibraryNovel) -> Unit,
+    onLongClickNovel: ((LibraryNovel) -> Unit)?,
     onClickContinueReading: ((LibraryNovel) -> Unit)?,
 ) {
     EntryCompactGridItem(
         coverData = item.novel.asNovelCover(),
         title = item.novel.title,
-        onClick = { onNovelClicked(item.novel.id) },
-        onLongClick = {},
+        onClick = { onNovelClicked(item) },
+        onLongClick = { onLongClickNovel?.invoke(item) },
+        isSelected = selection.fastAny { it.id == item.id },
         onClickContinueViewing = if (onClickContinueReading != null && item.unreadCount > 0) {
             { onClickContinueReading(item) }
         } else {
@@ -327,8 +355,10 @@ private fun NovelLibraryAuroraCard(
     showMetadata: Boolean,
     modifier: Modifier,
     coverHeightFraction: Float,
-    onNovelClicked: (Long) -> Unit,
+    onNovelClicked: () -> Unit,
+    onLongClick: (() -> Unit)?,
     onClickContinueReading: ((LibraryNovel) -> Unit)?,
+    isSelected: Boolean,
 ) {
     val progressText = if (showMetadata && item.totalChapters > 0) {
         "${item.totalChapters - item.unreadCount}/${item.totalChapters} ${stringResource(
@@ -384,12 +414,14 @@ private fun NovelLibraryAuroraCard(
             } else {
                 null
             },
-            onClick = { onNovelClicked(item.novel.id) },
+            onClick = onNovelClicked,
+            onLongClick = onLongClick,
             onClickContinueViewing = if (onClickContinueReading != null && item.unreadCount > 0) {
                 { onClickContinueReading(item) }
             } else {
                 null
             },
+            isSelected = isSelected,
             titleMaxLines = if (showMetadata) 1 else 2,
         )
     } else {
@@ -397,12 +429,14 @@ private fun NovelLibraryAuroraCard(
             coverData = coverRequest,
             badgeState = badgeState,
             modifier = modifier,
+            isSelected = isSelected,
             onClickContinueViewing = if (onClickContinueReading != null && item.unreadCount > 0) {
                 { onClickContinueReading(item) }
             } else {
                 null
             },
-            onClick = { onNovelClicked(item.novel.id) },
+            onClick = onNovelClicked,
+            onLongClick = onLongClick,
         )
     }
 }
@@ -412,20 +446,30 @@ private fun NovelLibraryAuroraCoverOnlyCard(
     coverData: Any?,
     badgeState: NovelLibraryBadgeState,
     modifier: Modifier,
+    isSelected: Boolean,
     onClickContinueViewing: (() -> Unit)?,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)?,
 ) {
     val colors = AuroraTheme.colors
     Card(
-        modifier = modifier,
+        modifier = modifier.combinedClickable(
+            onClick = onClick,
+            onLongClick = onLongClick,
+        ),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = colors.glass),
         border = BorderStroke(
-            width = 1.dp,
-            color = if (colors.isDark) Color.Transparent else Color.LightGray.copy(alpha = 0.4f),
+            width = if (isSelected) 2.dp else 1.dp,
+            color = if (isSelected) {
+                colors.accent
+            } else if (colors.isDark) {
+                Color.Transparent
+            } else {
+                Color.LightGray.copy(alpha = 0.4f)
+            },
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        onClick = onClick,
     ) {
         Box(
             modifier = Modifier

@@ -1,11 +1,24 @@
 package eu.kanade.tachiyomi.ui.library.novel
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager
+import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
+import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadManager
 import eu.kanade.tachiyomi.source.model.SManga
+import eu.kanade.tachiyomi.ui.entries.novel.NovelDownloadAction
+import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.PersistentList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
@@ -13,12 +26,20 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tachiyomi.domain.entries.novel.model.NovelUpdate
+import tachiyomi.core.common.preference.CheckboxState
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.util.lang.compareToWithCollator
+import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.domain.category.model.Category
+import tachiyomi.domain.category.novel.interactor.GetNovelCategories
+import tachiyomi.domain.category.novel.interactor.SetNovelCategories
 import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
+import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
+import tachiyomi.domain.items.novelchapter.service.getNovelChapterSort
 import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.library.novel.model.NovelLibrarySort
 import tachiyomi.domain.library.service.LibraryPreferences
@@ -28,9 +49,14 @@ import kotlin.random.Random
 
 class NovelLibraryScreenModel(
     private val getLibraryNovel: GetLibraryNovel = Injekt.get(),
+    private val getNovelCategories: GetNovelCategories = Injekt.get(),
+    private val setNovelCategories: SetNovelCategories = Injekt.get(),
+    private val updateNovel: UpdateNovel = Injekt.get(),
     private val chapterRepository: NovelChapterRepository = Injekt.get(),
     private val basePreferences: BasePreferences = Injekt.get(),
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
+    private val novelDownloadManager: NovelDownloadManager = NovelDownloadManager(),
+    private val novelTranslatedDownloadManager: NovelTranslatedDownloadManager = NovelTranslatedDownloadManager(),
     private val hasDownloadedChapters: (tachiyomi.domain.entries.novel.model.Novel) -> Boolean = {
         NovelDownloadManager().hasAnyDownloadedChapter(it)
     },
@@ -48,6 +74,7 @@ class NovelLibraryScreenModel(
         randomSortSeed = libraryPreferences.randomNovelSortSeed().get(),
     ),
 ) {
+    var activeCategoryIndex: Int by mutableStateOf(0)
 
     init {
         screenModelScope.launch {
@@ -203,6 +230,312 @@ class NovelLibraryScreenModel(
         mutableState.update { it.copy(dialog = null) }
     }
 
+    fun clearSelection() {
+        mutableState.update { it.copy(selection = persistentListOf()) }
+    }
+
+    fun toggleSelection(novel: LibraryNovel) {
+        mutableState.update { current ->
+            val mutable = current.selection.toMutableList()
+            val existingIndex = mutable.indexOfFirst { it.id == novel.id }
+            if (existingIndex >= 0) {
+                mutable.removeAt(existingIndex)
+            } else {
+                mutable.add(novel)
+            }
+            current.copy(selection = persistentListOf<LibraryNovel>().addAll(mutable))
+        }
+    }
+
+    fun toggleRangeSelection(novel: LibraryNovel) {
+        mutableState.update { current ->
+            val mutable = current.selection.toMutableList()
+            val lastSelected = mutable.lastOrNull()
+            if (lastSelected?.category != novel.category) {
+                val existingIndex = mutable.indexOfFirst { it.id == novel.id }
+                if (existingIndex >= 0) {
+                    mutable.removeAt(existingIndex)
+                } else {
+                    mutable.add(novel)
+                }
+                return@update current.copy(selection = persistentListOf<LibraryNovel>().addAll(mutable))
+            }
+
+            val items = current.items.filter { it.category == novel.category }
+            val lastIndex = items.indexOfFirst { it.id == lastSelected.id }
+            val currentIndex = items.indexOfFirst { it.id == novel.id }
+            if (lastIndex < 0 || currentIndex < 0 || lastIndex == currentIndex) {
+                return@update current
+            }
+
+            val selectedIds = mutable.map { it.id }.toSet()
+            val start = minOf(lastIndex, currentIndex)
+            val end = maxOf(lastIndex, currentIndex)
+            val toAdd = items
+                .subList(start, end + 1)
+                .filterNot { it.id in selectedIds }
+            mutable.addAll(toAdd)
+            current.copy(selection = persistentListOf<LibraryNovel>().addAll(mutable))
+        }
+    }
+
+    fun selectAll(index: Int) {
+        mutableState.update { current ->
+            val targetCategoryId = current.visibleCategoryIds().getOrNull(index)
+            val scopeItems = if (targetCategoryId == null) {
+                current.items
+            } else {
+                current.items.filter { it.category == targetCategoryId }
+            }
+            val selectedIds = current.selection.map { it.id }.toSet()
+            val mutable = current.selection.toMutableList()
+            mutable.addAll(scopeItems.filterNot { it.id in selectedIds })
+            current.copy(selection = persistentListOf<LibraryNovel>().addAll(mutable))
+        }
+    }
+
+    fun invertSelection(index: Int) {
+        mutableState.update { current ->
+            val targetCategoryId = current.visibleCategoryIds().getOrNull(index)
+            val scopeItems = if (targetCategoryId == null) {
+                current.items
+            } else {
+                current.items.filter { it.category == targetCategoryId }
+            }
+            val selectedIds = current.selection.map { it.id }.toSet()
+            val toRemoveIds = scopeItems.filter { it.id in selectedIds }.map { it.id }.toSet()
+            val mutable = current.selection.filterNot { it.id in toRemoveIds }.toMutableList()
+            mutable.addAll(scopeItems.filterNot { it.id in selectedIds })
+            current.copy(selection = persistentListOf<LibraryNovel>().addAll(mutable))
+        }
+    }
+
+    fun openChangeCategoryDialog() {
+        val novels = state.value.selection.map { it.novel }.distinctBy { it.id }
+        openChangeCategoryDialog(novels)
+    }
+
+    fun openChangeCategoryDialog(novel: Novel) {
+        openChangeCategoryDialog(listOf(novel))
+    }
+
+    private fun openChangeCategoryDialog(novels: List<Novel>) {
+        if (novels.isEmpty()) return
+        screenModelScope.launchIO {
+            val categories = getCategories()
+            if (categories.isEmpty()) return@launchIO
+            val common = getCommonCategories(novels)
+            val mix = getMixCategories(novels)
+            val preselected = categories
+                .map { category ->
+                    when (category) {
+                        in common -> CheckboxState.State.Checked(category)
+                        in mix -> CheckboxState.TriState.Exclude(category)
+                        else -> CheckboxState.State.None(category)
+                    }
+                }
+                .toImmutableList()
+            mutableState.update {
+                it.copy(dialog = Dialog.ChangeCategory(novels, preselected))
+            }
+        }
+    }
+
+    fun openDeleteNovelDialog() {
+        val novels = state.value.selection.map { it.novel }.distinctBy { it.id }
+        if (novels.isEmpty()) return
+        mutableState.update { it.copy(dialog = Dialog.DeleteNovels(novels)) }
+    }
+
+    fun updateNovelCategories(
+        novels: List<Novel>,
+        addCategories: List<Long>,
+        removeCategories: List<Long>,
+    ) {
+        if (novels.isEmpty()) return
+        screenModelScope.launchIO {
+            novels.forEach { novel ->
+                val categoryIds = getNovelCategories.await(novel.id)
+                    .map { it.id }
+                    .subtract(removeCategories.toSet())
+                    .plus(addCategories)
+                    .toList()
+                setNovelCategories.await(novel.id, categoryIds)
+            }
+        }
+    }
+
+    fun markReadSelection(read: Boolean) {
+        val selected = state.value.selection.map { it.novel }.distinctBy { it.id }
+        if (selected.isEmpty()) return
+        screenModelScope.launchIO {
+            selected.forEach { novel ->
+                val chapters = chapterRepository.getChapterByNovelId(
+                    novelId = novel.id,
+                    applyScanlatorFilter = true,
+                )
+                if (chapters.isEmpty()) return@forEach
+                chapterRepository.updateAllChapters(
+                    chapters.map {
+                        NovelChapterUpdate(
+                            id = it.id,
+                            read = read,
+                            lastPageRead = if (read) 0L else it.lastPageRead,
+                        )
+                    },
+                )
+            }
+        }
+        clearSelection()
+    }
+
+    fun removeNovels(
+        novels: List<Novel>,
+        deleteFromLibrary: Boolean,
+        deleteChapters: Boolean,
+    ) {
+        screenModelScope.launchIO {
+            val toDelete = novels.distinctBy { it.id }
+            if (deleteFromLibrary) {
+                updateNovel.awaitAll(
+                    toDelete.map {
+                        NovelUpdate(
+                            id = it.id,
+                            favorite = false,
+                        )
+                    },
+                )
+            }
+            if (deleteChapters) {
+                toDelete.forEach { novel ->
+                    novelDownloadManager.deleteNovel(novel)
+                }
+            }
+        }
+    }
+
+    suspend fun runDownloadActionSelection(
+        action: NovelDownloadAction,
+        amount: Int = 0,
+    ): Int {
+        val selected = state.value.selection.map { it.novel }.distinctBy { it.id }
+        if (selected.isEmpty()) return 0
+        var totalAdded = 0
+        selected.forEach { novel ->
+            val chapters = getSortedNovelChapters(novel)
+            if (chapters.isEmpty()) return@forEach
+            val downloadedChapterIds = chapters
+                .filter { chapter ->
+                    novelDownloadManager.isChapterDownloaded(novel, chapter.id)
+                }
+                .mapTo(mutableSetOf()) { it.id }
+            val toQueue = NovelScreenModel.selectChaptersForDownload(
+                action = action,
+                novel = novel,
+                chapters = chapters,
+                downloadedChapterIds = downloadedChapterIds,
+                amount = amount,
+            )
+            totalAdded += NovelDownloadQueueManager.enqueueOriginal(novel, toQueue)
+        }
+        clearSelection()
+        return totalAdded
+    }
+
+    suspend fun runTranslatedDownloadActionSelection(
+        action: NovelDownloadAction,
+        amount: Int = 0,
+        format: NovelTranslatedDownloadFormat,
+    ): Int {
+        val selected = state.value.selection.map { it.novel }.distinctBy { it.id }
+        if (selected.isEmpty()) return 0
+        var totalAdded = 0
+        selected.forEach { novel ->
+            val chaptersWithCache = getSortedNovelChapters(novel)
+                .filter { chapter -> novelTranslatedDownloadManager.hasTranslationCache(chapter.id) }
+            if (chaptersWithCache.isEmpty()) return@forEach
+            val downloadedTranslatedIds = chaptersWithCache
+                .filter { chapter ->
+                    novelTranslatedDownloadManager.isTranslatedChapterDownloaded(
+                        novel = novel,
+                        chapter = chapter,
+                        format = format,
+                    )
+                }
+                .mapTo(mutableSetOf()) { it.id }
+            val toQueue = NovelScreenModel.selectTranslatedChaptersForDownload(
+                action = action,
+                novel = novel,
+                chaptersWithCache = chaptersWithCache,
+                downloadedTranslatedChapterIds = downloadedTranslatedIds,
+                amount = amount,
+            )
+            totalAdded += NovelDownloadQueueManager.enqueueTranslated(
+                novel = novel,
+                chapters = toQueue,
+                format = format,
+            )
+        }
+        clearSelection()
+        return totalAdded
+    }
+
+    suspend fun getSingleSelectionDownloadCandidates(onlyNotDownloaded: Boolean): List<NovelChapter> {
+        val novel = state.value.selection.singleOrNull()?.novel ?: return emptyList()
+        val chapters = getSortedNovelChapters(novel)
+        if (!onlyNotDownloaded) return chapters
+        return chapters.filterNot { chapter ->
+            novelDownloadManager.isChapterDownloaded(novel, chapter.id)
+        }
+    }
+
+    suspend fun runDownloadForSingleSelectionChapterIds(chapterIds: Set<Long>): Int {
+        if (chapterIds.isEmpty()) return 0
+        val novel = state.value.selection.singleOrNull()?.novel ?: return 0
+        val chaptersById = getSortedNovelChapters(novel).associateBy { it.id }
+        val chapters = chapterIds.mapNotNull { chaptersById[it] }
+        if (chapters.isEmpty()) return 0
+        val added = NovelDownloadQueueManager.enqueueOriginal(novel, chapters)
+        clearSelection()
+        return added
+    }
+
+    suspend fun getSingleSelectionTranslatedCandidates(
+        format: NovelTranslatedDownloadFormat,
+        onlyNotDownloaded: Boolean,
+    ): List<NovelChapter> {
+        val novel = state.value.selection.singleOrNull()?.novel ?: return emptyList()
+        val chaptersWithCache = getSortedNovelChapters(novel)
+            .filter { chapter -> novelTranslatedDownloadManager.hasTranslationCache(chapter.id) }
+        if (!onlyNotDownloaded) return chaptersWithCache
+        return chaptersWithCache.filterNot { chapter ->
+            novelTranslatedDownloadManager.isTranslatedChapterDownloaded(
+                novel = novel,
+                chapter = chapter,
+                format = format,
+            )
+        }
+    }
+
+    suspend fun runTranslatedDownloadForSingleSelectionChapterIds(
+        chapterIds: Set<Long>,
+        format: NovelTranslatedDownloadFormat,
+    ): Int {
+        if (chapterIds.isEmpty()) return 0
+        val novel = state.value.selection.singleOrNull()?.novel ?: return 0
+        val chaptersById = getSortedNovelChapters(novel).associateBy { it.id }
+        val chapters = chapterIds.mapNotNull { chaptersById[it] }
+            .filter { chapter -> novelTranslatedDownloadManager.hasTranslationCache(chapter.id) }
+        if (chapters.isEmpty()) return 0
+        val added = NovelDownloadQueueManager.enqueueTranslated(
+            novel = novel,
+            chapters = chapters,
+            format = format,
+        )
+        clearSelection()
+        return added
+    }
+
     fun toggleDownloadedFilter() {
         setDownloadedFilter(state.value.downloadedFilter.next())
     }
@@ -282,6 +615,50 @@ class NovelLibraryScreenModel(
 
         // Fallback for "nothing read yet".
         return chapters.firstOrNull { !it.read }
+    }
+
+    private suspend fun getSortedNovelChapters(novel: Novel): List<NovelChapter> {
+        return chapterRepository.getChapterByNovelId(
+            novelId = novel.id,
+            applyScanlatorFilter = true,
+        ).sortedWith(Comparator(getNovelChapterSort(novel)))
+    }
+
+    private suspend fun getCommonCategories(novels: List<Novel>): Collection<Category> {
+        if (novels.isEmpty()) return emptyList()
+        return novels
+            .map { getNovelCategories.await(it.id).toSet() }
+            .reduce { left, right -> left.intersect(right) }
+            .map {
+                Category(
+                    id = it.id,
+                    name = it.name,
+                    order = it.order,
+                    flags = it.flags,
+                    hidden = it.hidden,
+                )
+            }
+            .filterNot(Category::isSystemCategory)
+    }
+
+    private suspend fun getMixCategories(novels: List<Novel>): Collection<Category> {
+        if (novels.isEmpty()) return emptyList()
+        val novelCategories = novels.map { getNovelCategories.await(it.id).toSet() }
+        val common = novelCategories.reduce { left, right -> left.intersect(right) }
+        return novelCategories
+            .flatten()
+            .distinct()
+            .subtract(common)
+            .map {
+                Category(
+                    id = it.id,
+                    name = it.name,
+                    order = it.order,
+                    flags = it.flags,
+                    hidden = it.hidden,
+                )
+            }
+            .filterNot(Category::isSystemCategory)
     }
 
     private fun filterItems(
@@ -386,11 +763,26 @@ class NovelLibraryScreenModel(
         return sorted
     }
 
+    private suspend fun getCategories(): List<Category> {
+        return getNovelCategories.await()
+            .map {
+                Category(
+                    id = it.id,
+                    name = it.name,
+                    order = it.order,
+                    flags = it.flags,
+                    hidden = it.hidden,
+                )
+            }
+            .filterNot(Category::isSystemCategory)
+    }
+
     @Immutable
     data class State(
         val isLoading: Boolean = true,
         val rawItems: List<LibraryNovel> = emptyList(),
         val items: List<LibraryNovel> = emptyList(),
+        val selection: PersistentList<LibraryNovel> = persistentListOf(),
         val searchQuery: String? = null,
         val downloadedOnly: Boolean = false,
         val downloadedFilter: TriState = TriState.DISABLED,
@@ -410,6 +802,9 @@ class NovelLibraryScreenModel(
         val isLibraryEmpty: Boolean
             get() = rawItems.isEmpty()
 
+        val selectionMode: Boolean
+            get() = selection.isNotEmpty()
+
         val hasActiveFilters: Boolean
             get() = effectiveDownloadedFilter != TriState.DISABLED ||
                 unreadFilter != TriState.DISABLED ||
@@ -417,6 +812,10 @@ class NovelLibraryScreenModel(
                 bookmarkedFilter != TriState.DISABLED ||
                 completedFilter != TriState.DISABLED ||
                 filterIntervalCustom != TriState.DISABLED
+
+        fun visibleCategoryIds(): List<Long> {
+            return items.map { it.category }.distinct()
+        }
     }
 
     private data class FilterPreferences(
@@ -431,5 +830,10 @@ class NovelLibraryScreenModel(
 
     sealed interface Dialog {
         data object Settings : Dialog
+        data class ChangeCategory(
+            val novels: List<Novel>,
+            val initialSelection: ImmutableList<CheckboxState<Category>>,
+        ) : Dialog
+        data class DeleteNovels(val novels: List<Novel>) : Dialog
     }
 }

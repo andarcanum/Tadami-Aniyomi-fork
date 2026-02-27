@@ -33,6 +33,7 @@ import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.NewLabel
 import androidx.compose.material.icons.outlined.RemoveDone
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -295,6 +296,8 @@ fun LibraryBottomActionMenu(
     onMarkAsViewedClicked: () -> Unit,
     onMarkAsUnviewedClicked: () -> Unit,
     onDownloadClicked: ((DownloadAction) -> Unit)?,
+    onOpenDownloadDialog: (() -> Unit)? = null,
+    onTranslatedDownloadClicked: (() -> Unit)? = null,
     onDeleteClicked: () -> Unit,
     isManga: Boolean,
     modifier: Modifier = Modifier,
@@ -314,11 +317,11 @@ fun LibraryBottomActionMenu(
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
             val haptic = LocalHapticFeedback.current
-            val confirm = remember { mutableStateListOf(false, false, false, false, false) }
+            val confirm = remember { mutableStateListOf(false, false, false, false, false, false) }
             var resetJob: Job? = remember { null }
             val onLongClickItem: (Int) -> Unit = { toConfirmIndex ->
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                (0..<5).forEach { i -> confirm[i] = i == toConfirmIndex }
+                (0..<confirm.size).forEach { i -> confirm[i] = i == toConfirmIndex }
                 resetJob?.cancel()
                 resetJob = scope.launch {
                     delay(1.seconds)
@@ -356,7 +359,15 @@ fun LibraryBottomActionMenu(
                     onLongClick = { onLongClickItem(2) },
                     onClick = onMarkAsUnviewedClicked,
                 )
-                if (onDownloadClicked != null) {
+                if (onOpenDownloadDialog != null) {
+                    Button(
+                        title = stringResource(MR.strings.action_download),
+                        icon = Icons.Outlined.Download,
+                        toConfirm = confirm[3],
+                        onLongClick = { onLongClickItem(3) },
+                        onClick = onOpenDownloadDialog,
+                    )
+                } else if (onDownloadClicked != null) {
                     var downloadExpanded by remember { mutableStateOf(false) }
                     Button(
                         title = stringResource(MR.strings.action_download),
@@ -374,11 +385,20 @@ fun LibraryBottomActionMenu(
                         )
                     }
                 }
+                if (onTranslatedDownloadClicked != null) {
+                    Button(
+                        title = stringResource(AYMR.strings.novel_translated_download_short),
+                        icon = Icons.Outlined.Translate,
+                        toConfirm = confirm[4],
+                        onLongClick = { onLongClickItem(4) },
+                        onClick = onTranslatedDownloadClicked,
+                    )
+                }
                 Button(
                     title = stringResource(MR.strings.action_delete),
                     icon = Icons.Outlined.Delete,
-                    toConfirm = confirm[4],
-                    onLongClick = { onLongClickItem(4) },
+                    toConfirm = confirm[5],
+                    onLongClick = { onLongClickItem(5) },
                     onClick = onDeleteClicked,
                 )
             }

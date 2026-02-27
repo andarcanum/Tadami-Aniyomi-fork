@@ -40,6 +40,7 @@ import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
+import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.entries.components.ItemCover
 import eu.kanade.presentation.library.components.LibraryToolbar
 import eu.kanade.presentation.library.components.LibraryToolbarTitle
@@ -49,6 +50,7 @@ import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
+import eu.kanade.tachiyomi.ui.category.CategoriesTab
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collectLatest
@@ -257,11 +259,35 @@ data object NovelLibraryTab : Tab {
             queryEvent.receiveAsFlow().collectLatest { screenModel.search(it) }
         }
 
-        when (state.dialog) {
+        when (val dialog = state.dialog) {
             NovelLibraryScreenModel.Dialog.Settings -> {
                 NovelLibrarySettingsDialog(
                     onDismissRequest = screenModel::closeDialog,
                     screenModel = screenModel,
+                )
+            }
+            is NovelLibraryScreenModel.Dialog.ChangeCategory -> {
+                ChangeCategoryDialog(
+                    initialSelection = dialog.initialSelection,
+                    onDismissRequest = screenModel::closeDialog,
+                    onEditCategories = {
+                        navigator.push(CategoriesTab)
+                        CategoriesTab.showNovelCategory()
+                    },
+                    onConfirm = { include, exclude ->
+                        screenModel.updateNovelCategories(dialog.novels, include, exclude)
+                    },
+                )
+            }
+            is NovelLibraryScreenModel.Dialog.DeleteNovels -> {
+                eu.kanade.presentation.library.DeleteLibraryEntryDialog(
+                    containsLocalEntry = false,
+                    onDismissRequest = screenModel::closeDialog,
+                    onConfirm = { deleteFromLibrary, deleteChapters ->
+                        screenModel.removeNovels(dialog.novels, deleteFromLibrary, deleteChapters)
+                        screenModel.clearSelection()
+                    },
+                    isManga = true,
                 )
             }
             null -> {}

@@ -72,6 +72,10 @@ insert:
 INSERT INTO novel_categories(name, sort, flags)
 VALUES (:name, :order, :flags);
 
+insertOrIgnoreWithId:
+INSERT OR IGNORE INTO novel_categories(_id, name, sort, flags, hidden)
+VALUES (:id, :name, :order, :flags, :hidden);
+
 delete:
 DELETE FROM novel_categories
 WHERE _id = :categoryId;

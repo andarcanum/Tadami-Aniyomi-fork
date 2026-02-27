@@ -368,7 +368,8 @@ private fun NovelUpdateCard(
         Box(
             modifier = Modifier
                 .size(36.dp)
-                .background(colors.accent, CircleShape),
+                .background(colors.accent, CircleShape)
+                .clickable { onChapterClick(update.chapterId) },
             contentAlignment = Alignment.Center,
         ) {
             Icon(

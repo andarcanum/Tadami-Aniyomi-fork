@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.entries.novel
 
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
@@ -16,6 +17,11 @@ import eu.kanade.domain.items.novelchapter.interactor.GetAvailableNovelScanlator
 import eu.kanade.domain.items.novelchapter.interactor.GetNovelScanlatorChapterCounts
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager
+import eu.kanade.tachiyomi.data.download.novel.NovelQueuedDownloadType
+import eu.kanade.tachiyomi.data.download.novel.NovelQueuedDownloadStatus
+import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
+import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadManager
 import eu.kanade.tachiyomi.data.export.novel.NovelEpubExportOptions
 import eu.kanade.tachiyomi.data.export.novel.NovelEpubExporter
 import eu.kanade.tachiyomi.data.track.MangaTracker
@@ -61,6 +67,9 @@ import tachiyomi.domain.track.novel.interactor.GetNovelTracks
 import tachiyomi.domain.track.novel.model.NovelTrack
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import android.app.Application
+import tachiyomi.core.common.i18n.stringResource
+import tachiyomi.i18n.aniyomi.AYMR
 import java.io.File
 import java.time.Instant
 import java.util.LinkedHashMap
@@ -70,6 +79,7 @@ enum class NovelDownloadAction {
     NEXT,
     UNREAD,
     ALL,
+    NOT_DOWNLOADED,
 }
 
 data class NovelEpubExportPreferencesState(
@@ -98,12 +108,26 @@ class NovelScreenModel(
     private val sourceManager: NovelSourceManager = Injekt.get(),
     private val trackerManager: TrackerManager = Injekt.get(),
     private val getTracks: GetNovelTracks = Injekt.get(),
+    private val application: Application? = runCatching { Injekt.get<Application>() }.getOrNull(),
     private val novelDownloadManager: NovelDownloadManager = NovelDownloadManager(),
+    private val novelTranslatedDownloadManager: NovelTranslatedDownloadManager = NovelTranslatedDownloadManager(),
     private val novelEpubExporter: NovelEpubExporter = NovelEpubExporter(),
     private val novelReaderPreferences: NovelReaderPreferences = Injekt.get(),
     private val eventBus: AchievementEventBus? = runCatching { Injekt.get<AchievementEventBus>() }.getOrNull(),
     val snackbarHostState: SnackbarHostState = SnackbarHostState(),
 ) : StateScreenModel<NovelScreenModel.State>(State.Loading) {
+
+    private data class QueueNotifySummary(
+        val pending: Int = 0,
+        val active: Int = 0,
+        val failed: Int = 0,
+    ) {
+        val activeTotal: Int
+            get() = pending + active
+    }
+
+    private var previousQueueNotifySummary = QueueNotifySummary()
+    private var lastQueueProgressNotifyAt = 0L
 
     private val successState: State.Success?
         get() = state.value as? State.Success
@@ -218,6 +242,43 @@ class NovelScreenModel(
         }
 
         screenModelScope.launchIO {
+            NovelDownloadQueueManager.state.collectLatest { queueState ->
+                updateSuccessState { current ->
+                    val allNovelTasks = queueState.tasks.filter { task -> task.novel.id == current.novel.id }
+                    val activeChapterIds = queueState.tasks
+                        .asSequence()
+                        .filter { task ->
+                            task.novel.id == current.novel.id &&
+                                task.type == NovelQueuedDownloadType.ORIGINAL &&
+                                (task.status == NovelQueuedDownloadStatus.QUEUED ||
+                                    task.status == NovelQueuedDownloadStatus.DOWNLOADING)
+                        }
+                        .map { it.chapter.id }
+                        .toSet()
+
+                    val queueSummary = QueueNotifySummary(
+                        pending = allNovelTasks.count { it.status == NovelQueuedDownloadStatus.QUEUED },
+                        active = allNovelTasks.count { it.status == NovelQueuedDownloadStatus.DOWNLOADING },
+                        failed = allNovelTasks.count { it.status == NovelQueuedDownloadStatus.FAILED },
+                    )
+                    maybeNotifyQueueState(queueSummary)
+
+                    val downloadedChapterIds = novelDownloadManager.getDownloadedChapterIds(current.novel, current.chapters)
+                    if (activeChapterIds == current.downloadingChapterIds &&
+                        downloadedChapterIds == current.downloadedChapterIds
+                    ) {
+                        current
+                    } else {
+                        current.copy(
+                            downloadingChapterIds = activeChapterIds,
+                            downloadedChapterIds = downloadedChapterIds,
+                        )
+                    }
+                }
+            }
+        }
+
+        screenModelScope.launchIO {
             val novel = getNovelWithChapters.awaitNovel(novelId)
             if (!novel.favorite) {
                 setNovelDefaultChapterFlags.await(novel)
@@ -313,6 +374,83 @@ class NovelScreenModel(
                 is State.Success -> func(it).also(::cacheState)
             }
         }
+    }
+
+    private fun syncDownloadedState() {
+        val state = successState ?: return
+        screenModelScope.launchIO {
+            val downloadedIds = novelDownloadManager.getDownloadedChapterIds(state.novel, state.chapters)
+            updateSuccessState {
+                if (downloadedIds == it.downloadedChapterIds) {
+                    it
+                } else {
+                    it.copy(downloadedChapterIds = downloadedIds)
+                }
+            }
+        }
+    }
+
+    private fun notifyQueueStarted(addedCount: Int) {
+        if (addedCount <= 0) return
+        val app = application ?: return
+        val message = app.stringResource(
+            AYMR.strings.novel_download_queue_started_count,
+            addedCount,
+        )
+        screenModelScope.launchIO {
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Short,
+            )
+        }
+    }
+
+    private fun maybeNotifyQueueState(summary: QueueNotifySummary) {
+        val previous = previousQueueNotifySummary
+        val now = System.currentTimeMillis()
+
+        if (summary.activeTotal > 0 &&
+            (summary.pending != previous.pending || summary.active != previous.active) &&
+            now - lastQueueProgressNotifyAt >= 1_500
+        ) {
+            val app = application
+            if (app != null) {
+                val message = app.stringResource(
+                    AYMR.strings.novel_download_queue_progress,
+                    summary.pending,
+                    summary.active,
+                )
+                screenModelScope.launchIO {
+                    snackbarHostState.showSnackbar(
+                        message = message,
+                        duration = SnackbarDuration.Short,
+                    )
+                }
+                lastQueueProgressNotifyAt = now
+            }
+        }
+
+        if (summary.activeTotal == 0 && previous.activeTotal > 0) {
+            val app = application
+            if (app != null) {
+                val message = if (summary.failed > 0) {
+                    app.stringResource(
+                        AYMR.strings.novel_download_queue_failed_count,
+                        summary.failed,
+                    )
+                } else {
+                    app.stringResource(AYMR.strings.novel_download_queue_completed)
+                }
+                screenModelScope.launchIO {
+                    snackbarHostState.showSnackbar(
+                        message = message,
+                        duration = SnackbarDuration.Short,
+                    )
+                }
+            }
+        }
+
+        previousQueueNotifySummary = summary
     }
 
     fun toggleFavorite() {
@@ -697,7 +835,6 @@ class NovelScreenModel(
     fun toggleChapterDownload(chapterId: Long) {
         val state = successState ?: return
         val chapter = state.chapters.firstOrNull { it.id == chapterId } ?: return
-        if (chapterId in state.downloadingChapterIds) return
 
         if (chapterId in state.downloadedChapterIds) {
             screenModelScope.launchIO {
@@ -709,28 +846,17 @@ class NovelScreenModel(
             return
         }
 
-        updateSuccessState {
-            it.copy(downloadingChapterIds = it.downloadingChapterIds + chapterId)
+        if (chapterId in state.downloadingChapterIds) {
+            NovelDownloadQueueManager.cancelTask(
+                novelId = state.novel.id,
+                chapterId = chapterId,
+            )
+            return
         }
 
-        screenModelScope.launchIO {
-            val success = runCatching {
-                novelDownloadManager.downloadChapter(state.novel, chapter)
-            }.getOrElse {
-                snackbarHostState.showSnackbar(message = it.message ?: "Failed to download chapter")
-                false
-            }
-            updateSuccessState {
-                it.copy(
-                    downloadedChapterIds = if (success) {
-                        it.downloadedChapterIds + chapterId
-                    } else {
-                        it.downloadedChapterIds
-                    },
-                    downloadingChapterIds = it.downloadingChapterIds - chapterId,
-                )
-            }
-        }
+        val added = NovelDownloadQueueManager.enqueueOriginal(state.novel, listOf(chapter))
+        notifyQueueStarted(added)
+        syncDownloadedState()
     }
 
     fun downloadSelectedChapters() {
@@ -740,21 +866,10 @@ class NovelScreenModel(
         }
         if (selectedChapters.isEmpty()) return
 
-        val chapterIds = selectedChapters.mapTo(mutableSetOf()) { it.id }
-        updateSuccessState {
-            it.copy(downloadingChapterIds = it.downloadingChapterIds + chapterIds)
-        }
-
-        screenModelScope.launchIO {
-            val downloadedIds = novelDownloadManager.downloadChapters(state.novel, selectedChapters)
-            updateSuccessState {
-                it.copy(
-                    downloadedChapterIds = it.downloadedChapterIds + downloadedIds,
-                    downloadingChapterIds = it.downloadingChapterIds - chapterIds,
-                )
-            }
-            toggleAllSelection(false)
-        }
+        val added = NovelDownloadQueueManager.enqueueOriginal(state.novel, selectedChapters)
+        notifyQueueStarted(added)
+        toggleAllSelection(false)
+        syncDownloadedState()
     }
 
     fun runDownloadAction(
@@ -771,20 +886,124 @@ class NovelScreenModel(
         )
         if (chaptersToDownload.isEmpty()) return
 
-        val chapterIds = chaptersToDownload.mapTo(mutableSetOf()) { it.id }
-        updateSuccessState {
-            it.copy(downloadingChapterIds = it.downloadingChapterIds + chapterIds)
-        }
+        val added = NovelDownloadQueueManager.enqueueOriginal(state.novel, chaptersToDownload)
+        notifyQueueStarted(added)
+        syncDownloadedState()
+    }
 
-        screenModelScope.launchIO {
-            val downloadedIds = novelDownloadManager.downloadChapters(state.novel, chaptersToDownload)
-            updateSuccessState {
-                it.copy(
-                    downloadedChapterIds = it.downloadedChapterIds + downloadedIds,
-                    downloadingChapterIds = it.downloadingChapterIds - chapterIds,
+    fun getBatchDownloadCandidates(onlyNotDownloaded: Boolean): List<NovelChapter> {
+        val state = successState ?: return emptyList()
+        val sortedChapters = state.chapters.sortedWith(Comparator(getNovelChapterSort(state.novel)))
+        return if (onlyNotDownloaded) {
+            sortedChapters.filter { it.id !in state.downloadedChapterIds }
+        } else {
+            sortedChapters
+        }
+    }
+
+    fun runDownloadForChapterIds(chapterIds: Set<Long>): Int {
+        if (chapterIds.isEmpty()) return 0
+        val state = successState ?: return 0
+        val chaptersById = state.chapters.associateBy { it.id }
+        val chapters = chapterIds
+            .asSequence()
+            .mapNotNull { chaptersById[it] }
+            .filter { it.id !in state.downloadedChapterIds }
+            .toList()
+        if (chapters.isEmpty()) return 0
+
+        val added = NovelDownloadQueueManager.enqueueOriginal(state.novel, chapters)
+        notifyQueueStarted(added)
+        syncDownloadedState()
+        return added
+    }
+
+    fun runTranslatedDownloadAction(
+        action: NovelDownloadAction,
+        amount: Int = 0,
+        format: NovelTranslatedDownloadFormat,
+    ): Int {
+        val state = successState ?: return 0
+        val chaptersWithCache = state.chapters
+            .sortedWith(Comparator(getNovelChapterSort(state.novel)))
+            .filter { chapter ->
+            novelTranslatedDownloadManager.hasTranslationCache(chapter.id)
+        }
+        if (chaptersWithCache.isEmpty()) return 0
+
+        val downloadedTranslatedChapterIds = chaptersWithCache
+            .asSequence()
+            .filter { chapter ->
+                novelTranslatedDownloadManager.isTranslatedChapterDownloaded(
+                    novel = state.novel,
+                    chapter = chapter,
+                    format = format,
                 )
             }
+            .map { it.id }
+            .toSet()
+
+        val translatedChapters = selectTranslatedChaptersForDownload(
+            action = action,
+            novel = state.novel,
+            chaptersWithCache = chaptersWithCache,
+            downloadedTranslatedChapterIds = downloadedTranslatedChapterIds,
+            amount = amount,
+        )
+        if (translatedChapters.isEmpty()) return 0
+
+        val added = NovelDownloadQueueManager.enqueueTranslated(
+            novel = state.novel,
+            chapters = translatedChapters,
+            format = format,
+        )
+        notifyQueueStarted(added)
+        return added
+    }
+
+    fun getTranslatedDownloadCandidates(
+        format: NovelTranslatedDownloadFormat,
+        onlyNotDownloaded: Boolean,
+    ): List<NovelChapter> {
+        val state = successState ?: return emptyList()
+        val chaptersWithCache = state.chapters
+            .sortedWith(Comparator(getNovelChapterSort(state.novel)))
+            .filter { chapter ->
+                novelTranslatedDownloadManager.hasTranslationCache(chapter.id)
+            }
+
+        if (!onlyNotDownloaded) return chaptersWithCache
+
+        return chaptersWithCache.filterNot { chapter ->
+            novelTranslatedDownloadManager.isTranslatedChapterDownloaded(
+                novel = state.novel,
+                chapter = chapter,
+                format = format,
+            )
         }
+    }
+
+    fun runTranslatedDownloadForChapterIds(
+        chapterIds: Set<Long>,
+        format: NovelTranslatedDownloadFormat,
+    ): Int {
+        if (chapterIds.isEmpty()) return 0
+        val state = successState ?: return 0
+        val chaptersById = state.chapters.associateBy { it.id }
+        val chapters = chapterIds
+            .asSequence()
+            .mapNotNull { chaptersById[it] }
+            .filter { chapter -> novelTranslatedDownloadManager.hasTranslationCache(chapter.id) }
+            .toList()
+        if (chapters.isEmpty()) return 0
+
+        val added = NovelDownloadQueueManager.enqueueTranslated(
+            novel = state.novel,
+            chapters = chapters,
+            format = format,
+        )
+        notifyQueueStarted(added)
+        return added
     }
 
     fun deleteDownloadedSelectedChapters() {
@@ -1111,6 +1330,36 @@ class NovelScreenModel(
                 NovelDownloadAction.ALL -> {
                     sortedChapters
                         .filter { it.id !in downloadedChapterIds }
+                }
+                NovelDownloadAction.NOT_DOWNLOADED -> {
+                    sortedChapters
+                        .filter { it.id !in downloadedChapterIds }
+                }
+            }
+        }
+
+        internal fun selectTranslatedChaptersForDownload(
+            action: NovelDownloadAction,
+            novel: Novel,
+            chaptersWithCache: List<NovelChapter>,
+            downloadedTranslatedChapterIds: Set<Long>,
+            amount: Int,
+        ): List<NovelChapter> {
+            val sortedChapters = chaptersWithCache.sortedWith(Comparator(getNovelChapterSort(novel)))
+            val notDownloadedChapters = sortedChapters.filter { it.id !in downloadedTranslatedChapterIds }
+            return when (action) {
+                NovelDownloadAction.NEXT -> {
+                    val sequence = notDownloadedChapters.asSequence()
+                    if (amount > 0) sequence.take(amount).toList() else sequence.toList()
+                }
+                NovelDownloadAction.UNREAD -> {
+                    notDownloadedChapters.filter { !it.read }
+                }
+                NovelDownloadAction.ALL -> {
+                    sortedChapters
+                }
+                NovelDownloadAction.NOT_DOWNLOADED -> {
+                    notDownloadedChapters
                 }
             }
         }

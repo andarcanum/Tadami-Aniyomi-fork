@@ -81,6 +81,61 @@ class NovelDownloadSelectionTest {
         ).map { it.id }.shouldContainExactly(30, 32)
     }
 
+    @Test
+    fun `selectChaptersForDownload returns all not-downloaded chapters for NOT_DOWNLOADED action`() {
+        val novel = Novel.create()
+        val chapters = listOf(
+            chapter(id = 40, unread = false, order = 1),
+            chapter(id = 41, unread = true, order = 2),
+            chapter(id = 42, unread = false, order = 3),
+        )
+
+        NovelScreenModel.selectChaptersForDownload(
+            action = NovelDownloadAction.NOT_DOWNLOADED,
+            novel = novel,
+            chapters = chapters,
+            downloadedChapterIds = setOf(41L),
+            amount = 0,
+        ).map { it.id }.shouldContainExactly(40, 42)
+    }
+
+    @Test
+    fun `selectTranslatedChaptersForDownload NEXT skips already downloaded translated chapters`() {
+        val novel = Novel.create()
+        val chaptersWithCache = listOf(
+            chapter(id = 100, unread = true, order = 1),
+            chapter(id = 101, unread = true, order = 2),
+            chapter(id = 102, unread = true, order = 3),
+            chapter(id = 103, unread = true, order = 4),
+        )
+
+        NovelScreenModel.selectTranslatedChaptersForDownload(
+            action = NovelDownloadAction.NEXT,
+            novel = novel,
+            chaptersWithCache = chaptersWithCache,
+            downloadedTranslatedChapterIds = setOf(100L, 101L),
+            amount = 2,
+        ).map { it.id }.shouldContainExactly(102, 103)
+    }
+
+    @Test
+    fun `selectTranslatedChaptersForDownload returns only not downloaded chapters for NOT_DOWNLOADED action`() {
+        val novel = Novel.create()
+        val chaptersWithCache = listOf(
+            chapter(id = 200, unread = false, order = 1),
+            chapter(id = 201, unread = true, order = 2),
+            chapter(id = 202, unread = true, order = 3),
+        )
+
+        NovelScreenModel.selectTranslatedChaptersForDownload(
+            action = NovelDownloadAction.NOT_DOWNLOADED,
+            novel = novel,
+            chaptersWithCache = chaptersWithCache,
+            downloadedTranslatedChapterIds = setOf(201L),
+            amount = 0,
+        ).map { it.id }.shouldContainExactly(200, 202)
+    }
+
     private fun chapter(
         id: Long,
         unread: Boolean,
