@@ -76,6 +76,21 @@ class UserProfilePreferencesTest {
         layout?.version shouldBe HomeHeaderLayoutSpec.CURRENT_VERSION
     }
 
+    @Test
+    fun `greeting cooldown tracks seen ids within window`() {
+        val prefs = UserProfilePreferences(MutablePreferenceStore())
+        val now = 1_700_000_000_000L
+        val hour = 60L * 60L * 1000L
+        val day = 24L * hour
+
+        prefs.appendRecentGreetingEvent("general_a", now - (2 * hour))
+        prefs.appendRecentGreetingEvent("general_b", now - (26 * hour))
+        prefs.appendRecentGreetingEvent("general_a", now - hour)
+
+        prefs.getGreetingIdsShownWithin(windowMs = day, nowMillis = now) shouldBe setOf("general_a")
+        prefs.getGreetingIdsShownWithin(windowMs = 3 * day, nowMillis = now) shouldBe setOf("general_a", "general_b")
+    }
+
     private class MutablePreferenceStore : PreferenceStore {
         private val values = mutableMapOf<String, Any?>()
 

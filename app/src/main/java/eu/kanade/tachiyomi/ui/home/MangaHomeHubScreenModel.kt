@@ -82,23 +82,6 @@ class MangaHomeHubScreenModel(
 
     init {
         val cached = fastCache.load()
-        val lastOpened = userProfilePreferences.lastOpenedTime().get()
-        val totalLaunches = userProfilePreferences.totalLaunches().get()
-        val recentGreetingIds = userProfilePreferences.getRecentGreetingHistory()
-        val recentScenarioIds = userProfilePreferences.getRecentScenarioHistory()
-        val greetingSelection = GreetingProvider.selectGreeting(
-            lastOpenedTime = lastOpened,
-            isFirstTime = lastOpened == 0L,
-            totalLaunches = totalLaunches,
-            recentGreetingIds = recentGreetingIds,
-            recentScenarioIds = recentScenarioIds,
-        )
-
-        userProfilePreferences.lastOpenedTime().set(System.currentTimeMillis())
-        userProfilePreferences.totalLaunches().set(totalLaunches + 1)
-        userProfilePreferences.appendRecentGreetingId(greetingSelection.greetingId)
-        userProfilePreferences.appendRecentScenarioId(greetingSelection.scenarioId)
-
         mutableState.update {
             it.copy(
                 hero = cached.hero?.toHeroData(),
@@ -106,10 +89,16 @@ class MangaHomeHubScreenModel(
                 recommendations = cached.recommendations.map { r -> r.toRecommendationData() },
                 userName = cached.userName,
                 userAvatar = cached.userAvatar,
-                greeting = greetingSelection.greeting,
                 isInitialized = cached.isInitialized,
                 isLoading = false,
             )
+        }
+
+        screenModelScope.launchIO {
+            val greetingSelection = HomeGreetingSession.resolveGreeting(
+                userProfilePreferences = userProfilePreferences,
+            )
+            mutableState.update { it.copy(greeting = greetingSelection.greeting) }
         }
 
         cached.hero?.let { hero ->

@@ -319,7 +319,11 @@ private fun GeneralTab(
                     val selected = settings.translationProvider == option.first
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
                         modifier = Modifier.clickable {
                             update(
                                 option.first,

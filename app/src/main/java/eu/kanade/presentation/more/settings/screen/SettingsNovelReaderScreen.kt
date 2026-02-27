@@ -37,8 +37,8 @@ import eu.kanade.presentation.reader.novel.novelReaderFonts
 import eu.kanade.presentation.reader.novel.novelReaderPresetThemes
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderChapterDiskCache
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderChapterDiskCacheStore
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
@@ -94,7 +94,9 @@ object SettingsNovelReaderScreen : SearchableSettings {
                 Preference.PreferenceItem.ListPreference(
                     preference = prefs.geminiPromptMode(),
                     entries = persistentMapOf(
-                        GeminiPromptMode.CLASSIC to stringResource(AYMR.strings.novel_reader_gemini_prompt_mode_classic),
+                        GeminiPromptMode.CLASSIC to stringResource(
+                            AYMR.strings.novel_reader_gemini_prompt_mode_classic,
+                        ),
                         GeminiPromptMode.ADULT_18 to stringResource(AYMR.strings.novel_reader_gemini_prompt_mode_adult),
                     ),
                     title = stringResource(AYMR.strings.novel_reader_gemini_prompt_mode),

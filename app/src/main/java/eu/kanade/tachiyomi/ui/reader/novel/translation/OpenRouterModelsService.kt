@@ -73,4 +73,3 @@ private fun kotlinx.serialization.json.JsonElement?.asStringOrNull(): String? {
     val primitive = this as? JsonPrimitive ?: return null
     return if (primitive.isString) primitive.content else null
 }
-

@@ -84,10 +84,6 @@ class HomeHubScreenModel(
 
     init {
         val cached = fastCache.load()
-        val lastOpened = userProfilePreferences.lastOpenedTime().get()
-        val totalLaunches = userProfilePreferences.totalLaunches().get()
-        val recentGreetingIds = userProfilePreferences.getRecentGreetingHistory()
-        val recentScenarioIds = userProfilePreferences.getRecentScenarioHistory()
 
         // Собираем статистику для умного приветствия
         screenModelScope.launchIO {
@@ -99,24 +95,15 @@ class HomeHubScreenModel(
             val achievementCount = profile.achievementsUnlocked
             val episodesWatched = monthStats.episodesWatched
             val librarySize = libraryAnime.size
-            val isFirstTime = lastOpened == 0L
-
-            val greetingSelection = GreetingProvider.selectGreeting(
-                lastOpenedTime = lastOpened,
-                achievementCount = achievementCount,
-                episodesWatched = episodesWatched,
-                librarySize = librarySize,
-                currentStreak = currentStreak,
-                isFirstTime = isFirstTime,
-                totalLaunches = totalLaunches,
-                recentGreetingIds = recentGreetingIds,
-                recentScenarioIds = recentScenarioIds,
+            val greetingSelection = HomeGreetingSession.resolveGreeting(
+                userProfilePreferences = userProfilePreferences,
+                stats = HomeGreetingStats(
+                    achievementCount = achievementCount,
+                    episodesWatched = episodesWatched,
+                    librarySize = librarySize,
+                    currentStreak = currentStreak,
+                ),
             )
-
-            userProfilePreferences.lastOpenedTime().set(System.currentTimeMillis())
-            userProfilePreferences.totalLaunches().set(totalLaunches + 1)
-            userProfilePreferences.appendRecentGreetingId(greetingSelection.greetingId)
-            userProfilePreferences.appendRecentScenarioId(greetingSelection.scenarioId)
 
             mutableState.update {
                 it.copy(

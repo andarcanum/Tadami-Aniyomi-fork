@@ -80,29 +80,18 @@ class NovelHomeHubScreenModel(
     )
 
     init {
-        val lastOpened = userProfilePreferences.lastOpenedTime().get()
-        val totalLaunches = userProfilePreferences.totalLaunches().get()
-        val recentGreetingIds = userProfilePreferences.getRecentGreetingHistory()
-        val recentScenarioIds = userProfilePreferences.getRecentScenarioHistory()
-        val greetingSelection = GreetingProvider.selectGreeting(
-            lastOpenedTime = lastOpened,
-            isFirstTime = lastOpened == 0L,
-            totalLaunches = totalLaunches,
-            recentGreetingIds = recentGreetingIds,
-            recentScenarioIds = recentScenarioIds,
-        )
-
-        userProfilePreferences.lastOpenedTime().set(System.currentTimeMillis())
-        userProfilePreferences.totalLaunches().set(totalLaunches + 1)
-        userProfilePreferences.appendRecentGreetingId(greetingSelection.greetingId)
-        userProfilePreferences.appendRecentScenarioId(greetingSelection.scenarioId)
-
         mutableState.update {
             it.copy(
                 userName = userProfilePreferences.name().get(),
                 userAvatar = userProfilePreferences.avatarUrl().get(),
-                greeting = greetingSelection.greeting,
             )
+        }
+
+        screenModelScope.launchIO {
+            val greetingSelection = HomeGreetingSession.resolveGreeting(
+                userProfilePreferences = userProfilePreferences,
+            )
+            mutableState.update { it.copy(greeting = greetingSelection.greeting) }
         }
     }
 

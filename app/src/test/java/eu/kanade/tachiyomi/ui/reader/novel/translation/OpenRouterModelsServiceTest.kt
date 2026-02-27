@@ -54,4 +54,3 @@ class OpenRouterModelsServiceTest {
         server.takeRequest().path shouldBe "/api/v1/models"
     }
 }
-

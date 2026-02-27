@@ -129,7 +129,10 @@ class AirforceTranslationService(
                     var usedStreamFallback = false
 
                     if (looksLikeAirforceRateLimitBanner(candidateText)) {
-                        val waitMs = computeRateLimitDelayMs(attempt = attempt, hintSeconds = extractRetryAfterSeconds(candidateText))
+                        val waitMs = computeRateLimitDelayMs(
+                            attempt = attempt,
+                            hintSeconds = extractRetryAfterSeconds(candidateText),
+                        )
                         onLog?.invoke(
                             "Airforce returned rate-limit banner in content (attempt $attempt/$MAX_ATTEMPTS). " +
                                 "Retrying in ${"%.1f".format(waitMs / 1000f)}s",
@@ -173,7 +176,9 @@ class AirforceTranslationService(
                             is StreamFallbackOutcome.RateLimited -> {
                                 val waitMs = streamFallback.waitMs.coerceAtLeast(1_200L)
                                 onLog?.invoke(
-                                    "Airforce rate limited (stream fallback attempt $attempt/$MAX_ATTEMPTS): ${streamFallback.details}. " +
+                                    "Airforce rate limited " +
+                                        "(stream fallback attempt $attempt/$MAX_ATTEMPTS): " +
+                                        "${streamFallback.details}. " +
                                         "Retrying in ${"%.1f".format(waitMs / 1000f)}s",
                                 )
                                 if (attempt == MAX_ATTEMPTS) {
@@ -196,7 +201,10 @@ class AirforceTranslationService(
                     }
 
                     if (looksLikeAirforceRateLimitBanner(candidateText)) {
-                        val waitMs = computeRateLimitDelayMs(attempt = attempt, hintSeconds = extractRetryAfterSeconds(candidateText))
+                        val waitMs = computeRateLimitDelayMs(
+                            attempt = attempt,
+                            hintSeconds = extractRetryAfterSeconds(candidateText),
+                        )
                         onLog?.invoke(
                             "Airforce returned rate-limit banner after fallback (attempt $attempt/$MAX_ATTEMPTS). " +
                                 "Retrying in ${"%.1f".format(waitMs / 1000f)}s",

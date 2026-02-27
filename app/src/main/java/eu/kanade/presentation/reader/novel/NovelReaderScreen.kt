@@ -24,8 +24,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
@@ -73,7 +73,6 @@ import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -144,10 +143,10 @@ import eu.kanade.tachiyomi.ui.reader.novel.NovelRichBlockTextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
 import eu.kanade.tachiyomi.ui.reader.novel.encodeNativeScrollProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodeWebScrollProgressPercent
+import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
-import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptModifiers
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
@@ -2096,7 +2095,9 @@ private fun GeminiTranslationDialog(
     var tempPrefetchNextChapterTranslation by remember(readerSettings.geminiPrefetchNextChapterTranslation) {
         mutableStateOf(readerSettings.geminiPrefetchNextChapterTranslation)
     }
-    var tempProvider by remember(readerSettings.translationProvider) { mutableStateOf(readerSettings.translationProvider) }
+    var tempProvider by remember(readerSettings.translationProvider) {
+        mutableStateOf(readerSettings.translationProvider)
+    }
     var tempOpenRouterBaseUrl by remember(readerSettings.openRouterBaseUrl) {
         mutableStateOf(readerSettings.openRouterBaseUrl)
     }
@@ -2317,7 +2318,9 @@ private fun GeminiTranslationDialog(
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     OutlinedButton(onClick = onRefreshOpenRouterModels) {
-                                        Text(if (isOpenRouterModelsLoading) "Загрузка моделей..." else "Обновить список")
+                                        Text(
+                                            if (isOpenRouterModelsLoading) "Загрузка моделей..." else "Обновить список",
+                                        )
                                     }
                                 }
                                 OutlinedTextField(

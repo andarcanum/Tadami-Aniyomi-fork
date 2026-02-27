@@ -46,20 +46,26 @@ class GreetingProviderTest {
     }
 
     @Test
-    fun `selectGreetingForContext picks frequent user teasing when user opens app constantly`() {
+    fun `selectGreetingForContext does not get stuck on frequent tease for power users`() {
         val now = 1_700_000_000_000L
-        val context = GreetingProvider.GreetingContext(
-            nowMillis = now,
-            hourOfDay = 21,
-            dayOfWeek = Calendar.WEDNESDAY,
-            lastOpenedTime = now - (6L * 60 * 60 * 1000),
-            isFirstTime = false,
-            totalLaunches = 60L,
-        )
+        val scenarios = mutableSetOf<String>()
 
-        val selection = GreetingProvider.selectGreetingForContext(context)
+        repeat(16) { step ->
+            val context = GreetingProvider.GreetingContext(
+                nowMillis = now + step * 60_000L,
+                hourOfDay = 21,
+                dayOfWeek = Calendar.WEDNESDAY,
+                lastOpenedTime = now - (6L * 60 * 60 * 1000),
+                isFirstTime = false,
+                totalLaunches = 60L + step,
+            )
 
-        selection.scenarioId shouldBe "frequent_tease"
+            val selection = GreetingProvider.selectGreetingForContext(context)
+            scenarios += selection.scenarioId
+        }
+
+        scenarios.contains("frequent_tease") shouldBe true
+        scenarios.any { it != "frequent_tease" } shouldBe true
     }
 
     @Test
@@ -89,6 +95,48 @@ class GreetingProviderTest {
         second.greetingId shouldNotBe first.greetingId
         third.greetingId shouldNotBe first.greetingId
         third.greetingId shouldNotBe second.greetingId
+    }
+
+    @Test
+    fun `selectGreetingForContext respects blocked greeting ids for cooldown window`() {
+        val now = 1_700_000_000_000L
+        val context = GreetingProvider.GreetingContext(
+            nowMillis = now,
+            hourOfDay = 18,
+            dayOfWeek = Calendar.THURSDAY,
+            lastOpenedTime = now - (3L * 60 * 60 * 1000),
+            isFirstTime = false,
+            totalLaunches = 40L,
+        )
+
+        val first = GreetingProvider.selectGreetingForContext(context)
+        val second = GreetingProvider.selectGreetingForContext(
+            context = context.copy(nowMillis = now + 10_000L, totalLaunches = 41L),
+            blockedGreetingIds = setOf(first.greetingId),
+        )
+
+        second.greetingId shouldNotBe first.greetingId
+    }
+
+    @Test
+    fun `selectGreetingForContext falls back to general when scenario candidates are blocked`() {
+        val context = GreetingProvider.GreetingContext(
+            nowMillis = 1_700_000_000_000L,
+            hourOfDay = 10,
+            dayOfWeek = Calendar.MONDAY,
+            lastOpenedTime = 0L,
+            isFirstTime = true,
+            totalLaunches = 0L,
+        )
+
+        val selection = GreetingProvider.selectGreetingForContext(
+            context = context,
+            blockedGreetingIds = setOf("welcome_family", "first_time"),
+        )
+
+        selection.scenarioId shouldBe "general_fallback"
+        selection.greetingId shouldNotBe "welcome_family"
+        selection.greetingId shouldNotBe "first_time"
     }
 
     @Test

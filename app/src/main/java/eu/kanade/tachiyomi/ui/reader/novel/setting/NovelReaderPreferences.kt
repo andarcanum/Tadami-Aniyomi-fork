@@ -57,7 +57,7 @@ data class NovelReaderSettings(
     val customJS: String,
 
     // Gemini Translation
-    val geminiEnabled: Boolean = true,
+    val geminiEnabled: Boolean = false,
     val geminiApiKey: String = "",
     val geminiModel: String = "gemini-2.5-flash",
     val geminiBatchSize: Int = 40,
@@ -276,7 +276,7 @@ class NovelReaderPreferences(
     fun customJS() = preferenceStore.getString("novel_reader_custom_js", "")
 
     // Gemini Translation
-    fun geminiEnabled() = preferenceStore.getBoolean("novel_reader_gemini_enabled", true)
+    fun geminiEnabled() = preferenceStore.getBoolean("novel_reader_gemini_enabled", false)
 
     fun geminiApiKey() = preferenceStore.getString("novel_reader_gemini_api_key", "")
 
@@ -332,7 +332,10 @@ class NovelReaderPreferences(
 
     fun airforceModel() = preferenceStore.getString("novel_reader_airforce_model", "")
 
-    fun openRouterBaseUrl() = preferenceStore.getString("novel_reader_openrouter_base_url", "https://openrouter.ai/api/v1")
+    fun openRouterBaseUrl() = preferenceStore.getString(
+        "novel_reader_openrouter_base_url",
+        "https://openrouter.ai/api/v1",
+    )
 
     fun openRouterApiKey() = preferenceStore.getString("novel_reader_openrouter_api_key", "")
 

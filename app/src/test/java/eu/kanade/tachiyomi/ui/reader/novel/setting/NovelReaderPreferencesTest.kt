@@ -42,6 +42,7 @@ class NovelReaderPreferencesTest {
         prefs.bionicReading().get() shouldBe false
         prefs.swipeGestures().get() shouldBe false
         prefs.customThemes().get() shouldBe emptyList()
+        prefs.geminiEnabled().get() shouldBe false
         prefs.geminiPromptMode().get() shouldBe GeminiPromptMode.ADULT_18
         prefs.geminiModel().get() shouldBe "gemini-2.5-flash"
         prefs.geminiTemperature().get() shouldBe 0.7f

@@ -67,6 +67,26 @@ object GreetingProvider {
         candidate("lets_go", AYMR.strings.aurora_greeting_lets_go),
         candidate("anime_time", AYMR.strings.aurora_greeting_anime_time),
         candidate("main_character", AYMR.strings.aurora_greeting_main_character),
+        candidate("manga_scroll", AYMR.strings.aurora_greeting_manga_scroll),
+        candidate("manhwa_system", AYMR.strings.aurora_greeting_manhwa_system),
+        candidate("manga_black_and_white", AYMR.strings.aurora_greeting_manga_black_and_white),
+        candidate("novel_wall_of_text", AYMR.strings.aurora_greeting_novel_wall_of_text),
+        candidate("manga_left_to_right", AYMR.strings.aurora_greeting_manga_left_to_right),
+        candidate("trope_tsundere", AYMR.strings.aurora_greeting_trope_tsundere),
+        candidate("trope_yandere", AYMR.strings.aurora_greeting_trope_yandere),
+        candidate("trope_chuunibyou", AYMR.strings.aurora_greeting_trope_chuunibyou),
+        candidate("trope_imouto", AYMR.strings.aurora_greeting_trope_imouto),
+        candidate("trope_maid", AYMR.strings.aurora_greeting_trope_maid),
+        candidate("general_gacha", AYMR.strings.aurora_greeting_general_gacha),
+        candidate("general_plot_armor", AYMR.strings.aurora_greeting_general_plot_armor),
+        candidate("general_bankai", AYMR.strings.aurora_greeting_general_bankai),
+        candidate("general_titan", AYMR.strings.aurora_greeting_general_titan),
+        candidate("general_isekai_truck", AYMR.strings.aurora_greeting_general_isekai_truck),
+        candidate("general_susume", AYMR.strings.aurora_greeting_general_susume),
+        candidate("general_magic_girl", AYMR.strings.aurora_greeting_general_magic_girl),
+        candidate("general_mecha", AYMR.strings.aurora_greeting_general_mecha),
+        candidate("general_power_level", AYMR.strings.aurora_greeting_general_power_level),
+        candidate("general_cultured", AYMR.strings.aurora_greeting_general_cultured),
     )
 
     private val morningGreetings = listOf(
@@ -77,6 +97,9 @@ object GreetingProvider {
         candidate("morning_early_bird", AYMR.strings.aurora_greeting_morning_early_bird),
         candidate("morning_fresh", AYMR.strings.aurora_greeting_morning_fresh),
         candidate("morning_energetic", AYMR.strings.aurora_greeting_morning_energetic),
+        candidate("morning_toast", AYMR.strings.aurora_greeting_morning_toast),
+        candidate("morning_alarm", AYMR.strings.aurora_greeting_morning_alarm),
+        candidate("morning_isekai", AYMR.strings.aurora_greeting_morning_isekai),
     )
 
     private val afternoonGreetings = listOf(
@@ -86,6 +109,8 @@ object GreetingProvider {
         candidate("afternoon_sugoi", AYMR.strings.aurora_greeting_afternoon_sugoi),
         candidate("afternoon_break", AYMR.strings.aurora_greeting_afternoon_break),
         candidate("afternoon_relax", AYMR.strings.aurora_greeting_afternoon_relax),
+        candidate("afternoon_siesta", AYMR.strings.aurora_greeting_afternoon_siesta),
+        candidate("afternoon_tea", AYMR.strings.aurora_greeting_afternoon_tea),
     )
 
     private val eveningGreetings = listOf(
@@ -96,6 +121,9 @@ object GreetingProvider {
         candidate("evening_relax_time", AYMR.strings.aurora_greeting_evening_relax_time),
         candidate("evening_sunset", AYMR.strings.aurora_greeting_evening_sunset),
         candidate("evening_after_work", AYMR.strings.aurora_greeting_evening_after_work),
+        candidate("evening_boss_defeated", AYMR.strings.aurora_greeting_evening_boss_defeated),
+        candidate("evening_comf", AYMR.strings.aurora_greeting_evening_comf),
+        candidate("evening_dinner", AYMR.strings.aurora_greeting_evening_dinner),
     )
 
     private val nightGreetings = listOf(
@@ -108,6 +136,10 @@ object GreetingProvider {
         candidate("night_just_one", AYMR.strings.aurora_greeting_night_just_one),
         candidate("night_midnight", AYMR.strings.aurora_greeting_night_midnight),
         candidate("night_starry", AYMR.strings.aurora_greeting_night_starry),
+        candidate("night_ninja", AYMR.strings.aurora_greeting_night_ninja),
+        candidate("night_vampire", AYMR.strings.aurora_greeting_night_vampire),
+        candidate("night_red_eyes", AYMR.strings.aurora_greeting_night_red_eyes),
+        candidate("night_3am", AYMR.strings.aurora_greeting_night_3am),
     )
 
     private val firstTimeGreetings = listOf(
@@ -121,6 +153,9 @@ object GreetingProvider {
         candidate("absence_long_you_back", AYMR.strings.aurora_greeting_youre_back),
         candidate("absence_long_back_for_more", AYMR.strings.aurora_greeting_back_for_more),
         candidate("absence_long_whats_next", AYMR.strings.aurora_greeting_whats_next),
+        candidate("absence_spider", AYMR.strings.aurora_greeting_absence_spider),
+        candidate("absence_training_arc", AYMR.strings.aurora_greeting_absence_training_arc),
+        candidate("absence_amnesia", AYMR.strings.aurora_greeting_absence_amnesia),
     )
 
     private val absenceMidGreetings = listOf(
@@ -129,6 +164,9 @@ object GreetingProvider {
         candidate("absence_mid_back_more", AYMR.strings.aurora_greeting_absence_mid_back_for_more),
         candidate("absence_mid_you_back", AYMR.strings.aurora_greeting_youre_back),
         candidate("absence_mid_ready", AYMR.strings.aurora_greeting_ready),
+        candidate("absence_spider", AYMR.strings.aurora_greeting_absence_spider),
+        candidate("absence_training_arc", AYMR.strings.aurora_greeting_absence_training_arc),
+        candidate("absence_amnesia", AYMR.strings.aurora_greeting_absence_amnesia),
     )
 
     private val frequentUserGreetings = listOf(
@@ -137,23 +175,34 @@ object GreetingProvider {
         candidate("frequent_quick_return", AYMR.strings.aurora_greeting_frequent_quick_return),
         candidate("frequent_back_for_more", AYMR.strings.aurora_greeting_back_for_more),
         candidate("frequent_queue_awaits", AYMR.strings.aurora_greeting_queue_awaits),
+        candidate("frequent_touch_grass", AYMR.strings.aurora_greeting_frequent_touch_grass),
+        candidate("frequent_coffee_iv", AYMR.strings.aurora_greeting_frequent_coffee_iv),
+        candidate("frequent_resident", AYMR.strings.aurora_greeting_frequent_resident),
     )
 
     private val saturdayGreetings = listOf(
         candidate("weekend_time", AYMR.strings.aurora_greeting_weekend_time),
         candidate("saturday_perfect", AYMR.strings.aurora_greeting_saturday_perfect),
         candidate("weekend_relax", AYMR.strings.aurora_greeting_weekend_relax),
+        candidate("weekend_pajamas", AYMR.strings.aurora_greeting_weekend_pajamas),
+        candidate("weekend_marathon_prep", AYMR.strings.aurora_greeting_weekend_marathon_prep),
+        candidate("weekend_no_regrets", AYMR.strings.aurora_greeting_weekend_no_regrets),
     )
 
     private val sundayGreetings = listOf(
         candidate("weekend_time", AYMR.strings.aurora_greeting_weekend_time),
         candidate("sunday_marathon", AYMR.strings.aurora_greeting_sunday_marathon),
         candidate("weekend_relax", AYMR.strings.aurora_greeting_weekend_relax),
+        candidate("weekend_pajamas", AYMR.strings.aurora_greeting_weekend_pajamas),
+        candidate("weekend_marathon_prep", AYMR.strings.aurora_greeting_weekend_marathon_prep),
+        candidate("weekend_no_regrets", AYMR.strings.aurora_greeting_weekend_no_regrets),
     )
 
     private val weekendFallbackGreetings = listOf(
         candidate("weekend_time", AYMR.strings.aurora_greeting_weekend_time),
         candidate("weekend_relax", AYMR.strings.aurora_greeting_weekend_relax),
+        candidate("weekend_marathon_prep", AYMR.strings.aurora_greeting_weekend_marathon_prep),
+        candidate("weekend_no_regrets", AYMR.strings.aurora_greeting_weekend_no_regrets),
     )
 
     private val weekdayMondayGreetings = listOf(
@@ -161,24 +210,28 @@ object GreetingProvider {
         candidate("weekday_generic", AYMR.strings.aurora_greeting_weekday_generic),
         candidate("weekday_monday_lets_go", AYMR.strings.aurora_greeting_lets_go),
         candidate("weekday_monday_pick_good", AYMR.strings.aurora_greeting_pick_good),
+        candidate("weekday_survival", AYMR.strings.aurora_greeting_weekday_survival),
     )
     private val weekdayTuesdayGreetings = listOf(
         candidate("weekday_tuesday", AYMR.strings.aurora_greeting_weekday_tuesday),
         candidate("weekday_generic", AYMR.strings.aurora_greeting_weekday_generic),
         candidate("weekday_tuesday_got_minute", AYMR.strings.aurora_greeting_got_minute),
         candidate("weekday_tuesday_queue", AYMR.strings.aurora_greeting_queue_awaits),
+        candidate("weekday_motivation", AYMR.strings.aurora_greeting_weekday_motivation),
     )
     private val weekdayWednesdayGreetings = listOf(
         candidate("weekday_wednesday", AYMR.strings.aurora_greeting_weekday_wednesday),
         candidate("weekday_generic", AYMR.strings.aurora_greeting_weekday_generic),
         candidate("weekday_wednesday_ready", AYMR.strings.aurora_greeting_ready),
         candidate("weekday_wednesday_whats_next", AYMR.strings.aurora_greeting_whats_next),
+        candidate("weekday_survival", AYMR.strings.aurora_greeting_weekday_survival),
     )
     private val weekdayThursdayGreetings = listOf(
         candidate("weekday_thursday", AYMR.strings.aurora_greeting_weekday_thursday),
         candidate("weekday_generic", AYMR.strings.aurora_greeting_weekday_generic),
         candidate("weekday_thursday_binge", AYMR.strings.aurora_greeting_binge_time),
         candidate("weekday_thursday_dive_in", AYMR.strings.aurora_greeting_dive_in),
+        candidate("weekday_motivation", AYMR.strings.aurora_greeting_weekday_motivation),
     )
     private val weekdayFridayGreetings = listOf(
         candidate("weekday_friday", AYMR.strings.aurora_greeting_weekday_friday),
@@ -186,6 +239,7 @@ object GreetingProvider {
         candidate("weekday_friday_anime_time", AYMR.strings.aurora_greeting_anime_time),
         candidate("weekday_friday_main_character", AYMR.strings.aurora_greeting_main_character),
         candidate("weekday_friday_new_episodes", AYMR.strings.aurora_greeting_new_episodes),
+        candidate("weekday_survival", AYMR.strings.aurora_greeting_weekday_survival),
     )
     private val weekdayGreetingsByDay = mapOf(
         Calendar.MONDAY to weekdayMondayGreetings,
@@ -198,6 +252,8 @@ object GreetingProvider {
         candidate("weekday_generic", AYMR.strings.aurora_greeting_weekday_generic),
         candidate("weekday_fallback_ready", AYMR.strings.aurora_greeting_ready),
         candidate("weekday_fallback_whats_next", AYMR.strings.aurora_greeting_whats_next),
+        candidate("weekday_survival", AYMR.strings.aurora_greeting_weekday_survival),
+        candidate("weekday_motivation", AYMR.strings.aurora_greeting_weekday_motivation),
     )
 
     private val streakGreetings = listOf(
@@ -206,6 +262,7 @@ object GreetingProvider {
         candidate("streak_loyal", AYMR.strings.aurora_greeting_streak_loyal),
         candidate("streak_unstoppable", AYMR.strings.aurora_greeting_streak_unstoppable),
         candidate("streak_daily", AYMR.strings.aurora_greeting_streak_daily),
+        candidate("streak_dedication", AYMR.strings.aurora_greeting_streak_dedication),
     )
 
     private val achievementGreetings = listOf(
@@ -226,6 +283,7 @@ object GreetingProvider {
         candidate("stats_1000_eps", AYMR.strings.aurora_greeting_stats_1000_eps),
         candidate("stats_pro_viewer", AYMR.strings.aurora_greeting_stats_pro_viewer),
         candidate("stats_impressive", AYMR.strings.aurora_greeting_stats_impressive),
+        candidate("stats_404_eps", AYMR.strings.aurora_greeting_stats_404_eps),
     )
 
     private val libraryGreetings = listOf(
@@ -234,6 +292,8 @@ object GreetingProvider {
         candidate("library_growing", AYMR.strings.aurora_greeting_library_growing),
         candidate("library_true_collector", AYMR.strings.aurora_greeting_library_true_collector),
         candidate("library_100", AYMR.strings.aurora_greeting_library_100),
+        candidate("library_hoarder", AYMR.strings.aurora_greeting_library_hoarder),
+        candidate("library_black_hole", AYMR.strings.aurora_greeting_library_black_hole),
     )
 
     fun getGreeting(
@@ -264,6 +324,7 @@ object GreetingProvider {
         totalLaunches: Long = 0L,
         recentGreetingIds: List<String> = emptyList(),
         recentScenarioIds: List<String> = emptyList(),
+        blockedGreetingIds: Set<String> = emptySet(),
         nowMillis: Long = System.currentTimeMillis(),
     ): GreetingSelection {
         val calendar = Calendar.getInstance().apply { timeInMillis = nowMillis }
@@ -284,6 +345,7 @@ object GreetingProvider {
             context = context,
             recentGreetingIds = recentGreetingIds,
             recentScenarioIds = recentScenarioIds,
+            blockedGreetingIds = blockedGreetingIds,
         )
     }
 
@@ -291,6 +353,7 @@ object GreetingProvider {
         context: GreetingContext,
         recentGreetingIds: List<String> = emptyList(),
         recentScenarioIds: List<String> = emptyList(),
+        blockedGreetingIds: Set<String> = emptySet(),
     ): GreetingSelection {
         if (context.isFirstTime) {
             return chooseGreeting(
@@ -298,6 +361,7 @@ object GreetingProvider {
                 candidates = firstTimeGreetings,
                 context = context,
                 recentGreetingIds = recentGreetingIds,
+                blockedGreetingIds = blockedGreetingIds,
             )
         }
 
@@ -307,6 +371,7 @@ object GreetingProvider {
                 candidates = absenceLongGreetings,
                 context = context,
                 recentGreetingIds = recentGreetingIds,
+                blockedGreetingIds = blockedGreetingIds,
             )
         }
 
@@ -316,15 +381,7 @@ object GreetingProvider {
                 candidates = absenceMidGreetings,
                 context = context,
                 recentGreetingIds = recentGreetingIds,
-            )
-        }
-
-        if (isFrequentUser(context)) {
-            return chooseGreeting(
-                scenarioId = "frequent_tease",
-                candidates = frequentUserGreetings,
-                context = context,
-                recentGreetingIds = recentGreetingIds,
+                blockedGreetingIds = blockedGreetingIds,
             )
         }
 
@@ -341,6 +398,14 @@ object GreetingProvider {
                 id = "milestone",
                 weight = 20,
                 candidates = milestoneCandidates,
+            )
+        }
+
+        if (isFrequentUser(context)) {
+            scenarios += GreetingScenario(
+                id = "frequent_tease",
+                weight = 14,
+                candidates = frequentUserGreetings,
             )
         }
 
@@ -379,8 +444,17 @@ object GreetingProvider {
         val selectedCandidate = pickCandidate(
             candidates = selectedScenario.candidates,
             recentGreetingIds = recentGreetingIds,
+            blockedGreetingIds = blockedGreetingIds,
             seed = createSeed(context, selectedScenario.id),
         )
+
+        if (selectedCandidate == null) {
+            return pickGeneralFallback(
+                context = context,
+                recentGreetingIds = recentGreetingIds,
+                blockedGreetingIds = blockedGreetingIds,
+            )
+        }
 
         return GreetingSelection(
             greeting = selectedCandidate.value,
@@ -394,11 +468,17 @@ object GreetingProvider {
         candidates: List<GreetingCandidate>,
         context: GreetingContext,
         recentGreetingIds: List<String>,
+        blockedGreetingIds: Set<String>,
     ): GreetingSelection {
         val candidate = pickCandidate(
             candidates = candidates,
             recentGreetingIds = recentGreetingIds,
+            blockedGreetingIds = blockedGreetingIds,
             seed = createSeed(context, scenarioId),
+        ) ?: return pickGeneralFallback(
+            context = context,
+            recentGreetingIds = recentGreetingIds,
+            blockedGreetingIds = blockedGreetingIds,
         )
         return GreetingSelection(
             greeting = candidate.value,
@@ -464,10 +544,21 @@ object GreetingProvider {
 
     private fun checkStreakMilestone(streak: Int): List<GreetingCandidate>? {
         return when {
+            streak >= 100 -> listOf(
+                candidate("streak_100", AYMR.strings.aurora_greeting_streak_100),
+                candidate("streak_dedication", AYMR.strings.aurora_greeting_streak_dedication),
+                candidate("streak_unstoppable", AYMR.strings.aurora_greeting_streak_unstoppable),
+            )
+            streak >= 30 -> listOf(
+                candidate("streak_30", AYMR.strings.aurora_greeting_streak_30),
+                candidate("streak_dedication", AYMR.strings.aurora_greeting_streak_dedication),
+                candidate("streak_unstoppable", AYMR.strings.aurora_greeting_streak_unstoppable),
+            )
             streak >= 14 -> listOf(
                 candidate("streak_unstoppable", AYMR.strings.aurora_greeting_streak_unstoppable),
                 candidate("streak_loyal", AYMR.strings.aurora_greeting_streak_loyal),
                 candidate("streak_daily", AYMR.strings.aurora_greeting_streak_daily),
+                candidate("streak_dedication", AYMR.strings.aurora_greeting_streak_dedication),
             )
             streak >= 7 -> listOf(
                 candidate("streak_7_days", AYMR.strings.aurora_greeting_streak_7_days),
@@ -502,6 +593,10 @@ object GreetingProvider {
                 candidate("stats_500_eps", AYMR.strings.aurora_greeting_stats_500_eps),
                 candidate("stats_marathoner", AYMR.strings.aurora_greeting_stats_marathoner),
             )
+            episodes >= 404 -> listOf(
+                candidate("stats_404_eps", AYMR.strings.aurora_greeting_stats_404_eps),
+                candidate("stats_marathoner", AYMR.strings.aurora_greeting_stats_marathoner),
+            )
             episodes >= 100 -> statsGreetings
             else -> null
         }
@@ -512,10 +607,12 @@ object GreetingProvider {
             size >= 100 -> listOf(
                 candidate("library_100", AYMR.strings.aurora_greeting_library_100),
                 candidate("library_true_collector", AYMR.strings.aurora_greeting_library_true_collector),
+                candidate("library_black_hole", AYMR.strings.aurora_greeting_library_black_hole),
             )
             size >= 50 -> listOf(
                 candidate("library_50", AYMR.strings.aurora_greeting_library_50),
                 candidate("library_impressive", AYMR.strings.aurora_greeting_library_impressive),
+                candidate("library_hoarder", AYMR.strings.aurora_greeting_library_hoarder),
             )
             size >= 10 -> libraryGreetings
             else -> null
@@ -525,16 +622,38 @@ object GreetingProvider {
     private fun pickCandidate(
         candidates: List<GreetingCandidate>,
         recentGreetingIds: List<String>,
+        blockedGreetingIds: Set<String>,
         seed: Long,
-    ): GreetingCandidate {
-        if (candidates.isEmpty()) {
-            return candidate("welcome_back", AYMR.strings.aurora_welcome_back)
-        }
+    ): GreetingCandidate? {
+        if (candidates.isEmpty()) return null
 
         val recentSet = recentGreetingIds.toSet()
-        val available = candidates.filterNot { it.id in recentSet }
-        val pool = if (available.isNotEmpty()) available else candidates
-        return deterministicPick(pool, seed)
+        val available = candidates.filterNot { it.id in recentSet || it.id in blockedGreetingIds }
+        if (available.isNotEmpty()) return deterministicPick(available, seed)
+
+        val relaxedByRecent = candidates.filterNot { it.id in blockedGreetingIds }
+        if (relaxedByRecent.isNotEmpty()) return deterministicPick(relaxedByRecent, seed)
+
+        return null
+    }
+
+    private fun pickGeneralFallback(
+        context: GreetingContext,
+        recentGreetingIds: List<String>,
+        blockedGreetingIds: Set<String>,
+    ): GreetingSelection {
+        val seed = createSeed(context, "general_fallback")
+        val candidate = pickCandidate(
+            candidates = generalGreetings,
+            recentGreetingIds = recentGreetingIds,
+            blockedGreetingIds = blockedGreetingIds,
+            seed = seed,
+        ) ?: deterministicPick(generalGreetings, seed)
+        return GreetingSelection(
+            greeting = candidate.value,
+            greetingId = candidate.id,
+            scenarioId = "general_fallback",
+        )
     }
 
     private fun <T> weightedPick(

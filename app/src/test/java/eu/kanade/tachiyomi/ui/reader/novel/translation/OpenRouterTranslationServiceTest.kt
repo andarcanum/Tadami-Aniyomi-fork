@@ -86,4 +86,3 @@ class OpenRouterTranslationServiceTest {
         server.requestCount shouldBe 0
     }
 }
-

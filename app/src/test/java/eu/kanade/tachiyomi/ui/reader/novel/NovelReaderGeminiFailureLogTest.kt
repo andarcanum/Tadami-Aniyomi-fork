@@ -1,8 +1,8 @@
 package eu.kanade.tachiyomi.ui.reader.novel
 
 import eu.kanade.tachiyomi.ui.reader.novel.translation.formatGeminiThrowableForLog
-import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import org.junit.jupiter.api.Test
 import java.net.SocketTimeoutException
 

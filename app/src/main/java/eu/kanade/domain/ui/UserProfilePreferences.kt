@@ -12,6 +12,7 @@ class UserProfilePreferences(
     fun totalLaunches() = preferenceStore.getLong("user_profile_total_launches", 0L)
     fun recentGreetingIds() = preferenceStore.getString("user_profile_recent_greeting_ids", "")
     fun recentScenarioIds() = preferenceStore.getString("user_profile_recent_scenario_ids", "")
+    fun recentGreetingEvents() = preferenceStore.getString("user_profile_recent_greeting_events", "")
     fun nameEdited() = preferenceStore.getBoolean("user_profile_name_edited", false)
 
     fun nicknameFont() = preferenceStore.getString("user_profile_name_font", "default")
@@ -91,6 +92,39 @@ class UserProfilePreferences(
         recentScenarioIds().set(encodeHistory(prependHistory(getRecentScenarioHistory(limit), id, limit)))
     }
 
+    fun getGreetingIdsShownWithin(windowMs: Long, nowMillis: Long): Set<String> {
+        if (windowMs <= 0L) return emptySet()
+        if (nowMillis <= 0L) return emptySet()
+
+        return decodeGreetingEvents(recentGreetingEvents().get())
+            .asSequence()
+            .filter { event ->
+                event.shownAtMillis in 1..nowMillis &&
+                    nowMillis - event.shownAtMillis < windowMs
+            }
+            .map { it.id }
+            .toSet()
+    }
+
+    fun appendRecentGreetingEvent(
+        id: String,
+        shownAtMillis: Long,
+        limit: Int = GREETING_EVENT_LIMIT,
+    ) {
+        if (id.isBlank()) return
+        if (shownAtMillis <= 0L) return
+
+        val byId = decodeGreetingEvents(recentGreetingEvents().get())
+            .associateBy { it.id }
+            .toMutableMap()
+        byId[id] = GreetingEvent(id = id, shownAtMillis = shownAtMillis)
+
+        val compact = byId.values
+            .sortedByDescending { it.shownAtMillis }
+            .take(limit.coerceAtLeast(1))
+        recentGreetingEvents().set(encodeGreetingEvents(compact))
+    }
+
     private fun decodeHistory(raw: String, limit: Int): List<String> {
         if (raw.isBlank()) return emptyList()
         return raw.split(HISTORY_SEPARATOR)
@@ -108,9 +142,41 @@ class UserProfilePreferences(
         return (listOf(id) + existing.filterNot { it == id }).take(limit)
     }
 
+    private fun decodeGreetingEvents(raw: String): List<GreetingEvent> {
+        if (raw.isBlank()) return emptyList()
+
+        return raw.split(HISTORY_SEPARATOR)
+            .asSequence()
+            .map { token -> token.trim() }
+            .filter { it.isNotEmpty() }
+            .mapNotNull { token ->
+                val separatorIndex = token.lastIndexOf(GREETING_EVENT_SEPARATOR)
+                if (separatorIndex <= 0 || separatorIndex >= token.lastIndex) return@mapNotNull null
+                val id = token.substring(0, separatorIndex).trim()
+                val shownAt = token.substring(separatorIndex + 1).trim().toLongOrNull() ?: return@mapNotNull null
+                if (id.isBlank() || shownAt <= 0L) return@mapNotNull null
+                GreetingEvent(id = id, shownAtMillis = shownAt)
+            }
+            .toList()
+    }
+
+    private fun encodeGreetingEvents(events: Collection<GreetingEvent>): String {
+        if (events.isEmpty()) return ""
+        return events.joinToString(HISTORY_SEPARATOR) { event ->
+            "${event.id}${GREETING_EVENT_SEPARATOR}${event.shownAtMillis}"
+        }
+    }
+
+    private data class GreetingEvent(
+        val id: String,
+        val shownAtMillis: Long,
+    )
+
     companion object {
         private const val HISTORY_SEPARATOR = "|"
+        private const val GREETING_EVENT_SEPARATOR = "@"
         private const val RECENT_HISTORY_LIMIT = 3
+        private const val GREETING_EVENT_LIMIT = 200
         const val DEFAULT_NAME = "\u0417\u0440\u0438\u0442\u0435\u043b\u044c"
     }
 }

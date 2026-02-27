@@ -45,4 +45,3 @@ class AirforceModelsServiceTest {
         server.takeRequest().path shouldBe "/v1/models"
     }
 }
-

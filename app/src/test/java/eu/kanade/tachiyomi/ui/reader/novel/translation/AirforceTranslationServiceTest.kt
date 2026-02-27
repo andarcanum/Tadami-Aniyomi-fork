@@ -162,7 +162,9 @@ class AirforceTranslationServiceTest {
         server.enqueue(
             MockResponse()
                 .setResponseCode(429)
-                .setBody("""{"error":{"message":"Global rate limit exceeded. Try again in 0.1 seconds.","type":"rate_limit_exceeded","code":"429"}}"""),
+                .setBody(
+                    """{"error":{"message":"Global rate limit exceeded. Try again in 0.1 seconds.","type":"rate_limit_exceeded","code":"429"}}""",
+                ),
         )
         server.enqueue(
             MockResponse().setBody(

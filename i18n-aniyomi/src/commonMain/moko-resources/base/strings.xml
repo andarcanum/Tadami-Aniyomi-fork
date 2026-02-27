@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Generic strings -->
     <string name="confirm_exit">Enable Horizontal Seek</string>
@@ -972,6 +972,57 @@
     <string name="aurora_greeting_night_midnight">Midnight session</string>
     <string name="aurora_greeting_night_starry">Starry night anime</string>
 
+
+    <!-- Additional Dynamic Greetings -->
+    <string name="aurora_greeting_manga_scroll">Пальцы размял? Тренировка по скроллингу начинается! 📱</string>
+    <string name="aurora_greeting_manhwa_system">[Система] приветствует нового Игрока. Желаете повысить уровень? 🌟</string>
+    <string name="aurora_greeting_manga_black_and_white">Жизнь обретает смысл в чёрно-белых тонах 🖤🤍</string>
+    <string name="aurora_greeting_novel_wall_of_text">Стена текста не пугает истинного культиватора! 🧘‍♂️</string>
+    <string name="aurora_greeting_manga_left_to_right">Читаем справа налево, живём задом наперёд 📖</string>
+    <string name="aurora_greeting_trope_tsundere">Б-бака! Я вовсе не ждало твоего возвращения... просто мимо проходило! 😤</string>
+    <string name="aurora_greeting_trope_yandere">Ты ведь будешь смотреть тайтлы только со мной, да? 🔪💕</string>
+    <string name="aurora_greeting_trope_chuunibyou">Глаз Тёмного Властелина резонирует! Время пришло! 👁️🔥</string>
+    <string name="aurora_greeting_trope_imouto">Онии-чан, пора смотреть аниме! 🎀</string>
+    <string name="aurora_greeting_trope_maid">Добро пожаловать домой, Хозяин! Чай или новую главу? ☕🧹</string>
+    <string name="aurora_greeting_absence_spider">Приложение чуть не покрылось паутиной! Спасибо, что спас 🕸️</string>
+    <string name="aurora_greeting_absence_training_arc">Твоя тренировочная арка в реале завершена? Показывай новые скиллы! ⚔️</string>
+    <string name="aurora_greeting_absence_amnesia">Ты помнишь, на чём остановился, или у нас арка амнезии? 🤕</string>
+    <string name="aurora_greeting_frequent_touch_grass">Говорят, на улице есть такая штука... «трава». Не хочешь потрогать? 🌱</string>
+    <string name="aurora_greeting_frequent_coffee_iv">Тебе чайник по венам пустить или сам нальёшь? ☕🩸</string>
+    <string name="aurora_greeting_frequent_resident">Твоя виртуальная 2D-комната уже готова. Заходи! 🚪</string>
+    <string name="aurora_greeting_streak_30">Месяц без перерывов. Настоящий хикки-профессионал! 🏆</string>
+    <string name="aurora_greeting_streak_100">100 дней?! Ты познал дзен и слился с 2D миром 🧘‍♂️</string>
+    <string name="aurora_greeting_streak_dedication">Твоей целеустремлённости позавидует любой сёнэн-герой! 💪</string>
+    <string name="aurora_greeting_stats_404_eps">Ошибка 404: Реальная жизнь не найдена. Осталось только аниме 🤖</string>
+    <string name="aurora_greeting_library_hoarder">Ты всё равно не посмотришь всё, что добавил в список, признайся 🤫</string>
+    <string name="aurora_greeting_library_black_hole">Твой список «В планах» уже обрёл собственную гравитацию 🌌</string>
+    <string name="aurora_greeting_morning_toast">Беги с тостом во рту, а то опоздаешь на просмотр! 🍞🏃‍♀️</string>
+    <string name="aurora_greeting_morning_alarm">Лучший будильник — это выход нового эпизода онгоинга ⏰</string>
+    <string name="aurora_greeting_morning_isekai">Ещё один день, когда мы не переродились в слайма. Придётся жить эту жизнь 💧</string>
+    <string name="aurora_greeting_afternoon_siesta">Время сиесты! Самое то для пары серий уютного слайсика 🍰</string>
+    <string name="aurora_greeting_afternoon_tea">Время послеобеденного чая с клубом лёгкой музыки 🎸</string>
+    <string name="aurora_greeting_evening_boss_defeated">Дневной босс «Обязанности» повержен. Лутаем опыт и смотрим аниме! 🎮</string>
+    <string name="aurora_greeting_evening_comf">Максимальный уровень уюта достигнут. Запуск протокола «чилл» 🐾</string>
+    <string name="aurora_greeting_evening_dinner">Ужин вкуснее, если на фоне кто-то кричит «ТАТАКАЭ!» 🍽️</string>
+    <string name="aurora_greeting_night_ninja">Режим ниндзя активирован: смотрим так, чтобы никто дома не услышал 🥷</string>
+    <string name="aurora_greeting_night_vampire">Солнце село, мы проснулись. Приветствую, дитя ночи 🦇</string>
+    <string name="aurora_greeting_night_red_eyes">У тебя уже Шаринган от недосыпа открылся, иди спать! 👁️🩸</string>
+    <string name="aurora_greeting_night_3am">Глубокая ночь — идеальное время для драмы, чтобы поплакать в подушку 😭</string>
+    <string name="aurora_greeting_weekend_pajamas">Выходные — это значит не снимать пижаму до понедельника 👘</string>
+    <string name="aurora_greeting_weekend_marathon_prep">Готовь снеки, закрывай шторы — начинается великий марафон! 🏃‍♂️💨</string>
+    <string name="aurora_greeting_weekend_no_regrets">Никаких сожалений о потраченном времени. Оно потрачено на искусство! 🎨</string>
+    <string name="aurora_greeting_weekday_survival">Пережить будни — это тоже своего рода хардкор-квест 🛡️</string>
+    <string name="aurora_greeting_weekday_motivation">Сделай вид, что ты в монтаже тренировок. Скоро выходные! 🎬</string>
+    <string name="aurora_greeting_general_gacha">Твоя удача на сегодня — ранга SSR! Приятного просмотра ✨</string>
+    <string name="aurora_greeting_general_plot_armor">Надеваем сюжетную броню и ныряем в новый тайтл! 🛡️</string>
+    <string name="aurora_greeting_general_bankai">БАНКАЙ! Ой, то есть... запускаю приложение! 🗡️</string>
+    <string name="aurora_greeting_general_titan">Отдадим же наши сердца за годный контент! Шинзо во сасагеё! ✊❤️</string>
+    <string name="aurora_greeting_general_isekai_truck">Смотри по сторонам, а то Грузовик-сан отправит тебя в фэнтези! 🚚</string>
+    <string name="aurora_greeting_general_susume">СУСУМЭЭЭ! Вперёд, к новым эпизодам! 🐎</string>
+    <string name="aurora_greeting_general_magic_girl">Трансформация в девочку-волшебницу... или просто включение плеера 🪄</string>
+    <string name="aurora_greeting_general_mecha">Залезай в грёбаного робота, Синдзи... или просто посмотри аниме 🤖</string>
+    <string name="aurora_greeting_general_power_level">Уровень твоей крутости &quot;OVER 9000!&quot; 💥</string>
+    <string name="aurora_greeting_general_cultured">Ах, я вижу, передо мной человек высокой культуры 🧐🍷</string>
     <!-- Browse Screen -->
     <string name="aurora_browse">Browse</string>
     <string name="aurora_discover_sources">Discover anime sources</string>
@@ -1116,3 +1167,4 @@
     <string name="home_header_layout_editor_preview_greeting">Hello, welcome</string>
     <string name="home_header_layout_editor_preview_nickname">Viewer</string>
 </resources>
+
