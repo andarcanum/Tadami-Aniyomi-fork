@@ -28,6 +28,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,6 +47,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderOverride
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.i18n.aniyomi.AYMR
@@ -116,6 +118,16 @@ private fun GeneralTab(
             preferences.updateSourceOverride(sourceId) { copyOverride(it, value) }
         } else {
             setGlobal(value)
+        }
+    }
+
+    LaunchedEffect(settings.translationProvider) {
+        if (settings.translationProvider == NovelTranslationProvider.AIRFORCE) {
+            update(
+                NovelTranslationProvider.GEMINI,
+                { o, v -> o.copy(translationProvider = v) },
+                { preferences.translationProvider().set(it) },
+            )
         }
     }
 
@@ -286,18 +298,47 @@ private fun GeneralTab(
         ) {
             Text(
                 text = if (showGeminiSettings) {
-                    "Gemini переводчик: скрыть"
+                    "AI translator: hide"
                 } else {
-                    "Gemini переводчик: показать"
+                    "AI translator: show"
                 },
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                 style = MaterialTheme.typography.labelLarge,
             )
         }
         if (showGeminiSettings) {
+            Text(
+                text = "Provider",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    NovelTranslationProvider.GEMINI to "Gemini",
+                    NovelTranslationProvider.OPENROUTER to "OpenRouter",
+                ).forEach { option ->
+                    val selected = settings.translationProvider == option.first
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.clickable {
+                            update(
+                                option.first,
+                                { o, v -> o.copy(translationProvider = v) },
+                                { preferences.translationProvider().set(it) },
+                            )
+                        },
+                    ) {
+                        Text(
+                            text = if (selected) "* ${option.second}" else option.second,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
+                }
+            }
             SwitchPreferenceWidget(
-                title = "Автостарт перевода для English",
-                subtitle = "Автоматически запускать Gemini перевод при English source language",
+                title = "Auto-start translation for English",
+                subtitle = "Automatically start translation when source language is English",
                 checked = settings.geminiAutoTranslateEnglishSource,
                 onCheckedChanged = {
                     update(
@@ -308,8 +349,8 @@ private fun GeneralTab(
                 },
             )
             SwitchPreferenceWidget(
-                title = "Превентивный перевод следующей главы (30%)",
-                subtitle = "Запускать перевод следующей главы в фоне после 30% чтения текущей",
+                title = "Pre-translate next chapter (30%)",
+                subtitle = "Start next chapter translation in background after 30% reading progress",
                 checked = settings.geminiPrefetchNextChapterTranslation,
                 onCheckedChanged = {
                     update(
@@ -319,6 +360,53 @@ private fun GeneralTab(
                     )
                 },
             )
+            if (settings.translationProvider == NovelTranslationProvider.OPENROUTER) {
+                EditTextPreferenceWidget(
+                    title = "OpenRouter Base URL",
+                    subtitle = "%s",
+                    icon = null,
+                    value = settings.openRouterBaseUrl,
+                    onConfirm = {
+                        update(
+                            it,
+                            { o, v -> o.copy(openRouterBaseUrl = v) },
+                            { preferences.openRouterBaseUrl().set(it) },
+                        )
+                        true
+                    },
+                    canBeBlank = false,
+                )
+                EditTextPreferenceWidget(
+                    title = "OpenRouter API key",
+                    subtitle = "%s",
+                    icon = null,
+                    value = settings.openRouterApiKey,
+                    onConfirm = {
+                        update(
+                            it,
+                            { o, v -> o.copy(openRouterApiKey = v) },
+                            { preferences.openRouterApiKey().set(it) },
+                        )
+                        true
+                    },
+                    canBeBlank = false,
+                )
+                EditTextPreferenceWidget(
+                    title = "OpenRouter model (:free only)",
+                    subtitle = "%s",
+                    icon = null,
+                    value = settings.openRouterModel,
+                    onConfirm = {
+                        update(
+                            it,
+                            { o, v -> o.copy(openRouterModel = v) },
+                            { preferences.openRouterModel().set(it) },
+                        )
+                        true
+                    },
+                    canBeBlank = false,
+                )
+            }
         }
 
         SwitchPreferenceWidget(

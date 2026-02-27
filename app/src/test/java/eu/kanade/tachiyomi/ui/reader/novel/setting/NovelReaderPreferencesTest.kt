@@ -51,6 +51,13 @@ class NovelReaderPreferencesTest {
         prefs.geminiTopK().get() shouldBe 40
         prefs.geminiAutoTranslateEnglishSource().get() shouldBe false
         prefs.geminiPrefetchNextChapterTranslation().get() shouldBe false
+        prefs.translationProvider().get() shouldBe NovelTranslationProvider.GEMINI
+        prefs.airforceBaseUrl().get() shouldBe "https://api.airforce"
+        prefs.airforceApiKey().get() shouldBe ""
+        prefs.airforceModel().get() shouldBe ""
+        prefs.openRouterBaseUrl().get() shouldBe "https://openrouter.ai/api/v1"
+        prefs.openRouterApiKey().get() shouldBe ""
+        prefs.openRouterModel().get() shouldBe ""
     }
 
     @Test
@@ -90,6 +97,13 @@ class NovelReaderPreferencesTest {
         prefs.geminiPromptModifiers().set("modifiers")
         prefs.geminiAutoTranslateEnglishSource().set(true)
         prefs.geminiPrefetchNextChapterTranslation().set(true)
+        prefs.translationProvider().set(NovelTranslationProvider.AIRFORCE)
+        prefs.airforceBaseUrl().set("https://api.airforce")
+        prefs.airforceApiKey().set("airforce-key")
+        prefs.airforceModel().set("openai/gpt-4.1-mini")
+        prefs.openRouterBaseUrl().set("https://openrouter.ai/api/v1")
+        prefs.openRouterApiKey().set("openrouter-key")
+        prefs.openRouterModel().set("google/gemma-3-27b-it:free")
         prefs.customThemes().set(
             listOf(
                 NovelReaderColorTheme(backgroundColor = "#111111", textColor = "#eeeeee"),
@@ -131,6 +145,13 @@ class NovelReaderPreferencesTest {
         override?.geminiPromptModifiers shouldBe "modifiers"
         override?.geminiAutoTranslateEnglishSource shouldBe true
         override?.geminiPrefetchNextChapterTranslation shouldBe true
+        override?.translationProvider shouldBe NovelTranslationProvider.AIRFORCE
+        override?.airforceBaseUrl shouldBe "https://api.airforce"
+        override?.airforceApiKey shouldBe "airforce-key"
+        override?.airforceModel shouldBe "openai/gpt-4.1-mini"
+        override?.openRouterBaseUrl shouldBe "https://openrouter.ai/api/v1"
+        override?.openRouterApiKey shouldBe "openrouter-key"
+        override?.openRouterModel shouldBe "google/gemma-3-27b-it:free"
         override?.customThemes shouldBe listOf(
             NovelReaderColorTheme(backgroundColor = "#111111", textColor = "#eeeeee"),
         )
@@ -173,6 +194,13 @@ class NovelReaderPreferencesTest {
         prefs.geminiPromptModifiers().set("")
         prefs.geminiAutoTranslateEnglishSource().set(false)
         prefs.geminiPrefetchNextChapterTranslation().set(false)
+        prefs.translationProvider().set(NovelTranslationProvider.GEMINI)
+        prefs.airforceBaseUrl().set("https://api.airforce")
+        prefs.airforceApiKey().set("")
+        prefs.airforceModel().set("")
+        prefs.openRouterBaseUrl().set("https://openrouter.ai/api/v1")
+        prefs.openRouterApiKey().set("")
+        prefs.openRouterModel().set("")
         prefs.customThemes().set(
             listOf(
                 NovelReaderColorTheme(backgroundColor = "#f5f5fa", textColor = "#111111"),
@@ -214,6 +242,13 @@ class NovelReaderPreferencesTest {
                 geminiPromptModifiers = "override-mod",
                 geminiAutoTranslateEnglishSource = true,
                 geminiPrefetchNextChapterTranslation = true,
+                translationProvider = NovelTranslationProvider.AIRFORCE,
+                airforceBaseUrl = "https://api.airforce",
+                airforceApiKey = "airforce-key",
+                airforceModel = "openai/gpt-4.1-mini",
+                openRouterBaseUrl = "https://openrouter.ai/api/v1",
+                openRouterApiKey = "openrouter-key",
+                openRouterModel = "google/gemma-3-27b-it:free",
                 customThemes = listOf(
                     NovelReaderColorTheme(backgroundColor = "#000000", textColor = "#ffffff"),
                 ),
@@ -254,6 +289,13 @@ class NovelReaderPreferencesTest {
         settings.geminiPromptModifiers shouldBe "override-mod"
         settings.geminiAutoTranslateEnglishSource shouldBe true
         settings.geminiPrefetchNextChapterTranslation shouldBe true
+        settings.translationProvider shouldBe NovelTranslationProvider.AIRFORCE
+        settings.airforceBaseUrl shouldBe "https://api.airforce"
+        settings.airforceApiKey shouldBe "airforce-key"
+        settings.airforceModel shouldBe "openai/gpt-4.1-mini"
+        settings.openRouterBaseUrl shouldBe "https://openrouter.ai/api/v1"
+        settings.openRouterApiKey shouldBe "openrouter-key"
+        settings.openRouterModel shouldBe "google/gemma-3-27b-it:free"
         settings.customThemes shouldBe listOf(
             NovelReaderColorTheme(backgroundColor = "#000000", textColor = "#ffffff"),
         )

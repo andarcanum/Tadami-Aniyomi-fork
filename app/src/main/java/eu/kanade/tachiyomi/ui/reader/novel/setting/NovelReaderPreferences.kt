@@ -77,6 +77,13 @@ data class NovelReaderSettings(
     val geminiPromptModifiers: String = "",
     val geminiAutoTranslateEnglishSource: Boolean = false,
     val geminiPrefetchNextChapterTranslation: Boolean = false,
+    val translationProvider: NovelTranslationProvider = NovelTranslationProvider.GEMINI,
+    val airforceBaseUrl: String = "https://api.airforce",
+    val airforceApiKey: String = "",
+    val airforceModel: String = "",
+    val openRouterBaseUrl: String = "https://openrouter.ai/api/v1",
+    val openRouterApiKey: String = "",
+    val openRouterModel: String = "",
 )
 
 enum class NovelReaderTheme {
@@ -96,6 +103,12 @@ enum class TextAlign {
 enum class GeminiPromptMode {
     CLASSIC,
     ADULT_18,
+}
+
+enum class NovelTranslationProvider {
+    GEMINI,
+    AIRFORCE,
+    OPENROUTER,
 }
 
 @Serializable
@@ -168,6 +181,13 @@ data class NovelReaderOverride(
     val geminiPromptModifiers: String? = null,
     val geminiAutoTranslateEnglishSource: Boolean? = null,
     val geminiPrefetchNextChapterTranslation: Boolean? = null,
+    val translationProvider: NovelTranslationProvider? = null,
+    val airforceBaseUrl: String? = null,
+    val airforceApiKey: String? = null,
+    val airforceModel: String? = null,
+    val openRouterBaseUrl: String? = null,
+    val openRouterApiKey: String? = null,
+    val openRouterModel: String? = null,
 )
 
 class NovelReaderPreferences(
@@ -303,6 +323,21 @@ class NovelReaderPreferences(
     fun geminiPrefetchNextChapterTranslation() =
         preferenceStore.getBoolean("novel_reader_gemini_prefetch_next_chapter_translation", false)
 
+    fun translationProvider() =
+        preferenceStore.getEnum("novel_reader_translation_provider", NovelTranslationProvider.GEMINI)
+
+    fun airforceBaseUrl() = preferenceStore.getString("novel_reader_airforce_base_url", "https://api.airforce")
+
+    fun airforceApiKey() = preferenceStore.getString("novel_reader_airforce_api_key", "")
+
+    fun airforceModel() = preferenceStore.getString("novel_reader_airforce_model", "")
+
+    fun openRouterBaseUrl() = preferenceStore.getString("novel_reader_openrouter_base_url", "https://openrouter.ai/api/v1")
+
+    fun openRouterApiKey() = preferenceStore.getString("novel_reader_openrouter_api_key", "")
+
+    fun openRouterModel() = preferenceStore.getString("novel_reader_openrouter_model", "")
+
     // EPUB export
     fun epubExportLocation() = preferenceStore.getString("novel_epub_export_location", "")
 
@@ -386,6 +421,13 @@ class NovelReaderPreferences(
                 geminiPromptModifiers = geminiPromptModifiers().get(),
                 geminiAutoTranslateEnglishSource = geminiAutoTranslateEnglishSource().get(),
                 geminiPrefetchNextChapterTranslation = geminiPrefetchNextChapterTranslation().get(),
+                translationProvider = translationProvider().get(),
+                airforceBaseUrl = airforceBaseUrl().get(),
+                airforceApiKey = airforceApiKey().get(),
+                airforceModel = airforceModel().get(),
+                openRouterBaseUrl = openRouterBaseUrl().get(),
+                openRouterApiKey = openRouterApiKey().get(),
+                openRouterModel = openRouterModel().get(),
             ),
         )
     }
@@ -457,6 +499,13 @@ class NovelReaderPreferences(
             override?.geminiAutoTranslateEnglishSource ?: geminiAutoTranslateEnglishSource().get(),
             geminiPrefetchNextChapterTranslation =
             override?.geminiPrefetchNextChapterTranslation ?: geminiPrefetchNextChapterTranslation().get(),
+            translationProvider = override?.translationProvider ?: translationProvider().get(),
+            airforceBaseUrl = override?.airforceBaseUrl ?: airforceBaseUrl().get(),
+            airforceApiKey = override?.airforceApiKey ?: airforceApiKey().get(),
+            airforceModel = override?.airforceModel ?: airforceModel().get(),
+            openRouterBaseUrl = override?.openRouterBaseUrl ?: openRouterBaseUrl().get(),
+            openRouterApiKey = override?.openRouterApiKey ?: openRouterApiKey().get(),
+            openRouterModel = override?.openRouterModel ?: openRouterModel().get(),
         )
     }
 
@@ -573,6 +622,13 @@ class NovelReaderPreferences(
             geminiPromptModifiers().changes(),
             geminiAutoTranslateEnglishSource().changes(),
             geminiPrefetchNextChapterTranslation().changes(),
+            translationProvider().changes(),
+            airforceBaseUrl().changes(),
+            airforceApiKey().changes(),
+            airforceModel().changes(),
+            openRouterBaseUrl().changes(),
+            openRouterApiKey().changes(),
+            openRouterModel().changes(),
         ) { values: Array<Any?> ->
             GeminiSettings(
                 enabled = values[0] as Boolean,
@@ -595,6 +651,13 @@ class NovelReaderPreferences(
                 promptModifiers = values[17] as String,
                 autoTranslateEnglishSource = values[18] as Boolean,
                 prefetchNextChapterTranslation = values[19] as Boolean,
+                translationProvider = values[20] as NovelTranslationProvider,
+                airforceBaseUrl = values[21] as String,
+                airforceApiKey = values[22] as String,
+                airforceModel = values[23] as String,
+                openRouterBaseUrl = values[24] as String,
+                openRouterApiKey = values[25] as String,
+                openRouterModel = values[26] as String,
             )
         }
 
@@ -672,6 +735,13 @@ class NovelReaderPreferences(
                 override?.geminiAutoTranslateEnglishSource ?: gemini.autoTranslateEnglishSource,
                 geminiPrefetchNextChapterTranslation =
                 override?.geminiPrefetchNextChapterTranslation ?: gemini.prefetchNextChapterTranslation,
+                translationProvider = override?.translationProvider ?: gemini.translationProvider,
+                airforceBaseUrl = override?.airforceBaseUrl ?: gemini.airforceBaseUrl,
+                airforceApiKey = override?.airforceApiKey ?: gemini.airforceApiKey,
+                airforceModel = override?.airforceModel ?: gemini.airforceModel,
+                openRouterBaseUrl = override?.openRouterBaseUrl ?: gemini.openRouterBaseUrl,
+                openRouterApiKey = override?.openRouterApiKey ?: gemini.openRouterApiKey,
+                openRouterModel = override?.openRouterModel ?: gemini.openRouterModel,
             )
         }
     }
@@ -744,6 +814,13 @@ class NovelReaderPreferences(
         val promptModifiers: String,
         val autoTranslateEnglishSource: Boolean,
         val prefetchNextChapterTranslation: Boolean,
+        val translationProvider: NovelTranslationProvider,
+        val airforceBaseUrl: String,
+        val airforceApiKey: String,
+        val airforceModel: String,
+        val openRouterBaseUrl: String,
+        val openRouterApiKey: String,
+        val openRouterModel: String,
     )
 
     companion object {

@@ -56,6 +56,17 @@ class NovelReaderScreen(
                 onSetGeminiCustomPromptModifier = screenModel::setGeminiCustomPromptModifier,
                 onSetGeminiAutoTranslateEnglishSource = screenModel::setGeminiAutoTranslateEnglishSource,
                 onSetGeminiPrefetchNextChapterTranslation = screenModel::setGeminiPrefetchNextChapterTranslation,
+                onSetTranslationProvider = screenModel::setTranslationProvider,
+                onSetAirforceBaseUrl = screenModel::setAirforceBaseUrl,
+                onSetAirforceApiKey = screenModel::setAirforceApiKey,
+                onSetAirforceModel = screenModel::setAirforceModel,
+                onRefreshAirforceModels = screenModel::refreshAirforceModels,
+                onTestAirforceConnection = screenModel::testAirforceConnection,
+                onSetOpenRouterBaseUrl = screenModel::setOpenRouterBaseUrl,
+                onSetOpenRouterApiKey = screenModel::setOpenRouterApiKey,
+                onSetOpenRouterModel = screenModel::setOpenRouterModel,
+                onRefreshOpenRouterModels = screenModel::refreshOpenRouterModels,
+                onTestOpenRouterConnection = screenModel::testOpenRouterConnection,
                 onOpenPreviousChapter = { previousChapterId ->
                     navigator.replace(NovelReaderScreen(previousChapterId))
                 },

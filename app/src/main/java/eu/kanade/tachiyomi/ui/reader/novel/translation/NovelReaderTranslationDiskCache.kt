@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.reader.novel.translation
 
 import android.app.Application
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -67,6 +68,7 @@ internal class NovelReaderTranslationDiskCache(
 private data class GeminiTranslationCacheDiskModel(
     val chapterId: Long,
     val translatedByIndex: Map<Int, String>,
+    val provider: NovelTranslationProvider = NovelTranslationProvider.GEMINI,
     val model: String,
     val sourceLang: String,
     val targetLang: String,
@@ -76,6 +78,7 @@ private data class GeminiTranslationCacheDiskModel(
         return GeminiTranslationCacheEntry(
             chapterId = chapterId,
             translatedByIndex = translatedByIndex,
+            provider = provider,
             model = model,
             sourceLang = sourceLang,
             targetLang = targetLang,
@@ -88,6 +91,7 @@ private data class GeminiTranslationCacheDiskModel(
             return GeminiTranslationCacheDiskModel(
                 chapterId = entry.chapterId,
                 translatedByIndex = entry.translatedByIndex,
+                provider = entry.provider,
                 model = entry.model,
                 sourceLang = entry.sourceLang,
                 targetLang = entry.targetLang,

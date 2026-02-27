@@ -148,6 +148,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptModifiers
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import kotlinx.collections.immutable.persistentListOf
@@ -199,6 +200,17 @@ fun NovelReaderScreen(
     onSetGeminiCustomPromptModifier: (String) -> Unit = {},
     onSetGeminiAutoTranslateEnglishSource: (Boolean) -> Unit = {},
     onSetGeminiPrefetchNextChapterTranslation: (Boolean) -> Unit = {},
+    onSetTranslationProvider: (NovelTranslationProvider) -> Unit = {},
+    onSetAirforceBaseUrl: (String) -> Unit = {},
+    onSetAirforceApiKey: (String) -> Unit = {},
+    onSetAirforceModel: (String) -> Unit = {},
+    onRefreshAirforceModels: () -> Unit = {},
+    onTestAirforceConnection: () -> Unit = {},
+    onSetOpenRouterBaseUrl: (String) -> Unit = {},
+    onSetOpenRouterApiKey: (String) -> Unit = {},
+    onSetOpenRouterModel: (String) -> Unit = {},
+    onRefreshOpenRouterModels: () -> Unit = {},
+    onTestOpenRouterConnection: () -> Unit = {},
     onOpenPreviousChapter: ((Long) -> Unit)? = null,
     onOpenNextChapter: ((Long) -> Unit)? = null,
 ) {
@@ -1917,6 +1929,23 @@ fun NovelReaderScreen(
                 onSetGeminiCustomPromptModifier = onSetGeminiCustomPromptModifier,
                 onSetGeminiAutoTranslateEnglishSource = onSetGeminiAutoTranslateEnglishSource,
                 onSetGeminiPrefetchNextChapterTranslation = onSetGeminiPrefetchNextChapterTranslation,
+                onSetTranslationProvider = onSetTranslationProvider,
+                onSetAirforceBaseUrl = onSetAirforceBaseUrl,
+                onSetAirforceApiKey = onSetAirforceApiKey,
+                onSetAirforceModel = onSetAirforceModel,
+                onRefreshAirforceModels = onRefreshAirforceModels,
+                onTestAirforceConnection = onTestAirforceConnection,
+                onSetOpenRouterBaseUrl = onSetOpenRouterBaseUrl,
+                onSetOpenRouterApiKey = onSetOpenRouterApiKey,
+                onSetOpenRouterModel = onSetOpenRouterModel,
+                onRefreshOpenRouterModels = onRefreshOpenRouterModels,
+                onTestOpenRouterConnection = onTestOpenRouterConnection,
+                airforceModels = state.airforceModelIds,
+                isAirforceModelsLoading = state.isAirforceModelsLoading,
+                isTestingAirforceConnection = state.isTestingAirforceConnection,
+                openRouterModels = state.openRouterModelIds,
+                isOpenRouterModelsLoading = state.isOpenRouterModelsLoading,
+                isTestingOpenRouterConnection = state.isTestingOpenRouterConnection,
                 onDismiss = { showGeminiDialog = false },
             )
         }
@@ -1980,6 +2009,23 @@ private fun GeminiTranslationDialog(
     onSetGeminiCustomPromptModifier: (String) -> Unit,
     onSetGeminiAutoTranslateEnglishSource: (Boolean) -> Unit,
     onSetGeminiPrefetchNextChapterTranslation: (Boolean) -> Unit,
+    onSetTranslationProvider: (NovelTranslationProvider) -> Unit,
+    onSetAirforceBaseUrl: (String) -> Unit,
+    onSetAirforceApiKey: (String) -> Unit,
+    onSetAirforceModel: (String) -> Unit,
+    onRefreshAirforceModels: () -> Unit,
+    onTestAirforceConnection: () -> Unit,
+    onSetOpenRouterBaseUrl: (String) -> Unit,
+    onSetOpenRouterApiKey: (String) -> Unit,
+    onSetOpenRouterModel: (String) -> Unit,
+    onRefreshOpenRouterModels: () -> Unit,
+    onTestOpenRouterConnection: () -> Unit,
+    airforceModels: List<String>,
+    isAirforceModelsLoading: Boolean,
+    isTestingAirforceConnection: Boolean,
+    openRouterModels: List<String>,
+    isOpenRouterModelsLoading: Boolean,
+    isTestingOpenRouterConnection: Boolean,
     onDismiss: () -> Unit,
 ) {
     val modelEntries = remember {
@@ -1997,6 +2043,15 @@ private fun GeminiTranslationDialog(
             "50-2" to (50 to 2),
             "30-3" to (30 to 3),
         )
+    }
+    val openRouterAllModelEntries = remember(openRouterModels) {
+        openRouterModels
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() && it.endsWith(":free", ignoreCase = true) }
+            .distinct()
+            .sorted()
+            .associateWith { it }
     }
 
     var tempKey by remember(readerSettings.geminiApiKey) { mutableStateOf(readerSettings.geminiApiKey) }
@@ -2041,6 +2096,16 @@ private fun GeminiTranslationDialog(
     var tempPrefetchNextChapterTranslation by remember(readerSettings.geminiPrefetchNextChapterTranslation) {
         mutableStateOf(readerSettings.geminiPrefetchNextChapterTranslation)
     }
+    var tempProvider by remember(readerSettings.translationProvider) { mutableStateOf(readerSettings.translationProvider) }
+    var tempOpenRouterBaseUrl by remember(readerSettings.openRouterBaseUrl) {
+        mutableStateOf(readerSettings.openRouterBaseUrl)
+    }
+    var tempOpenRouterApiKey by remember(readerSettings.openRouterApiKey) {
+        mutableStateOf(readerSettings.openRouterApiKey)
+    }
+    var tempOpenRouterModel by remember(readerSettings.openRouterModel) {
+        mutableStateOf(readerSettings.openRouterModel)
+    }
     var showAdvanced by remember { mutableStateOf(false) }
     var showGenerationConfig by remember { mutableStateOf(false) }
     var showLogs by remember { mutableStateOf(false) }
@@ -2064,7 +2129,23 @@ private fun GeminiTranslationDialog(
     )
     val status = geminiStatusPresentation(uiState)
     val hasTranslationResult = hasCache || translationProgress >= 100
+    val isGeminiSelected = tempProvider == NovelTranslationProvider.GEMINI
+    val isOpenRouterSelected = tempProvider == NovelTranslationProvider.OPENROUTER
     val tabTitles = remember { persistentListOf("Основные", "Промпт", "Еще") }
+
+    LaunchedEffect(tempProvider) {
+        if (tempProvider == NovelTranslationProvider.AIRFORCE) {
+            tempProvider = NovelTranslationProvider.GEMINI
+            onSetTranslationProvider(NovelTranslationProvider.GEMINI)
+            onAddLog("⚙️ Airforce hidden. Switched to Gemini")
+        }
+    }
+
+    LaunchedEffect(isOpenRouterSelected, openRouterModels.size) {
+        if (isOpenRouterSelected && openRouterModels.isEmpty()) {
+            onRefreshOpenRouterModels()
+        }
+    }
 
     TabbedDialog(
         onDismissRequest = onDismiss,
@@ -2077,7 +2158,7 @@ private fun GeminiTranslationDialog(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = "Gemini Переводчик",
+                text = "AI Переводчик",
                 style = MaterialTheme.typography.titleMedium,
             )
             if (page == 0) {
@@ -2166,21 +2247,91 @@ private fun GeminiTranslationDialog(
                 ) {
                     if (page == 0) {
                         Text(
-                            "Модель",
+                            "Провайдер",
                             style = MaterialTheme.typography.labelLarge,
                         )
-                        eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
-                            value = tempModel,
-                            title = "Текущая модель",
-                            subtitle = modelMap[tempModel] ?: tempModel,
-                            icon = null,
-                            entries = modelMap,
-                            onValueChange = { selected ->
-                                tempModel = selected
-                                onSetGeminiModel(selected)
-                                onAddLog("⚙️ Model: ${modelMap[selected] ?: selected}")
-                            },
-                        )
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(
+                                listOf(
+                                    NovelTranslationProvider.GEMINI to "Gemini",
+                                    NovelTranslationProvider.OPENROUTER to "OpenRouter",
+                                ),
+                            ) { option ->
+                                val selected = tempProvider == option.first
+                                OutlinedButton(
+                                    onClick = {
+                                        tempProvider = option.first
+                                        onSetTranslationProvider(option.first)
+                                        onAddLog("⚙️ Provider: ${option.second}")
+                                        when (option.first) {
+                                            NovelTranslationProvider.GEMINI -> Unit
+                                            NovelTranslationProvider.OPENROUTER -> onRefreshOpenRouterModels()
+                                            NovelTranslationProvider.AIRFORCE -> Unit
+                                        }
+                                    },
+                                ) {
+                                    Text(if (selected) "• ${option.second}" else option.second)
+                                }
+                            }
+                        }
+                    }
+
+                    if (page == 0) {
+                        when (tempProvider) {
+                            NovelTranslationProvider.GEMINI -> {
+                                Text(
+                                    "Модель",
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                                eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
+                                    value = tempModel,
+                                    title = "Текущая модель",
+                                    subtitle = modelMap[tempModel] ?: tempModel,
+                                    icon = null,
+                                    entries = modelMap,
+                                    onValueChange = { selected ->
+                                        tempModel = selected
+                                        onSetGeminiModel(selected)
+                                        onAddLog("⚙️ Model: ${modelMap[selected] ?: selected}")
+                                    },
+                                )
+                            }
+                            NovelTranslationProvider.OPENROUTER -> {
+                                Text(
+                                    "OpenRouter модели (free)",
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                                if (openRouterAllModelEntries.isNotEmpty()) {
+                                    eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
+                                        value = tempOpenRouterModel,
+                                        title = "Бесплатные модели (${openRouterAllModelEntries.size})",
+                                        subtitle = tempOpenRouterModel.ifBlank { "Выберите free модель (:free)" },
+                                        icon = null,
+                                        entries = openRouterAllModelEntries,
+                                        onValueChange = { selected ->
+                                            tempOpenRouterModel = selected
+                                            onSetOpenRouterModel(selected)
+                                            onAddLog("⚙️ OpenRouter model: $selected")
+                                        },
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(onClick = onRefreshOpenRouterModels) {
+                                        Text(if (isOpenRouterModelsLoading) "Загрузка моделей..." else "Обновить список")
+                                    }
+                                }
+                                OutlinedTextField(
+                                    value = tempOpenRouterModel,
+                                    onValueChange = {
+                                        tempOpenRouterModel = it
+                                        onSetOpenRouterModel(it)
+                                    },
+                                    label = { Text("Model ID (только :free)") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                            NovelTranslationProvider.AIRFORCE -> Unit
+                        }
                     }
 
                     if (page == 1) {
@@ -2287,7 +2438,11 @@ private fun GeminiTranslationDialog(
                         }
                     }
 
-                    if (page == 1 && (tempModel == "gemini-3-flash-preview" || tempModel == "gemini-3-pro-preview")) {
+                    if (
+                        page == 1 &&
+                        isGeminiSelected &&
+                        (tempModel == "gemini-3-flash-preview" || tempModel == "gemini-3-pro-preview")
+                    ) {
                         Text(
                             "Уровень размышления",
                             style = MaterialTheme.typography.labelLarge,
@@ -2312,7 +2467,7 @@ private fun GeminiTranslationDialog(
                         }
                     }
 
-                    if (page == 1 && tempModel == "gemini-2.5-flash") {
+                    if (page == 1 && isGeminiSelected && tempModel == "gemini-2.5-flash") {
                         Text(
                             "Бюджет токенов (Gemini 2.5)",
                             style = MaterialTheme.typography.labelLarge,
@@ -2382,10 +2537,31 @@ private fun GeminiTranslationDialog(
                         Text(if (showAdvanced) "Скрыть доп. настройки" else "Доп. настройки")
                     }
                     if (showAdvanced) {
+                        if (isOpenRouterSelected) {
+                            OutlinedTextField(
+                                value = tempOpenRouterBaseUrl,
+                                onValueChange = { tempOpenRouterBaseUrl = it },
+                                label = { Text("Base URL") },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                         OutlinedTextField(
-                            value = tempKey,
-                            onValueChange = { tempKey = it },
-                            label = { Text("API ключ") },
+                            value = if (isOpenRouterSelected) tempOpenRouterApiKey else tempKey,
+                            onValueChange = {
+                                if (isOpenRouterSelected) {
+                                    tempOpenRouterApiKey = it
+                                } else {
+                                    tempKey = it
+                                }
+                            },
+                            label = {
+                                Text(
+                                    when {
+                                        isOpenRouterSelected -> "OpenRouter API key"
+                                        else -> "API ключ"
+                                    },
+                                )
+                            },
                             modifier = Modifier.fillMaxWidth(),
                         )
                         Row(
@@ -2394,8 +2570,15 @@ private fun GeminiTranslationDialog(
                         ) {
                             TextButton(
                                 onClick = {
-                                    onSetGeminiApiKey(tempKey)
-                                    onAddLog("⚙️ API ключ сохранен")
+                                    if (isOpenRouterSelected) {
+                                        onSetOpenRouterBaseUrl(tempOpenRouterBaseUrl)
+                                        onSetOpenRouterApiKey(tempOpenRouterApiKey)
+                                        onSetOpenRouterModel(tempOpenRouterModel)
+                                        onAddLog("⚙️ OpenRouter settings saved")
+                                    } else {
+                                        onSetGeminiApiKey(tempKey)
+                                        onAddLog("⚙️ API ключ сохранен")
+                                    }
                                 },
                                 modifier = Modifier.weight(1f),
                             ) {
@@ -2410,6 +2593,27 @@ private fun GeminiTranslationDialog(
                                 modifier = Modifier.weight(1f),
                             ) {
                                 Text("Relaxed: ${if (tempRelaxed) "ON" else "OFF"}")
+                            }
+                        }
+                        if (isOpenRouterSelected) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                TextButton(
+                                    onClick = onTestOpenRouterConnection,
+                                    enabled = !isTestingOpenRouterConnection,
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Text(if (isTestingOpenRouterConnection) "Проверка..." else "Тест подключения")
+                                }
+                                TextButton(
+                                    onClick = onRefreshOpenRouterModels,
+                                    enabled = !isOpenRouterModelsLoading,
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Text(if (isOpenRouterModelsLoading) "Обновление..." else "Обновить модели")
+                                }
                             }
                         }
                         Row(

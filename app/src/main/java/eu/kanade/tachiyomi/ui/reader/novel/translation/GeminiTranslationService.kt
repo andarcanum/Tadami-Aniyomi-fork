@@ -116,33 +116,39 @@ class GeminiTranslationService(
             )
         }
 
-        val responseText = withIOContext {
-            val url = buildString {
-                append("https://generativelanguage.googleapis.com/v1beta/models/")
-                append(params.model)
-                append(":generateContent?key=")
-                append(params.apiKey)
-            }
-            val request = POST(
-                url = url,
-                headers = headersOf("Content-Type", "application/json"),
-                body = requestBody.toString().toRequestBody(jsonMime),
-            )
-            val response = client.newCall(request).await()
-            response.use {
-                if (!it.isSuccessful) {
-                    val body = it.body.string().take(300)
-                    onLog?.invoke("🚫 Gemini API error ${it.code}: $body")
-                    return@withIOContext null
+        val responseText = runCatching {
+            withIOContext {
+                val url = buildString {
+                    append("https://generativelanguage.googleapis.com/v1beta/models/")
+                    append(params.model)
+                    append(":generateContent?key=")
+                    append(params.apiKey)
                 }
-                it.body.string()
+                val request = POST(
+                    url = url,
+                    headers = headersOf("Content-Type", "application/json"),
+                    body = requestBody.toString().toRequestBody(jsonMime),
+                )
+                val response = client.newCall(request).await()
+                response.use {
+                    if (!it.isSuccessful) {
+                        val rawBody = it.body.string()
+                        val modelError = extractGeminiApiErrorMessage(rawBody)
+                        val details = modelError ?: rawBody.take(1200)
+                        onLog?.invoke("🚫 Gemini API error ${it.code}: $details")
+                        return@withIOContext null
+                    }
+                    it.body.string()
+                }
             }
-        } ?: return null
+        }.onFailure { error ->
+            onLog?.invoke("🚫 Gemini request exception: ${formatGeminiThrowableForLog(error)}")
+        }.getOrNull() ?: return null
 
         val payload = runCatching { json.parseToJsonElement(responseText) as? JsonObject }
             .getOrNull()
             ?: run {
-                onLog?.invoke("🚫 Gemini response is not valid JSON object")
+                onLog?.invoke("🚫 Gemini response is not valid JSON object. Raw: ${responseText.take(600)}")
                 return null
             }
 
@@ -159,7 +165,7 @@ class GeminiTranslationService(
             ?.asObjectOrNull()
 
         if (firstCandidate == null) {
-            onLog?.invoke("🚫 Gemini response has no candidates")
+            onLog?.invoke("🚫 Gemini response has no candidates. Payload: ${payload.toString().take(600)}")
             return null
         }
 
@@ -185,6 +191,7 @@ class GeminiTranslationService(
             } else {
                 onLog?.invoke("🚫 Gemini candidate has no text parts")
             }
+            onLog?.invoke("🧩 Candidate payload: ${firstCandidate.toString().take(600)}")
             val safetyRatings = firstCandidate["safetyRatings"]?.asArrayOrNull()?.toString()
             if (!safetyRatings.isNullOrBlank()) {
                 onLog?.invoke("🛡️ Safety ratings: ${safetyRatings.take(240)}")
@@ -195,6 +202,7 @@ class GeminiTranslationService(
         val parsed = GeminiXmlSegmentParser.parse(candidateText, expectedCount = segments.size)
         if (parsed.all { it.isNullOrBlank() }) {
             onLog?.invoke("⚠️ Gemini parse warning: no XML segments found in candidate text")
+            onLog?.invoke("🧾 Candidate text preview: ${candidateText.take(600)}")
         }
         return parsed
     }
