@@ -3954,6 +3954,9 @@ private fun ReaderAtmosphereBackground(
     oledEdgeGradient: Boolean,
     isDarkTheme: Boolean,
 ) {
+    val showParchmentGradient = backgroundTexture == NovelReaderBackgroundTexture.PARCHMENT
+    val showOledVignette = oledEdgeGradient && isDarkTheme
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -3985,34 +3988,36 @@ private fun ReaderAtmosphereBackground(
             )
         }
 
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            if (backgroundTexture == NovelReaderBackgroundTexture.PARCHMENT) {
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(Color.White.copy(alpha = 0.14f), Color.Transparent),
-                        center = Offset(size.width * 0.22f, size.height * 0.2f),
-                        radius = max(size.width, size.height) * 0.62f,
-                    ),
-                )
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(Color.Black.copy(alpha = 0.12f), Color.Transparent),
-                        center = Offset(size.width * 0.82f, size.height * 0.78f),
-                        radius = max(size.width, size.height) * 0.56f,
-                    ),
-                )
-            }
-            if (oledEdgeGradient && isDarkTheme) {
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.36f),
+        if (showParchmentGradient || showOledVignette) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                if (showParchmentGradient) {
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            colors = listOf(Color.White.copy(alpha = 0.14f), Color.Transparent),
+                            center = Offset(size.width * 0.22f, size.height * 0.2f),
+                            radius = max(size.width, size.height) * 0.62f,
                         ),
-                        center = Offset(size.width / 2f, size.height / 2f),
-                        radius = max(size.width, size.height) * 0.8f,
-                    ),
-                )
+                    )
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            colors = listOf(Color.Black.copy(alpha = 0.12f), Color.Transparent),
+                            center = Offset(size.width * 0.82f, size.height * 0.78f),
+                            radius = max(size.width, size.height) * 0.56f,
+                        ),
+                    )
+                }
+                if (showOledVignette) {
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.36f),
+                            ),
+                            center = Offset(size.width / 2f, size.height / 2f),
+                            radius = max(size.width, size.height) * 0.8f,
+                        ),
+                    )
+                }
             }
         }
     }

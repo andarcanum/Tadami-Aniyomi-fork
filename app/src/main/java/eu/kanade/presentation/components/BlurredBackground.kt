@@ -5,11 +5,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import eu.kanade.tachiyomi.data.coil.staticBlur
 
 /**
  * Aniview Premium Blurred Background System
@@ -23,15 +26,19 @@ fun ScreenWithBlurredBackground(
     dimAlpha: Float = 0.6f,
     content: @Composable () -> Unit,
 ) {
+    val context = LocalContext.current
+    val blurRadiusPx = with(LocalDensity.current) { blurRadius.dp.roundToPx() }
     Box(modifier = modifier.fillMaxSize()) {
         // Layer 1: Blurred background image
         if (backgroundImageModel != null) {
             AsyncImage(
-                model = backgroundImageModel, // Coil handles EntryCover and String
+                model = ImageRequest.Builder(context)
+                    .data(backgroundImageModel)
+                    .staticBlur(blurRadiusPx, intensityFactor = 0.6f)
+                    .build(),
                 contentDescription = null,
                 modifier = Modifier
                     .fillMaxSize()
-                    .blur(blurRadius.dp)
                     .background(Color.Black.copy(alpha = 0.3f)),
                 contentScale = ContentScale.Crop,
                 alpha = 0.4f,

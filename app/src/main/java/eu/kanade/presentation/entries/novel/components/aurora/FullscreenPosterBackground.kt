@@ -10,14 +10,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
+import eu.kanade.tachiyomi.data.coil.staticBlur
 import tachiyomi.domain.entries.novel.model.Novel
 
 /**
@@ -48,16 +49,18 @@ fun FullscreenPosterBackground(
         ),
         label = "dimAlpha",
     )
-
-    // Calculate blur amount - permanent after scrolling away
-    val blurAmount = if (hasScrolledAway) {
-        20.dp
-    } else {
-        (scrollOffset / 100f * 20f).coerceIn(0f, 20f).dp
-    }
+    val blurOverlayAlpha by animateFloatAsState(
+        targetValue = if (hasScrolledAway) 1f else (scrollOffset / 100f).coerceIn(0f, 1f),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessLow,
+        ),
+        label = "blurOverlayAlpha",
+    )
+    val blurRadiusPx = with(LocalDensity.current) { 20.dp.roundToPx() }
 
     Box(modifier = modifier.fillMaxSize()) {
-        // Full quality poster
+        // Base poster.
         AsyncImage(
             model = remember(novel.id, novel.coverLastModified) {
                 ImageRequest.Builder(context)
@@ -68,9 +71,22 @@ fun FullscreenPosterBackground(
             },
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxSize()
-                .blur(blurAmount),
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        // Pre-blurred overlay.
+        AsyncImage(
+            model = remember(novel.id, novel.coverLastModified, blurRadiusPx) {
+                ImageRequest.Builder(context)
+                    .data(novel.thumbnailUrl)
+                    .memoryCacheKey("novel-bg;${novel.id};${novel.coverLastModified}")
+                    .staticBlur(blurRadiusPx, intensityFactor = 0.6f)
+                    .build()
+            },
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            alpha = blurOverlayAlpha,
+            modifier = Modifier.fillMaxSize(),
         )
 
         // Base gradient overlay (always present)

@@ -4,11 +4,13 @@ import coil3.Extras
 import coil3.getExtra
 import coil3.request.ImageRequest
 import coil3.request.Options
+import coil3.request.transformations
 import coil3.size.Dimension
 import coil3.size.Scale
 import coil3.size.Size
 import coil3.size.isOriginal
 import coil3.size.pxOrElse
+import kotlin.math.roundToInt
 
 internal inline fun Size.widthPx(scale: Scale, original: () -> Int): Int {
     return if (isOriginal) original() else width.toPx(scale)
@@ -51,3 +53,13 @@ val Options.useBackground: Boolean
     get() = getExtra(useBackgroundKey)
 
 private val useBackgroundKey = Extras.Key(default = false)
+
+fun ImageRequest.Builder.staticBlur(
+    radiusPx: Int,
+    intensityFactor: Float = 1f,
+) = apply {
+    val effectiveRadius = (radiusPx * intensityFactor).roundToInt()
+    if (effectiveRadius > 0) {
+        transformations(StaticBlurTransformation(effectiveRadius))
+    }
+}

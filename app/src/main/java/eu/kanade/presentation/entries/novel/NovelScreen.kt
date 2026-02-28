@@ -46,7 +46,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
@@ -54,6 +53,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -69,6 +69,7 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.formatChapterNumber
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
+import eu.kanade.tachiyomi.data.coil.staticBlur
 import me.saket.swipe.SwipeableActionsBox
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
@@ -249,6 +250,7 @@ fun NovelScreen(
                     Color.Transparent,
                     MaterialTheme.colorScheme.background,
                 )
+                val blurRadiusPx = with(LocalDensity.current) { 4.dp.roundToPx() }
 
                 Box(
                     modifier = Modifier
@@ -260,6 +262,7 @@ fun NovelScreen(
                             .data(state.novel.thumbnailUrl)
                             .crossfade(true)
                             .placeholderMemoryCacheKey(state.novel.thumbnailUrl)
+                            .staticBlur(blurRadiusPx, intensityFactor = 0.6f)
                             .build(),
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
@@ -272,7 +275,6 @@ fun NovelScreen(
                                     brush = Brush.verticalGradient(colors = backdropGradientColors),
                                 )
                             }
-                            .blur(4.dp)
                             .alpha(0.2f),
                     )
 
