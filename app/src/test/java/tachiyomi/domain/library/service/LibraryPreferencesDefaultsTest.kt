@@ -42,5 +42,6 @@ class LibraryPreferencesDefaultsTest {
         prefs.showContinueViewingButton().get() shouldBe true
 
         prefs.autoUpdateItemRestrictions().get() shouldBe emptySet()
+        prefs.autoUpdateWifiAndChargingOnly().get() shouldBe false
     }
 }

@@ -50,4 +50,5 @@ val migrations: List<Migration>
         PrefLangMigration(),
         AuroraSectionMigration(),
         SetupNovelLibraryUpdateMigration(),
+        CoalesceLibraryUpdateWorkersMigration(),
     )

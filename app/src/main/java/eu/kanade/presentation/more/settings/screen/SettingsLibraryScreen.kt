@@ -199,6 +199,9 @@ object SettingsLibraryScreen : SearchableSettings {
 
         val autoUpdateIntervalPref = libraryPreferences.autoUpdateInterval()
         val autoUpdateInterval by autoUpdateIntervalPref.collectAsState()
+        val autoUpdateDeviceRestrictionsPref = libraryPreferences.autoUpdateDeviceRestrictions()
+        val autoUpdateWifiAndChargingOnlyPref = libraryPreferences.autoUpdateWifiAndChargingOnly()
+        val autoUpdateWifiAndChargingOnly by autoUpdateWifiAndChargingOnlyPref.collectAsState()
 
         val animeAutoUpdateCategoriesPref = libraryPreferences.animeUpdateCategories()
         val animeAutoUpdateCategoriesExcludePref =
@@ -301,8 +304,29 @@ object SettingsLibraryScreen : SearchableSettings {
                         true
                     },
                 ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = autoUpdateWifiAndChargingOnlyPref,
+                    title = "${stringResource(MR.strings.connected_to_wifi)} + ${stringResource(MR.strings.charging)}",
+                    subtitle = stringResource(MR.strings.pref_library_update_restriction),
+                    enabled = autoUpdateInterval > 0,
+                    onValueChanged = { enabled ->
+                        val currentRestrictions = autoUpdateDeviceRestrictionsPref.get()
+                        val updatedRestrictions = if (enabled) {
+                            currentRestrictions + setOf(DEVICE_ONLY_ON_WIFI, DEVICE_CHARGING)
+                        } else {
+                            currentRestrictions - setOf(DEVICE_ONLY_ON_WIFI, DEVICE_CHARGING)
+                        }
+                        autoUpdateDeviceRestrictionsPref.set(updatedRestrictions)
+                        ContextCompat.getMainExecutor(context).execute {
+                            MangaLibraryUpdateJob.setupTask(context)
+                            AnimeLibraryUpdateJob.setupTask(context)
+                            NovelLibraryUpdateJob.setupTask(context)
+                        }
+                        true
+                    },
+                ),
                 Preference.PreferenceItem.MultiSelectListPreference(
-                    preference = libraryPreferences.autoUpdateDeviceRestrictions(),
+                    preference = autoUpdateDeviceRestrictionsPref,
                     entries = persistentMapOf(
                         DEVICE_ONLY_ON_WIFI to stringResource(MR.strings.connected_to_wifi),
                         DEVICE_NETWORK_NOT_METERED to stringResource(MR.strings.network_not_metered),
@@ -310,7 +334,7 @@ object SettingsLibraryScreen : SearchableSettings {
                     ),
                     title = stringResource(MR.strings.pref_library_update_restriction),
                     subtitle = stringResource(MR.strings.restrictions),
-                    enabled = autoUpdateInterval > 0,
+                    enabled = autoUpdateInterval > 0 && !autoUpdateWifiAndChargingOnly,
                     onValueChanged = {
                         // Post to event looper to allow the preference to be updated.
                         ContextCompat.getMainExecutor(context).execute {
