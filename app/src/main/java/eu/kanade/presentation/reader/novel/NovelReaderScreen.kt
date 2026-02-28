@@ -1,6 +1,7 @@
 ﻿package eu.kanade.presentation.reader.novel
 
 import android.app.Activity
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
@@ -99,7 +100,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -141,6 +141,7 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.res.ResourcesCompat
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -289,12 +290,7 @@ fun NovelReaderScreen(
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val batteryLevel by rememberBatteryLevel(context)
-    val timeText by produceState(initialValue = currentTimeString(context), context) {
-        while (isActive) {
-            value = currentTimeString(context)
-            delay(60_000)
-        }
-    }
+    val timeText by rememberCurrentTimeText(context)
     val isDarkTheme = when (state.readerSettings.theme) {
         NovelReaderTheme.SYSTEM -> MaterialTheme.colorScheme.background.luminance() < 0.5f
         NovelReaderTheme.DARK -> true
@@ -4823,26 +4819,87 @@ internal fun shouldRestoreSystemBarsOnDispose(
 
 @Composable
 private fun rememberBatteryLevel(context: Context): State<Int> {
-    return produceState(initialValue = readBatteryLevel(context), context) {
-        while (isActive) {
-            value = readBatteryLevel(context)
-            delay(60_000)
+    val batteryLevelState = remember(context) { mutableIntStateOf(readBatteryLevel(context)) }
+
+    DisposableEffect(context) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context?, intent: Intent?) {
+                batteryLevelState.intValue = readBatteryLevel(context, intent)
+            }
+        }
+        val stickyIntent = ContextCompat.registerReceiver(
+            context,
+            receiver,
+            IntentFilter(Intent.ACTION_BATTERY_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        batteryLevelState.intValue = readBatteryLevel(context, stickyIntent)
+        onDispose {
+            runCatching { context.unregisterReceiver(receiver) }
         }
     }
+
+    return batteryLevelState
 }
 
-private fun readBatteryLevel(context: Context): Int {
+@Composable
+private fun rememberCurrentTimeText(context: Context): State<String> {
+    val timeState = remember(context) { mutableStateOf(currentTimeString(context)) }
+
+    DisposableEffect(context) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context?, intent: Intent?) {
+                timeState.value = currentTimeString(context)
+            }
+        }
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_TIME_TICK)
+            addAction(Intent.ACTION_TIME_CHANGED)
+            addAction(Intent.ACTION_TIMEZONE_CHANGED)
+        }
+        ContextCompat.registerReceiver(
+            context,
+            receiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        timeState.value = currentTimeString(context)
+        onDispose {
+            runCatching { context.unregisterReceiver(receiver) }
+        }
+    }
+
+    return timeState
+}
+
+private fun readBatteryLevel(
+    context: Context,
+    batteryIntent: Intent? = null,
+): Int {
+    val levelFromIntent = resolveBatteryLevelPercent(
+        level = batteryIntent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1,
+        scale = batteryIntent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1,
+    )
+    if (levelFromIntent != null) return levelFromIntent
+
     val manager = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
     val directLevel = manager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
     if (directLevel in 0..100) return directLevel
 
-    val batteryIntent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-    val level = batteryIntent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
-    val scale = batteryIntent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
-    if (level >= 0 && scale > 0) {
-        return ((level * 100f) / scale.toFloat()).roundToInt().coerceIn(0, 100)
-    }
+    val fallbackIntent = batteryIntent ?: context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+    resolveBatteryLevelPercent(
+        level = fallbackIntent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1,
+        scale = fallbackIntent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1,
+    )?.let { return it }
     return 100
+}
+
+internal fun resolveBatteryLevelPercent(
+    level: Int,
+    scale: Int,
+): Int? {
+    if (level < 0 || scale <= 0) return null
+    return ((level * 100f) / scale.toFloat()).roundToInt().coerceIn(0, 100)
 }
 
 private fun currentTimeString(context: Context): String {

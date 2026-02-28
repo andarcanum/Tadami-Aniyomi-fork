@@ -62,6 +62,18 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `battery percentage is resolved from intent extras`() {
+        val percent = resolveBatteryLevelPercent(level = 42, scale = 84)
+        assertTrue(percent == 50)
+    }
+
+    @Test
+    fun `battery percentage returns null for invalid extras`() {
+        assertTrue(resolveBatteryLevelPercent(level = -1, scale = 100) == null)
+        assertTrue(resolveBatteryLevelPercent(level = 50, scale = 0) == null)
+    }
+
+    @Test
     fun `bottom overlay stays visible for kindle informers`() {
         assertTrue(
             shouldShowBottomInfoOverlay(
