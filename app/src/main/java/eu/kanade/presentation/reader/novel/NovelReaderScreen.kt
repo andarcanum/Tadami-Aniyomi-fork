@@ -38,6 +38,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -87,6 +88,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -1832,13 +1834,16 @@ fun NovelReaderScreen(
         }
 
         val panelSlideSpec = spring<androidx.compose.ui.unit.IntOffset>(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessLow,
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow,
         )
         val panelFadeSpec = spring<Float>(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessLow,
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow,
         )
+        val panelBackgroundColor = MaterialTheme.colorScheme
+            .surfaceColorAtElevation(3.dp)
+            .copy(alpha = if (isSystemInDarkTheme()) 0.9f else 0.95f)
         // Top AppBar with status bar support
         AnimatedVisibility(
             visible = showReaderUI,
@@ -1856,7 +1861,7 @@ fun NovelReaderScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                        panelBackgroundColor,
                         RoundedCornerShape(bottomStart = 18.dp, bottomEnd = 18.dp),
                     )
                     .statusBarsPadding(),
@@ -1966,7 +1971,7 @@ fun NovelReaderScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                        panelBackgroundColor,
                         RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
                     ),
             ) {

@@ -1,6 +1,10 @@
 package eu.kanade.presentation.reader.appbars
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -18,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -52,6 +57,14 @@ import tachiyomi.presentation.core.i18n.stringResource
 
 private val animationSpec = tween<IntOffset>(200)
 private val expandAnimationSpec = tween<IntSize>(200)
+private val panelSlideSpec = spring<IntOffset>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = Spring.StiffnessMediumLow,
+)
+private val panelFadeSpec = spring<Float>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = Spring.StiffnessMediumLow,
+)
 
 @Composable
 fun ReaderAppBars(
@@ -116,18 +129,21 @@ fun ReaderAppBars(
             visible = visible,
             enter = slideInVertically(
                 initialOffsetY = { -it },
-                animationSpec = animationSpec,
-            ),
+                animationSpec = panelSlideSpec,
+            ) + fadeIn(animationSpec = panelFadeSpec),
             exit = slideOutVertically(
                 targetOffsetY = { -it },
-                animationSpec = animationSpec,
-            ),
+                animationSpec = panelSlideSpec,
+            ) + fadeOut(animationSpec = panelFadeSpec),
         ) {
             // Box с фоном, который рисуется под статус-баром
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(backgroundColor)
+                    .background(
+                        color = backgroundColor,
+                        shape = RoundedCornerShape(bottomStart = 18.dp, bottomEnd = 18.dp),
+                    )
                     .clickable(onClick = onClickTopAppBar),
             ) {
                 Column(
@@ -291,12 +307,12 @@ fun ReaderAppBars(
             visible = visible,
             enter = slideInVertically(
                 initialOffsetY = { it },
-                animationSpec = animationSpec,
-            ),
+                animationSpec = panelSlideSpec,
+            ) + fadeIn(animationSpec = panelFadeSpec),
             exit = slideOutVertically(
                 targetOffsetY = { it },
-                animationSpec = animationSpec,
-            ),
+                animationSpec = panelSlideSpec,
+            ) + fadeOut(animationSpec = panelFadeSpec),
         ) {
             Column(
                 modifier = Modifier,
