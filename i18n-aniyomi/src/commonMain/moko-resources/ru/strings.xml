@@ -316,6 +316,7 @@
     <string name="novel_reader_translation_provider">Провайдер</string>
     <string name="novel_reader_translation_provider_gemini">Gemini</string>
     <string name="novel_reader_translation_provider_openrouter">OpenRouter</string>
+    <string name="novel_reader_translation_provider_deepseek">DeepSeek</string>
     <string name="novel_reader_translation_auto_english_title">Автозапуск перевода для английского</string>
     <string name="novel_reader_translation_auto_english_summary">Автоматически запускать перевод, когда язык источника английский</string>
     <string name="novel_reader_translation_prefetch_next_title">Предперевод следующей главы (30%)</string>
@@ -323,6 +324,9 @@
     <string name="novel_reader_openrouter_base_url">Базовый URL OpenRouter</string>
     <string name="novel_reader_openrouter_api_key">API-ключ OpenRouter</string>
     <string name="novel_reader_openrouter_model">Модель OpenRouter (:free only)</string>
+    <string name="novel_reader_deepseek_base_url">Базовый URL DeepSeek</string>
+    <string name="novel_reader_deepseek_api_key">API-ключ DeepSeek</string>
+    <string name="novel_reader_deepseek_model">Модель DeepSeek</string>
     <string name="novel_reader_gemini_section_title">Gemini перевод</string>
     <string name="novel_reader_gemini_section_summary">Настройки пакетного перевода для кнопки AI в ридере.</string>
     <string name="novel_reader_gemini_api_key">Gemini API ключ</string>

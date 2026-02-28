@@ -488,6 +488,7 @@
     <string name="novel_reader_translation_provider">Provider</string>
     <string name="novel_reader_translation_provider_gemini">Gemini</string>
     <string name="novel_reader_translation_provider_openrouter">OpenRouter</string>
+    <string name="novel_reader_translation_provider_deepseek">DeepSeek</string>
     <string name="novel_reader_translation_auto_english_title">Auto-start translation for English</string>
     <string name="novel_reader_translation_auto_english_summary">Automatically start translation when source language is English</string>
     <string name="novel_reader_translation_prefetch_next_title">Pre-translate next chapter (30%)</string>
@@ -495,6 +496,9 @@
     <string name="novel_reader_openrouter_base_url">OpenRouter Base URL</string>
     <string name="novel_reader_openrouter_api_key">OpenRouter API key</string>
     <string name="novel_reader_openrouter_model">OpenRouter model (:free only)</string>
+    <string name="novel_reader_deepseek_base_url">DeepSeek Base URL</string>
+    <string name="novel_reader_deepseek_api_key">DeepSeek API key</string>
+    <string name="novel_reader_deepseek_model">DeepSeek model</string>
     <string name="novel_reader_gemini_section_title">Gemini Translation</string>
     <string name="novel_reader_gemini_section_summary">Chunk translation settings used by the AI button in reader.</string>
     <string name="novel_reader_gemini_api_key">Gemini API key</string>

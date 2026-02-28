@@ -67,6 +67,11 @@ class NovelReaderScreen(
                 onSetOpenRouterModel = screenModel::setOpenRouterModel,
                 onRefreshOpenRouterModels = screenModel::refreshOpenRouterModels,
                 onTestOpenRouterConnection = screenModel::testOpenRouterConnection,
+                onSetDeepSeekBaseUrl = screenModel::setDeepSeekBaseUrl,
+                onSetDeepSeekApiKey = screenModel::setDeepSeekApiKey,
+                onSetDeepSeekModel = screenModel::setDeepSeekModel,
+                onRefreshDeepSeekModels = screenModel::refreshDeepSeekModels,
+                onTestDeepSeekConnection = screenModel::testDeepSeekConnection,
                 onOpenPreviousChapter = { previousChapterId ->
                     navigator.replace(NovelReaderScreen(previousChapterId))
                 },

@@ -84,6 +84,9 @@ data class NovelReaderSettings(
     val openRouterBaseUrl: String = "https://openrouter.ai/api/v1",
     val openRouterApiKey: String = "",
     val openRouterModel: String = "",
+    val deepSeekBaseUrl: String = "https://api.deepseek.com",
+    val deepSeekApiKey: String = "",
+    val deepSeekModel: String = "deepseek-chat",
 )
 
 enum class NovelReaderTheme {
@@ -109,6 +112,7 @@ enum class NovelTranslationProvider {
     GEMINI,
     AIRFORCE,
     OPENROUTER,
+    DEEPSEEK,
 }
 
 @Serializable
@@ -188,6 +192,9 @@ data class NovelReaderOverride(
     val openRouterBaseUrl: String? = null,
     val openRouterApiKey: String? = null,
     val openRouterModel: String? = null,
+    val deepSeekBaseUrl: String? = null,
+    val deepSeekApiKey: String? = null,
+    val deepSeekModel: String? = null,
 )
 
 class NovelReaderPreferences(
@@ -341,6 +348,12 @@ class NovelReaderPreferences(
 
     fun openRouterModel() = preferenceStore.getString("novel_reader_openrouter_model", "")
 
+    fun deepSeekBaseUrl() = preferenceStore.getString("novel_reader_deepseek_base_url", "https://api.deepseek.com")
+
+    fun deepSeekApiKey() = preferenceStore.getString("novel_reader_deepseek_api_key", "")
+
+    fun deepSeekModel() = preferenceStore.getString("novel_reader_deepseek_model", "deepseek-chat")
+
     // EPUB export
     fun epubExportLocation() = preferenceStore.getString("novel_epub_export_location", "")
 
@@ -431,6 +444,9 @@ class NovelReaderPreferences(
                 openRouterBaseUrl = openRouterBaseUrl().get(),
                 openRouterApiKey = openRouterApiKey().get(),
                 openRouterModel = openRouterModel().get(),
+                deepSeekBaseUrl = deepSeekBaseUrl().get(),
+                deepSeekApiKey = deepSeekApiKey().get(),
+                deepSeekModel = deepSeekModel().get(),
             ),
         )
     }
@@ -509,6 +525,9 @@ class NovelReaderPreferences(
             openRouterBaseUrl = override?.openRouterBaseUrl ?: openRouterBaseUrl().get(),
             openRouterApiKey = override?.openRouterApiKey ?: openRouterApiKey().get(),
             openRouterModel = override?.openRouterModel ?: openRouterModel().get(),
+            deepSeekBaseUrl = override?.deepSeekBaseUrl ?: deepSeekBaseUrl().get(),
+            deepSeekApiKey = override?.deepSeekApiKey ?: deepSeekApiKey().get(),
+            deepSeekModel = override?.deepSeekModel ?: deepSeekModel().get(),
         )
     }
 
@@ -632,6 +651,9 @@ class NovelReaderPreferences(
             openRouterBaseUrl().changes(),
             openRouterApiKey().changes(),
             openRouterModel().changes(),
+            deepSeekBaseUrl().changes(),
+            deepSeekApiKey().changes(),
+            deepSeekModel().changes(),
         ) { values: Array<Any?> ->
             GeminiSettings(
                 enabled = values[0] as Boolean,
@@ -661,6 +683,9 @@ class NovelReaderPreferences(
                 openRouterBaseUrl = values[24] as String,
                 openRouterApiKey = values[25] as String,
                 openRouterModel = values[26] as String,
+                deepSeekBaseUrl = values[27] as String,
+                deepSeekApiKey = values[28] as String,
+                deepSeekModel = values[29] as String,
             )
         }
 
@@ -745,6 +770,9 @@ class NovelReaderPreferences(
                 openRouterBaseUrl = override?.openRouterBaseUrl ?: gemini.openRouterBaseUrl,
                 openRouterApiKey = override?.openRouterApiKey ?: gemini.openRouterApiKey,
                 openRouterModel = override?.openRouterModel ?: gemini.openRouterModel,
+                deepSeekBaseUrl = override?.deepSeekBaseUrl ?: gemini.deepSeekBaseUrl,
+                deepSeekApiKey = override?.deepSeekApiKey ?: gemini.deepSeekApiKey,
+                deepSeekModel = override?.deepSeekModel ?: gemini.deepSeekModel,
             )
         }
     }
@@ -824,6 +852,9 @@ class NovelReaderPreferences(
         val openRouterBaseUrl: String,
         val openRouterApiKey: String,
         val openRouterModel: String,
+        val deepSeekBaseUrl: String,
+        val deepSeekApiKey: String,
+        val deepSeekModel: String,
     )
 
     companion object {

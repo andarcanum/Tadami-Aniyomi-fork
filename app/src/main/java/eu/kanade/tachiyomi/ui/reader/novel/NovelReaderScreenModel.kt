@@ -19,6 +19,10 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekModelsService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekPromptResolver
+import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationParams
+import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptModifiers
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationCacheEntry
@@ -131,6 +135,27 @@ class NovelReaderScreenModel(
             json = json,
         )
     },
+    private val deepSeekTranslationService: DeepSeekTranslationService = run {
+        val app = Injekt.get<Application>()
+        val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
+        val json = Injekt.get<Json>()
+        val deepSeekClient = networkHelper.client.newBuilder()
+            .readTimeout(180, TimeUnit.SECONDS)
+            .build()
+        DeepSeekTranslationService(
+            client = deepSeekClient,
+            json = json,
+            resolveSystemPrompt = DeepSeekPromptResolver(app)::resolveSystemPrompt,
+        )
+    },
+    private val deepSeekModelsService: DeepSeekModelsService = run {
+        val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
+        val json = Injekt.get<Json>()
+        DeepSeekModelsService(
+            client = networkHelper.client,
+            json = json,
+        )
+    },
 ) : StateScreenModel<NovelReaderScreenModel.State>(State.Loading) {
 
     private var settingsJob: Job? = null
@@ -168,6 +193,9 @@ class NovelReaderScreenModel(
     private var openRouterModelIds: List<String> = emptyList()
     private var isOpenRouterModelsLoading: Boolean = false
     private var isTestingOpenRouterConnection: Boolean = false
+    private var deepSeekModelIds: List<String> = emptyList()
+    private var isDeepSeekModelsLoading: Boolean = false
+    private var isTestingDeepSeekConnection: Boolean = false
     private val structuredJson = Json {
         ignoreUnknownKeys = true
         isLenient = true
@@ -249,6 +277,8 @@ class NovelReaderScreenModel(
         isTestingAirforceConnection = false
         isOpenRouterModelsLoading = false
         isTestingOpenRouterConnection = false
+        isDeepSeekModelsLoading = false
+        isTestingDeepSeekConnection = false
         lastSavedProgress = chapter.lastPageRead
         lastSavedRead = chapter.read
         val savedNativeProgress = decodeNativeScrollProgress(chapter.lastPageRead)
@@ -306,6 +336,7 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.GEMINI -> Unit
             NovelTranslationProvider.AIRFORCE -> refreshAirforceModels()
             NovelTranslationProvider.OPENROUTER -> refreshOpenRouterModels()
+            NovelTranslationProvider.DEEPSEEK -> refreshDeepSeekModels()
         }
     }
 
@@ -485,6 +516,9 @@ class NovelReaderScreenModel(
             openRouterModelIds = openRouterModelIds,
             isOpenRouterModelsLoading = isOpenRouterModelsLoading,
             isTestingOpenRouterConnection = isTestingOpenRouterConnection,
+            deepSeekModelIds = deepSeekModelIds,
+            isDeepSeekModelsLoading = isDeepSeekModelsLoading,
+            isTestingDeepSeekConnection = isTestingDeepSeekConnection,
         )
     }
 
@@ -953,6 +987,7 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.GEMINI -> Unit
             NovelTranslationProvider.AIRFORCE -> refreshAirforceModels()
             NovelTranslationProvider.OPENROUTER -> refreshOpenRouterModels()
+            NovelTranslationProvider.DEEPSEEK -> refreshDeepSeekModels()
         }
     }
 
@@ -984,6 +1019,21 @@ class NovelReaderScreenModel(
     fun setOpenRouterModel(value: String) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.openRouterModel().set(value) },
         setOverride = { it.copy(openRouterModel = value) },
+    )
+
+    fun setDeepSeekBaseUrl(value: String) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.deepSeekBaseUrl().set(value) },
+        setOverride = { it.copy(deepSeekBaseUrl = value) },
+    )
+
+    fun setDeepSeekApiKey(value: String) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.deepSeekApiKey().set(value) },
+        setOverride = { it.copy(deepSeekApiKey = value) },
+    )
+
+    fun setDeepSeekModel(value: String) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.deepSeekModel().set(value) },
+        setOverride = { it.copy(deepSeekModel = value) },
     )
 
     fun refreshAirforceModels() {
@@ -1097,6 +1147,64 @@ class NovelReaderScreenModel(
                 addGeminiLog("❌ OpenRouter connection failed: ${formatGeminiThrowableForLog(error)}")
             }
             isTestingOpenRouterConnection = false
+            val currentSettings = (mutableState.value as? State.Success)?.readerSettings ?: settings
+            updateContent(currentSettings)
+        }
+    }
+
+    fun refreshDeepSeekModels() {
+        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
+        if (settings.translationProvider != NovelTranslationProvider.DEEPSEEK) return
+        if (settings.deepSeekApiKey.isBlank()) return
+        if (settings.deepSeekBaseUrl.isBlank()) return
+
+        isDeepSeekModelsLoading = true
+        updateContent(settings)
+        screenModelScope.launch(Dispatchers.IO) {
+            val fetched = runCatching {
+                deepSeekModelsService.fetchModels(
+                    baseUrl = settings.deepSeekBaseUrl,
+                    apiKey = settings.deepSeekApiKey,
+                )
+            }.getOrElse { error ->
+                addGeminiLog("❌ DeepSeek models load failed: ${formatGeminiThrowableForLog(error)}")
+                emptyList()
+            }
+            deepSeekModelIds = fetched
+            isDeepSeekModelsLoading = false
+            val currentSettings = (mutableState.value as? State.Success)?.readerSettings ?: settings
+            updateContent(currentSettings)
+        }
+    }
+
+    fun testDeepSeekConnection() {
+        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
+        if (isTestingDeepSeekConnection) return
+        if (settings.translationProvider != NovelTranslationProvider.DEEPSEEK) return
+        if (!settings.hasConfiguredTranslationProvider()) {
+            addGeminiLog("❌ DeepSeek config invalid: fill Base URL, API key and Model")
+            return
+        }
+
+        isTestingDeepSeekConnection = true
+        updateContent(settings)
+        screenModelScope.launch {
+            runCatching {
+                val result = requestTranslationBatch(
+                    segments = listOf("Connection test"),
+                    settings = settings,
+                ) { message ->
+                    addGeminiLog("🧪 Test: $message")
+                }
+                if (result.isNullOrEmpty() || result.firstOrNull().isNullOrBlank()) {
+                    error("Empty response")
+                }
+            }.onSuccess {
+                addGeminiLog("✅ DeepSeek connection OK")
+            }.onFailure { error ->
+                addGeminiLog("❌ DeepSeek connection failed: ${formatGeminiThrowableForLog(error)}")
+            }
+            isTestingDeepSeekConnection = false
             val currentSettings = (mutableState.value as? State.Success)?.readerSettings ?: settings
             updateContent(currentSettings)
         }
@@ -1451,6 +1559,29 @@ class NovelReaderScreenModel(
         )
     }
 
+    private fun NovelReaderSettings.toDeepSeekTranslationParams(): DeepSeekTranslationParams {
+        val modifierText = GeminiPromptModifiers.buildPromptText(
+            enabledIds = geminiEnabledPromptModifiers,
+            customModifier = geminiCustomPromptModifier,
+        )
+        val finalPromptModifiers = listOf(
+            modifierText,
+            geminiPromptModifiers.trim(),
+        ).filter { it.isNotBlank() }
+            .joinToString("\n\n")
+        return DeepSeekTranslationParams(
+            baseUrl = deepSeekBaseUrl,
+            apiKey = deepSeekApiKey,
+            model = deepSeekModel,
+            sourceLang = geminiSourceLang,
+            targetLang = geminiTargetLang,
+            promptMode = geminiPromptMode,
+            promptModifiers = finalPromptModifiers,
+            temperature = geminiTemperature,
+            topP = geminiTopP,
+        )
+    }
+
     private suspend fun requestTranslationBatch(
         segments: List<String>,
         settings: NovelReaderSettings,
@@ -1478,6 +1609,13 @@ class NovelReaderScreenModel(
                     onLog = onLog,
                 )
             }
+            NovelTranslationProvider.DEEPSEEK -> {
+                deepSeekTranslationService.translateBatch(
+                    segments = segments,
+                    params = settings.toDeepSeekTranslationParams(),
+                    onLog = onLog,
+                )
+            }
         }
     }
 
@@ -1493,6 +1631,11 @@ class NovelReaderScreenModel(
                     openRouterApiKey.isNotBlank() &&
                     openRouterModel.trim().endsWith(":free", ignoreCase = true)
             }
+            NovelTranslationProvider.DEEPSEEK -> {
+                deepSeekBaseUrl.isNotBlank() &&
+                    deepSeekApiKey.isNotBlank() &&
+                    deepSeekModel.isNotBlank()
+            }
         }
     }
 
@@ -1501,6 +1644,7 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.GEMINI -> geminiConcurrency.coerceIn(1, 8)
             NovelTranslationProvider.AIRFORCE -> 1
             NovelTranslationProvider.OPENROUTER -> 1
+            NovelTranslationProvider.DEEPSEEK -> geminiConcurrency.coerceIn(1, MAX_DEEPSEEK_CONCURRENCY)
         }
     }
 
@@ -1509,6 +1653,7 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.GEMINI -> geminiModel.normalizeGeminiModelId()
             NovelTranslationProvider.AIRFORCE -> airforceModel.trim()
             NovelTranslationProvider.OPENROUTER -> openRouterModel.trim()
+            NovelTranslationProvider.DEEPSEEK -> deepSeekModel.trim()
         }
     }
 
@@ -2317,6 +2462,9 @@ class NovelReaderScreenModel(
             val openRouterModelIds: List<String> = emptyList(),
             val isOpenRouterModelsLoading: Boolean = false,
             val isTestingOpenRouterConnection: Boolean = false,
+            val deepSeekModelIds: List<String> = emptyList(),
+            val isDeepSeekModelsLoading: Boolean = false,
+            val isTestingDeepSeekConnection: Boolean = false,
         ) : State
     }
 
@@ -2326,6 +2474,8 @@ class NovelReaderScreenModel(
     }
 
     companion object {
+        private const val MAX_DEEPSEEK_CONCURRENCY = 32
+
         private val STRUCTURED_NODE_TYPES = setOf(
             "doc",
             "paragraph",

@@ -110,7 +110,10 @@ import eu.kanade.tachiyomi.ui.category.CategoriesTab
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreen
 import eu.kanade.tachiyomi.ui.entries.novel.NovelDownloadAction
+import eu.kanade.tachiyomi.ui.entries.novel.NovelBatchDownloadDialog
+import eu.kanade.tachiyomi.ui.entries.novel.NovelDownloadChapterPickerDialog
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
+import eu.kanade.tachiyomi.ui.entries.novel.NovelTranslatedDownloadDialog
 import eu.kanade.tachiyomi.ui.home.HomeScreen
 import eu.kanade.tachiyomi.ui.library.manga.MangaLibraryScreenModel
 import eu.kanade.tachiyomi.ui.library.manga.MangaLibrarySettingsScreenModel
@@ -989,7 +992,7 @@ data object AnimeLibraryTab : Tab {
         }
 
         if (showNovelBatchDownloadDialog) {
-            NovelLibraryBatchDownloadDialog(
+            NovelBatchDownloadDialog(
                 onDismissRequest = { showNovelBatchDownloadDialog = false },
                 onSelectChapters = {
                     scope.launch {
@@ -1027,7 +1030,7 @@ data object AnimeLibraryTab : Tab {
         }
 
         if (showNovelBatchChapterPickerDialog) {
-            NovelLibraryChapterPickerDialog(
+            NovelDownloadChapterPickerDialog(
                 title = context.stringResource(AYMR.strings.novel_download_select_chapters_title),
                 chapters = novelBatchPickerChapters,
                 onDismissRequest = { showNovelBatchChapterPickerDialog = false },
@@ -1050,7 +1053,7 @@ data object AnimeLibraryTab : Tab {
         }
 
         if (showNovelTranslatedDownloadDialog) {
-            NovelLibraryTranslatedDownloadDialog(
+            NovelTranslatedDownloadDialog(
                 onDismissRequest = { showNovelTranslatedDownloadDialog = false },
                 onSelectChapters = { format ->
                     scope.launch {
@@ -1094,7 +1097,7 @@ data object AnimeLibraryTab : Tab {
         }
 
         if (showNovelTranslatedChapterPickerDialog) {
-            NovelLibraryChapterPickerDialog(
+            NovelDownloadChapterPickerDialog(
                 title = context.stringResource(AYMR.strings.novel_translated_download_select_title),
                 chapters = novelTranslatedPickerChapters,
                 onDismissRequest = { showNovelTranslatedChapterPickerDialog = false },
@@ -1482,246 +1485,6 @@ private fun AuroraLibraryCategoryTabs(
             }
         }
     }
-}
-
-@Composable
-private fun NovelLibraryBatchDownloadDialog(
-    onDismissRequest: () -> Unit,
-    onSelectChapters: () -> Unit,
-    onActionSelected: (NovelDownloadAction, Int) -> Unit,
-) {
-    var customCount by remember { mutableStateOf("20") }
-
-    AlertDialog(
-        onDismissRequest = onDismissRequest,
-        title = { Text(text = stringResource(AYMR.strings.novel_batch_download_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                NovelLibraryDownloadActionRow(
-                    label = stringResource(AYMR.strings.novel_download_next_1),
-                    onClick = { onActionSelected(NovelDownloadAction.NEXT, 1) },
-                )
-                NovelLibraryDownloadActionRow(
-                    label = stringResource(AYMR.strings.novel_download_next_5),
-                    onClick = { onActionSelected(NovelDownloadAction.NEXT, 5) },
-                )
-                NovelLibraryDownloadActionRow(
-                    label = stringResource(AYMR.strings.novel_download_next_10),
-                    onClick = { onActionSelected(NovelDownloadAction.NEXT, 10) },
-                )
-                NovelLibraryDownloadActionRow(
-                    label = stringResource(AYMR.strings.action_download_unread),
-                    onClick = { onActionSelected(NovelDownloadAction.UNREAD, 0) },
-                )
-                NovelLibraryDownloadActionRow(
-                    label = stringResource(AYMR.strings.novel_download_all),
-                    onClick = { onActionSelected(NovelDownloadAction.ALL, 0) },
-                )
-                NovelLibraryDownloadActionRow(
-                    label = stringResource(AYMR.strings.novel_download_not_downloaded),
-                    onClick = { onActionSelected(NovelDownloadAction.NOT_DOWNLOADED, 0) },
-                )
-                NovelLibraryDownloadActionRow(
-                    label = stringResource(AYMR.strings.novel_download_choose_chapters),
-                    onClick = onSelectChapters,
-                )
-                OutlinedTextField(
-                    value = customCount,
-                    onValueChange = { customCount = it.filter(Char::isDigit) },
-                    label = { Text(stringResource(AYMR.strings.novel_download_custom_count)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Button(
-                    onClick = {
-                        val amount = customCount.toIntOrNull()?.coerceAtLeast(1) ?: return@Button
-                        onActionSelected(NovelDownloadAction.NEXT, amount)
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(text = stringResource(MR.strings.manga_download))
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismissRequest) {
-                Text(text = stringResource(MR.strings.action_cancel))
-            }
-        },
-    )
-}
-
-@Composable
-private fun NovelLibraryTranslatedDownloadDialog(
-    onDismissRequest: () -> Unit,
-    onSelectChapters: (NovelTranslatedDownloadFormat) -> Unit,
-    onActionSelected: (NovelDownloadAction, Int, NovelTranslatedDownloadFormat) -> Unit,
-) {
-    var format by remember { mutableStateOf(NovelTranslatedDownloadFormat.TXT) }
-    var customCount by remember { mutableStateOf("20") }
-
-    AlertDialog(
-        onDismissRequest = onDismissRequest,
-        title = { Text(text = stringResource(AYMR.strings.novel_translated_download_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = { format = NovelTranslatedDownloadFormat.TXT },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(text = stringResource(AYMR.strings.novel_translated_download_format_txt))
-                    }
-                    Button(
-                        onClick = { format = NovelTranslatedDownloadFormat.DOCX },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(text = stringResource(AYMR.strings.novel_translated_download_format_docx))
-                    }
-                }
-                NovelLibraryDownloadActionRow(
-                    label = stringResource(AYMR.strings.novel_download_next_1),
-                    onClick = { onActionSelected(NovelDownloadAction.NEXT, 1, format) },
-                )
-                NovelLibraryDownloadActionRow(
-                    label = stringResource(AYMR.strings.novel_download_next_5),
-                    onClick = { onActionSelected(NovelDownloadAction.NEXT, 5, format) },
-                )
-                NovelLibraryDownloadActionRow(
-                    label = stringResource(AYMR.strings.novel_download_next_10),
-                    onClick = { onActionSelected(NovelDownloadAction.NEXT, 10, format) },
-                )
-                NovelLibraryDownloadActionRow(
-                    label = stringResource(AYMR.strings.action_download_unread),
-                    onClick = { onActionSelected(NovelDownloadAction.UNREAD, 0, format) },
-                )
-                NovelLibraryDownloadActionRow(
-                    label = stringResource(AYMR.strings.novel_download_all),
-                    onClick = { onActionSelected(NovelDownloadAction.ALL, 0, format) },
-                )
-                NovelLibraryDownloadActionRow(
-                    label = stringResource(AYMR.strings.novel_download_not_downloaded),
-                    onClick = { onActionSelected(NovelDownloadAction.NOT_DOWNLOADED, 0, format) },
-                )
-                NovelLibraryDownloadActionRow(
-                    label = stringResource(AYMR.strings.novel_translated_download_choose_chapters),
-                    onClick = { onSelectChapters(format) },
-                )
-                OutlinedTextField(
-                    value = customCount,
-                    onValueChange = { customCount = it.filter(Char::isDigit) },
-                    label = { Text(stringResource(AYMR.strings.novel_download_custom_count)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Button(
-                    onClick = {
-                        val amount = customCount.toIntOrNull()?.coerceAtLeast(1) ?: return@Button
-                        onActionSelected(NovelDownloadAction.NEXT, amount, format)
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(text = stringResource(MR.strings.manga_download))
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismissRequest) {
-                Text(text = stringResource(MR.strings.action_cancel))
-            }
-        },
-    )
-}
-
-@Composable
-private fun NovelLibraryDownloadActionRow(
-    label: String,
-    onClick: () -> Unit,
-) {
-    TextButton(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
-}
-
-@Composable
-private fun NovelLibraryChapterPickerDialog(
-    title: String,
-    chapters: List<DomainNovelChapter>,
-    onDismissRequest: () -> Unit,
-    onConfirm: (Set<Long>) -> Unit,
-) {
-    var selectedChapterIds: Set<Long> by remember(chapters) {
-        mutableStateOf(chapters.mapTo(linkedSetOf()) { it.id })
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismissRequest,
-        title = { Text(text = title) },
-        text = {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(320.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                items(chapters, key = { it.id }) { chapter ->
-                    val isSelected = chapter.id in selectedChapterIds
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                selectedChapterIds = if (isSelected) {
-                                    selectedChapterIds - chapter.id
-                                } else {
-                                    selectedChapterIds + chapter.id
-                                }
-                            },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Checkbox(
-                            checked = isSelected,
-                            onCheckedChange = { checked ->
-                                selectedChapterIds = if (checked) {
-                                    selectedChapterIds + chapter.id
-                                } else {
-                                    selectedChapterIds - chapter.id
-                                }
-                            },
-                        )
-                        Text(
-                            text = chapter.name.ifBlank { "ID ${chapter.id}" },
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(selectedChapterIds) },
-                enabled = selectedChapterIds.isNotEmpty(),
-            ) {
-                Text(text = stringResource(MR.strings.action_ok))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismissRequest) {
-                Text(text = stringResource(MR.strings.action_cancel))
-            }
-        },
-    )
 }
 
 internal fun resolveAuroraLibrarySection(

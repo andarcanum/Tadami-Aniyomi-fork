@@ -210,6 +210,11 @@ fun NovelReaderScreen(
     onSetOpenRouterModel: (String) -> Unit = {},
     onRefreshOpenRouterModels: () -> Unit = {},
     onTestOpenRouterConnection: () -> Unit = {},
+    onSetDeepSeekBaseUrl: (String) -> Unit = {},
+    onSetDeepSeekApiKey: (String) -> Unit = {},
+    onSetDeepSeekModel: (String) -> Unit = {},
+    onRefreshDeepSeekModels: () -> Unit = {},
+    onTestDeepSeekConnection: () -> Unit = {},
     onOpenPreviousChapter: ((Long) -> Unit)? = null,
     onOpenNextChapter: ((Long) -> Unit)? = null,
 ) {
@@ -1939,12 +1944,20 @@ fun NovelReaderScreen(
                 onSetOpenRouterModel = onSetOpenRouterModel,
                 onRefreshOpenRouterModels = onRefreshOpenRouterModels,
                 onTestOpenRouterConnection = onTestOpenRouterConnection,
+                onSetDeepSeekBaseUrl = onSetDeepSeekBaseUrl,
+                onSetDeepSeekApiKey = onSetDeepSeekApiKey,
+                onSetDeepSeekModel = onSetDeepSeekModel,
+                onRefreshDeepSeekModels = onRefreshDeepSeekModels,
+                onTestDeepSeekConnection = onTestDeepSeekConnection,
                 airforceModels = state.airforceModelIds,
                 isAirforceModelsLoading = state.isAirforceModelsLoading,
                 isTestingAirforceConnection = state.isTestingAirforceConnection,
                 openRouterModels = state.openRouterModelIds,
                 isOpenRouterModelsLoading = state.isOpenRouterModelsLoading,
                 isTestingOpenRouterConnection = state.isTestingOpenRouterConnection,
+                deepSeekModels = state.deepSeekModelIds,
+                isDeepSeekModelsLoading = state.isDeepSeekModelsLoading,
+                isTestingDeepSeekConnection = state.isTestingDeepSeekConnection,
                 onDismiss = { showGeminiDialog = false },
             )
         }
@@ -2019,12 +2032,20 @@ private fun GeminiTranslationDialog(
     onSetOpenRouterModel: (String) -> Unit,
     onRefreshOpenRouterModels: () -> Unit,
     onTestOpenRouterConnection: () -> Unit,
+    onSetDeepSeekBaseUrl: (String) -> Unit,
+    onSetDeepSeekApiKey: (String) -> Unit,
+    onSetDeepSeekModel: (String) -> Unit,
+    onRefreshDeepSeekModels: () -> Unit,
+    onTestDeepSeekConnection: () -> Unit,
     airforceModels: List<String>,
     isAirforceModelsLoading: Boolean,
     isTestingAirforceConnection: Boolean,
     openRouterModels: List<String>,
     isOpenRouterModelsLoading: Boolean,
     isTestingOpenRouterConnection: Boolean,
+    deepSeekModels: List<String>,
+    isDeepSeekModelsLoading: Boolean,
+    isTestingDeepSeekConnection: Boolean,
     onDismiss: () -> Unit,
 ) {
     val modelEntries = remember {
@@ -2048,6 +2069,15 @@ private fun GeminiTranslationDialog(
             .asSequence()
             .map { it.trim() }
             .filter { it.isNotBlank() && it.endsWith(":free", ignoreCase = true) }
+            .distinct()
+            .sorted()
+            .associateWith { it }
+    }
+    val deepSeekAllModelEntries = remember(deepSeekModels) {
+        deepSeekModels
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
             .distinct()
             .sorted()
             .associateWith { it }
@@ -2107,6 +2137,15 @@ private fun GeminiTranslationDialog(
     var tempOpenRouterModel by remember(readerSettings.openRouterModel) {
         mutableStateOf(readerSettings.openRouterModel)
     }
+    var tempDeepSeekBaseUrl by remember(readerSettings.deepSeekBaseUrl) {
+        mutableStateOf(readerSettings.deepSeekBaseUrl)
+    }
+    var tempDeepSeekApiKey by remember(readerSettings.deepSeekApiKey) {
+        mutableStateOf(readerSettings.deepSeekApiKey)
+    }
+    var tempDeepSeekModel by remember(readerSettings.deepSeekModel) {
+        mutableStateOf(readerSettings.deepSeekModel)
+    }
     var showAdvanced by remember { mutableStateOf(false) }
     var showGenerationConfig by remember { mutableStateOf(false) }
     var showLogs by remember { mutableStateOf(false) }
@@ -2116,8 +2155,9 @@ private fun GeminiTranslationDialog(
         tempBatch.toIntOrNull()?.let {
             onSetGeminiBatchSize(it.coerceIn(1, 100))
         }
+        val maxConcurrency = if (tempProvider == NovelTranslationProvider.DEEPSEEK) 32 else 8
         tempConcurrency.toIntOrNull()?.let {
-            onSetGeminiConcurrency(it.coerceIn(1, 8))
+            onSetGeminiConcurrency(it.coerceIn(1, maxConcurrency))
         }
     }
 
@@ -2132,6 +2172,7 @@ private fun GeminiTranslationDialog(
     val hasTranslationResult = hasCache || translationProgress >= 100
     val isGeminiSelected = tempProvider == NovelTranslationProvider.GEMINI
     val isOpenRouterSelected = tempProvider == NovelTranslationProvider.OPENROUTER
+    val isDeepSeekSelected = tempProvider == NovelTranslationProvider.DEEPSEEK
     val tabTitles = remember { persistentListOf("Основные", "Промпт", "Еще") }
 
     LaunchedEffect(tempProvider) {
@@ -2145,6 +2186,12 @@ private fun GeminiTranslationDialog(
     LaunchedEffect(isOpenRouterSelected, openRouterModels.size) {
         if (isOpenRouterSelected && openRouterModels.isEmpty()) {
             onRefreshOpenRouterModels()
+        }
+    }
+
+    LaunchedEffect(isDeepSeekSelected, deepSeekModels.size) {
+        if (isDeepSeekSelected && deepSeekModels.isEmpty()) {
+            onRefreshDeepSeekModels()
         }
     }
 
@@ -2256,6 +2303,7 @@ private fun GeminiTranslationDialog(
                                 listOf(
                                     NovelTranslationProvider.GEMINI to "Gemini",
                                     NovelTranslationProvider.OPENROUTER to "OpenRouter",
+                                    NovelTranslationProvider.DEEPSEEK to "DeepSeek",
                                 ),
                             ) { option ->
                                 val selected = tempProvider == option.first
@@ -2267,6 +2315,7 @@ private fun GeminiTranslationDialog(
                                         when (option.first) {
                                             NovelTranslationProvider.GEMINI -> Unit
                                             NovelTranslationProvider.OPENROUTER -> onRefreshOpenRouterModels()
+                                            NovelTranslationProvider.DEEPSEEK -> onRefreshDeepSeekModels()
                                             NovelTranslationProvider.AIRFORCE -> Unit
                                         }
                                     },
@@ -2330,6 +2379,42 @@ private fun GeminiTranslationDialog(
                                         onSetOpenRouterModel(it)
                                     },
                                     label = { Text("Model ID (только :free)") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                            NovelTranslationProvider.DEEPSEEK -> {
+                                Text(
+                                    "DeepSeek модели",
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                                if (deepSeekAllModelEntries.isNotEmpty()) {
+                                    eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
+                                        value = tempDeepSeekModel,
+                                        title = "Модели (${deepSeekAllModelEntries.size})",
+                                        subtitle = tempDeepSeekModel.ifBlank { "Выберите модель" },
+                                        icon = null,
+                                        entries = deepSeekAllModelEntries,
+                                        onValueChange = { selected ->
+                                            tempDeepSeekModel = selected
+                                            onSetDeepSeekModel(selected)
+                                            onAddLog("⚙️ DeepSeek model: $selected")
+                                        },
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(onClick = onRefreshDeepSeekModels) {
+                                        Text(
+                                            if (isDeepSeekModelsLoading) "Загрузка моделей..." else "Обновить список",
+                                        )
+                                    }
+                                }
+                                OutlinedTextField(
+                                    value = tempDeepSeekModel,
+                                    onValueChange = {
+                                        tempDeepSeekModel = it
+                                        onSetDeepSeekModel(it)
+                                    },
+                                    label = { Text("Model ID") },
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
@@ -2540,19 +2625,31 @@ private fun GeminiTranslationDialog(
                         Text(if (showAdvanced) "Скрыть доп. настройки" else "Доп. настройки")
                     }
                     if (showAdvanced) {
-                        if (isOpenRouterSelected) {
+                        if (isOpenRouterSelected || isDeepSeekSelected) {
                             OutlinedTextField(
-                                value = tempOpenRouterBaseUrl,
-                                onValueChange = { tempOpenRouterBaseUrl = it },
+                                value = if (isOpenRouterSelected) tempOpenRouterBaseUrl else tempDeepSeekBaseUrl,
+                                onValueChange = {
+                                    if (isOpenRouterSelected) {
+                                        tempOpenRouterBaseUrl = it
+                                    } else {
+                                        tempDeepSeekBaseUrl = it
+                                    }
+                                },
                                 label = { Text("Base URL") },
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
                         OutlinedTextField(
-                            value = if (isOpenRouterSelected) tempOpenRouterApiKey else tempKey,
+                            value = when {
+                                isOpenRouterSelected -> tempOpenRouterApiKey
+                                isDeepSeekSelected -> tempDeepSeekApiKey
+                                else -> tempKey
+                            },
                             onValueChange = {
                                 if (isOpenRouterSelected) {
                                     tempOpenRouterApiKey = it
+                                } else if (isDeepSeekSelected) {
+                                    tempDeepSeekApiKey = it
                                 } else {
                                     tempKey = it
                                 }
@@ -2561,6 +2658,7 @@ private fun GeminiTranslationDialog(
                                 Text(
                                     when {
                                         isOpenRouterSelected -> "OpenRouter API key"
+                                        isDeepSeekSelected -> "DeepSeek API key"
                                         else -> "API ключ"
                                     },
                                 )
@@ -2578,6 +2676,11 @@ private fun GeminiTranslationDialog(
                                         onSetOpenRouterApiKey(tempOpenRouterApiKey)
                                         onSetOpenRouterModel(tempOpenRouterModel)
                                         onAddLog("⚙️ OpenRouter settings saved")
+                                    } else if (isDeepSeekSelected) {
+                                        onSetDeepSeekBaseUrl(tempDeepSeekBaseUrl)
+                                        onSetDeepSeekApiKey(tempDeepSeekApiKey)
+                                        onSetDeepSeekModel(tempDeepSeekModel)
+                                        onAddLog("⚙️ DeepSeek settings saved")
                                     } else {
                                         onSetGeminiApiKey(tempKey)
                                         onAddLog("⚙️ API ключ сохранен")
@@ -2598,24 +2701,42 @@ private fun GeminiTranslationDialog(
                                 Text("Relaxed: ${if (tempRelaxed) "ON" else "OFF"}")
                             }
                         }
-                        if (isOpenRouterSelected) {
+                        if (isOpenRouterSelected || isDeepSeekSelected) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 TextButton(
-                                    onClick = onTestOpenRouterConnection,
-                                    enabled = !isTestingOpenRouterConnection,
+                                    onClick = if (isOpenRouterSelected) onTestOpenRouterConnection else onTestDeepSeekConnection,
+                                    enabled = if (isOpenRouterSelected) {
+                                        !isTestingOpenRouterConnection
+                                    } else {
+                                        !isTestingDeepSeekConnection
+                                    },
                                     modifier = Modifier.weight(1f),
                                 ) {
-                                    Text(if (isTestingOpenRouterConnection) "Проверка..." else "Тест подключения")
+                                    val isTesting = if (isOpenRouterSelected) {
+                                        isTestingOpenRouterConnection
+                                    } else {
+                                        isTestingDeepSeekConnection
+                                    }
+                                    Text(if (isTesting) "Проверка..." else "Тест подключения")
                                 }
                                 TextButton(
-                                    onClick = onRefreshOpenRouterModels,
-                                    enabled = !isOpenRouterModelsLoading,
+                                    onClick = if (isOpenRouterSelected) onRefreshOpenRouterModels else onRefreshDeepSeekModels,
+                                    enabled = if (isOpenRouterSelected) {
+                                        !isOpenRouterModelsLoading
+                                    } else {
+                                        !isDeepSeekModelsLoading
+                                    },
                                     modifier = Modifier.weight(1f),
                                 ) {
-                                    Text(if (isOpenRouterModelsLoading) "Обновление..." else "Обновить модели")
+                                    val isLoading = if (isOpenRouterSelected) {
+                                        isOpenRouterModelsLoading
+                                    } else {
+                                        isDeepSeekModelsLoading
+                                    }
+                                    Text(if (isLoading) "Обновление..." else "Обновить модели")
                                 }
                             }
                         }

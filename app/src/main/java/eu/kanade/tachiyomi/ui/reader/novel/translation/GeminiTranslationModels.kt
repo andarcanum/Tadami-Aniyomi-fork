@@ -50,3 +50,15 @@ data class OpenRouterTranslationParams(
     val temperature: Float,
     val topP: Float,
 )
+
+data class DeepSeekTranslationParams(
+    val baseUrl: String,
+    val apiKey: String,
+    val model: String,
+    val sourceLang: String,
+    val targetLang: String,
+    val promptMode: GeminiPromptMode,
+    val promptModifiers: String,
+    val temperature: Float,
+    val topP: Float,
+)

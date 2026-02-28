@@ -352,6 +352,7 @@ private fun GeneralTab(
                 listOf(
                     NovelTranslationProvider.GEMINI to stringResource(AYMR.strings.novel_reader_translation_provider_gemini),
                     NovelTranslationProvider.OPENROUTER to stringResource(AYMR.strings.novel_reader_translation_provider_openrouter),
+                    NovelTranslationProvider.DEEPSEEK to stringResource(AYMR.strings.novel_reader_translation_provider_deepseek),
                 ).forEach { option ->
                     val selected = settings.translationProvider == option.first
                     Surface(
@@ -442,6 +443,53 @@ private fun GeneralTab(
                             it,
                             { o, v -> o.copy(openRouterModel = v) },
                             { preferences.openRouterModel().set(it) },
+                        )
+                        true
+                    },
+                    canBeBlank = false,
+                )
+            }
+            if (settings.translationProvider == NovelTranslationProvider.DEEPSEEK) {
+                EditTextPreferenceWidget(
+                    title = stringResource(AYMR.strings.novel_reader_deepseek_base_url),
+                    subtitle = "%s",
+                    icon = null,
+                    value = settings.deepSeekBaseUrl,
+                    onConfirm = {
+                        update(
+                            it,
+                            { o, v -> o.copy(deepSeekBaseUrl = v) },
+                            { preferences.deepSeekBaseUrl().set(it) },
+                        )
+                        true
+                    },
+                    canBeBlank = false,
+                )
+                EditTextPreferenceWidget(
+                    title = stringResource(AYMR.strings.novel_reader_deepseek_api_key),
+                    subtitle = "%s",
+                    icon = null,
+                    value = settings.deepSeekApiKey,
+                    onConfirm = {
+                        update(
+                            it,
+                            { o, v -> o.copy(deepSeekApiKey = v) },
+                            { preferences.deepSeekApiKey().set(it) },
+                        )
+                        true
+                    },
+                    canBeBlank = false,
+                )
+                EditTextPreferenceWidget(
+                    title = stringResource(AYMR.strings.novel_reader_deepseek_model),
+                    subtitle = "%s",
+                    icon = null,
+                    value = settings.deepSeekModel,
+                    onConfirm = {
+                        update(
+                            it,
+                            { o, v -> o.copy(deepSeekModel = v) },
+                            { preferences.deepSeekModel().set(it) },
                         )
                         true
                     },

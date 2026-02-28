@@ -59,6 +59,9 @@ class NovelReaderPreferencesTest {
         prefs.openRouterBaseUrl().get() shouldBe "https://openrouter.ai/api/v1"
         prefs.openRouterApiKey().get() shouldBe ""
         prefs.openRouterModel().get() shouldBe ""
+        prefs.deepSeekBaseUrl().get() shouldBe "https://api.deepseek.com"
+        prefs.deepSeekApiKey().get() shouldBe ""
+        prefs.deepSeekModel().get() shouldBe "deepseek-chat"
     }
 
     @Test
@@ -105,6 +108,9 @@ class NovelReaderPreferencesTest {
         prefs.openRouterBaseUrl().set("https://openrouter.ai/api/v1")
         prefs.openRouterApiKey().set("openrouter-key")
         prefs.openRouterModel().set("google/gemma-3-27b-it:free")
+        prefs.deepSeekBaseUrl().set("https://api.deepseek.com")
+        prefs.deepSeekApiKey().set("deepseek-key")
+        prefs.deepSeekModel().set("deepseek-chat")
         prefs.customThemes().set(
             listOf(
                 NovelReaderColorTheme(backgroundColor = "#111111", textColor = "#eeeeee"),
@@ -153,6 +159,9 @@ class NovelReaderPreferencesTest {
         override?.openRouterBaseUrl shouldBe "https://openrouter.ai/api/v1"
         override?.openRouterApiKey shouldBe "openrouter-key"
         override?.openRouterModel shouldBe "google/gemma-3-27b-it:free"
+        override?.deepSeekBaseUrl shouldBe "https://api.deepseek.com"
+        override?.deepSeekApiKey shouldBe "deepseek-key"
+        override?.deepSeekModel shouldBe "deepseek-chat"
         override?.customThemes shouldBe listOf(
             NovelReaderColorTheme(backgroundColor = "#111111", textColor = "#eeeeee"),
         )
@@ -202,6 +211,9 @@ class NovelReaderPreferencesTest {
         prefs.openRouterBaseUrl().set("https://openrouter.ai/api/v1")
         prefs.openRouterApiKey().set("")
         prefs.openRouterModel().set("")
+        prefs.deepSeekBaseUrl().set("https://api.deepseek.com")
+        prefs.deepSeekApiKey().set("")
+        prefs.deepSeekModel().set("deepseek-chat")
         prefs.customThemes().set(
             listOf(
                 NovelReaderColorTheme(backgroundColor = "#f5f5fa", textColor = "#111111"),
@@ -250,6 +262,9 @@ class NovelReaderPreferencesTest {
                 openRouterBaseUrl = "https://openrouter.ai/api/v1",
                 openRouterApiKey = "openrouter-key",
                 openRouterModel = "google/gemma-3-27b-it:free",
+                deepSeekBaseUrl = "https://api.deepseek.com",
+                deepSeekApiKey = "deepseek-key",
+                deepSeekModel = "deepseek-chat",
                 customThemes = listOf(
                     NovelReaderColorTheme(backgroundColor = "#000000", textColor = "#ffffff"),
                 ),
@@ -297,6 +312,9 @@ class NovelReaderPreferencesTest {
         settings.openRouterBaseUrl shouldBe "https://openrouter.ai/api/v1"
         settings.openRouterApiKey shouldBe "openrouter-key"
         settings.openRouterModel shouldBe "google/gemma-3-27b-it:free"
+        settings.deepSeekBaseUrl shouldBe "https://api.deepseek.com"
+        settings.deepSeekApiKey shouldBe "deepseek-key"
+        settings.deepSeekModel shouldBe "deepseek-chat"
         settings.customThemes shouldBe listOf(
             NovelReaderColorTheme(backgroundColor = "#000000", textColor = "#ffffff"),
         )

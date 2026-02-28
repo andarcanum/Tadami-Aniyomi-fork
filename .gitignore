@@ -53,6 +53,7 @@ build_errors_utf8.txt
 # MCP & AI tools
 .mcp.json
 CLAUDE.md
+GEMINI.md
 
 # Node.js
 package-lock.json

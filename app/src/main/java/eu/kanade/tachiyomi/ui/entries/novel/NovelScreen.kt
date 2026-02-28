@@ -22,7 +22,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.DoneAll
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -51,7 +56,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -95,6 +99,7 @@ import tachiyomi.core.common.i18n.stringResource as contextStringResource
 import tachiyomi.domain.entries.novel.model.Novel as DomainNovel
 import tachiyomi.domain.items.novelchapter.model.NovelChapter as DomainNovelChapter
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.graphics.vector.ImageVector
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -562,7 +567,7 @@ internal fun resolveNovelWebViewLoginHintKey(
 }
 
 @Composable
-private fun NovelBatchDownloadDialog(
+internal fun NovelBatchDownloadDialog(
     onDismissRequest: () -> Unit,
     onSelectChapters: () -> Unit,
     onActionSelected: (NovelDownloadAction, Int) -> Unit,
@@ -605,37 +610,40 @@ private fun NovelBatchDownloadDialog(
 
                     val actionItems = listOf(
                         DownloadActionItem(
-                            iconRes = R.drawable.ic_play_arrow_24dp,
+                            icon = Icons.AutoMirrored.Outlined.ArrowForward,
                             label = stringResource(AYMR.strings.novel_download_next_1),
+                            badgeText = "1",
                             onClick = { onActionSelected(NovelDownloadAction.NEXT, 1) },
                         ),
                         DownloadActionItem(
-                            iconRes = R.drawable.ic_done_prev_24dp,
+                            icon = Icons.AutoMirrored.Outlined.ArrowForward,
                             label = stringResource(AYMR.strings.novel_download_next_5),
+                            badgeText = "5",
                             onClick = { onActionSelected(NovelDownloadAction.NEXT, 5) },
                         ),
                         DownloadActionItem(
-                            iconRes = R.drawable.ic_done_24dp,
+                            icon = Icons.AutoMirrored.Outlined.ArrowForward,
                             label = stringResource(AYMR.strings.novel_download_next_10),
+                            badgeText = "10",
                             onClick = { onActionSelected(NovelDownloadAction.NEXT, 10) },
                         ),
                         DownloadActionItem(
-                            iconRes = R.drawable.ic_book_24dp,
+                            icon = Icons.Outlined.Visibility,
                             label = stringResource(AYMR.strings.action_download_unread),
                             onClick = { onActionSelected(NovelDownloadAction.UNREAD, 0) },
                         ),
                         DownloadActionItem(
-                            iconRes = R.drawable.ic_done_24dp,
+                            icon = Icons.Outlined.DoneAll,
                             label = stringResource(AYMR.strings.novel_download_all),
                             onClick = { onActionSelected(NovelDownloadAction.ALL, 0) },
                         ),
                         DownloadActionItem(
-                            iconRes = R.drawable.ic_download_item_24dp,
+                            icon = Icons.Outlined.Download,
                             label = stringResource(AYMR.strings.novel_download_not_downloaded),
                             onClick = { onActionSelected(NovelDownloadAction.NOT_DOWNLOADED, 0) },
                         ),
                         DownloadActionItem(
-                            iconRes = R.drawable.ic_extension_24dp,
+                            icon = Icons.Outlined.FilterList,
                             label = stringResource(AYMR.strings.novel_download_choose_chapters),
                             onClick = onSelectChapters,
                         ),
@@ -711,7 +719,7 @@ private fun NovelBatchDownloadDialog(
 }
 
 @Composable
-private fun NovelTranslatedDownloadDialog(
+internal fun NovelTranslatedDownloadDialog(
     onDismissRequest: () -> Unit,
     onSelectChapters: (NovelTranslatedDownloadFormat) -> Unit,
     onActionSelected: (NovelDownloadAction, Int, NovelTranslatedDownloadFormat) -> Unit,
@@ -815,37 +823,40 @@ private fun NovelTranslatedDownloadDialog(
 
                     val actionItems = listOf(
                         DownloadActionItem(
-                            iconRes = R.drawable.ic_play_arrow_24dp,
+                            icon = Icons.AutoMirrored.Outlined.ArrowForward,
                             label = stringResource(AYMR.strings.novel_download_next_1),
+                            badgeText = "1",
                             onClick = { onActionSelected(NovelDownloadAction.NEXT, 1, format) },
                         ),
                         DownloadActionItem(
-                            iconRes = R.drawable.ic_done_prev_24dp,
+                            icon = Icons.AutoMirrored.Outlined.ArrowForward,
                             label = stringResource(AYMR.strings.novel_download_next_5),
+                            badgeText = "5",
                             onClick = { onActionSelected(NovelDownloadAction.NEXT, 5, format) },
                         ),
                         DownloadActionItem(
-                            iconRes = R.drawable.ic_done_24dp,
+                            icon = Icons.AutoMirrored.Outlined.ArrowForward,
                             label = stringResource(AYMR.strings.novel_download_next_10),
+                            badgeText = "10",
                             onClick = { onActionSelected(NovelDownloadAction.NEXT, 10, format) },
                         ),
                         DownloadActionItem(
-                            iconRes = R.drawable.ic_book_24dp,
+                            icon = Icons.Outlined.Visibility,
                             label = stringResource(AYMR.strings.action_download_unread),
                             onClick = { onActionSelected(NovelDownloadAction.UNREAD, 0, format) },
                         ),
                         DownloadActionItem(
-                            iconRes = R.drawable.ic_done_24dp,
+                            icon = Icons.Outlined.DoneAll,
                             label = stringResource(AYMR.strings.novel_download_all),
                             onClick = { onActionSelected(NovelDownloadAction.ALL, 0, format) },
                         ),
                         DownloadActionItem(
-                            iconRes = R.drawable.ic_download_item_24dp,
+                            icon = Icons.Outlined.Download,
                             label = stringResource(AYMR.strings.novel_download_not_downloaded),
                             onClick = { onActionSelected(NovelDownloadAction.NOT_DOWNLOADED, 0, format) },
                         ),
                         DownloadActionItem(
-                            iconRes = R.drawable.ic_extension_24dp,
+                            icon = Icons.Outlined.FilterList,
                             label = stringResource(AYMR.strings.novel_translated_download_choose_chapters),
                             onClick = { onSelectChapters(format) },
                         ),
@@ -921,8 +932,9 @@ private fun NovelTranslatedDownloadDialog(
 }
 
 private data class DownloadActionItem(
-    val iconRes: Int,
+    val icon: ImageVector,
     val label: String,
+    val badgeText: String? = null,
     val onClick: () -> Unit,
 )
 
@@ -937,7 +949,7 @@ private fun DownloadActionRow(item: DownloadActionItem) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            painter = painterResource(item.iconRes),
+            imageVector = item.icon,
             contentDescription = null,
             tint = colorScheme.onSurface,
             modifier = Modifier.size(21.dp),
@@ -947,12 +959,26 @@ private fun DownloadActionRow(item: DownloadActionItem) {
             text = item.label,
             color = colorScheme.onSurface,
             style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.weight(1f),
         )
+        item.badgeText?.let { badge ->
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = colorScheme.primary.copy(alpha = 0.14f),
+            ) {
+                Text(
+                    text = badge,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                )
+            }
+        }
     }
 }
 
 @Composable
-private fun NovelDownloadChapterPickerDialog(
+internal fun NovelDownloadChapterPickerDialog(
     title: String,
     chapters: List<DomainNovelChapter>,
     onDismissRequest: () -> Unit,
