@@ -53,7 +53,9 @@ class MangaExtensionManager(
     /**
      * API where all the available extensions can be found.
      */
-    private val api = MangaExtensionApi()
+    private val api by lazy(LazyThreadSafetyMode.NONE) {
+        MangaExtensionApi(extensionManager = this)
+    }
 
     /**
      * The installer which installs, updates and uninstalls the extensions.

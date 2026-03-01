@@ -44,6 +44,23 @@ internal fun resolveLibraryAutoUpdateConstraintPolicy(
     )
 }
 
+internal fun shouldRetryLegacyAutoUpdateRun(
+    restrictions: Set<String>,
+    isConnectedToWifi: Boolean,
+    isCharging: Boolean,
+): Boolean {
+    if ((DEVICE_ONLY_ON_WIFI in restrictions) && !isConnectedToWifi) {
+        return true
+    }
+    if ((DEVICE_NETWORK_NOT_METERED in restrictions) && !isConnectedToWifi) {
+        return true
+    }
+    if ((DEVICE_CHARGING in restrictions) && !isCharging) {
+        return true
+    }
+    return false
+}
+
 class LibraryAutoUpdateSchedulerJob(
     private val context: Context,
     workerParams: WorkerParameters,

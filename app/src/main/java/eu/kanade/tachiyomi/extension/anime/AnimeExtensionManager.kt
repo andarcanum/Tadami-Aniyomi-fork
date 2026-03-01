@@ -56,7 +56,9 @@ class AnimeExtensionManager(
     /**
      * API where all the available anime extensions can be found.
      */
-    private val api = AnimeExtensionApi()
+    private val api by lazy(LazyThreadSafetyMode.NONE) {
+        AnimeExtensionApi(animeExtensionManager = this)
+    }
 
     /**
      * The installer which installs, updates and uninstalls the anime extensions.

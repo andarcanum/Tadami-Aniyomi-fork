@@ -6,6 +6,7 @@ import eu.kanade.tachiyomi.source.model.SManga
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
+import io.mockk.coJustRun
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
@@ -22,6 +23,10 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
+import tachiyomi.domain.category.novel.interactor.GetNovelCategories
+import tachiyomi.domain.category.novel.interactor.SetNovelCategories
+import tachiyomi.domain.category.novel.model.NovelCategory
+import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
@@ -39,6 +44,9 @@ class NovelLibraryScreenModelTest {
     private lateinit var testDispatcher: TestDispatcher
     private lateinit var basePreferences: BasePreferences
     private lateinit var libraryPreferences: LibraryPreferences
+    private lateinit var getNovelCategories: GetNovelCategories
+    private lateinit var setNovelCategories: SetNovelCategories
+    private lateinit var updateNovel: UpdateNovel
 
     @BeforeEach
     fun setup() {
@@ -49,6 +57,14 @@ class NovelLibraryScreenModelTest {
         libraryFlow = MutableStateFlow(emptyList())
         every { getLibraryNovel.subscribe() } returns libraryFlow
         coEvery { chapterRepository.getChapterByNovelId(any(), any()) } returns emptyList()
+        getNovelCategories = mockk()
+        setNovelCategories = mockk()
+        updateNovel = mockk()
+        coEvery { getNovelCategories.await(any<Long>()) } returns emptyList()
+        coEvery { getNovelCategories.await() } returns emptyList<NovelCategory>()
+        coJustRun { setNovelCategories.await(any(), any()) }
+        coEvery { updateNovel.await(any()) } returns true
+        coEvery { updateNovel.awaitAll(any()) } returns true
         val preferenceStore = FakePreferenceStore()
         basePreferences = BasePreferences(
             context = mockk<Context>(relaxed = true),
@@ -259,6 +275,9 @@ class NovelLibraryScreenModelTest {
     ): NovelLibraryScreenModel {
         return NovelLibraryScreenModel(
             getLibraryNovel = getLibraryNovel,
+            getNovelCategories = getNovelCategories,
+            setNovelCategories = setNovelCategories,
+            updateNovel = updateNovel,
             chapterRepository = chapterRepository,
             basePreferences = basePreferences,
             libraryPreferences = libraryPreferences,

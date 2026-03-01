@@ -44,4 +44,26 @@ class LibraryAutoUpdateSchedulerJobTest {
         assertFalse(policy.requireNotMetered)
         assertTrue(policy.requireCharging)
     }
+
+    @Test
+    fun `legacy not metered restriction allows work on wifi`() {
+        val shouldRetry = shouldRetryLegacyAutoUpdateRun(
+            restrictions = setOf(DEVICE_NETWORK_NOT_METERED),
+            isConnectedToWifi = true,
+            isCharging = true,
+        )
+
+        assertFalse(shouldRetry)
+    }
+
+    @Test
+    fun `legacy not metered restriction retries when wifi is unavailable`() {
+        val shouldRetry = shouldRetryLegacyAutoUpdateRun(
+            restrictions = setOf(DEVICE_NETWORK_NOT_METERED),
+            isConnectedToWifi = false,
+            isCharging = true,
+        )
+
+        assertTrue(shouldRetry)
+    }
 }

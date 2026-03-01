@@ -471,6 +471,32 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `auto-scroll toggle hides reader panels when enabling`() {
+        val state = resolveAutoScrollUiStateOnToggle(
+            currentEnabled = false,
+            showReaderUi = true,
+            autoScrollExpanded = true,
+        )
+
+        assertTrue(state.autoScrollEnabled)
+        assertFalse(state.showReaderUi)
+        assertFalse(state.autoScrollExpanded)
+    }
+
+    @Test
+    fun `auto-scroll toggle preserves panel states when disabling`() {
+        val state = resolveAutoScrollUiStateOnToggle(
+            currentEnabled = true,
+            showReaderUi = true,
+            autoScrollExpanded = true,
+        )
+
+        assertFalse(state.autoScrollEnabled)
+        assertTrue(state.showReaderUi)
+        assertTrue(state.autoScrollExpanded)
+    }
+
+    @Test
     fun `page pagination splits long text and keeps order`() {
         val text = buildString {
             repeat(120) { append("Paragraph $it line of text.\n\n") }

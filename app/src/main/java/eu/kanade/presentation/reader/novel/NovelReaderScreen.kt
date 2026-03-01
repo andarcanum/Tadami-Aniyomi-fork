@@ -259,8 +259,10 @@ fun NovelReaderScreen(
     val sourceId = state.novel.source
     val hasSourceOverride = remember(sourceId) { readerPreferences.getSourceOverride(sourceId) != null }
     var pageViewportSize by remember(state.chapter.id) { mutableStateOf(IntSize.Zero) }
-    var autoScrollEnabled by remember(state.chapter.id) { mutableStateOf(state.readerSettings.autoScroll) }
-    var autoScrollSpeed by remember(state.chapter.id) {
+    var autoScrollEnabled by remember(state.chapter.id, state.readerSettings.autoScroll) {
+        mutableStateOf(state.readerSettings.autoScroll)
+    }
+    var autoScrollSpeed by remember(state.chapter.id, state.readerSettings.autoScrollInterval) {
         mutableIntStateOf(intervalToAutoScrollSpeed(state.readerSettings.autoScrollInterval))
     }
     var autoScrollExpanded by remember(state.chapter.id) { mutableStateOf(false) }
@@ -1928,9 +1930,15 @@ fun NovelReaderScreen(
                         ) {
                             IconButton(
                                 onClick = {
-                                    val newValue = !autoScrollEnabled
-                                    autoScrollEnabled = newValue
-                                    updateAutoScrollPreferences(enabled = newValue)
+                                    val nextState = resolveAutoScrollUiStateOnToggle(
+                                        currentEnabled = autoScrollEnabled,
+                                        showReaderUi = showReaderUI,
+                                        autoScrollExpanded = autoScrollExpanded,
+                                    )
+                                    autoScrollEnabled = nextState.autoScrollEnabled
+                                    showReaderUI = nextState.showReaderUi
+                                    autoScrollExpanded = nextState.autoScrollExpanded
+                                    updateAutoScrollPreferences(enabled = nextState.autoScrollEnabled)
                                 },
                                 modifier = Modifier.padding(top = 12.dp),
                             ) {
@@ -4985,6 +4993,33 @@ internal data class AutoScrollStepResult(
     val stepPx: Int,
     val remainderPx: Float,
 )
+
+internal data class AutoScrollUiState(
+    val autoScrollEnabled: Boolean,
+    val showReaderUi: Boolean,
+    val autoScrollExpanded: Boolean,
+)
+
+internal fun resolveAutoScrollUiStateOnToggle(
+    currentEnabled: Boolean,
+    showReaderUi: Boolean,
+    autoScrollExpanded: Boolean,
+): AutoScrollUiState {
+    val toggledEnabled = !currentEnabled
+    return if (toggledEnabled) {
+        AutoScrollUiState(
+            autoScrollEnabled = true,
+            showReaderUi = false,
+            autoScrollExpanded = false,
+        )
+    } else {
+        AutoScrollUiState(
+            autoScrollEnabled = false,
+            showReaderUi = showReaderUi,
+            autoScrollExpanded = autoScrollExpanded,
+        )
+    }
+}
 
 internal fun resolveAutoScrollStep(
     frameStepPx: Float,

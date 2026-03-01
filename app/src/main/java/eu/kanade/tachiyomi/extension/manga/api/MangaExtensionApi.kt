@@ -21,21 +21,26 @@ import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.system.logcat
-import uy.kohesive.injekt.injectLazy
-import java.time.Instant
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import kotlin.time.Duration.Companion.days
 
-internal class MangaExtensionApi {
-
-    private val networkService: NetworkHelper by injectLazy()
-    private val preferenceStore: PreferenceStore by injectLazy()
-    private val getExtensionRepo: GetMangaExtensionRepo by injectLazy()
-    private val updateExtensionRepo: UpdateMangaExtensionRepo by injectLazy()
-    private val extensionManager: MangaExtensionManager by injectLazy()
-    private val json: Json by injectLazy()
+internal class MangaExtensionApi(
+    private val networkService: NetworkHelper = Injekt.get(),
+    private val preferenceStore: PreferenceStore = Injekt.get(),
+    private val getExtensionRepo: GetMangaExtensionRepo = Injekt.get(),
+    private val updateExtensionRepo: UpdateMangaExtensionRepo = Injekt.get(),
+    private val extensionManager: MangaExtensionManager = Injekt.get(),
+    private val json: Json = Injekt.get(),
+    private val timeProvider: () -> Long = { System.currentTimeMillis() },
+) {
 
     private val lastExtCheck: Preference<Long> by lazy {
         preferenceStore.getLong("last_ext_check", 0)
+    }
+
+    suspend fun checkForUpdatesIfDue(context: Context): List<MangaExtension.Installed>? {
+        return checkForUpdates(context, fromAvailableExtensionList = true)
     }
 
     suspend fun findExtensions(): List<MangaExtension.Available> {
@@ -69,9 +74,10 @@ internal class MangaExtensionApi {
         context: Context,
         fromAvailableExtensionList: Boolean = false,
     ): List<MangaExtension.Installed>? {
+        val nowMs = timeProvider()
         // Limit checks to once a day at most
         if (fromAvailableExtensionList &&
-            Instant.now().toEpochMilli() < lastExtCheck.get() + 1.days.inWholeMilliseconds
+            nowMs < lastExtCheck.get() + 1.days.inWholeMilliseconds
         ) {
             return null
         }
@@ -82,8 +88,9 @@ internal class MangaExtensionApi {
         val extensions = if (fromAvailableExtensionList) {
             extensionManager.availableExtensionsFlow.value
         } else {
-            findExtensions().also { lastExtCheck.set(Instant.now().toEpochMilli()) }
+            findExtensions()
         }
+        lastExtCheck.set(nowMs)
 
         val installedExtensions = extensionManager.installedExtensionsFlow.value
 

@@ -504,11 +504,11 @@ class MainActivity : BaseActivity() {
 
         // Extensions updates
         LaunchedEffect(Unit) {
-            runCatching { AnimeExtensionApi().checkForUpdates(context) }
+            runCatching { AnimeExtensionApi().checkForUpdatesIfDue(context) }
                 .onFailure { error ->
                     logcat(LogPriority.WARN, error) { "Anime extension update check failed" }
                 }
-            runCatching { MangaExtensionApi().checkForUpdates(context) }
+            runCatching { MangaExtensionApi().checkForUpdatesIfDue(context) }
                 .onFailure { error ->
                     logcat(LogPriority.WARN, error) { "Manga extension update check failed" }
                 }

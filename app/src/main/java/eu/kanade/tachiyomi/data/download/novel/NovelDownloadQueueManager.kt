@@ -220,11 +220,7 @@ object NovelDownloadQueueManager {
         while (true) {
             val snapshot = state.value
             if (!snapshot.isRunning) {
-                val hasActiveOrPending = snapshot.tasks.any { task ->
-                    task.status == NovelQueuedDownloadStatus.QUEUED ||
-                        task.status == NovelQueuedDownloadStatus.DOWNLOADING
-                }
-                if (!hasActiveOrPending) {
+                if (!shouldWaitForNovelQueueWhilePaused(snapshot)) {
                     break
                 }
                 delay(150)
@@ -359,4 +355,10 @@ object NovelDownloadQueueManager {
         val activeTotal: Int
             get() = pending + active
     }
+}
+
+internal fun shouldWaitForNovelQueueWhilePaused(
+    state: NovelDownloadQueueState,
+): Boolean {
+    return !state.isRunning && state.tasks.any { it.status == NovelQueuedDownloadStatus.DOWNLOADING }
 }

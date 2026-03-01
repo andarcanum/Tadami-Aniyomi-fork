@@ -8,8 +8,16 @@ import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
+import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceModelsService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekModelsService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterModelsService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -48,6 +56,13 @@ import java.util.Collections
 
 class NovelReaderScreenModelTest {
     private val activeScreenModels = mutableListOf<NovelReaderScreenModel>()
+    private val geminiTranslationService = mockk<GeminiTranslationService>(relaxed = true)
+    private val airforceTranslationService = mockk<AirforceTranslationService>(relaxed = true)
+    private val airforceModelsService = mockk<AirforceModelsService>(relaxed = true)
+    private val openRouterTranslationService = mockk<OpenRouterTranslationService>(relaxed = true)
+    private val openRouterModelsService = mockk<OpenRouterModelsService>(relaxed = true)
+    private val deepSeekTranslationService = mockk<DeepSeekTranslationService>(relaxed = true)
+    private val deepSeekModelsService = mockk<DeepSeekModelsService>(relaxed = true)
 
     @AfterEach
     fun tearDown() {
@@ -881,6 +896,16 @@ class NovelReaderScreenModelTest {
                         NovelReaderTheme.LIGHT,
                         NovelReaderTheme.SYSTEM,
                     ),
+                    InMemoryPreferenceStore.InMemoryPreference(
+                        "novel_reader_cache_read_chapters",
+                        false,
+                        true,
+                    ),
+                    InMemoryPreferenceStore.InMemoryPreference(
+                        "novel_reader_cache_read_chapters_unlimited",
+                        false,
+                        false,
+                    ),
                 ),
             )
             val prefs = NovelReaderPreferences(
@@ -933,7 +958,10 @@ class NovelReaderScreenModelTest {
             val prefs = NovelReaderPreferences(
                 preferenceStore = store,
                 json = Json { encodeDefaults = true },
-            )
+            ).also {
+                it.cacheReadChapters().set(false)
+                it.cacheReadChaptersUnlimited().set(false)
+            }
             val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
             val chapter = NovelChapter.create().copy(
                 id = 5L,
@@ -1029,7 +1057,10 @@ class NovelReaderScreenModelTest {
             val prefs = NovelReaderPreferences(
                 preferenceStore = store,
                 json = Json { encodeDefaults = true },
-            )
+            ).also {
+                it.cacheReadChapters().set(false)
+                it.cacheReadChaptersUnlimited().set(false)
+            }
             val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
             val chapter = NovelChapter.create().copy(
                 id = 5L,
@@ -1640,7 +1671,11 @@ class NovelReaderScreenModelTest {
         return NovelReaderPreferences(
             preferenceStore = ReactivePreferenceStore(),
             json = Json { encodeDefaults = true },
-        )
+        ).also { prefs ->
+            // Unit tests run without Android Application in Injekt; avoid touching disk cache store.
+            prefs.cacheReadChapters().set(false)
+            prefs.cacheReadChaptersUnlimited().set(false)
+        }
     }
 
     private fun trackedNovelReaderScreenModel(
@@ -1662,6 +1697,13 @@ class NovelReaderScreenModelTest {
             historyRepository = historyRepository,
             novelReaderPreferences = novelReaderPreferences,
             isSystemDark = isSystemDark,
+            geminiTranslationService = geminiTranslationService,
+            airforceTranslationService = airforceTranslationService,
+            airforceModelsService = airforceModelsService,
+            openRouterTranslationService = openRouterTranslationService,
+            openRouterModelsService = openRouterModelsService,
+            deepSeekTranslationService = deepSeekTranslationService,
+            deepSeekModelsService = deepSeekModelsService,
         ).also(activeScreenModels::add)
     }
 
