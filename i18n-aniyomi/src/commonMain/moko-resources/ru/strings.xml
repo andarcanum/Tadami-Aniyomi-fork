@@ -774,6 +774,7 @@
     <string name="aurora_greeting_preview">Предпросмотр приветствия</string>
     <string name="aurora_greeting_font">Шрифт приветствия</string>
     <string name="aurora_greeting_font_size">Размер приветствия: %s</string>
+    <string name="aurora_greeting_alpha">Прозрачность приветствия: %s</string>
     <string name="aurora_greeting_color">Цвет приветствия</string>
     <string name="aurora_greeting_custom_color">Свой цвет приветствия (HEX)</string>
     <string name="aurora_greeting_custom_color_hint">Формат: #RRGGBB или #AARRGGBB</string>

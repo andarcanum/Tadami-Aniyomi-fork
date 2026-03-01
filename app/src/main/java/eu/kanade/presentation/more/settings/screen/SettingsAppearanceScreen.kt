@@ -141,6 +141,8 @@ object SettingsAppearanceScreen : SearchableSettings {
         val showNovelSection by showNovelSectionPref.collectAsState()
         val greetingFontSizePref = userProfilePreferences.greetingFontSize()
         val greetingFontSize by greetingFontSizePref.collectAsState()
+        val greetingAlphaPref = userProfilePreferences.greetingAlpha()
+        val greetingAlpha by greetingAlphaPref.collectAsState()
         val greetingColorPref = userProfilePreferences.greetingColor()
         val greetingColor by greetingColorPref.collectAsState()
         var isGreetingSettingsExpanded by rememberSaveable { mutableStateOf(false) }
@@ -169,6 +171,16 @@ object SettingsAppearanceScreen : SearchableSettings {
                     steps = 15,
                     onValueChanged = {
                         greetingFontSizePref.set(it.coerceIn(10, 26))
+                        true
+                    },
+                ),
+                Preference.PreferenceItem.SliderPreference(
+                    value = greetingAlpha.coerceIn(10, 100),
+                    title = stringResource(AYMR.strings.aurora_greeting_alpha, "${greetingAlpha}%"),
+                    valueRange = 10..100,
+                    steps = 89,
+                    onValueChanged = {
+                        greetingAlphaPref.set(it.coerceIn(10, 100))
                         true
                     },
                 ),

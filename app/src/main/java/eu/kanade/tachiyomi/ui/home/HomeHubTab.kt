@@ -360,6 +360,7 @@ private data class GreetingStyle(
     val color: NicknameColorPreset,
     val customColorHex: String,
     val fontSize: Int,
+    val alpha: Int,
     val decoration: GreetingDecorationPreset,
     val italic: Boolean,
 )
@@ -492,6 +493,7 @@ object HomeHubTab : Tab {
         val greetingColorKey by userProfilePreferences.greetingColor().collectAsState()
         val greetingCustomColorHex by userProfilePreferences.greetingCustomColorHex().collectAsState()
         val greetingFontSize by userProfilePreferences.greetingFontSize().collectAsState()
+        val greetingAlpha by userProfilePreferences.greetingAlpha().collectAsState()
         val greetingDecorationKey by userProfilePreferences.greetingDecoration().collectAsState()
         val greetingItalic by userProfilePreferences.greetingItalic().collectAsState()
         val greetingStyle = GreetingStyle(
@@ -499,6 +501,7 @@ object HomeHubTab : Tab {
             color = NicknameColorPreset.fromKey(greetingColorKey),
             customColorHex = greetingCustomColorHex,
             fontSize = greetingFontSize.coerceIn(10, 26),
+            alpha = greetingAlpha.coerceIn(10, 100),
             decoration = GreetingDecorationPreset.fromKey(greetingDecorationKey),
             italic = greetingItalic,
         )
@@ -575,6 +578,7 @@ object HomeHubTab : Tab {
                     userProfilePreferences.greetingColor().set(newStyle.color.key)
                     userProfilePreferences.greetingCustomColorHex().set(newStyle.customColorHex)
                     userProfilePreferences.greetingFontSize().set(newStyle.fontSize.coerceIn(10, 26))
+                    userProfilePreferences.greetingAlpha().set(newStyle.alpha.coerceIn(10, 100))
                     userProfilePreferences.greetingDecoration().set(newStyle.decoration.key)
                     userProfilePreferences.greetingItalic().set(newStyle.italic)
                     showGreetingDialog = false
@@ -1168,7 +1172,7 @@ private fun HomeHubProfileHeaderCanvas(
                         fontFamily = greetingFontFamily,
                         lineBreak = LineBreak.Heading,
                     ),
-                    color = greetingColor,
+                    color = greetingColor.copy(alpha = greetingStyle.alpha.coerceIn(10, 100) / 100f),
                     fontWeight = FontWeight.Medium,
                     maxLines = if (isTabletHeaderLayout) 2 else 2,
                     textAlign = when {
@@ -1400,6 +1404,7 @@ internal fun HomeHeaderLayoutLivePreview(
             color = NicknameColorPreset.Theme,
             customColorHex = "#FFFFFF",
             fontSize = 12,
+            alpha = 60,
             decoration = GreetingDecorationPreset.Auto,
             italic = false,
         )
@@ -2555,12 +2560,14 @@ private fun GreetingStyleDialog(
     var selectedDecoration by remember(currentStyle) { mutableStateOf(currentStyle.decoration) }
     var italicEnabled by remember(currentStyle) { mutableStateOf(currentStyle.italic) }
     var fontSize by remember(currentStyle) { mutableIntStateOf(currentStyle.fontSize.coerceIn(10, 26)) }
+    var alpha by remember(currentStyle) { mutableIntStateOf(currentStyle.alpha.coerceIn(10, 100)) }
 
     val previewStyle = GreetingStyle(
         font = selectedFont,
         color = selectedColor,
         customColorHex = customColorHex,
         fontSize = fontSize.coerceIn(10, 26),
+        alpha = alpha.coerceIn(10, 100),
         decoration = selectedDecoration,
         italic = italicEnabled,
     )
@@ -2598,7 +2605,7 @@ private fun GreetingStyleDialog(
                             fontStyle = if (previewStyle.italic) FontStyle.Italic else FontStyle.Normal,
                             fontFamily = greetingFontFamily,
                         ),
-                        color = greetingColor,
+                        color = greetingColor.copy(alpha = previewStyle.alpha.coerceIn(10, 100) / 100f),
                         fontWeight = FontWeight.Medium,
                     )
                 }
@@ -2632,6 +2639,18 @@ private fun GreetingStyleDialog(
                     onValueChange = { fontSize = it.roundToInt().coerceIn(10, 26) },
                     valueRange = 10f..26f,
                     steps = 15,
+                )
+
+                Text(
+                    text = stringResource(AYMR.strings.aurora_greeting_alpha, "${alpha}%"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AuroraTheme.colors.textSecondary,
+                )
+                Slider(
+                    value = alpha.toFloat(),
+                    onValueChange = { alpha = it.roundToInt().coerceIn(10, 100) },
+                    valueRange = 10f..100f,
+                    steps = 89,
                 )
 
                 Text(

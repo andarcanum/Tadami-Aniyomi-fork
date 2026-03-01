@@ -879,6 +879,7 @@
     <string name="aurora_greeting_preview">Greeting preview</string>
     <string name="aurora_greeting_font">Greeting font</string>
     <string name="aurora_greeting_font_size">Greeting size: %s</string>
+    <string name="aurora_greeting_alpha">Greeting opacity: %s</string>
     <string name="aurora_greeting_color">Greeting color</string>
     <string name="aurora_greeting_custom_color">Greeting custom color (HEX)</string>
     <string name="aurora_greeting_custom_color_hint">Format: #RRGGBB or #AARRGGBB</string>

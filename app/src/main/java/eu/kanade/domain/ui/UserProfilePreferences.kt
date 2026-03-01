@@ -41,6 +41,7 @@ class UserProfilePreferences(
     fun greetingCustomColorHex() = preferenceStore.getString("user_profile_greeting_custom_color_hex", "#FFFFFF")
     fun greetingDecoration() = preferenceStore.getString("user_profile_greeting_decoration", "sparkle")
     fun greetingItalic() = preferenceStore.getBoolean("user_profile_greeting_italic", true)
+    fun greetingAlpha() = preferenceStore.getInt("user_profile_greeting_alpha", 60)
     fun homeHeaderLayoutJson() = preferenceStore.getString("user_profile_home_header_layout_json", "")
 
     fun getHomeHeaderLayoutOrNull(): HomeHeaderLayoutSpec? {
