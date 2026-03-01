@@ -79,6 +79,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -1849,6 +1850,17 @@ private fun HeroSection(
             ),
         )
     }
+    val actionButtonShape = RoundedCornerShape(12.dp)
+    val actionButtonBrush = remember(colors.accent) {
+        Brush.linearGradient(
+            colors = listOf(
+                lerp(colors.accent, Color.White, 0.16f),
+                lerp(colors.accent, Color.Black, 0.08f),
+            ),
+            start = Offset(0f, 0f),
+            end = Offset(0f, 420f),
+        )
+    }
 
     Box(
         modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp).height(
@@ -1899,10 +1911,14 @@ private fun HeroSection(
 
             Button(
                 onClick = onPlayClick,
-                colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
-                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                shape = actionButtonShape,
                 contentPadding = PaddingValues(start = 22.dp, end = 24.dp, top = 8.dp, bottom = 8.dp),
-                modifier = Modifier.height(52.dp),
+                modifier = Modifier
+                    .height(52.dp)
+                    .clip(actionButtonShape)
+                    .background(actionButtonBrush)
+                    .border(1.dp, Color.White.copy(alpha = 0.12f), actionButtonShape),
             ) {
                 Icon(Icons.Filled.PlayArrow, null, tint = colors.textOnAccent, modifier = Modifier.size(21.dp))
                 Spacer(Modifier.width(8.dp))
@@ -1938,6 +1954,17 @@ private fun QuickSourceButton(sourceName: String?, onClick: () -> Unit) {
     val colors = AuroraTheme.colors
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val contentMaxWidthDp = auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp
+    val sourceButtonShape = RoundedCornerShape(16.dp)
+    val sourceSurface = if (colors.background.luminance() < 0.5f) {
+        Color.White.copy(alpha = 0.05f)
+    } else {
+        Color.Black.copy(alpha = 0.03f)
+    }
+    val sourceBorder = if (colors.background.luminance() < 0.5f) {
+        Color.White.copy(alpha = 0.10f)
+    } else {
+        Color.Black.copy(alpha = 0.10f)
+    }
 
     Box(
         modifier = Modifier
@@ -1946,9 +1973,14 @@ private fun QuickSourceButton(sourceName: String?, onClick: () -> Unit) {
     ) {
         Button(
             onClick = onClick,
-            colors = ButtonDefaults.buttonColors(containerColor = colors.glass),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth().height(56.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+            shape = sourceButtonShape,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .clip(sourceButtonShape)
+                .background(sourceSurface)
+                .border(1.dp, sourceBorder, sourceButtonShape),
         ) {
             Icon(Icons.Filled.Search, null, tint = colors.accent, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(10.dp))

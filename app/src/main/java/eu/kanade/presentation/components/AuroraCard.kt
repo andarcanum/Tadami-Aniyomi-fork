@@ -72,7 +72,7 @@ fun AuroraCard(
             color = if (isSelected) {
                 colors.accent
             } else if (colors.isDark) {
-                Color.Transparent
+                Color.White.copy(alpha = 0.04f)
             } else {
                 Color.LightGray.copy(alpha = 0.4f)
             },
@@ -87,7 +87,6 @@ fun AuroraCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(if (showTextContent) normalizedCoverHeightFraction else 1f)
-                    .background(Color.Black.copy(alpha = 0.1f)) // Placeholder bg
                     .padding(imagePadding),
             ) {
                 AsyncImage(
