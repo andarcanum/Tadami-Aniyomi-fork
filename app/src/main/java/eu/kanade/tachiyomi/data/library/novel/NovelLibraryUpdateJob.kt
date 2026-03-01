@@ -115,7 +115,7 @@ class NovelLibraryUpdateJob(
 
         return withIOContext {
             try {
-                updateChapterList()
+                updateChapterList(isManualRun = tags.contains(WORK_NAME_MANUAL))
                 Result.success()
             } catch (e: CancellationException) {
                 throw e
@@ -215,9 +215,11 @@ class NovelLibraryUpdateJob(
         }
     }
 
-    private suspend fun updateChapterList() {
+    private suspend fun updateChapterList(isManualRun: Boolean) {
         val semaphore = Semaphore(5)
         val progressCount = AtomicInteger(0)
+        val updatedCount = AtomicInteger(0)
+        val failedCount = AtomicInteger(0)
         val currentlyUpdating = CopyOnWriteArrayList<Novel>()
         val newUpdates = CopyOnWriteArrayList<Pair<Novel, Int>>()
         val failedUpdates = CopyOnWriteArrayList<Pair<Novel, String?>>()
@@ -234,7 +236,13 @@ class NovelLibraryUpdateJob(
                                     return@forEach
                                 }
 
-                                withUpdateNotification(currentlyUpdating, progressCount, novel) {
+                                withUpdateNotification(
+                                    updatingNovel = currentlyUpdating,
+                                    completed = progressCount,
+                                    updated = updatedCount,
+                                    failed = failedCount,
+                                    novel = novel,
+                                ) {
                                     try {
                                         val newChapters = updateNovel(novel)
                                         if (newChapters.isNotEmpty()) {
@@ -247,6 +255,7 @@ class NovelLibraryUpdateJob(
                                                 novelDownloadManager.downloadChapters(novel, chaptersToDownload)
                                             }
                                             newUpdates.add(novel to newChapters.size)
+                                            updatedCount.incrementAndGet()
                                         }
                                     } catch (e: Throwable) {
                                         if (e is CancellationException) throw e
@@ -259,6 +268,7 @@ class NovelLibraryUpdateJob(
                                             else -> e.message
                                         }
                                         failedUpdates.add(novel to errorMessage)
+                                        failedCount.incrementAndGet()
                                     }
                                 }
                             }
@@ -275,6 +285,9 @@ class NovelLibraryUpdateJob(
         }
         if (failedUpdates.isNotEmpty()) {
             notifier.showUpdateErrorNotification(failedUpdates.size)
+        }
+        if (isManualRun && newUpdates.isEmpty() && failedUpdates.isEmpty()) {
+            notifier.showNoUpdatesNotification(checked = novelToUpdate.size)
         }
     }
 
@@ -325,13 +338,21 @@ class NovelLibraryUpdateJob(
     private suspend fun withUpdateNotification(
         updatingNovel: CopyOnWriteArrayList<Novel>,
         completed: AtomicInteger,
+        updated: AtomicInteger,
+        failed: AtomicInteger,
         novel: Novel,
         block: suspend () -> Unit,
     ) = coroutineScope {
         ensureActive()
 
         updatingNovel.add(novel)
-        notifier.showProgressNotification(updatingNovel, completed.get(), novelToUpdate.size)
+        notifier.showProgressNotification(
+            novels = updatingNovel,
+            current = completed.get(),
+            total = novelToUpdate.size,
+            updated = updated.get(),
+            failed = failed.get(),
+        )
 
         block()
 
@@ -339,7 +360,13 @@ class NovelLibraryUpdateJob(
 
         updatingNovel.remove(novel)
         completed.getAndIncrement()
-        notifier.showProgressNotification(updatingNovel, completed.get(), novelToUpdate.size)
+        notifier.showProgressNotification(
+            novels = updatingNovel,
+            current = completed.get(),
+            total = novelToUpdate.size,
+            updated = updated.get(),
+            failed = failed.get(),
+        )
     }
 
     companion object {

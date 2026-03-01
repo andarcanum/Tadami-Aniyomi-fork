@@ -121,9 +121,9 @@ data object UpdatesTab : Tab {
             val internalErrorMessage = stringResource(MR.strings.internal_error)
             val updatingAnimeMessage = stringResource(AYMR.strings.aurora_updating_anime)
             val updatingMangaMessage = stringResource(AYMR.strings.aurora_updating_manga)
-            val updatingNovelMessage = stringResource(AYMR.strings.aurora_updating_novel)
+            val updatingNovelMessage = stringResource(MR.strings.updating_library)
             val updatingAllLibraryMessage = stringResource(AYMR.strings.aurora_updating_library)
-            val updateAlreadyRunningMessage = stringResource(AYMR.strings.aurora_update_already_running)
+            val updateAlreadyRunningMessage = stringResource(MR.strings.update_already_running)
             val scope = rememberCoroutineScope()
             val playerPreferences = remember { Injekt.get<PlayerPreferences>() }
 

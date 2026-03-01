@@ -74,6 +74,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastAll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
+import android.widget.Toast
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
@@ -251,30 +252,37 @@ data object AnimeLibraryTab : Tab {
         var showNovelTranslatedChapterPickerDialog by remember { mutableStateOf(false) }
         var novelTranslatedPickerFormat by remember { mutableStateOf(NovelTranslatedDownloadFormat.TXT) }
         var novelTranslatedPickerChapters by remember { mutableStateOf<List<DomainNovelChapter>>(emptyList()) }
+        val updatingAnimeMessage = context.stringResource(AYMR.strings.aurora_updating_anime)
+        val updatingMangaMessage = context.stringResource(AYMR.strings.aurora_updating_manga)
+        val updatingNovelMessage = context.stringResource(MR.strings.updating_library)
+        val updateAlreadyRunningMessage = context.stringResource(MR.strings.update_already_running)
 
-        val onClickRefresh: (Category?) -> Boolean = { category ->
-            val started = AnimeLibraryUpdateJob.startNow(context, category)
+        fun showLibraryUpdateFeedback(started: Boolean, startedMessage: String) {
+            if (isAurora) {
+                val message = if (started) startedMessage else updateAlreadyRunningMessage
+                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                return
+            }
             scope.launch {
                 val msgRes = if (started) MR.strings.updating_category else MR.strings.update_already_running
                 snackbarHostState.showSnackbar(context.stringResource(msgRes))
             }
+        }
+
+        val onClickRefresh: (Category?) -> Boolean = { category ->
+            val started = AnimeLibraryUpdateJob.startNow(context, category)
+            showLibraryUpdateFeedback(started, updatingAnimeMessage)
             started
         }
 
         val onClickRefreshManga: (Category?) -> Boolean = { category ->
             val started = MangaLibraryUpdateJob.startNow(context, category)
-            scope.launch {
-                val msgRes = if (started) MR.strings.updating_category else MR.strings.update_already_running
-                snackbarHostState.showSnackbar(context.stringResource(msgRes))
-            }
+            showLibraryUpdateFeedback(started, updatingMangaMessage)
             started
         }
         val onClickRefreshNovel: () -> Boolean = {
             val started = NovelLibraryUpdateJob.startNow(context)
-            scope.launch {
-                val msgRes = if (started) MR.strings.updating_category else MR.strings.update_already_running
-                snackbarHostState.showSnackbar(context.stringResource(msgRes))
-            }
+            showLibraryUpdateFeedback(started, updatingNovelMessage)
             started
         }
 

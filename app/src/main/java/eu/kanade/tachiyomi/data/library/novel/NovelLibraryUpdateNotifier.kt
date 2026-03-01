@@ -12,10 +12,17 @@ import eu.kanade.tachiyomi.util.system.notify
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.i18n.MR
+import java.math.RoundingMode
+import java.text.NumberFormat
 
 class NovelLibraryUpdateNotifier(
     private val context: Context,
 ) {
+
+    private val percentFormatter = NumberFormat.getPercentInstance().apply {
+        roundingMode = RoundingMode.DOWN
+        maximumFractionDigits = 0
+    }
 
     private val cancelIntent by lazy {
         NotificationReceiver.cancelLibraryUpdatePendingBroadcast(context)
@@ -35,14 +42,23 @@ class NovelLibraryUpdateNotifier(
         }
     }
 
-    fun showProgressNotification(novels: List<Novel>, current: Int, total: Int) {
+    fun showProgressNotification(
+        novels: List<Novel>,
+        current: Int,
+        total: Int,
+        updated: Int,
+        failed: Int,
+    ) {
+        val safeTotal = total.coerceAtLeast(1)
+
         progressNotificationBuilder
             .setContentTitle(
                 context.stringResource(
                     MR.strings.notification_updating_progress,
-                    "${(current * 100) / total}%",
+                    percentFormatter.format(current.toFloat() / safeTotal),
                 ),
             )
+            .setContentText("$current/$total | +$updated | !$failed")
             .setStyle(
                 NotificationCompat.BigTextStyle().bigText(
                     novels.joinToString("\n") { it.title.chop(40) },
@@ -55,6 +71,19 @@ class NovelLibraryUpdateNotifier(
                 .setProgress(total, current, false)
                 .build(),
         )
+    }
+
+    fun showNoUpdatesNotification(checked: Int) {
+        context.notify(
+            Notifications.ID_NEW_NOVEL_CHAPTERS,
+            Notifications.CHANNEL_LIBRARY_PROGRESS,
+        ) {
+            setContentTitle(context.stringResource(MR.strings.updating_library))
+            setContentText(context.stringResource(MR.strings.update_check_no_new_updates))
+            setSubText("$checked")
+            setSmallIcon(R.drawable.ic_ani)
+            setAutoCancel(true)
+        }
     }
 
     fun showUpdateSummaryNotification(updated: List<Pair<Novel, Int>>) {

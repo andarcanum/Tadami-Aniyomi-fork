@@ -115,6 +115,19 @@ class AnimeLibraryUpdateNotifier(
         )
     }
 
+    fun showNoUpdatesNotification(checked: Int) {
+        context.notify(
+            Notifications.ID_NEW_EPISODES,
+            Notifications.CHANNEL_LIBRARY_PROGRESS,
+        ) {
+            setContentTitle(context.stringResource(MR.strings.updating_library))
+            setContentText(context.stringResource(MR.strings.update_check_no_new_updates))
+            setSubText("$checked")
+            setSmallIcon(R.drawable.ic_ani)
+            setAutoCancel(true)
+        }
+    }
+
     fun showQueueSizeWarningNotification() {
         context.notify(
             Notifications.ID_LIBRARY_SIZE_WARNING,

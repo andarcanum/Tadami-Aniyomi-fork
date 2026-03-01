@@ -122,7 +122,7 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
 
         return withIOContext {
             try {
-                updateEpisodeList()
+                updateEpisodeList(isManualRun = tags.contains(WORK_NAME_MANUAL))
                 Result.success()
             } catch (e: CancellationException) {
                 throw e
@@ -265,7 +265,7 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
      *
      * @return an observable delivering the progress of each update.
      */
-    private suspend fun updateEpisodeList() {
+    private suspend fun updateEpisodeList(isManualRun: Boolean) {
         val semaphore = Semaphore(5)
         val progressCount = AtomicInteger(0)
         val currentlyUpdatingAnime = CopyOnWriteArrayList<Anime>()
@@ -347,6 +347,9 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                 failedUpdates.size,
                 errorFile.getUriCompat(context),
             )
+        }
+        if (isManualRun && newUpdates.isEmpty() && failedUpdates.isEmpty()) {
+            notifier.showNoUpdatesNotification(checked = animeToUpdate.size)
         }
     }
 

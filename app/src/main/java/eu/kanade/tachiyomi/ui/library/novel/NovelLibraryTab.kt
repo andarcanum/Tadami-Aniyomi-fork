@@ -145,7 +145,7 @@ data object NovelLibraryTab : Tab {
         val onClickRefresh: () -> Unit = {
             val started = NovelLibraryUpdateJob.startNow(context)
             scope.launch {
-                val msgRes = if (started) MR.strings.updating_category else MR.strings.update_already_running
+                val msgRes = if (started) MR.strings.updating_library else MR.strings.update_already_running
                 snackbarHostState.showSnackbar(context.stringResource(msgRes))
             }
         }
