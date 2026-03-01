@@ -112,6 +112,7 @@ import eu.kanade.presentation.components.AuroraCard
 import eu.kanade.presentation.components.AuroraTabRow
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.components.TabbedScreenAurora
+import eu.kanade.presentation.components.auroraMenuRimLightBrush
 import eu.kanade.presentation.more.settings.screen.browse.AnimeExtensionReposScreen
 import eu.kanade.presentation.more.settings.screen.browse.MangaExtensionReposScreen
 import eu.kanade.presentation.more.settings.screen.browse.NovelExtensionReposScreen
@@ -871,7 +872,6 @@ private fun HomeHubPinnedHeader(
             ),
         )
     }
-
     Layout(
         content = {
             Column(
@@ -1817,6 +1817,22 @@ internal fun resolveHomeHubHeaderTintSecondaryAlpha(primaryAlpha: Float): Float 
     return (primaryAlpha * 0.5f).coerceIn(0f, 1f)
 }
 
+internal fun homeHubRimLightAlphaStops(): List<Pair<Float, Float>> {
+    return listOf(
+        0.00f to 0.15f,
+        0.28f to 0.05f,
+        0.62f to 0.00f,
+        1.00f to 0.00f,
+    )
+}
+
+internal fun homeHubRimLightBrush(): Brush {
+    val stops = homeHubRimLightAlphaStops()
+        .map { (stop, alpha) -> stop to Color.White.copy(alpha = alpha) }
+        .toTypedArray()
+    return Brush.verticalGradient(colorStops = stops)
+}
+
 @Composable
 private fun HeroSection(
     hero: HomeHubHero,
@@ -1840,16 +1856,7 @@ private fun HeroSection(
             ),
         )
     }
-    val rimLightBrush = remember {
-        Brush.verticalGradient(
-            colorStops = arrayOf(
-                0.00f to Color.White.copy(alpha = 0.15f),
-                0.28f to Color.White.copy(alpha = 0.05f),
-                0.62f to Color.Transparent,
-                1.00f to Color.Transparent,
-            ),
-        )
-    }
+    val rimLightBrush = remember { homeHubRimLightBrush() }
     val actionButtonShape = RoundedCornerShape(12.dp)
     val actionButtonBrush = remember(colors.accent) {
         Brush.linearGradient(
@@ -1960,11 +1967,7 @@ private fun QuickSourceButton(sourceName: String?, onClick: () -> Unit) {
     } else {
         Color.Black.copy(alpha = 0.03f)
     }
-    val sourceBorder = if (colors.background.luminance() < 0.5f) {
-        Color.White.copy(alpha = 0.10f)
-    } else {
-        Color.Black.copy(alpha = 0.10f)
-    }
+    val sourceBorderBrush = remember { auroraMenuRimLightBrush() }
 
     Box(
         modifier = Modifier
@@ -1980,7 +1983,7 @@ private fun QuickSourceButton(sourceName: String?, onClick: () -> Unit) {
                 .height(56.dp)
                 .clip(sourceButtonShape)
                 .background(sourceSurface)
-                .border(1.dp, sourceBorder, sourceButtonShape),
+                .border(0.75.dp, sourceBorderBrush, sourceButtonShape),
         ) {
             Icon(Icons.Filled.Search, null, tint = colors.accent, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(10.dp))

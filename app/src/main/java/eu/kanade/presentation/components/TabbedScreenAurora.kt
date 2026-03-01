@@ -522,6 +522,7 @@ internal fun AuroraTabRow(
 ) {
     val colors = AuroraTheme.colors
     val scrollState = rememberScrollState()
+    val menuBorderBrush = remember { auroraMenuRimLightBrush() }
 
     // Segmented pill container - adaptive glass background
     Box(
@@ -531,6 +532,11 @@ internal fun AuroraTabRow(
             .background(
                 colors.glass,
                 RoundedCornerShape(28.dp),
+            )
+            .border(
+                width = 0.75.dp,
+                brush = menuBorderBrush,
+                shape = RoundedCornerShape(28.dp),
             )
             .padding(horizontal = 4.dp, vertical = 4.dp),
     ) {
@@ -628,4 +634,20 @@ internal fun AuroraTab(
             }
         }
     }
+}
+
+internal fun auroraMenuRimLightAlphaStops(): List<Pair<Float, Float>> {
+    return listOf(
+        0.00f to 0.10f,
+        0.28f to 0.03f,
+        0.62f to 0.00f,
+        1.00f to 0.00f,
+    )
+}
+
+internal fun auroraMenuRimLightBrush(): Brush {
+    val stops = auroraMenuRimLightAlphaStops()
+        .map { (stop, alpha) -> stop to Color.White.copy(alpha = alpha) }
+        .toTypedArray()
+    return Brush.verticalGradient(colorStops = stops)
 }

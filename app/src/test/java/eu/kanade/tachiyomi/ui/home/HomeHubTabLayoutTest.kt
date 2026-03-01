@@ -8,6 +8,16 @@ import org.junit.jupiter.api.Test
 class HomeHubTabLayoutTest {
 
     @Test
+    fun `home hub rim light stops match hero border style`() {
+        homeHubRimLightAlphaStops() shouldBe listOf(
+            0.00f to 0.15f,
+            0.28f to 0.05f,
+            0.62f to 0.00f,
+            1.00f to 0.00f,
+        )
+    }
+
+    @Test
     fun `wrapped homehub section layout is enabled only on tablet classes`() {
         shouldUseHomeHubWrappedSections(AuroraDeviceClass.Phone) shouldBe false
         shouldUseHomeHubWrappedSections(AuroraDeviceClass.TabletCompact) shouldBe true
