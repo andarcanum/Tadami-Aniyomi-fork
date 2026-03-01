@@ -222,6 +222,28 @@ class NovelRichContentParserTest {
     }
 
     @Test
+    fun `parser strips trailing formatting newline after inferred leading indent`() {
+        val html = "<p>\n\u3000\u3000Indented by ideographic spaces\n</p>"
+
+        val result = parseNovelRichContent(html)
+
+        val paragraph = result.blocks.first() as NovelRichContentBlock.Paragraph
+        paragraph.firstLineIndentEm shouldBe 2f
+        paragraph.segments.joinToString(separator = "") { it.text } shouldBe "Indented by ideographic spaces"
+    }
+
+    @Test
+    fun `parser drops whitespace-only paragraph made of indent markers`() {
+        val html = "<p>&emsp;&emsp;</p><p>Visible paragraph</p>"
+
+        val result = parseNovelRichContent(html)
+
+        result.blocks shouldHaveSize 1
+        val paragraph = result.blocks.first() as NovelRichContentBlock.Paragraph
+        paragraph.segments.joinToString(separator = "") { it.text } shouldBe "Visible paragraph"
+    }
+
+    @Test
     fun `parser does not treat single leading regular space as paragraph indent`() {
         val html = """
             <p> Single leading space</p>

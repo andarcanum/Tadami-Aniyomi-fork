@@ -3856,6 +3856,9 @@ private fun WebView.applyReaderCss(
             const shouldForceAlign = $alignFlag;
             const shouldForceFirstLineIndent = $firstLineIndentFlag;
             const firstLineIndentTags = new Set(['p', 'div', 'article', 'section']);
+            const emptyBlockTags = new Set(['p', 'div', 'article', 'section', 'li', 'blockquote', 'pre']);
+            const invisibleSpaceRegex = /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g;
+            const mediaContentSelector = 'img,svg,video,canvas,iframe,picture,hr';
             const root = document.body;
             if (!root) return;
             const nodes = root.querySelectorAll('*');
@@ -3872,6 +3875,18 @@ private fun WebView.applyReaderCss(
                     tag === 'canvas' || tag === 'iframe' || tag === 'source' || tag === 'picture'
                 ) {
                     continue;
+                }
+                if (emptyBlockTags.has(tag)) {
+                    const normalizedText = (node.textContent || '')
+                        .replace(invisibleSpaceRegex, ' ')
+                        .trim();
+                    const hasMediaContent = node.querySelector(mediaContentSelector) !== null;
+                    if (!hasMediaContent && normalizedText.length === 0) {
+                        node.style.setProperty('display', 'none', 'important');
+                        node.style.setProperty('margin', '0', 'important');
+                        node.style.setProperty('padding', '0', 'important');
+                        continue;
+                    }
                 }
                 node.style.setProperty('background-color', 'transparent', 'important');
                 node.style.setProperty('color', 'var(--an-reader-fg)', 'important');
