@@ -858,19 +858,28 @@ private fun HomeHubPinnedHeader(
     val colors = AuroraTheme.colors
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val contentMaxWidthDp = auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp
+    val isDarkTheme = colors.background.luminance() < 0.5f
+    val headerTintAlpha = resolveHomeHubHeaderTintAlpha(isDarkTheme = isDarkTheme)
+    val headerTintSecondaryAlpha = resolveHomeHubHeaderTintSecondaryAlpha(primaryAlpha = headerTintAlpha)
+    val headerBackgroundBrush = remember(colors.accent, headerTintAlpha, headerTintSecondaryAlpha) {
+        Brush.verticalGradient(
+            colors = listOf(
+                colors.accent.copy(alpha = headerTintAlpha),
+                colors.accent.copy(alpha = headerTintSecondaryAlpha),
+                Color.Transparent,
+            ),
+        )
+    }
 
-    Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-    Spacer(Modifier.height(5.dp))
     Layout(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clipToBounds(),
         content = {
             Column(
                 modifier = Modifier
                     .auroraCenteredMaxWidth(contentMaxWidthDp)
                     .padding(horizontal = 16.dp),
             ) {
+                Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+                Spacer(Modifier.height(5.dp))
                 Spacer(Modifier.height(10.dp))
                 HomeHubProfileHeaderCanvas(
                     modifier = Modifier.fillMaxWidth(),
@@ -903,21 +912,26 @@ private fun HomeHubPinnedHeader(
                 Spacer(Modifier.height(16.dp))
             }
         },
-    ) { measurables, constraints ->
-        if (measurables.isEmpty()) {
-            return@Layout layout(constraints.minWidth, 0) {}
-        }
-        val placeable = measurables.first().measure(constraints)
-        val fullHeight = placeable.height
-        if (fullHeight > 0) {
-            onHeightMeasured(fullHeight)
-        }
-        val collapsedHeight = headerOffsetPx.roundToInt().coerceIn(0, fullHeight)
-        val visibleHeight = (fullHeight - collapsedHeight).coerceAtLeast(0)
-        layout(placeable.width, visibleHeight) {
-            placeable.placeRelative(x = 0, y = -collapsedHeight)
-        }
-    }
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(brush = headerBackgroundBrush)
+            .clipToBounds(),
+        measurePolicy = { measurables, constraints ->
+            if (measurables.isEmpty()) {
+                return@Layout layout(constraints.minWidth, 0) {}
+            }
+            val placeable = measurables.first().measure(constraints)
+            val fullHeight = placeable.height
+            if (fullHeight > 0) {
+                onHeightMeasured(fullHeight)
+            }
+            val collapsedHeight = headerOffsetPx.roundToInt().coerceIn(0, fullHeight)
+            val visibleHeight = (fullHeight - collapsedHeight).coerceAtLeast(0)
+            layout(placeable.width, visibleHeight) {
+                placeable.placeRelative(x = 0, y = -collapsedHeight)
+            }
+        },
+    )
 }
 
 @Composable
@@ -1792,6 +1806,14 @@ internal fun shouldReserveHomeHubHeroSlot(
     if (showWelcome) return false
     if (isFiltering) return false
     return true
+}
+
+internal fun resolveHomeHubHeaderTintAlpha(isDarkTheme: Boolean): Float {
+    return if (isDarkTheme) 0.12f else 0.09f
+}
+
+internal fun resolveHomeHubHeaderTintSecondaryAlpha(primaryAlpha: Float): Float {
+    return (primaryAlpha * 0.5f).coerceIn(0f, 1f)
 }
 
 @Composable

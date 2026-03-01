@@ -230,4 +230,18 @@ class HomeHubHeaderBehaviorTest {
     fun `decorateGreetingText with sparkle decoration wraps greeting`() {
         decorateGreetingText("Hello", GreetingDecorationPreset.Sparkle) shouldBe "✦ Hello ✦"
     }
+    @Test
+    fun `resolveHomeHubHeaderTintAlpha returns expected dark value`() {
+        resolveHomeHubHeaderTintAlpha(isDarkTheme = true) shouldBe 0.12f
+    }
+
+    @Test
+    fun `resolveHomeHubHeaderTintAlpha returns expected light value`() {
+        resolveHomeHubHeaderTintAlpha(isDarkTheme = false) shouldBe 0.09f
+    }
+
+    @Test
+    fun `resolveHomeHubHeaderTintSecondaryAlpha scales down primary alpha`() {
+        resolveHomeHubHeaderTintSecondaryAlpha(primaryAlpha = 0.12f) shouldBe 0.06f
+    }
 }
