@@ -497,6 +497,12 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `auto-scroll starts disabled for every reader session`() {
+        assertFalse(resolveInitialAutoScrollEnabled(savedPreferenceEnabled = true))
+        assertFalse(resolveInitialAutoScrollEnabled(savedPreferenceEnabled = false))
+    }
+
+    @Test
     fun `page pagination splits long text and keeps order`() {
         val text = buildString {
             repeat(120) { append("Paragraph $it line of text.\n\n") }

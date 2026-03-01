@@ -118,8 +118,15 @@ private fun parseParagraphLikeOrContainerBlocks(
             } else {
                 null
             }
+            val normalizedSegments = trimTrailingFormattingWhitespaceFromSegments(
+                inferredLeadingIndent?.segments ?: merged,
+            )
+            if (!hasRenderableParagraphContent(normalizedSegments)) {
+                pendingSegments.clear()
+                return
+            }
             blocks += NovelRichContentBlock.Paragraph(
-                segments = inferredLeadingIndent?.segments ?: merged,
+                segments = normalizedSegments,
                 textAlign = blockTextAlign,
                 firstLineIndentEm = blockFirstLineIndentEm ?: inferredLeadingIndent?.indentEm,
             )
@@ -513,6 +520,37 @@ private fun parseLeadingWhitespaceIndentEm(text: String): Pair<Float, Int>? {
     }
     if (index == markerStart || indentEm < 0.5f) return null
     return indentEm to index
+}
+
+private fun trimTrailingFormattingWhitespaceFromSegments(
+    segments: List<NovelRichTextSegment>,
+): List<NovelRichTextSegment> {
+    if (segments.isEmpty()) return segments
+    val mutable = segments.toMutableList()
+    var index = mutable.lastIndex
+    while (index >= 0) {
+        val segment = mutable[index]
+        val trimmedText = segment.text.trimEnd(::isHtmlFormattingWhitespace)
+        if (trimmedText.isNotEmpty()) {
+            mutable[index] = segment.copy(text = trimmedText)
+            break
+        }
+        mutable.removeAt(index)
+        index--
+    }
+    return mutable
+}
+
+private fun hasRenderableParagraphContent(
+    segments: List<NovelRichTextSegment>,
+): Boolean {
+    return segments.any { segment ->
+        segment.text.any(::isRenderableParagraphChar)
+    }
+}
+
+private fun isRenderableParagraphChar(char: Char): Boolean {
+    return !isHtmlFormattingWhitespace(char) && !isRichIndentSpaceChar(char)
 }
 
 private fun isHtmlFormattingWhitespace(char: Char): Boolean {

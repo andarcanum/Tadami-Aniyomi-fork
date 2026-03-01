@@ -248,21 +248,17 @@ private fun GeneralTab(
                 update(it, { o, v -> o.copy(tapToScroll = v) }, { preferences.tapToScroll().set(it) })
             },
         )
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_auto_scroll),
-            checked = settings.autoScroll,
-            onCheckedChanged = { update(it, { o, v -> o.copy(autoScroll = v) }, { preferences.autoScroll().set(it) }) },
-        )
         LnReaderSliderRow(
-            label = stringResource(AYMR.strings.novel_reader_auto_scroll_interval),
-            valueText = settings.autoScrollInterval.toString(),
-            value = settings.autoScrollInterval.toFloat(),
-            range = 1f..60f,
-            steps = 58,
-            enabled = settings.autoScroll,
+            label = stringResource(AYMR.strings.novel_reader_auto_scroll_speed),
+            valueText = intervalToAutoScrollSpeed(settings.autoScrollInterval).toString(),
+            value = intervalToAutoScrollSpeed(settings.autoScrollInterval).toFloat(),
+            range = 1f..100f,
+            steps = 98,
+            enabled = true,
             onChange = {
+                val speed = it.toInt().coerceIn(1, 100)
                 update(
-                    it.toInt(),
+                    autoScrollSpeedToInterval(speed),
                     { o, v -> o.copy(autoScrollInterval = v) },
                     { preferences.autoScrollInterval().set(it) },
                 )
@@ -274,7 +270,7 @@ private fun GeneralTab(
             value = settings.autoScrollOffset.toFloat(),
             range = 0f..2000f,
             steps = 1999,
-            enabled = settings.autoScroll,
+            enabled = true,
             onChange = {
                 update(it.toInt(), { o, v -> o.copy(autoScrollOffset = v) }, { preferences.autoScrollOffset().set(it) })
             },

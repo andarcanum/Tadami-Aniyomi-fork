@@ -1208,6 +1208,7 @@
     <string name="novel_reader_swipe_to_prev">Свайп вниз к предыдущей главе</string>
     <string name="novel_reader_tap_to_scroll">Навигация касанием краев</string>
     <string name="novel_reader_auto_scroll">Автопрокрутка</string>
+    <string name="novel_reader_auto_scroll_speed">Скорость автопрокрутки</string>
     <string name="novel_reader_auto_scroll_interval">Интервал автопрокрутки (сек)</string>
     <string name="novel_reader_auto_scroll_offset">Смещение автопрокрутки (px)</string>
     <string name="novel_reader_prefetch_next_chapter">Предзагрузка следующей главы</string>

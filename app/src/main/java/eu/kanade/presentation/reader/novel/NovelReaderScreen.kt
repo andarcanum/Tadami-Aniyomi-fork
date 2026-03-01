@@ -260,8 +260,8 @@ fun NovelReaderScreen(
     val sourceId = state.novel.source
     val hasSourceOverride = remember(sourceId) { readerPreferences.getSourceOverride(sourceId) != null }
     var pageViewportSize by remember(state.chapter.id) { mutableStateOf(IntSize.Zero) }
-    var autoScrollEnabled by remember(state.chapter.id, state.readerSettings.autoScroll) {
-        mutableStateOf(state.readerSettings.autoScroll)
+    var autoScrollEnabled by remember(state.chapter.id) {
+        mutableStateOf(resolveInitialAutoScrollEnabled(savedPreferenceEnabled = state.readerSettings.autoScroll))
     }
     var autoScrollSpeed by remember(state.chapter.id, state.readerSettings.autoScrollInterval) {
         mutableIntStateOf(intervalToAutoScrollSpeed(state.readerSettings.autoScrollInterval))
@@ -274,20 +274,30 @@ fun NovelReaderScreen(
     }
     var shouldRestoreWebScroll by remember(state.chapter.id) { mutableStateOf(true) }
     var appliedWebCssFingerprint by remember(state.chapter.id) { mutableStateOf<String?>(null) }
-    fun updateAutoScrollPreferences(
-        enabled: Boolean? = null,
-        interval: Int? = null,
+    fun persistAutoScrollEnabledPreference(
+        enabled: Boolean,
     ) {
         if (hasSourceOverride) {
             readerPreferences.updateSourceOverride(sourceId) { override ->
                 override.copy(
-                    autoScroll = enabled ?: override.autoScroll,
-                    autoScrollInterval = interval ?: override.autoScrollInterval,
+                    autoScroll = enabled,
                 )
             }
         } else {
-            enabled?.let { readerPreferences.autoScroll().set(it) }
-            interval?.let { readerPreferences.autoScrollInterval().set(it) }
+            readerPreferences.autoScroll().set(enabled)
+        }
+    }
+    fun persistAutoScrollIntervalPreference(
+        interval: Int,
+    ) {
+        if (hasSourceOverride) {
+            readerPreferences.updateSourceOverride(sourceId) { override ->
+                override.copy(
+                    autoScrollInterval = interval,
+                )
+            }
+        } else {
+            readerPreferences.autoScrollInterval().set(interval)
         }
     }
     val context = LocalContext.current
@@ -557,6 +567,12 @@ fun NovelReaderScreen(
     val minVerticalChapterSwipeDistancePx = with(density) { 120.dp.toPx() }
     val verticalChapterSwipeHorizontalTolerancePx = with(density) { 20.dp.toPx() }
     val minVerticalChapterSwipeHoldDurationMillis = 180L
+
+    LaunchedEffect(state.chapter.id) {
+        if (state.readerSettings.autoScroll) {
+            persistAutoScrollEnabledPreference(enabled = false)
+        }
+    }
 
     // Управление System UI для fullscreen режима
     SystemUIController(
@@ -1945,7 +1961,6 @@ fun NovelReaderScreen(
                                     autoScrollEnabled = nextState.autoScrollEnabled
                                     showReaderUI = nextState.showReaderUi
                                     autoScrollExpanded = nextState.autoScrollExpanded
-                                    updateAutoScrollPreferences(enabled = nextState.autoScrollEnabled)
                                 },
                                 modifier = Modifier.padding(top = 12.dp),
                             ) {
@@ -1960,7 +1975,9 @@ fun NovelReaderScreen(
                             }
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Auto-scroll speed: $autoScrollSpeed",
+                                    text = stringResource(
+                                        AYMR.strings.novel_reader_auto_scroll_speed,
+                                    ) + ": $autoScrollSpeed",
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
                                 Slider(
@@ -1968,7 +1985,7 @@ fun NovelReaderScreen(
                                     onValueChange = {
                                         val newSpeed = it.roundToInt().coerceIn(1, 100)
                                         autoScrollSpeed = newSpeed
-                                        updateAutoScrollPreferences(
+                                        persistAutoScrollIntervalPreference(
                                             interval = autoScrollSpeedToInterval(newSpeed),
                                         )
                                     },
@@ -3856,6 +3873,9 @@ private fun WebView.applyReaderCss(
             const shouldForceAlign = $alignFlag;
             const shouldForceFirstLineIndent = $firstLineIndentFlag;
             const firstLineIndentTags = new Set(['p', 'div', 'article', 'section']);
+            const emptyBlockTags = new Set(['p', 'div', 'article', 'section', 'li', 'blockquote', 'pre']);
+            const invisibleSpaceRegex = /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g;
+            const mediaContentSelector = 'img,svg,video,canvas,iframe,picture,hr';
             const root = document.body;
             if (!root) return;
             const nodes = root.querySelectorAll('*');
@@ -3872,6 +3892,18 @@ private fun WebView.applyReaderCss(
                     tag === 'canvas' || tag === 'iframe' || tag === 'source' || tag === 'picture'
                 ) {
                     continue;
+                }
+                if (emptyBlockTags.has(tag)) {
+                    const normalizedText = (node.textContent || '')
+                        .replace(invisibleSpaceRegex, ' ')
+                        .trim();
+                    const hasMediaContent = node.querySelector(mediaContentSelector) !== null;
+                    if (!hasMediaContent && normalizedText.length === 0) {
+                        node.style.setProperty('display', 'none', 'important');
+                        node.style.setProperty('margin', '0', 'important');
+                        node.style.setProperty('padding', '0', 'important');
+                        continue;
+                    }
                 }
                 node.style.setProperty('background-color', 'transparent', 'important');
                 node.style.setProperty('color', 'var(--an-reader-fg)', 'important');
@@ -5049,6 +5081,13 @@ internal fun resolveAutoScrollUiStateOnToggle(
             autoScrollExpanded = autoScrollExpanded,
         )
     }
+}
+
+internal fun resolveInitialAutoScrollEnabled(
+    @Suppress("UNUSED_PARAMETER")
+    savedPreferenceEnabled: Boolean,
+): Boolean {
+    return false
 }
 
 internal fun resolveAutoScrollStep(

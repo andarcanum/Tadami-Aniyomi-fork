@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.widget.BasePreferenceWidget
 import eu.kanade.presentation.more.settings.widget.PrefsHorizontalPadding
+import eu.kanade.presentation.reader.novel.autoScrollSpeedToInterval
+import eu.kanade.presentation.reader.novel.intervalToAutoScrollSpeed
 import eu.kanade.presentation.reader.novel.novelReaderFonts
 import eu.kanade.presentation.reader.novel.novelReaderPresetThemes
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderChapterDiskCache
@@ -283,10 +285,9 @@ object SettingsNovelReaderScreen : SearchableSettings {
     @Composable
     private fun getNavigationGroup(prefs: NovelReaderPreferences): Preference.PreferenceGroup {
         val context = LocalContext.current
-        val autoScrollPref = prefs.autoScroll()
-        val autoScroll by autoScrollPref.collectAsState()
         val autoScrollIntervalPref = prefs.autoScrollInterval()
         val autoScrollInterval by autoScrollIntervalPref.collectAsState()
+        val autoScrollSpeed = intervalToAutoScrollSpeed(autoScrollInterval)
         val autoScrollOffsetPref = prefs.autoScrollOffset()
         val autoScrollOffset by autoScrollOffsetPref.collectAsState()
         val cacheReadChaptersPref = prefs.cacheReadChapters()
@@ -371,18 +372,14 @@ object SettingsNovelReaderScreen : SearchableSettings {
                     title = stringResource(AYMR.strings.novel_reader_rich_native_renderer_experimental),
                     subtitle = stringResource(AYMR.strings.novel_reader_rich_native_renderer_experimental_summary),
                 ),
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = autoScrollPref,
-                    title = stringResource(AYMR.strings.novel_reader_auto_scroll),
-                ),
                 Preference.PreferenceItem.SliderPreference(
-                    value = autoScrollInterval,
-                    title = stringResource(AYMR.strings.novel_reader_auto_scroll_interval),
-                    subtitle = autoScrollInterval.toString(),
-                    valueRange = 1..60,
-                    enabled = autoScroll,
+                    value = autoScrollSpeed,
+                    title = stringResource(AYMR.strings.novel_reader_auto_scroll_speed),
+                    subtitle = autoScrollSpeed.toString(),
+                    valueRange = 1..100,
+                    enabled = true,
                     onValueChanged = {
-                        autoScrollIntervalPref.set(it)
+                        autoScrollIntervalPref.set(autoScrollSpeedToInterval(it.coerceIn(1, 100)))
                         true
                     },
                 ),
@@ -391,7 +388,7 @@ object SettingsNovelReaderScreen : SearchableSettings {
                     title = stringResource(AYMR.strings.novel_reader_auto_scroll_offset),
                     subtitle = autoScrollOffset.toString(),
                     valueRange = 0..2000,
-                    enabled = autoScroll,
+                    enabled = true,
                     onValueChanged = {
                         autoScrollOffsetPref.set(it)
                         true
