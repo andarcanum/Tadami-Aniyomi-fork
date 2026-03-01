@@ -22,22 +22,31 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Checkout lnreader-plugins index and scripts
+      - name: Checkout lnreader-plugins published artifacts
         run: |
-          git clone --depth 1 https://github.com/andreykolesnikov/lnreader-plugins.git lnreader-plugins
+          repo="https://github.com/andreykolesnikov/lnreader-plugins.git"
+          plugin_branch="$(git ls-remote --heads "$repo" "refs/heads/plugins/*" | awk '{print $2}' | sed 's#refs/heads/##' | sort -V | tail -n1)"
+          if [ -z "$plugin_branch" ]; then
+            echo "::error::No plugins/* branch found in $repo"
+            exit 1
+          fi
+          echo "Using lnreader-plugins branch: $plugin_branch"
+          git clone --depth 1 --branch "$plugin_branch" "$repo" lnreader-plugins
+          test -f "lnreader-plugins/.dist/plugins.min.json" || (echo "::error::Missing lnreader-plugins/.dist/plugins.min.json" && exit 1)
+          test -d "lnreader-plugins/.js/src/plugins" || (echo "::error::Missing lnreader-plugins/.js/src/plugins" && exit 1)
 
       - name: Run compatibility check
         run: |
           node tools/compat/check-lnreader-plugins.js \
             --index "lnreader-plugins/.dist/plugins.min.json" \
-            --plugins-dir "lnreader-plugins/.js/plugins" \
+            --plugins-dir "lnreader-plugins/.js/src/plugins" \
             --output "docs/reports/compat-data/nightly-lnreader-plugins-compat.json"
 
       - name: Run live smoke check
         run: |
           node tools/compat/live-smoke-lnreader-plugins.js \
             --index "lnreader-plugins/.dist/plugins.min.json" \
-            --plugins-dir "lnreader-plugins/.js/plugins" \
+            --plugins-dir "lnreader-plugins/.js/src/plugins" \
             --output "docs/reports/compat-data/nightly-lnreader-plugins-live-smoke.json" \
             --timeout-ms 20000 \
             --concurrency 8
