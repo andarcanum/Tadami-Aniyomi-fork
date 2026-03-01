@@ -560,6 +560,7 @@ fun NovelReaderScreen(
         fullScreenMode = state.readerSettings.fullScreenMode,
         keepScreenOn = state.readerSettings.keepScreenOn,
         showReaderUi = showReaderUI,
+        defaultLightStatusBars = context.resources.getBoolean(R.bool.lightStatusBar),
     )
 
     // Volume Buttons Handler
@@ -5158,8 +5159,10 @@ private fun SystemUIController(
     fullScreenMode: Boolean,
     keepScreenOn: Boolean,
     showReaderUi: Boolean,
+    defaultLightStatusBars: Boolean,
 ) {
     val view = LocalView.current
+    
     val capturedSystemBarsState = remember(view) { mutableStateOf<ReaderSystemBarsState?>(null) }
     DisposableEffect(view) {
         val activity = view.context.findActivity()
@@ -5199,6 +5202,7 @@ private fun SystemUIController(
             showReaderUi = showReaderUi,
             fullScreenMode = fullScreenMode,
             base = baseSystemBarsState,
+            defaultLightStatusBars = defaultLightStatusBars,
         )
 
         // Keep Screen On
@@ -5208,14 +5212,15 @@ private fun SystemUIController(
             window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
 
-        insetsController.restoreReaderSystemBarsState(activeSystemBarsState)
-
         // Fullscreen Mode
         if (shouldHideSystemBars(fullScreenMode = fullScreenMode, showReaderUi = showReaderUi)) {
             insetsController.hide(WindowInsetsCompat.Type.systemBars())
         } else {
             insetsController.show(WindowInsetsCompat.Type.systemBars())
         }
+        // Re-apply desired icon appearance after show/hide, as showing bars can
+        // transiently restore prior icon mode on first reveal.
+        insetsController.restoreReaderSystemBarsState(activeSystemBarsState)
     }
 }
 
@@ -5236,10 +5241,24 @@ internal fun resolveActiveReaderSystemBarsState(
     showReaderUi: Boolean,
     fullScreenMode: Boolean,
     base: ReaderSystemBarsState,
+    defaultLightStatusBars: Boolean,
 ): ReaderSystemBarsState {
-    if (!fullScreenMode || showReaderUi) return base
+    if (showReaderUi) {
+        return base.copy(
+            isLightStatusBars = defaultLightStatusBars,
+            isLightNavigationBars = defaultLightStatusBars,
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE,
+        )
+    }
+    if (!fullScreenMode) {
+        return base.copy(
+            isLightStatusBars = defaultLightStatusBars,
+            isLightNavigationBars = defaultLightStatusBars,
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE,
+        )
+    }
     return base.copy(
-        isLightStatusBars = false,
+        isLightStatusBars = false, // When fullscreen, transient bars should have light icons
         isLightNavigationBars = false,
         systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE,
     )

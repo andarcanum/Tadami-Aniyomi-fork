@@ -55,4 +55,16 @@ class MainActivityStatusBarStyleSelectionTest {
             isLightStatusBarBackground = false,
         ) shouldBe MainStatusBarStyleMode.DARK
     }
+
+    @Test
+    fun `main activity edge-to-edge updates are skipped for novel reader screen`() {
+        shouldMainActivityApplyEdgeToEdge(
+            eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen(chapterId = 1L),
+        ) shouldBe false
+    }
+
+    @Test
+    fun `main activity edge-to-edge updates stay enabled for regular screens`() {
+        shouldMainActivityApplyEdgeToEdge(Any()) shouldBe true
+    }
 }

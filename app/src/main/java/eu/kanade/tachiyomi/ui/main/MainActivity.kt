@@ -106,6 +106,7 @@ import eu.kanade.tachiyomi.ui.more.NewUpdateScreen
 import eu.kanade.tachiyomi.ui.more.OnboardingScreen
 import eu.kanade.tachiyomi.ui.player.ExternalIntents
 import eu.kanade.tachiyomi.ui.player.PlayerActivity
+import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
 import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.util.system.isNavigationBarNeedsScrim
 import eu.kanade.tachiyomi.util.system.openInBrowser
@@ -211,6 +212,7 @@ class MainActivity : BaseActivity() {
                 ),
             ) { navigator ->
                 LaunchedEffect(isSystemInDarkTheme, statusBarBackgroundColor, navigator.lastItem, isAurora) {
+                    if (!shouldMainActivityApplyEdgeToEdge(navigator.lastItem)) return@LaunchedEffect
                     // Draw edge-to-edge and set system bars color to transparent
                     val lightStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.BLACK)
                     val transparentLightStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
@@ -792,6 +794,11 @@ internal fun resolveMainStatusBarStyleMode(
     } else {
         MainStatusBarStyleMode.DARK
     }
+}
+
+internal fun shouldMainActivityApplyEdgeToEdge(screen: Any?): Boolean {
+    // Novel reader controls system bar appearance on its own.
+    return screen !is NovelReaderScreen
 }
 
 // Splash screen
