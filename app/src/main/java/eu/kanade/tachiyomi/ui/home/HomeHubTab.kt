@@ -87,14 +87,17 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -410,6 +413,7 @@ private data class HomeHubUiState(
     val userName: String,
     val userAvatar: String,
     val greeting: dev.icerock.moko.resources.StringResource,
+    val greetingReady: Boolean,
     val isLoading: Boolean,
     val showWelcome: Boolean,
 )
@@ -556,6 +560,11 @@ object HomeHubTab : Tab {
             HomeHubSection.Anime -> Triple(animeState.userName, animeState.userAvatar, animeState.greeting)
             HomeHubSection.Manga -> Triple(mangaState.userName, mangaState.userAvatar, mangaState.greeting)
             HomeHubSection.Novel -> Triple(novelState.userName, novelState.userAvatar, novelState.greeting)
+        }
+        val headerGreetingReady = when (profileSection) {
+            HomeHubSection.Anime -> animeState.greetingReady
+            HomeHubSection.Manga -> mangaState.greetingReady
+            HomeHubSection.Novel -> novelState.greetingReady
         }
         val showNameEditHint = shouldShowNicknameEditHint(
             currentName = headerUserName,
@@ -748,7 +757,7 @@ object HomeHubTab : Tab {
                     userAvatar = headerUserAvatar,
                     nicknameStyle = nicknameStyle,
                     greetingStyle = greetingStyle,
-                    showGreeting = showHomeGreeting,
+                    showGreeting = showHomeGreeting && headerGreetingReady,
                     showNameEditHint = showNameEditHint,
                     currentStreak = currentStreak,
                     showStreak = showHomeStreak,
@@ -796,6 +805,7 @@ private fun HomeHubScreenModel.State.toUiState(): HomeHubUiState {
         userName = userName,
         userAvatar = userAvatar,
         greeting = greeting,
+        greetingReady = greetingReady,
         isLoading = isLoading,
         showWelcome = showWelcome,
     )
@@ -831,6 +841,7 @@ private fun MangaHomeHubScreenModel.State.toUiState(): HomeHubUiState {
         userName = userName,
         userAvatar = userAvatar,
         greeting = greeting,
+        greetingReady = greetingReady,
         isLoading = isLoading,
         showWelcome = showWelcome,
     )
@@ -865,6 +876,7 @@ private fun NovelHomeHubScreenModel.State.toUiState(): HomeHubUiState {
         userName = userName,
         userAvatar = userAvatar,
         greeting = greeting,
+        greetingReady = greetingReady,
         isLoading = isLoading,
         showWelcome = showWelcome,
     )
@@ -993,33 +1005,72 @@ private fun HomeHubProfileHeaderCanvas(
     val colors = AuroraTheme.colors
     val density = LocalDensity.current
     val fontScale = density.fontScale.coerceIn(1f, 1.6f)
-    val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     // Use the classic (phone) header layout on tablets too.
     val isTabletHeaderLayout = false
     val elementSizes = remember { defaultHomeHeaderElementPixelSizes() }
-    var greetingRequestedLineCount by remember(
-        greetingText,
+    val greetingFontFamily = greetingStyle.font.fontRes?.let { FontFamily(Font(it)) }
+    val decoratedGreetingText = remember(greetingText, greetingStyle.decoration) {
+        decorateGreetingText(greetingText, greetingStyle.decoration)
+    }
+    val greetingBaseTextStyle = MaterialTheme.typography.labelMedium
+    val greetingTextStyle = remember(
+        greetingBaseTextStyle,
         greetingStyle.fontSize,
         greetingStyle.italic,
-        greetingStyle.font,
-        greetingStyle.decoration,
-        showGreeting,
+        greetingFontFamily,
     ) {
-        mutableIntStateOf(1)
+        greetingBaseTextStyle.copy(
+            fontSize = greetingStyle.fontSize.sp,
+            lineHeight = (greetingStyle.fontSize + 3).sp,
+            fontStyle = if (greetingStyle.italic) FontStyle.Italic else FontStyle.Normal,
+            fontFamily = greetingFontFamily,
+            lineBreak = LineBreak.Heading,
+        )
     }
-    val greetingLineLimit = resolveGreetingLineLimit(greetingRequestedLineCount)
-    val headerCanvasHeightDp = resolveHomeHeaderCanvasHeightDp(greetingLineLimit).dp
+    val textMeasurer = rememberTextMeasurer()
 
-    BoxWithConstraints(
-        modifier = modifier.height(headerCanvasHeightDp),
-    ) {
-        val containerWidthPx = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
-        val containerHeightPx = with(density) { maxHeight.toPx() }.coerceAtLeast(1f)
-        val designWidthPx = layoutSpec.canvas.width.coerceAtLeast(1f)
-        val designHeightPx = resolveHomeHeaderCanvasHeightDp(greetingLineLimit).toFloat().coerceAtLeast(1f)
-        val scaleX = containerWidthPx / designWidthPx
-        val scaleY = containerHeightPx / designHeightPx
-        val defaultLayoutSpec = remember(layoutSpec.canvas) { HomeHeaderLayoutSpec.default(layoutSpec.canvas) }
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val preMeasureWidthPx = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
+        val preMeasureScaleX = preMeasureWidthPx / layoutSpec.canvas.width.coerceAtLeast(1f)
+        val greetingBaseWidthPx = elementSizes.getValue(HomeHeaderLayoutElement.Greeting).width
+        val greetingMeasureWidthPx = (greetingBaseWidthPx * preMeasureScaleX).toInt().coerceAtLeast(1)
+        val preMeasuredGreetingLayout = remember(
+            decoratedGreetingText,
+            greetingTextStyle,
+            greetingMeasureWidthPx,
+        ) {
+            textMeasurer.measure(
+                text = AnnotatedString(decoratedGreetingText),
+                style = greetingTextStyle,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis,
+                constraints = Constraints(maxWidth = greetingMeasureWidthPx),
+            )
+        }
+        val measuredGreetingLineCount = if (showGreeting) {
+            if (preMeasuredGreetingLayout.hasVisualOverflow) {
+                4
+            } else {
+                preMeasuredGreetingLayout.lineCount.coerceAtLeast(1)
+            }
+        } else {
+            1
+        }
+        val greetingLineLimit = resolveGreetingLineLimit(measuredGreetingLineCount)
+        val headerCanvasHeightDp = resolveHomeHeaderCanvasHeightDp(greetingLineLimit).dp
+
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(headerCanvasHeightDp),
+        ) {
+            val containerWidthPx = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
+            val containerHeightPx = with(density) { maxHeight.toPx() }.coerceAtLeast(1f)
+            val designWidthPx = layoutSpec.canvas.width.coerceAtLeast(1f)
+            val designHeightPx = resolveHomeHeaderCanvasHeightDp(greetingLineLimit).toFloat().coerceAtLeast(1f)
+            val scaleX = containerWidthPx / designWidthPx
+            val scaleY = containerHeightPx / designHeightPx
+            val defaultLayoutSpec = remember(layoutSpec.canvas) { HomeHeaderLayoutSpec.default(layoutSpec.canvas) }
 
         fun elementSizeFor(element: HomeHeaderLayoutElement): HomeHeaderPixelSize {
             val baseSize = elementSizes.getValue(element)
@@ -1238,52 +1289,32 @@ private fun HomeHubProfileHeaderCanvas(
             return slotModifier to contentModifier
         }
 
-        if (showGreeting) {
-            val (slotModifier, _) = frameFor(HomeHeaderLayoutElement.Greeting)
-            val greetingFontFamily = greetingStyle.font.fontRes?.let { FontFamily(Font(it)) }
-            val greetingColor = resolveNicknameColor(greetingStyle.color, greetingStyle.customColorHex, colors)
-            Box(
-                modifier = slotModifier.clickable(onClick = onGreetingClick),
-                contentAlignment = when {
-                    isTabletHeaderLayout -> Alignment.Center
-                    else -> Alignment.BottomCenter
-                },
-            ) {
-                Text(
-                    text = decorateGreetingText(greetingText, greetingStyle.decoration),
-                    modifier = Modifier.fillMaxWidth(),
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontSize = greetingStyle.fontSize.sp,
-                        lineHeight = (greetingStyle.fontSize + 3).sp,
-                        fontStyle = if (greetingStyle.italic) FontStyle.Italic else FontStyle.Normal,
-                        fontFamily = greetingFontFamily,
-                        lineBreak = LineBreak.Heading,
-                    ),
-                    color = greetingColor.copy(alpha = greetingStyle.alpha.coerceIn(10, 100) / 100f),
-                    fontWeight = FontWeight.Medium,
-                    maxLines = if (isTabletHeaderLayout) 2 else greetingLineLimit,
-                    textAlign = when {
-                        isTabletHeaderLayout -> TextAlign.Center
-                        greetingAlignRight -> TextAlign.End
-                        else -> TextAlign.Start
+            if (showGreeting) {
+                val (slotModifier, _) = frameFor(HomeHeaderLayoutElement.Greeting)
+                val greetingColor = resolveNicknameColor(greetingStyle.color, greetingStyle.customColorHex, colors)
+                Box(
+                    modifier = slotModifier.clickable(onClick = onGreetingClick),
+                    contentAlignment = when {
+                        isTabletHeaderLayout -> Alignment.Center
+                        else -> Alignment.BottomCenter
                     },
-                    overflow = TextOverflow.Ellipsis,
-                    onTextLayout = { layoutResult ->
-                        if (!isTabletHeaderLayout) {
-                            val visibleLineCount = layoutResult.lineCount.coerceAtLeast(1)
-                            when {
-                                layoutResult.hasVisualOverflow && greetingLineLimit < 4 -> {
-                                    greetingRequestedLineCount = greetingLineLimit + 1
-                                }
-                                !layoutResult.hasVisualOverflow && visibleLineCount < greetingLineLimit -> {
-                                    greetingRequestedLineCount = visibleLineCount
-                                }
-                            }
-                        }
-                    },
-                )
+                ) {
+                    Text(
+                        text = decoratedGreetingText,
+                        modifier = Modifier.fillMaxWidth(),
+                        style = greetingTextStyle,
+                        color = greetingColor.copy(alpha = greetingStyle.alpha.coerceIn(10, 100) / 100f),
+                        fontWeight = FontWeight.Medium,
+                        maxLines = if (isTabletHeaderLayout) 2 else greetingLineLimit,
+                        textAlign = when {
+                            isTabletHeaderLayout -> TextAlign.Center
+                            greetingAlignRight -> TextAlign.End
+                            else -> TextAlign.Start
+                        },
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
-        }
 
         run {
             val (slotModifier, contentModifier) = frameFor(HomeHeaderLayoutElement.Nickname)
@@ -1475,6 +1506,7 @@ private fun HomeHubProfileHeaderCanvas(
             }
         }
     }
+}
 }
 
 @Composable

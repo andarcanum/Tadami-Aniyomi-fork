@@ -46,6 +46,7 @@ class NovelHomeHubScreenModel(
         val userName: String = "Reader",
         val userAvatar: String = "",
         val greeting: StringResource = AYMR.strings.aurora_welcome_back,
+        val greetingReady: Boolean = false,
         val isInitialized: Boolean = false,
         val isLoading: Boolean = true,
     ) {
@@ -91,7 +92,7 @@ class NovelHomeHubScreenModel(
             val greetingSelection = HomeGreetingSession.resolveGreeting(
                 userProfilePreferences = userProfilePreferences,
             )
-            mutableState.update { it.copy(greeting = greetingSelection.greeting) }
+            mutableState.update { it.copy(greeting = greetingSelection.greeting, greetingReady = true) }
         }
     }
 

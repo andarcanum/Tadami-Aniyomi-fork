@@ -49,6 +49,7 @@ class HomeHubScreenModel(
         val userName: String = "Зритель",
         val userAvatar: String = "",
         val greeting: StringResource = AYMR.strings.aurora_welcome_back,
+        val greetingReady: Boolean = false,
         val isInitialized: Boolean = false,
         val isLoading: Boolean = true,
     ) {
@@ -113,6 +114,7 @@ class HomeHubScreenModel(
                     userName = cached.userName,
                     userAvatar = cached.userAvatar,
                     greeting = greetingSelection.greeting,
+                    greetingReady = true,
                     isInitialized = cached.isInitialized,
                     isLoading = false,
                 )
