@@ -42,7 +42,7 @@ internal fun clampHomeHeaderPixelPoint(
 internal fun defaultHomeHeaderElementPixelSizes(): Map<HomeHeaderLayoutElement, HomeHeaderPixelSize> {
     return mapOf(
         // Expanded to reach the streak/counter area so longer greetings fit without early ellipsis.
-        HomeHeaderLayoutElement.Greeting to HomeHeaderPixelSize(width = 280f, height = 32f),
+        HomeHeaderLayoutElement.Greeting to HomeHeaderPixelSize(width = 280f, height = 48f),
         HomeHeaderLayoutElement.Nickname to HomeHeaderPixelSize(width = 248f, height = 30f),
         HomeHeaderLayoutElement.Avatar to HomeHeaderPixelSize(width = 48f, height = 48f),
         HomeHeaderLayoutElement.Streak to HomeHeaderPixelSize(width = 68f, height = 22f),

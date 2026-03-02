@@ -257,6 +257,42 @@ internal fun shouldFillNicknameRowSpace(showNameEditHint: Boolean): Boolean {
     return !showNameEditHint
 }
 
+private const val HOME_HEADER_CANVAS_HEIGHT_ONE_LINE_DP = 72
+private const val HOME_HEADER_CANVAS_HEIGHT_TWO_LINES_DP = 76
+private const val HOME_HEADER_CANVAS_HEIGHT_THREE_LINES_DP = 80
+private const val HOME_HEADER_CANVAS_HEIGHT_FOUR_LINES_DP = 88
+
+internal fun resolveGreetingLineLimit(measuredLineCount: Int): Int {
+    return measuredLineCount.coerceIn(1, 4)
+}
+
+internal fun resolveHomeHeaderCanvasHeightDp(lineLimit: Int): Int {
+    return when (lineLimit.coerceIn(1, 4)) {
+        1 -> HOME_HEADER_CANVAS_HEIGHT_ONE_LINE_DP
+        2 -> HOME_HEADER_CANVAS_HEIGHT_TWO_LINES_DP
+        3 -> HOME_HEADER_CANVAS_HEIGHT_THREE_LINES_DP
+        else -> HOME_HEADER_CANVAS_HEIGHT_FOUR_LINES_DP
+    }
+}
+
+internal fun resolveGreetingSlotHeightPx(lineLimit: Int): Float {
+    return when (lineLimit.coerceIn(1, 4)) {
+        1 -> 24f
+        2 -> 36f
+        3 -> 48f
+        else -> 56f
+    }
+}
+
+internal fun resolveNicknameYForGreetingOverlap(
+    nicknameY: Float,
+    greetingY: Float,
+    greetingHeight: Float,
+    minGap: Float = 2f,
+): Float {
+    return maxOf(nicknameY, greetingY + greetingHeight + minGap)
+}
+
 private val greetingDecorators = listOf("✦", "✧", "◆", "◇")
 
 internal enum class GreetingDecorationPreset(val key: String) {
@@ -880,8 +916,8 @@ private fun HomeHubPinnedHeader(
                     .padding(horizontal = 16.dp),
             ) {
                 Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-                Spacer(Modifier.height(5.dp))
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(3.dp))
+                Spacer(Modifier.height(7.dp))
                 HomeHubProfileHeaderCanvas(
                     modifier = Modifier.fillMaxWidth(),
                     layoutSpec = homeHeaderLayout,
@@ -961,20 +997,41 @@ private fun HomeHubProfileHeaderCanvas(
     // Use the classic (phone) header layout on tablets too.
     val isTabletHeaderLayout = false
     val elementSizes = remember { defaultHomeHeaderElementPixelSizes() }
+    var greetingRequestedLineCount by remember(
+        greetingText,
+        greetingStyle.fontSize,
+        greetingStyle.italic,
+        greetingStyle.font,
+        greetingStyle.decoration,
+        showGreeting,
+    ) {
+        mutableIntStateOf(1)
+    }
+    val greetingLineLimit = resolveGreetingLineLimit(greetingRequestedLineCount)
+    val headerCanvasHeightDp = resolveHomeHeaderCanvasHeightDp(greetingLineLimit).dp
 
     BoxWithConstraints(
-        modifier = modifier.height(72.dp),
+        modifier = modifier.height(headerCanvasHeightDp),
     ) {
-        val widthPx = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
-        val heightPx = with(density) { maxHeight.toPx() }.coerceAtLeast(1f)
+        val containerWidthPx = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
+        val containerHeightPx = with(density) { maxHeight.toPx() }.coerceAtLeast(1f)
         val designWidthPx = layoutSpec.canvas.width.coerceAtLeast(1f)
-        val designHeightPx = layoutSpec.canvas.height.coerceAtLeast(1f)
-        val scaleX = widthPx / designWidthPx
-        val scaleY = heightPx / designHeightPx
+        val designHeightPx = resolveHomeHeaderCanvasHeightDp(greetingLineLimit).toFloat().coerceAtLeast(1f)
+        val scaleX = containerWidthPx / designWidthPx
+        val scaleY = containerHeightPx / designHeightPx
         val defaultLayoutSpec = remember(layoutSpec.canvas) { HomeHeaderLayoutSpec.default(layoutSpec.canvas) }
 
+        fun elementSizeFor(element: HomeHeaderLayoutElement): HomeHeaderPixelSize {
+            val baseSize = elementSizes.getValue(element)
+            return if (element == HomeHeaderLayoutElement.Greeting) {
+                baseSize.copy(height = resolveGreetingSlotHeightPx(greetingLineLimit))
+            } else {
+                baseSize
+            }
+        }
+
         fun pointFor(spec: HomeHeaderLayoutSpec, element: HomeHeaderLayoutElement): HomeHeaderPixelPoint {
-            val size = elementSizes.getValue(element)
+            val size = elementSizeFor(element)
             return clampHomeHeaderPixelPoint(
                 point = HomeHeaderPixelPoint(
                     x = spec.positionOf(element).x,
@@ -1010,12 +1067,12 @@ private fun HomeHubProfileHeaderCanvas(
         }
 
         fun frameFor(element: HomeHeaderLayoutElement): Pair<Modifier, Modifier> {
-            val size = elementSizes.getValue(element)
+            val size = elementSizeFor(element)
             if (isTabletHeaderLayout) {
-                val greetingSize = elementSizes.getValue(HomeHeaderLayoutElement.Greeting)
-                val nicknameSize = elementSizes.getValue(HomeHeaderLayoutElement.Nickname)
-                val avatarSize = elementSizes.getValue(HomeHeaderLayoutElement.Avatar)
-                val streakSize = elementSizes.getValue(HomeHeaderLayoutElement.Streak)
+                val greetingSize = elementSizeFor(HomeHeaderLayoutElement.Greeting)
+                val nicknameSize = elementSizeFor(HomeHeaderLayoutElement.Nickname)
+                val avatarSize = elementSizeFor(HomeHeaderLayoutElement.Avatar)
+                val streakSize = elementSizeFor(HomeHeaderLayoutElement.Streak)
 
                 val horizontalPadding = 8.dp
                 // Tablet preset tuned from the visual editor payload (720x72 baseline),
@@ -1153,9 +1210,25 @@ private fun HomeHubProfileHeaderCanvas(
 
             val point = basePointFor(element)
             val xPx = point.x * scaleX
-            val yPx = point.y * scaleY
+            val yPxRaw = point.y * scaleY
             val widthDp = with(density) { (size.width * scaleX).toDp() }
             val heightDp = with(density) { (size.height * scaleY).toDp() }
+            val yPxAdjusted = if (element == HomeHeaderLayoutElement.Nickname && showGreeting) {
+                val greetingPoint = basePointFor(HomeHeaderLayoutElement.Greeting)
+                val greetingSize = elementSizeFor(HomeHeaderLayoutElement.Greeting)
+                resolveNicknameYForGreetingOverlap(
+                    nicknameY = yPxRaw,
+                    greetingY = greetingPoint.y * scaleY,
+                    greetingHeight = greetingSize.height * scaleY,
+                )
+            } else {
+                yPxRaw
+            }
+            val elementHeightPx = size.height * scaleY
+            val yPx = yPxAdjusted.coerceIn(
+                0f,
+                (containerHeightPx - elementHeightPx).coerceAtLeast(0f),
+            )
 
             val slotModifier = Modifier
                 .offset { IntOffset(xPx.roundToInt(), yPx.roundToInt()) }
@@ -1166,20 +1239,19 @@ private fun HomeHubProfileHeaderCanvas(
         }
 
         if (showGreeting) {
-            val (slotModifier, contentModifier) = frameFor(HomeHeaderLayoutElement.Greeting)
+            val (slotModifier, _) = frameFor(HomeHeaderLayoutElement.Greeting)
             val greetingFontFamily = greetingStyle.font.fontRes?.let { FontFamily(Font(it)) }
             val greetingColor = resolveNicknameColor(greetingStyle.color, greetingStyle.customColorHex, colors)
             Box(
-                modifier = slotModifier,
+                modifier = slotModifier.clickable(onClick = onGreetingClick),
                 contentAlignment = when {
                     isTabletHeaderLayout -> Alignment.Center
-                    greetingAlignRight -> Alignment.TopEnd
-                    else -> Alignment.TopStart
+                    else -> Alignment.BottomCenter
                 },
             ) {
                 Text(
                     text = decorateGreetingText(greetingText, greetingStyle.decoration),
-                    modifier = contentModifier.clickable(onClick = onGreetingClick),
+                    modifier = Modifier.fillMaxWidth(),
                     style = MaterialTheme.typography.labelMedium.copy(
                         fontSize = greetingStyle.fontSize.sp,
                         lineHeight = (greetingStyle.fontSize + 3).sp,
@@ -1189,13 +1261,26 @@ private fun HomeHubProfileHeaderCanvas(
                     ),
                     color = greetingColor.copy(alpha = greetingStyle.alpha.coerceIn(10, 100) / 100f),
                     fontWeight = FontWeight.Medium,
-                    maxLines = if (isTabletHeaderLayout) 2 else 2,
+                    maxLines = if (isTabletHeaderLayout) 2 else greetingLineLimit,
                     textAlign = when {
                         isTabletHeaderLayout -> TextAlign.Center
                         greetingAlignRight -> TextAlign.End
                         else -> TextAlign.Start
                     },
                     overflow = TextOverflow.Ellipsis,
+                    onTextLayout = { layoutResult ->
+                        if (!isTabletHeaderLayout) {
+                            val visibleLineCount = layoutResult.lineCount.coerceAtLeast(1)
+                            when {
+                                layoutResult.hasVisualOverflow && greetingLineLimit < 4 -> {
+                                    greetingRequestedLineCount = greetingLineLimit + 1
+                                }
+                                !layoutResult.hasVisualOverflow && visibleLineCount < greetingLineLimit -> {
+                                    greetingRequestedLineCount = visibleLineCount
+                                }
+                            }
+                        }
+                    },
                 )
             }
         }
