@@ -16,6 +16,9 @@ data class GeminiTranslationParams(
     val topK: Int,
     val promptMode: GeminiPromptMode,
     val promptModifiers: String,
+    val provider: NovelTranslationProvider = NovelTranslationProvider.GEMINI,
+    val privateUnlocked: Boolean = false,
+    val privatePythonLikeMode: Boolean = false,
 )
 
 internal data class GeminiTranslationCacheEntry(

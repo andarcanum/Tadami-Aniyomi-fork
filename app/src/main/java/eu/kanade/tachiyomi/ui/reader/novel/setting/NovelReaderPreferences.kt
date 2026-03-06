@@ -65,7 +65,7 @@ data class NovelReaderSettings(
     // Gemini Translation
     val geminiEnabled: Boolean = false,
     val geminiApiKey: String = "",
-    val geminiModel: String = "gemini-2.5-flash",
+    val geminiModel: String = "gemini-3.1-flash-lite-preview",
     val geminiBatchSize: Int = 40,
     val geminiConcurrency: Int = 2,
     val geminiDisableCache: Boolean = false,
@@ -84,6 +84,8 @@ data class NovelReaderSettings(
     val geminiPromptModifiers: String = "",
     val geminiAutoTranslateEnglishSource: Boolean = false,
     val geminiPrefetchNextChapterTranslation: Boolean = false,
+    val geminiPrivateUnlocked: Boolean = false,
+    val geminiPrivatePythonLikeMode: Boolean = false,
     val translationProvider: NovelTranslationProvider = NovelTranslationProvider.GEMINI,
     val airforceBaseUrl: String = "https://api.airforce",
     val airforceApiKey: String = "",
@@ -138,6 +140,7 @@ enum class NovelTranslationStylePreset {
 
 enum class NovelTranslationProvider {
     GEMINI,
+    GEMINI_PRIVATE,
     AIRFORCE,
     OPENROUTER,
     DEEPSEEK,
@@ -220,6 +223,8 @@ data class NovelReaderOverride(
     val geminiPromptModifiers: String? = null,
     val geminiAutoTranslateEnglishSource: Boolean? = null,
     val geminiPrefetchNextChapterTranslation: Boolean? = null,
+    val geminiPrivateUnlocked: Boolean? = null,
+    val geminiPrivatePythonLikeMode: Boolean? = null,
     val translationProvider: NovelTranslationProvider? = null,
     val airforceBaseUrl: String? = null,
     val airforceApiKey: String? = null,
@@ -336,7 +341,7 @@ class NovelReaderPreferences(
 
     fun geminiApiKey() = preferenceStore.getString("novel_reader_gemini_api_key", "")
 
-    fun geminiModel() = preferenceStore.getString("novel_reader_gemini_model", "gemini-2.5-flash")
+    fun geminiModel() = preferenceStore.getString("novel_reader_gemini_model", "gemini-3.1-flash-lite-preview")
 
     fun geminiBatchSize() = preferenceStore.getInt("novel_reader_gemini_batch_size", 40)
 
@@ -381,6 +386,10 @@ class NovelReaderPreferences(
 
     fun geminiPrefetchNextChapterTranslation() =
         preferenceStore.getBoolean("novel_reader_gemini_prefetch_next_chapter_translation", false)
+
+    fun geminiPrivateUnlocked() = preferenceStore.getBoolean("novel_reader_gemini_private_unlocked", false)
+
+    fun geminiPrivatePythonLikeMode() = preferenceStore.getBoolean("novel_reader_gemini_private_python_like_mode", false)
 
     fun translationProvider() =
         preferenceStore.getEnum("novel_reader_translation_provider", NovelTranslationProvider.GEMINI)
@@ -496,6 +505,7 @@ class NovelReaderPreferences(
                 geminiPromptModifiers = geminiPromptModifiers().get(),
                 geminiAutoTranslateEnglishSource = geminiAutoTranslateEnglishSource().get(),
                 geminiPrefetchNextChapterTranslation = geminiPrefetchNextChapterTranslation().get(),
+                geminiPrivatePythonLikeMode = geminiPrivatePythonLikeMode().get(),
                 translationProvider = translationProvider().get(),
                 airforceBaseUrl = airforceBaseUrl().get(),
                 airforceApiKey = airforceApiKey().get(),
@@ -584,6 +594,9 @@ class NovelReaderPreferences(
             override?.geminiAutoTranslateEnglishSource ?: geminiAutoTranslateEnglishSource().get(),
             geminiPrefetchNextChapterTranslation =
             override?.geminiPrefetchNextChapterTranslation ?: geminiPrefetchNextChapterTranslation().get(),
+            geminiPrivateUnlocked = geminiPrivateUnlocked().get(),
+            geminiPrivatePythonLikeMode =
+            override?.geminiPrivatePythonLikeMode ?: geminiPrivatePythonLikeMode().get(),
             translationProvider = override?.translationProvider ?: translationProvider().get(),
             airforceBaseUrl = override?.airforceBaseUrl ?: airforceBaseUrl().get(),
             airforceApiKey = override?.airforceApiKey ?: airforceApiKey().get(),
@@ -723,6 +736,8 @@ class NovelReaderPreferences(
             geminiPromptModifiers().changes(),
             geminiAutoTranslateEnglishSource().changes(),
             geminiPrefetchNextChapterTranslation().changes(),
+            geminiPrivateUnlocked().changes(),
+            geminiPrivatePythonLikeMode().changes(),
             translationProvider().changes(),
             airforceBaseUrl().changes(),
             airforceApiKey().changes(),
@@ -756,16 +771,18 @@ class NovelReaderPreferences(
                 promptModifiers = values[18] as String,
                 autoTranslateEnglishSource = values[19] as Boolean,
                 prefetchNextChapterTranslation = values[20] as Boolean,
-                translationProvider = values[21] as NovelTranslationProvider,
-                airforceBaseUrl = values[22] as String,
-                airforceApiKey = values[23] as String,
-                airforceModel = values[24] as String,
-                openRouterBaseUrl = values[25] as String,
-                openRouterApiKey = values[26] as String,
-                openRouterModel = values[27] as String,
-                deepSeekBaseUrl = values[28] as String,
-                deepSeekApiKey = values[29] as String,
-                deepSeekModel = values[30] as String,
+                privateUnlocked = values[21] as Boolean,
+                privatePythonLikeMode = values[22] as Boolean,
+                translationProvider = values[23] as NovelTranslationProvider,
+                airforceBaseUrl = values[24] as String,
+                airforceApiKey = values[25] as String,
+                airforceModel = values[26] as String,
+                openRouterBaseUrl = values[27] as String,
+                openRouterApiKey = values[28] as String,
+                openRouterModel = values[29] as String,
+                deepSeekBaseUrl = values[30] as String,
+                deepSeekApiKey = values[31] as String,
+                deepSeekModel = values[32] as String,
             )
         }
 
@@ -850,6 +867,9 @@ class NovelReaderPreferences(
                 override?.geminiAutoTranslateEnglishSource ?: gemini.autoTranslateEnglishSource,
                 geminiPrefetchNextChapterTranslation =
                 override?.geminiPrefetchNextChapterTranslation ?: gemini.prefetchNextChapterTranslation,
+                geminiPrivateUnlocked = override?.geminiPrivateUnlocked ?: gemini.privateUnlocked,
+                geminiPrivatePythonLikeMode =
+                override?.geminiPrivatePythonLikeMode ?: gemini.privatePythonLikeMode,
                 translationProvider = override?.translationProvider ?: gemini.translationProvider,
                 airforceBaseUrl = override?.airforceBaseUrl ?: gemini.airforceBaseUrl,
                 airforceApiKey = override?.airforceApiKey ?: gemini.airforceApiKey,
@@ -939,6 +959,8 @@ class NovelReaderPreferences(
         val promptModifiers: String,
         val autoTranslateEnglishSource: Boolean,
         val prefetchNextChapterTranslation: Boolean,
+        val privateUnlocked: Boolean,
+        val privatePythonLikeMode: Boolean,
         val translationProvider: NovelTranslationProvider,
         val airforceBaseUrl: String,
         val airforceApiKey: String,

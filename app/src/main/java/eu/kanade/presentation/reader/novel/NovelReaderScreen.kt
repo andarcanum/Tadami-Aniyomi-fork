@@ -1,4 +1,4 @@
-﻿package eu.kanade.presentation.reader.novel
+package eu.kanade.presentation.reader.novel
 
 import android.app.Activity
 import android.content.BroadcastReceiver
@@ -166,6 +166,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationStylePreset
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPrivateBridge
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptModifiers
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePresets
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
@@ -220,6 +221,8 @@ fun NovelReaderScreen(
     onSetGeminiCustomPromptModifier: (String) -> Unit = {},
     onSetGeminiAutoTranslateEnglishSource: (Boolean) -> Unit = {},
     onSetGeminiPrefetchNextChapterTranslation: (Boolean) -> Unit = {},
+    onSetGeminiPrivateUnlocked: (Boolean) -> Unit = {},
+    onSetGeminiPrivatePythonLikeMode: (Boolean) -> Unit = {},
     onSetTranslationProvider: (NovelTranslationProvider) -> Unit = {},
     onSetAirforceBaseUrl: (String) -> Unit = {},
     onSetAirforceApiKey: (String) -> Unit = {},
@@ -2152,6 +2155,8 @@ fun NovelReaderScreen(
                 onSetGeminiCustomPromptModifier = onSetGeminiCustomPromptModifier,
                 onSetGeminiAutoTranslateEnglishSource = onSetGeminiAutoTranslateEnglishSource,
                 onSetGeminiPrefetchNextChapterTranslation = onSetGeminiPrefetchNextChapterTranslation,
+                onSetGeminiPrivateUnlocked = onSetGeminiPrivateUnlocked,
+                onSetGeminiPrivatePythonLikeMode = onSetGeminiPrivatePythonLikeMode,
                 onSetTranslationProvider = onSetTranslationProvider,
                 onSetAirforceBaseUrl = onSetAirforceBaseUrl,
                 onSetAirforceApiKey = onSetAirforceApiKey,
@@ -2241,6 +2246,8 @@ private fun GeminiTranslationDialog(
     onSetGeminiCustomPromptModifier: (String) -> Unit,
     onSetGeminiAutoTranslateEnglishSource: (Boolean) -> Unit,
     onSetGeminiPrefetchNextChapterTranslation: (Boolean) -> Unit,
+    onSetGeminiPrivateUnlocked: (Boolean) -> Unit,
+    onSetGeminiPrivatePythonLikeMode: (Boolean) -> Unit,
     onSetTranslationProvider: (NovelTranslationProvider) -> Unit,
     onSetAirforceBaseUrl: (String) -> Unit,
     onSetAirforceApiKey: (String) -> Unit,
@@ -2272,7 +2279,7 @@ private fun GeminiTranslationDialog(
         listOf(
             "gemini-3-flash-preview" to "Gemini 3 Flash",
             "gemini-3-pro-preview" to "Gemini 3 Pro",
-            "gemini-2.5-flash" to "Gemini 2.5 Flash",
+            "gemini-3.1-flash-lite-preview" to "Gemini 3.1 Flash Lite",
         )
     }
     val modelMap = remember(modelEntries) { modelEntries.toMap() }
@@ -2306,10 +2313,10 @@ private fun GeminiTranslationDialog(
     var tempKey by remember(readerSettings.geminiApiKey) { mutableStateOf(readerSettings.geminiApiKey) }
     var tempModel by remember(readerSettings.geminiModel) {
         mutableStateOf(
-            if (readerSettings.geminiModel == "gemini-3-flash") {
-                "gemini-3-flash-preview"
-            } else {
-                readerSettings.geminiModel
+            when (readerSettings.geminiModel) {
+                "gemini-3-flash" -> "gemini-3-flash-preview"
+                "gemini-2.5-flash" -> "gemini-3.1-flash-lite-preview"
+                else -> readerSettings.geminiModel
             },
         )
     }
@@ -2350,6 +2357,20 @@ private fun GeminiTranslationDialog(
     }
     var tempProvider by remember(readerSettings.translationProvider) {
         mutableStateOf(readerSettings.translationProvider)
+    }
+    var tempPrivatePythonLikeMode by remember(readerSettings.geminiPrivatePythonLikeMode) {
+        mutableStateOf(readerSettings.geminiPrivatePythonLikeMode)
+    }
+    val isPrivateProviderInstalled = remember { GeminiPrivateBridge.isInstalled() }
+    val privateProviderLabel = remember(isPrivateProviderInstalled) {
+        if (isPrivateProviderInstalled) GeminiPrivateBridge.providerLabel() else "Gemini Private"
+    }
+    var tempPrivatePassword by remember { mutableStateOf("") }
+    var isPrivateProviderUnlocked by remember(isPrivateProviderInstalled, readerSettings.geminiPrivateUnlocked) {
+        mutableStateOf(
+            isPrivateProviderInstalled &&
+                (readerSettings.geminiPrivateUnlocked || GeminiPrivateBridge.isUnlocked()),
+        )
     }
     var tempOpenRouterBaseUrl by remember(readerSettings.openRouterBaseUrl) {
         mutableStateOf(readerSettings.openRouterBaseUrl)
@@ -2414,7 +2435,7 @@ private fun GeminiTranslationDialog(
                 advantage = "Речь персонажей звучит естественнее и эмоциональнее",
             ),
             GenerationPreset(
-                id = "nsfw_pulse",
+                id = "private_pulse",
                 title = "18+ Импульс",
                 temperature = 0.98f,
                 topP = 0.97f,
@@ -2534,6 +2555,15 @@ private fun GeminiTranslationDialog(
     val status = geminiStatusPresentation(uiState)
     val hasTranslationResult = hasCache || translationProgress >= 100
     val isGeminiSelected = tempProvider == NovelTranslationProvider.GEMINI
+    val isGeminiPrivateSelected = tempProvider == NovelTranslationProvider.GEMINI_PRIVATE
+    val isGeminiFamilySelected = isGeminiSelected || isGeminiPrivateSelected
+    val isPrivateSingleRequestMode =
+        isGeminiPrivateSelected &&
+            isPrivateProviderInstalled &&
+            GeminiPrivateBridge.forceSingleChapterRequest()
+    val privateBridgeInstalled = isGeminiPrivateSelected && isPrivateProviderInstalled
+    val privateBridgeRequiresUnlock = privateBridgeInstalled
+    val privateBridgeUnlocked = !privateBridgeRequiresUnlock || isPrivateProviderUnlocked
     val isOpenRouterSelected = tempProvider == NovelTranslationProvider.OPENROUTER
     val isDeepSeekSelected = tempProvider == NovelTranslationProvider.DEEPSEEK
     val activeGenerationPresets = if (isDeepSeekSelected) {
@@ -2549,6 +2579,11 @@ private fun GeminiTranslationDialog(
             onSetTranslationProvider(NovelTranslationProvider.GEMINI)
             onAddLog("?? Airforce hidden. Switched to Gemini")
         }
+    }
+
+    LaunchedEffect(isPrivateProviderInstalled, readerSettings.geminiPrivateUnlocked) {
+        isPrivateProviderUnlocked = isPrivateProviderInstalled &&
+            (readerSettings.geminiPrivateUnlocked || GeminiPrivateBridge.isUnlocked())
     }
 
     LaunchedEffect(isOpenRouterSelected, openRouterModels.size) {
@@ -2627,9 +2662,14 @@ private fun GeminiTranslationDialog(
                                 if (isTranslating) {
                                     onStop()
                                 } else {
-                                    onStart()
+                                    if (privateBridgeUnlocked) {
+                                        onStart()
+                                    } else {
+                                        onAddLog("🔒 $privateProviderLabel bridge is locked. Unlock it first.")
+                                    }
                                 }
                             },
+                            enabled = isTranslating || privateBridgeUnlocked,
                             modifier = Modifier.weight(1f),
                         ) {
                             Text(if (isTranslating) "Остановить" else "Запустить")
@@ -2666,37 +2706,128 @@ private fun GeminiTranslationDialog(
                             "Провайдер",
                             style = MaterialTheme.typography.labelLarge,
                         )
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(
-                                listOf(
-                                    NovelTranslationProvider.GEMINI to "Gemini",
-                                    NovelTranslationProvider.OPENROUTER to "OpenRouter",
-                                    NovelTranslationProvider.DEEPSEEK to "DeepSeek",
-                                ),
-                            ) { option ->
-                                val selected = tempProvider == option.first
-                                OutlinedButton(
-                                    onClick = {
-                                        tempProvider = option.first
-                                        onSetTranslationProvider(option.first)
-                                        onAddLog("?? Provider: ${option.second}")
-                                        when (option.first) {
-                                            NovelTranslationProvider.GEMINI -> Unit
-                                            NovelTranslationProvider.OPENROUTER -> onRefreshOpenRouterModels()
-                                            NovelTranslationProvider.DEEPSEEK -> onRefreshDeepSeekModels()
-                                            NovelTranslationProvider.AIRFORCE -> Unit
-                                        }
-                                    },
-                                ) {
-                                    Text(if (selected) "• ${option.second}" else option.second)
+                        val providerCards = listOf(
+                            NovelTranslationProvider.GEMINI to "Gemini",
+                            NovelTranslationProvider.GEMINI_PRIVATE to privateProviderLabel,
+                            NovelTranslationProvider.OPENROUTER to "OpenRouter",
+                            NovelTranslationProvider.DEEPSEEK to "DeepSeek",
+                        )
+                        providerCards.chunked(2).forEach { row ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                row.forEach { option ->
+                                    val selected = tempProvider == option.first
+                                    Surface(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clickable {
+                                                tempProvider = option.first
+                                                onSetTranslationProvider(option.first)
+                                                onAddLog("?? Provider: ${option.second}")
+                                                when (option.first) {
+                                                    NovelTranslationProvider.GEMINI -> Unit
+                                                    NovelTranslationProvider.GEMINI_PRIVATE -> Unit
+                                                    NovelTranslationProvider.OPENROUTER -> onRefreshOpenRouterModels()
+                                                    NovelTranslationProvider.DEEPSEEK -> onRefreshDeepSeekModels()
+                                                    NovelTranslationProvider.AIRFORCE -> Unit
+                                                }
+                                            },
+                                        shape = RoundedCornerShape(12.dp),
+                                        border = BorderStroke(
+                                            width = if (selected) 1.5.dp else 1.dp,
+                                            color = if (selected) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+                                            },
+                                        ),
+                                        color = if (selected) {
+                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                        } else {
+                                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                        },
+                                    ) {
+                                        Text(
+                                            text = option.second,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 10.dp, vertical = 12.dp),
+                                            style = MaterialTheme.typography.labelLarge,
+                                            textAlign = TextAlign.Center,
+                                        )
+                                    }
+                                }
+                                if (row.size == 1) {
+                                    Spacer(modifier = Modifier.weight(1f))
                                 }
                             }
                         }
                     }
 
                     if (page == 0) {
+                        if (privateBridgeInstalled) {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f),
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Text(
+                                    text = if (isPrivateProviderUnlocked) {
+                                        "$privateProviderLabel bridge подключен и разблокирован."
+                                    } else {
+                                        "$privateProviderLabel bridge подключен. Для работы нужен unlock."
+                                    },
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+
+                        if (privateBridgeRequiresUnlock && !isPrivateProviderUnlocked) {
+                            OutlinedTextField(
+                                value = tempPrivatePassword,
+                                onValueChange = { tempPrivatePassword = it },
+                                label = { Text("Пароль $privateProviderLabel bridge") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = {
+                                        val password = tempPrivatePassword.trim()
+                                        if (password.isBlank()) {
+                                            onAddLog("🔒 Enter bridge password")
+                                        } else {
+                                            val unlocked = GeminiPrivateBridge.unlock(password)
+                                            if (unlocked) {
+                                                isPrivateProviderUnlocked = true
+                                                onSetGeminiPrivateUnlocked(true)
+                                                tempPrivatePassword = ""
+                                                onAddLog("✅ $privateProviderLabel bridge unlocked")
+                                            } else {
+                                                onAddLog("❌ Invalid bridge password")
+                                            }
+                                        }
+                                    },
+                                ) {
+                                    Text("Unlock")
+                                }
+                                OutlinedButton(
+                                    onClick = {
+                                        tempPrivatePassword = ""
+                                    },
+                                ) {
+                                    Text("Очистить")
+                                }
+                            }
+                        }
+
                         when (tempProvider) {
-                            NovelTranslationProvider.GEMINI -> {
+                            NovelTranslationProvider.GEMINI,
+                            NovelTranslationProvider.GEMINI_PRIVATE,
+                            -> {
                                 Text(
                                     "Модель",
                                     style = MaterialTheme.typography.labelLarge,
@@ -2791,130 +2922,146 @@ private fun GeminiTranslationDialog(
                     }
 
                     if (page == 1) {
-                        Text(
-                            "Режим промпта",
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(
-                                listOf(
-                                    GeminiPromptMode.CLASSIC to "Классический",
-                                    GeminiPromptMode.ADULT_18 to "18+",
-                                ),
-                            ) { option ->
-                                val selected = tempPromptMode == option.first
-                                OutlinedButton(
-                                    onClick = {
-                                        tempPromptMode = option.first
-                                        onSetGeminiPromptMode(option.first)
-                                        onAddLog("?? Prompt mode: ${option.second}")
-                                    },
-                                ) {
-                                    Text(if (selected) "• ${option.second}" else option.second)
+                        if (!isPrivateSingleRequestMode) {
+                            Text(
+                                "Режим промпта",
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(
+                                    listOf(
+                                        GeminiPromptMode.CLASSIC to "Классический",
+                                        GeminiPromptMode.ADULT_18 to "18+",
+                                    ),
+                                ) { option ->
+                                    val selected = tempPromptMode == option.first
+                                    OutlinedButton(
+                                        onClick = {
+                                            tempPromptMode = option.first
+                                            onSetGeminiPromptMode(option.first)
+                                            onAddLog("?? Prompt mode: ${option.second}")
+                                        },
+                                    ) {
+                                        Text(if (selected) "• ${option.second}" else option.second)
+                                    }
                                 }
                             }
-                        }
 
-                        Text(
-                            "Стиль перевода",
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(stylePresets) { preset ->
-                                val selected = tempStylePreset == preset.id
-                                OutlinedButton(
-                                    onClick = {
-                                        tempStylePreset = preset.id
-                                        onSetGeminiStylePreset(preset.id)
-                                        onAddLog("?? Стиль: ${preset.title}")
-                                    },
-                                ) {
-                                    Text(if (selected) "• ${preset.title}" else preset.title)
+                            Text(
+                                "Стиль перевода",
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(stylePresets) { preset ->
+                                    val selected = tempStylePreset == preset.id
+                                    OutlinedButton(
+                                        onClick = {
+                                            tempStylePreset = preset.id
+                                            onSetGeminiStylePreset(preset.id)
+                                            onAddLog("?? Стиль: ${preset.title}")
+                                        },
+                                    ) {
+                                        Text(if (selected) "• ${preset.title}" else preset.title)
+                                    }
                                 }
                             }
-                        }
-                        val selectedStylePreset = stylePresets.firstOrNull { it.id == tempStylePreset }
-                        if (selectedStylePreset != null) {
+                            val selectedStylePreset = stylePresets.firstOrNull { it.id == tempStylePreset }
+                            if (selectedStylePreset != null) {
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                                    shape = RoundedCornerShape(12.dp),
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        Text(
+                                            text = selectedStylePreset.title,
+                                            style = MaterialTheme.typography.labelLarge,
+                                        )
+                                        Text(
+                                            text = "Для чего: ${selectedStylePreset.scenario}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        Text(
+                                            text = "Преимущество: ${selectedStylePreset.advantage}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
+
+                            Text(
+                                "Модификаторы промпта",
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(GeminiPromptModifiers.all) { modifier ->
+                                    val selected = tempEnabledModifiers.contains(modifier.id)
+                                    Surface(
+                                        color = if (selected) {
+                                            MaterialTheme.colorScheme.primaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.surfaceVariant
+                                        },
+                                        shape = RoundedCornerShape(16.dp),
+                                        modifier = Modifier.clickable {
+                                            tempEnabledModifiers = if (selected) {
+                                                tempEnabledModifiers - modifier.id
+                                            } else {
+                                                tempEnabledModifiers + modifier.id
+                                            }
+                                            onSetGeminiEnabledPromptModifiers(
+                                                tempEnabledModifiers.toList(),
+                                            )
+                                        },
+                                    ) {
+                                        Text(
+                                            text = modifier.label,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                            style = MaterialTheme.typography.labelMedium,
+                                        )
+                                    }
+                                }
+                                item {
+                                    Surface(
+                                        color = if (tempCustomModifier.isNotBlank()) {
+                                            MaterialTheme.colorScheme.tertiaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.surfaceVariant
+                                        },
+                                        shape = RoundedCornerShape(16.dp),
+                                        modifier = Modifier.clickable { showCustomPromptDialog = true },
+                                    ) {
+                                        Text(
+                                            text = if (tempCustomModifier.isBlank()) "+ Свой" else "Свой",
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                            style = MaterialTheme.typography.labelMedium,
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f),
                                 shape = RoundedCornerShape(12.dp),
                             ) {
-                                Column(
+                                Text(
+                                    text =
+                                        "$privateProviderLabel: используются зашитые правила private bridge " +
+                                            "и авто-режим без пользовательских модификаторов.",
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                                ) {
-                                    Text(
-                                        text = selectedStylePreset.title,
-                                        style = MaterialTheme.typography.labelLarge,
-                                    )
-                                    Text(
-                                        text = "Для чего: ${selectedStylePreset.scenario}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    Text(
-                                        text = "Преимущество: ${selectedStylePreset.advantage}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        }
-
-                        Text(
-                            "Модификаторы промпта",
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(GeminiPromptModifiers.all) { modifier ->
-                                val selected = tempEnabledModifiers.contains(modifier.id)
-                                Surface(
-                                    color = if (selected) {
-                                        MaterialTheme.colorScheme.primaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.surfaceVariant
-                                    },
-                                    shape = RoundedCornerShape(16.dp),
-                                    modifier = Modifier.clickable {
-                                        tempEnabledModifiers = if (selected) {
-                                            tempEnabledModifiers - modifier.id
-                                        } else {
-                                            tempEnabledModifiers + modifier.id
-                                        }
-                                        onSetGeminiEnabledPromptModifiers(
-                                            tempEnabledModifiers.toList(),
-                                        )
-                                    },
-                                ) {
-                                    Text(
-                                        text = modifier.label,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                        style = MaterialTheme.typography.labelMedium,
-                                    )
-                                }
-                            }
-                            item {
-                                Surface(
-                                    color = if (tempCustomModifier.isNotBlank()) {
-                                        MaterialTheme.colorScheme.tertiaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.surfaceVariant
-                                    },
-                                    shape = RoundedCornerShape(16.dp),
-                                    modifier = Modifier.clickable { showCustomPromptDialog = true },
-                                ) {
-                                    Text(
-                                        text = if (tempCustomModifier.isBlank()) "+ Свой" else "Свой",
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                        style = MaterialTheme.typography.labelMedium,
-                                    )
-                                }
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
                             }
                         }
                     }
 
-                    if (page == 0) {
+                    if (page == 0 && !isPrivateSingleRequestMode) {
                         Text(
                             "Скорость (батч-параллельность)",
                             style = MaterialTheme.typography.labelLarge,
@@ -2941,10 +3088,30 @@ private fun GeminiTranslationDialog(
                         }
                     }
 
+                    if (page == 0 && isPrivateSingleRequestMode) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f),
+                            shape = RoundedCornerShape(12.dp),
+                        ) {
+                            Text(
+                                text =
+                                    "$privateProviderLabel: отправка идет одним запросом на главу. " +
+                                        "При ошибке включается fallback (batch=40, concurrency=1).",
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+
                     if (
                         page == 1 &&
-                        isGeminiSelected &&
-                        (tempModel == "gemini-3-flash-preview" || tempModel == "gemini-3-pro-preview")
+                        isGeminiFamilySelected &&
+                        (
+                            tempModel == "gemini-3-flash-preview" ||
+                                tempModel == "gemini-3-pro-preview" ||
+                                tempModel == "gemini-3.1-flash-lite-preview"
+                            )
                     ) {
                         Text(
                             "Уровень размышления",
@@ -2965,27 +3132,6 @@ private fun GeminiTranslationDialog(
                                     },
                                 ) {
                                     Text(if (tempReasoning == option) "• ${option.uppercase()}" else option.uppercase())
-                                }
-                            }
-                        }
-                    }
-
-                    if (page == 1 && isGeminiSelected && tempModel == "gemini-2.5-flash") {
-                        Text(
-                            "Бюджет токенов (Gemini 2.5)",
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            items(listOf(-1, 2048, 4096, 8192, 16384)) { value ->
-                                OutlinedButton(
-                                    onClick = {
-                                        tempBudget = value
-                                        onSetGeminiBudgetTokens(value)
-                                        onAddLog("?? Бюджет: ${if (value == -1) "AUTO" else value}")
-                                    },
-                                ) {
-                                    val title = if (value == -1) "AUTO" else value.toString()
-                                    Text(if (tempBudget == value) "• $title" else title)
                                 }
                             }
                         }
@@ -3035,6 +3181,27 @@ private fun GeminiTranslationDialog(
                                 onAddLog("?? Next chapter pre-translation: ${if (enabled) "ON" else "OFF"}")
                             },
                         )
+                    }
+                    if (isGeminiPrivateSelected) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "Python-like режим (цельная глава, ответ до ***)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Switch(
+                                checked = tempPrivatePythonLikeMode,
+                                onCheckedChange = { enabled ->
+                                    tempPrivatePythonLikeMode = enabled
+                                    onSetGeminiPrivatePythonLikeMode(enabled)
+                                    onAddLog("🔀 Private Python-like: ${if (enabled) "ON" else "OFF"}")
+                                },
+                            )
+                        }
                     }
                     TextButton(onClick = { showAdvanced = !showAdvanced }) {
                         Text(if (showAdvanced) "Скрыть доп. настройки" else "Доп. настройки")

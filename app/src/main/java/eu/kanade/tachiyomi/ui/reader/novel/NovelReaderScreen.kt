@@ -57,6 +57,8 @@ class NovelReaderScreen(
                 onSetGeminiCustomPromptModifier = screenModel::setGeminiCustomPromptModifier,
                 onSetGeminiAutoTranslateEnglishSource = screenModel::setGeminiAutoTranslateEnglishSource,
                 onSetGeminiPrefetchNextChapterTranslation = screenModel::setGeminiPrefetchNextChapterTranslation,
+                onSetGeminiPrivateUnlocked = screenModel::setGeminiPrivateUnlocked,
+                onSetGeminiPrivatePythonLikeMode = screenModel::setGeminiPrivatePythonLikeMode,
                 onSetTranslationProvider = screenModel::setTranslationProvider,
                 onSetAirforceBaseUrl = screenModel::setAirforceBaseUrl,
                 onSetAirforceApiKey = screenModel::setAirforceApiKey,

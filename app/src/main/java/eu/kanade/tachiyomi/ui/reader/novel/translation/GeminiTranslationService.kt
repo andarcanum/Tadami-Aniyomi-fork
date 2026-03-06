@@ -4,6 +4,7 @@ import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.await
 import eu.kanade.tachiyomi.network.jsonMime
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -31,22 +32,108 @@ class GeminiTranslationService(
         if (segments.isEmpty()) return emptyList()
         if (params.apiKey.isBlank()) return null
 
-        val taggedInput = segments.mapIndexed { index, text ->
+        val usePrivateBridge =
+            params.provider == NovelTranslationProvider.GEMINI_PRIVATE &&
+                GeminiPrivateBridge.isInstalled()
+        val bridgeUnlocked = !usePrivateBridge || params.privateUnlocked || GeminiPrivateBridge.isUnlocked()
+        if (usePrivateBridge && !bridgeUnlocked) {
+            onLog?.invoke("🔒 Private Gemini bridge is locked")
+            return null
+        }
+        val preparedSegments = if (usePrivateBridge) GeminiPrivateBridge.preprocessSegments(segments) else segments
+
+        val usePrivatePythonLikeMode = usePrivateBridge && params.privatePythonLikeMode
+        val taggedInput = preparedSegments.mapIndexed { index, text ->
             "<s i='$index'>$text</s>"
         }.joinToString("\\n")
+        val plainChapterInput = preparedSegments.joinToString("\n\n")
+
+        val effectiveModifiers = if (usePrivateBridge && GeminiPrivateBridge.disablePromptModifiers()) {
+            ""
+        } else {
+            params.promptModifiers
+        }
 
         val userPrompt = buildUserPrompt(
             sourceLang = params.sourceLang,
             targetLang = params.targetLang,
             taggedInput = taggedInput,
         )
-        val systemPrompt = buildSystemPrompt(
+        val defaultSystemPrompt = buildSystemPrompt(
             mode = params.promptMode,
-            modifiers = params.promptModifiers,
+            modifiers = effectiveModifiers,
         )
+        val systemPrompt = if (usePrivateBridge) {
+            GeminiPrivateBridge.systemPromptOverride() ?: defaultSystemPrompt
+        } else {
+            defaultSystemPrompt
+        }
         val fullPrompt = "$systemPrompt\\n\\n$userPrompt"
+        val userContentText = when {
+            usePrivatePythonLikeMode -> plainChapterInput
+            usePrivateBridge -> taggedInput
+            else -> fullPrompt
+        }
+
+        val requestModel = if (usePrivateBridge) {
+            GeminiPrivateBridge.requestModelOverride(params.model)
+        } else {
+            params.model
+        }
+        val requestTemperature = if (usePrivateBridge) {
+            GeminiPrivateBridge.requestTemperatureOverride(params.temperature)
+        } else {
+            params.temperature
+        }
+        val requestTopP = if (usePrivateBridge) {
+            GeminiPrivateBridge.requestTopPOverride(params.topP)
+        } else {
+            params.topP
+        }
+        val requestTopK = if (usePrivateBridge) {
+            GeminiPrivateBridge.requestTopKOverride(params.topK)
+        } else {
+            params.topK
+        }
+        val requestMaxOutputTokens = if (usePrivateBridge) {
+            GeminiPrivateBridge.requestMaxOutputTokensOverride(8192)
+        } else {
+            8192
+        }
+        val requestFrequencyPenalty = if (usePrivateBridge) {
+            GeminiPrivateBridge.requestFrequencyPenaltyOverride(0f)
+        } else {
+            0f
+        }
+        val requestPresencePenalty = if (usePrivateBridge) {
+            GeminiPrivateBridge.requestPresencePenaltyOverride(0f)
+        } else {
+            0f
+        }
+        val requestThinkingLevel = if (usePrivateBridge) {
+            GeminiPrivateBridge.requestThinkingLevelOverride(params.reasoningEffort)
+        } else {
+            params.reasoningEffort
+        }
+        if (usePrivatePythonLikeMode) {
+            onLog?.invoke("🧪 GeminiNSFW python-like mode enabled (plain chapter payload, parse full response)")
+        }
 
         val requestBody = buildJsonObject {
+            if (usePrivateBridge) {
+                put(
+                    "systemInstruction",
+                    buildJsonObject {
+                        put("role", "system")
+                        put(
+                            "parts",
+                            buildJsonArray {
+                                add(buildJsonObject { put("text", systemPrompt) })
+                            },
+                        )
+                    },
+                )
+            }
             put(
                 "contents",
                 buildJsonArray {
@@ -56,7 +143,7 @@ class GeminiTranslationService(
                             put(
                                 "parts",
                                 buildJsonArray {
-                                    add(buildJsonObject { put("text", fullPrompt) })
+                                    add(buildJsonObject { put("text", userContentText) })
                                 },
                             )
                         },
@@ -66,15 +153,19 @@ class GeminiTranslationService(
             put(
                 "generationConfig",
                 buildJsonObject {
-                    put("maxOutputTokens", 8192)
-                    put("temperature", params.temperature)
-                    put("topP", params.topP)
-                    put("topK", params.topK)
+                    put("maxOutputTokens", requestMaxOutputTokens)
+                    put("temperature", requestTemperature)
+                    put("topP", requestTopP)
+                    put("topK", requestTopK)
+                    if (usePrivateBridge) {
+                        put("frequencyPenalty", requestFrequencyPenalty)
+                        put("presencePenalty", requestPresencePenalty)
+                    }
                     put(
                         "thinkingConfig",
                         buildJsonObject {
                             // Match lnreader behavior: send only thinkingLevel.
-                            put("thinkingLevel", params.reasoningEffort)
+                            put("thinkingLevel", requestThinkingLevel)
                         },
                     )
                 },
@@ -82,12 +173,6 @@ class GeminiTranslationService(
             put(
                 "safetySettings",
                 buildJsonArray {
-                    add(
-                        buildJsonObject {
-                            put("category", "HARM_CATEGORY_HARASSMENT")
-                            put("threshold", "BLOCK_NONE")
-                        },
-                    )
                     add(
                         buildJsonObject {
                             put("category", "HARM_CATEGORY_HATE_SPEECH")
@@ -108,6 +193,12 @@ class GeminiTranslationService(
                     )
                     add(
                         buildJsonObject {
+                            put("category", "HARM_CATEGORY_HARASSMENT")
+                            put("threshold", "BLOCK_NONE")
+                        },
+                    )
+                    add(
+                        buildJsonObject {
                             put("category", "HARM_CATEGORY_CIVIC_INTEGRITY")
                             put("threshold", "BLOCK_NONE")
                         },
@@ -120,7 +211,7 @@ class GeminiTranslationService(
             withIOContext {
                 val url = buildString {
                     append("https://generativelanguage.googleapis.com/v1beta/models/")
-                    append(params.model)
+                    append(requestModel)
                     append(":generateContent?key=")
                     append(params.apiKey)
                 }
@@ -174,7 +265,7 @@ class GeminiTranslationService(
             ?.get("parts")
             .asArrayOrNull()
 
-        val candidateText = parts
+        val rawCandidateText = parts
             .extractTextParts()
             .let { texts ->
                 // Prefer fragment that actually looks like XML payload.
@@ -183,6 +274,11 @@ class GeminiTranslationService(
             }
             .orEmpty()
             .trim()
+        if (usePrivateBridge && rawCandidateText.isNotBlank()) {
+            onLog?.invoke("📥 GeminiNSFW raw response:")
+            logLargeTextToGeminiLog(rawCandidateText, onLog, prefix = "📥")
+        }
+        val candidateText = rawCandidateText
 
         if (candidateText.isBlank()) {
             val finishReason = firstCandidate["finishReason"].asStringOrNull()
@@ -199,18 +295,33 @@ class GeminiTranslationService(
             return null
         }
 
-        val parsed = GeminiXmlSegmentParser.parse(candidateText, expectedCount = segments.size)
+        val parsed = if (usePrivatePythonLikeMode) {
+            val parsedPlain = GeminiXmlSegmentParser.parsePlaintext(
+                rawResponse = candidateText,
+                expectedCount = preparedSegments.size,
+            )
+            val translatedCount = parsedPlain.count { !it.isNullOrBlank() }
+            if (translatedCount < preparedSegments.size) {
+                onLog?.invoke(
+                    "⚠️ GeminiNSFW python-like: expected ${preparedSegments.size}, got $translatedCount",
+                )
+            }
+            parsedPlain
+        } else {
+            GeminiXmlSegmentParser.parse(candidateText, expectedCount = preparedSegments.size)
+        }
         if (parsed.all { it.isNullOrBlank() }) {
-            onLog?.invoke("⚠️ Gemini parse warning: no XML segments found in candidate text")
+            if (usePrivatePythonLikeMode) {
+                onLog?.invoke("⚠️ Gemini parse warning: python-like response is empty")
+            } else {
+                onLog?.invoke("⚠️ Gemini parse warning: no XML segments found in candidate text")
+            }
             onLog?.invoke("🧾 Candidate text preview: ${candidateText.take(600)}")
         }
         return parsed
     }
 
-    private fun buildSystemPrompt(
-        mode: GeminiPromptMode,
-        modifiers: String,
-    ): String {
+    private fun buildSystemPrompt(mode: GeminiPromptMode, modifiers: String): String {
         val basePrompt = promptResolver.resolveSystemPrompt(mode)
         if (modifiers.isBlank()) return basePrompt
         return basePrompt + "\\n\\n" + modifiers.trim()
@@ -254,4 +365,21 @@ private fun kotlinx.serialization.json.JsonElement?.asStringOrNull(): String? {
     val primitive = this as? JsonPrimitive ?: return null
     if (primitive is JsonNull) return null
     return primitive.content
+}
+
+private fun logLargeTextToGeminiLog(
+    text: String,
+    onLog: ((String) -> Unit)?,
+    prefix: String,
+    chunkSize: Int = 1200,
+) {
+    if (onLog == null) return
+    if (text.isBlank()) {
+        onLog("$prefix <empty>")
+        return
+    }
+    val chunks = text.chunked(chunkSize.coerceAtLeast(200))
+    chunks.forEachIndexed { index, chunk ->
+        onLog("$prefix [${index + 1}/${chunks.size}] $chunk")
+    }
 }
