@@ -34,4 +34,45 @@ class GeminiXmlSegmentParserTest {
 
         parsed shouldBe listOf("One", "Two")
     }
+
+    @Test
+    fun `parses full plaintext response for python like mode`() {
+        val raw = """
+            First paragraph
+
+            Second paragraph
+        """.trimIndent()
+
+        val parsed = GeminiXmlSegmentParser.parsePlaintext(raw, expectedCount = 2)
+
+        parsed shouldBe listOf("First paragraph", "Second paragraph")
+    }
+
+    @Test
+    fun `merges overflow plaintext paragraphs into last segment`() {
+        val raw = """
+            One
+
+            Two
+
+            Three
+        """.trimIndent()
+
+        val parsed = GeminiXmlSegmentParser.parsePlaintext(raw, expectedCount = 2)
+
+        parsed shouldBe listOf("One", "Two\n\nThree")
+    }
+
+    @Test
+    fun `removes emoji in python like plaintext mode without leaving gaps`() {
+        val raw = """
+            Hello 😊 world
+
+            Second 🚀 paragraph 😈
+        """.trimIndent()
+
+        val parsed = GeminiXmlSegmentParser.parsePlaintext(raw, expectedCount = 2)
+
+        parsed shouldBe listOf("Hello world", "Second paragraph")
+    }
 }
