@@ -48,12 +48,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
+import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.components.relativeDateText
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
-import eu.kanade.presentation.util.rememberResourceBitmapPainter
-import eu.kanade.tachiyomi.R
 import eu.kanade.presentation.updates.aurora.AuroraUpdatesGroupCard
 import eu.kanade.presentation.updates.aurora.buildAuroraUpdatesGroups
 import eu.kanade.tachiyomi.ui.updates.novel.NovelUpdatesItem
@@ -300,6 +300,7 @@ private fun NovelUpdateCard(
 ) {
     val colors = AuroraTheme.colors
     val update = item.update
+    val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
 
     Row(
         modifier = modifier
@@ -318,12 +319,12 @@ private fun NovelUpdateCard(
                 .clickable { onNovelClick(update.novelId) },
         ) {
             AsyncImage(
-                model = update.coverData,
+                model = resolveAuroraCoverModel(update.coverData),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
-                error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
-                fallback = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                error = placeholderPainter,
+                fallback = placeholderPainter,
             )
         }
 

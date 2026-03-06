@@ -3,8 +3,8 @@ package eu.kanade.presentation.entries.anime.components.aurora
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -21,8 +21,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
-import eu.kanade.presentation.util.rememberResourceBitmapPainter
-import eu.kanade.tachiyomi.R
+import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
+import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
+import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.tachiyomi.data.coil.staticBlur
 import tachiyomi.domain.entries.anime.model.Anime
 
@@ -44,11 +45,12 @@ fun FullscreenPosterBackground(
     resolvedCoverUrlFallback: String? = null,
 ) {
     val context = LocalContext.current
+    val placeholderPainter = rememberAuroraCoverPlaceholderPainter(AuroraCoverPlaceholderVariant.Wide)
+    val initialModel = resolveAuroraCoverModel(resolvedCoverUrl) as? String
+    val fallbackModel = resolveAuroraCoverModel(resolvedCoverUrlFallback) as? String
 
-    // Once user scrolled away from first screen, keep blur/dim at maximum permanently
     val hasScrolledAway = firstVisibleItemIndex > 0 || scrollOffset > 100
 
-    // Calculate dim alpha - permanent after scrolling away
     val dimAlpha by animateFloatAsState(
         targetValue = if (hasScrolledAway) 0.7f else (scrollOffset / 100f).coerceIn(0f, 0.7f),
         animationSpec = spring(
@@ -68,56 +70,65 @@ fun FullscreenPosterBackground(
     val blurRadiusPx = with(LocalDensity.current) { 20.dp.roundToPx() }
 
     Box(modifier = modifier.fillMaxSize()) {
-        if (resolvedCoverUrl != null) {
-            var model by remember(resolvedCoverUrl) { mutableStateOf(resolvedCoverUrl) }
+        if (initialModel != null) {
+            var model by remember(initialModel) { mutableStateOf(initialModel) }
+            val resolvedModel = resolveAuroraCoverModel(model) as? String
 
-            AsyncImage(
-                model = remember(model, anime.id, anime.coverLastModified) {
-                    ImageRequest.Builder(context)
-                        .data(model)
-                        .build()
-                },
-                onError = {
-                    if (model == resolvedCoverUrl && resolvedCoverUrlFallback != null) {
-                        model = resolvedCoverUrlFallback
-                    }
-                },
-                error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
-                fallback = rememberResourceBitmapPainter(id = R.drawable.cover_error),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
+            if (resolvedModel != null) {
+                AsyncImage(
+                    model = remember(resolvedModel, anime.id, anime.coverLastModified) {
+                        ImageRequest.Builder(context)
+                            .data(resolvedModel)
+                            .build()
+                    },
+                    onError = {
+                        if (model == initialModel && fallbackModel != null) {
+                            model = fallbackModel
+                        }
+                    },
+                    error = placeholderPainter,
+                    fallback = placeholderPainter,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
 
-            AsyncImage(
-                model = remember(model, anime.id, anime.coverLastModified, blurRadiusPx) {
-                    ImageRequest.Builder(context)
-                        .data(model)
-                        .staticBlur(blurRadiusPx, intensityFactor = 0.6f)
-                        .build()
-                },
-                onError = {
-                    if (model == resolvedCoverUrl && resolvedCoverUrlFallback != null) {
-                        model = resolvedCoverUrlFallback
-                    }
-                },
-                error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
-                fallback = rememberResourceBitmapPainter(id = R.drawable.cover_error),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                alpha = blurOverlayAlpha,
-                modifier = Modifier.fillMaxSize(),
-            )
+                AsyncImage(
+                    model = remember(resolvedModel, anime.id, anime.coverLastModified, blurRadiusPx) {
+                        ImageRequest.Builder(context)
+                            .data(resolvedModel)
+                            .staticBlur(blurRadiusPx, intensityFactor = 0.6f)
+                            .build()
+                    },
+                    onError = {
+                        if (model == initialModel && fallbackModel != null) {
+                            model = fallbackModel
+                        }
+                    },
+                    error = placeholderPainter,
+                    fallback = placeholderPainter,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    alpha = blurOverlayAlpha,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Image(
+                    painter = placeholderPainter,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         } else {
             Image(
-                painter = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                painter = placeholderPainter,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
         }
 
-        // Base gradient overlay (always present)
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -132,7 +143,6 @@ fun FullscreenPosterBackground(
                 ),
         )
 
-        // Scroll-based dimming overlay
         Box(
             modifier = Modifier
                 .fillMaxSize()

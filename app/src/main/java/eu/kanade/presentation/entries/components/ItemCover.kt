@@ -10,11 +10,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.painter.ColorPainter
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import coil3.compose.AsyncImage
-import eu.kanade.presentation.util.rememberResourceBitmapPainter
-import eu.kanade.tachiyomi.R
+import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
+import tachiyomi.domain.entries.anime.model.AnimeCover
+import tachiyomi.domain.entries.manga.model.MangaCover
 import tachiyomi.domain.entries.novel.model.NovelCover
 
 enum class ItemCover(val ratio: Float) {
@@ -30,6 +32,7 @@ enum class ItemCover(val ratio: Float) {
         contentDescription: String = "",
         shape: Shape = MaterialTheme.shapes.extraSmall,
         onClick: (() -> Unit)? = null,
+        errorPainter: Painter? = null,
     ) {
         val model = resolveCoverModel(data)
         val imageModifier = modifier
@@ -46,20 +49,21 @@ enum class ItemCover(val ratio: Float) {
                 },
             )
 
+        val resolvedErrorPainter = errorPainter ?: rememberThemeAwareCoverErrorPainter()
+
         if (isLoadableCoverData(model)) {
-            val coverErrorPainter = rememberResourceBitmapPainter(id = R.drawable.cover_error)
             AsyncImage(
                 model = model,
                 placeholder = ColorPainter(CoverPlaceholderColor),
-                error = coverErrorPainter,
-                fallback = coverErrorPainter,
+                error = resolvedErrorPainter,
+                fallback = resolvedErrorPainter,
                 contentDescription = contentDescription,
                 modifier = imageModifier,
                 contentScale = ContentScale.Crop,
             )
         } else {
             Image(
-                painter = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                painter = resolvedErrorPainter,
                 contentDescription = contentDescription,
                 modifier = imageModifier,
                 contentScale = ContentScale.Crop,
@@ -70,6 +74,9 @@ enum class ItemCover(val ratio: Float) {
 
 internal fun resolveCoverModel(data: Any?): Any? {
     return when (data) {
+        is String -> data.takeIf { it.isNotBlank() }
+        is AnimeCover -> data.takeIf { !it.url.isNullOrBlank() }
+        is MangaCover -> data.takeIf { !it.url.isNullOrBlank() }
         is NovelCover -> data.takeIf { !it.url.isNullOrBlank() }
         else -> data
     }

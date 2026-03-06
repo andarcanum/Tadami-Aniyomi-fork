@@ -159,19 +159,11 @@ fun MangaScreenAuroraImpl(
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Fixed background poster
-        if (manga.initialized) {
-            FullscreenPosterBackground(
-                manga = manga,
-                scrollOffset = scrollOffset,
-                firstVisibleItemIndex = firstVisibleItemIndex,
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black),
-            )
-        }
+        FullscreenPosterBackground(
+            manga = manga,
+            scrollOffset = scrollOffset,
+            firstVisibleItemIndex = firstVisibleItemIndex,
+        )
 
         if (useTwoPaneLayout) {
             val topContentPadding = 96.dp

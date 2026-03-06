@@ -13,6 +13,7 @@ import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import eu.kanade.presentation.browse.BrowseSourceLoadingItem
 import eu.kanade.presentation.browse.InLibraryBadge
+import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.library.components.CommonEntryItemDefaults
 import eu.kanade.presentation.library.components.EntryCompactGridItem
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
@@ -69,6 +70,7 @@ private fun BrowseMangaSourceCompactGridItem(
     onClick: () -> Unit = {},
     onLongClick: () -> Unit = onClick,
 ) {
+    val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
     EntryCompactGridItem(
         title = manga.title,
         coverData = MangaCover(
@@ -82,6 +84,7 @@ private fun BrowseMangaSourceCompactGridItem(
         coverBadgeStart = {
             InLibraryBadge(enabled = manga.favorite)
         },
+        errorPainter = placeholderPainter,
         onLongClick = onLongClick,
         onClick = onClick,
     )

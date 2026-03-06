@@ -2,6 +2,8 @@ package eu.kanade.presentation.entries.components
 
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.entries.anime.model.AnimeCover
+import tachiyomi.domain.entries.manga.model.MangaCover
 import tachiyomi.domain.entries.novel.model.NovelCover
 
 class ItemCoverTest {
@@ -34,6 +36,34 @@ class ItemCoverTest {
         )
 
         model shouldBe null
+    }
+
+    @Test
+    fun `anime and manga cover models with blank urls resolve to null`() {
+        resolveCoverModel(
+            AnimeCover(
+                animeId = 1L,
+                sourceId = 2L,
+                isAnimeFavorite = false,
+                url = " ",
+                lastModified = 0L,
+            ),
+        ) shouldBe null
+
+        resolveCoverModel(
+            MangaCover(
+                mangaId = 1L,
+                sourceId = 2L,
+                isMangaFavorite = false,
+                url = "",
+                lastModified = 0L,
+            ),
+        ) shouldBe null
+    }
+
+    @Test
+    fun `blank string cover model resolves to null`() {
+        resolveCoverModel("   ") shouldBe null
     }
 
     @Test

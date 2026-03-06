@@ -33,8 +33,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.theme.AuroraTheme
-import eu.kanade.presentation.util.rememberResourceBitmapPainter
-import eu.kanade.tachiyomi.R
 
 @Composable
 fun AuroraCard(
@@ -55,6 +53,7 @@ fun AuroraCard(
     val colors = AuroraTheme.colors
     val normalizedCoverHeightFraction = coverHeightFraction.coerceIn(0.01f, 1f)
     val showTextContent = normalizedCoverHeightFraction < 1f
+    val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
 
     Card(
         modifier = modifier
@@ -89,7 +88,7 @@ fun AuroraCard(
                     .padding(imagePadding),
             ) {
                 AsyncImage(
-                    model = coverData,
+                    model = resolveAuroraCoverModel(coverData),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
@@ -105,8 +104,8 @@ fun AuroraCard(
                                 RoundedCornerShape(12.dp)
                             },
                         ),
-                    error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
-                    fallback = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                    error = placeholderPainter,
+                    fallback = placeholderPainter,
                 )
 
                 // Badge overlay (e.g. Unread count)

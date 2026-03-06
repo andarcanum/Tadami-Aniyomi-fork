@@ -31,11 +31,11 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
+import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadAction
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadIndicator
 import eu.kanade.presentation.theme.AuroraTheme
-import eu.kanade.presentation.util.rememberResourceBitmapPainter
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.entries.manga.ChapterList
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.entries.manga.model.asMangaCover
@@ -58,6 +58,7 @@ fun MangaChapterCardCompact(
     val colors = AuroraTheme.colors
     val context = LocalContext.current
     val chapter = item.chapter
+    val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
 
     // Adjust opacity for read chapters
     val contentAlpha = if (chapter.read) 0.6f else 1f
@@ -85,14 +86,14 @@ fun MangaChapterCardCompact(
                 AsyncImage(
                     model = remember(manga.id, manga.thumbnailUrl, manga.coverLastModified) {
                         ImageRequest.Builder(context)
-                            .data(manga.asMangaCover())
+                            .data(resolveAuroraCoverModel(manga.asMangaCover()))
                             .placeholderMemoryCacheKey(manga.thumbnailUrl)
                             .crossfade(true)
                             .size(40)
                             .build()
                     },
-                    error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
-                    fallback = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                    error = placeholderPainter,
+                    fallback = placeholderPainter,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.size(40.dp),

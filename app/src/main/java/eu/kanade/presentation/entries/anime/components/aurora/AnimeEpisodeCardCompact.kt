@@ -31,12 +31,12 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
+import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.entries.anime.components.EpisodeDownloadAction
 import eu.kanade.presentation.entries.anime.components.EpisodeDownloadIndicator
 import eu.kanade.presentation.entries.manga.components.aurora.GlassmorphismCard
 import eu.kanade.presentation.theme.AuroraTheme
-import eu.kanade.presentation.util.rememberResourceBitmapPainter
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.entries.anime.EpisodeList
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.entries.anime.model.asAnimeCover
@@ -59,6 +59,7 @@ fun AnimeEpisodeCardCompact(
     val colors = AuroraTheme.colors
     val context = LocalContext.current
     val episode = item.episode
+    val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
 
     // Adjust opacity for seen episodes
     val contentAlpha = if (episode.seen) 0.6f else 1f
@@ -86,14 +87,14 @@ fun AnimeEpisodeCardCompact(
                 AsyncImage(
                     model = remember(anime.id, anime.thumbnailUrl, anime.coverLastModified) {
                         ImageRequest.Builder(context)
-                            .data(anime.asAnimeCover())
+                            .data(resolveAuroraCoverModel(anime.asAnimeCover()))
                             .placeholderMemoryCacheKey(anime.thumbnailUrl)
                             .crossfade(true)
                             .size(40)
                             .build()
                     },
-                    error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
-                    fallback = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                    error = placeholderPainter,
+                    fallback = placeholderPainter,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.size(40.dp),

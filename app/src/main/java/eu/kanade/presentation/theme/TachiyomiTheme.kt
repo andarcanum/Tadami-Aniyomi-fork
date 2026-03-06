@@ -8,6 +8,7 @@ import androidx.compose.material3.RippleConfiguration
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import eu.kanade.domain.ui.UiPreferences
@@ -72,7 +73,10 @@ private fun BaseTachiyomiTheme(
         isAmoled = isAmoled,
     )
 
-    CompositionLocalProvider(LocalAuroraColors provides auroraColors) {
+    CompositionLocalProvider(
+        LocalAuroraColors provides auroraColors,
+        LocalIsAuroraTheme provides appTheme.isAuroraStyle,
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             content = content,
@@ -113,6 +117,8 @@ val playerRippleConfiguration
             pressedAlpha = RIPPLE_PRESSED_ALPHA,
         ),
     )
+
+val LocalIsAuroraTheme = staticCompositionLocalOf { false }
 
 private val colorSchemes: Map<AppTheme, BaseColorScheme> = mapOf(
     AppTheme.DEFAULT to AuroraColorScheme,

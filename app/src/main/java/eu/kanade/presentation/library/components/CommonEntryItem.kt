@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
@@ -78,6 +79,7 @@ fun EntryCompactGridItem(
     title: String? = null,
     onClickContinueViewing: (() -> Unit)? = null,
     coverAlpha: Float = 1f,
+    errorPainter: Painter? = null,
     coverBadgeStart: @Composable (RowScope.() -> Unit)? = null,
     coverBadgeEnd: @Composable (RowScope.() -> Unit)? = null,
 ) {
@@ -93,6 +95,7 @@ fun EntryCompactGridItem(
                         .fillMaxWidth()
                         .alpha(if (isSelected) GRID_SELECTED_COVER_ALPHA else coverAlpha),
                     data = coverData,
+                    errorPainter = errorPainter,
                 )
             },
             badgesStart = coverBadgeStart,
@@ -183,6 +186,7 @@ fun EntryComfortableGridItem(
     titleMaxLines: Int = 2,
     coverData: EntryCoverModel,
     coverAlpha: Float = 1f,
+    errorPainter: Painter? = null,
     coverBadgeStart: (@Composable RowScope.() -> Unit)? = null,
     coverBadgeEnd: (@Composable RowScope.() -> Unit)? = null,
     onClickContinueViewing: (() -> Unit)? = null,
@@ -200,6 +204,7 @@ fun EntryComfortableGridItem(
                             .fillMaxWidth()
                             .alpha(if (isSelected) GRID_SELECTED_COVER_ALPHA else coverAlpha),
                         data = coverData,
+                        errorPainter = errorPainter,
                     )
                 },
                 badgesStart = coverBadgeStart,
@@ -335,6 +340,7 @@ fun EntryListItem(
     title: String,
     coverData: EntryCoverModel,
     coverAlpha: Float = 1f,
+    errorPainter: Painter? = null,
     onLongClick: () -> Unit,
     onClick: () -> Unit,
     badge: @Composable (RowScope.() -> Unit),
@@ -367,6 +373,7 @@ fun EntryListItem(
                 .fillMaxHeight()
                 .alpha(coverAlpha),
             data = coverData,
+            errorPainter = errorPainter,
         )
         Text(
             text = title,

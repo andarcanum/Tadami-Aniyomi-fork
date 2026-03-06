@@ -157,19 +157,11 @@ fun NovelScreenAuroraImpl(
         val topContentPadding = 96.dp
 
         Box(modifier = Modifier.fillMaxSize()) {
-            if (!novel.thumbnailUrl.isNullOrBlank()) {
-                FullscreenPosterBackground(
-                    novel = novel,
-                    scrollOffset = 0,
-                    firstVisibleItemIndex = 0,
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black),
-                )
-            }
+            FullscreenPosterBackground(
+                novel = novel,
+                scrollOffset = 0,
+                firstVisibleItemIndex = 0,
+            )
 
             TwoPanelBox(
                 modifier = Modifier.fillMaxSize(),
@@ -460,19 +452,11 @@ fun NovelScreenAuroraImpl(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        if (!novel.thumbnailUrl.isNullOrBlank()) {
-            FullscreenPosterBackground(
-                novel = novel,
-                scrollOffset = scrollOffset,
-                firstVisibleItemIndex = firstVisibleItemIndex,
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black),
-            )
-        }
+        FullscreenPosterBackground(
+            novel = novel,
+            scrollOffset = scrollOffset,
+            firstVisibleItemIndex = firstVisibleItemIndex,
+        )
 
         LazyColumn(
             state = lazyListState,

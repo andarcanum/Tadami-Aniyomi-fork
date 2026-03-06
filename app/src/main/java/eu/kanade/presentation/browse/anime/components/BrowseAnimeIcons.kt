@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import coil3.compose.AsyncImage
 import eu.kanade.domain.source.anime.model.icon
-import eu.kanade.presentation.util.rememberResourceBitmapPainter
+import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.extension.anime.model.AnimeExtension
 import eu.kanade.tachiyomi.extension.anime.util.AnimeExtensionLoader
@@ -91,7 +91,7 @@ fun AnimeExtensionIcon(
                 model = extension.iconUrl,
                 contentDescription = null,
                 placeholder = ColorPainter(Color(0x1F888888)),
-                error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                error = rememberThemeAwareCoverErrorPainter(),
                 modifier = modifier
                     .clip(MaterialTheme.shapes.extraSmall),
             )

@@ -13,6 +13,7 @@ import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import eu.kanade.presentation.browse.BrowseSourceLoadingItem
 import eu.kanade.presentation.browse.InLibraryBadge
+import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.library.components.CommonEntryItemDefaults
 import eu.kanade.presentation.library.components.EntryListItem
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
@@ -78,6 +79,7 @@ private fun BrowseMangaSourceListItem(
     entries: Int,
     containerHeight: Int,
 ) {
+    val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
     EntryListItem(
         title = manga.title,
         coverData = MangaCover(
@@ -91,6 +93,7 @@ private fun BrowseMangaSourceListItem(
         badge = {
             InLibraryBadge(enabled = manga.favorite)
         },
+        errorPainter = placeholderPainter,
         onLongClick = onLongClick,
         onClick = onClick,
         entries = entries,
