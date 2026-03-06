@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -106,6 +107,11 @@ fun NovelScreenAuroraImpl(
     scanlatorChapterCounts: Map<String, Int>,
     selectedScanlator: String?,
     onScanlatorSelected: (String?) -> Unit,
+    chapterPageEnabled: Boolean,
+    chapterPageCurrent: Int,
+    chapterPageTotal: Int,
+    chapterPageLoading: Boolean,
+    onChapterPageChange: (Int) -> Unit,
     onToggleAllSelection: (Boolean) -> Unit,
     onInvertSelection: () -> Unit,
     onMultiBookmarkClicked: (Boolean) -> Unit,
@@ -113,6 +119,11 @@ fun NovelScreenAuroraImpl(
 ) {
     val novel = state.novel
     val chapters = state.processedChapters
+    val totalChapterCount = if (state.chapterPageEnabled) {
+        maxOf(state.chapters.size, state.chapterPageEstimatedTotal)
+    } else {
+        chapters.size
+    }
     val colors = AuroraTheme.colors
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
@@ -176,7 +187,7 @@ fun NovelScreenAuroraImpl(
                         ) {
                             NovelHeroContent(
                                 novel = novel,
-                                chapterCount = chapters.size,
+                                chapterCount = totalChapterCount,
                                 onContinueReading = onStartReading,
                                 isReading = isReading,
                                 modifier = Modifier.fillMaxWidth(),
@@ -184,7 +195,7 @@ fun NovelScreenAuroraImpl(
                             Spacer(modifier = Modifier.height(8.dp))
                             NovelInfoCard(
                                 novel = novel,
-                                chapterCount = chapters.size,
+                                chapterCount = totalChapterCount,
                                 nextUpdate = nextUpdate,
                                 onTagSearch = {},
                                 descriptionExpanded = descriptionExpanded,
@@ -243,7 +254,21 @@ fun NovelScreenAuroraImpl(
                         }
 
                         item {
-                            ChaptersHeader(chapterCount = chapters.size)
+                            ChaptersHeader(chapterCount = totalChapterCount)
+                        }
+
+                        if (chapterPageEnabled) {
+                            item {
+                                AuroraChapterPageControls(
+                                    chapterPageCurrent = chapterPageCurrent,
+                                    chapterPageTotal = chapterPageTotal,
+                                    chapterPageLoading = chapterPageLoading,
+                                    onChapterPageChange = onChapterPageChange,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp),
+                                )
+                            }
                         }
 
                         if (state.showScanlatorSelector) {
@@ -465,7 +490,7 @@ fun NovelScreenAuroraImpl(
                     Spacer(modifier = Modifier.height(16.dp))
                     NovelInfoCard(
                         novel = novel,
-                        chapterCount = chapters.size,
+                        chapterCount = totalChapterCount,
                         nextUpdate = nextUpdate,
                         onTagSearch = {},
                         descriptionExpanded = descriptionExpanded,
@@ -512,9 +537,21 @@ fun NovelScreenAuroraImpl(
             item {
                 Spacer(modifier = Modifier.height(16.dp))
                 ChaptersHeader(
-                    chapterCount = chapters.size,
+                    chapterCount = totalChapterCount,
                     modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
                 )
+            }
+
+            if (chapterPageEnabled) {
+                item {
+                    AuroraChapterPageControls(
+                        chapterPageCurrent = chapterPageCurrent,
+                        chapterPageTotal = chapterPageTotal,
+                        chapterPageLoading = chapterPageLoading,
+                        onChapterPageChange = onChapterPageChange,
+                        modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
+                    )
+                }
             }
 
             if (state.showScanlatorSelector) {
@@ -612,7 +649,7 @@ fun NovelScreenAuroraImpl(
             ) {
                 NovelHeroContent(
                     novel = novel,
-                    chapterCount = chapters.size,
+                    chapterCount = totalChapterCount,
                     onContinueReading = onStartReading,
                     isReading = isReading,
                 )
@@ -758,6 +795,62 @@ fun NovelScreenAuroraImpl(
 
 internal fun shouldUseNovelAuroraTwoPane(deviceClass: AuroraDeviceClass): Boolean {
     return deviceClass == AuroraDeviceClass.TabletExpanded
+}
+
+@Composable
+private fun AuroraChapterPageControls(
+    chapterPageCurrent: Int,
+    chapterPageTotal: Int,
+    chapterPageLoading: Boolean,
+    onChapterPageChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AuroraTheme.colors
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+            .background(colors.surface.copy(alpha = 0.86f))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        SelectionChip(
+            text = "←",
+            onClick = {
+                if (!chapterPageLoading && chapterPageCurrent > 1) {
+                    onChapterPageChange(chapterPageCurrent - 1)
+                }
+            },
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "$chapterPageCurrent / $chapterPageTotal",
+                color = colors.textPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            if (chapterPageLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(14.dp),
+                    strokeWidth = 2.dp,
+                    color = colors.accent,
+                )
+            }
+        }
+        SelectionChip(
+            text = "→",
+            onClick = {
+                if (!chapterPageLoading && chapterPageCurrent < chapterPageTotal) {
+                    onChapterPageChange(chapterPageCurrent + 1)
+                }
+            },
+        )
+    }
 }
 
 @Composable

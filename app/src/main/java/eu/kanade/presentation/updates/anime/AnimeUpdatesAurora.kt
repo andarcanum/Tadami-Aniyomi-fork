@@ -52,6 +52,8 @@ import eu.kanade.presentation.components.relativeDateText
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
+import eu.kanade.presentation.util.rememberResourceBitmapPainter
+import eu.kanade.tachiyomi.R
 import eu.kanade.presentation.updates.aurora.AuroraUpdatesGroupCard
 import eu.kanade.presentation.updates.aurora.buildAuroraUpdatesGroups
 import eu.kanade.tachiyomi.ui.updates.anime.AnimeUpdatesItem
@@ -319,6 +321,8 @@ fun AuroraUpdateCard(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
+                error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                fallback = rememberResourceBitmapPainter(id = R.drawable.cover_error),
             )
         }
 

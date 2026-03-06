@@ -50,7 +50,7 @@ class NovelReaderPreferencesTest {
         prefs.customThemes().get() shouldBe emptyList()
         prefs.geminiEnabled().get() shouldBe false
         prefs.geminiPromptMode().get() shouldBe GeminiPromptMode.ADULT_18
-        prefs.geminiModel().get() shouldBe "gemini-2.5-flash"
+        prefs.geminiModel().get() shouldBe "gemini-3.1-flash-lite-preview"
         prefs.geminiTemperature().get() shouldBe 0.7f
         prefs.geminiReasoningEffort().get() shouldBe "minimal"
         prefs.geminiBudgetTokens().get() shouldBe 8192
@@ -215,7 +215,7 @@ class NovelReaderPreferencesTest {
         prefs.prefetchNextChapter().set(false)
         prefs.bionicReading().set(false)
         prefs.geminiApiKey().set("")
-        prefs.geminiModel().set("gemini-2.5-flash")
+        prefs.geminiModel().set("gemini-3.1-flash-lite-preview")
         prefs.geminiBatchSize().set(40)
         prefs.geminiConcurrency().set(2)
         prefs.geminiDisableCache().set(false)

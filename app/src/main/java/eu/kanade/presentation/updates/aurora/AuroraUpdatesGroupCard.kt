@@ -30,6 +30,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.util.rememberResourceBitmapPainter
+import eu.kanade.tachiyomi.R
 
 @Composable
 fun AuroraUpdatesGroupCard(
@@ -72,6 +74,8 @@ fun AuroraUpdatesGroupCard(
                     .height(72.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(colors.cardBackground),
+                error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                fallback = rememberResourceBitmapPainter(id = R.drawable.cover_error),
             )
 
             Spacer(modifier = Modifier.width(12.dp))

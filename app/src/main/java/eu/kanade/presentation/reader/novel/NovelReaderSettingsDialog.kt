@@ -51,6 +51,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPrivateBridge
 import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.padding
@@ -366,6 +367,11 @@ private fun GeneralTab(
             )
         }
         if (showGeminiSettings) {
+            val privateProviderLabel = if (GeminiPrivateBridge.isInstalled()) {
+                GeminiPrivateBridge.providerLabel()
+            } else {
+                "Gemini Private"
+            }
             Text(
                 text = stringResource(AYMR.strings.novel_reader_translation_provider),
                 style = MaterialTheme.typography.bodyMedium,
@@ -374,6 +380,7 @@ private fun GeneralTab(
                 listOf(
                     NovelTranslationProvider.GEMINI to
                         stringResource(AYMR.strings.novel_reader_translation_provider_gemini),
+                    NovelTranslationProvider.GEMINI_PRIVATE to privateProviderLabel,
                     NovelTranslationProvider.OPENROUTER to
                         stringResource(AYMR.strings.novel_reader_translation_provider_openrouter),
                     NovelTranslationProvider.DEEPSEEK to

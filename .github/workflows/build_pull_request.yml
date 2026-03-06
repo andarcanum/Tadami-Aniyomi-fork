@@ -198,3 +198,20 @@ jobs:
       - name: Reading gate skipped (non-reading change)
         if: steps.reading_changes.outputs.reading_critical != 'true'
         run: echo "reading_critical=false, strict reading regression matrix skipped."
+
+  aurora_contrast_check:
+    name: Aurora Contrast Check (non-blocking)
+    runs-on: 'ubuntu-24.04'
+    continue-on-error: true
+
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Run Aurora contrast validation script
+        shell: pwsh
+        run: |
+          ./tools/ci/check_aurora_contrast.ps1 `
+            -InputPath tools/ci/aurora-contrast-samples.csv `
+            -MinContrast 4.5 `
+            -Strict

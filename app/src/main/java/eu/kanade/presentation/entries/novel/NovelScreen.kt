@@ -18,6 +18,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.ChevronLeft
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.Download
@@ -31,6 +33,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -66,6 +69,7 @@ import eu.kanade.presentation.entries.components.EntryToolbar
 import eu.kanade.presentation.entries.components.ItemCover
 import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.util.rememberResourceBitmapPainter
 import eu.kanade.presentation.util.formatChapterNumber
 import eu.kanade.tachiyomi.data.coil.staticBlur
 import eu.kanade.tachiyomi.source.model.SManga
@@ -117,6 +121,11 @@ fun NovelScreen(
     scanlatorChapterCounts: Map<String, Int>,
     selectedScanlator: String?,
     onScanlatorSelected: (String?) -> Unit,
+    chapterPageEnabled: Boolean,
+    chapterPageCurrent: Int,
+    chapterPageTotal: Int,
+    chapterPageLoading: Boolean,
+    onChapterPageChange: (Int) -> Unit,
     onChapterLongClick: (Long) -> Unit,
     onAllChapterSelected: (Boolean) -> Unit,
     onInvertSelection: () -> Unit,
@@ -160,6 +169,11 @@ fun NovelScreen(
             scanlatorChapterCounts = scanlatorChapterCounts,
             selectedScanlator = selectedScanlator,
             onScanlatorSelected = onScanlatorSelected,
+            chapterPageEnabled = chapterPageEnabled,
+            chapterPageCurrent = chapterPageCurrent,
+            chapterPageTotal = chapterPageTotal,
+            chapterPageLoading = chapterPageLoading,
+            onChapterPageChange = onChapterPageChange,
             onToggleAllSelection = onAllChapterSelected,
             onInvertSelection = onInvertSelection,
             onMultiBookmarkClicked = onMultiBookmarkClicked,
@@ -173,6 +187,11 @@ fun NovelScreen(
     val auroraColors = AuroraTheme.colors
 
     val chapters = state.processedChapters
+    val totalChapterCount = if (state.chapterPageEnabled) {
+        maxOf(state.chapters.size, state.chapterPageEstimatedTotal)
+    } else {
+        chapters.size
+    }
     val selectedIds = state.selectedChapterIds
     val selectedCount = selectedIds.size
     val isAnySelected = selectedCount > 0
@@ -264,6 +283,8 @@ fun NovelScreen(
                             .placeholderMemoryCacheKey(state.novel.thumbnailUrl)
                             .staticBlur(blurRadiusPx, intensityFactor = 0.6f)
                             .build(),
+                        error = rememberResourceBitmapPainter(id = eu.kanade.tachiyomi.R.drawable.cover_error),
+                        fallback = rememberResourceBitmapPainter(id = eu.kanade.tachiyomi.R.drawable.cover_error),
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
@@ -335,8 +356,8 @@ fun NovelScreen(
                                 Text(
                                     text = pluralStringResource(
                                         MR.plurals.manga_num_chapters,
-                                        chapters.size,
-                                        chapters.size,
+                                        totalChapterCount,
+                                        totalChapterCount,
                                     ),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = if (isAurora) {
@@ -520,6 +541,52 @@ fun NovelScreen(
                             .fillMaxWidth()
                             .padding(horizontal = MaterialTheme.padding.medium, vertical = MaterialTheme.padding.small),
                     )
+                }
+            }
+
+            if (chapterPageEnabled) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = MaterialTheme.padding.medium, vertical = MaterialTheme.padding.small),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        IconButton(
+                            onClick = { onChapterPageChange(chapterPageCurrent - 1) },
+                            enabled = !chapterPageLoading && chapterPageCurrent > 1,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.ChevronLeft,
+                                contentDescription = stringResource(MR.strings.spen_previous_page),
+                            )
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                text = "$chapterPageCurrent / $chapterPageTotal",
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                            if (chapterPageLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                            }
+                        }
+                        IconButton(
+                            onClick = { onChapterPageChange(chapterPageCurrent + 1) },
+                            enabled = !chapterPageLoading && chapterPageCurrent < chapterPageTotal,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.ChevronRight,
+                                contentDescription = stringResource(MR.strings.spen_next_page),
+                            )
+                        }
+                    }
                 }
             }
 

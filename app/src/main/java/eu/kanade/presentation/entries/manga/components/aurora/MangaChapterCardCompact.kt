@@ -34,6 +34,8 @@ import coil3.request.crossfade
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadAction
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadIndicator
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.util.rememberResourceBitmapPainter
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.entries.manga.ChapterList
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.entries.manga.model.asMangaCover
@@ -89,6 +91,8 @@ fun MangaChapterCardCompact(
                             .size(40)
                             .build()
                     },
+                    error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                    fallback = rememberResourceBitmapPainter(id = R.drawable.cover_error),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.size(40.dp),

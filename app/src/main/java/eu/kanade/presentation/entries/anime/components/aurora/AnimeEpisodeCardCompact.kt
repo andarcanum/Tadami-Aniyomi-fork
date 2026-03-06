@@ -35,6 +35,8 @@ import eu.kanade.presentation.entries.anime.components.EpisodeDownloadAction
 import eu.kanade.presentation.entries.anime.components.EpisodeDownloadIndicator
 import eu.kanade.presentation.entries.manga.components.aurora.GlassmorphismCard
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.util.rememberResourceBitmapPainter
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.entries.anime.EpisodeList
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.entries.anime.model.asAnimeCover
@@ -90,6 +92,8 @@ fun AnimeEpisodeCardCompact(
                             .size(40)
                             .build()
                     },
+                    error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                    fallback = rememberResourceBitmapPainter(id = R.drawable.cover_error),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.size(40.dp),

@@ -3,8 +3,17 @@ package eu.kanade.tachiyomi.ui.home
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.RowScope
@@ -26,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.contentDescription
@@ -41,8 +51,10 @@ import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.StartScreen
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.util.ResolvedNavigationTransitionMode
 import eu.kanade.presentation.util.Screen
 import eu.kanade.presentation.util.isTabletUi
+import eu.kanade.presentation.util.resolveNavigationTransitionMode
 import eu.kanade.tachiyomi.ui.browse.BrowseTab
 import eu.kanade.tachiyomi.ui.download.DownloadsTab
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen
@@ -53,6 +65,8 @@ import eu.kanade.tachiyomi.ui.library.anime.AnimeLibraryTab
 import eu.kanade.tachiyomi.ui.library.manga.MangaLibraryTab
 import eu.kanade.tachiyomi.ui.more.MoreTab
 import eu.kanade.tachiyomi.ui.updates.UpdatesTab
+import eu.kanade.tachiyomi.util.system.animatorDurationScale
+import eu.kanade.tachiyomi.util.system.powerManager
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -78,6 +92,8 @@ object HomeScreen : Screen() {
     private val showBottomNavEvent = Channel<Boolean>()
 
     private const val TAB_FADE_DURATION = 200
+    private const val TAB_MODERN_ENTER_DURATION = 260
+    private const val TAB_MODERN_EXIT_DURATION = 180
     private const val TAB_NAVIGATOR_KEY = "HomeTabs"
 
     private val uiPreferences: UiPreferences by injectLazy()
@@ -86,7 +102,14 @@ object HomeScreen : Screen() {
 
     @Composable
     override fun Content() {
+        val context = LocalContext.current
         val navStyle by uiPreferences.navStyle().collectAsState()
+        val selectedTransitionMode by uiPreferences.navigationTransitionMode().collectAsState()
+        val resolvedTransitionMode = resolveNavigationTransitionMode(
+            selectedMode = selectedTransitionMode,
+            animatorDurationScale = context.animatorDurationScale,
+            isPowerSaveMode = context.powerManager.isPowerSaveMode,
+        )
         val currentMoreTab = navStyle.moreTab
         val theme by uiPreferences.appTheme().collectAsState()
         val isAurora = theme.isAuroraStyle
@@ -152,11 +175,45 @@ object HomeScreen : Screen() {
                         AnimatedContent(
                             targetState = tabNavigator.current,
                             transitionSpec = {
-                                materialFadeThroughIn(
-                                    initialScale = 1f,
-                                    durationMillis = TAB_FADE_DURATION,
-                                ) togetherWith
-                                    materialFadeThroughOut(durationMillis = TAB_FADE_DURATION)
+                                when (resolvedTransitionMode) {
+                                    ResolvedNavigationTransitionMode.NONE -> {
+                                        EnterTransition.None togetherWith ExitTransition.None
+                                    }
+                                    ResolvedNavigationTransitionMode.LEGACY -> {
+                                        materialFadeThroughIn(
+                                            initialScale = 1f,
+                                            durationMillis = TAB_FADE_DURATION,
+                                        ) togetherWith
+                                            materialFadeThroughOut(durationMillis = TAB_FADE_DURATION)
+                                    }
+                                    ResolvedNavigationTransitionMode.MODERN -> {
+                                        val direction = tabDirection(
+                                            initialTab = initialState,
+                                            targetTab = targetState,
+                                            currentMoreTab = currentMoreTab,
+                                            navStyle = navStyle,
+                                        )
+                                        val enter = slideInHorizontally(
+                                            animationSpec = tween(
+                                                durationMillis = TAB_MODERN_ENTER_DURATION,
+                                                easing = LinearOutSlowInEasing,
+                                            ),
+                                            initialOffsetX = { width -> direction * (width / 3) },
+                                        ) + fadeIn(
+                                            animationSpec = tween(durationMillis = TAB_MODERN_ENTER_DURATION),
+                                        )
+                                        val exit = slideOutHorizontally(
+                                            animationSpec = tween(
+                                                durationMillis = TAB_MODERN_EXIT_DURATION,
+                                                easing = FastOutSlowInEasing,
+                                            ),
+                                            targetOffsetX = { width -> -direction * (width / 4) },
+                                        ) + fadeOut(
+                                            animationSpec = tween(durationMillis = TAB_MODERN_EXIT_DURATION),
+                                        )
+                                        enter togetherWith exit
+                                    }
+                                }
                             },
                             label = "tabContent",
                         ) {
@@ -438,4 +495,28 @@ internal fun shouldHandleBackInHome(
 ): Boolean {
     return (currentTab == currentMoreTab || currentTab != defaultTab) &&
         (currentTab != AnimeLibraryTab || defaultTab != currentMoreTab)
+}
+
+private fun tabDirection(
+    initialTab: cafe.adriel.voyager.navigator.tab.Tab,
+    targetTab: cafe.adriel.voyager.navigator.tab.Tab,
+    currentMoreTab: cafe.adriel.voyager.navigator.tab.Tab,
+    navStyle: eu.kanade.domain.ui.model.NavStyle,
+): Int {
+    val initialIndex = tabOrderIndex(initialTab, navStyle, currentMoreTab)
+    val targetIndex = tabOrderIndex(targetTab, navStyle, currentMoreTab)
+    return if (targetIndex >= initialIndex) 1 else -1
+}
+
+private fun tabOrderIndex(
+    tab: cafe.adriel.voyager.navigator.tab.Tab,
+    navStyle: eu.kanade.domain.ui.model.NavStyle,
+    currentMoreTab: cafe.adriel.voyager.navigator.tab.Tab,
+): Int {
+    val visibleIndex = navStyle.tabs.indexOfFirst { it::class == tab::class }
+    return when {
+        visibleIndex >= 0 -> visibleIndex
+        tab::class == currentMoreTab::class -> navStyle.tabs.size
+        else -> navStyle.tabs.size + 1
+    }
 }

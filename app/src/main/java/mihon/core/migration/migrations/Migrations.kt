@@ -51,4 +51,5 @@ val migrations: List<Migration>
         AuroraSectionMigration(),
         SetupNovelLibraryUpdateMigration(),
         CoalesceLibraryUpdateWorkersMigration(),
+        NavigationTransitionModeMigration(),
     )

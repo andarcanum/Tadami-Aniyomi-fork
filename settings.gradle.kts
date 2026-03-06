@@ -1,3 +1,5 @@
+import java.util.Properties
+
 pluginManagement {
     resolutionStrategy {
         eachPlugin {
@@ -58,3 +60,19 @@ include(":presentation-core")
 include(":presentation-widget")
 include(":source-api")
 include(":source-local")
+
+val localProperties = Properties().apply {
+    val file = rootDir.resolve("local.properties")
+    if (file.isFile) {
+        file.inputStream().use(::load)
+    }
+}
+
+val privateGeminiModuleDir = localProperties.getProperty("private.gemini.module.dir")?.trim().orEmpty()
+if (privateGeminiModuleDir.isNotEmpty()) {
+    val privateModule = file(privateGeminiModuleDir)
+    if (privateModule.isDirectory) {
+        include(":private-gemini-bridge")
+        project(":private-gemini-bridge").projectDir = privateModule
+    }
+}

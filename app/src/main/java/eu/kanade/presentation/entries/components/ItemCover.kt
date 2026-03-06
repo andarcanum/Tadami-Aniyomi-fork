@@ -47,10 +47,12 @@ enum class ItemCover(val ratio: Float) {
             )
 
         if (isLoadableCoverData(model)) {
+            val coverErrorPainter = rememberResourceBitmapPainter(id = R.drawable.cover_error)
             AsyncImage(
                 model = model,
                 placeholder = ColorPainter(CoverPlaceholderColor),
-                error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                error = coverErrorPainter,
+                fallback = coverErrorPainter,
                 contentDescription = contentDescription,
                 modifier = imageModifier,
                 contentScale = ContentScale.Crop,

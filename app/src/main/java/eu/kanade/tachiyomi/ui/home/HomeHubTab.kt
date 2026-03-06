@@ -125,6 +125,7 @@ import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.presentation.util.Tab
+import eu.kanade.presentation.util.rememberResourceBitmapPainter
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.browse.BrowseTab
 import eu.kanade.tachiyomi.ui.browse.anime.source.browse.BrowseAnimeSourceScreen
@@ -1966,11 +1967,28 @@ private fun HeroSection(
         Brush.verticalGradient(
             colorStops = arrayOf(
                 0.00f to Color.Transparent,
-                0.46f to Color.Transparent,
-                0.72f to colors.background.copy(alpha = 0.34f),
-                0.90f to colors.background.copy(alpha = 0.72f),
-                1.00f to colors.background.copy(alpha = 0.93f),
+                0.40f to Color.Transparent,
+                0.66f to colors.background.copy(alpha = 0.42f),
+                0.86f to colors.background.copy(alpha = 0.84f),
+                1.00f to colors.background.copy(alpha = 0.96f),
             ),
+        )
+    }
+    val readabilityScrim = remember {
+        Brush.verticalGradient(
+            colorStops = arrayOf(
+                0.00f to Color.Transparent,
+                0.58f to Color.Transparent,
+                0.78f to Color.Black.copy(alpha = 0.46f),
+                1.00f to Color.Black.copy(alpha = 0.88f),
+            ),
+        )
+    }
+    val heroTextShadow = remember {
+        Shadow(
+            color = Color.Black.copy(alpha = 0.86f),
+            offset = Offset(0f, 2.5f),
+            blurRadius = 10f,
         )
     }
     val rimLightBrush = remember { homeHubRimLightBrush() }
@@ -1999,8 +2017,11 @@ private fun HeroSection(
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),
+            error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+            fallback = rememberResourceBitmapPainter(id = R.drawable.cover_error),
         )
         Box(Modifier.fillMaxSize().background(overlayGradient))
+        Box(Modifier.fillMaxSize().background(readabilityScrim))
 
         Column(
             modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp),
@@ -2009,11 +2030,11 @@ private fun HeroSection(
             // Badge hidden as per design update
             Text(
                 hero.title,
-                color = colors.textPrimary,
+                color = Color.White,
                 fontSize = 28.sp,
                 fontFamily = FontFamily(Font(eu.kanade.tachiyomi.R.font.montserrat_bold)),
                 lineHeight = 34.sp,
-                style = TextStyle(lineBreak = LineBreak.Heading),
+                style = TextStyle(lineBreak = LineBreak.Heading, shadow = heroTextShadow),
                 textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -2025,9 +2046,10 @@ private fun HeroSection(
                 Spacer(Modifier.width(8.dp))
                 Text(
                     stringResource(progressLabelRes, (hero.progressNumber % 1000).toInt()),
-                    color = colors.textSecondary,
+                    color = Color.White.copy(alpha = 0.92f),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
+                    style = TextStyle(shadow = heroTextShadow),
                 )
             }
 

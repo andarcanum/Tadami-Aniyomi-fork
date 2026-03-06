@@ -80,6 +80,7 @@ import coil3.request.crossfade
 import eu.kanade.presentation.components.DropdownMenu
 import eu.kanade.presentation.entries.components.DotSeparatorText
 import eu.kanade.presentation.entries.components.ItemCover
+import eu.kanade.presentation.util.rememberResourceBitmapPainter
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.coil.staticBlur
 import eu.kanade.tachiyomi.source.model.SManga
@@ -124,6 +125,8 @@ fun MangaInfoBox(
                 .placeholderMemoryCacheKey(manga.thumbnailUrl)
                 .staticBlur(blurRadiusPx, intensityFactor = 0.6f)
                 .build(),
+            error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+            fallback = rememberResourceBitmapPainter(id = R.drawable.cover_error),
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier

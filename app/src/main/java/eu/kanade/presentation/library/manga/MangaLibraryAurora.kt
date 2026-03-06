@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.util.rememberResourceBitmapPainter
+import eu.kanade.tachiyomi.R
 import tachiyomi.domain.entries.manga.model.asMangaCover
 import tachiyomi.domain.library.manga.LibraryManga
 import tachiyomi.i18n.MR
@@ -66,6 +68,8 @@ fun AniviewMangaCard(
                         .placeholderMemoryCacheKey(item.manga.thumbnailUrl)
                         .build()
                 },
+                error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                fallback = rememberResourceBitmapPainter(id = R.drawable.cover_error),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),

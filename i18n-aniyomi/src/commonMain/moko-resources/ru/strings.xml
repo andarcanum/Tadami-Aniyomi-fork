@@ -336,7 +336,7 @@
     <string name="novel_reader_gemini_api_key">Gemini API ключ</string>
     <string name="novel_reader_gemini_api_key_hint">Нужен для запросов перевода Gemini</string>
     <string name="novel_reader_gemini_model">Модель Gemini</string>
-    <string name="novel_reader_gemini_model_hint">Например: gemini-2.5-flash</string>
+    <string name="novel_reader_gemini_model_hint">Например: gemini-3.1-flash-lite-preview</string>
     <string name="novel_reader_gemini_batch_size">Размер батча</string>
     <string name="novel_reader_gemini_concurrency">Параллельность</string>
     <string name="novel_reader_gemini_disable_cache">Отключить кэш перевода</string>
@@ -469,6 +469,12 @@
     <string name="action_start_download_externally">Использовать внешний загрузчик</string>
     <string name="action_start_download_internally">Использовать внутренний загрузчик</string>
     <string name="pref_bottom_nav_style">Стиль нижней навигации</string>
+    <string name="pref_category_motion">Анимация</string>
+    <string name="pref_navigation_transition_mode">Режим анимации переходов</string>
+    <string name="pref_navigation_transition_mode_summary">Авто использует Modern и переключается на Legacy в режиме энергосбережения</string>
+    <string name="pref_navigation_transition_mode_auto">Авто</string>
+    <string name="pref_navigation_transition_mode_modern">Современный</string>
+    <string name="pref_navigation_transition_mode_legacy">Классический</string>
     <string name="pref_show_anime_section">Показывать раздел аниме</string>
     <string name="pref_show_manga_section">Показывать раздел манги</string>
     <string name="pref_show_novel_section">Показывать раздел ранобэ</string>

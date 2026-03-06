@@ -360,7 +360,7 @@ class LibraryPreferences(
 
     fun sortNovelChapterBySourceOrNumber() = preferenceStore.getLong(
         "default_novel_chapter_sort_by_source_or_number",
-        Novel.CHAPTER_SORTING_SOURCE,
+        Novel.CHAPTER_SORTING_NUMBER,
     )
 
     fun displayNovelChapterByNameOrNumber() = preferenceStore.getLong(
@@ -370,7 +370,7 @@ class LibraryPreferences(
 
     fun sortNovelChapterByAscendingOrDescending() = preferenceStore.getLong(
         "default_novel_chapter_sort_by_ascending_or_descending",
-        Novel.CHAPTER_SORT_DESC,
+        Novel.CHAPTER_SORT_ASC,
     )
 
     fun setNovelChapterSettingsDefault(novel: Novel) {

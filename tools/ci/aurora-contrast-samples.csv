@@ -1,0 +1,4 @@
+id,scenario,foreground_hex,background_hex
+home_dark_title,home_dynamic_dark,#FFFFFF,#0D1630
+home_light_title,home_dynamic_light,#1B1B1B,#E7EEFF
+settings_dark_body,settings_dynamic_dark,#F3F4F6,#060913

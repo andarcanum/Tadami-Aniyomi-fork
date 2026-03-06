@@ -523,7 +523,7 @@
     <string name="novel_reader_gemini_api_key">Gemini API key</string>
     <string name="novel_reader_gemini_api_key_hint">Required for Gemini translation requests</string>
     <string name="novel_reader_gemini_model">Gemini model</string>
-    <string name="novel_reader_gemini_model_hint">Example: gemini-2.5-flash</string>
+    <string name="novel_reader_gemini_model_hint">Example: gemini-3.1-flash-lite-preview</string>
     <string name="novel_reader_gemini_batch_size">Batch size</string>
     <string name="novel_reader_gemini_concurrency">Concurrency</string>
     <string name="novel_reader_gemini_disable_cache">Disable translation cache</string>
@@ -665,6 +665,12 @@
     <string name="action_start_download_externally">Use external downloader</string>
     <string name="action_start_download_internally">Use internal downloader</string>
     <string name="pref_bottom_nav_style">Bottom navigation style</string>
+    <string name="pref_category_motion">Motion</string>
+    <string name="pref_navigation_transition_mode">Navigation transition mode</string>
+    <string name="pref_navigation_transition_mode_summary">Auto uses Modern and falls back to Legacy in Battery Saver</string>
+    <string name="pref_navigation_transition_mode_auto">Auto</string>
+    <string name="pref_navigation_transition_mode_modern">Modern</string>
+    <string name="pref_navigation_transition_mode_legacy">Legacy</string>
     <string name="pref_default_home_tab_library">Set start screen to Manga Tab</string>
     <string name="default_manga_category">Default manga category</string>
     <string name="default_anime_category">Default anime category</string>

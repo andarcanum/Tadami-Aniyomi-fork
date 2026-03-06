@@ -3,6 +3,7 @@ package eu.kanade.domain.ui
 import eu.kanade.domain.ui.model.AnimeMetadataSource
 import eu.kanade.domain.ui.model.AppTheme
 import eu.kanade.domain.ui.model.NavStyle
+import eu.kanade.domain.ui.model.NavTransitionMode
 import eu.kanade.domain.ui.model.StartScreen
 import eu.kanade.domain.ui.model.TabletUiMode
 import eu.kanade.domain.ui.model.ThemeMode
@@ -42,6 +43,11 @@ class UiPreferences(
     fun showMangaScanlatorBranches() = preferenceStore.getBoolean("show_manga_scanlator_branches", false)
 
     fun navStyle() = preferenceStore.getEnum("bottom_rail_nav_style", NavStyle.MOVE_HISTORY_TO_MORE)
+
+    fun navigationTransitionMode() = preferenceStore.getEnum(
+        "navigation_transition_mode",
+        NavTransitionMode.MODERN,
+    )
 
     /**
      * Source for anime metadata (posters, ratings, type, status).

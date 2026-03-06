@@ -4,6 +4,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -20,6 +21,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
+import eu.kanade.presentation.util.rememberResourceBitmapPainter
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.coil.staticBlur
 import tachiyomi.domain.entries.anime.model.Anime
 
@@ -79,6 +82,8 @@ fun FullscreenPosterBackground(
                         model = resolvedCoverUrlFallback
                     }
                 },
+                error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                fallback = rememberResourceBitmapPainter(id = R.drawable.cover_error),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
@@ -96,9 +101,18 @@ fun FullscreenPosterBackground(
                         model = resolvedCoverUrlFallback
                     }
                 },
+                error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                fallback = rememberResourceBitmapPainter(id = R.drawable.cover_error),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 alpha = blurOverlayAlpha,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Image(
+                painter = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
         }

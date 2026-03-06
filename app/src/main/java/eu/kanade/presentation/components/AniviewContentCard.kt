@@ -32,6 +32,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.util.rememberResourceBitmapPainter
+import eu.kanade.tachiyomi.R
 
 /**
  * Aniview Universal Content Card
@@ -62,6 +64,8 @@ fun AniviewContentCard(
                     .clip(RoundedCornerShape(12.dp))
                     .cyanGlow(blurRadius = 12.dp, alpha = 0.4f),
                 contentScale = ContentScale.Crop,
+                error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                fallback = rememberResourceBitmapPainter(id = R.drawable.cover_error),
             )
 
             // Badge (top-left)
@@ -152,6 +156,8 @@ fun AniviewHeroCard(
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
+            error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+            fallback = rememberResourceBitmapPainter(id = R.drawable.cover_error),
         )
 
         // Gradient overlay (dark at bottom for text readability)

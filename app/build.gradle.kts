@@ -9,6 +9,7 @@ plugins {
     kotlin("plugin.serialization")
     alias(libs.plugins.aboutLibraries)
 }
+val hasPrivateGeminiBridge = findProject(":private-gemini-bridge") != null
 
 android {
     namespace = "eu.kanade.tachiyomi"
@@ -23,6 +24,7 @@ android {
         buildConfigField("String", "COMMIT_SHA", "\"${getGitSha()}\"")
         buildConfigField("String", "BUILD_TIME", "\"${getBuildTime(useLastCommitTime = false)}\"")
         buildConfigField("boolean", "UPDATER_ENABLED", "${Config.enableUpdater}")
+        buildConfigField("boolean", "PRIVATE_GEMINI_BRIDGE_ENABLED", "$hasPrivateGeminiBridge")
 
         // Put these fields in acra.properties
         // val acraProperties = Properties()
@@ -41,7 +43,7 @@ android {
 
     buildTypes {
         val debug by getting {
-            applicationIdSuffix = ".dev"
+            applicationIdSuffix = ".localdev"
             versionNameSuffix = "-${getCommitCount()}"
             isPseudoLocalesEnabled = true
         }
@@ -190,6 +192,9 @@ dependencies {
     implementation(projects.domain)
     implementation(projects.presentationCore)
     implementation(projects.presentationWidget)
+    if (hasPrivateGeminiBridge) {
+        implementation(project(":private-gemini-bridge"))
+    }
 
     // Compose
     implementation(compose.activity)

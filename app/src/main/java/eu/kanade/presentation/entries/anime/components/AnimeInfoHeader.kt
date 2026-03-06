@@ -8,6 +8,7 @@ import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -84,6 +85,7 @@ import coil3.request.crossfade
 import eu.kanade.presentation.components.DropdownMenu
 import eu.kanade.presentation.entries.components.DotSeparatorText
 import eu.kanade.presentation.entries.components.ItemCover
+import eu.kanade.presentation.util.rememberResourceBitmapPainter
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.data.coil.staticBlur
@@ -131,6 +133,8 @@ fun AnimeInfoBox(
                     .crossfade(true)
                     .staticBlur(blurRadiusPx, intensityFactor = 0.6f)
                     .build(),
+                error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                fallback = rememberResourceBitmapPainter(id = R.drawable.cover_error),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
@@ -138,12 +142,12 @@ fun AnimeInfoBox(
                     .alpha(0.2f),
             )
         } else {
-            Box(
+            Image(
+                painter = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .matchParentSize()
-                    .background(
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
-                    )
                     .alpha(0.2f),
             )
         }

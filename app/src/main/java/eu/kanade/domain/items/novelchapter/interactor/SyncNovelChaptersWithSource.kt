@@ -40,6 +40,8 @@ class SyncNovelChaptersWithSource(
         source: NovelSource,
         manualFetch: Boolean = false,
         fetchWindow: Pair<Long, Long> = Pair(0, 0),
+        retainMissingChapters: Boolean = false,
+        sourceOrderOffset: Long = 0L,
     ): List<NovelChapter> {
         if (rawSourceChapters.isEmpty()) {
             throw NoChaptersException()
@@ -54,16 +56,20 @@ class SyncNovelChaptersWithSource(
                 NovelChapter.create()
                     .copyFromSNovelChapter(sChapter)
                     .copy(name = with(ChapterSanitizer) { sChapter.name.sanitize(novel.title) })
-                    .copy(novelId = novel.id, sourceOrder = i.toLong())
+                    .copy(novelId = novel.id, sourceOrder = sourceOrderOffset + i.toLong())
             }
 
         val dbChapters = novelChapterRepository.getChapterByNovelId(novel.id)
 
         val newChapters = mutableListOf<NovelChapter>()
         val updatedChapters = mutableListOf<NovelChapter>()
-        val removedChapters = dbChapters.filterNot { dbChapter ->
-            sourceChapters.any { sourceChapter ->
-                dbChapter.url == sourceChapter.url
+        val removedChapters = if (retainMissingChapters) {
+            emptyList()
+        } else {
+            dbChapters.filterNot { dbChapter ->
+                sourceChapters.any { sourceChapter ->
+                    dbChapter.url == sourceChapter.url
+                }
             }
         }
 

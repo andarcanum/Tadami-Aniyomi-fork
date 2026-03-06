@@ -267,18 +267,74 @@ class NovelJsSource internal constructor(
                 return@runPluginSafe normalizeChapters(htmlFallbackChapters).mapNotNull { it.toSChapterOrNull() }
             }
 
+            if (isJaomixPlugin()) {
+                if (hasParsePage != true) return@runPluginSafe emptyList()
+                val oldestPage = (sourceNovel.totalPages ?: 1).coerceAtLeast(1)
+                val firstPageChapters = collectChaptersFromParsePage(runtime, novel.url, oldestPage..oldestPage)
+                return@runPluginSafe normalizeChapters(firstPageChapters).mapNotNull { it.toSChapterOrNull() }
+            }
+
             val totalPages = sourceNovel.totalPages ?: return@runPluginSafe emptyList()
             if (hasParsePage != true) return@runPluginSafe emptyList()
 
-            val collected = mutableListOf<ParsedPluginChapter>()
-            for (page in 1..totalPages) {
-                val payload = mutex.withLock {
-                    callPlugin(runtime, "parsePage", toJsString(novel.url), toJsString(page.toString()))
-                }
-                val pageResult = NovelJsPayloadParser.parsePage(json, payload) ?: continue
-                collected.addAll(pageResult.chapters)
-            }
+            val collected = collectChaptersFromParsePage(runtime, novel.url, totalPages)
             normalizeChapters(collected).mapNotNull { it.toSChapterOrNull() }
+        }
+    }
+
+    suspend fun getChapterListPage(
+        novel: SNovel,
+        page: Int,
+    ): NovelPluginChapterListPage? {
+        return runPluginSafe(
+            operation = "chapterListPage(url=${novel.url}, page=$page)",
+            defaultValue = null,
+        ) {
+            val runtime = mutex.withLock { ensureRuntimeLocked() }
+            val sourceNovel = runCatching {
+                mutex.withLock {
+                    val payload = callPlugin(runtime, "parseNovel", toJsString(novel.url))
+                    NovelJsPayloadParser.parseNovel(json, payload)
+                }
+            }.getOrNull() ?: return@runPluginSafe null
+
+            val directChapters = sourceNovel.chapters ?: emptyList()
+            var probePageResult: ParsedPluginPage? = null
+
+            suspend fun parseSinglePage(pageNumber: Int): ParsedPluginPage? {
+                if (hasParsePage != true) return null
+                val payload = mutex.withLock {
+                    callPlugin(runtime, "parsePage", toJsString(novel.url), toJsString(pageNumber.toString()))
+                }
+                return NovelJsPayloadParser.parsePage(json, payload)
+            }
+
+            var totalPages = sourceNovel.totalPages
+            if (totalPages == null) {
+                probePageResult = parseSinglePage(1)
+                totalPages = probePageResult?.totalPages
+            }
+            val safeTotalPages = (totalPages ?: 1).coerceAtLeast(1)
+            val targetPage = page.coerceIn(1, safeTotalPages)
+            val sourcePage = if (isJaomixPlugin()) {
+                (safeTotalPages - targetPage + 1).coerceIn(1, safeTotalPages)
+            } else {
+                targetPage
+            }
+
+            val pageResult = when {
+                sourcePage == 1 && directChapters.isNotEmpty() -> directChapters
+                sourcePage == 1 && probePageResult != null -> probePageResult!!.chapters
+                hasParsePage == true -> parseSinglePage(sourcePage)?.chapters.orEmpty()
+                else -> directChapters
+            }
+            val chapters = normalizeChapters(pageResult).mapNotNull { it.toSChapterOrNull() }
+
+            NovelPluginChapterListPage(
+                page = targetPage,
+                totalPages = safeTotalPages,
+                chapters = chapters,
+            )
         }
     }
 
@@ -1113,6 +1169,40 @@ class NovelJsSource internal constructor(
         return plugin.id.equals("wuxiaworld", ignoreCase = true)
     }
 
+    private fun isJaomixPlugin(): Boolean {
+        return plugin.id.equals("jaomix", ignoreCase = true) ||
+            plugin.id.equals("jaomix.ru", ignoreCase = true) ||
+            plugin.id.contains("jaomix", ignoreCase = true) ||
+            plugin.name.contains("jaomix", ignoreCase = true)
+    }
+
+    fun isJaomixPagedPlugin(): Boolean = isJaomixPlugin()
+
+    private suspend fun collectChaptersFromParsePage(
+        runtime: NovelJsRuntime,
+        novelPath: String,
+        totalPages: Int,
+    ): List<ParsedPluginChapter> {
+        return collectChaptersFromParsePage(runtime, novelPath, 1..totalPages)
+    }
+
+    private suspend fun collectChaptersFromParsePage(
+        runtime: NovelJsRuntime,
+        novelPath: String,
+        pages: IntRange,
+    ): List<ParsedPluginChapter> {
+        if (pages.isEmpty() || hasParsePage != true) return emptyList()
+        val collected = mutableListOf<ParsedPluginChapter>()
+        for (page in pages) {
+            val payload = mutex.withLock {
+                callPlugin(runtime, "parsePage", toJsString(novelPath), toJsString(page.toString()))
+            }
+            val pageResult = NovelJsPayloadParser.parsePage(json, payload) ?: continue
+            collected.addAll(pageResult.chapters)
+        }
+        return collected
+    }
+
     private fun isNovelUpdatesPlugin(): Boolean {
         return plugin.id.equals("novelupdates", ignoreCase = true)
     }
@@ -1358,6 +1448,14 @@ internal data class ParsedPluginNovel(
 
 internal data class ParsedPluginPage(
     val chapters: List<ParsedPluginChapter> = emptyList(),
+    val page: Int? = null,
+    val totalPages: Int? = null,
+)
+
+data class NovelPluginChapterListPage(
+    val page: Int,
+    val totalPages: Int,
+    val chapters: List<SNovelChapter>,
 )
 
 internal object NovelJsPayloadParser {
@@ -1374,7 +1472,15 @@ internal object NovelJsPayloadParser {
             status = root.string("status"),
             rating = root.number("rating"),
             chapters = parseChapters(root["chapters"]),
-            totalPages = root.integer("totalPages"),
+            totalPages = root.integer(
+                "totalPages",
+                "total_pages",
+                "pages",
+                "lastPage",
+                "last_page",
+                "pageCount",
+                "page_count",
+            ),
         )
     }
 
@@ -1385,7 +1491,20 @@ internal object NovelJsPayloadParser {
             is JsonObject -> parseChapters(element["chapters"])
             else -> emptyList()
         }
-        return ParsedPluginPage(chapters = chapters)
+        val root = element as? JsonObject
+        return ParsedPluginPage(
+            chapters = chapters,
+            page = root?.integer("page", "currentPage", "current_page", "pageIndex", "page_index"),
+            totalPages = root?.integer(
+                "totalPages",
+                "total_pages",
+                "pages",
+                "lastPage",
+                "last_page",
+                "pageCount",
+                "page_count",
+            ),
+        )
     }
 
     fun parseChaptersArray(json: Json, payload: String): List<ParsedPluginChapter> {

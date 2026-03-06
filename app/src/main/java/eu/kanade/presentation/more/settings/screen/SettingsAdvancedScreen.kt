@@ -25,6 +25,8 @@ import androidx.core.net.toUri
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.base.BasePreferences
+import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.model.NavTransitionMode
 import eu.kanade.domain.extension.anime.interactor.TrustAnimeExtension
 import eu.kanade.domain.extension.manga.interactor.TrustMangaExtension
 import eu.kanade.domain.source.service.SourcePreferences
@@ -101,6 +103,7 @@ object SettingsAdvancedScreen : SearchableSettings {
 
         val basePreferences = remember { Injekt.get<BasePreferences>() }
         val networkPreferences = remember { Injekt.get<NetworkPreferences>() }
+        val uiPreferences = remember { Injekt.get<UiPreferences>() }
 
         return listOf(
             Preference.PreferenceItem.TextPreference(
@@ -139,6 +142,7 @@ object SettingsAdvancedScreen : SearchableSettings {
                 },
             ),
             getBackgroundActivityGroup(),
+            getMotionGroup(uiPreferences = uiPreferences),
             getDataGroup(),
             getNetworkGroup(networkPreferences = networkPreferences),
             getLibraryGroup(),
@@ -184,6 +188,27 @@ object SettingsAdvancedScreen : SearchableSettings {
                     title = "Don't kill my app!",
                     subtitle = stringResource(MR.strings.about_dont_kill_my_app),
                     onClick = { uriHandler.openUri("https://dontkillmyapp.com/") },
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getMotionGroup(
+        uiPreferences: UiPreferences,
+    ): Preference.PreferenceGroup {
+        return Preference.PreferenceGroup(
+            title = stringResource(AYMR.strings.pref_category_motion),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.ListPreference(
+                    preference = uiPreferences.navigationTransitionMode(),
+                    entries = mapOf(
+                        NavTransitionMode.AUTO to stringResource(AYMR.strings.pref_navigation_transition_mode_auto),
+                        NavTransitionMode.MODERN to stringResource(AYMR.strings.pref_navigation_transition_mode_modern),
+                        NavTransitionMode.LEGACY to stringResource(AYMR.strings.pref_navigation_transition_mode_legacy),
+                    ).toImmutableMap(),
+                    title = stringResource(AYMR.strings.pref_navigation_transition_mode),
+                    subtitle = stringResource(AYMR.strings.pref_navigation_transition_mode_summary),
                 ),
             ),
         )
