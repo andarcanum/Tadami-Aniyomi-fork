@@ -696,7 +696,7 @@ internal fun shouldUseAnimeAuroraTwoPane(deviceClass: AuroraDeviceClass): Boolea
     return deviceClass == AuroraDeviceClass.TabletExpanded
 }
 
-private fun resolveCoverUrl(
+internal fun resolveCoverUrl(
     state: AnimeScreenModel.State.Success,
     useMetadataCovers: Boolean,
 ): ResolvedCover {
@@ -705,7 +705,7 @@ private fun resolveCoverUrl(
     }
 
     if (state.isMetadataLoading) {
-        return ResolvedCover(null, null)
+        return ResolvedCover(state.anime.thumbnailUrl, null)
     }
 
     val metadataCoverUrl = state.animeMetadata?.coverUrl?.takeIf { it.isNotBlank() }
