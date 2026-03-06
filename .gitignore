@@ -74,6 +74,14 @@ photo_5269395384788784295_y.jpg
 # Local caches
 app/cash/
 
+# Local private modules (never push)
+/private-modules/
+/tools/private/
+
+# Local private modules (never push)
+/private-modules/
+/tools/private/
+
 # Conductor tracks (local metadata)
 conductor/tracks/
 
@@ -84,3 +92,4 @@ docs/
 app/release/output-metadata.json
 app/release/baselineProfiles/
 update_reports_0.25_vs_0.23.md
+ReBorn.md
