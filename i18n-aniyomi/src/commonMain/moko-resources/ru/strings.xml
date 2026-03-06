@@ -1136,6 +1136,8 @@
     <string name="pref_show_original_title_summary">Отображать оригинальное название из описания в скобках</string>
     <string name="pref_show_achievement_notifications">Уведомления о достижениях</string>
     <string name="pref_show_achievement_notifications_summary">Показывать всплывающее окно при получении достижений</string>
+    <string name="pref_animated_aurora_background">Анимированный фон Aurora</string>
+    <string name="pref_animated_aurora_background_summary">Показывать мягкие анимированные цветовые переливы на экранах Aurora</string>
 
     <!-- Shikimori Integration -->
     <string name="pref_use_shikimori_rating">Использовать рейтинг и тип из Shikimori</string>

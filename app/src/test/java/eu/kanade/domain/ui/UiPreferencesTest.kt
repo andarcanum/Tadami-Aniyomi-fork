@@ -12,4 +12,11 @@ class UiPreferencesTest {
 
         prefs.showMangaScanlatorBranches().get() shouldBe false
     }
+
+    @Test
+    fun `animated aurora background is enabled by default`() {
+        val prefs = UiPreferences(InMemoryPreferenceStore())
+
+        prefs.animatedAuroraBackground().get() shouldBe true
+    }
 }

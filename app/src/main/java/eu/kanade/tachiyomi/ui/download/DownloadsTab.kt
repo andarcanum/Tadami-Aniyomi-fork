@@ -64,6 +64,7 @@ import cafe.adriel.voyager.navigator.tab.TabOptions
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
+import eu.kanade.presentation.components.AuroraBackground
 import eu.kanade.presentation.components.AuroraTabRow
 import eu.kanade.presentation.components.DropdownMenu
 import eu.kanade.presentation.components.NestedMenuItem
@@ -172,17 +173,7 @@ data object DownloadsTab : Tab {
             }
         }
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(
-                    if (isAurora) {
-                        Modifier.background(auroraColors.backgroundGradient)
-                    } else {
-                        Modifier
-                    },
-                ),
-        ) {
+        val screenContent: @Composable () -> Unit = {
             Scaffold(
                 containerColor = if (isAurora) Color.Transparent else MaterialTheme.colorScheme.background,
                 topBar = {
@@ -419,6 +410,18 @@ data object DownloadsTab : Tab {
                         }
                     }
                 }
+            }
+        }
+
+        if (isAurora) {
+            AuroraBackground {
+                screenContent()
+            }
+        } else {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                screenContent()
             }
         }
     }

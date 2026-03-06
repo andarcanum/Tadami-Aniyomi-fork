@@ -188,10 +188,8 @@ fun TabbedScreenAurora(
         previousInstantTabSwitching = instantTabSwitching
     }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(colors.backgroundGradient),
+    AuroraBackground(
+        modifier = modifier,
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             if (applyStatusBarsPadding) {

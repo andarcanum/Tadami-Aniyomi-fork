@@ -47,6 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.browse.anime.AnimeSourceUiModel
+import eu.kanade.presentation.components.AuroraBackground
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
@@ -68,95 +69,95 @@ fun BrowseScreenAurora(
     onMigrateClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
-    BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.backgroundGradient),
-    ) {
-        val auroraAdaptiveSpec = resolveAuroraAdaptiveSpec(
-            isTabletUi = isTabletUi(),
-            containerWidthDp = maxWidth.value.toInt(),
-        )
-        val columnCount = when (auroraAdaptiveSpec.deviceClass) {
-            AuroraDeviceClass.Phone -> 2
-            AuroraDeviceClass.TabletCompact -> 3
-            AuroraDeviceClass.TabletExpanded -> 4
-        }
-
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(columnCount),
-            modifier = Modifier
-                .fillMaxSize()
-                .auroraCenteredMaxWidth(auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp),
-            contentPadding = PaddingValues(bottom = 100.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+    AuroraBackground {
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxSize(),
         ) {
-            item(span = { GridItemSpan(columnCount) }) {
-                Spacer(modifier = Modifier.height(20.dp))
+            val auroraAdaptiveSpec = resolveAuroraAdaptiveSpec(
+                isTabletUi = isTabletUi(),
+                containerWidthDp = maxWidth.value.toInt(),
+            )
+            val columnCount = when (auroraAdaptiveSpec.deviceClass) {
+                AuroraDeviceClass.Phone -> 2
+                AuroraDeviceClass.TabletCompact -> 3
+                AuroraDeviceClass.TabletExpanded -> 4
             }
 
-            item(span = { GridItemSpan(columnCount) }) {
-                BrowseAuroraHeader(
-                    onSearchClick = onGlobalSearchClick,
-                )
-            }
-
-            item(span = { GridItemSpan(columnCount) }) {
-                QuickActionsSection(
-                    useFullWidthActions = auroraAdaptiveSpec.deviceClass != AuroraDeviceClass.Phone,
-                    onGlobalSearchClick = onGlobalSearchClick,
-                    onExtensionsClick = onExtensionsClick,
-                    onMigrateClick = onMigrateClick,
-                )
-            }
-
-            val pinnedSources = animeSources.filterIsInstance<AnimeSourceUiModel.Item>()
-                .filter { Pin.Actual in it.source.pin }
-
-            if (pinnedSources.isNotEmpty()) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(columnCount),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .auroraCenteredMaxWidth(auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp),
+                contentPadding = PaddingValues(bottom = 100.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 item(span = { GridItemSpan(columnCount) }) {
-                    SourcesSectionHeader(title = stringResource(AYMR.strings.aurora_pinned_sources))
+                    Spacer(modifier = Modifier.height(20.dp))
                 }
+
                 item(span = { GridItemSpan(columnCount) }) {
-                    PinnedSourcesRow(
-                        sources = pinnedSources.map { it.source },
-                        onSourceClick = onAnimeSourceClick,
-                        onSourceLongClick = onAnimeSourceLongClick,
+                    BrowseAuroraHeader(
+                        onSearchClick = onGlobalSearchClick,
                     )
                 }
-            }
 
-            val pinnedSourceIds = pinnedSources.map { it.source.id }.toSet()
+                item(span = { GridItemSpan(columnCount) }) {
+                    QuickActionsSection(
+                        useFullWidthActions = auroraAdaptiveSpec.deviceClass != AuroraDeviceClass.Phone,
+                        onGlobalSearchClick = onGlobalSearchClick,
+                        onExtensionsClick = onExtensionsClick,
+                        onMigrateClick = onMigrateClick,
+                    )
+                }
 
-            animeSources.forEach { item ->
-                when (item) {
-                    is AnimeSourceUiModel.Header -> {
-                        item(
-                            span = { GridItemSpan(columnCount) },
-                            key = "header_${item.language}",
-                        ) {
-                            SourcesSectionHeader(
-                                title = getLanguageDisplayNameComposable(item.language),
-                                showDivider = true,
-                            )
-                        }
+                val pinnedSources = animeSources.filterIsInstance<AnimeSourceUiModel.Item>()
+                    .filter { Pin.Actual in it.source.pin }
+
+                if (pinnedSources.isNotEmpty()) {
+                    item(span = { GridItemSpan(columnCount) }) {
+                        SourcesSectionHeader(title = stringResource(AYMR.strings.aurora_pinned_sources))
                     }
-                    is AnimeSourceUiModel.Item -> {
-                        if (item.source.id !in pinnedSourceIds) {
-                            item(key = "source_${item.source.id}") {
-                                SourceGridItem(
-                                    source = item.source,
-                                    onClick = { onAnimeSourceClick(item.source) },
-                                    onPinClick = { onAnimeSourceLongClick(item.source) },
+                    item(span = { GridItemSpan(columnCount) }) {
+                        PinnedSourcesRow(
+                            sources = pinnedSources.map { it.source },
+                            onSourceClick = onAnimeSourceClick,
+                            onSourceLongClick = onAnimeSourceLongClick,
+                        )
+                    }
+                }
+
+                val pinnedSourceIds = pinnedSources.map { it.source.id }.toSet()
+
+                animeSources.forEach { item ->
+                    when (item) {
+                        is AnimeSourceUiModel.Header -> {
+                            item(
+                                span = { GridItemSpan(columnCount) },
+                                key = "header_${item.language}",
+                            ) {
+                                SourcesSectionHeader(
+                                    title = getLanguageDisplayNameComposable(item.language),
+                                    showDivider = true,
                                 )
+                            }
+                        }
+                        is AnimeSourceUiModel.Item -> {
+                            if (item.source.id !in pinnedSourceIds) {
+                                item(key = "source_${item.source.id}") {
+                                    SourceGridItem(
+                                        source = item.source,
+                                        onClick = { onAnimeSourceClick(item.source) },
+                                        onPinClick = { onAnimeSourceLongClick(item.source) },
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            item(span = { GridItemSpan(columnCount) }) { Spacer(modifier = Modifier.height(24.dp)) }
+                item(span = { GridItemSpan(columnCount) }) { Spacer(modifier = Modifier.height(24.dp)) }
+            }
         }
     }
 }

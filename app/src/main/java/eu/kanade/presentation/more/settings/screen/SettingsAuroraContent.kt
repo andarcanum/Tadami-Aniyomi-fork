@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.navigator.Navigator
+import eu.kanade.presentation.components.AuroraBackground
 import eu.kanade.presentation.more.settings.screen.about.AboutScreen
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.ui.setting.PlayerSettingsScreen
@@ -136,11 +137,7 @@ fun SettingsAuroraContent(
         ),
     )
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.backgroundGradient),
-    ) {
+    AuroraBackground {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()

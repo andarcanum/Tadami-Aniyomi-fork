@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.domain.ui.model.NavStyle
+import eu.kanade.presentation.components.AuroraBackground
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.ui.more.DownloadQueueState
 import tachiyomi.i18n.aniyomi.AYMR
@@ -68,11 +69,7 @@ fun MoreScreenAurora(
 ) {
     val colors = AuroraTheme.colors
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.backgroundGradient),
-    ) {
+    AuroraBackground {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()

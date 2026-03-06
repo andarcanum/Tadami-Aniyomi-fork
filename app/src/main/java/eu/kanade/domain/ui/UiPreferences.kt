@@ -74,6 +74,8 @@ class UiPreferences(
 
     fun showAchievementNotifications() = preferenceStore.getBoolean("show_achievement_notifications", true)
 
+    fun animatedAuroraBackground() = preferenceStore.getBoolean("animated_aurora_background", true)
+
     companion object {
         fun dateFormat(format: String): DateTimeFormatter = when (format) {
             "" -> DateTimeFormatter.ofLocalizedDate(FormatStyle.SHORT)

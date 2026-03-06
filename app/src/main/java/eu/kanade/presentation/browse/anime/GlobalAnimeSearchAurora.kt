@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import eu.kanade.presentation.components.AuroraBackground
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.i18n.aniyomi.AYMR
@@ -40,11 +41,7 @@ fun GlobalAnimeSearchAuroraContent(
 ) {
     val colors = AuroraTheme.colors
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.backgroundGradient),
-    ) {
+    AuroraBackground {
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             contentPadding = contentPadding,

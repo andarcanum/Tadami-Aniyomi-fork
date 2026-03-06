@@ -365,6 +365,13 @@ object SettingsAppearanceScreen : SearchableSettings {
                     ),
                 )
                 add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.animatedAuroraBackground(),
+                        title = stringResource(AYMR.strings.pref_animated_aurora_background),
+                        subtitle = stringResource(AYMR.strings.pref_animated_aurora_background_summary),
+                    ),
+                )
+                add(
                     Preference.PreferenceItem.TextPreference(
                         title = stringResource(AYMR.strings.pref_customize_home_header_layout),
                         subtitle = stringResource(AYMR.strings.pref_customize_home_header_layout_summary),
