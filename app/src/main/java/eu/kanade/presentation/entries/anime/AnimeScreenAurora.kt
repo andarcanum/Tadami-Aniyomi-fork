@@ -7,7 +7,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -689,18 +688,7 @@ fun AnimeScreenAuroraImpl(
             }
         }
 
-        if (isAnyEpisodeSelected) {
-            AuroraEpisodeSelectionTopBar(
-                selectedCount = selectedEpisodes.size,
-                onSelectAll = { onAllEpisodeSelected(true) },
-                onInvertSelection = onInvertSelection,
-                onCancel = { onAllEpisodeSelected(false) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(WindowInsets.statusBars.asPaddingValues())
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-            )
-        } else {
+        if (!isAnyEpisodeSelected) {
             // Top header bar
             Row(
                 modifier = Modifier
@@ -786,8 +774,11 @@ fun AnimeScreenAuroraImpl(
             }
         }
 
-        AuroraAnimeBottomActionMenu(
+        AuroraEpisodeSelectionBottomStack(
             selected = selectedEpisodes,
+            onSelectAll = { onAllEpisodeSelected(true) },
+            onInvertSelection = onInvertSelection,
+            onCancel = { onAllEpisodeSelected(false) },
             onEpisodeClicked = onEpisodeClicked,
             onMultiBookmarkClicked = onMultiBookmarkClicked,
             onMultiFillermarkClicked = onMultiFillermarkClicked,
@@ -795,7 +786,11 @@ fun AnimeScreenAuroraImpl(
             onMarkPreviousAsSeenClicked = onMarkPreviousAsSeenClicked,
             onDownloadEpisode = onDownloadEpisode,
             onMultiDeleteClicked = onMultiDeleteClicked,
-            fillFraction = if (useTwoPaneLayout) 0.5f else 1f,
+            fillFraction = if (auroraSelectionControlsPlacement() == AuroraSelectionControlsPlacement.BottomStack && useTwoPaneLayout) {
+                0.5f
+            } else {
+                1f
+            },
             alwaysUseExternalPlayer = alwaysUseExternalPlayer,
             modifier = Modifier
                 .align(if (useTwoPaneLayout) Alignment.BottomEnd else Alignment.BottomCenter)
@@ -806,50 +801,6 @@ fun AnimeScreenAuroraImpl(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(WindowInsets.systemBars.asPaddingValues()),
-        )
-    }
-}
-
-@Composable
-private fun AuroraEpisodeSelectionTopBar(
-    selectedCount: Int,
-    onSelectAll: () -> Unit,
-    onInvertSelection: () -> Unit,
-    onCancel: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val colors = AuroraTheme.colors
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(colors.surface.copy(alpha = 0.9f))
-            .padding(horizontal = 12.dp, vertical = 10.dp)
-            .horizontalScroll(rememberScrollState()),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(
-            text = selectedCount.toString(),
-            color = colors.accent,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-        )
-        Text(
-            text = stringResource(MR.strings.selected),
-            color = colors.textPrimary,
-            fontSize = 13.sp,
-        )
-        AuroraSelectionChip(
-            text = stringResource(MR.strings.action_select_all),
-            onClick = onSelectAll,
-        )
-        AuroraSelectionChip(
-            text = stringResource(MR.strings.action_select_inverse),
-            onClick = onInvertSelection,
-        )
-        AuroraSelectionChip(
-            text = stringResource(MR.strings.action_cancel),
-            onClick = onCancel,
         )
     }
 }
@@ -885,8 +836,11 @@ private fun AuroraSelectionChip(
 }
 
 @Composable
-private fun AuroraAnimeBottomActionMenu(
+private fun AuroraEpisodeSelectionBottomStack(
     selected: List<EpisodeList.Item>,
+    onSelectAll: () -> Unit,
+    onInvertSelection: () -> Unit,
+    onCancel: () -> Unit,
     onEpisodeClicked: (Episode, Boolean) -> Unit,
     onMultiBookmarkClicked: (List<Episode>, bookmarked: Boolean) -> Unit,
     onMultiFillermarkClicked: (List<Episode>, fillermarked: Boolean) -> Unit,
@@ -898,48 +852,88 @@ private fun AuroraAnimeBottomActionMenu(
     alwaysUseExternalPlayer: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    EntryBottomActionMenu(
-        visible = selected.isNotEmpty(),
-        modifier = modifier.fillMaxWidth(fillFraction),
-        onBookmarkClicked = {
-            onMultiBookmarkClicked(selected.map { it.episode }, true)
-        }.takeIf { selected.any { !it.episode.bookmark } },
-        onRemoveBookmarkClicked = {
-            onMultiBookmarkClicked(selected.map { it.episode }, false)
-        }.takeIf { selected.all { it.episode.bookmark } },
-        onFillermarkClicked = {
-            onMultiFillermarkClicked(selected.map { it.episode }, true)
-        }.takeIf { selected.any { !it.episode.fillermark } },
-        onRemoveFillermarkClicked = {
-            onMultiFillermarkClicked(selected.map { it.episode }, false)
-        }.takeIf { selected.all { it.episode.fillermark } },
-        onMarkAsViewedClicked = {
-            onMultiMarkAsSeenClicked(selected.map { it.episode }, true)
-        }.takeIf { selected.any { !it.episode.seen } },
-        onMarkAsUnviewedClicked = {
-            onMultiMarkAsSeenClicked(selected.map { it.episode }, false)
-        }.takeIf { selected.any { it.episode.seen || it.episode.lastSecondSeen > 0L } },
-        onMarkPreviousAsViewedClicked = {
-            onMarkPreviousAsSeenClicked(selected.first().episode)
-        }.takeIf { selected.size == 1 },
-        onDownloadClicked = {
-            onDownloadEpisode!!(selected, EpisodeDownloadAction.START)
-        }.takeIf {
-            onDownloadEpisode != null && selected.any { it.downloadState != AnimeDownload.State.DOWNLOADED }
-        },
-        onDeleteClicked = {
-            onMultiDeleteClicked(selected.map { it.episode })
-        }.takeIf {
-            onDownloadEpisode != null && selected.any { it.downloadState == AnimeDownload.State.DOWNLOADED }
-        },
-        onExternalClicked = {
-            onEpisodeClicked(selected.first().episode, true)
-        }.takeIf { !alwaysUseExternalPlayer && selected.size == 1 },
-        onInternalClicked = {
-            onEpisodeClicked(selected.first().episode, true)
-        }.takeIf { alwaysUseExternalPlayer && selected.size == 1 },
-        isManga = false,
-    )
+    Column(modifier = modifier.fillMaxWidth(fillFraction)) {
+        if (selected.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(AuroraTheme.colors.surface.copy(alpha = 0.9f))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = selected.size.toString(),
+                    color = AuroraTheme.colors.accent,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = stringResource(MR.strings.selected),
+                    color = AuroraTheme.colors.textPrimary,
+                    fontSize = 13.sp,
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                AuroraSelectionChip(
+                    text = stringResource(MR.strings.action_select_all),
+                    onClick = onSelectAll,
+                )
+                AuroraSelectionChip(
+                    text = stringResource(MR.strings.action_select_inverse),
+                    onClick = onInvertSelection,
+                )
+                AuroraSelectionChip(
+                    text = stringResource(MR.strings.action_cancel),
+                    onClick = onCancel,
+                )
+            }
+        }
+
+        EntryBottomActionMenu(
+            visible = selected.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth(),
+            onBookmarkClicked = {
+                onMultiBookmarkClicked(selected.map { it.episode }, true)
+            }.takeIf { selected.any { !it.episode.bookmark } },
+            onRemoveBookmarkClicked = {
+                onMultiBookmarkClicked(selected.map { it.episode }, false)
+            }.takeIf { selected.all { it.episode.bookmark } },
+            onFillermarkClicked = {
+                onMultiFillermarkClicked(selected.map { it.episode }, true)
+            }.takeIf { selected.any { !it.episode.fillermark } },
+            onRemoveFillermarkClicked = {
+                onMultiFillermarkClicked(selected.map { it.episode }, false)
+            }.takeIf { selected.all { it.episode.fillermark } },
+            onMarkAsViewedClicked = {
+                onMultiMarkAsSeenClicked(selected.map { it.episode }, true)
+            }.takeIf { selected.any { !it.episode.seen } },
+            onMarkAsUnviewedClicked = {
+                onMultiMarkAsSeenClicked(selected.map { it.episode }, false)
+            }.takeIf { selected.any { it.episode.seen || it.episode.lastSecondSeen > 0L } },
+            onMarkPreviousAsViewedClicked = {
+                onMarkPreviousAsSeenClicked(selected.first().episode)
+            }.takeIf { selected.size == 1 },
+            onDownloadClicked = {
+                onDownloadEpisode!!(selected, EpisodeDownloadAction.START)
+            }.takeIf {
+                onDownloadEpisode != null && selected.any { it.downloadState != AnimeDownload.State.DOWNLOADED }
+            },
+            onDeleteClicked = {
+                onMultiDeleteClicked(selected.map { it.episode })
+            }.takeIf {
+                onDownloadEpisode != null && selected.any { it.downloadState == AnimeDownload.State.DOWNLOADED }
+            },
+            onExternalClicked = {
+                onEpisodeClicked(selected.first().episode, true)
+            }.takeIf { !alwaysUseExternalPlayer && selected.size == 1 },
+            onInternalClicked = {
+                onEpisodeClicked(selected.first().episode, true)
+            }.takeIf { alwaysUseExternalPlayer && selected.size == 1 },
+            isManga = false,
+        )
+    }
 }
 
 data class ResolvedCover(
@@ -955,6 +949,14 @@ internal enum class AuroraEpisodeClickAction {
     OpenEpisode,
     SelectEpisode,
     UnselectEpisode,
+}
+
+internal enum class AuroraSelectionControlsPlacement {
+    BottomStack,
+}
+
+internal fun auroraSelectionControlsPlacement(): AuroraSelectionControlsPlacement {
+    return AuroraSelectionControlsPlacement.BottomStack
 }
 
 internal fun resolveAuroraEpisodeClickAction(

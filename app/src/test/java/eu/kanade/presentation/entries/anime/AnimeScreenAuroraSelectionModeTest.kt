@@ -6,6 +6,11 @@ import org.junit.jupiter.api.Test
 class AnimeScreenAuroraSelectionModeTest {
 
     @Test
+    fun `aurora selection controls are rendered in bottom stack`() {
+        auroraSelectionControlsPlacement() shouldBe AuroraSelectionControlsPlacement.BottomStack
+    }
+
+    @Test
     fun `episode click opens episode when nothing is selected`() {
         resolveAuroraEpisodeClickAction(
             isEpisodeSelected = false,

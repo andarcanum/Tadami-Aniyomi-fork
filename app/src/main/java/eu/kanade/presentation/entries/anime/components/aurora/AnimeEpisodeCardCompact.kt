@@ -213,6 +213,30 @@ fun AnimeEpisodeCardCompact(
                         )
                     }
 
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        if (episode.bookmark) {
+                            AuroraEpisodeStatusBadge(
+                                icon = Icons.Outlined.BookmarkAdd,
+                                label = "Bookmark",
+                            )
+                        }
+                        if (episode.fillermark) {
+                            AuroraEpisodeStatusBadge(
+                                icon = Icons.Outlined.NewLabel,
+                                label = "Filler",
+                            )
+                        }
+                        if (episode.seen) {
+                            AuroraEpisodeStatusBadge(
+                                icon = Icons.Outlined.Done,
+                                label = "Seen",
+                            )
+                        }
+                    }
+
                     // Progress bar for seen episodes
                     if (episode.seen) {
                         Spacer(modifier = Modifier.height(2.dp))
@@ -238,6 +262,15 @@ fun AnimeEpisodeCardCompact(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
+                    if (episode.bookmark) {
+                        Icon(
+                            Icons.Outlined.BookmarkAdd,
+                            contentDescription = null,
+                            tint = colors.accent,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+
                     // Download indicator
                     if (onDownloadEpisode != null && !isAnyEpisodeSelected) {
                         EpisodeDownloadIndicator(
@@ -275,6 +308,36 @@ fun AnimeEpisodeCardCompact(
         ) {
             episodeCard()
         }
+    }
+}
+
+@Composable
+private fun AuroraEpisodeStatusBadge(
+    icon: ImageVector,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AuroraTheme.colors
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(colors.surface.copy(alpha = 0.32f))
+            .padding(horizontal = 6.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = colors.accent,
+            modifier = Modifier.size(12.dp),
+        )
+        Text(
+            text = label,
+            color = colors.textSecondary,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
+        )
     }
 }
 
