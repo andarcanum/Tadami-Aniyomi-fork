@@ -768,8 +768,8 @@
                              "category":  "secret",
                              "threshold":  10,
                              "points":  50,
-                             "title":  "Настойчивый",
-                             "description":  "Нажмите на логотип 10 раз",
+                             "title":  "Исекайнутый через меню",
+                             "description":  "Открыть секретный пролог вместо того, чтобы наконец заняться делами.",
                              "badge_icon":  "ic_badge_persistent",
                              "is_hidden":  true,
                              "is_secret":  true

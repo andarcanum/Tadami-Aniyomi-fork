@@ -89,6 +89,7 @@ fun Modifier.gradientBorderGlow(
     borderWidth: Dp = 2.dp,
     glowRadius: Dp = 12.dp,
     alpha: Float = 0.7f,
+    cornerRadius: Dp = 24.dp,
 ): Modifier = this.drawBehind {
     val stroke = androidx.compose.ui.graphics.drawscope.Stroke(
         width = borderWidth.toPx(),
@@ -109,7 +110,7 @@ fun Modifier.gradientBorderGlow(
                     x = -(glowRadius.toPx() * i / 6),
                     y = -(glowRadius.toPx() * i / 6),
                 ),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(24.dp.toPx()),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(cornerRadius.toPx()),
             )
         }
     }
@@ -119,6 +120,6 @@ fun Modifier.gradientBorderGlow(
     drawRoundRect(
         brush = brush,
         style = stroke,
-        cornerRadius = androidx.compose.ui.geometry.CornerRadius(24.dp.toPx()),
+        cornerRadius = androidx.compose.ui.geometry.CornerRadius(cornerRadius.toPx()),
     )
 }

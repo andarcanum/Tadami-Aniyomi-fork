@@ -1,9 +1,12 @@
 package eu.kanade.presentation.more.settings.screen.about
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -14,6 +17,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -21,7 +25,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -51,6 +57,7 @@ import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.handler.AchievementHandler
+import tachiyomi.data.achievement.handler.FeatureUsageCollector
 import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.domain.release.interactor.GetApplicationRelease
 import tachiyomi.domain.release.service.AppUpdatePreferences
@@ -76,75 +83,77 @@ object AboutScreen : Screen() {
     override fun Content() {
         val scope = rememberCoroutineScope()
         val context = LocalContext.current
+        val haptic = LocalHapticFeedback.current
         val uriHandler = LocalUriHandler.current
         val handleBack = LocalBackPress.current
         val navigator = LocalNavigator.currentOrThrow
-        var isCheckingUpdates by remember { mutableStateOf(false) }
-
-        Scaffold(
-            topBar = { scrollBehavior ->
-                AppBar(
-                    title = stringResource(MR.strings.pref_category_about),
-                    navigateUp = if (handleBack != null) handleBack::invoke else null,
-                    scrollBehavior = scrollBehavior,
+        val achievementHandler = remember { Injekt.get<AchievementHandler>() }
+        val featureUsageCollector = remember { Injekt.get<FeatureUsageCollector>() }
+        val hiddenFeatureConfig = remember(context) { loadAboutHiddenFeatureConfig(context) }
+        val easterEggStateMachine = remember(hiddenFeatureConfig) {
+            hiddenFeatureConfig?.trigger?.let { trigger ->
+                AboutEasterEggStateMachine(
+                    requiredPrimarySignals = trigger.requiredPrimarySignals,
+                    primedWindowMs = trigger.primedWindowMs,
+                    tapStreakWindowMs = trigger.tapStreakWindowMs,
                 )
-            },
-        ) { contentPadding ->
-            ScrollbarLazyColumn(
-                contentPadding = contentPadding,
+            }
+        }
+        var isCheckingUpdates by remember { mutableStateOf(false) }
+        var easterEggPhase by remember(easterEggStateMachine) {
+            mutableStateOf(easterEggStateMachine?.phase ?: AboutEasterEggPhase.Idle)
+        }
+        val isEasterEggVisible = easterEggPhase !in setOf(
+            AboutEasterEggPhase.Idle,
+            AboutEasterEggPhase.Primed,
+        )
+
+        fun syncEasterEggPhase(block: (AboutEasterEggStateMachine) -> Unit) {
+            val machine = easterEggStateMachine ?: return
+            block(machine)
+            easterEggPhase = machine.phase
+        }
+
+        LaunchedEffect(easterEggPhase, easterEggStateMachine) {
+            if (easterEggStateMachine != null &&
+                hiddenFeatureConfig != null &&
+                easterEggPhase == AboutEasterEggPhase.Primed
             ) {
-                item {
-                    val achievementHandler = Injekt.get<AchievementHandler>()
-                    LogoHeader(
-                        onClick = {
-                            achievementHandler.trackFeatureUsed(AchievementEvent.Feature.LOGO_CLICK)
-                        },
-                    )
+                kotlinx.coroutines.delay(hiddenFeatureConfig.trigger.primedWindowMs)
+                syncEasterEggPhase { machine ->
+                    machine.tick(SystemClock.uptimeMillis())
                 }
+            }
+        }
 
-                item {
-                    TextPreferenceWidget(
-                        title = stringResource(MR.strings.version),
-                        subtitle = getVersionName(withBuildDate = true),
-                        onPreferenceClick = {
-                            val deviceInfo = CrashLogUtil(context).getDebugInfo()
-                            context.copyToClipboard("Debug information", deviceInfo)
-                        },
-                    )
-                }
-
-                if (updaterEnabled) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Scaffold(
+                topBar = { scrollBehavior ->
+                    if (!isEasterEggVisible) {
+                        AppBar(
+                            title = stringResource(MR.strings.pref_category_about),
+                            navigateUp = if (handleBack != null) handleBack::invoke else null,
+                            scrollBehavior = scrollBehavior,
+                        )
+                    }
+                },
+            ) { contentPadding ->
+                ScrollbarLazyColumn(
+                    contentPadding = contentPadding,
+                ) {
                     item {
-                        TextPreferenceWidget(
-                            title = stringResource(MR.strings.check_for_updates),
-                            widget = {
-                                AnimatedVisibility(visible = isCheckingUpdates) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(28.dp),
-                                        strokeWidth = 3.dp,
-                                    )
-                                }
-                            },
-                            onPreferenceClick = {
-                                if (!isCheckingUpdates) {
-                                    scope.launch {
-                                        isCheckingUpdates = true
-
-                                        checkVersion(
-                                            context = context,
-                                            onAvailableUpdate = { result ->
-                                                val updateScreen = NewUpdateScreen(
-                                                    versionName = result.release.version,
-                                                    changelogInfo = result.release.info,
-                                                    releaseLink = result.release.releaseLink,
-                                                    downloadLink = result.release.downloadLink,
-                                                )
-                                                navigator.push(updateScreen)
-                                            },
-                                            onFinish = {
-                                                isCheckingUpdates = false
-                                            },
-                                        )
+                        LogoHeader(
+                            onClick = {
+                                achievementHandler.trackFeatureUsed(AchievementEvent.Feature.LOGO_CLICK)
+                                syncEasterEggPhase { machine ->
+                                    when (machine.onPrimarySignal(SystemClock.uptimeMillis())) {
+                                        AboutEasterEggTapFeedback.Light -> {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        }
+                                        AboutEasterEggTapFeedback.Primed -> {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        }
+                                        AboutEasterEggTapFeedback.None -> Unit
                                     }
                                 }
                             },
@@ -152,115 +161,209 @@ object AboutScreen : Screen() {
                     }
 
                     item {
-                        val appUpdatePreferences = remember { Injekt.get<AppUpdatePreferences>() }
-                        val updateInterval by appUpdatePreferences.appUpdateInterval().collectAsState()
-
-                        ListPreferenceWidget(
-                            value = updateInterval,
-                            title = stringResource(MR.strings.pref_app_update_interval),
-                            subtitle = null,
-                            icon = null,
-                            entries = persistentMapOf(
-                                -1 to stringResource(MR.strings.app_update_on_start),
-                                0 to stringResource(MR.strings.update_never),
-                                6 to stringResource(MR.strings.app_update_6h),
-                                12 to stringResource(MR.strings.app_update_12h),
-                                24 to stringResource(MR.strings.app_update_24h),
-                                168 to stringResource(MR.strings.app_update_weekly),
-                            ),
-                            onValueChange = { newInterval ->
-                                appUpdatePreferences.appUpdateInterval().set(newInterval)
-                                AppUpdateJob.setupTask(context, newInterval)
+                        TextPreferenceWidget(
+                            title = stringResource(MR.strings.version),
+                            subtitle = getVersionName(withBuildDate = true),
+                            onPreferenceClick = {
+                                val deviceInfo = CrashLogUtil(context).getDebugInfo()
+                                context.copyToClipboard("Debug information", deviceInfo)
+                            },
+                            onPreferenceLongClick = {
+                                syncEasterEggPhase { machine ->
+                                    if (machine.onSecondarySignal(SystemClock.uptimeMillis())) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    }
+                                }
                             },
                         )
                     }
-                }
 
-                if (!BuildConfig.DEBUG) {
+                    if (updaterEnabled) {
+                        item {
+                            TextPreferenceWidget(
+                                title = stringResource(MR.strings.check_for_updates),
+                                widget = {
+                                    AnimatedVisibility(visible = isCheckingUpdates) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(28.dp),
+                                            strokeWidth = 3.dp,
+                                        )
+                                    }
+                                },
+                                onPreferenceClick = {
+                                    if (!isCheckingUpdates) {
+                                        scope.launch {
+                                            isCheckingUpdates = true
+
+                                            checkVersion(
+                                                context = context,
+                                                onAvailableUpdate = { result ->
+                                                    val updateScreen = NewUpdateScreen(
+                                                        versionName = result.release.version,
+                                                        changelogInfo = result.release.info,
+                                                        releaseLink = result.release.releaseLink,
+                                                        downloadLink = result.release.downloadLink,
+                                                    )
+                                                    navigator.push(updateScreen)
+                                                },
+                                                onFinish = {
+                                                    isCheckingUpdates = false
+                                                },
+                                            )
+                                        }
+                                    }
+                                },
+                            )
+                        }
+
+                        item {
+                            val appUpdatePreferences = remember { Injekt.get<AppUpdatePreferences>() }
+                            val updateInterval by appUpdatePreferences.appUpdateInterval().collectAsState()
+
+                            ListPreferenceWidget(
+                                value = updateInterval,
+                                title = stringResource(MR.strings.pref_app_update_interval),
+                                subtitle = null,
+                                icon = null,
+                                entries = persistentMapOf(
+                                    -1 to stringResource(MR.strings.app_update_on_start),
+                                    0 to stringResource(MR.strings.update_never),
+                                    6 to stringResource(MR.strings.app_update_6h),
+                                    12 to stringResource(MR.strings.app_update_12h),
+                                    24 to stringResource(MR.strings.app_update_24h),
+                                    168 to stringResource(MR.strings.app_update_weekly),
+                                ),
+                                onValueChange = { newInterval ->
+                                    appUpdatePreferences.appUpdateInterval().set(newInterval)
+                                    AppUpdateJob.setupTask(context, newInterval)
+                                },
+                            )
+                        }
+                    }
+
+                    if (!BuildConfig.DEBUG) {
+                        item {
+                            TextPreferenceWidget(
+                                title = stringResource(MR.strings.whats_new),
+                                onPreferenceClick = { uriHandler.openUri(RELEASE_URL) },
+                            )
+                        }
+                    }
+
                     item {
                         TextPreferenceWidget(
-                            title = stringResource(MR.strings.whats_new),
-                            onPreferenceClick = { uriHandler.openUri(RELEASE_URL) },
+                            title = stringResource(MR.strings.help_translate),
+                            onPreferenceClick = {
+                                uriHandler.openUri(
+                                    "https://aniyomi.org/docs/contribute#translation",
+                                )
+                            },
                         )
                     }
-                }
 
-                item {
-                    TextPreferenceWidget(
-                        title = stringResource(MR.strings.help_translate),
-                        onPreferenceClick = {
-                            uriHandler.openUri(
-                                "https://aniyomi.org/docs/contribute#translation",
-                            )
-                        },
-                    )
-                }
-
-                item {
-                    TextPreferenceWidget(
-                        title = stringResource(MR.strings.licenses),
-                        onPreferenceClick = { navigator.push(OpenSourceLicensesScreen()) },
-                    )
-                }
-
-                item {
-                    TextPreferenceWidget(
-                        title = stringResource(MR.strings.privacy_policy),
-                        onPreferenceClick = { uriHandler.openUri("https://aniyomi.org/privacy/") },
-                    )
-                }
-
-                item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text(
-                            text = "Aniyomi",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
+                    item {
+                        TextPreferenceWidget(
+                            title = stringResource(MR.strings.licenses),
+                            onPreferenceClick = { navigator.push(OpenSourceLicensesScreen()) },
                         )
-                        Row {
-                            LinkIcon(
-                                label = stringResource(MR.strings.website),
-                                icon = Icons.Outlined.Public,
-                                url = "https://aniyomi.org",
-                            )
-                            LinkIcon(
-                                label = "Discord",
-                                icon = CustomIcons.Discord,
-                                url = "https://discord.gg/F32UjdJZrR",
-                            )
-                            LinkIcon(
-                                label = "GitHub",
-                                icon = CustomIcons.Github,
-                                url = "https://github.com/aniyomiorg/aniyomi",
-                            )
-                        }
+                    }
 
-                        HorizontalDivider(
+                    item {
+                        TextPreferenceWidget(
+                            title = stringResource(MR.strings.privacy_policy),
+                            onPreferenceClick = { uriHandler.openUri("https://aniyomi.org/privacy/") },
+                        )
+                    }
+
+                    item {
+                        Column(
                             modifier = Modifier
-                                .padding(vertical = 8.dp)
-                                .fillMaxWidth(0.5f),
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
-                        )
-
-                        Text(
-                            text = "Tadami",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Row {
-                            LinkIcon(
-                                label = "Tadami",
-                                icon = CustomIcons.Github,
-                                url = "https://github.com/andarcanum/Tadami-Aniyomi-fork",
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(
+                                text = "Aniyomi",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
+                            Row {
+                                LinkIcon(
+                                    label = stringResource(MR.strings.website),
+                                    icon = Icons.Outlined.Public,
+                                    url = "https://aniyomi.org",
+                                )
+                                LinkIcon(
+                                    label = "Discord",
+                                    icon = CustomIcons.Discord,
+                                    url = "https://discord.gg/F32UjdJZrR",
+                                )
+                                LinkIcon(
+                                    label = "GitHub",
+                                    icon = CustomIcons.Github,
+                                    url = "https://github.com/aniyomiorg/aniyomi",
+                                )
+                            }
+
+                            HorizontalDivider(
+                                modifier = Modifier
+                                    .padding(vertical = 8.dp)
+                                    .fillMaxWidth(0.5f),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+                            )
+
+                            Text(
+                                text = "Tadami",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Row {
+                                LinkIcon(
+                                    label = "Tadami",
+                                    icon = CustomIcons.Github,
+                                    url = "https://github.com/andarcanum/Tadami-Aniyomi-fork",
+                                )
+                            }
                         }
                     }
                 }
+            }
+
+            if (hiddenFeatureConfig != null) {
+                AboutEasterEggOverlay(
+                    phase = easterEggPhase,
+                    content = hiddenFeatureConfig.content,
+                    onGlyphRainFinished = {
+                        syncEasterEggPhase { machine ->
+                            machine.onGlyphRainFinished()
+                        }
+                    },
+                    onPageMaterialized = {
+                        syncEasterEggPhase { machine ->
+                            machine.onPageMaterialized()
+                        }
+                    },
+                    onDismissRequest = {
+                        syncEasterEggPhase { machine ->
+                            machine.dismiss()
+                        }
+                    },
+                    onDismissFinished = {
+                        syncEasterEggPhase { machine ->
+                            machine.onDismissFinished()
+                        }
+                    },
+                    onRevealComplete = {
+                        val missingLogoClicks = (
+                            10 -
+                                featureUsageCollector.getFeatureCount(AchievementEvent.Feature.LOGO_CLICK)
+                            )
+                            .coerceAtLeast(0)
+                        repeat(missingLogoClicks) {
+                            achievementHandler.trackFeatureUsed(AchievementEvent.Feature.LOGO_CLICK)
+                        }
+                    },
+                )
             }
         }
     }
