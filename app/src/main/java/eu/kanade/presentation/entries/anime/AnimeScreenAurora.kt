@@ -1,11 +1,13 @@
 package eu.kanade.presentation.entries.anime
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,6 +61,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
@@ -68,6 +72,7 @@ import eu.kanade.presentation.components.DropdownMenu
 import eu.kanade.presentation.components.EntryDownloadDropdownMenu
 import eu.kanade.presentation.entries.DownloadAction
 import eu.kanade.presentation.entries.anime.components.EpisodeDownloadAction
+import eu.kanade.presentation.entries.components.EntryBottomActionMenu
 import eu.kanade.presentation.entries.anime.components.aurora.AnimeActionCard
 import eu.kanade.presentation.entries.anime.components.aurora.AnimeEpisodeCardCompact
 import eu.kanade.presentation.entries.anime.components.aurora.AnimeHeroContent
@@ -75,6 +80,7 @@ import eu.kanade.presentation.entries.anime.components.aurora.AnimeInfoCard
 import eu.kanade.presentation.entries.anime.components.aurora.EpisodesHeader
 import eu.kanade.presentation.entries.anime.components.aurora.FullscreenPosterBackground
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.resolveAuroraAdaptiveSpec
@@ -139,6 +145,10 @@ fun AnimeScreenAuroraImpl(
 ) {
     val anime = state.anime
     val episodes = state.episodeListItems
+    val selectedEpisodes = remember(episodes) {
+        episodes.filterIsInstance<EpisodeList.Item>().filter { it.selected }
+    }
+    val isAnyEpisodeSelected = selectedEpisodes.isNotEmpty()
     val colors = AuroraTheme.colors
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
@@ -175,6 +185,26 @@ fun AnimeScreenAuroraImpl(
     // State for episodes expansion
     var episodesExpanded by remember { mutableStateOf(false) }
     val episodesToShow = if (episodesExpanded) episodes else episodes.take(5)
+    val haptic = LocalHapticFeedback.current
+
+    BackHandler(onBack = {
+        if (isAnyEpisodeSelected) {
+            onAllEpisodeSelected(false)
+        } else {
+            navigateUp()
+        }
+    })
+
+    LaunchedEffect(isAnyEpisodeSelected, episodesExpanded, episodes.size) {
+        if (isAnyEpisodeSelected &&
+            shouldAutoExpandAuroraEpisodesList(
+                episodesExpanded = episodesExpanded,
+                totalEpisodes = episodes.size,
+            )
+        ) {
+            episodesExpanded = true
+        }
+    }
 
     // State for description and genres expansion
     var descriptionExpanded by remember { mutableStateOf(false) }
@@ -339,7 +369,39 @@ fun AnimeScreenAuroraImpl(
                                 AnimeEpisodeCardCompact(
                                     anime = anime,
                                     item = item,
-                                    onEpisodeClicked = { episode -> onEpisodeClicked(episode, false) },
+                                    selected = item.selected,
+                                    isAnyEpisodeSelected = isAnyEpisodeSelected,
+                                    episodeSwipeStartAction = episodeSwipeStartAction,
+                                    episodeSwipeEndAction = episodeSwipeEndAction,
+                                    onClick = {
+                                        when (
+                                            resolveAuroraEpisodeClickAction(
+                                                isEpisodeSelected = item.selected,
+                                                isAnyEpisodeSelected = isAnyEpisodeSelected,
+                                            )
+                                        ) {
+                                            AuroraEpisodeClickAction.OpenEpisode -> {
+                                                onEpisodeClicked(item.episode, false)
+                                            }
+                                            AuroraEpisodeClickAction.SelectEpisode -> {
+                                                onEpisodeSelected(item, true, true, false)
+                                                if (shouldAutoExpandAuroraEpisodesList(episodesExpanded, episodes.size)) {
+                                                    episodesExpanded = true
+                                                }
+                                            }
+                                            AuroraEpisodeClickAction.UnselectEpisode -> {
+                                                onEpisodeSelected(item, false, true, false)
+                                            }
+                                        }
+                                    },
+                                    onLongClick = {
+                                        onEpisodeSelected(item, !item.selected, true, true)
+                                        if (!item.selected && shouldAutoExpandAuroraEpisodesList(episodesExpanded, episodes.size)) {
+                                            episodesExpanded = true
+                                        }
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    },
+                                    onEpisodeSwipe = { action -> onEpisodeSwipe(item, action) },
                                     onDownloadEpisode = onDownloadEpisode,
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -495,7 +557,39 @@ fun AnimeScreenAuroraImpl(
                         AnimeEpisodeCardCompact(
                             anime = anime,
                             item = item,
-                            onEpisodeClicked = { episode -> onEpisodeClicked(episode, false) },
+                            selected = item.selected,
+                            isAnyEpisodeSelected = isAnyEpisodeSelected,
+                            episodeSwipeStartAction = episodeSwipeStartAction,
+                            episodeSwipeEndAction = episodeSwipeEndAction,
+                            onClick = {
+                                when (
+                                    resolveAuroraEpisodeClickAction(
+                                        isEpisodeSelected = item.selected,
+                                        isAnyEpisodeSelected = isAnyEpisodeSelected,
+                                    )
+                                ) {
+                                    AuroraEpisodeClickAction.OpenEpisode -> {
+                                        onEpisodeClicked(item.episode, false)
+                                    }
+                                    AuroraEpisodeClickAction.SelectEpisode -> {
+                                        onEpisodeSelected(item, true, true, false)
+                                        if (shouldAutoExpandAuroraEpisodesList(episodesExpanded, episodes.size)) {
+                                            episodesExpanded = true
+                                        }
+                                    }
+                                    AuroraEpisodeClickAction.UnselectEpisode -> {
+                                        onEpisodeSelected(item, false, true, false)
+                                    }
+                                }
+                            },
+                            onLongClick = {
+                                onEpisodeSelected(item, !item.selected, true, true)
+                                if (!item.selected && shouldAutoExpandAuroraEpisodesList(episodesExpanded, episodes.size)) {
+                                    episodesExpanded = true
+                                }
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            },
+                            onEpisodeSwipe = { action -> onEpisodeSwipe(item, action) },
                             onDownloadEpisode = onDownloadEpisode,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -573,7 +667,7 @@ fun AnimeScreenAuroraImpl(
 
         // Floating Play button (shows after Hero Content is hidden)
         val showFab = firstVisibleItemIndex > 0 || scrollOffset > heroThreshold
-        if (!useTwoPaneLayout && showFab) {
+        if (!useTwoPaneLayout && showFab && !isAnyEpisodeSelected) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -595,89 +689,118 @@ fun AnimeScreenAuroraImpl(
             }
         }
 
-        // Top header bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(WindowInsets.statusBars.asPaddingValues())
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            // Back button - Aurora glassmorphism style
-            AuroraActionButton(
-                onClick = navigateUp,
-                icon = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = null,
+        if (isAnyEpisodeSelected) {
+            AuroraEpisodeSelectionTopBar(
+                selectedCount = selectedEpisodes.size,
+                onSelectAll = { onAllEpisodeSelected(true) },
+                onInvertSelection = onInvertSelection,
+                onCancel = { onAllEpisodeSelected(false) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(WindowInsets.statusBars.asPaddingValues())
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
             )
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            // Filter button - Aurora glassmorphism style
-            AuroraActionButton(
-                onClick = onFilterButtonClicked,
-                icon = Icons.Default.FilterList,
-                contentDescription = null,
-            )
-
-            // Download menu - Aurora glassmorphism style
-            if (onDownloadActionClicked != null) {
-                var downloadExpanded by remember { mutableStateOf(false) }
-                Box(contentAlignment = Alignment.TopEnd) {
-                    AuroraActionButton(
-                        onClick = { downloadExpanded = !downloadExpanded },
-                        icon = Icons.Filled.Download,
-                        contentDescription = null,
-                    )
-                    EntryDownloadDropdownMenu(
-                        expanded = downloadExpanded,
-                        onDismissRequest = { downloadExpanded = false },
-                        onDownloadClicked = { onDownloadActionClicked.invoke(it) },
-                        isManga = false,
-                    )
-                }
-            }
-
-            // More menu - Aurora glassmorphism style
-            var showMenu by remember { mutableStateOf(false) }
-            Box(contentAlignment = Alignment.TopEnd) {
+        } else {
+            // Top header bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(WindowInsets.statusBars.asPaddingValues())
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                // Back button - Aurora glassmorphism style
                 AuroraActionButton(
-                    onClick = { showMenu = !showMenu },
-                    icon = Icons.Default.MoreVert,
+                    onClick = navigateUp,
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = null,
                 )
-                AuroraDropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false },
-                ) {
-                    AuroraDropdownMenuItem(
-                        text = stringResource(MR.strings.action_webview_refresh),
-                        onClick = {
-                            onRefresh()
-                            showMenu = false
-                        },
-                    )
-                    if (onShareClicked != null) {
-                        AuroraDropdownMenuItem(
-                            text = stringResource(MR.strings.action_share),
-                            onClick = {
-                                onShareClicked()
-                                showMenu = false
-                            },
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                // Filter button - Aurora glassmorphism style
+                AuroraActionButton(
+                    onClick = onFilterButtonClicked,
+                    icon = Icons.Default.FilterList,
+                    contentDescription = null,
+                )
+
+                // Download menu - Aurora glassmorphism style
+                if (onDownloadActionClicked != null) {
+                    var downloadExpanded by remember { mutableStateOf(false) }
+                    Box(contentAlignment = Alignment.TopEnd) {
+                        AuroraActionButton(
+                            onClick = { downloadExpanded = !downloadExpanded },
+                            icon = Icons.Filled.Download,
+                            contentDescription = null,
+                        )
+                        EntryDownloadDropdownMenu(
+                            expanded = downloadExpanded,
+                            onDismissRequest = { downloadExpanded = false },
+                            onDownloadClicked = { onDownloadActionClicked.invoke(it) },
+                            isManga = false,
                         )
                     }
-                    if (onSettingsClicked != null) {
+                }
+
+                // More menu - Aurora glassmorphism style
+                var showMenu by remember { mutableStateOf(false) }
+                Box(contentAlignment = Alignment.TopEnd) {
+                    AuroraActionButton(
+                        onClick = { showMenu = !showMenu },
+                        icon = Icons.Default.MoreVert,
+                        contentDescription = null,
+                    )
+                    AuroraDropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                    ) {
                         AuroraDropdownMenuItem(
-                            text = stringResource(MR.strings.action_settings),
+                            text = stringResource(MR.strings.action_webview_refresh),
                             onClick = {
-                                onSettingsClicked()
+                                onRefresh()
                                 showMenu = false
                             },
                         )
+                        if (onShareClicked != null) {
+                            AuroraDropdownMenuItem(
+                                text = stringResource(MR.strings.action_share),
+                                onClick = {
+                                    onShareClicked()
+                                    showMenu = false
+                                },
+                            )
+                        }
+                        if (onSettingsClicked != null) {
+                            AuroraDropdownMenuItem(
+                                text = stringResource(MR.strings.action_settings),
+                                onClick = {
+                                    onSettingsClicked()
+                                    showMenu = false
+                                },
+                            )
+                        }
                     }
                 }
             }
         }
+
+        AuroraAnimeBottomActionMenu(
+            selected = selectedEpisodes,
+            onEpisodeClicked = onEpisodeClicked,
+            onMultiBookmarkClicked = onMultiBookmarkClicked,
+            onMultiFillermarkClicked = onMultiFillermarkClicked,
+            onMultiMarkAsSeenClicked = onMultiMarkAsSeenClicked,
+            onMarkPreviousAsSeenClicked = onMarkPreviousAsSeenClicked,
+            onDownloadEpisode = onDownloadEpisode,
+            onMultiDeleteClicked = onMultiDeleteClicked,
+            fillFraction = if (useTwoPaneLayout) 0.5f else 1f,
+            alwaysUseExternalPlayer = alwaysUseExternalPlayer,
+            modifier = Modifier
+                .align(if (useTwoPaneLayout) Alignment.BottomEnd else Alignment.BottomCenter)
+                .padding(WindowInsets.systemBars.asPaddingValues()),
+        )
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier
@@ -687,6 +810,138 @@ fun AnimeScreenAuroraImpl(
     }
 }
 
+@Composable
+private fun AuroraEpisodeSelectionTopBar(
+    selectedCount: Int,
+    onSelectAll: () -> Unit,
+    onInvertSelection: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AuroraTheme.colors
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(colors.surface.copy(alpha = 0.9f))
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .horizontalScroll(rememberScrollState()),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = selectedCount.toString(),
+            color = colors.accent,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text = stringResource(MR.strings.selected),
+            color = colors.textPrimary,
+            fontSize = 13.sp,
+        )
+        AuroraSelectionChip(
+            text = stringResource(MR.strings.action_select_all),
+            onClick = onSelectAll,
+        )
+        AuroraSelectionChip(
+            text = stringResource(MR.strings.action_select_inverse),
+            onClick = onInvertSelection,
+        )
+        AuroraSelectionChip(
+            text = stringResource(MR.strings.action_cancel),
+            onClick = onCancel,
+        )
+    }
+}
+
+@Composable
+private fun AuroraSelectionChip(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AuroraTheme.colors
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(
+                Brush.horizontalGradient(
+                    listOf(
+                        colors.accent.copy(alpha = 0.2f),
+                        colors.accent.copy(alpha = 0.1f),
+                    ),
+                ),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    ) {
+        Text(
+            text = text,
+            color = colors.textPrimary,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
+@Composable
+private fun AuroraAnimeBottomActionMenu(
+    selected: List<EpisodeList.Item>,
+    onEpisodeClicked: (Episode, Boolean) -> Unit,
+    onMultiBookmarkClicked: (List<Episode>, bookmarked: Boolean) -> Unit,
+    onMultiFillermarkClicked: (List<Episode>, fillermarked: Boolean) -> Unit,
+    onMultiMarkAsSeenClicked: (List<Episode>, markAsSeen: Boolean) -> Unit,
+    onMarkPreviousAsSeenClicked: (Episode) -> Unit,
+    onDownloadEpisode: ((List<EpisodeList.Item>, EpisodeDownloadAction) -> Unit)?,
+    onMultiDeleteClicked: (List<Episode>) -> Unit,
+    fillFraction: Float,
+    alwaysUseExternalPlayer: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    EntryBottomActionMenu(
+        visible = selected.isNotEmpty(),
+        modifier = modifier.fillMaxWidth(fillFraction),
+        onBookmarkClicked = {
+            onMultiBookmarkClicked(selected.map { it.episode }, true)
+        }.takeIf { selected.any { !it.episode.bookmark } },
+        onRemoveBookmarkClicked = {
+            onMultiBookmarkClicked(selected.map { it.episode }, false)
+        }.takeIf { selected.all { it.episode.bookmark } },
+        onFillermarkClicked = {
+            onMultiFillermarkClicked(selected.map { it.episode }, true)
+        }.takeIf { selected.any { !it.episode.fillermark } },
+        onRemoveFillermarkClicked = {
+            onMultiFillermarkClicked(selected.map { it.episode }, false)
+        }.takeIf { selected.all { it.episode.fillermark } },
+        onMarkAsViewedClicked = {
+            onMultiMarkAsSeenClicked(selected.map { it.episode }, true)
+        }.takeIf { selected.any { !it.episode.seen } },
+        onMarkAsUnviewedClicked = {
+            onMultiMarkAsSeenClicked(selected.map { it.episode }, false)
+        }.takeIf { selected.any { it.episode.seen || it.episode.lastSecondSeen > 0L } },
+        onMarkPreviousAsViewedClicked = {
+            onMarkPreviousAsSeenClicked(selected.first().episode)
+        }.takeIf { selected.size == 1 },
+        onDownloadClicked = {
+            onDownloadEpisode!!(selected, EpisodeDownloadAction.START)
+        }.takeIf {
+            onDownloadEpisode != null && selected.any { it.downloadState != AnimeDownload.State.DOWNLOADED }
+        },
+        onDeleteClicked = {
+            onMultiDeleteClicked(selected.map { it.episode })
+        }.takeIf {
+            onDownloadEpisode != null && selected.any { it.downloadState == AnimeDownload.State.DOWNLOADED }
+        },
+        onExternalClicked = {
+            onEpisodeClicked(selected.first().episode, true)
+        }.takeIf { !alwaysUseExternalPlayer && selected.size == 1 },
+        onInternalClicked = {
+            onEpisodeClicked(selected.first().episode, true)
+        }.takeIf { alwaysUseExternalPlayer && selected.size == 1 },
+        isManga = false,
+    )
+}
+
 data class ResolvedCover(
     val url: String?,
     val fallbackUrl: String?,
@@ -694,6 +949,30 @@ data class ResolvedCover(
 
 internal fun shouldUseAnimeAuroraTwoPane(deviceClass: AuroraDeviceClass): Boolean {
     return deviceClass == AuroraDeviceClass.TabletExpanded
+}
+
+internal enum class AuroraEpisodeClickAction {
+    OpenEpisode,
+    SelectEpisode,
+    UnselectEpisode,
+}
+
+internal fun resolveAuroraEpisodeClickAction(
+    isEpisodeSelected: Boolean,
+    isAnyEpisodeSelected: Boolean,
+): AuroraEpisodeClickAction {
+    return when {
+        isEpisodeSelected -> AuroraEpisodeClickAction.UnselectEpisode
+        isAnyEpisodeSelected -> AuroraEpisodeClickAction.SelectEpisode
+        else -> AuroraEpisodeClickAction.OpenEpisode
+    }
+}
+
+internal fun shouldAutoExpandAuroraEpisodesList(
+    episodesExpanded: Boolean,
+    totalEpisodes: Int,
+): Boolean {
+    return !episodesExpanded && totalEpisodes > 5
 }
 
 internal fun resolveCoverUrl(
