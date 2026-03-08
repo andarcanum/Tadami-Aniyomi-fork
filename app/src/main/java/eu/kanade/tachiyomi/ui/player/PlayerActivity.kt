@@ -1118,15 +1118,17 @@ class PlayerActivity : BaseActivity() {
         if (viewModel.isEpisodeOnline() != true) return
         val source = viewModel.currentSource.value as? AnimeHttpSource ?: return
 
-        val headers = (video.headers ?: source.headers)
-            .toMultimap()
-            .mapValues { it.value.firstOrNull() ?: "" }
-            .toMutableMap()
+        val options = toPlaybackHttpOptions(
+            sourceHeaders = source.headers,
+            videoHeaders = video.headers,
+        )
 
-        val httpHeaderString = headers.map {
+        val httpHeaderString = options.headers.map {
             it.key + ": " + it.value.replace(",", "\\,")
         }.joinToString(",")
 
+        MPVLib.setOptionString("user-agent", options.userAgent.orEmpty())
+        MPVLib.setOptionString("referrer", options.referrer.orEmpty())
         MPVLib.setOptionString("http-header-fields", httpHeaderString)
 
         // need to fix the cache

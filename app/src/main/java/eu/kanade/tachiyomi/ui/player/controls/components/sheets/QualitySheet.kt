@@ -29,12 +29,18 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,13 +55,48 @@ import tachiyomi.presentation.core.i18n.pluralStringResource
 import tachiyomi.presentation.core.i18n.stringResource
 
 sealed class HosterState(open val name: String) {
-    data class Idle(override val name: String) : HosterState(name)
-    data class Loading(override val name: String) : HosterState(name)
-    data class Error(override val name: String) : HosterState(name)
+    abstract val playerId: String?
+    abstract val playerLabel: String?
+    abstract val dubbingId: String?
+    abstract val dubbingLabel: String?
+    abstract val sortOrder: Int?
+
+    data class Idle(
+        override val name: String,
+        override val playerId: String? = null,
+        override val playerLabel: String? = null,
+        override val dubbingId: String? = null,
+        override val dubbingLabel: String? = null,
+        override val sortOrder: Int? = null,
+    ) : HosterState(name)
+
+    data class Loading(
+        override val name: String,
+        override val playerId: String? = null,
+        override val playerLabel: String? = null,
+        override val dubbingId: String? = null,
+        override val dubbingLabel: String? = null,
+        override val sortOrder: Int? = null,
+    ) : HosterState(name)
+
+    data class Error(
+        override val name: String,
+        override val playerId: String? = null,
+        override val playerLabel: String? = null,
+        override val dubbingId: String? = null,
+        override val dubbingLabel: String? = null,
+        override val sortOrder: Int? = null,
+    ) : HosterState(name)
+
     data class Ready(
         override val name: String,
         val videoList: List<Video>,
         val videoState: List<Video.State>,
+        override val playerId: String? = null,
+        override val playerLabel: String? = null,
+        override val dubbingId: String? = null,
+        override val dubbingLabel: String? = null,
+        override val sortOrder: Int? = null,
     ) : HosterState(name)
 }
 
@@ -68,6 +109,11 @@ fun HosterState.Ready.getChangedAt(index: Int, newVideo: Video, newState: Video.
         videoState = this.videoState.mapIndexed { idx, state ->
             if (idx == index) newState else state
         },
+        playerId = this.playerId,
+        playerLabel = this.playerLabel,
+        dubbingId = this.dubbingId,
+        dubbingLabel = this.dubbingLabel,
+        sortOrder = this.sortOrder,
     )
 }
 
@@ -190,19 +236,75 @@ fun QualitySheetHosterContent(
     displayHosters: Pair<Boolean, Boolean>,
     modifier: Modifier = Modifier,
 ) {
+    val playerOptions = hosterState.mapNotNull { state ->
+        val playerId = state.playerId ?: return@mapNotNull null
+        playerId to (state.playerLabel ?: playerId.uppercase())
+    }.distinctBy { it.first }
+
+    var selectedPlayerId by remember(hosterState, selectedVideoIndex) {
+        mutableStateOf(
+            hosterState.getOrNull(selectedVideoIndex.first)?.playerId ?: playerOptions.firstOrNull()?.first,
+        )
+    }
+
+    fun playerMatches(state: HosterState): Boolean {
+        val playerId = selectedPlayerId ?: return true
+        return state.playerId == null || state.playerId == playerId
+    }
+
     val validHosters = hosterState.withIndex().filter { (_, state) ->
         state is HosterState.Idle ||
             state is HosterState.Loading ||
             (state is HosterState.Ready && state.videoList.isNotEmpty())
-    }
+    }.filter { (_, state) -> playerMatches(state) }
     val failedHosters = hosterState.withIndex().filter { (_, state) ->
         state is HosterState.Error
-    }
+    }.filter { (_, state) -> playerMatches(state) }
     val emptyHosters = hosterState.withIndex().filter { (_, state) ->
         state is HosterState.Ready && state.videoList.isEmpty()
-    }
+    }.filter { (_, state) -> playerMatches(state) }
 
     LazyColumn(modifier = modifier.fillMaxWidth()) {
+        if (playerOptions.size > 1) {
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = MaterialTheme.padding.medium),
+                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
+                ) {
+                    playerOptions.forEach { (playerId, label) ->
+                        Surface(
+                            color = if (selectedPlayerId == playerId) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            },
+                            shape = MaterialTheme.shapes.small,
+                            modifier = Modifier.clickable { selectedPlayerId = playerId },
+                        ) {
+                            Text(
+                                text = label,
+                                color = if (selectedPlayerId == playerId) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                style = MaterialTheme.typography.labelLarge.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontFamily = FontFamily.SansSerif,
+                                ),
+                                modifier = Modifier.padding(
+                                    horizontal = MaterialTheme.padding.medium,
+                                    vertical = MaterialTheme.padding.small,
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         hosterContent(
             hosters = validHosters,
             expandedState = expandedState,

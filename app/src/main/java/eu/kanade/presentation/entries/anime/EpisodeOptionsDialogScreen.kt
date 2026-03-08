@@ -53,6 +53,10 @@ import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
+import eu.kanade.tachiyomi.ui.player.PlaybackPlayerPreference
+import eu.kanade.tachiyomi.ui.player.PlaybackSelection
+import eu.kanade.tachiyomi.ui.player.PlaybackSelectionPreferences
+import eu.kanade.tachiyomi.ui.player.PlaybackSelectionResolver
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.player.controls.components.sheets.HosterState
 import eu.kanade.tachiyomi.ui.player.controls.components.sheets.QualitySheetHosterContent
@@ -138,7 +142,7 @@ class EpisodeOptionsDialogScreen(
 
 class EpisodeOptionsDialogScreenModel(
     episodeId: Long,
-    animeId: Long,
+    private val animeId: Long,
     sourceId: Long,
 ) : ScreenModel {
     private val sourceManager: AnimeSourceManager = Injekt.get()
@@ -167,8 +171,58 @@ class EpisodeOptionsDialogScreenModel(
     private val _showAllQualities = MutableStateFlow(false)
     val showAllQualities = _showAllQualities.asStateFlow()
 
+    private fun getPlaybackSelectionPreferences(): PlaybackSelectionPreferences {
+        return PlaybackSelectionPreferences(
+            preferredPlayer = PlaybackPlayerPreference.fromPreference(
+                preferenceStore.getString("anime_player_pref_$animeId", PlaybackPlayerPreference.AUTO.name).get(),
+            ),
+            preferredDubbingCdn = preferenceStore.getString("anime_dubbing_pref_cdn_$animeId", "").get(),
+            preferredDubbingKodik = preferenceStore.getString("anime_dubbing_pref_kodik_$animeId", "").get(),
+            preferredDubbingAlloha = preferenceStore.getString("anime_dubbing_pref_alloha_$animeId", "").get(),
+            preferredQualityCdn = preferenceStore.getString("anime_quality_pref_cdn_$animeId", "best").get(),
+            preferredQualityKodik = preferenceStore.getString("anime_quality_pref_kodik_$animeId", "best").get(),
+            preferredQualityAlloha = preferenceStore.getString("anime_quality_pref_alloha_$animeId", "best").get(),
+        )
+    }
+
+    private fun hasExplicitPlaybackPreferences(preferences: PlaybackSelectionPreferences): Boolean {
+        return preferences.preferredPlayer != PlaybackPlayerPreference.AUTO ||
+            preferences.preferredDubbingCdn.isNotBlank() ||
+            preferences.preferredDubbingKodik.isNotBlank() ||
+            preferences.preferredDubbingAlloha.isNotBlank() ||
+            !preferences.preferredQualityCdn.equals("best", ignoreCase = true) ||
+            !preferences.preferredQualityKodik.equals("best", ignoreCase = true) ||
+            !preferences.preferredQualityAlloha.equals("best", ignoreCase = true)
+    }
+
+    private fun findVideoByPlaybackPreferences(
+        hosterStates: List<HosterState>,
+        preferences: PlaybackSelectionPreferences,
+    ): Pair<Int, Int> {
+        return when (val selection = PlaybackSelectionResolver.resolve(hosterStates.mapToHosters(), preferences)) {
+            is PlaybackSelection.Selected -> selection.hosterIndex to selection.videoIndex
+            PlaybackSelection.None -> Pair(-1, -1)
+        }
+    }
+
+    private fun List<HosterState>.mapToHosters(): List<Hoster> {
+        return mapNotNull { state ->
+            val ready = state as? HosterState.Ready ?: return@mapNotNull null
+            Hoster(
+                hosterName = ready.name,
+                videoList = ready.videoList,
+                playerId = ready.playerId,
+                playerLabel = ready.playerLabel,
+                dubbingId = ready.dubbingId,
+                dubbingLabel = ready.dubbingLabel,
+                sortOrder = ready.sortOrder,
+            )
+        }
+    }
+
     init {
         val hasFoundPreferredVideo = AtomicBoolean(false)
+        val playbackPreferences = getPlaybackSelectionPreferences()
 
         screenModelScope.launchIO {
             val episode = Injekt.get<GetEpisode>().await(episodeId)!!
@@ -200,13 +254,25 @@ class EpisodeOptionsDialogScreenModel(
 
             val initialHosterState = hosterList.map { hoster ->
                 if (hoster.videoList == null) {
-                    HosterState.Loading(hoster.hosterName)
+                    HosterState.Loading(
+                        name = hoster.hosterName,
+                        playerId = hoster.playerId,
+                        playerLabel = hoster.playerLabel,
+                        dubbingId = hoster.dubbingId,
+                        dubbingLabel = hoster.dubbingLabel,
+                        sortOrder = hoster.sortOrder,
+                    )
                 } else {
                     val videoList = hoster.videoList!!
                     HosterState.Ready(
-                        hoster.hosterName,
-                        videoList,
-                        List(videoList.size) { Video.State.LOAD_VIDEO },
+                        name = hoster.hosterName,
+                        videoList = videoList,
+                        videoState = List(videoList.size) { Video.State.LOAD_VIDEO },
+                        playerId = hoster.playerId,
+                        playerLabel = hoster.playerLabel,
+                        dubbingId = hoster.dubbingId,
+                        dubbingLabel = hoster.dubbingLabel,
+                        sortOrder = hoster.sortOrder,
                     )
                 }
             }
@@ -222,7 +288,7 @@ class EpisodeOptionsDialogScreenModel(
 
                         if (hosterState is HosterState.Ready) {
                             val prefIndex = hosterState.videoList.indexOfFirst { it.preferred }
-                            if (prefIndex != -1) {
+                            if (!hasExplicitPlaybackPreferences(playbackPreferences) && prefIndex != -1) {
                                 if (hasFoundPreferredVideo.compareAndSet(false, true)) {
                                     val success =
                                         loadVideo(source, hosterState.videoList[prefIndex], hosterIdx, prefIndex)
@@ -237,15 +303,28 @@ class EpisodeOptionsDialogScreenModel(
 
                 if (hasFoundPreferredVideo.compareAndSet(false, true)) {
                     val hosterStateList = hosterState.value!!.getOrThrow()
-
-                    val preferredDubbing = preferenceStore.getString("anime_dubbing_pref_$animeId", "").get()
-                    val preferredQuality = preferenceStore.getString("anime_quality_pref_$animeId", "").get()
-
-                    var (hosterIdx, videoIdx) = findVideoByDubbingAndQuality(
+                    var (hosterIdx, videoIdx) = findVideoByPlaybackPreferences(
                         hosterStateList,
-                        preferredDubbing,
-                        preferredQuality,
+                        playbackPreferences,
                     )
+
+                    if (hosterIdx == -1) {
+                        val legacyDubbing = playbackPreferences.preferredDubbingCdn.ifBlank {
+                            playbackPreferences.preferredDubbingKodik
+                        }
+                        val legacyQuality = if (legacyDubbing == playbackPreferences.preferredDubbingKodik) {
+                            playbackPreferences.preferredQualityKodik
+                        } else {
+                            playbackPreferences.preferredQualityCdn
+                        }
+                        val legacy = findVideoByDubbingAndQuality(
+                            hosterStateList,
+                            legacyDubbing,
+                            legacyQuality,
+                        )
+                        hosterIdx = legacy.first
+                        videoIdx = legacy.second
+                    }
 
                     if (hosterIdx == -1) {
                         val best = HosterLoader.selectBestVideo(hosterStateList)
@@ -266,7 +345,18 @@ class EpisodeOptionsDialogScreenModel(
                 }
             } catch (e: CancellationException) {
                 _hosterState.update { _ ->
-                    Result.success(hosterList.map { HosterState.Idle(it.hosterName) })
+                    Result.success(
+                        hosterList.map {
+                            HosterState.Idle(
+                                name = it.hosterName,
+                                playerId = it.playerId,
+                                playerLabel = it.playerLabel,
+                                dubbingId = it.dubbingId,
+                                dubbingLabel = it.dubbingLabel,
+                                sortOrder = it.sortOrder,
+                            )
+                        },
+                    )
                 }
 
                 throw e
@@ -358,8 +448,17 @@ class EpisodeOptionsDialogScreenModel(
                 }
             }
             is HosterState.Error, is HosterState.Idle -> {
-                val hosterName = hosterState.name
-                _hosterState.updateAt(hosterIndex, HosterState.Loading(hosterName))
+                _hosterState.updateAt(
+                    hosterIndex,
+                    HosterState.Loading(
+                        name = hosterState.name,
+                        playerId = hosterState.playerId,
+                        playerLabel = hosterState.playerLabel,
+                        dubbingId = hosterState.dubbingId,
+                        dubbingLabel = hosterState.dubbingLabel,
+                        sortOrder = hosterState.sortOrder,
+                    ),
+                )
 
                 screenModelScope.launchIO {
                     val newHosterState = EpisodeLoader.loadHosterVideos(
@@ -399,12 +498,22 @@ class EpisodeOptionsDialogScreenModel(
                     hosterName = h.hosterName,
                     hosterUrl = h.hosterUrl,
                     videoList = (hosterStateList[index] as HosterState.Ready).videoList,
+                    playerId = h.playerId,
+                    playerLabel = h.playerLabel,
+                    dubbingId = h.dubbingId,
+                    dubbingLabel = h.dubbingLabel,
+                    sortOrder = h.sortOrder,
                 )
             } else {
                 Hoster(
                     hosterName = h.hosterName,
                     hosterUrl = h.hosterUrl,
                     videoList = h.videoList,
+                    playerId = h.playerId,
+                    playerLabel = h.playerLabel,
+                    dubbingId = h.dubbingId,
+                    dubbingLabel = h.dubbingLabel,
+                    sortOrder = h.sortOrder,
                 )
             }
         }

@@ -1300,82 +1300,115 @@ class PlayerViewModel @JvmOverloads constructor(
         getHosterVideoLinksJob?.cancel()
     }
 
-    private fun findVideoByDubbingAndQuality(
+    private fun getPlaybackSelectionPreferences(anime: Anime?): PlaybackSelectionPreferences {
+        if (anime == null) return PlaybackSelectionPreferences()
+        return PlaybackSelectionPreferences(
+            preferredPlayer = PlaybackPlayerPreference.fromPreference(
+                preferenceStore.getString("anime_player_pref_${anime.id}", PlaybackPlayerPreference.AUTO.name).get(),
+            ),
+            preferredDubbingCdn = preferenceStore.getString("anime_dubbing_pref_cdn_${anime.id}", "").get(),
+            preferredDubbingKodik = preferenceStore.getString("anime_dubbing_pref_kodik_${anime.id}", "").get(),
+            preferredDubbingAlloha = preferenceStore.getString("anime_dubbing_pref_alloha_${anime.id}", "").get(),
+            preferredQualityCdn = preferenceStore.getString("anime_quality_pref_cdn_${anime.id}", "best").get(),
+            preferredQualityKodik = preferenceStore.getString("anime_quality_pref_kodik_${anime.id}", "best").get(),
+            preferredQualityAlloha = preferenceStore.getString("anime_quality_pref_alloha_${anime.id}", "best").get(),
+        )
+    }
+
+    private fun hasExplicitPlaybackPreferences(preferences: PlaybackSelectionPreferences): Boolean {
+        return preferences.preferredPlayer != PlaybackPlayerPreference.AUTO ||
+            preferences.preferredDubbingCdn.isNotBlank() ||
+            preferences.preferredDubbingKodik.isNotBlank() ||
+            preferences.preferredDubbingAlloha.isNotBlank() ||
+            !preferences.preferredQualityCdn.equals("best", ignoreCase = true) ||
+            !preferences.preferredQualityKodik.equals("best", ignoreCase = true) ||
+            !preferences.preferredQualityAlloha.equals("best", ignoreCase = true)
+    }
+
+    private fun findVideoByPlaybackPreferences(
+        hosterStates: List<HosterState>,
+        preferences: PlaybackSelectionPreferences,
+    ): Pair<Int, Int> {
+        val selection = PlaybackSelectionResolver.resolve(hosterStates.mapToHosters(), preferences)
+        return when (selection) {
+            is PlaybackSelection.Selected -> selection.hosterIndex to selection.videoIndex
+            PlaybackSelection.None -> Pair(-1, -1)
+        }
+    }
+
+    private fun findLegacyVideoByDubbingAndQuality(
         hosterStates: List<HosterState>,
         preferredDubbing: String,
         preferredQuality: String,
     ): Pair<Int, Int> {
-        logcat(LogPriority.DEBUG) {
-            "findVideoByDubbingAndQuality: preferredDubbing='$preferredDubbing', preferredQuality='$preferredQuality'"
-        }
-
-        if (preferredDubbing.isBlank()) {
-            logcat(LogPriority.DEBUG) { "findVideoByDubbingAndQuality: preferredDubbing is blank, returning (-1, -1)" }
-            return Pair(-1, -1)
-        }
+        if (preferredDubbing.isBlank()) return Pair(-1, -1)
 
         val qualityOrder = listOf("1080p", "720p", "480p", "360p")
-
-        data class VideoCandidate(
-            val hosterIdx: Int,
-            val videoIdx: Int,
-            val quality: String,
-            val qualityRank: Int,
-        )
-
-        val candidates = mutableListOf<VideoCandidate>()
+        val candidates = mutableListOf<Triple<Int, Int, Int>>()
 
         hosterStates.forEachIndexed { hIdx, hState ->
-            if (hState is HosterState.Ready) {
-                val hosterName = hState.name
-                logcat(LogPriority.DEBUG) { "findVideoByDubbingAndQuality: checking hoster[$hIdx] name='$hosterName'" }
-
-                if (hosterName.equals(preferredDubbing, ignoreCase = true)) {
-                    logcat(LogPriority.DEBUG) { "findVideoByDubbingAndQuality: HOSTER MATCH! '$hosterName'" }
-
-                    hState.videoList.forEachIndexed { vIdx, video ->
-                        val title = video.videoTitle.lowercase()
-                        val qualityRank = when {
-                            preferredQuality == "best" -> {
-                                qualityOrder.indexOfFirst { title.contains(it.lowercase()) }
-                                    .let { if (it == -1) 999 else it }
-                            }
-                            title.contains(preferredQuality.lowercase()) -> 0
-                            else -> {
-                                qualityOrder.indexOfFirst { title.contains(it.lowercase()) }
-                                    .let { if (it == -1) 999 else it + 1 }
-                            }
+            if (hState is HosterState.Ready && hState.name.equals(preferredDubbing, ignoreCase = true)) {
+                hState.videoList.forEachIndexed { vIdx, video ->
+                    val title = video.videoTitle.lowercase()
+                    val qualityRank = when {
+                        preferredQuality.equals("best", ignoreCase = true) -> {
+                            qualityOrder.indexOfFirst { title.contains(it.lowercase()) }.let { if (it == -1) 999 else it }
                         }
-                        logcat(LogPriority.DEBUG) {
-                            "findVideoByDubbingAndQuality: video[$vIdx] title='${video.videoTitle}', qualityRank=$qualityRank"
+                        title.contains(preferredQuality.lowercase()) -> 0
+                        else -> {
+                            qualityOrder.indexOfFirst { title.contains(it.lowercase()) }.let { if (it == -1) 999 else it + 1 }
                         }
-                        candidates.add(VideoCandidate(hIdx, vIdx, title, qualityRank))
                     }
+                    candidates.add(Triple(hIdx, vIdx, qualityRank))
                 }
             }
         }
 
-        logcat(LogPriority.DEBUG) { "findVideoByDubbingAndQuality: total candidates=${candidates.size}" }
+        val best = candidates.minByOrNull { it.third } ?: return Pair(-1, -1)
+        return best.first to best.second
+    }
 
-        if (candidates.isEmpty()) return Pair(-1, -1)
-
-        val best = candidates.minByOrNull { it.qualityRank }
-        logcat(LogPriority.DEBUG) {
-            "findVideoByDubbingAndQuality: best candidate hosterIdx=${best?.hosterIdx}, videoIdx=${best?.videoIdx}"
+    private fun List<HosterState>.mapToHosters(): List<Hoster> {
+        return mapNotNull { state ->
+            val ready = state as? HosterState.Ready ?: return@mapNotNull null
+            Hoster(
+                hosterName = ready.name,
+                videoList = ready.videoList,
+                playerId = ready.playerId,
+                playerLabel = ready.playerLabel,
+                dubbingId = ready.dubbingId,
+                dubbingLabel = ready.dubbingLabel,
+                sortOrder = ready.sortOrder,
+            )
         }
-        return best?.let { Pair(it.hosterIdx, it.videoIdx) } ?: Pair(-1, -1)
+    }
+
+    private fun filterHostersBySourcePreference(
+        hosterList: List<Hoster>,
+        preferences: PlaybackSelectionPreferences,
+    ): List<Hoster> {
+        if (preferences.preferredPlayer != PlaybackPlayerPreference.AUTO) return hosterList
+
+        return when (playerPreferences.hosterSourceFilter().get()) {
+            "cdn_only" -> hosterList.filter { hoster ->
+                hoster.playerId.equals("cdn", ignoreCase = true) ||
+                    hoster.hosterName.startsWith("[C]") ||
+                    !hoster.hosterName.startsWith("[")
+            }
+            "kodik_only" -> hosterList.filter { hoster ->
+                hoster.playerId.equals("kodik", ignoreCase = true) ||
+                    hoster.hosterName.startsWith("[K]")
+            }
+            else -> hosterList
+        }
     }
 
     /**
      * Set the video list for hosters.
      */
     fun loadHosters(source: AnimeSource, hosterList: List<Hoster>, hosterIndex: Int, videoIndex: Int) {
-        val sourceFilter = playerPreferences.hosterSourceFilter().get()
-        val filteredHosterList = when (sourceFilter) {
-            "cdn_only" -> hosterList.filter { it.hosterName.startsWith("[C]") || !it.hosterName.startsWith("[") }
-            "kodik_only" -> hosterList.filter { it.hosterName.startsWith("[K]") }
-            else -> hosterList
-        }
+        val playbackPreferences = getPlaybackSelectionPreferences(_currentAnime.value)
+        val filteredHosterList = filterHostersBySourcePreference(hosterList, playbackPreferences)
 
         logcat(LogPriority.DEBUG) {
             "loadHosters: hosterIndex=$hosterIndex, videoIndex=$videoIndex, hosterListSize=${filteredHosterList.size}"
@@ -1397,15 +1430,34 @@ class PlayerViewModel @JvmOverloads constructor(
             _hosterState.update { _ ->
                 filteredHosterList.map { hoster ->
                     if (hoster.lazy) {
-                        HosterState.Idle(hoster.hosterName)
+                        HosterState.Idle(
+                            name = hoster.hosterName,
+                            playerId = hoster.playerId,
+                            playerLabel = hoster.playerLabel,
+                            dubbingId = hoster.dubbingId,
+                            dubbingLabel = hoster.dubbingLabel,
+                            sortOrder = hoster.sortOrder,
+                        )
                     } else if (hoster.videoList == null) {
-                        HosterState.Loading(hoster.hosterName)
+                        HosterState.Loading(
+                            name = hoster.hosterName,
+                            playerId = hoster.playerId,
+                            playerLabel = hoster.playerLabel,
+                            dubbingId = hoster.dubbingId,
+                            dubbingLabel = hoster.dubbingLabel,
+                            sortOrder = hoster.sortOrder,
+                        )
                     } else {
                         val videoList = hoster.videoList!!
                         HosterState.Ready(
-                            hoster.hosterName,
-                            videoList,
-                            List(videoList.size) { Video.State.QUEUE },
+                            name = hoster.hosterName,
+                            videoList = videoList,
+                            videoState = List(videoList.size) { Video.State.QUEUE },
+                            playerId = hoster.playerId,
+                            playerLabel = hoster.playerLabel,
+                            dubbingId = hoster.dubbingId,
+                            dubbingLabel = hoster.dubbingLabel,
+                            sortOrder = hoster.sortOrder,
                         )
                     }
                 }
@@ -1431,7 +1483,7 @@ class PlayerViewModel @JvmOverloads constructor(
 
                             if (hosterState is HosterState.Ready) {
                                 val prefIndex = hosterState.videoList.indexOfFirst { it.preferred }
-                                if (prefIndex != -1 && hosterIndex == -1) {
+                                if (!hasExplicitPlaybackPreferences(playbackPreferences) && prefIndex != -1 && hosterIndex == -1) {
                                     if (hasFoundPreferredVideo.compareAndSet(false, true)) {
                                         if (selectedHosterVideoIndex.value == Pair(-1, -1)) {
                                             val success =
@@ -1452,26 +1504,31 @@ class PlayerViewModel @JvmOverloads constructor(
                     }.awaitAll()
 
                     if (hasFoundPreferredVideo.compareAndSet(false, true)) {
-                        val anime = _currentAnime.value
-                        val preferredDubbing = anime?.let {
-                            preferenceStore.getString("anime_dubbing_pref_${it.id}", "").get()
-                        } ?: ""
-                        val preferredQuality = anime?.let {
-                            preferenceStore.getString("anime_quality_pref_${it.id}", "").get()
-                        } ?: ""
-
-                        logcat(LogPriority.DEBUG) {
-                            "loadHosters: animeId=${anime?.id}, preferredDubbing='$preferredDubbing', preferredQuality='$preferredQuality'"
-                        }
-
-                        var (hosterIdx, videoIdx) = findVideoByDubbingAndQuality(
+                        var (hosterIdx, videoIdx) = findVideoByPlaybackPreferences(
                             hosterState.value,
-                            preferredDubbing,
-                            preferredQuality,
+                            playbackPreferences,
                         )
 
                         logcat(LogPriority.DEBUG) {
-                            "loadHosters: findVideoByDubbingAndQuality returned hosterIdx=$hosterIdx, videoIdx=$videoIdx"
+                            "loadHosters: playback resolver returned hosterIdx=$hosterIdx, videoIdx=$videoIdx"
+                        }
+
+                        if (hosterIdx == -1) {
+                            val legacyDubbing = playbackPreferences.preferredDubbingCdn.ifBlank {
+                                playbackPreferences.preferredDubbingKodik
+                            }
+                            val legacyQuality = if (legacyDubbing == playbackPreferences.preferredDubbingKodik) {
+                                playbackPreferences.preferredQualityKodik
+                            } else {
+                                playbackPreferences.preferredQualityCdn
+                            }
+                            val legacy = findLegacyVideoByDubbingAndQuality(
+                                hosterState.value,
+                                legacyDubbing,
+                                legacyQuality,
+                            )
+                            hosterIdx = legacy.first
+                            videoIdx = legacy.second
                         }
 
                         if (hosterIdx == -1) {
@@ -1494,7 +1551,16 @@ class PlayerViewModel @JvmOverloads constructor(
                 }
             } catch (e: CancellationException) {
                 _hosterState.update { _ ->
-                    filteredHosterList.map { HosterState.Idle(it.hosterName) }
+                    filteredHosterList.map {
+                        HosterState.Idle(
+                            name = it.hosterName,
+                            playerId = it.playerId,
+                            playerLabel = it.playerLabel,
+                            dubbingId = it.dubbingId,
+                            dubbingLabel = it.dubbingLabel,
+                            sortOrder = it.sortOrder,
+                        )
+                    }
                 }
 
                 throw e
@@ -1599,13 +1665,23 @@ class PlayerViewModel @JvmOverloads constructor(
                 _hosterExpandedList.updateAt(index, !_hosterExpandedList.value[index])
             }
             is HosterState.Idle -> {
-                val hosterName = hosterList.value[index].hosterName
-                _hosterState.updateAt(index, HosterState.Loading(hosterName))
+                val hoster = hosterList.value[index]
+                _hosterState.updateAt(
+                    index,
+                    HosterState.Loading(
+                        name = hoster.hosterName,
+                        playerId = hoster.playerId,
+                        playerLabel = hoster.playerLabel,
+                        dubbingId = hoster.dubbingId,
+                        dubbingLabel = hoster.dubbingLabel,
+                        sortOrder = hoster.sortOrder,
+                    ),
+                )
 
                 viewModelScope.launchIO {
                     val hosterState = EpisodeLoader.loadHosterVideos(
                         source = currentSource.value!!,
-                        hoster = hosterList.value[index],
+                        hoster = hoster,
                         force = true,
                     )
                     _hosterState.updateAt(index, hosterState)

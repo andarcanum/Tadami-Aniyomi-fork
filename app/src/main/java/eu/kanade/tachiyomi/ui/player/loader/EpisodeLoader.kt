@@ -36,7 +36,7 @@ class EpisodeLoader {
                 isDownloaded -> getHostersOnDownloaded(episode, anime, source)
                 source is AnimeHttpSource -> getHostersOnHttp(episode, source)
                 source is LocalAnimeSource -> getHostersOnLocal(episode)
-                else -> error("source not supported")
+                else -> getHostersOnGeneric(episode, source)
             }
         }
 
@@ -96,6 +96,20 @@ class EpisodeLoader {
         }
 
         /**
+         * Returns a list of hosters for non-[AnimeHttpSource] implementations.
+         *
+         * This keeps playback resilient for wrapped/delegated sources that only implement
+         * the generic [AnimeSource] API.
+         */
+        private suspend fun getHostersOnGeneric(episode: Episode, source: AnimeSource): List<Hoster> {
+            return runCatching {
+                source.getHosterList(episode.toSEpisode()).ifEmpty {
+                    source.getVideoList(episode.toSEpisode()).toHosterList()
+                }
+            }.getOrDefault(emptyList())
+        }
+
+        /**
          * Returns the hoster when the [episode] is downloaded.
          *
          * @param episode the episode being parsed.
@@ -152,10 +166,12 @@ class EpisodeLoader {
          */
         private suspend fun getVideos(source: AnimeSource, hoster: Hoster): List<Video> {
             val videos = when {
-                hoster.videoList != null && source is AnimeHttpSource -> hoster.videoList!!.parseVideoUrls(source)
+                // Legacy ext-lib sources can already provide grouped videos, but some of them
+                // still resolve the final stream lazily. Keep those videos as-is here and resolve
+                // only the actually selected candidate later via HosterLoader.getResolvedVideo().
                 hoster.videoList != null -> hoster.videoList!!
                 source is AnimeHttpSource -> getVideosOnHttp(source, hoster)
-                else -> error("source not supported")
+                else -> getVideosOnGeneric(source, hoster)
             }
 
             return if (source is AnimeHttpSource) {
@@ -176,6 +192,12 @@ class EpisodeLoader {
                 .parseVideoUrls(source)
         }
 
+        private suspend fun getVideosOnGeneric(source: AnimeSource, hoster: Hoster): List<Video> {
+            return runCatching {
+                source.getVideoList(hoster)
+            }.getOrDefault(emptyList())
+        }
+
         // TODO(1.6): Remove after ext lib bump
         private suspend fun List<Video>.parseVideoUrls(source: AnimeHttpSource): List<Video> {
             return this.map { video ->
@@ -188,18 +210,41 @@ class EpisodeLoader {
 
         suspend fun loadHosterVideos(source: AnimeSource, hoster: Hoster, force: Boolean = false): HosterState {
             if (!force && hoster.lazy) {
-                return HosterState.Idle(hoster.hosterName)
+                return HosterState.Idle(
+                    name = hoster.hosterName,
+                    playerId = hoster.playerId,
+                    playerLabel = hoster.playerLabel,
+                    dubbingId = hoster.dubbingId,
+                    dubbingLabel = hoster.dubbingLabel,
+                    sortOrder = hoster.sortOrder,
+                )
             }
 
             return try {
                 val videos = getVideos(source, hoster)
-                HosterState.Ready(hoster.hosterName, videos, List(videos.size) { Video.State.QUEUE })
+                HosterState.Ready(
+                    name = hoster.hosterName,
+                    videoList = videos,
+                    videoState = List(videos.size) { Video.State.QUEUE },
+                    playerId = hoster.playerId,
+                    playerLabel = hoster.playerLabel,
+                    dubbingId = hoster.dubbingId,
+                    dubbingLabel = hoster.dubbingLabel,
+                    sortOrder = hoster.sortOrder,
+                )
             } catch (e: Exception) {
                 if (e is CancellationException) {
                     throw e
                 }
 
-                HosterState.Error(hoster.hosterName)
+                HosterState.Error(
+                    name = hoster.hosterName,
+                    playerId = hoster.playerId,
+                    playerLabel = hoster.playerLabel,
+                    dubbingId = hoster.dubbingId,
+                    dubbingLabel = hoster.dubbingLabel,
+                    sortOrder = hoster.sortOrder,
+                )
             }
         }
     }

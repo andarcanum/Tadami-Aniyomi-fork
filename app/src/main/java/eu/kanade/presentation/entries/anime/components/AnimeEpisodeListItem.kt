@@ -521,6 +521,23 @@ fun AnimeEpisodeListItemPreview() {
 }
 
 private fun formatScanlatorForDisplay(scanlator: String): String {
+    if (scanlator.contains(':') && scanlator.contains('|')) {
+        val sections = scanlator.split("|")
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .map { section ->
+                val label = section.substringBefore(':').trim()
+                val count = section.substringAfter(':', "")
+                    .split(",")
+                    .map(String::trim)
+                    .count(String::isNotBlank)
+                if (count > 0) "$label: $count" else label
+            }
+        if (sections.isNotEmpty()) {
+            return sections.joinToString(" | ")
+        }
+    }
+
     val items = scanlator.split(",").map { it.trim() }
     return when {
         items.size <= 2 -> scanlator

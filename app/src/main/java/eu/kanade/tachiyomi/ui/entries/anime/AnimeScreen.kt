@@ -223,7 +223,15 @@ class AnimeScreen(
             onDubbingClicked = {
                 screenModel.showDubbingDialog()
             }.takeIf { successState.availableDubbings.isNotEmpty() },
-            selectedDubbing = screenModel.getPreferredDubbing().takeIf { it.isNotBlank() },
+            selectedDubbing = buildString {
+                val player = screenModel.getPreferredPlayer()
+                val dubbing = screenModel.getPreferredDubbing()
+                if (player != eu.kanade.tachiyomi.ui.player.PlaybackPlayerPreference.AUTO) {
+                    append(player.name)
+                    if (dubbing.isNotBlank()) append(" • ")
+                }
+                if (dubbing.isNotBlank()) append(dubbing)
+            }.takeIf { it.isNotBlank() },
             onRetryMetadata = screenModel::retryMetadataLoad,
         )
 
@@ -408,12 +416,10 @@ class AnimeScreen(
             is AnimeScreenModel.Dialog.SelectDubbing -> {
                 DubbingSelectionDialog(
                     availableDubbings = dialog.availableDubbings,
-                    currentDubbing = dialog.currentDubbing,
-                    currentQuality = dialog.currentQuality,
+                    currentPreferences = dialog.currentPreferences,
                     onDismissRequest = onDismissRequest,
-                    onConfirm = { dubbing, quality ->
-                        screenModel.setPreferredDubbing(dubbing)
-                        screenModel.setPreferredQuality(quality)
+                    onConfirm = { preferences ->
+                        screenModel.setPlaybackSelectionPreferences(preferences)
                         onDismissRequest()
                     },
                 )

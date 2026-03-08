@@ -412,7 +412,18 @@ abstract class AnimeHttpSource : AnimeCatalogueSource {
      * @return the resolved video, or null on failure
      */
     open suspend fun resolveVideo(video: Video): Video? {
-        return video
+        if (video.initialized) return video
+
+        val currentUrl = video.videoUrl
+        if (currentUrl.isNotBlank() && currentUrl != "null") {
+            return video
+        }
+
+        val resolvedUrl = getVideoUrl(video)
+            .takeUnless { it.isBlank() || it == "null" }
+            ?: return null
+
+        return video.copy(videoUrl = resolvedUrl)
     }
 
     /**

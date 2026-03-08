@@ -41,6 +41,7 @@ data class Video(
     val ffmpegVideoArgs: List<Pair<String, String>> = emptyList(),
     val internalData: String = "",
     val initialized: Boolean = false,
+    val pageUrl: String = "",
 ) {
 
     // TODO(1.6): Remove after ext lib bump
@@ -50,10 +51,7 @@ data class Video(
 
     // TODO(1.6): Remove after ext lib bump
     val url: String
-        get() = videoPageUrl
-
-    // TODO(1.6): Remove after ext lib bump
-    private var videoPageUrl: String = ""
+        get() = pageUrl
 
     // TODO(1.6): Remove after ext lib bump
     constructor(
@@ -69,9 +67,8 @@ data class Video(
         headers = headers,
         subtitleTracks = subtitleTracks,
         audioTracks = audioTracks,
-    ) {
-        this.videoPageUrl = url
-    }
+        pageUrl = url,
+    )
 
     // TODO(1.6): Remove after ext lib bump
     @Suppress("UNUSED_PARAMETER")
@@ -118,6 +115,7 @@ data class SerializableVideo(
     val ffmpegVideoArgs: List<Pair<String, String>> = emptyList(),
     val internalData: String = "",
     val initialized: Boolean = false,
+    val pageUrl: String = "",
 ) {
 
     companion object {
@@ -139,6 +137,7 @@ data class SerializableVideo(
                         vid.ffmpegVideoArgs,
                         vid.internalData,
                         vid.initialized,
+                        vid.url,
                     )
                 },
             )
@@ -163,6 +162,7 @@ data class SerializableVideo(
                         sVid.ffmpegVideoArgs,
                         sVid.internalData,
                         sVid.initialized,
+                        sVid.pageUrl,
                     )
                 }
     }
