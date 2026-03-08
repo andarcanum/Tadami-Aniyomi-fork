@@ -16,17 +16,23 @@ class HosterTest {
             Video(
                 videoUrl = "https://example.com/cdn-1080.m3u8",
                 videoTitle = "1080p",
-                internalData = """{"playerId":"cdn","playerLabel":"CDN","dubbingId":"anistar","dubbingLabel":"AniStar","sortOrder":0}""",
+                internalData = """
+                    {"playerId":"cdn","playerLabel":"CDN","dubbingId":"anistar","dubbingLabel":"AniStar","sortOrder":0}
+                """.trimIndent(),
             ),
             Video(
                 videoUrl = "https://example.com/cdn-720.m3u8",
                 videoTitle = "720p",
-                internalData = """{"playerId":"cdn","playerLabel":"CDN","dubbingId":"anistar","dubbingLabel":"AniStar","sortOrder":0}""",
+                internalData = """
+                    {"playerId":"cdn","playerLabel":"CDN","dubbingId":"anistar","dubbingLabel":"AniStar","sortOrder":0}
+                """.trimIndent(),
             ),
             Video(
                 videoUrl = "https://example.com/kodik-1080.m3u8",
                 videoTitle = "1080p",
-                internalData = """{"playerId":"kodik","playerLabel":"Kodik","dubbingId":"animevost","dubbingLabel":"AnimeVost","sortOrder":10}""",
+                internalData = """
+                    {"playerId":"kodik","playerLabel":"Kodik","dubbingId":"animevost","dubbingLabel":"AnimeVost","sortOrder":10}
+                """.trimIndent(),
             ),
         )
 
