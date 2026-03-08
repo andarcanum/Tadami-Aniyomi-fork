@@ -165,7 +165,7 @@ class PlaybackSelectionResolverTest {
             dubbingLabel = dubbingLabel,
             videoList = qualities.map { quality ->
                 Video(
-                    videoUrl = "https://example.com/${playerId}-${dubbingId}-${quality}.m3u8",
+                    videoUrl = "https://example.com/$playerId-$dubbingId-$quality.m3u8",
                     videoTitle = quality,
                 )
             },

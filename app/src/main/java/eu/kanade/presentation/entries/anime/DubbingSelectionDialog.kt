@@ -72,11 +72,17 @@ fun DubbingSelectionDialog(
         mutableStateOf(currentPreferences.preferredDubbingKodik.ifBlank { availableKodikDubbings.firstOrNull() ?: "" })
     }
     var selectedDubbingAlloha by remember {
-        mutableStateOf(currentPreferences.preferredDubbingAlloha.ifBlank { availableAllohaDubbings.firstOrNull() ?: "" })
+        mutableStateOf(
+            currentPreferences.preferredDubbingAlloha.ifBlank {
+                availableAllohaDubbings.firstOrNull() ?: ""
+            },
+        )
     }
     var selectedQualityCdn by remember { mutableStateOf(currentPreferences.preferredQualityCdn.ifBlank { "best" }) }
     var selectedQualityKodik by remember { mutableStateOf(currentPreferences.preferredQualityKodik.ifBlank { "best" }) }
-    var selectedQualityAlloha by remember { mutableStateOf(currentPreferences.preferredQualityAlloha.ifBlank { "best" }) }
+    var selectedQualityAlloha by remember {
+        mutableStateOf(currentPreferences.preferredQualityAlloha.ifBlank { "best" })
+    }
 
     val qualityOptions = listOf("best", "1080p", "720p", "480p", "360p")
     val configuration = LocalConfiguration.current

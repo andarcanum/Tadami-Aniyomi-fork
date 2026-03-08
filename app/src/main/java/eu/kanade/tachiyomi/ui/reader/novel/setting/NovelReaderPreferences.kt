@@ -389,7 +389,10 @@ class NovelReaderPreferences(
 
     fun geminiPrivateUnlocked() = preferenceStore.getBoolean("novel_reader_gemini_private_unlocked", false)
 
-    fun geminiPrivatePythonLikeMode() = preferenceStore.getBoolean("novel_reader_gemini_private_python_like_mode", false)
+    fun geminiPrivatePythonLikeMode() = preferenceStore.getBoolean(
+        "novel_reader_gemini_private_python_like_mode",
+        false,
+    )
 
     fun translationProvider() =
         preferenceStore.getEnum("novel_reader_translation_provider", NovelTranslationProvider.GEMINI)

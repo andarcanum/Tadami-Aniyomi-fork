@@ -62,9 +62,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
@@ -74,18 +74,18 @@ import eu.kanade.presentation.components.DropdownMenu
 import eu.kanade.presentation.components.EntryDownloadDropdownMenu
 import eu.kanade.presentation.entries.DownloadAction
 import eu.kanade.presentation.entries.anime.components.EpisodeDownloadAction
-import eu.kanade.presentation.entries.components.EntryBottomActionMenu
 import eu.kanade.presentation.entries.anime.components.aurora.AnimeActionCard
 import eu.kanade.presentation.entries.anime.components.aurora.AnimeEpisodeCardCompact
 import eu.kanade.presentation.entries.anime.components.aurora.AnimeHeroContent
 import eu.kanade.presentation.entries.anime.components.aurora.AnimeInfoCard
 import eu.kanade.presentation.entries.anime.components.aurora.EpisodesHeader
 import eu.kanade.presentation.entries.anime.components.aurora.FullscreenPosterBackground
+import eu.kanade.presentation.entries.components.EntryBottomActionMenu
 import eu.kanade.presentation.theme.AuroraTheme
-import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.resolveAuroraAdaptiveSpec
+import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreenModel
 import eu.kanade.tachiyomi.ui.entries.anime.EpisodeList
 import kotlinx.coroutines.launch
@@ -387,7 +387,11 @@ fun AnimeScreenAuroraImpl(
                                             }
                                             AuroraEpisodeClickAction.SelectEpisode -> {
                                                 onEpisodeSelected(item, true, true, false)
-                                                if (shouldAutoExpandAuroraEpisodesList(episodesExpanded, episodes.size)) {
+                                                if (shouldAutoExpandAuroraEpisodesList(
+                                                        episodesExpanded,
+                                                        episodes.size,
+                                                    )
+                                                ) {
                                                     episodesExpanded = true
                                                 }
                                             }
@@ -398,7 +402,9 @@ fun AnimeScreenAuroraImpl(
                                     },
                                     onLongClick = {
                                         onEpisodeSelected(item, !item.selected, true, true)
-                                        if (!item.selected && shouldAutoExpandAuroraEpisodesList(episodesExpanded, episodes.size)) {
+                                        if (!item.selected &&
+                                            shouldAutoExpandAuroraEpisodesList(episodesExpanded, episodes.size)
+                                        ) {
                                             episodesExpanded = true
                                         }
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -586,7 +592,9 @@ fun AnimeScreenAuroraImpl(
                             },
                             onLongClick = {
                                 onEpisodeSelected(item, !item.selected, true, true)
-                                if (!item.selected && shouldAutoExpandAuroraEpisodesList(episodesExpanded, episodes.size)) {
+                                if (!item.selected &&
+                                    shouldAutoExpandAuroraEpisodesList(episodesExpanded, episodes.size)
+                                ) {
                                     episodesExpanded = true
                                 }
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -789,7 +797,9 @@ fun AnimeScreenAuroraImpl(
             onMarkPreviousAsSeenClicked = onMarkPreviousAsSeenClicked,
             onDownloadEpisode = onDownloadEpisode,
             onMultiDeleteClicked = onMultiDeleteClicked,
-            fillFraction = if (auroraSelectionControlsPlacement() == AuroraSelectionControlsPlacement.BottomStack && useTwoPaneLayout) {
+            fillFraction = if (auroraSelectionControlsPlacement() == AuroraSelectionControlsPlacement.BottomStack &&
+                useTwoPaneLayout
+            ) {
                 0.5f
             } else {
                 1f

@@ -1,5 +1,6 @@
 package eu.kanade.presentation.entries.anime
 
+import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy
 import eu.kanade.tachiyomi.animesource.model.FetchType
@@ -7,9 +8,8 @@ import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreenModel
-import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
-import io.kotest.matchers.shouldBe
 import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.entries.anime.model.Anime
 

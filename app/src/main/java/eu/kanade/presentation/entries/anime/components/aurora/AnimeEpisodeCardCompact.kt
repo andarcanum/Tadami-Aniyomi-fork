@@ -55,7 +55,6 @@ import eu.kanade.tachiyomi.ui.entries.anime.EpisodeList
 import me.saket.swipe.SwipeableActionsBox
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.entries.anime.model.asAnimeCover
-import tachiyomi.domain.items.episode.model.Episode
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource

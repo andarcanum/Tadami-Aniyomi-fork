@@ -1352,11 +1352,27 @@ class PlayerViewModel @JvmOverloads constructor(
                     val title = video.videoTitle.lowercase()
                     val qualityRank = when {
                         preferredQuality.equals("best", ignoreCase = true) -> {
-                            qualityOrder.indexOfFirst { title.contains(it.lowercase()) }.let { if (it == -1) 999 else it }
+                            qualityOrder.indexOfFirst { title.contains(it.lowercase()) }.let {
+                                if (it ==
+                                    -1
+                                ) {
+                                    999
+                                } else {
+                                    it
+                                }
+                            }
                         }
                         title.contains(preferredQuality.lowercase()) -> 0
                         else -> {
-                            qualityOrder.indexOfFirst { title.contains(it.lowercase()) }.let { if (it == -1) 999 else it + 1 }
+                            qualityOrder.indexOfFirst { title.contains(it.lowercase()) }.let {
+                                if (it ==
+                                    -1
+                                ) {
+                                    999
+                                } else {
+                                    it + 1
+                                }
+                            }
                         }
                     }
                     candidates.add(Triple(hIdx, vIdx, qualityRank))
@@ -1483,7 +1499,10 @@ class PlayerViewModel @JvmOverloads constructor(
 
                             if (hosterState is HosterState.Ready) {
                                 val prefIndex = hosterState.videoList.indexOfFirst { it.preferred }
-                                if (!hasExplicitPlaybackPreferences(playbackPreferences) && prefIndex != -1 && hosterIndex == -1) {
+                                if (!hasExplicitPlaybackPreferences(playbackPreferences) &&
+                                    prefIndex != -1 &&
+                                    hosterIndex == -1
+                                ) {
                                     if (hasFoundPreferredVideo.compareAndSet(false, true)) {
                                         if (selectedHosterVideoIndex.value == Pair(-1, -1)) {
                                             val success =

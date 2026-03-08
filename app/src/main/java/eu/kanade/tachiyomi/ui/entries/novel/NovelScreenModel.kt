@@ -26,8 +26,8 @@ import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadManager
 import eu.kanade.tachiyomi.data.export.novel.NovelEpubExportOptions
 import eu.kanade.tachiyomi.data.export.novel.NovelEpubExporter
 import eu.kanade.tachiyomi.data.track.MangaTracker
-import eu.kanade.tachiyomi.extension.novel.runtime.NovelJsSource
 import eu.kanade.tachiyomi.data.track.TrackerManager
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelJsSource
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.source.novel.NovelSiteSource
@@ -670,7 +670,7 @@ class NovelScreenModel(
         val sourceChapters = state.source.getChapterList(state.novel.toSNovel())
         logcat {
             "Fetched chapters for id=${state.novel.id} source=${state.source.name}, " +
-            "count=${sourceChapters.size}, manualFetch=$manualFetch"
+                "count=${sourceChapters.size}, manualFetch=$manualFetch"
         }
         if (isLikelyWebViewLoginRequired(state.source, state.novel, sourceChapters.size)) {
             logcat(LogPriority.WARN) {
@@ -1449,7 +1449,11 @@ class NovelScreenModel(
                 chapters
                     .asSequence()
                     .filter { chapter ->
-                        (!chapterPageEnabled || chapterPageVisibleUrls.isEmpty() || chapter.url in chapterPageVisibleUrls) &&
+                        (
+                            !chapterPageEnabled ||
+                                chapterPageVisibleUrls.isEmpty() ||
+                                chapter.url in chapterPageVisibleUrls
+                            ) &&
                             applyFilter(novel.unreadFilter) { !chapter.read } &&
                             applyFilter(novel.downloadedFilter) { chapter.id in downloadedChapterIds } &&
                             applyFilter(novel.bookmarkedFilter) { chapter.bookmark }

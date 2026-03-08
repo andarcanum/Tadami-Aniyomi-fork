@@ -3052,8 +3052,8 @@ private fun GeminiTranslationDialog(
                             ) {
                                 Text(
                                     text =
-                                        "$privateProviderLabel: используются зашитые правила private bridge " +
-                                            "и авто-режим без пользовательских модификаторов.",
+                                    "$privateProviderLabel: используются зашитые правила private bridge " +
+                                        "и авто-режим без пользовательских модификаторов.",
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                     style = MaterialTheme.typography.bodySmall,
                                 )
@@ -3096,8 +3096,8 @@ private fun GeminiTranslationDialog(
                         ) {
                             Text(
                                 text =
-                                    "$privateProviderLabel: отправка идет одним запросом на главу. " +
-                                        "При ошибке включается fallback (batch=40, concurrency=1).",
+                                "$privateProviderLabel: отправка идет одним запросом на главу. " +
+                                    "При ошибке включается fallback (batch=40, concurrency=1).",
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                 style = MaterialTheme.typography.bodySmall,
                             )
