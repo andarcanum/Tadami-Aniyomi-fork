@@ -1,5 +1,7 @@
 package eu.kanade.presentation.entries.anime
 
+import eu.kanade.presentation.entries.anime.components.aurora.AuroraEpisodeStatus
+import eu.kanade.presentation.entries.anime.components.aurora.shouldShowAuroraEpisodeStatusLabel
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 
@@ -53,5 +55,17 @@ class AnimeScreenAuroraSelectionModeTest {
             episodesExpanded = false,
             totalEpisodes = 5,
         ) shouldBe false
+    }
+
+    @Test
+    fun `aurora selection summary uses compact icon actions`() {
+        shouldUseCompactAuroraSelectionActions() shouldBe true
+    }
+
+    @Test
+    fun `bookmark status badge hides text label while filler and seen keep it`() {
+        shouldShowAuroraEpisodeStatusLabel(AuroraEpisodeStatus.Bookmark) shouldBe false
+        shouldShowAuroraEpisodeStatusLabel(AuroraEpisodeStatus.Fillermark) shouldBe true
+        shouldShowAuroraEpisodeStatusLabel(AuroraEpisodeStatus.Seen) shouldBe true
     }
 }

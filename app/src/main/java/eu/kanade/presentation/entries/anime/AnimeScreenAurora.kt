@@ -36,6 +36,9 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarDuration
@@ -806,17 +809,19 @@ fun AnimeScreenAuroraImpl(
 }
 
 @Composable
-private fun AuroraSelectionChip(
-    text: String,
+private fun AuroraSelectionIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
+            .size(32.dp)
+            .clip(CircleShape)
             .background(
-                Brush.horizontalGradient(
+                Brush.radialGradient(
                     listOf(
                         colors.accent.copy(alpha = 0.2f),
                         colors.accent.copy(alpha = 0.1f),
@@ -824,13 +829,14 @@ private fun AuroraSelectionChip(
                 ),
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            .padding(7.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = text,
-            color = colors.textPrimary,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = colors.textPrimary,
+            modifier = Modifier.size(18.dp),
         )
     }
 }
@@ -858,34 +864,39 @@ private fun AuroraEpisodeSelectionBottomStack(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 8.dp)
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(18.dp))
                     .background(AuroraTheme.colors.surface.copy(alpha = 0.9f))
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text(
-                    text = selected.size.toString(),
-                    color = AuroraTheme.colors.accent,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = stringResource(MR.strings.selected),
-                    color = AuroraTheme.colors.textPrimary,
-                    fontSize = 13.sp,
-                )
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(AuroraTheme.colors.accent.copy(alpha = 0.16f))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        text = selected.size.toString(),
+                        color = AuroraTheme.colors.accent,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
                 Spacer(modifier = Modifier.weight(1f))
-                AuroraSelectionChip(
-                    text = stringResource(MR.strings.action_select_all),
+                AuroraSelectionIconButton(
+                    icon = Icons.Outlined.SelectAll,
+                    contentDescription = stringResource(MR.strings.action_select_all),
                     onClick = onSelectAll,
                 )
-                AuroraSelectionChip(
-                    text = stringResource(MR.strings.action_select_inverse),
+                AuroraSelectionIconButton(
+                    icon = Icons.Filled.SwapHoriz,
+                    contentDescription = stringResource(MR.strings.action_select_inverse),
                     onClick = onInvertSelection,
                 )
-                AuroraSelectionChip(
-                    text = stringResource(MR.strings.action_cancel),
+                AuroraSelectionIconButton(
+                    icon = Icons.Outlined.Close,
+                    contentDescription = stringResource(MR.strings.action_cancel),
                     onClick = onCancel,
                 )
             }
@@ -957,6 +968,10 @@ internal enum class AuroraSelectionControlsPlacement {
 
 internal fun auroraSelectionControlsPlacement(): AuroraSelectionControlsPlacement {
     return AuroraSelectionControlsPlacement.BottomStack
+}
+
+internal fun shouldUseCompactAuroraSelectionActions(): Boolean {
+    return true
 }
 
 internal fun resolveAuroraEpisodeClickAction(

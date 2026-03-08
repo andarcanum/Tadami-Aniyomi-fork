@@ -54,6 +54,7 @@ build_errors_utf8.txt
 .mcp.json
 CLAUDE.md
 GEMINI.md
+AGENTS.md
 
 # Node.js
 package-lock.json

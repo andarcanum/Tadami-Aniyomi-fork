@@ -57,6 +57,8 @@ import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.entries.anime.model.asAnimeCover
 import tachiyomi.domain.items.episode.model.Episode
 import tachiyomi.domain.library.service.LibraryPreferences
+import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.presentation.core.i18n.stringResource
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -219,20 +221,23 @@ fun AnimeEpisodeCardCompact(
                     ) {
                         if (episode.bookmark) {
                             AuroraEpisodeStatusBadge(
+                                status = AuroraEpisodeStatus.Bookmark,
                                 icon = Icons.Outlined.BookmarkAdd,
-                                label = "Bookmark",
+                                label = null,
                             )
                         }
                         if (episode.fillermark) {
                             AuroraEpisodeStatusBadge(
+                                status = AuroraEpisodeStatus.Fillermark,
                                 icon = Icons.Outlined.NewLabel,
-                                label = "Filler",
+                                label = stringResource(AYMR.strings.aurora_episode_badge_filler),
                             )
                         }
                         if (episode.seen) {
                             AuroraEpisodeStatusBadge(
+                                status = AuroraEpisodeStatus.Seen,
                                 icon = Icons.Outlined.Done,
-                                label = "Seen",
+                                label = stringResource(AYMR.strings.aurora_episode_badge_seen),
                             )
                         }
                     }
@@ -262,15 +267,6 @@ fun AnimeEpisodeCardCompact(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    if (episode.bookmark) {
-                        Icon(
-                            Icons.Outlined.BookmarkAdd,
-                            contentDescription = null,
-                            tint = colors.accent,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-
                     // Download indicator
                     if (onDownloadEpisode != null && !isAnyEpisodeSelected) {
                         EpisodeDownloadIndicator(
@@ -313,8 +309,9 @@ fun AnimeEpisodeCardCompact(
 
 @Composable
 private fun AuroraEpisodeStatusBadge(
+    status: AuroraEpisodeStatus,
     icon: ImageVector,
-    label: String,
+    label: String?,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
@@ -324,7 +321,7 @@ private fun AuroraEpisodeStatusBadge(
             .background(colors.surface.copy(alpha = 0.32f))
             .padding(horizontal = 6.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (label != null) 4.dp else 0.dp),
     ) {
         Icon(
             imageVector = icon,
@@ -332,13 +329,25 @@ private fun AuroraEpisodeStatusBadge(
             tint = colors.accent,
             modifier = Modifier.size(12.dp),
         )
-        Text(
-            text = label,
-            color = colors.textSecondary,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Medium,
-        )
+        if (shouldShowAuroraEpisodeStatusLabel(status) && label != null) {
+            Text(
+                text = label,
+                color = colors.textSecondary,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
     }
+}
+
+internal enum class AuroraEpisodeStatus {
+    Bookmark,
+    Fillermark,
+    Seen,
+}
+
+internal fun shouldShowAuroraEpisodeStatusLabel(status: AuroraEpisodeStatus): Boolean {
+    return status != AuroraEpisodeStatus.Bookmark
 }
 
 private fun auroraAnimeSwipeAction(
