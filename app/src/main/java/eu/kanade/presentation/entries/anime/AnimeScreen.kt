@@ -1268,7 +1268,7 @@ private fun onEpisodeItemClick(
     }
 }
 
-private fun resolveCoverUrl(
+internal fun resolveCoverUrl(
     state: AnimeScreenModel.State.Success,
     metadataSource: eu.kanade.domain.ui.model.AnimeMetadataSource,
 ): String? {
@@ -1277,7 +1277,7 @@ private fun resolveCoverUrl(
     }
 
     if (state.isMetadataLoading) {
-        return null
+        return state.anime.thumbnailUrl
     }
 
     val metadataCoverUrl = state.animeMetadata?.coverUrl?.takeIf { it.isNotBlank() }

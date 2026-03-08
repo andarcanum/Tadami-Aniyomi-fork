@@ -34,10 +34,23 @@ fun rememberAuroraCoverPlaceholderPainter(
 fun rememberThemeAwareCoverErrorPainter(
     variant: AuroraCoverPlaceholderVariant = AuroraCoverPlaceholderVariant.Portrait,
 ): Painter {
-    return if (LocalIsAuroraTheme.current) {
-        rememberAuroraCoverPlaceholderPainter(variant = variant)
+    return rememberResourceBitmapPainter(
+        id = themeAwareCoverFallbackResId(
+            isAuroraTheme = LocalIsAuroraTheme.current,
+            variant = variant,
+        ),
+    )
+}
+
+@DrawableRes
+fun themeAwareCoverFallbackResId(
+    isAuroraTheme: Boolean,
+    variant: AuroraCoverPlaceholderVariant = AuroraCoverPlaceholderVariant.Portrait,
+): Int {
+    return if (isAuroraTheme) {
+        auroraCoverPlaceholderResId(variant)
     } else {
-        rememberResourceBitmapPainter(id = R.drawable.cover_error)
+        R.drawable.cover_empty
     }
 }
 

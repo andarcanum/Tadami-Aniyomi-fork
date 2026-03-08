@@ -79,4 +79,25 @@ class AuroraCoverPlaceholdersTest {
         auroraCoverPlaceholderResId(AuroraCoverPlaceholderVariant.Wide) shouldBe
             R.drawable.aurora_cover_placeholder_wide
     }
+
+    @Test
+    fun `theme aware fallback uses cover empty when aurora is disabled`() {
+        themeAwareCoverFallbackResId(
+            isAuroraTheme = false,
+            variant = AuroraCoverPlaceholderVariant.Portrait,
+        ) shouldBe R.drawable.cover_empty
+    }
+
+    @Test
+    fun `theme aware fallback uses aurora placeholders when aurora is enabled`() {
+        themeAwareCoverFallbackResId(
+            isAuroraTheme = true,
+            variant = AuroraCoverPlaceholderVariant.Portrait,
+        ) shouldBe R.drawable.aurora_cover_placeholder_portrait
+
+        themeAwareCoverFallbackResId(
+            isAuroraTheme = true,
+            variant = AuroraCoverPlaceholderVariant.Wide,
+        ) shouldBe R.drawable.aurora_cover_placeholder_wide
+    }
 }

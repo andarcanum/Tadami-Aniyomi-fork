@@ -63,13 +63,14 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
+import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
 import eu.kanade.presentation.components.relativeDateTimeText
 import eu.kanade.presentation.entries.components.EntryBottomActionMenu
 import eu.kanade.presentation.entries.components.EntryToolbar
 import eu.kanade.presentation.entries.components.ItemCover
 import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
 import eu.kanade.presentation.theme.AuroraTheme
-import eu.kanade.presentation.util.rememberResourceBitmapPainter
 import eu.kanade.presentation.util.formatChapterNumber
 import eu.kanade.tachiyomi.data.coil.staticBlur
 import eu.kanade.tachiyomi.source.model.SManga
@@ -270,6 +271,7 @@ fun NovelScreen(
                     MaterialTheme.colorScheme.background,
                 )
                 val blurRadiusPx = with(LocalDensity.current) { 4.dp.roundToPx() }
+                val fallbackPainter = rememberThemeAwareCoverErrorPainter(variant = AuroraCoverPlaceholderVariant.Wide)
 
                 Box(
                     modifier = Modifier
@@ -283,8 +285,8 @@ fun NovelScreen(
                             .placeholderMemoryCacheKey(state.novel.thumbnailUrl)
                             .staticBlur(blurRadiusPx, intensityFactor = 0.6f)
                             .build(),
-                        error = rememberResourceBitmapPainter(id = eu.kanade.tachiyomi.R.drawable.cover_error),
-                        fallback = rememberResourceBitmapPainter(id = eu.kanade.tachiyomi.R.drawable.cover_error),
+                        error = fallbackPainter,
+                        fallback = fallbackPainter,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier

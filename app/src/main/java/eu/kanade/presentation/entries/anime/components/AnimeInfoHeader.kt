@@ -82,10 +82,11 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
 import eu.kanade.presentation.components.DropdownMenu
+import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
 import eu.kanade.presentation.entries.components.DotSeparatorText
 import eu.kanade.presentation.entries.components.ItemCover
-import eu.kanade.presentation.util.rememberResourceBitmapPainter
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.data.coil.staticBlur
@@ -125,6 +126,7 @@ fun AnimeInfoBox(
             MaterialTheme.colorScheme.background,
         )
         val blurRadiusPx = with(LocalDensity.current) { 4.dp.roundToPx() }
+        val fallbackPainter = rememberThemeAwareCoverErrorPainter(variant = AuroraCoverPlaceholderVariant.Wide)
         if (resolvedCoverUrl != null) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
@@ -133,8 +135,8 @@ fun AnimeInfoBox(
                     .crossfade(true)
                     .staticBlur(blurRadiusPx, intensityFactor = 0.6f)
                     .build(),
-                error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
-                fallback = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                error = fallbackPainter,
+                fallback = fallbackPainter,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
@@ -143,7 +145,7 @@ fun AnimeInfoBox(
             )
         } else {
             Image(
-                painter = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                painter = fallbackPainter,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
