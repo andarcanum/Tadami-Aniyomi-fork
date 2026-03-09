@@ -9,19 +9,11 @@ import tachiyomi.domain.achievement.model.Achievement
 import tachiyomi.domain.achievement.model.AchievementProgress
 import tachiyomi.domain.achievement.model.AchievementType
 
-/**
- * Чекер для достижений, основанных на использовании функций
- * Проверяет: поиск, фильтры, скачивания, бэкап, настройки
- */
 class FeatureBasedAchievementChecker(
     private val eventBus: AchievementEventBus,
     private val featureCollector: FeatureUsageCollector,
 ) {
 
-    /**
-     * Проверяет фиче-бейсд достижения
-     * @return true если достижение выполнено
-     */
     suspend fun check(
         achievement: Achievement,
         currentProgress: AchievementProgress,
@@ -32,12 +24,9 @@ class FeatureBasedAchievementChecker(
 
         return when (achievement.id) {
             "download_starter", "chapter_collector", "trophy_hunter" -> {
-                // Скачивание глав
-                val downloadCount = featureCollector.getFeatureCount(AchievementEvent.Feature.DOWNLOAD)
-                downloadCount >= threshold
+                featureCollector.getFeatureCount(AchievementEvent.Feature.DOWNLOAD) >= threshold
             }
             "search_user", "advanced_explorer" -> {
-                // Использование поиска
                 val searchCount = featureCollector.getFeatureCount(AchievementEvent.Feature.SEARCH)
                 val advancedSearchCount = featureCollector.getFeatureCount(AchievementEvent.Feature.ADVANCED_SEARCH)
                 val totalSearches = if (achievement.id == "advanced_explorer") {
@@ -48,34 +37,25 @@ class FeatureBasedAchievementChecker(
                 totalSearches >= threshold
             }
             "filter_master" -> {
-                // Использование фильтров
-                val filterCount = featureCollector.getFeatureCount(AchievementEvent.Feature.FILTER)
-                filterCount >= threshold
+                featureCollector.getFeatureCount(AchievementEvent.Feature.FILTER) >= threshold
             }
             "backup_master" -> {
-                // Создание бэкапа
-                val backupCount = featureCollector.getFeatureCount(AchievementEvent.Feature.BACKUP)
-                backupCount >= threshold
+                featureCollector.getFeatureCount(AchievementEvent.Feature.BACKUP) >= threshold
             }
             "settings_explorer" -> {
-                // Заход в настройки
-                val settingsCount = featureCollector.getFeatureCount(AchievementEvent.Feature.SETTINGS)
-                settingsCount >= threshold
+                featureCollector.getFeatureCount(AchievementEvent.Feature.SETTINGS) >= threshold
             }
             "stats_viewer" -> {
-                // Просмотр статистики
-                val statsCount = featureCollector.getFeatureCount(AchievementEvent.Feature.STATS)
-                statsCount >= threshold
+                featureCollector.getFeatureCount(AchievementEvent.Feature.STATS) >= threshold
             }
             "theme_changer" -> {
-                // Смена темы
-                val themeCount = featureCollector.getFeatureCount(AchievementEvent.Feature.THEME_CHANGE)
-                themeCount >= threshold
+                featureCollector.getFeatureCount(AchievementEvent.Feature.THEME_CHANGE) >= threshold
             }
             "persistent_clicker" -> {
-                // Секретное: нажать на логотип 10 раз
-                val logoClicks = featureCollector.getFeatureCount(AchievementEvent.Feature.LOGO_CLICK)
-                logoClicks >= threshold
+                featureCollector.getFeatureCount(AchievementEvent.Feature.LOGO_CLICK) >= threshold
+            }
+            "secret_hall_unlocked" -> {
+                featureCollector.getFeatureCount(AchievementEvent.Feature.SECRET_HALL_UNLOCKED) >= threshold
             }
             else -> {
                 logcat(LogPriority.WARN) { "[ACHIEVEMENTS] Unknown feature_based achievement: ${achievement.id}" }
@@ -84,10 +64,6 @@ class FeatureBasedAchievementChecker(
         }
     }
 
-    /**
-     * Вычисляет прогресс для фиче-бейсд достижений
-     * @return 0-1 прогресс или null если не применимо
-     */
     suspend fun getProgress(
         achievement: Achievement,
         currentProgress: AchievementProgress,
@@ -124,6 +100,9 @@ class FeatureBasedAchievementChecker(
             }
             "persistent_clicker" -> {
                 featureCollector.getFeatureCount(AchievementEvent.Feature.LOGO_CLICK)
+            }
+            "secret_hall_unlocked" -> {
+                featureCollector.getFeatureCount(AchievementEvent.Feature.SECRET_HALL_UNLOCKED)
             }
             else -> return null
         }

@@ -1,13 +1,16 @@
 package eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.core.util.ifNovelSourcesLoaded
+import eu.kanade.presentation.browse.isSecretHallQuery
 import eu.kanade.presentation.browse.novel.GlobalNovelSearchScreen
+import eu.kanade.presentation.browse.openSecretHallIfNeeded
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.ui.browse.novel.source.browse.BrowseNovelSourceScreen
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
@@ -25,6 +28,13 @@ class GlobalNovelSearchScreen(
         }
 
         val navigator = LocalNavigator.currentOrThrow
+        if (isSecretHallQuery(searchQuery)) {
+            LaunchedEffect(searchQuery) {
+                openSecretHallIfNeeded(navigator, searchQuery)
+            }
+            LoadingScreen()
+            return
+        }
         val screenModel = rememberScreenModel {
             GlobalNovelSearchScreenModel(
                 initialQuery = searchQuery,
@@ -36,7 +46,11 @@ class GlobalNovelSearchScreen(
             state = state,
             navigateUp = navigator::pop,
             onChangeSearchQuery = screenModel::updateSearchQuery,
-            onSearch = { screenModel.search() },
+            onSearch = { enteredQuery ->
+                if (!openSecretHallIfNeeded(navigator, enteredQuery)) {
+                    screenModel.search()
+                }
+            },
             onChangeSearchFilter = screenModel::setSourceFilter,
             onToggleResults = screenModel::toggleFilterResults,
             getNovel = { screenModel.getNovel(it) },

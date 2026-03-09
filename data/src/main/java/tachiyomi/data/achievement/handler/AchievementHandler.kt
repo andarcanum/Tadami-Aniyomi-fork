@@ -686,6 +686,7 @@ class AchievementHandler(
                     AchievementEvent.Feature.BACKUP -> id.contains("backup")
                     AchievementEvent.Feature.FILTER -> id.contains("filter")
                     AchievementEvent.Feature.SETTINGS -> id.contains("settings")
+                    AchievementEvent.Feature.SECRET_HALL_UNLOCKED -> id.contains("secret_hall")
                     else -> false
                 }
             }

@@ -7,6 +7,7 @@ import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.browse.novel.GlobalNovelSearchScreen
+import eu.kanade.presentation.browse.openSecretHallIfNeeded
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.ui.browse.novel.source.browse.BrowseNovelSourceScreen
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
@@ -31,7 +32,11 @@ class MigrateNovelSearchScreen(private val novelId: Long) : Screen() {
             state = state,
             navigateUp = navigator::pop,
             onChangeSearchQuery = screenModel::updateSearchQuery,
-            onSearch = { screenModel.search() },
+            onSearch = { enteredQuery ->
+                if (!openSecretHallIfNeeded(navigator, enteredQuery)) {
+                    screenModel.search()
+                }
+            },
             getNovel = { screenModel.getNovel(it) },
             onChangeSearchFilter = screenModel::setSourceFilter,
             onToggleResults = screenModel::toggleFilterResults,

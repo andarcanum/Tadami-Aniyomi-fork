@@ -7,6 +7,7 @@ import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.browse.anime.MigrateAnimeSearchScreen
+import eu.kanade.presentation.browse.openSecretHallIfNeeded
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.ui.browse.anime.migration.anime.season.MigrateSeasonSelectScreen
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen
@@ -32,7 +33,11 @@ class MigrateAnimeSearchScreen(private val animeId: Long) : Screen() {
             fromSourceId = dialogState.anime?.source,
             navigateUp = navigator::pop,
             onChangeSearchQuery = screenModel::updateSearchQuery,
-            onSearch = { screenModel.search() },
+            onSearch = { enteredQuery ->
+                if (!openSecretHallIfNeeded(navigator, enteredQuery)) {
+                    screenModel.search()
+                }
+            },
             getAnime = { screenModel.getAnime(it) },
             onChangeSearchFilter = screenModel::setSourceFilter,
             onToggleResults = screenModel::toggleFilterResults,

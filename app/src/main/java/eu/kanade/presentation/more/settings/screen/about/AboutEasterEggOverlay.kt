@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -316,6 +317,7 @@ private fun MaterializingPage(
     onDismissRequest: () -> Unit,
 ) {
     val transition = updateTransition(targetState = phase, label = "materializingPage")
+    var glitchTargetX by remember { mutableFloatStateOf(0f) }
     val pageScale by transition.animateFloat(
         transitionSpec = { tween(durationMillis = PAGE_MATERIALIZE_DURATION_MS) },
         label = "pageScale",
@@ -350,6 +352,20 @@ private fun MaterializingPage(
             else -> 0f
         }
     }
+    val glitchOffsetX by transition.animateFloat(
+        transitionSpec = { tween(durationMillis = 70) },
+        label = "glitchOffsetX",
+    ) { state ->
+        when (state) {
+            AboutEasterEggPhase.PageMaterializing -> glitchTargetX
+            AboutEasterEggPhase.PrologueVisible,
+            AboutEasterEggPhase.Dismissing,
+            AboutEasterEggPhase.GlyphRain,
+            AboutEasterEggPhase.Primed,
+            AboutEasterEggPhase.Idle,
+            -> 0f
+        }
+    }
     val glowPulse = rememberInfiniteTransition(label = "pageGlow")
     val glowRadius by glowPulse.animateFloat(
         initialValue = 14f,
@@ -381,6 +397,16 @@ private fun MaterializingPage(
         ),
     )
 
+    LaunchedEffect(phase) {
+        if (phase == AboutEasterEggPhase.PageMaterializing) {
+            repeat(10) {
+                glitchTargetX = Random.nextInt(-10, 11).toFloat()
+                delay(45)
+            }
+        }
+        glitchTargetX = 0f
+    }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -390,6 +416,7 @@ private fun MaterializingPage(
     ) {
         Box(
             modifier = Modifier
+                .offset { IntOffset(glitchOffsetX.roundToInt(), 0) }
                 .graphicsLayer {
                     alpha = pageAlpha
                     scaleX = pageScale

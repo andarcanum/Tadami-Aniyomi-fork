@@ -11,7 +11,9 @@ import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.core.util.ifMangaSourcesLoaded
+import eu.kanade.presentation.browse.isSecretHallQuery
 import eu.kanade.presentation.browse.manga.GlobalMangaSearchScreen
+import eu.kanade.presentation.browse.openSecretHallIfNeeded
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.ui.browse.manga.source.browse.BrowseMangaSourceScreen
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreen
@@ -30,6 +32,14 @@ class GlobalMangaSearchScreen(
         }
 
         val navigator = LocalNavigator.currentOrThrow
+
+        if (isSecretHallQuery(searchQuery)) {
+            LaunchedEffect(searchQuery) {
+                openSecretHallIfNeeded(navigator, searchQuery)
+            }
+            LoadingScreen()
+            return
+        }
 
         val screenModel = rememberScreenModel {
             GlobalMangaSearchScreenModel(
@@ -67,7 +77,11 @@ class GlobalMangaSearchScreen(
                 state = state,
                 navigateUp = navigator::pop,
                 onChangeSearchQuery = screenModel::updateSearchQuery,
-                onSearch = { screenModel.search() },
+                onSearch = { enteredQuery ->
+                    if (!openSecretHallIfNeeded(navigator, enteredQuery)) {
+                        screenModel.search()
+                    }
+                },
                 getManga = { screenModel.getManga(it) },
                 onChangeSearchFilter = screenModel::setSourceFilter,
                 onToggleResults = screenModel::toggleFilterResults,
