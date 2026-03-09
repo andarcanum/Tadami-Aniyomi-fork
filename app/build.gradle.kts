@@ -7,7 +7,7 @@ plugins {
     id("mihon.android.application")
     id("mihon.android.application.compose")
     kotlin("plugin.serialization")
-    alias(libs.plugins.aboutLibraries)
+    alias(libs.plugins.aboutLibrariesAndroid)
 }
 val hasPrivateGeminiBridge = findProject(":private-gemini-bridge") != null
 

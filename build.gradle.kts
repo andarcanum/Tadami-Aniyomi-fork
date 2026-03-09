@@ -7,6 +7,7 @@ buildscript {
 plugins {
     alias(kotlinx.plugins.serialization) apply false
     alias(libs.plugins.aboutLibraries) apply false
+    alias(libs.plugins.aboutLibrariesAndroid) apply false
     alias(libs.plugins.moko) apply false
     alias(libs.plugins.sqldelight) apply false
 }
