@@ -91,10 +91,10 @@ class EventAchievementsTest : AchievementTestBase() {
     }
 
     @Test
-    fun `isEventMatch matches read_10_chapters on ChapterRead`() = runTest {
+    fun `isEventMatch does NOT match read_10_chapters on ChapterRead`() = runTest {
         val event = AchievementEvent.ChapterRead(mangaId = 1L, chapterNumber = 1)
         val result = invokeIsEventMatch("read_10_chapters", event)
-        result shouldBe true
+        result shouldBe false
     }
 
     @Test
@@ -119,10 +119,10 @@ class EventAchievementsTest : AchievementTestBase() {
     }
 
     @Test
-    fun `isEventMatch matches watch_10_episodes on EpisodeWatched`() = runTest {
+    fun `isEventMatch does NOT match watch_10_episodes on EpisodeWatched`() = runTest {
         val event = AchievementEvent.EpisodeWatched(animeId = 1L, episodeNumber = 1)
         val result = invokeIsEventMatch("watch_10_episodes", event)
-        result shouldBe true
+        result shouldBe false
     }
 
     // ==================== CRITICAL FIX: complete_1_manga ====================
@@ -135,17 +135,17 @@ class EventAchievementsTest : AchievementTestBase() {
     }
 
     @Test
-    fun `isEventMatch matches complete_10_manga on MangaCompleted`() = runTest {
+    fun `isEventMatch does NOT match complete_10_manga on MangaCompleted`() = runTest {
         val event = AchievementEvent.MangaCompleted(mangaId = 1L)
         val result = invokeIsEventMatch("complete_10_manga", event)
-        result shouldBe true
+        result shouldBe false
     }
 
     @Test
-    fun `isEventMatch matches complete_50_manga on MangaCompleted`() = runTest {
+    fun `isEventMatch does NOT match complete_50_manga on MangaCompleted`() = runTest {
         val event = AchievementEvent.MangaCompleted(mangaId = 1L)
         val result = invokeIsEventMatch("complete_50_manga", event)
-        result shouldBe true
+        result shouldBe false
     }
 
     @Test
@@ -172,10 +172,10 @@ class EventAchievementsTest : AchievementTestBase() {
     }
 
     @Test
-    fun `isEventMatch matches complete_10_anime on AnimeCompleted`() = runTest {
+    fun `isEventMatch does NOT match complete_10_anime on AnimeCompleted`() = runTest {
         val event = AchievementEvent.AnimeCompleted(animeId = 1L)
         val result = invokeIsEventMatch("complete_10_anime", event)
-        result shouldBe true
+        result shouldBe false
     }
 
     @Test
@@ -195,11 +195,17 @@ class EventAchievementsTest : AchievementTestBase() {
     }
 
     @Test
-    fun `isEventMatch matches read_long_manga on ChapterRead via read pattern`() = runTest {
-        // This documents that the pattern WOULD match, but it's filtered in handleChapterRead
+    fun `isEventMatch does NOT match read_long_manga on ChapterRead`() = runTest {
         val event = AchievementEvent.ChapterRead(mangaId = 1L, chapterNumber = 1)
         val result = invokeIsEventMatch("read_long_manga", event)
-        result shouldBe true // Pattern matches via "read", but handler filters it out
+        result shouldBe false
+    }
+
+    @Test
+    fun `isEventMatch fail closes unknown first like id`() = runTest {
+        val event = AchievementEvent.ChapterRead(mangaId = 1L, chapterNumber = 1)
+        val result = invokeIsEventMatch("first_manga_library", event)
+        result shouldBe false
     }
 
     // ==================== Edge Cases ====================

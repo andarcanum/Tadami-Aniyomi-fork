@@ -289,13 +289,95 @@ internal fun resolveGreetingSlotHeightPx(lineLimit: Int): Float {
     }
 }
 
+private const val HOME_HEADER_NICKNAME_MIN_GAP_PX = 2f
+private const val HOME_HEADER_DEFAULT_NICKNAME_Y_PX = 26f
+private const val HOME_HEADER_NICKNAME_ATTACH_TOLERANCE_PX = 6f
+
 internal fun resolveNicknameYForGreetingOverlap(
     nicknameY: Float,
     greetingY: Float,
     greetingHeight: Float,
-    minGap: Float = 2f,
+    minGap: Float = HOME_HEADER_NICKNAME_MIN_GAP_PX,
+    nicknameX: Float = 0f,
+    nicknameWidth: Float = Float.POSITIVE_INFINITY,
+    greetingX: Float = 0f,
+    greetingWidth: Float = Float.POSITIVE_INFINITY,
+    defaultNicknameY: Float = HOME_HEADER_DEFAULT_NICKNAME_Y_PX,
+    attachTolerance: Float = HOME_HEADER_NICKNAME_ATTACH_TOLERANCE_PX,
 ): Float {
-    return maxOf(nicknameY, greetingY + greetingHeight + minGap)
+    if (!rangesOverlap(nicknameX, nicknameWidth, greetingX, greetingWidth)) {
+        return nicknameY
+    }
+
+    val minimumSafeNicknameY = greetingY + greetingHeight + minGap
+    val attachThreshold = defaultNicknameY + attachTolerance
+    return if (nicknameY <= attachThreshold) {
+        minimumSafeNicknameY
+    } else {
+        maxOf(nicknameY, minimumSafeNicknameY)
+    }
+}
+
+internal fun resolveHomeHeaderEffectivePoint(
+    element: HomeHeaderLayoutElement,
+    layoutSpec: HomeHeaderLayoutSpec,
+    elementSizes: Map<HomeHeaderLayoutElement, HomeHeaderPixelSize>,
+    canvasWidth: Float,
+    canvasHeight: Float,
+    showGreeting: Boolean,
+): HomeHeaderPixelPoint {
+    fun pointFor(target: HomeHeaderLayoutElement): HomeHeaderPixelPoint {
+        val size = elementSizes.getValue(target)
+        return clampHomeHeaderPixelPoint(
+            point = HomeHeaderPixelPoint(
+                x = layoutSpec.positionOf(target).x,
+                y = layoutSpec.positionOf(target).y,
+            ),
+            elementSize = size,
+            canvasWidth = canvasWidth,
+            canvasHeight = canvasHeight,
+        )
+    }
+
+    val point = pointFor(element)
+    if (element != HomeHeaderLayoutElement.Nickname || !showGreeting) {
+        return point
+    }
+
+    val nicknameSize = elementSizes.getValue(HomeHeaderLayoutElement.Nickname)
+    val greetingPoint = pointFor(HomeHeaderLayoutElement.Greeting)
+    val greetingSize = elementSizes.getValue(HomeHeaderLayoutElement.Greeting)
+    return point.copy(
+        y = resolveNicknameYForGreetingOverlap(
+            nicknameY = point.y,
+            greetingY = greetingPoint.y,
+            greetingHeight = greetingSize.height,
+            nicknameX = point.x,
+            nicknameWidth = nicknameSize.width,
+            greetingX = greetingPoint.x,
+            greetingWidth = greetingSize.width,
+        ),
+    )
+}
+
+private fun rangesOverlap(
+    firstX: Float,
+    firstWidth: Float,
+    secondX: Float,
+    secondWidth: Float,
+): Boolean {
+    if (!firstWidth.isFinite() || !secondWidth.isFinite()) {
+        return true
+    }
+
+    val safeFirstWidth = firstWidth.coerceAtLeast(0f)
+    val safeSecondWidth = secondWidth.coerceAtLeast(0f)
+    if (safeFirstWidth == 0f || safeSecondWidth == 0f) {
+        return false
+    }
+
+    return firstX < secondX + safeSecondWidth &&
+        firstX + safeFirstWidth > secondX
 }
 
 private val greetingDecorators = listOf("✦", "✧", "◆", "◇")
@@ -1083,8 +1165,10 @@ private fun HomeHubProfileHeaderCanvas(
                 }
             }
 
+            val effectiveElementSizes = HomeHeaderLayoutElement.entries.associateWith(::elementSizeFor)
+
             fun pointFor(spec: HomeHeaderLayoutSpec, element: HomeHeaderLayoutElement): HomeHeaderPixelPoint {
-                val size = elementSizeFor(element)
+                val size = effectiveElementSizes.getValue(element)
                 return clampHomeHeaderPixelPoint(
                     point = HomeHeaderPixelPoint(
                         x = spec.positionOf(element).x,
@@ -1095,10 +1179,6 @@ private fun HomeHubProfileHeaderCanvas(
                     canvasHeight = designHeightPx,
                 )
             }
-
-            fun basePointFor(
-                element: HomeHeaderLayoutElement,
-            ): HomeHeaderPixelPoint = pointFor(layoutSpec, element)
 
             fun tabletCustomDeltaFor(
                 element: HomeHeaderLayoutElement,
@@ -1261,24 +1341,20 @@ private fun HomeHubProfileHeaderCanvas(
                     return slotModifier to contentModifier
                 }
 
-                val point = basePointFor(element)
+                val point = resolveHomeHeaderEffectivePoint(
+                    element = element,
+                    layoutSpec = layoutSpec,
+                    elementSizes = effectiveElementSizes,
+                    canvasWidth = designWidthPx,
+                    canvasHeight = designHeightPx,
+                    showGreeting = showGreeting,
+                )
                 val xPx = point.x * scaleX
                 val yPxRaw = point.y * scaleY
                 val widthDp = with(density) { (size.width * scaleX).toDp() }
                 val heightDp = with(density) { (size.height * scaleY).toDp() }
-                val yPxAdjusted = if (element == HomeHeaderLayoutElement.Nickname && showGreeting) {
-                    val greetingPoint = basePointFor(HomeHeaderLayoutElement.Greeting)
-                    val greetingSize = elementSizeFor(HomeHeaderLayoutElement.Greeting)
-                    resolveNicknameYForGreetingOverlap(
-                        nicknameY = yPxRaw,
-                        greetingY = greetingPoint.y * scaleY,
-                        greetingHeight = greetingSize.height * scaleY,
-                    )
-                } else {
-                    yPxRaw
-                }
                 val elementHeightPx = size.height * scaleY
-                val yPx = yPxAdjusted.coerceIn(
+                val yPx = yPxRaw.coerceIn(
                     0f,
                     (containerHeightPx - elementHeightPx).coerceAtLeast(0f),
                 )

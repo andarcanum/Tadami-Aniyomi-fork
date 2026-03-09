@@ -60,49 +60,73 @@ class AchievementCalculator(
             val streak = streakChecker.getCurrentStreak()
             logcat(LogPriority.INFO) { "Current streak: $streak days" }
 
-            val libraryCounts = getLibraryCounts()
-
             val nonMetaAchievements = allAchievements.filter { it.type != AchievementType.META }
-            val progressUpdates = nonMetaAchievements.map { achievement ->
-                val progress = when (achievement.type) {
-                    AchievementType.QUANTITY -> calculateQuantityProgress(
-                        achievement,
-                        mangaChapters,
-                        animeEpisodes,
-                        novelChapters,
-                    )
-                    AchievementType.EVENT -> calculateEventProgress(
-                        achievement = achievement,
-                        mangaChapters = mangaChapters,
-                        animeEpisodes = animeEpisodes,
-                        novelChapters = novelChapters,
-                    )
-                    AchievementType.DIVERSITY -> calculateDiversityProgress(
-                        achievement,
-                        genreCount,
-                        sourceCount,
-                        mangaGenreCount,
-                        animeGenreCount,
-                        novelGenreCount,
-                        mangaSourceCount,
-                        animeSourceCount,
-                        novelSourceCount,
-                    )
-                    AchievementType.STREAK -> {
-                        streak
-                    }
-                    AchievementType.LIBRARY -> calculateLibraryProgress(achievement, libraryCounts)
-                    AchievementType.BALANCED -> calculateBalancedProgress(mangaChapters, animeEpisodes)
-                    AchievementType.META -> 0
-                    // Secret achievements handled by AchievementHandler.checkSecretAchievements()
-                    AchievementType.SECRET -> 0
-                    // Time-based achievements handled by AchievementHandler
-                    AchievementType.TIME_BASED -> 0
-                    // Feature-based achievements handled by AchievementHandler
-                    AchievementType.FEATURE_BASED -> 0
+            val needsLibraryCounts = nonMetaAchievements.any { it.type == AchievementType.LIBRARY }
+            val needsCompletedCounts = nonMetaAchievements.any {
+                when (it.type) {
+                    AchievementType.EVENT -> it.id == "complete_1_manga" ||
+                        it.id == "complete_1_anime" ||
+                        it.id == "complete_1_novel"
+                    AchievementType.QUANTITY -> it.id.startsWith("complete_")
+                    else -> false
                 }
+            }
+            val needsLongMangaCompletion = nonMetaAchievements.any { it.id == "read_long_manga" }
+            val needsLongNovelCompletion = nonMetaAchievements.any { it.id == "read_long_novel" }
 
-                buildProgress(achievement, progress)
+            val libraryCounts = if (needsLibraryCounts) getLibraryCounts() else Triple(0L, 0L, 0L)
+            val completedCounts = if (needsCompletedCounts) getCompletedCounts() else Triple(0L, 0L, 0L)
+            val hasLongMangaCompletion = if (needsLongMangaCompletion) {
+                hasCompletedMangaWithMinReadChapters(200)
+            } else {
+                false
+            }
+            val hasLongNovelCompletion = if (needsLongNovelCompletion) {
+                hasCompletedNovelWithMinReadChapters(200)
+            } else {
+                false
+            }
+
+            val progressUpdates = buildList {
+                nonMetaAchievements.forEach { achievement ->
+                    val progress = when (achievement.type) {
+                        AchievementType.QUANTITY -> calculateQuantityProgress(
+                            achievement,
+                            mangaChapters,
+                            animeEpisodes,
+                            novelChapters,
+                        )
+                        AchievementType.EVENT -> calculateEventProgress(
+                            achievement = achievement,
+                            mangaChapters = mangaChapters,
+                            animeEpisodes = animeEpisodes,
+                            novelChapters = novelChapters,
+                            completedCounts = completedCounts,
+                            hasLongMangaCompletion = hasLongMangaCompletion,
+                            hasLongNovelCompletion = hasLongNovelCompletion,
+                        )
+                        AchievementType.DIVERSITY -> calculateDiversityProgress(
+                            achievement,
+                            genreCount,
+                            sourceCount,
+                            mangaGenreCount,
+                            animeGenreCount,
+                            novelGenreCount,
+                            mangaSourceCount,
+                            animeSourceCount,
+                            novelSourceCount,
+                        )
+                        AchievementType.STREAK -> streak
+                        AchievementType.LIBRARY -> calculateLibraryProgress(achievement, libraryCounts)
+                        AchievementType.BALANCED -> calculateBalancedProgress(mangaChapters, animeEpisodes)
+                        AchievementType.META -> 0
+                        AchievementType.SECRET -> calculateSecretProgress(achievement)
+                        AchievementType.TIME_BASED -> 0
+                        AchievementType.FEATURE_BASED -> 0
+                    }
+
+                    add(buildProgress(achievement, progress))
+                }
             }
 
             val unlockedCountExcludingMeta = progressUpdates.count { it.isUnlocked }
@@ -185,6 +209,25 @@ class AchievementCalculator(
         return Triple(mangaCount, animeCount, novelCount)
     }
 
+    private suspend fun getCompletedCounts(): Triple<Long, Long, Long> {
+        val mangaCount = mangaHandler.awaitOneOrNull { mangasQueries.getCompletedMangaCount() } ?: 0L
+        val animeCount = animeHandler.awaitOneOrNull { animesQueries.getCompletedAnimeCount() } ?: 0L
+        val novelCount = novelHandler.awaitOneOrNull { novelsQueries.getCompletedNovelCount() } ?: 0L
+        return Triple(mangaCount, animeCount, novelCount)
+    }
+
+    private suspend fun hasCompletedMangaWithMinReadChapters(chapterCount: Long): Boolean {
+        return (mangaHandler.awaitOneOrNull {
+            mangasQueries.hasCompletedLibraryMangaWithMinReadChapters(chapterCount)
+        }) ?: false
+    }
+
+    private suspend fun hasCompletedNovelWithMinReadChapters(chapterCount: Long): Boolean {
+        return (novelHandler.awaitOneOrNull {
+            novelsQueries.hasCompletedLibraryNovelWithMinReadChapters(chapterCount)
+        }) ?: false
+    }
+
     private fun calculateQuantityProgress(
         achievement: Achievement,
         mangaChapters: Long,
@@ -205,22 +248,84 @@ class AchievementCalculator(
         mangaChapters: Long,
         animeEpisodes: Long,
         novelChapters: Long,
+        completedCounts: Triple<Long, Long, Long>,
+        hasLongMangaCompletion: Boolean,
+        hasLongNovelCompletion: Boolean,
     ): Int {
-        val id = achievement.id.lowercase()
-        if (!id.contains("first")) return 0
-
-        return when {
-            id.contains("novel") || id.contains("ranobe") -> if (novelChapters > 0) 1 else 0
-            id.contains("episode") || id.contains("anime") -> if (animeEpisodes > 0) 1 else 0
-            id.contains("chapter") || id.contains("manga") -> if (mangaChapters > 0) 1 else 0
-            achievement.category == AchievementCategory.NOVEL -> if (novelChapters > 0) 1 else 0
-            achievement.category == AchievementCategory.ANIME -> if (animeEpisodes > 0) 1 else 0
-            achievement.category == AchievementCategory.MANGA -> if (mangaChapters > 0) 1 else 0
-            achievement.category == AchievementCategory.BOTH -> {
-                if (mangaChapters > 0 || animeEpisodes > 0 || novelChapters > 0) 1 else 0
-            }
+        val (completedManga, completedAnime, completedNovel) = completedCounts
+        return when (achievement.id) {
+            "first_chapter" -> if (mangaChapters > 0) 1 else 0
+            "first_episode" -> if (animeEpisodes > 0) 1 else 0
+            "first_novel_chapter" -> if (novelChapters > 0) 1 else 0
+            "complete_1_manga" -> if (completedManga > 0) 1 else 0
+            "complete_1_anime" -> if (completedAnime > 0) 1 else 0
+            "complete_1_novel" -> if (completedNovel > 0) 1 else 0
+            "read_long_manga" -> if (hasLongMangaCompletion) 1 else 0
+            "read_long_novel" -> if (hasLongNovelCompletion) 1 else 0
             else -> 0
         }
+    }
+
+    private suspend fun calculateSecretProgress(achievement: Achievement): Int {
+        val threshold = achievement.threshold ?: 1
+        val unlocked = when (achievement.id) {
+            "secret_harem_king" -> {
+                val mangaCount = mangaHandler.awaitOneOrNull {
+                    mangasQueries.getLibraryGenreCount("Harem")
+                } ?: 0L
+                val animeCount = animeHandler.awaitOneOrNull {
+                    animesQueries.getLibraryGenreCount("Harem")
+                } ?: 0L
+                mangaCount + animeCount >= threshold
+            }
+            "secret_isekai_truck" -> {
+                val mangaCount = mangaHandler.awaitOneOrNull {
+                    mangasQueries.getLibraryGenreCount("Isekai")
+                } ?: 0L
+                val animeCount = animeHandler.awaitOneOrNull {
+                    animesQueries.getLibraryGenreCount("Isekai")
+                } ?: 0L
+                mangaCount + animeCount >= threshold
+            }
+            "secret_chad" -> {
+                val completedCount = mangaHandler.awaitOneOrNull {
+                    mangasQueries.getCompletedMangaCount()
+                } ?: 0L
+                val ongoingCount = mangaHandler.awaitOneOrNull {
+                    mangasQueries.getLibraryCountByStatus(1L)
+                } ?: 0L
+                completedCount >= 10 && ongoingCount == 0L
+            }
+            "secret_shonen" -> {
+                val mangaCount = mangaHandler.awaitOneOrNull {
+                    mangasQueries.getCompletedLibraryCountByAnyGenre(2L, "Shounen", "Shonen")
+                } ?: 0L
+                val animeCount = animeHandler.awaitOneOrNull {
+                    animesQueries.getCompletedLibraryCountByAnyGenre(2L, "Shounen", "Shonen")
+                } ?: 0L
+                mangaCount + animeCount >= threshold
+            }
+            "secret_saitama" -> {
+                val mangaCount = mangaHandler.awaitOneOrNull {
+                    mangasQueries.getLibraryCount()
+                } ?: 0L
+                val animeCount = animeHandler.awaitOneOrNull {
+                    animesQueries.getLibraryCount()
+                } ?: 0L
+                mangaCount == 1L && animeCount == 1L
+            }
+            "secret_jojo" -> {
+                val hasManga = mangaHandler.awaitOneOrNull {
+                    mangasQueries.hasLibraryTitleLike("jojo")
+                } ?: false
+                val hasAnime = animeHandler.awaitOneOrNull {
+                    animesQueries.hasLibraryTitleLike("jojo")
+                } ?: false
+                hasManga || hasAnime
+            }
+            else -> false
+        }
+        return if (unlocked) threshold else 0
     }
 
     private fun calculateDiversityProgress(

@@ -14,24 +14,17 @@ class SessionManager(
         startTime = System.currentTimeMillis()
         startTimestamp = startTime
 
-        // Отправляем событие AppStart с информацией о времени суток
         val hourOfDay = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        eventBus.tryEmit(AchievementEvent.AppStart(hourOfDay = hourOfDay))
-
-        // Сохраняем информацию о сессии в FeatureUsageCollector
         featureCollector.onSessionStart(startTimestamp, hourOfDay)
+        eventBus.tryEmit(AchievementEvent.AppStart(hourOfDay = hourOfDay))
     }
 
     fun onSessionEnd() {
         if (startTime == 0L) return
 
         val durationMs = System.currentTimeMillis() - startTime
-
-        // Отправляем событие SessionEnd
-        eventBus.tryEmit(AchievementEvent.SessionEnd(durationMs))
-
-        // Сохраняем длительность сессии в FeatureUsageCollector
         featureCollector.onSessionEnd(durationMs)
+        eventBus.tryEmit(AchievementEvent.SessionEnd(durationMs))
 
         startTime = 0L
     }
