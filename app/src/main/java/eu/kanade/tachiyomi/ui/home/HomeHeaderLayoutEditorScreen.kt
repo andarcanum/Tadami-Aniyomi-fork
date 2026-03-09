@@ -352,7 +352,11 @@ private fun HomeHeaderLayoutEditorCanvas(
         val designWidthPx = layout.canvas.width.coerceAtLeast(1f)
         val previewMeasureScaleX = canvasWidthPx / designWidthPx
         val greetingMeasureWidthPx =
-            (elementSizes.getValue(HomeHeaderLayoutElement.Greeting).width * previewMeasureScaleX).toInt().coerceAtLeast(1)
+            (
+                elementSizes.getValue(
+                    HomeHeaderLayoutElement.Greeting,
+                ).width * previewMeasureScaleX
+                ).toInt().coerceAtLeast(1)
         val preMeasuredGreetingLayout = remember(
             decoratedPreviewGreetingText,
             previewGreetingTextStyle,

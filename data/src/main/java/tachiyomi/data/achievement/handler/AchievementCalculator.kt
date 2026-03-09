@@ -64,9 +64,10 @@ class AchievementCalculator(
             val needsLibraryCounts = nonMetaAchievements.any { it.type == AchievementType.LIBRARY }
             val needsCompletedCounts = nonMetaAchievements.any {
                 when (it.type) {
-                    AchievementType.EVENT -> it.id == "complete_1_manga" ||
-                        it.id == "complete_1_anime" ||
-                        it.id == "complete_1_novel"
+                    AchievementType.EVENT ->
+                        it.id == "complete_1_manga" ||
+                            it.id == "complete_1_anime" ||
+                            it.id == "complete_1_novel"
                     AchievementType.QUANTITY -> it.id.startsWith("complete_")
                     else -> false
                 }
@@ -217,15 +218,19 @@ class AchievementCalculator(
     }
 
     private suspend fun hasCompletedMangaWithMinReadChapters(chapterCount: Long): Boolean {
-        return (mangaHandler.awaitOneOrNull {
-            mangasQueries.hasCompletedLibraryMangaWithMinReadChapters(chapterCount)
-        }) ?: false
+        return (
+            mangaHandler.awaitOneOrNull {
+                mangasQueries.hasCompletedLibraryMangaWithMinReadChapters(chapterCount)
+            }
+            ) ?: false
     }
 
     private suspend fun hasCompletedNovelWithMinReadChapters(chapterCount: Long): Boolean {
-        return (novelHandler.awaitOneOrNull {
-            novelsQueries.hasCompletedLibraryNovelWithMinReadChapters(chapterCount)
-        }) ?: false
+        return (
+            novelHandler.awaitOneOrNull {
+                novelsQueries.hasCompletedLibraryNovelWithMinReadChapters(chapterCount)
+            }
+            ) ?: false
     }
 
     private fun calculateQuantityProgress(
