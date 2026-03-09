@@ -1968,7 +1968,7 @@ class NovelReaderScreenModel(
                         continue
                     }
                     val normalizedText = if (element.tagName().equals("li", ignoreCase = true)) {
-                        "� $text"
+                        "• $text"
                     } else {
                         text
                     }
@@ -2027,7 +2027,7 @@ class NovelReaderScreenModel(
                     null
                 } else {
                     val normalized = if (candidate.tagName().equals("li", ignoreCase = true)) {
-                        "� $candidateText"
+                        "• $candidateText"
                     } else {
                         candidateText
                     }
@@ -2607,8 +2607,8 @@ class NovelReaderScreenModel(
             val contextStart = (match.range.first - 220).coerceAtLeast(0)
             val context = payload.substring(contextStart, match.range.first).lowercase()
             val isListItemContext = context.contains("listitem") || context.contains("bulletlist")
-            val normalized = if (isListItemContext && !decodedText.startsWith("�")) {
-                "� $decodedText"
+            val normalized = if (isListItemContext && !decodedText.startsWith("•")) {
+                "• $decodedText"
             } else {
                 decodedText
             }
@@ -2737,7 +2737,7 @@ class NovelReaderScreenModel(
 
 internal fun isGeminiSourceLanguageEnglish(sourceLang: String): Boolean {
     val normalized = sourceLang.trim().lowercase()
-    return normalized == "english" || normalized == "en" || normalized == "����������"
+    return normalized == "english" || normalized == "en" || normalized == "английский"
 }
 
 internal fun hasReachedGeminiNextChapterTranslationPrefetchThreshold(
