@@ -330,7 +330,11 @@ fun MangaScreenAuroraImpl(
                                             }
                                             AuroraChapterClickAction.SelectChapter -> {
                                                 onChapterSelected(item, true, true, false)
-                                                if (shouldAutoExpandAuroraChaptersList(chaptersExpanded, chapters.size)) {
+                                                if (shouldAutoExpandAuroraChaptersList(
+                                                        chaptersExpanded,
+                                                        chapters.size,
+                                                    )
+                                                ) {
                                                     chaptersExpanded = true
                                                 }
                                             }

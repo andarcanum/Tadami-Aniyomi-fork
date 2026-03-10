@@ -1,3 +1,5 @@
+@file:Suppress("MaxLineLength")
+
 package eu.kanade.presentation.more.settings.screen.about
 
 import org.junit.jupiter.api.Test
@@ -13,7 +15,7 @@ class AboutHiddenFeatureContentLocalizationTest {
         assertEquals("[System Notification]", localized.systemLabel)
         assertEquals("Hidden Chapter: Confession of the Seeker.", localized.title)
         assertEquals(
-            "\"Every time we run from reality into worlds beyond the screen, we forget that one day the illusion may look back at us.\"",
+            "\"Every time we run from reality into worlds beyond the screen, \" +\n                \"we forget that one day the illusion may look back at us.\"",
             localized.subtitle,
         )
         assertEquals("[ Exit to 3D ]", localized.exitLabel)
@@ -48,7 +50,9 @@ class AboutHiddenFeatureContentLocalizationTest {
             exitLabel = "[ Выйти в 3D ]",
             systemLabelEn = "[System Notification]",
             titleEn = "Hidden Chapter: Confession of the Seeker.",
-            subtitleEn = "\"Every time we run from reality into worlds beyond the screen, we forget that one day the illusion may look back at us.\"",
+            subtitleEn =
+            "\"Every time we run from reality into worlds beyond the screen, \" +\n" +
+                "\"we forget that one day the illusion may look back at us.\"",
             bodyEn = "body-en",
             exitLabelEn = "[ Exit to 3D ]",
         )
