@@ -72,7 +72,7 @@ private val ExitButtonShape = RoundedCornerShape(18.dp)
 @Composable
 internal fun AboutEasterEggOverlay(
     phase: AboutEasterEggPhase,
-    content: AboutHiddenFeatureContent,
+    content: AboutHiddenFeatureLocalizedContent,
     onGlyphRainFinished: () -> Unit,
     onPageMaterialized: () -> Unit,
     onDismissRequest: () -> Unit,
@@ -309,7 +309,7 @@ internal fun GlyphRainLayer(
 @Composable
 private fun MaterializingPage(
     phase: AboutEasterEggPhase,
-    content: AboutHiddenFeatureContent,
+    content: AboutHiddenFeatureLocalizedContent,
     timeline: TypewriterTimeline,
     revealElapsedMs: Int,
     canDismiss: Boolean,
@@ -459,7 +459,7 @@ private fun MaterializingPage(
 @Composable
 private fun ProloguePage(
     phase: AboutEasterEggPhase,
-    content: AboutHiddenFeatureContent,
+    content: AboutHiddenFeatureLocalizedContent,
     timeline: TypewriterTimeline,
     revealElapsedMs: Int,
     canDismiss: Boolean,
@@ -640,7 +640,7 @@ internal fun revealTypewriterText(
     return text.take(visibleCharacters)
 }
 
-private fun buildTypewriterTimeline(content: AboutHiddenFeatureContent): TypewriterTimeline {
+private fun buildTypewriterTimeline(content: AboutHiddenFeatureLocalizedContent): TypewriterTimeline {
     val systemLabel = TypewriterSpec(startDelayMs = 0, millisPerChar = 52)
     val title = TypewriterSpec(
         startDelayMs = revealDurationMs(content.systemLabel, systemLabel) + TYPEWRITER_SECTION_PAUSE_MS,

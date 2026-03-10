@@ -76,6 +76,7 @@ import uy.kohesive.injekt.api.get
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.util.Locale
 
 private val GlitchMarks = charArrayOf(
     '\u0337',
@@ -96,6 +97,9 @@ object AboutScreen : Screen() {
         val achievementHandler = remember { Injekt.get<AchievementHandler>() }
         val featureUsageCollector = remember { Injekt.get<FeatureUsageCollector>() }
         val hiddenFeatureConfig = remember(context) { loadAboutHiddenFeatureConfig(context) }
+        val hiddenFeatureContent = remember(hiddenFeatureConfig?.content) {
+            hiddenFeatureConfig?.content?.localizedForLanguage(Locale.getDefault().language)
+        }
         val easterEggStateMachine = remember(hiddenFeatureConfig) {
             hiddenFeatureConfig?.trigger?.let { trigger ->
                 AboutEasterEggStateMachine(
@@ -339,10 +343,10 @@ object AboutScreen : Screen() {
                 }
             }
 
-            if (hiddenFeatureConfig != null) {
+            if (hiddenFeatureConfig != null && hiddenFeatureContent != null) {
                 AboutEasterEggOverlay(
                     phase = easterEggPhase,
-                    content = hiddenFeatureConfig.content,
+                    content = hiddenFeatureContent,
                     onGlyphRainFinished = {
                         syncEasterEggPhase { machine ->
                             machine.onGlyphRainFinished()
