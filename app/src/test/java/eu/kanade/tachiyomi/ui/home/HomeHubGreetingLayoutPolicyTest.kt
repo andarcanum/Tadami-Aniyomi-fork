@@ -30,13 +30,23 @@ class HomeHubGreetingLayoutPolicyTest {
     }
 
     @Test
-    fun `resolveNicknameYForGreetingOverlap keeps nickname below greeting`() {
+    fun `resolveNicknameYForGreetingOverlap soft attaches old default nickname for single line greeting`() {
         resolveNicknameYForGreetingOverlap(
-            nicknameY = 30f,
+            nicknameY = 32f,
             greetingY = 0f,
-            greetingHeight = 48f,
+            greetingHeight = 24f,
             minGap = 2f,
-        ) shouldBe 50f
+        ) shouldBe 26f
+    }
+
+    @Test
+    fun `resolveNicknameYForGreetingOverlap keeps minimum gap for taller greeting`() {
+        resolveNicknameYForGreetingOverlap(
+            nicknameY = 32f,
+            greetingY = 0f,
+            greetingHeight = 36f,
+            minGap = 2f,
+        ) shouldBe 38f
     }
 
     @Test
@@ -47,5 +57,19 @@ class HomeHubGreetingLayoutPolicyTest {
             greetingHeight = 48f,
             minGap = 2f,
         ) shouldBe 60f
+    }
+
+    @Test
+    fun `resolveNicknameYForGreetingOverlap keeps original nickname y when x ranges do not overlap`() {
+        resolveNicknameYForGreetingOverlap(
+            nicknameY = 32f,
+            greetingY = 0f,
+            greetingHeight = 24f,
+            minGap = 2f,
+            nicknameX = 220f,
+            nicknameWidth = 120f,
+            greetingX = 10f,
+            greetingWidth = 140f,
+        ) shouldBe 32f
     }
 }

@@ -1,5 +1,5 @@
 {
-    "version":  6,
+    "version":  7,
     "achievements":  [
                          {
                              "id":  "first_chapter",
@@ -771,6 +771,18 @@
                              "title":  "Исекайнутый через меню",
                              "description":  "Открыть секретный пролог вместо того, чтобы наконец заняться делами.",
                              "badge_icon":  "ic_badge_persistent",
+                             "is_hidden":  true,
+                             "is_secret":  true
+                         },
+                         {
+                             "id":  "secret_hall_unlocked",
+                             "type":  "feature_based",
+                             "category":  "secret",
+                             "threshold":  1,
+                             "points":  125,
+                             "title":  "Зал ранга S",
+                             "description":  "Расшифруйте скрытый сигнал и откройте секретный зал славы.",
+                             "badge_icon":  "ic_badge_secret_eren",
                              "is_hidden":  true,
                              "is_secret":  true
                          },

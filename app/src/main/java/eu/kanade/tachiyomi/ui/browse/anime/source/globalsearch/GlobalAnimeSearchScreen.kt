@@ -12,6 +12,8 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.core.util.ifAnimeSourcesLoaded
 import eu.kanade.presentation.browse.anime.GlobalAnimeSearchScreen
+import eu.kanade.presentation.browse.isSecretHallQuery
+import eu.kanade.presentation.browse.openSecretHallIfNeeded
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.ui.browse.anime.source.browse.BrowseAnimeSourceScreen
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen
@@ -30,6 +32,14 @@ data class GlobalAnimeSearchScreen(
         }
 
         val navigator = LocalNavigator.currentOrThrow
+
+        if (isSecretHallQuery(searchQuery)) {
+            LaunchedEffect(searchQuery) {
+                openSecretHallIfNeeded(navigator, searchQuery)
+            }
+            LoadingScreen()
+            return
+        }
 
         val screenModel = rememberScreenModel {
             GlobalAnimeSearchScreenModel(
@@ -67,7 +77,11 @@ data class GlobalAnimeSearchScreen(
                 state = state,
                 navigateUp = navigator::pop,
                 onChangeSearchQuery = screenModel::updateSearchQuery,
-                onSearch = { screenModel.search() },
+                onSearch = { enteredQuery ->
+                    if (!openSecretHallIfNeeded(navigator, enteredQuery)) {
+                        screenModel.search()
+                    }
+                },
                 getAnime = { screenModel.getAnime(it) },
                 onChangeSearchFilter = screenModel::setSourceFilter,
                 onToggleResults = screenModel::toggleFilterResults,

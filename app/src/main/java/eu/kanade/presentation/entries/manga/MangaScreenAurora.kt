@@ -1,5 +1,6 @@
 package eu.kanade.presentation.entries.manga
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -34,10 +36,15 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material3.Icon
+import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,7 +59,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
@@ -60,6 +69,7 @@ import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.components.DropdownMenu
 import eu.kanade.presentation.components.EntryDownloadDropdownMenu
 import eu.kanade.presentation.entries.DownloadAction
+import eu.kanade.presentation.entries.components.EntryBottomActionMenu
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadAction
 import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
 import eu.kanade.presentation.entries.manga.components.aurora.ChaptersHeader
@@ -72,6 +82,7 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.resolveAuroraAdaptiveSpec
+import eu.kanade.tachiyomi.data.download.manga.model.MangaDownload
 import eu.kanade.tachiyomi.ui.entries.manga.ChapterList
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreenModel
 import kotlinx.coroutines.launch
@@ -125,6 +136,10 @@ fun MangaScreenAuroraImpl(
 ) {
     val manga = state.manga
     val chapters = state.chapterListItems
+    val selectedChapters = remember(chapters) {
+        chapters.filterIsInstance<ChapterList.Item>().filter { it.selected }
+    }
+    val isAnyChapterSelected = selectedChapters.isNotEmpty()
     val colors = AuroraTheme.colors
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
@@ -142,6 +157,7 @@ fun MangaScreenAuroraImpl(
     val firstVisibleItemIndex by remember { derivedStateOf { lazyListState.firstVisibleItemIndex } }
     val scope = rememberCoroutineScope()
     val statsBringIntoViewRequester = remember { BringIntoViewRequester() }
+    val haptic = LocalHapticFeedback.current
 
     // State for chapters expansion
     var chaptersExpanded by remember { mutableStateOf(false) }
@@ -150,6 +166,25 @@ fun MangaScreenAuroraImpl(
         chapters.any { chapterItem ->
             val chapter = (chapterItem as? ChapterList.Item)?.chapter ?: return@any false
             chapter.read || chapter.lastPageRead > 0L
+        }
+    }
+
+    BackHandler(onBack = {
+        if (isAnyChapterSelected) {
+            onAllChapterSelected(false)
+        } else {
+            navigateUp()
+        }
+    })
+
+    LaunchedEffect(isAnyChapterSelected, chaptersExpanded, chapters.size) {
+        if (isAnyChapterSelected &&
+            shouldAutoExpandAuroraChaptersList(
+                chaptersExpanded = chaptersExpanded,
+                totalChapters = chapters.size,
+            )
+        ) {
+            chaptersExpanded = true
         }
     }
 
@@ -279,7 +314,45 @@ fun MangaScreenAuroraImpl(
                                 MangaChapterCardCompact(
                                     manga = manga,
                                     item = item,
-                                    onChapterClicked = onChapterClicked,
+                                    selected = item.selected,
+                                    isAnyChapterSelected = isAnyChapterSelected,
+                                    chapterSwipeStartAction = chapterSwipeStartAction,
+                                    chapterSwipeEndAction = chapterSwipeEndAction,
+                                    onChapterClicked = {
+                                        when (
+                                            resolveAuroraChapterClickAction(
+                                                isChapterSelected = item.selected,
+                                                isAnyChapterSelected = isAnyChapterSelected,
+                                            )
+                                        ) {
+                                            AuroraChapterClickAction.OpenChapter -> {
+                                                onChapterClicked(item.chapter)
+                                            }
+                                            AuroraChapterClickAction.SelectChapter -> {
+                                                onChapterSelected(item, true, true, false)
+                                                if (shouldAutoExpandAuroraChaptersList(
+                                                        chaptersExpanded,
+                                                        chapters.size,
+                                                    )
+                                                ) {
+                                                    chaptersExpanded = true
+                                                }
+                                            }
+                                            AuroraChapterClickAction.UnselectChapter -> {
+                                                onChapterSelected(item, false, true, false)
+                                            }
+                                        }
+                                    },
+                                    onLongClick = {
+                                        onChapterSelected(item, !item.selected, true, true)
+                                        if (!item.selected &&
+                                            shouldAutoExpandAuroraChaptersList(chaptersExpanded, chapters.size)
+                                        ) {
+                                            chaptersExpanded = true
+                                        }
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    },
+                                    onChapterSwipe = { action -> onChapterSwipe(item, action) },
                                     onDownloadChapter = onDownloadChapter,
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -439,7 +512,41 @@ fun MangaScreenAuroraImpl(
                         MangaChapterCardCompact(
                             manga = manga,
                             item = item,
-                            onChapterClicked = onChapterClicked,
+                            selected = item.selected,
+                            isAnyChapterSelected = isAnyChapterSelected,
+                            chapterSwipeStartAction = chapterSwipeStartAction,
+                            chapterSwipeEndAction = chapterSwipeEndAction,
+                            onChapterClicked = {
+                                when (
+                                    resolveAuroraChapterClickAction(
+                                        isChapterSelected = item.selected,
+                                        isAnyChapterSelected = isAnyChapterSelected,
+                                    )
+                                ) {
+                                    AuroraChapterClickAction.OpenChapter -> {
+                                        onChapterClicked(item.chapter)
+                                    }
+                                    AuroraChapterClickAction.SelectChapter -> {
+                                        onChapterSelected(item, true, true, false)
+                                        if (shouldAutoExpandAuroraChaptersList(chaptersExpanded, chapters.size)) {
+                                            chaptersExpanded = true
+                                        }
+                                    }
+                                    AuroraChapterClickAction.UnselectChapter -> {
+                                        onChapterSelected(item, false, true, false)
+                                    }
+                                }
+                            },
+                            onLongClick = {
+                                onChapterSelected(item, !item.selected, true, true)
+                                if (!item.selected &&
+                                    shouldAutoExpandAuroraChaptersList(chaptersExpanded, chapters.size)
+                                ) {
+                                    chaptersExpanded = true
+                                }
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            },
+                            onChapterSwipe = { action -> onChapterSwipe(item, action) },
                             onDownloadChapter = onDownloadChapter,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -516,7 +623,7 @@ fun MangaScreenAuroraImpl(
 
         // Floating Play button (shows after Hero Content is hidden)
         val showFab = firstVisibleItemIndex > 0 || scrollOffset > heroThreshold
-        if (!useTwoPaneLayout && showFab) {
+        if (!useTwoPaneLayout && showFab && !isAnyChapterSelected) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -538,95 +645,267 @@ fun MangaScreenAuroraImpl(
             }
         }
 
-        // Top header bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(WindowInsets.statusBars.asPaddingValues())
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            // Back button - Aurora glassmorphism style
-            AuroraActionButton(
-                onClick = navigateUp,
-                icon = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = null,
-            )
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            // Filter button - Aurora glassmorphism style
-            AuroraActionButton(
-                onClick = onFilterButtonClicked,
-                icon = Icons.Default.FilterList,
-                contentDescription = null,
-                iconTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f),
-            )
-
-            // Download menu - Aurora glassmorphism style
-            if (onDownloadActionClicked != null) {
-                var downloadExpanded by remember { mutableStateOf(false) }
-                Box(contentAlignment = Alignment.TopEnd) {
-                    AuroraActionButton(
-                        onClick = { downloadExpanded = !downloadExpanded },
-                        icon = Icons.Filled.Download,
-                        contentDescription = null,
-                    )
-                    EntryDownloadDropdownMenu(
-                        expanded = downloadExpanded,
-                        onDismissRequest = { downloadExpanded = false },
-                        onDownloadClicked = { onDownloadActionClicked.invoke(it) },
-                        isManga = true,
-                    )
-                }
-            }
-
-            // More menu - Aurora glassmorphism style
-            var showMenu by remember { mutableStateOf(false) }
-            Box(contentAlignment = Alignment.TopEnd) {
+        if (!isAnyChapterSelected) {
+            // Top header bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(WindowInsets.statusBars.asPaddingValues())
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                // Back button - Aurora glassmorphism style
                 AuroraActionButton(
-                    onClick = { showMenu = !showMenu },
-                    icon = Icons.Default.MoreVert,
+                    onClick = navigateUp,
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = null,
                 )
-                AuroraDropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false },
-                ) {
-                    AuroraDropdownMenuItem(
-                        text = stringResource(MR.strings.action_webview_refresh),
-                        onClick = {
-                            onRefresh()
-                            showMenu = false
-                        },
-                    )
-                    if (onShareClicked != null) {
-                        AuroraDropdownMenuItem(
-                            text = stringResource(MR.strings.action_share),
-                            onClick = {
-                                onShareClicked()
-                                showMenu = false
-                            },
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                // Filter button - Aurora glassmorphism style
+                AuroraActionButton(
+                    onClick = onFilterButtonClicked,
+                    icon = Icons.Default.FilterList,
+                    contentDescription = null,
+                    iconTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f),
+                )
+
+                // Download menu - Aurora glassmorphism style
+                if (onDownloadActionClicked != null) {
+                    var downloadExpanded by remember { mutableStateOf(false) }
+                    Box(contentAlignment = Alignment.TopEnd) {
+                        AuroraActionButton(
+                            onClick = { downloadExpanded = !downloadExpanded },
+                            icon = Icons.Filled.Download,
+                            contentDescription = null,
+                        )
+                        EntryDownloadDropdownMenu(
+                            expanded = downloadExpanded,
+                            onDismissRequest = { downloadExpanded = false },
+                            onDownloadClicked = { onDownloadActionClicked.invoke(it) },
+                            isManga = true,
                         )
                     }
-                    if (onSettingsClicked != null) {
+                }
+
+                // More menu - Aurora glassmorphism style
+                var showMenu by remember { mutableStateOf(false) }
+                Box(contentAlignment = Alignment.TopEnd) {
+                    AuroraActionButton(
+                        onClick = { showMenu = !showMenu },
+                        icon = Icons.Default.MoreVert,
+                        contentDescription = null,
+                    )
+                    AuroraDropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                    ) {
                         AuroraDropdownMenuItem(
-                            text = stringResource(MR.strings.action_settings),
+                            text = stringResource(MR.strings.action_webview_refresh),
                             onClick = {
-                                onSettingsClicked()
+                                onRefresh()
                                 showMenu = false
                             },
                         )
+                        if (onShareClicked != null) {
+                            AuroraDropdownMenuItem(
+                                text = stringResource(MR.strings.action_share),
+                                onClick = {
+                                    onShareClicked()
+                                    showMenu = false
+                                },
+                            )
+                        }
+                        if (onSettingsClicked != null) {
+                            AuroraDropdownMenuItem(
+                                text = stringResource(MR.strings.action_settings),
+                                onClick = {
+                                    onSettingsClicked()
+                                    showMenu = false
+                                },
+                            )
+                        }
                     }
                 }
             }
         }
+
+        AuroraChapterSelectionBottomStack(
+            selected = selectedChapters,
+            onSelectAll = { onAllChapterSelected(true) },
+            onInvertSelection = onInvertSelection,
+            onCancel = { onAllChapterSelected(false) },
+            onMultiBookmarkClicked = onMultiBookmarkClicked,
+            onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
+            onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
+            onDownloadChapter = onDownloadChapter,
+            onMultiDeleteClicked = onMultiDeleteClicked,
+            fillFraction = if (useTwoPaneLayout) 0.5f else 1f,
+            modifier = Modifier
+                .align(if (useTwoPaneLayout) Alignment.BottomEnd else Alignment.BottomCenter)
+                .padding(WindowInsets.systemBars.asPaddingValues()),
+        )
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(WindowInsets.systemBars.asPaddingValues()),
+        )
     }
 }
 
 internal fun shouldUseMangaAuroraTwoPane(deviceClass: AuroraDeviceClass): Boolean {
     return deviceClass == AuroraDeviceClass.TabletExpanded
+}
+
+internal enum class AuroraChapterClickAction {
+    OpenChapter,
+    SelectChapter,
+    UnselectChapter,
+}
+
+internal fun resolveAuroraChapterClickAction(
+    isChapterSelected: Boolean,
+    isAnyChapterSelected: Boolean,
+): AuroraChapterClickAction {
+    return when {
+        isChapterSelected -> AuroraChapterClickAction.UnselectChapter
+        isAnyChapterSelected -> AuroraChapterClickAction.SelectChapter
+        else -> AuroraChapterClickAction.OpenChapter
+    }
+}
+
+internal fun shouldAutoExpandAuroraChaptersList(
+    chaptersExpanded: Boolean,
+    totalChapters: Int,
+): Boolean {
+    return !chaptersExpanded && totalChapters > 5
+}
+
+@Composable
+private fun AuroraSelectionIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AuroraTheme.colors
+    Box(
+        modifier = modifier
+            .size(32.dp)
+            .clip(CircleShape)
+            .background(
+                Brush.radialGradient(
+                    listOf(
+                        colors.accent.copy(alpha = 0.2f),
+                        colors.accent.copy(alpha = 0.1f),
+                    ),
+                ),
+            )
+            .clickable(onClick = onClick)
+            .padding(7.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = colors.textPrimary,
+            modifier = Modifier.size(18.dp),
+        )
+    }
+}
+
+@Composable
+private fun AuroraChapterSelectionBottomStack(
+    selected: List<ChapterList.Item>,
+    onSelectAll: () -> Unit,
+    onInvertSelection: () -> Unit,
+    onCancel: () -> Unit,
+    onMultiBookmarkClicked: (List<Chapter>, bookmarked: Boolean) -> Unit,
+    onMultiMarkAsReadClicked: (List<Chapter>, markAsRead: Boolean) -> Unit,
+    onMarkPreviousAsReadClicked: (Chapter) -> Unit,
+    onDownloadChapter: ((List<ChapterList.Item>, ChapterDownloadAction) -> Unit)?,
+    onMultiDeleteClicked: (List<Chapter>) -> Unit,
+    fillFraction: Float,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxWidth(fillFraction)) {
+        if (selected.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(AuroraTheme.colors.surface.copy(alpha = 0.9f))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(AuroraTheme.colors.accent.copy(alpha = 0.16f))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        text = selected.size.toString(),
+                        color = AuroraTheme.colors.accent,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                AuroraSelectionIconButton(
+                    icon = Icons.Outlined.SelectAll,
+                    contentDescription = stringResource(MR.strings.action_select_all),
+                    onClick = onSelectAll,
+                )
+                AuroraSelectionIconButton(
+                    icon = Icons.Filled.SwapHoriz,
+                    contentDescription = stringResource(MR.strings.action_select_inverse),
+                    onClick = onInvertSelection,
+                )
+                AuroraSelectionIconButton(
+                    icon = Icons.Outlined.Close,
+                    contentDescription = stringResource(MR.strings.action_cancel),
+                    onClick = onCancel,
+                )
+            }
+        }
+
+        EntryBottomActionMenu(
+            visible = selected.isNotEmpty(),
+            isManga = true,
+            modifier = Modifier.fillMaxWidth(),
+            onBookmarkClicked = {
+                onMultiBookmarkClicked(selected.map { it.chapter }, true)
+            }.takeIf { selected.any { !it.chapter.bookmark } },
+            onRemoveBookmarkClicked = {
+                onMultiBookmarkClicked(selected.map { it.chapter }, false)
+            }.takeIf { selected.all { it.chapter.bookmark } },
+            onMarkAsViewedClicked = {
+                onMultiMarkAsReadClicked(selected.map { it.chapter }, true)
+            }.takeIf { selected.any { !it.chapter.read } },
+            onMarkAsUnviewedClicked = {
+                onMultiMarkAsReadClicked(selected.map { it.chapter }, false)
+            }.takeIf { selected.any { it.chapter.read || it.chapter.lastPageRead > 0L } },
+            onMarkPreviousAsViewedClicked = {
+                onMarkPreviousAsReadClicked(selected.first().chapter)
+            }.takeIf { selected.size == 1 },
+            onDownloadClicked = {
+                onDownloadChapter!!(selected, ChapterDownloadAction.START)
+            }.takeIf {
+                onDownloadChapter != null && selected.any { it.downloadState != MangaDownload.State.DOWNLOADED }
+            },
+            onDeleteClicked = {
+                onMultiDeleteClicked(selected.map { it.chapter })
+            }.takeIf {
+                selected.any { it.downloadState == MangaDownload.State.DOWNLOADED }
+            },
+        )
+    }
 }
 
 /**

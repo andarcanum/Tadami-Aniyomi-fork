@@ -63,7 +63,7 @@ data class HomeHeaderLayoutSpec(
         private const val DEFAULT_GREETING_X = 10f
         private const val DEFAULT_GREETING_Y = 0f
         private const val DEFAULT_NICKNAME_X = 0f
-        private const val DEFAULT_NICKNAME_Y = 32f
+        private const val DEFAULT_NICKNAME_Y = 26f
         private const val DEFAULT_AVATAR_WIDTH = 48f
         private const val DEFAULT_AVATAR_HEIGHT = 48f
         private const val DEFAULT_STREAK_WIDTH = 68f

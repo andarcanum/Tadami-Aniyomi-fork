@@ -76,6 +76,13 @@ import uy.kohesive.injekt.api.get
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.util.Locale
+
+private val GlitchMarks = charArrayOf(
+    '\u0337',
+    '\u0338',
+    '\u0336',
+)
 
 object AboutScreen : Screen() {
 
@@ -90,6 +97,9 @@ object AboutScreen : Screen() {
         val achievementHandler = remember { Injekt.get<AchievementHandler>() }
         val featureUsageCollector = remember { Injekt.get<FeatureUsageCollector>() }
         val hiddenFeatureConfig = remember(context) { loadAboutHiddenFeatureConfig(context) }
+        val hiddenFeatureContent = remember(hiddenFeatureConfig?.content) {
+            hiddenFeatureConfig?.content?.localizedForLanguage(Locale.getDefault().language)
+        }
         val easterEggStateMachine = remember(hiddenFeatureConfig) {
             hiddenFeatureConfig?.trigger?.let { trigger ->
                 AboutEasterEggStateMachine(
@@ -103,6 +113,7 @@ object AboutScreen : Screen() {
         var easterEggPhase by remember(easterEggStateMachine) {
             mutableStateOf(easterEggStateMachine?.phase ?: AboutEasterEggPhase.Idle)
         }
+        val isPrimed = easterEggPhase == AboutEasterEggPhase.Primed
         val isEasterEggVisible = easterEggPhase !in setOf(
             AboutEasterEggPhase.Idle,
             AboutEasterEggPhase.Primed,
@@ -163,7 +174,10 @@ object AboutScreen : Screen() {
                     item {
                         TextPreferenceWidget(
                             title = stringResource(MR.strings.version),
-                            subtitle = getVersionName(withBuildDate = true),
+                            subtitle = buildAboutVersionSubtitle(
+                                normalVersionName = getVersionName(withBuildDate = true),
+                                isPrimed = isPrimed,
+                            ),
                             onPreferenceClick = {
                                 val deviceInfo = CrashLogUtil(context).getDebugInfo()
                                 context.copyToClipboard("Debug information", deviceInfo)
@@ -329,10 +343,10 @@ object AboutScreen : Screen() {
                 }
             }
 
-            if (hiddenFeatureConfig != null) {
+            if (hiddenFeatureConfig != null && hiddenFeatureContent != null) {
                 AboutEasterEggOverlay(
                     phase = easterEggPhase,
-                    content = hiddenFeatureConfig.content,
+                    content = hiddenFeatureContent,
                     onGlyphRainFinished = {
                         syncEasterEggPhase { machine ->
                             machine.onGlyphRainFinished()
@@ -451,6 +465,28 @@ object AboutScreen : Screen() {
                 )
         } catch (e: Exception) {
             BuildConfig.BUILD_TIME
+        }
+    }
+}
+
+internal fun buildAboutVersionSubtitle(normalVersionName: String, isPrimed: Boolean): String {
+    return if (isPrimed) {
+        glitchAboutVersion(normalVersionName)
+    } else {
+        normalVersionName
+    }
+}
+
+private fun glitchAboutVersion(versionName: String): String {
+    return buildString(versionName.length * 2 + 16) {
+        append("V")
+        append('\u0338')
+        append(' ')
+        versionName.forEachIndexed { index, character ->
+            append(character)
+            if (!character.isWhitespace()) {
+                append(GlitchMarks[index % GlitchMarks.size])
+            }
         }
     }
 }

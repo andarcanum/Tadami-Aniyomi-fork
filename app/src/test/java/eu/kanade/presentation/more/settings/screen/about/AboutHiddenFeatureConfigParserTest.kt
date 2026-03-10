@@ -19,7 +19,7 @@ class AboutHiddenFeatureConfigParserTest {
                 "systemLabel": "[SYS]",
                 "title": "Dummy title",
                 "subtitle": "Dummy subtitle",
-                "body": "Dummy body",
+                "body": "T-line\nA-line\nT-line\nA-line\nK-line\nA-line\nE-line",
                 "exitLabel": "[Exit]"
               }
             }
@@ -29,6 +29,7 @@ class AboutHiddenFeatureConfigParserTest {
         assertEquals(4, config.trigger.requiredPrimarySignals)
         assertEquals(2_500L, config.trigger.primedWindowMs)
         assertEquals("Dummy title", config.content.title)
+        assertEquals(7, config.content.body.lines().size)
         assertEquals("[Exit]", config.content.exitLabel)
     }
 }

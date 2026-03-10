@@ -1,29 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">Tadami</string>
-
-    <!-- Generic strings -->
-    <string name="on">تشغيل</string>
-    <string name="off">إيقاف</string>
-    <string name="selected">محدد</string>
-    <string name="not_selected">غير محدد</string>
-    <string name="action_menu_overflow_description">مزيد من الخيارات</string>
-    <string name="action_bar_up_description">التنقل لأعلى</string>
-
-    <!-- Models -->
     <string name="name">الاسم</string>
-    <string name="categories">التصنيفات</string>
-    <string name="manga">عناصر المكتبة</string>
+    <string name="categories">الفئات</string>
+    <string name="manga">إدخالات المكتبة</string>
     <string name="chapters">الفصول</string>
     <string name="track">المتابعة</string>
     <string name="history">السجل</string>
     <string name="label_settings">الإعدادات</string>
     <string name="label_download_queue">قائمة التنزيلات</string>
     <string name="label_library">المكتبة</string>
-    <string name="label_recent_updates">التحديثات</string>
-    <string name="label_upcoming">القادم</string>
     <string name="label_recent_manga">السجل</string>
-    <string name="label_sources">المصادر</string>
+    <string name="label_recent_updates">التحديثات</string>
     <string name="label_backup">النسخ الاحتياطي والاستعادة</string>
     <string name="action_settings">الإعدادات</string>
     <string name="action_filter">الترتيب</string>
@@ -34,9 +21,6 @@
     <string name="action_sort_total">عدد الفصول</string>
     <string name="action_sort_last_read">آخر قراءة</string>
     <string name="action_search">بحث</string>
-    <string name="action_search_hint">بحث…</string>
-    <string name="action_search_settings">بحث في الإعدادات</string>
-    <string name="action_global_search">بحث شامل</string>
     <string name="action_select_all">تحديد الكل</string>
     <string name="action_mark_as_read">تمييز كمقروء</string>
     <string name="action_mark_as_unread">تمييز كغير مقروء</string>
@@ -46,8 +30,6 @@
     <string name="action_remove_bookmark">إزالة الإشارة المرجعية</string>
     <string name="action_delete">حذف</string>
     <string name="action_update_library">تحديث المكتبة</string>
-    <string name="action_enable_all">تمكين الكل</string>
-    <string name="action_disable_all">تعطيل الكل</string>
     <string name="action_edit">تعديل</string>
     <string name="action_add">إضافة</string>
     <string name="action_add_category">إضافة فئة</string>
@@ -60,56 +42,24 @@
     <string name="action_next_chapter">الفصل التالي</string>
     <string name="action_retry">إعادة المحاولة</string>
     <string name="action_remove">إزالة</string>
-    <string name="action_remove_everything">إزالة الكل</string>
-    <string name="action_start">بدء</string>
     <string name="action_resume">استئناف</string>
     <string name="action_open_in_browser">فتح في المتصفح</string>
     <string name="action_display_mode">وضع العرض</string>
     <string name="action_display">العرض</string>
     <string name="action_display_grid">شبكة</string>
     <string name="action_display_list">قائمة</string>
-    <string name="action_display_cover_only_grid">شبكة غلاف فقط</string>
-    <string name="action_display_download_badge">الفصول المُحمّلة</string>
-    <string name="action_display_unread_badge">الفصول غير المقروءة</string>
-    <string name="action_display_local_badge">المصدر المحلي</string>
-    <string name="action_display_language_badge">اللغة</string>
-    <string name="action_display_show_tabs">إظهار علامات التبويب</string>
-    <string name="action_display_show_number_of_items">إظهار عدد العناصر</string>
-    <string name="action_display_show_continue_reading_button">زر متابعة القراءة</string>
-    <string name="action_disable">تعطيل</string>
-    <string name="action_pin">تثبيت</string>
-    <string name="action_unpin">إلغاء التثبيت</string>
-    <string name="action_apply">تطبيق</string>
     <string name="action_cancel">إلغاء</string>
-    <string name="action_ok">موافق</string>
-    <string name="action_cancel_all">إلغاء الكل</string>
-    <string name="cancel_all_for_series">إلغاء الكل لهذه السلسلة</string>
-    <string name="action_sort">ترتيب</string>
-    <string name="action_order_by_upload_date">حسب تاريخ الرفع</string>
-    <string name="action_order_by_chapter_number">حسب رقم الفصل</string>
-    <string name="action_newest">الأحدث</string>
-    <string name="action_oldest">الأقدم</string>
-    <string name="action_asc">تصاعدي</string>
-    <string name="action_desc">تنازلي</string>
-    <string name="action_move_to_top">نقل إلى الأعلى</string>
-    <string name="action_move_to_top_all_for_series">نقل السلسلة إلى الأعلى</string>
-    <string name="action_move_to_bottom">نقل إلى الأسفل</string>
-    <string name="action_move_to_bottom_all_for_series">نقل السلسلة إلى الأسفل</string>
+    <string name="action_sort">فرز</string>
     <string name="action_install">تثبيت</string>
     <string name="action_share">مشاركة</string>
     <string name="action_save">حفظ</string>
     <string name="action_reset">إعادة تعيين</string>
-    <string name="action_revert_to_default">عودة إلى الافتراضي</string>
-    <!-- missing undo feature after Compose rewrite #7454 -->
     <string name="action_undo">تراجع</string>
-    <string name="action_close">إغلاق</string>
     <string name="action_open_log">فتح السجل</string>
     <string name="action_restore">استعادة</string>
     <string name="loading">جارٍ التحميل…</string>
     <string name="app_not_available">التطبيق غير متوفر</string>
     <string name="pref_category_general">عام</string>
-    <string name="pref_category_appearance">المظهر</string>
-    <string name="pref_category_library">المكتبة</string>
     <string name="pref_category_reader">القارئ</string>
     <string name="pref_category_downloads">التنزيلات</string>
     <string name="pref_category_tracking">المتابعة</string>
@@ -144,9 +94,7 @@
     <string name="pref_read_with_volume_keys_inverted">عكس أزرار الصوت</string>
     <string name="pref_reader_theme">خلفية القارئ</string>
     <string name="white_background">أبيض</string>
-    <string name="gray_background">رمادي</string>
     <string name="black_background">أسود</string>
-    <string name="automatic_background">تلقائي</string>
     <string name="pref_viewer_type">وضع القراءة الافتراضي</string>
     <string name="left_to_right_viewer">اتجاه: من اليسار إلى اليمين</string>
     <string name="right_to_left_viewer">اتجاه: من اليمين إلى اليسار</string>
@@ -208,13 +156,9 @@
     <string name="pref_acra_summary">يساعد هذا في حل المشكلات. لن تُرسل أية بيانات حساسة.</string>
     <string name="login_title">تسجيل الدخول إلى %1$s</string>
     <string name="username">اسم المستخدم</string>
-    <string name="email">عنوان البريد الإلكتروني</string>
     <string name="password">كلمة المرور</string>
     <string name="login">تسجيل الدخول</string>
     <string name="login_success">تم تسجيل الدخول</string>
-    <string name="logout_title">تسجيل الخروج من %1$s؟</string>
-    <string name="logout">تسجيل الخروج</string>
-    <string name="logout_success">تم تسجيل خروجك الآن</string>
     <string name="unknown_error">خطأ غير معروف</string>
     <string name="updating_category">جارٍ تحديث الفئة</string>
     <string name="no_more_results">لا توجد نتائج إضافية</string>
@@ -229,21 +173,13 @@
     <string name="remove_from_library">إزالة من المكتبة</string>
     <string name="delete_downloads_for_manga">حذف الفصول المحفوظة؟</string>
     <string name="display_mode_chapter">الفصل %1$s</string>
-    <string name="manga_display_interval_title">تقدير كل</string>
-    <string name="manga_display_modified_interval_title">ضبط التحديث كل</string>
-    <!-- "... around 2 days" -->
-    <string name="manga_interval_expected_update">من المتوقع إصدار فصول جديدة خلال %1$s تقريبًا، والتحقق كل %2$s تقريبًا.</string>
-    <string name="manga_interval_expected_update_null">هذه المانجا إما مكتملة أو لا يوجد تاريخ إصدار متوقع.</string>
-    <string name="manga_interval_expected_update_soon">قريبًا</string>
-    <string name="manga_interval_custom_amount">تكرار تحديث مخصص:</string>
-    <string name="chapter_downloading_progress">جارٍ التنزيل (%1$d/%2$d)</string>
+    <string name="chapter_downloading_progress">جاري التنزيل (%1$d/%2$d)</string>
     <string name="chapter_error">خطأ</string>
     <string name="chapter_paused">متوقف</string>
     <string name="show_title">عنوان المصدر</string>
     <string name="show_chapter_number">إظهار رقم الفصل</string>
     <string name="sort_by_source">حسب المصدر</string>
     <string name="sort_by_number">حسب رقم الفصل</string>
-    <string name="sort_by_upload_date">حسب تاريخ الرفع</string>
     <string name="manga_download">تنزيل</string>
     <string name="download_unread">تنزيل غير المقروء</string>
     <string name="confirm_delete_chapters">هل أنت متأكد أنك تريد حذف الفصول المحددة؟</string>

@@ -7,7 +7,7 @@ plugins {
     id("mihon.android.application")
     id("mihon.android.application.compose")
     kotlin("plugin.serialization")
-    alias(libs.plugins.aboutLibraries)
+    alias(libs.plugins.aboutLibrariesAndroid)
 }
 val hasPrivateGeminiBridge = findProject(":private-gemini-bridge") != null
 
@@ -17,8 +17,8 @@ android {
     defaultConfig {
         applicationId = "com.tadami.aurora"
 
-        versionCode = 143
-        versionName = "0.28"
+        versionCode = 144
+        versionName = "0.28.5"
 
         buildConfigField("String", "COMMIT_COUNT", "\"${getCommitCount()}\"")
         buildConfigField("String", "COMMIT_SHA", "\"${getGitSha()}\"")

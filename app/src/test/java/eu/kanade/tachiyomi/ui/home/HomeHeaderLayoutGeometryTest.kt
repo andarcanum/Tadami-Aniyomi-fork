@@ -8,6 +8,11 @@ import org.junit.jupiter.api.Test
 class HomeHeaderLayoutGeometryTest {
 
     @Test
+    fun `default home header layout uses compact nickname y`() {
+        HomeHeaderLayoutSpec.default().positionOf(HomeHeaderLayoutElement.Nickname).y shouldBe 26f
+    }
+
+    @Test
     fun `clampHomeHeaderPixelPoint keeps element inside canvas`() {
         clampHomeHeaderPixelPoint(
             point = HomeHeaderPixelPoint(x = 400f, y = 60f),

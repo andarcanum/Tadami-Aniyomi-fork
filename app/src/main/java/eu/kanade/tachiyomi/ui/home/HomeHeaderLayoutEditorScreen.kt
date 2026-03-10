@@ -46,8 +46,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.LineBreak
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.ui.UserProfilePreferences
@@ -321,6 +326,19 @@ private fun HomeHeaderLayoutEditorCanvas(
     val visibleElements = remember(showGreeting, showStreak) {
         homeHeaderLayoutEditorVisibleElements(showGreeting = showGreeting, showStreak = showStreak)
     }
+    val previewGreetingBaseTextStyle = MaterialTheme.typography.labelMedium
+    val previewGreetingText = stringResource(AYMR.strings.home_header_layout_editor_preview_greeting)
+    val decoratedPreviewGreetingText = remember(previewGreetingText) {
+        decorateGreetingText(previewGreetingText, GreetingDecorationPreset.Auto)
+    }
+    val previewGreetingTextStyle = remember(previewGreetingBaseTextStyle) {
+        previewGreetingBaseTextStyle.copy(
+            fontSize = 12.sp,
+            lineHeight = 15.sp,
+            lineBreak = LineBreak.Heading,
+        )
+    }
+    val textMeasurer = rememberTextMeasurer()
 
     BoxWithConstraints(
         modifier = Modifier
@@ -331,14 +349,56 @@ private fun HomeHeaderLayoutEditorCanvas(
             .padding(horizontal = 8.dp, vertical = 10.dp),
     ) {
         val canvasWidthPx = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
-        val canvasHeightPx = with(density) { maxHeight.toPx() }.coerceAtLeast(1f)
         val designWidthPx = layout.canvas.width.coerceAtLeast(1f)
-        val designHeightPx = layout.canvas.height.coerceAtLeast(1f)
+        val previewMeasureScaleX = canvasWidthPx / designWidthPx
+        val greetingMeasureWidthPx =
+            (
+                elementSizes.getValue(
+                    HomeHeaderLayoutElement.Greeting,
+                ).width * previewMeasureScaleX
+                ).toInt().coerceAtLeast(1)
+        val preMeasuredGreetingLayout = remember(
+            decoratedPreviewGreetingText,
+            previewGreetingTextStyle,
+            greetingMeasureWidthPx,
+        ) {
+            textMeasurer.measure(
+                text = AnnotatedString(decoratedPreviewGreetingText),
+                style = previewGreetingTextStyle,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis,
+                constraints = androidx.compose.ui.unit.Constraints(maxWidth = greetingMeasureWidthPx),
+            )
+        }
+        val measuredGreetingLineCount = if (showGreeting) {
+            if (preMeasuredGreetingLayout.hasVisualOverflow) {
+                4
+            } else {
+                preMeasuredGreetingLayout.lineCount.coerceAtLeast(1)
+            }
+        } else {
+            1
+        }
+        val greetingLineLimit = resolveGreetingLineLimit(measuredGreetingLineCount)
+        val previewCanvasHeightDp = resolveHomeHeaderCanvasHeightDp(greetingLineLimit).dp
+        val previewCanvasHeightPx = with(density) { previewCanvasHeightDp.toPx() }.coerceAtLeast(1f)
+        val designHeightPx = resolveHomeHeaderCanvasHeightDp(greetingLineLimit).toFloat().coerceAtLeast(1f)
         val scaleX = canvasWidthPx / designWidthPx
-        val scaleY = canvasHeightPx / designHeightPx
+        val scaleY = previewCanvasHeightPx / designHeightPx
+        val effectiveElementSizes = remember(greetingLineLimit) {
+            elementSizes.mapValues { (element, size) ->
+                if (element == HomeHeaderLayoutElement.Greeting) {
+                    size.copy(height = resolveGreetingSlotHeightPx(greetingLineLimit))
+                } else {
+                    size
+                }
+            }
+        }
 
         HomeHeaderLayoutLivePreview(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(previewCanvasHeightDp),
             layoutSpec = layout,
             showGreeting = showGreeting,
             showStreak = showStreak,
@@ -361,12 +421,14 @@ private fun HomeHeaderLayoutEditorCanvas(
         }
 
         visibleElements.forEach { element ->
-            val elementSize = elementSizes.getValue(element)
-            val point = clampHomeHeaderPixelPoint(
-                point = HomeHeaderPixelPoint(layout.positionOf(element).x, layout.positionOf(element).y),
-                elementSize = elementSize,
+            val elementSize = effectiveElementSizes.getValue(element)
+            val point = resolveHomeHeaderEffectivePoint(
+                element = element,
+                layoutSpec = layout,
+                elementSizes = effectiveElementSizes,
                 canvasWidth = designWidthPx,
                 canvasHeight = designHeightPx,
+                showGreeting = showGreeting,
             )
             val xPx = point.x * scaleX
             val yPx = point.y * scaleY

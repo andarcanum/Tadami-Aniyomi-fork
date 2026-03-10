@@ -267,7 +267,7 @@ class AchievementCalculatorTest : AchievementTestBase() {
     @Test
     fun `event achievements unlock on first action`() = runTest {
         val firstReadAchievement = Achievement(
-            id = "first_read",
+            id = "first_chapter",
             type = AchievementType.EVENT,
             category = AchievementCategory.MANGA,
             threshold = 1,

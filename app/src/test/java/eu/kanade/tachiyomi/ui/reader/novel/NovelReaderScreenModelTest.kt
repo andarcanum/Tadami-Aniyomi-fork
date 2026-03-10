@@ -1,5 +1,6 @@
 ﻿package eu.kanade.tachiyomi.ui.reader.novel
 
+import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginPackage
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoEntry
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
@@ -56,6 +57,7 @@ import java.util.Collections
 
 class NovelReaderScreenModelTest {
     private val activeScreenModels = mutableListOf<NovelReaderScreenModel>()
+    private val syncNovelChaptersWithSource = mockk<SyncNovelChaptersWithSource>(relaxed = true)
     private val geminiTranslationService = mockk<GeminiTranslationService>(relaxed = true)
     private val airforceTranslationService = mockk<AirforceTranslationService>(relaxed = true)
     private val airforceModelsService = mockk<AirforceModelsService>(relaxed = true)
@@ -1691,6 +1693,7 @@ class NovelReaderScreenModelTest {
         return NovelReaderScreenModel(
             chapterId = chapterId,
             novelChapterRepository = novelChapterRepository,
+            syncNovelChaptersWithSource = syncNovelChaptersWithSource,
             getNovel = getNovel,
             sourceManager = sourceManager,
             pluginStorage = pluginStorage,

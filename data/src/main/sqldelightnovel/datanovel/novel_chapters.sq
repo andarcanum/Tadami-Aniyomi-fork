@@ -70,6 +70,12 @@ SELECT scanlator
 FROM novel_chapters
 WHERE novel_id = :novelId;
 
+getReadChapterCountByNovelId:
+SELECT COUNT(*)
+FROM novel_chapters
+WHERE novel_id = :novelId
+AND read = 1;
+
 getBookmarkedChaptersByNovelId:
 SELECT *
 FROM novel_chapters

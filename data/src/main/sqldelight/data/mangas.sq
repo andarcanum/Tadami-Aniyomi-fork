@@ -198,6 +198,63 @@ SELECT COUNT(*)
 FROM mangas
 WHERE favorite = 1;
 
+getLibraryCountByStatus:
+SELECT COUNT(*)
+FROM mangas
+WHERE favorite = 1
+AND status = :status;
+
+getLibraryGenreCount:
+SELECT COUNT(*)
+FROM mangas
+WHERE favorite = 1
+AND genre IS NOT NULL
+AND (
+    LOWER(genre) = LOWER(:genre)
+    OR LOWER(genre) LIKE LOWER(:genre) || ', %'
+    OR LOWER(genre) LIKE '%, ' || LOWER(:genre)
+    OR LOWER(genre) LIKE '%, ' || LOWER(:genre) || ', %'
+);
+
+getCompletedLibraryCountByAnyGenre:
+SELECT COUNT(*)
+FROM mangas
+WHERE favorite = 1
+AND status = :status
+AND genre IS NOT NULL
+AND (
+    LOWER(genre) = LOWER(:genreA)
+    OR LOWER(genre) LIKE LOWER(:genreA) || ', %'
+    OR LOWER(genre) LIKE '%, ' || LOWER(:genreA)
+    OR LOWER(genre) LIKE '%, ' || LOWER(:genreA) || ', %'
+    OR LOWER(genre) = LOWER(:genreB)
+    OR LOWER(genre) LIKE LOWER(:genreB) || ', %'
+    OR LOWER(genre) LIKE '%, ' || LOWER(:genreB)
+    OR LOWER(genre) LIKE '%, ' || LOWER(:genreB) || ', %'
+);
+
+hasLibraryTitleLike:
+SELECT EXISTS(
+    SELECT 1
+    FROM mangas
+    WHERE favorite = 1
+    AND LOWER(title) LIKE '%' || LOWER(:searchTerm) || '%'
+    LIMIT 1
+);
+
+hasCompletedLibraryMangaWithMinReadChapters:
+SELECT EXISTS(
+    SELECT 1
+    FROM mangas M
+    INNER JOIN chapters C ON C.manga_id = M._id
+    WHERE M.favorite = 1
+    AND M.status = 2
+    AND C.read = 1
+    GROUP BY M._id
+    HAVING COUNT(*) >= :chapterCount
+    LIMIT 1
+);
+
 getCompletedMangaCount:
 SELECT COUNT(*) FROM mangas
 WHERE favorite = 1

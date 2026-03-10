@@ -227,6 +227,24 @@ class FeatureBasedAchievementCheckerTest {
     }
 
     @Test
+    fun `check secret hall unlocks at first secret hall entry`() = runTest {
+        val achievement = Achievement(
+            id = "secret_hall_unlocked",
+            title = "secret_hall_unlocked",
+            type = AchievementType.FEATURE_BASED,
+            category = tachiyomi.domain.achievement.model.AchievementCategory.SECRET,
+            threshold = 1,
+        )
+        val progress = AchievementProgress.createStandard("secret_hall_unlocked", 0, 1, false)
+
+        featureCollector.onFeatureUsed(AchievementEvent.Feature.SECRET_HALL_UNLOCKED, 1)
+
+        val result = checker.check(achievement, progress)
+
+        assert(result == true)
+    }
+
+    @Test
     fun `getProgress for download_starter calculates correctly`() = runTest {
         val achievement = Achievement(
             id = "download_starter",

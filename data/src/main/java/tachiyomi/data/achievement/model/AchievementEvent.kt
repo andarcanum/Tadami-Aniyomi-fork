@@ -56,7 +56,7 @@ sealed class AchievementEvent {
     ) : AchievementEvent()
 
     data class AppStart(
-        val hourOfDay: Int, // 0-23, для достижений типа "Ночной чтец" (2-5) или "Жаворонок" (6-9)
+        val hourOfDay: Int,
         override val timestamp: Long = System.currentTimeMillis(),
     ) : AchievementEvent()
 
@@ -67,15 +67,16 @@ sealed class AchievementEvent {
     ) : AchievementEvent()
 
     enum class Feature {
-        SEARCH, // Использование поиска
-        ADVANCED_SEARCH, // Расширенный поиск
-        FILTER, // Использование фильтров
-        DOWNLOAD, // Скачивание глав/серий
-        BACKUP, // Создание бэкапа
-        RESTORE, // Восстановление из бэкапа
-        SETTINGS, // Изменение настроек
-        STATS, // Просмотр статистики
-        THEME_CHANGE, // Смена темы
-        LOGO_CLICK, // Нажатие на логотип (для секретных достижений)
+        SEARCH,
+        ADVANCED_SEARCH,
+        FILTER,
+        DOWNLOAD,
+        BACKUP,
+        RESTORE,
+        SETTINGS,
+        STATS,
+        THEME_CHANGE,
+        LOGO_CLICK,
+        SECRET_HALL_UNLOCKED,
     }
 }

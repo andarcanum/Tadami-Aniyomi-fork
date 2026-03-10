@@ -70,6 +70,12 @@ SELECT scanlator
 FROM chapters
 WHERE manga_id = :mangaId;
 
+getReadChapterCountByMangaId:
+SELECT COUNT(*)
+FROM chapters
+WHERE manga_id = :mangaId
+AND read = 1;
+
 getBookmarkedChaptersByMangaId:
 SELECT *
 FROM chapters
