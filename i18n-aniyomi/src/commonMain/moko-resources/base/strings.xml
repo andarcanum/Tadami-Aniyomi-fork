@@ -437,6 +437,20 @@
     <string name="novel_reader_text_align_right">Right</string>
     <string name="novel_reader_force_paragraph_indent">Force first-line indent for paragraphs</string>
     <string name="novel_reader_force_paragraph_indent_summary">Apply a fixed first-line indent to each paragraph in reader mode</string>
+    <string name="novel_reader_force_bold_text">Bold text</string>
+    <string name="novel_reader_force_bold_text_summary">Force all text to be displayed in bold font weight</string>
+    <string name="novel_reader_force_italic_text">Italic text</string>
+    <string name="novel_reader_force_italic_text_summary">Force all text to be displayed in italic font style</string>
+    <string name="novel_reader_text_shadow">Text shadow</string>
+    <string name="novel_reader_text_shadow_summary">Apply a drop shadow to the text for better contrast</string>
+    <string name="novel_reader_text_shadow_color">Text shadow color</string>
+    <string name="novel_reader_text_shadow_color_summary">Custom shadow color (empty = auto). 8-digit: #AARRGGBB or #RRGGBBAA.</string>
+    <string name="novel_reader_text_shadow_blur">Shadow blur radius</string>
+    <string name="novel_reader_text_shadow_x">Shadow X offset</string>
+    <string name="novel_reader_text_shadow_y">Shadow Y offset</string>
+    <string name="novel_reader_page_edge_shadow">Page edge shadow</string>
+    <string name="novel_reader_page_edge_shadow_summary">Draw dark gradients on the side edges for a book feel</string>
+    <string name="novel_reader_page_edge_shadow_alpha">Edge shadow intensity</string>
     <string name="novel_reader_preserve_source_text_align_native">Preserve source text alignment in native reader</string>
     <string name="novel_reader_preserve_source_text_align_native_summary">Do not force the global text alignment in native mode; keep source alignment where supported</string>
 
@@ -492,6 +506,8 @@
     <string name="novel_reader_background_texture_paper_grain">Paper grain</string>
     <string name="novel_reader_background_texture_linen">Linen</string>
     <string name="novel_reader_background_texture_parchment">Parchment</string>
+    <string name="novel_reader_native_texture_strength">Texture strength (Native-Rich)</string>
+    <string name="novel_reader_native_texture_strength_summary">Applies only to Native-Rich. 50% = current look</string>
     <string name="novel_reader_oled_edge_gradient">OLED edge gradient</string>
     <string name="novel_reader_oled_edge_gradient_summary">Use a deep edge darkening in dark theme for smoother OLED scrolling</string>
 

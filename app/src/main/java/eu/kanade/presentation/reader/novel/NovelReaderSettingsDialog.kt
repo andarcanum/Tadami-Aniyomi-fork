@@ -58,6 +58,7 @@ import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import kotlin.math.roundToInt
 import android.graphics.Color as AndroidColor
 
 @Composable
@@ -672,6 +673,78 @@ private fun ReadingTab(
                 )
             },
         )
+        SwitchPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_force_bold_text),
+            subtitle = stringResource(AYMR.strings.novel_reader_force_bold_text_summary),
+            checked = settings.forceBoldText,
+            onCheckedChanged = {
+                update(it, { o, v -> o.copy(forceBoldText = v) }, { preferences.forceBoldText().set(it) })
+            },
+        )
+        SwitchPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_force_italic_text),
+            subtitle = stringResource(AYMR.strings.novel_reader_force_italic_text_summary),
+            checked = settings.forceItalicText,
+            onCheckedChanged = {
+                update(it, { o, v -> o.copy(forceItalicText = v) }, { preferences.forceItalicText().set(it) })
+            },
+        )
+        SwitchPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_text_shadow),
+            subtitle = stringResource(AYMR.strings.novel_reader_text_shadow_summary),
+            checked = settings.textShadow,
+            onCheckedChanged = {
+                update(it, { o, v -> o.copy(textShadow = v) }, { preferences.textShadow().set(it) })
+            },
+        )
+        if (settings.textShadow) {
+            Column(modifier = Modifier.padding(start = 16.dp)) {
+                EditTextPreferenceWidget(
+                    title = stringResource(AYMR.strings.novel_reader_text_shadow_color),
+                    subtitle = stringResource(AYMR.strings.novel_reader_text_shadow_color_summary),
+                    icon = null,
+                    value = settings.textShadowColor.orEmpty(),
+                    onConfirm = { value ->
+                        if (!isValidColorOrBlank(value)) return@EditTextPreferenceWidget false
+                        update(value.trim(), { o, v ->
+                            o.copy(textShadowColor = v)
+                        }, { preferences.textShadowColor().set(it) })
+                        true
+                    },
+                    canBeBlank = true,
+                )
+                LnReaderSliderRow(
+                    label = stringResource(AYMR.strings.novel_reader_text_shadow_blur),
+                    valueText = String.format("%.1f", settings.textShadowBlur),
+                    value = settings.textShadowBlur,
+                    range = 0f..20f,
+                    steps = 39,
+                    onChange = {
+                        update(it, { o, v -> o.copy(textShadowBlur = v) }, { preferences.textShadowBlur().set(it) })
+                    },
+                )
+                LnReaderSliderRow(
+                    label = stringResource(AYMR.strings.novel_reader_text_shadow_x),
+                    valueText = String.format("%.1f", settings.textShadowX),
+                    value = settings.textShadowX,
+                    range = -20f..20f,
+                    steps = 79,
+                    onChange = {
+                        update(it, { o, v -> o.copy(textShadowX = v) }, { preferences.textShadowX().set(it) })
+                    },
+                )
+                LnReaderSliderRow(
+                    label = stringResource(AYMR.strings.novel_reader_text_shadow_y),
+                    valueText = String.format("%.1f", settings.textShadowY),
+                    value = settings.textShadowY,
+                    range = -20f..20f,
+                    steps = 79,
+                    onChange = {
+                        update(it, { o, v -> o.copy(textShadowY = v) }, { preferences.textShadowY().set(it) })
+                    },
+                )
+            }
+        }
 
         FontExamplesRow(
             selected = settings.fontFamily,
@@ -682,7 +755,20 @@ private fun ReadingTab(
 
         ThemeModeRow(
             selected = settings.theme,
-            onSelect = { mode -> update(mode, { o, v -> o.copy(theme = v) }, { preferences.theme().set(it) }) },
+            onSelect = { mode ->
+                val selection = resolveThemeModeSelection(mode)
+                update(selection.theme, { o, v -> o.copy(theme = v) }, { preferences.theme().set(it) })
+                update(
+                    selection.backgroundColor,
+                    { o, v -> o.copy(backgroundColor = v) },
+                    { preferences.backgroundColor().set(it) },
+                )
+                update(
+                    selection.textColor,
+                    { o, v -> o.copy(textColor = v) },
+                    { preferences.textColor().set(it) },
+                )
+            },
         )
         Text(
             text = stringResource(AYMR.strings.novel_reader_background_texture),
@@ -723,6 +809,26 @@ private fun ReadingTab(
                 }
             }
         }
+        LnReaderSliderRow(
+            label = stringResource(AYMR.strings.novel_reader_native_texture_strength),
+            valueText = "${settings.nativeTextureStrengthPercent}%",
+            value = settings.nativeTextureStrengthPercent.toFloat(),
+            range = 0f..200f,
+            steps = 199,
+            onChange = { value ->
+                val rounded = value.roundToInt()
+                update(
+                    rounded,
+                    { o, v -> o.copy(nativeTextureStrengthPercent = v) },
+                    { preferences.nativeTextureStrengthPercent().set(it) },
+                )
+            },
+        )
+        Text(
+            text = stringResource(AYMR.strings.novel_reader_native_texture_strength_summary),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_oled_edge_gradient),
             subtitle = stringResource(AYMR.strings.novel_reader_oled_edge_gradient_summary),
@@ -731,6 +837,28 @@ private fun ReadingTab(
                 update(it, { o, v -> o.copy(oledEdgeGradient = v) }, { preferences.oledEdgeGradient().set(it) })
             },
         )
+        SwitchPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_page_edge_shadow),
+            subtitle = stringResource(AYMR.strings.novel_reader_page_edge_shadow_summary),
+            checked = settings.pageEdgeShadow,
+            onCheckedChanged = {
+                update(it, { o, v -> o.copy(pageEdgeShadow = v) }, { preferences.pageEdgeShadow().set(it) })
+            },
+        )
+        if (settings.pageEdgeShadow) {
+            LnReaderSliderRow(
+                label = stringResource(AYMR.strings.novel_reader_page_edge_shadow_alpha),
+                valueText = "${(settings.pageEdgeShadowAlpha * 100).toInt()}%",
+                value = settings.pageEdgeShadowAlpha,
+                range = 0.05f..1f,
+                steps = 18,
+                onChange = {
+                    update(it, { o, v ->
+                        o.copy(pageEdgeShadowAlpha = v)
+                    }, { preferences.pageEdgeShadowAlpha().set(it) })
+                },
+            )
+        }
 
         Text(
             text = stringResource(AYMR.strings.novel_reader_theme_presets),
@@ -1020,6 +1148,21 @@ private fun currentTheme(backgroundColor: String, textColor: String): NovelReade
     if (backgroundColor.isBlank() || textColor.isBlank()) return null
     if (!isValidColorOrBlank(backgroundColor) || !isValidColorOrBlank(textColor)) return null
     return NovelReaderColorTheme(backgroundColor = backgroundColor, textColor = textColor)
+}
+
+internal data class ThemeModeSelection(
+    val theme: NovelReaderTheme,
+    val backgroundColor: String,
+    val textColor: String,
+)
+
+internal fun resolveThemeModeSelection(theme: NovelReaderTheme): ThemeModeSelection {
+    // Base mode selection must restore fallback theme colors from reader screen logic.
+    return ThemeModeSelection(
+        theme = theme,
+        backgroundColor = "",
+        textColor = "",
+    )
 }
 
 private fun isValidColorOrBlank(value: String): Boolean {

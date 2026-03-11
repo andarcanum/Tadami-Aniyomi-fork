@@ -1,6 +1,9 @@
 package eu.kanade.presentation.reader.novel
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -18,9 +21,149 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import kotlin.math.abs
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
 
 class NovelReaderUiVisibilityTest {
+
+    @Test
+    fun `web atmosphere css keeps parchment and oled stop thresholds`() {
+        val css = buildWebReaderAtmosphereCss(
+            backgroundTexture = NovelReaderBackgroundTexture.PARCHMENT,
+            oledEdgeGradient = true,
+        )
+
+        assertTrue(css.contains("radial-gradient(circle at 20% 20%, rgba(255,255,255,0.14), transparent 45%)"))
+        assertTrue(css.contains("radial-gradient(circle at 80% 75%, rgba(0,0,0,0.12), transparent 42%)"))
+        assertTrue(css.contains("radial-gradient(circle at center, rgba(0,0,0,0.0) 38%, rgba(0,0,0,0.36) 100%)"))
+    }
+
+    @Test
+    fun `native atmosphere specs use css matching color stops`() {
+        val layers = buildReaderAtmosphereRadialLayers(
+            backgroundTexture = NovelReaderBackgroundTexture.PARCHMENT,
+            oledEdgeGradient = true,
+            isDarkTheme = true,
+            intensityFactor = 1f,
+        )
+
+        assertTrue(layers.size == 3)
+        assertTrue(
+            layers.any {
+                it.colorStops ==
+                    listOf(0f to Color.Transparent, 0.38f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.36f))
+            },
+        )
+        assertTrue(
+            layers.any {
+                it.colorStops ==
+                    listOf(0f to Color.White.copy(alpha = 0.14f), 0.45f to Color.Transparent, 1f to Color.Transparent)
+            },
+        )
+        assertTrue(
+            layers.any {
+                it.colorStops ==
+                    listOf(0f to Color.Black.copy(alpha = 0.12f), 0.42f to Color.Transparent, 1f to Color.Transparent)
+            },
+        )
+    }
+
+    @Test
+    fun `native atmosphere keeps oled vignette disabled on light theme`() {
+        val layers = buildReaderAtmosphereRadialLayers(
+            backgroundTexture = NovelReaderBackgroundTexture.NONE,
+            oledEdgeGradient = true,
+            isDarkTheme = false,
+            intensityFactor = 1f,
+        )
+
+        assertTrue(layers.isEmpty())
+    }
+
+    @Test
+    fun `native atmosphere layer order matches css stacking`() {
+        val layers = buildReaderAtmosphereRadialLayers(
+            backgroundTexture = NovelReaderBackgroundTexture.PARCHMENT,
+            oledEdgeGradient = true,
+            isDarkTheme = true,
+            intensityFactor = 1f,
+        )
+
+        assertTrue(layers.size == 3)
+        assertTrue(
+            layers[0].colorStops ==
+                listOf(0f to Color.Black.copy(alpha = 0.12f), 0.42f to Color.Transparent, 1f to Color.Transparent),
+        )
+        assertTrue(
+            layers[1].colorStops ==
+                listOf(0f to Color.White.copy(alpha = 0.14f), 0.45f to Color.Transparent, 1f to Color.Transparent),
+        )
+        assertTrue(
+            layers[2].colorStops ==
+                listOf(0f to Color.Transparent, 0.38f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.36f)),
+        )
+    }
+
+    @Test
+    fun `farthest corner radius matches geometric expectation`() {
+        val centered = calculateRadialGradientFarthestCornerRadius(
+            size = Size(100f, 50f),
+            center = Offset(50f, 25f),
+        )
+        val offset = calculateRadialGradientFarthestCornerRadius(
+            size = Size(100f, 50f),
+            center = Offset(20f, 10f),
+        )
+
+        assertTrue(abs(centered - 55.9017f) < 0.001f)
+        assertTrue(abs(offset - 89.44272f) < 0.001f)
+    }
+
+    @Test
+    fun `native texture strength maps baseline at fifty percent`() {
+        assertTrue(resolveNativeTextureIntensityFactor(50) == 1f)
+    }
+
+    @Test
+    fun `native texture strength clamps out of range and scales monotonically`() {
+        val zero = resolveNativeTextureIntensityFactor(0)
+        val fifty = resolveNativeTextureIntensityFactor(50)
+        val hundred = resolveNativeTextureIntensityFactor(100)
+        val twoHundred = resolveNativeTextureIntensityFactor(200)
+        val clampedLow = resolveNativeTextureIntensityFactor(-999)
+        val clampedHigh = resolveNativeTextureIntensityFactor(999)
+
+        assertTrue(zero == 0f)
+        assertTrue(fifty == 1f)
+        assertTrue(hundred > fifty)
+        assertTrue(twoHundred > hundred)
+        assertTrue(clampedLow == zero)
+        assertTrue(clampedHigh == twoHundred)
+    }
+
+    @Test
+    fun `native texture strength increases parchment alpha contribution`() {
+        val base = buildReaderAtmosphereRadialLayers(
+            backgroundTexture = NovelReaderBackgroundTexture.PARCHMENT,
+            oledEdgeGradient = false,
+            isDarkTheme = true,
+            intensityFactor = resolveNativeTextureIntensityFactor(50),
+        )
+        val boosted = buildReaderAtmosphereRadialLayers(
+            backgroundTexture = NovelReaderBackgroundTexture.PARCHMENT,
+            oledEdgeGradient = false,
+            isDarkTheme = true,
+            intensityFactor = resolveNativeTextureIntensityFactor(120),
+        )
+
+        val baseDarkAlpha = base[0].colorStops.first().second.alpha
+        val boostedDarkAlpha = boosted[0].colorStops.first().second.alpha
+        val baseLightAlpha = base[1].colorStops.first().second.alpha
+        val boostedLightAlpha = boosted[1].colorStops.first().second.alpha
+
+        assertTrue(boostedDarkAlpha > baseDarkAlpha)
+        assertTrue(boostedLightAlpha > baseLightAlpha)
+    }
 
     @Test
     fun `bottom overlay hidden when reader ui hidden`() {
@@ -1021,12 +1164,127 @@ class NovelReaderUiVisibilityTest {
             oledEdgeGradient = false,
             fontFamilyName = null,
             customCss = "",
+            textShadowCss = null,
         )
 
         assertTrue(css.contains("--an-reader-align: justify;"))
         assertTrue(css.contains("--an-reader-first-line-indent: 2em;"))
         assertTrue(css.contains("text-align: var(--an-reader-align) !important;"))
         assertTrue(css.contains("text-indent: var(--an-reader-first-line-indent) !important;"))
+    }
+
+    @Test
+    fun `auto shadow color uses light shadow on dark background`() {
+        val shadow = resolveAutoReaderShadowColor(
+            customShadowColor = null,
+            textColor = Color(0xFFEDEDED),
+            backgroundColor = Color(0xFF121212),
+        )
+
+        assertTrue(shadow.luminance() > 0.5f)
+    }
+
+    @Test
+    fun `auto shadow color uses dark shadow on light background`() {
+        val shadow = resolveAutoReaderShadowColor(
+            customShadowColor = null,
+            textColor = Color(0xFF1A1A1A),
+            backgroundColor = Color(0xFFFFFFFF),
+        )
+
+        assertTrue(shadow.luminance() < 0.5f)
+    }
+
+    @Test
+    fun `webview css includes text-shadow when enabled`() {
+        val textShadowCss = resolveWebReaderTextShadowCss(
+            textShadowEnabled = true,
+            textShadowColor = "",
+            textShadowBlur = 4f,
+            textShadowX = 0f,
+            textShadowY = 1f,
+            textColor = Color(0xFFEDEDED),
+            backgroundColor = Color(0xFF121212),
+        )
+        val css = buildWebReaderCssText(
+            fontFaceCss = "",
+            paddingTop = 0,
+            paddingBottom = 0,
+            paddingHorizontal = 16,
+            fontSizePx = 16,
+            lineHeightMultiplier = 1.6f,
+            textAlignCss = null,
+            firstLineIndentCss = null,
+            textColorHex = "#EDEDED",
+            backgroundHex = "#121212",
+            backgroundTexture = NovelReaderBackgroundTexture.NONE,
+            oledEdgeGradient = false,
+            fontFamilyName = null,
+            customCss = "",
+            textShadowCss = textShadowCss,
+        )
+
+        assertTrue(textShadowCss != null)
+        assertTrue(css.contains("--an-reader-text-shadow:"))
+        assertTrue(css.contains("text-shadow: var(--an-reader-text-shadow) !important;"))
+    }
+
+    @Test
+    fun `webview css omits text-shadow when disabled`() {
+        val textShadowCss = resolveWebReaderTextShadowCss(
+            textShadowEnabled = false,
+            textShadowColor = "",
+            textShadowBlur = 4f,
+            textShadowX = 0f,
+            textShadowY = 1f,
+            textColor = Color(0xFFEDEDED),
+            backgroundColor = Color(0xFF121212),
+        )
+        val css = buildWebReaderCssText(
+            fontFaceCss = "",
+            paddingTop = 0,
+            paddingBottom = 0,
+            paddingHorizontal = 16,
+            fontSizePx = 16,
+            lineHeightMultiplier = 1.6f,
+            textAlignCss = null,
+            firstLineIndentCss = null,
+            textColorHex = "#EDEDED",
+            backgroundHex = "#121212",
+            backgroundTexture = NovelReaderBackgroundTexture.NONE,
+            oledEdgeGradient = false,
+            fontFamilyName = null,
+            customCss = "",
+            textShadowCss = textShadowCss,
+        )
+
+        assertTrue(textShadowCss == null)
+        assertFalse(css.contains("--an-reader-text-shadow:"))
+        assertFalse(css.contains("text-shadow: var(--an-reader-text-shadow) !important;"))
+    }
+
+    @Test
+    fun `page edge shadow color is not pure black on dark background`() {
+        val color = resolvePageEdgeShadowColor(
+            pageEdgeShadowAlpha = 0.25f,
+            backgroundColor = Color(0xFF121212),
+        )
+
+        assertTrue(color.luminance() > 0f)
+    }
+
+    @Test
+    fun `reader color parser supports android argb format`() {
+        val parsed = parseReaderColorForTest("#66000000")
+        assertTrue(parsed != null)
+        assertTrue(parsed!!.alpha > 0f)
+    }
+
+    @Test
+    fun `reader color parser supports css rgba format`() {
+        val parsed = parseReaderColorForTest("#00000066")
+        assertTrue(parsed != null)
+        assertTrue(parsed!!.alpha > 0f)
     }
 
     @Test

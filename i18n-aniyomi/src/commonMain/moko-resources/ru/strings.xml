@@ -285,7 +285,21 @@
     <string name="novel_reader_text_align_right">По правому краю</string>
     <string name="novel_reader_force_paragraph_indent">Принудительная красная строка для абзацев</string>
     <string name="novel_reader_force_paragraph_indent_summary">Добавлять фиксированный отступ первой строки для каждого абзаца в режиме чтения</string>
-    <string name="novel_reader_preserve_source_text_align_native">Сохранять выравнивание источника в нативном ридере</string>
+    <string name="novel_reader_force_bold_text">Жирный текст</string>
+    <string name="novel_reader_force_bold_text_summary">Сделать весь текст жирным</string>
+    <string name="novel_reader_force_italic_text">Курсивный текст</string>
+    <string name="novel_reader_force_italic_text_summary">Сделать весь текст курсивным</string>
+    <string name="novel_reader_text_shadow">Тень текста</string>
+    <string name="novel_reader_text_shadow_summary">Добавляет тень к тексту для лучшего контраста с фоном</string>
+    <string name="novel_reader_text_shadow_color">Цвет тени текста</string>
+    <string name="novel_reader_text_shadow_color_summary">Пользовательский цвет тени (пусто = авто). 8-символьный формат: #AARRGGBB или #RRGGBBAA.</string>
+    <string name="novel_reader_text_shadow_blur">Размытие тени</string>
+    <string name="novel_reader_text_shadow_x">Смещение X (по горизонтали)</string>
+    <string name="novel_reader_text_shadow_y">Смещение Y (по вертикали)</string>
+    <string name="novel_reader_page_edge_shadow">Тень по краям страницы</string>
+    <string name="novel_reader_page_edge_shadow_summary">Рисует темные градиенты по бокам для эффекта книжного листа</string>
+    <string name="novel_reader_page_edge_shadow_alpha">Интенсивность тени у края</string>
+    <string name="novel_reader_preserve_source_text_align_native">Сохранять исходное выравнивание в Native-Rich</string>
     <string name="novel_reader_preserve_source_text_align_native_summary">Не применять глобальное выравнивание в нативном режиме и сохранять выравнивание источника, где поддерживается</string>
 
     <!-- Navigation -->
@@ -1294,6 +1308,8 @@
     <string name="novel_reader_background_texture_paper_grain">Бумажное зерно</string>
     <string name="novel_reader_background_texture_linen">Лен</string>
     <string name="novel_reader_background_texture_parchment">Пергамент</string>
+    <string name="novel_reader_native_texture_strength">Сила текстуры (Native-Rich)</string>
+    <string name="novel_reader_native_texture_strength_summary">Действует только в Native-Rich. 50% = текущий вид</string>
     <string name="novel_reader_oled_edge_gradient">OLED-градиент по краям</string>
     <string name="novel_reader_oled_edge_gradient_summary">Использовать мягкое затемнение краев в темной теме для более комфортной прокрутки на OLED</string>
     <string name="novel_reader_bionic_reading">Бионическое чтение</string>

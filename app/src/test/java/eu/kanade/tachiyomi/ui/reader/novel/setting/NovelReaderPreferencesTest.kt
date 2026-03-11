@@ -34,6 +34,7 @@ class NovelReaderPreferencesTest {
         prefs.showTimeToEnd().get() shouldBe true
         prefs.showWordCount().get() shouldBe true
         prefs.backgroundTexture().get() shouldBe NovelReaderBackgroundTexture.PAPER_GRAIN
+        prefs.nativeTextureStrengthPercent().get() shouldBe 50
         prefs.oledEdgeGradient().get() shouldBe false
         prefs.verticalSeekbar().get() shouldBe true
         prefs.swipeToNextChapter().get() shouldBe false
@@ -82,6 +83,7 @@ class NovelReaderPreferencesTest {
         prefs.showTimeToEnd().set(false)
         prefs.showWordCount().set(false)
         prefs.backgroundTexture().set(NovelReaderBackgroundTexture.PARCHMENT)
+        prefs.nativeTextureStrengthPercent().set(120)
         prefs.oledEdgeGradient().set(false)
         prefs.preferWebViewRenderer().set(false)
         prefs.richNativeRendererExperimental().set(true)
@@ -140,6 +142,7 @@ class NovelReaderPreferencesTest {
         override?.showTimeToEnd shouldBe false
         override?.showWordCount shouldBe false
         override?.backgroundTexture shouldBe NovelReaderBackgroundTexture.PARCHMENT
+        override?.nativeTextureStrengthPercent shouldBe 120
         override?.oledEdgeGradient shouldBe false
         override?.preferWebViewRenderer shouldBe false
         override?.richNativeRendererExperimental shouldBe true
@@ -199,6 +202,7 @@ class NovelReaderPreferencesTest {
         prefs.showTimeToEnd().set(true)
         prefs.showWordCount().set(true)
         prefs.backgroundTexture().set(NovelReaderBackgroundTexture.PAPER_GRAIN)
+        prefs.nativeTextureStrengthPercent().set(40)
         prefs.oledEdgeGradient().set(true)
         prefs.preferWebViewRenderer().set(true)
         prefs.richNativeRendererExperimental().set(false)
@@ -257,6 +261,7 @@ class NovelReaderPreferencesTest {
                 showTimeToEnd = false,
                 showWordCount = false,
                 backgroundTexture = NovelReaderBackgroundTexture.LINEN,
+                nativeTextureStrengthPercent = 135,
                 oledEdgeGradient = false,
                 preferWebViewRenderer = false,
                 richNativeRendererExperimental = true,
@@ -314,6 +319,7 @@ class NovelReaderPreferencesTest {
         settings.showTimeToEnd shouldBe false
         settings.showWordCount shouldBe false
         settings.backgroundTexture shouldBe NovelReaderBackgroundTexture.LINEN
+        settings.nativeTextureStrengthPercent shouldBe 135
         settings.oledEdgeGradient shouldBe false
         settings.preferWebViewRenderer shouldBe false
         settings.richNativeRendererExperimental shouldBe true

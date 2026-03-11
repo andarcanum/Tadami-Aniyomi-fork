@@ -24,12 +24,22 @@ data class NovelReaderSettings(
     val forceParagraphIndent: Boolean,
     val preserveSourceTextAlignInNative: Boolean,
     val fontFamily: String,
+    val forceBoldText: Boolean,
+    val forceItalicText: Boolean,
+    val textShadow: Boolean,
+    val textShadowColor: String,
+    val textShadowBlur: Float,
+    val textShadowX: Float,
+    val textShadowY: Float,
+    val pageEdgeShadow: Boolean,
+    val pageEdgeShadowAlpha: Float,
 
     // Theme
     val theme: NovelReaderTheme,
     val backgroundColor: String?,
     val textColor: String?,
     val backgroundTexture: NovelReaderBackgroundTexture,
+    val nativeTextureStrengthPercent: Int,
     val oledEdgeGradient: Boolean,
     val customThemes: List<NovelReaderColorTheme>,
 
@@ -163,12 +173,22 @@ data class NovelReaderOverride(
     val forceParagraphIndent: Boolean? = null,
     val preserveSourceTextAlignInNative: Boolean? = null,
     val fontFamily: String? = null,
+    val forceBoldText: Boolean? = null,
+    val forceItalicText: Boolean? = null,
+    val textShadow: Boolean? = null,
+    val textShadowColor: String? = null,
+    val textShadowBlur: Float? = null,
+    val textShadowX: Float? = null,
+    val textShadowY: Float? = null,
+    val pageEdgeShadow: Boolean? = null,
+    val pageEdgeShadowAlpha: Float? = null,
 
     // Theme
     val theme: NovelReaderTheme? = null,
     val backgroundColor: String? = null,
     val textColor: String? = null,
     val backgroundTexture: NovelReaderBackgroundTexture? = null,
+    val nativeTextureStrengthPercent: Int? = null,
     val oledEdgeGradient: Boolean? = null,
     val customThemes: List<NovelReaderColorTheme>? = null,
 
@@ -257,6 +277,24 @@ class NovelReaderPreferences(
 
     fun fontFamily() = preferenceStore.getString("novel_reader_font_family", "")
 
+    fun forceBoldText() = preferenceStore.getBoolean("novel_reader_force_bold_text", false)
+
+    fun forceItalicText() = preferenceStore.getBoolean("novel_reader_force_italic_text", false)
+
+    fun textShadow() = preferenceStore.getBoolean("novel_reader_text_shadow", false)
+
+    fun textShadowColor() = preferenceStore.getString("novel_reader_text_shadow_color", "")
+
+    fun textShadowBlur() = preferenceStore.getFloat("novel_reader_text_shadow_blur", 4f)
+
+    fun textShadowX() = preferenceStore.getFloat("novel_reader_text_shadow_x", 0f)
+
+    fun textShadowY() = preferenceStore.getFloat("novel_reader_text_shadow_y", 0f)
+
+    fun pageEdgeShadow() = preferenceStore.getBoolean("novel_reader_page_edge_shadow", false)
+
+    fun pageEdgeShadowAlpha() = preferenceStore.getFloat("novel_reader_page_edge_shadow_alpha", 0.25f)
+
     // Theme
     fun theme() = preferenceStore.getEnum("novel_reader_theme", NovelReaderTheme.SYSTEM)
 
@@ -266,6 +304,8 @@ class NovelReaderPreferences(
 
     fun backgroundTexture() =
         preferenceStore.getEnum("novel_reader_background_texture", NovelReaderBackgroundTexture.PAPER_GRAIN)
+
+    fun nativeTextureStrengthPercent() = preferenceStore.getInt("novel_reader_native_texture_strength_percent", 50)
 
     fun oledEdgeGradient() = preferenceStore.getBoolean("novel_reader_oled_edge_gradient", false)
 
@@ -459,10 +499,14 @@ class NovelReaderPreferences(
                 forceParagraphIndent = forceParagraphIndent().get(),
                 preserveSourceTextAlignInNative = preserveSourceTextAlignInNative().get(),
                 fontFamily = fontFamily().get(),
+                forceBoldText = forceBoldText().get(),
+                forceItalicText = forceItalicText().get(),
+                textShadow = textShadow().get(),
                 theme = theme().get(),
                 backgroundColor = backgroundColor().get(),
                 textColor = textColor().get(),
                 backgroundTexture = backgroundTexture().get(),
+                nativeTextureStrengthPercent = nativeTextureStrengthPercent().get(),
                 oledEdgeGradient = oledEdgeGradient().get(),
                 customThemes = customThemes().get(),
                 useVolumeButtons = useVolumeButtons().get(),
@@ -543,10 +587,21 @@ class NovelReaderPreferences(
             preserveSourceTextAlignInNative =
             override?.preserveSourceTextAlignInNative ?: preserveSourceTextAlignInNative().get(),
             fontFamily = override?.fontFamily ?: fontFamily().get(),
+            forceBoldText = override?.forceBoldText ?: forceBoldText().get(),
+            forceItalicText = override?.forceItalicText ?: forceItalicText().get(),
+            textShadow = override?.textShadow ?: textShadow().get(),
+            textShadowColor = override?.textShadowColor ?: textShadowColor().get(),
+            textShadowBlur = override?.textShadowBlur ?: textShadowBlur().get(),
+            textShadowX = override?.textShadowX ?: textShadowX().get(),
+            textShadowY = override?.textShadowY ?: textShadowY().get(),
+            pageEdgeShadow = override?.pageEdgeShadow ?: pageEdgeShadow().get(),
+            pageEdgeShadowAlpha = override?.pageEdgeShadowAlpha ?: pageEdgeShadowAlpha().get(),
             theme = override?.theme ?: theme().get(),
             backgroundColor = override?.backgroundColor ?: backgroundColor().get(),
             textColor = override?.textColor ?: textColor().get(),
             backgroundTexture = override?.backgroundTexture ?: backgroundTexture().get(),
+            nativeTextureStrengthPercent =
+            override?.nativeTextureStrengthPercent ?: nativeTextureStrengthPercent().get(),
             oledEdgeGradient = override?.oledEdgeGradient ?: oledEdgeGradient().get(),
             customThemes = override?.customThemes ?: customThemes().get(),
             useVolumeButtons = override?.useVolumeButtons ?: useVolumeButtons().get(),
@@ -625,6 +680,15 @@ class NovelReaderPreferences(
             forceParagraphIndent().changes(),
             preserveSourceTextAlignInNative().changes(),
             fontFamily().changes(),
+            forceBoldText().changes(),
+            forceItalicText().changes(),
+            textShadow().changes(),
+            textShadowColor().changes(),
+            textShadowBlur().changes(),
+            textShadowX().changes(),
+            textShadowY().changes(),
+            pageEdgeShadow().changes(),
+            pageEdgeShadowAlpha().changes(),
         ) { values: Array<Any?> ->
             DisplaySettings(
                 values[0] as Int,
@@ -635,6 +699,15 @@ class NovelReaderPreferences(
                 values[5] as Boolean,
                 values[6] as Boolean,
                 values[7] as String,
+                values[8] as Boolean,
+                values[9] as Boolean,
+                values[10] as Boolean,
+                values[11] as String,
+                values[12] as Float,
+                values[13] as Float,
+                values[14] as Float,
+                values[15] as Boolean,
+                values[16] as Float,
             )
         }
 
@@ -643,6 +716,7 @@ class NovelReaderPreferences(
             backgroundColor().changes(),
             textColor().changes(),
             backgroundTexture().changes(),
+            nativeTextureStrengthPercent().changes(),
             oledEdgeGradient().changes(),
             customThemes().changes(),
         ) { values: Array<Any?> ->
@@ -651,8 +725,9 @@ class NovelReaderPreferences(
                 values[1] as String,
                 values[2] as String,
                 values[3] as NovelReaderBackgroundTexture,
-                values[4] as Boolean,
-                values[5] as List<NovelReaderColorTheme>,
+                values[4] as Int,
+                values[5] as Boolean,
+                values[6] as List<NovelReaderColorTheme>,
             )
         }
 
@@ -817,10 +892,21 @@ class NovelReaderPreferences(
                 preserveSourceTextAlignInNative =
                 override?.preserveSourceTextAlignInNative ?: display.preserveSourceTextAlignInNative,
                 fontFamily = override?.fontFamily ?: display.fontFamily,
+                forceBoldText = override?.forceBoldText ?: display.forceBoldText,
+                forceItalicText = override?.forceItalicText ?: display.forceItalicText,
+                textShadow = override?.textShadow ?: display.textShadow,
+                textShadowColor = override?.textShadowColor ?: display.textShadowColor,
+                textShadowBlur = override?.textShadowBlur ?: display.textShadowBlur,
+                textShadowX = override?.textShadowX ?: display.textShadowX,
+                textShadowY = override?.textShadowY ?: display.textShadowY,
+                pageEdgeShadow = override?.pageEdgeShadow ?: display.pageEdgeShadow,
+                pageEdgeShadowAlpha = override?.pageEdgeShadowAlpha ?: display.pageEdgeShadowAlpha,
                 theme = override?.theme ?: theme.theme,
                 backgroundColor = override?.backgroundColor ?: theme.backgroundColor,
                 textColor = override?.textColor ?: theme.textColor,
                 backgroundTexture = override?.backgroundTexture ?: theme.backgroundTexture,
+                nativeTextureStrengthPercent =
+                override?.nativeTextureStrengthPercent ?: theme.nativeTextureStrengthPercent,
                 oledEdgeGradient = override?.oledEdgeGradient ?: theme.oledEdgeGradient,
                 customThemes = override?.customThemes ?: theme.customThemes,
                 useVolumeButtons = override?.useVolumeButtons ?: navigation.useVolumeButtons,
@@ -897,6 +983,15 @@ class NovelReaderPreferences(
         val forceParagraphIndent: Boolean,
         val preserveSourceTextAlignInNative: Boolean,
         val fontFamily: String,
+        val forceBoldText: Boolean,
+        val forceItalicText: Boolean,
+        val textShadow: Boolean,
+        val textShadowColor: String,
+        val textShadowBlur: Float,
+        val textShadowX: Float,
+        val textShadowY: Float,
+        val pageEdgeShadow: Boolean,
+        val pageEdgeShadowAlpha: Float,
     )
 
     private data class ThemeSettings(
@@ -904,6 +999,7 @@ class NovelReaderPreferences(
         val backgroundColor: String,
         val textColor: String,
         val backgroundTexture: NovelReaderBackgroundTexture,
+        val nativeTextureStrengthPercent: Int,
         val oledEdgeGradient: Boolean,
         val customThemes: List<NovelReaderColorTheme>,
     )

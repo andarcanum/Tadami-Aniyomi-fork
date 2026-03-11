@@ -107,11 +107,14 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.ImageShader
 import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
@@ -132,6 +135,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextIndent
@@ -186,6 +190,7 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.roundToInt
 import android.graphics.Color as AndroidColor
@@ -777,8 +782,11 @@ fun NovelReaderScreen(
         ReaderAtmosphereBackground(
             backgroundColor = textBackground,
             backgroundTexture = state.readerSettings.backgroundTexture,
+            nativeTextureStrengthPercent = state.readerSettings.nativeTextureStrengthPercent,
             oledEdgeGradient = state.readerSettings.oledEdgeGradient,
             isDarkTheme = isDarkTheme,
+            pageEdgeShadow = state.readerSettings.pageEdgeShadow,
+            pageEdgeShadowAlpha = state.readerSettings.pageEdgeShadowAlpha,
         )
         // Контент (текст главы) - занимает весь экран, padding ВНУТРИ через contentPadding
         androidx.compose.foundation.layout.Box(
@@ -1073,6 +1081,7 @@ fun NovelReaderScreen(
                                     novelUrl = state.novel.url,
                                     statusBarTopPadding = statusBarTopPadding,
                                     textColor = textColor,
+                                    backgroundColor = textBackground,
                                     fontSize = state.readerSettings.fontSize,
                                     lineHeight = state.readerSettings.lineHeight,
                                     composeFontFamily = composeFontFamily,
@@ -1082,6 +1091,13 @@ fun NovelReaderScreen(
                                     forceParagraphIndent = state.readerSettings.forceParagraphIndent,
                                     preserveSourceTextAlignInNative =
                                     state.readerSettings.preserveSourceTextAlignInNative,
+                                    forceBoldText = state.readerSettings.forceBoldText,
+                                    forceItalicText = state.readerSettings.forceItalicText,
+                                    textShadow = state.readerSettings.textShadow,
+                                    textShadowColor = state.readerSettings.textShadowColor,
+                                    textShadowBlur = state.readerSettings.textShadowBlur,
+                                    textShadowX = state.readerSettings.textShadowX,
+                                    textShadowY = state.readerSettings.textShadowY,
                                 )
                             }
                         } else {
@@ -1112,7 +1128,36 @@ fun NovelReaderScreen(
                                             } else {
                                                 composeFontFamily
                                             },
-                                            fontWeight = if (isChapterTitle) FontWeight.SemiBold else FontWeight.Normal,
+                                            fontWeight = if (isChapterTitle) {
+                                                FontWeight.SemiBold
+                                            } else if (state.readerSettings.forceBoldText) {
+                                                FontWeight.Bold
+                                            } else {
+                                                FontWeight.Normal
+                                            },
+                                            fontStyle = if (state.readerSettings.forceItalicText) {
+                                                FontStyle.Italic
+                                            } else {
+                                                FontStyle.Normal
+                                            },
+                                            shadow = if (state.readerSettings.textShadow) {
+                                                val customColor = parseReaderColor(state.readerSettings.textShadowColor)
+                                                val shadowColor = resolveAutoReaderShadowColor(
+                                                    customShadowColor = customColor,
+                                                    textColor = textColor,
+                                                    backgroundColor = textBackground,
+                                                )
+                                                Shadow(
+                                                    color = shadowColor,
+                                                    blurRadius = state.readerSettings.textShadowBlur,
+                                                    offset = androidx.compose.ui.geometry.Offset(
+                                                        x = state.readerSettings.textShadowX,
+                                                        y = state.readerSettings.textShadowY,
+                                                    ),
+                                                )
+                                            } else {
+                                                null
+                                            },
                                         ).withOptionalTextAlign(
                                             resolveNativeTextAlign(
                                                 globalTextAlign = state.readerSettings.textAlign,
@@ -1253,6 +1298,15 @@ fun NovelReaderScreen(
                 val initialCssFirstLineIndent = resolveWebViewFirstLineIndentCss(
                     forceParagraphIndent = state.readerSettings.forceParagraphIndent,
                 )
+                val initialTextShadowCss = resolveWebReaderTextShadowCss(
+                    textShadowEnabled = state.readerSettings.textShadow,
+                    textShadowColor = state.readerSettings.textShadowColor,
+                    textShadowBlur = state.readerSettings.textShadowBlur,
+                    textShadowX = state.readerSettings.textShadowX,
+                    textShadowY = state.readerSettings.textShadowY,
+                    textColor = textColor,
+                    backgroundColor = textBackground,
+                )
                 val initialSelectedFontFamily = state.readerSettings.fontFamily.takeIf { it.isNotBlank() }
                 val initialFontAssetFile = novelReaderFonts
                     .firstOrNull { it.id == state.readerSettings.fontFamily }
@@ -1283,6 +1337,7 @@ fun NovelReaderScreen(
                     oledEdgeGradient = state.readerSettings.oledEdgeGradient && isDarkTheme,
                     fontFamilyName = initialSelectedFontFamily,
                     customCss = state.readerSettings.customCSS,
+                    textShadowCss = initialTextShadowCss,
                 )
                 val initialFactoryWebViewHtml = buildInitialWebReaderHtml(
                     rawHtml = state.html,
@@ -1473,6 +1528,19 @@ fun NovelReaderScreen(
                         } else {
                             ""
                         }
+                        val currentTextColorCss = colorToCssHex(textColor)
+                        val currentBackgroundCss = colorToCssHex(textBackground)
+                        val currentCustomCss = state.readerSettings.customCSS
+                        val currentCustomJs = state.readerSettings.customJS
+                        val currentTextShadowCss = resolveWebReaderTextShadowCss(
+                            textShadowEnabled = state.readerSettings.textShadow,
+                            textShadowColor = state.readerSettings.textShadowColor,
+                            textShadowBlur = state.readerSettings.textShadowBlur,
+                            textShadowX = state.readerSettings.textShadowX,
+                            textShadowY = state.readerSettings.textShadowY,
+                            textColor = textColor,
+                            backgroundColor = textBackground,
+                        )
                         val styleFingerprint = buildWebReaderCssFingerprint(
                             chapterId = state.chapter.id,
                             paddingTop = paddingTop,
@@ -1488,12 +1556,8 @@ fun NovelReaderScreen(
                             oledEdgeGradient = state.readerSettings.oledEdgeGradient && isDarkTheme,
                             fontFamilyName = selectedFontFamily,
                             customCss = state.readerSettings.customCSS,
+                            textShadowCss = currentTextShadowCss,
                         )
-
-                        val currentTextColorCss = colorToCssHex(textColor)
-                        val currentBackgroundCss = colorToCssHex(textBackground)
-                        val currentCustomCss = state.readerSettings.customCSS
-                        val currentCustomJs = state.readerSettings.customJS
                         val currentRestoreProgress = state.lastSavedWebProgressPercent.coerceIn(0, 100)
                         val currentFontSize = state.readerSettings.fontSize
                         val currentLineHeight = state.readerSettings.lineHeight
@@ -1512,6 +1576,7 @@ fun NovelReaderScreen(
                             oledEdgeGradient = state.readerSettings.oledEdgeGradient && isDarkTheme,
                             fontFamilyName = selectedFontFamily,
                             customCss = currentCustomCss,
+                            textShadowCss = currentTextShadowCss,
                         )
                         val initialWebViewHtml = buildInitialWebReaderHtml(
                             rawHtml = state.html,
@@ -1562,6 +1627,7 @@ fun NovelReaderScreen(
                                     oledEdgeGradient = state.readerSettings.oledEdgeGradient && isDarkTheme,
                                     fontFamilyName = selectedFontFamily,
                                     customCss = currentCustomCss,
+                                    textShadowCss = currentTextShadowCss,
                                 )
                                 appliedWebCssFingerprint = styleFingerprint
 
@@ -1638,6 +1704,7 @@ fun NovelReaderScreen(
                                 oledEdgeGradient = state.readerSettings.oledEdgeGradient && isDarkTheme,
                                 fontFamilyName = selectedFontFamily,
                                 customCss = state.readerSettings.customCSS,
+                                textShadowCss = currentTextShadowCss,
                             )
                             appliedWebCssFingerprint = styleFingerprint
                         }
@@ -3811,6 +3878,7 @@ internal fun buildWebReaderCssText(
     oledEdgeGradient: Boolean,
     fontFamilyName: String?,
     customCss: String,
+    textShadowCss: String?,
 ): String {
     val escapedFontFamily = fontFamilyName
         ?.replace("\\", "\\\\")
@@ -3831,6 +3899,9 @@ internal fun buildWebReaderCssText(
         }
         append("  --an-reader-size: ${fontSizePx}px;\n")
         append("  --an-reader-line-height: ${lineHeightMultiplier.coerceAtLeast(1f)};\n")
+        if (!textShadowCss.isNullOrBlank()) {
+            append("  --an-reader-text-shadow: $textShadowCss;\n")
+        }
         if (fontVariable.isNotBlank()) {
             append("  --an-reader-font: $fontVariable;\n")
         }
@@ -3855,6 +3926,9 @@ internal fun buildWebReaderCssText(
         append("  word-break: break-word !important;\n")
         append("  overflow-wrap: anywhere !important;\n")
         append("  -webkit-text-size-adjust: 100% !important;\n")
+        if (!textShadowCss.isNullOrBlank()) {
+            append("  text-shadow: var(--an-reader-text-shadow) !important;\n")
+        }
         if (fontVariable.isNotBlank()) {
             append("  font-family: var(--an-reader-font) !important;\n")
         }
@@ -3916,6 +3990,9 @@ internal fun buildWebReaderCssText(
         }
         append("  line-height: var(--an-reader-line-height) !important;\n")
         append("  background-color: transparent !important;\n")
+        if (!textShadowCss.isNullOrBlank()) {
+            append("  text-shadow: var(--an-reader-text-shadow) !important;\n")
+        }
         if (fontVariable.isNotBlank()) {
             append("  font-family: var(--an-reader-font) !important;\n")
         }
@@ -3999,6 +4076,7 @@ private fun WebView.applyReaderCss(
     oledEdgeGradient: Boolean,
     fontFamilyName: String?,
     customCss: String,
+    textShadowCss: String?,
 ) {
     val css = buildWebReaderCssText(
         fontFaceCss = fontFaceCss,
@@ -4015,6 +4093,7 @@ private fun WebView.applyReaderCss(
         oledEdgeGradient = oledEdgeGradient,
         fontFamilyName = fontFamilyName,
         customCss = customCss,
+        textShadowCss = textShadowCss,
     )
     val escapedFontFamily = fontFamilyName
         ?.replace("\\", "\\\\")
@@ -4216,11 +4295,23 @@ private fun LnReaderVerticalSeekbar(
 private fun ReaderAtmosphereBackground(
     backgroundColor: Color,
     backgroundTexture: NovelReaderBackgroundTexture,
+    nativeTextureStrengthPercent: Int,
     oledEdgeGradient: Boolean,
     isDarkTheme: Boolean,
+    pageEdgeShadow: Boolean,
+    pageEdgeShadowAlpha: Float,
 ) {
-    val showParchmentGradient = backgroundTexture == NovelReaderBackgroundTexture.PARCHMENT
-    val showOledVignette = oledEdgeGradient && isDarkTheme
+    val textureIntensityFactor = remember(nativeTextureStrengthPercent) {
+        resolveNativeTextureIntensityFactor(nativeTextureStrengthPercent)
+    }
+    val radialLayers = remember(backgroundTexture, oledEdgeGradient, isDarkTheme, textureIntensityFactor) {
+        buildReaderAtmosphereRadialLayers(
+            backgroundTexture = backgroundTexture,
+            oledEdgeGradient = oledEdgeGradient,
+            isDarkTheme = isDarkTheme,
+            intensityFactor = textureIntensityFactor,
+        )
+    }
 
     Box(
         modifier = Modifier
@@ -4246,46 +4337,136 @@ private fun ReaderAtmosphereBackground(
                     ),
                 )
             }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(brush = brush),
-            )
-        }
-
-        if (showParchmentGradient || showOledVignette) {
+            val baseTextureAlpha = textureIntensityFactor.coerceIn(0f, 1f)
+            val boostTextureAlpha = ((textureIntensityFactor - 1f) / 3f).coerceIn(0f, 1f) * 0.45f
             Canvas(modifier = Modifier.fillMaxSize()) {
-                if (showParchmentGradient) {
+                if (baseTextureAlpha > 0f) {
+                    drawRect(brush = brush, alpha = baseTextureAlpha)
+                }
+                if (boostTextureAlpha > 0f) {
                     drawRect(
-                        brush = Brush.radialGradient(
-                            colors = listOf(Color.White.copy(alpha = 0.14f), Color.Transparent),
-                            center = Offset(size.width * 0.22f, size.height * 0.2f),
-                            radius = max(size.width, size.height) * 0.62f,
-                        ),
-                    )
-                    drawRect(
-                        brush = Brush.radialGradient(
-                            colors = listOf(Color.Black.copy(alpha = 0.12f), Color.Transparent),
-                            center = Offset(size.width * 0.82f, size.height * 0.78f),
-                            radius = max(size.width, size.height) * 0.56f,
-                        ),
+                        brush = brush,
+                        alpha = boostTextureAlpha,
+                        blendMode = BlendMode.Multiply,
                     )
                 }
-                if (showOledVignette) {
+            }
+        }
+
+        if (radialLayers.isNotEmpty()) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                radialLayers.forEach { layer ->
+                    val center = Offset(
+                        x = size.width * layer.centerXFraction,
+                        y = size.height * layer.centerYFraction,
+                    )
+                    val radius = calculateRadialGradientFarthestCornerRadius(
+                        size = size,
+                        center = center,
+                    )
                     drawRect(
                         brush = Brush.radialGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color.Black.copy(alpha = 0.36f),
-                            ),
-                            center = Offset(size.width / 2f, size.height / 2f),
-                            radius = max(size.width, size.height) * 0.8f,
+                            colorStops = layer.colorStops.toTypedArray(),
+                            center = center,
+                            radius = radius,
                         ),
                     )
                 }
             }
         }
+
+        if (pageEdgeShadow) {
+            val edgeColor = resolvePageEdgeShadowColor(
+                pageEdgeShadowAlpha = pageEdgeShadowAlpha,
+                backgroundColor = backgroundColor,
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        brush = Brush.horizontalGradient(
+                            0.0f to edgeColor,
+                            0.04f to Color.Transparent,
+                            0.96f to Color.Transparent,
+                            1.0f to edgeColor,
+                        ),
+                    ),
+            )
+        }
     }
+}
+
+internal data class ReaderAtmosphereRadialLayer(
+    val centerXFraction: Float,
+    val centerYFraction: Float,
+    val colorStops: List<Pair<Float, Color>>,
+)
+
+internal fun buildReaderAtmosphereRadialLayers(
+    backgroundTexture: NovelReaderBackgroundTexture,
+    oledEdgeGradient: Boolean,
+    isDarkTheme: Boolean,
+    intensityFactor: Float,
+): List<ReaderAtmosphereRadialLayer> {
+    val layers = mutableListOf<ReaderAtmosphereRadialLayer>()
+
+    if (backgroundTexture == NovelReaderBackgroundTexture.PARCHMENT) {
+        val parchmentDarkAlpha = (0.12f * intensityFactor).coerceIn(0f, 0.48f)
+        val parchmentLightAlpha = (0.14f * intensityFactor).coerceIn(0f, 0.56f)
+        // Draw order must follow CSS background layering (bottom -> top on Canvas).
+        // CSS for parchment: white highlight is listed before dark stain, so it is above it.
+        // Canvas paints later layers on top, therefore we add dark first, then white.
+        layers += ReaderAtmosphereRadialLayer(
+            centerXFraction = 0.8f,
+            centerYFraction = 0.75f,
+            colorStops = listOf(
+                0f to Color.Black.copy(alpha = parchmentDarkAlpha),
+                0.42f to Color.Transparent,
+                1f to Color.Transparent,
+            ),
+        )
+        layers += ReaderAtmosphereRadialLayer(
+            centerXFraction = 0.2f,
+            centerYFraction = 0.2f,
+            colorStops = listOf(
+                0f to Color.White.copy(alpha = parchmentLightAlpha),
+                0.45f to Color.Transparent,
+                1f to Color.Transparent,
+            ),
+        )
+    }
+
+    if (oledEdgeGradient && isDarkTheme) {
+        val oledBlendT = ((intensityFactor - 1f) / 3f).coerceIn(0f, 1f)
+        val oledEdgeAlpha = 0.36f - (0.08f * oledBlendT)
+        layers += ReaderAtmosphereRadialLayer(
+            centerXFraction = 0.5f,
+            centerYFraction = 0.5f,
+            colorStops = listOf(
+                0f to Color.Transparent,
+                0.38f to Color.Transparent,
+                1f to Color.Black.copy(alpha = oledEdgeAlpha),
+            ),
+        )
+    }
+
+    return layers
+}
+
+internal fun resolveNativeTextureIntensityFactor(strengthPercent: Int): Float {
+    val clamped = strengthPercent.coerceIn(0, 200)
+    return clamped / 50f
+}
+
+internal fun calculateRadialGradientFarthestCornerRadius(
+    size: Size,
+    center: Offset,
+): Float {
+    val topLeft = hypot(center.x.toDouble(), center.y.toDouble()).toFloat()
+    val topRight = hypot((size.width - center.x).toDouble(), center.y.toDouble()).toFloat()
+    val bottomLeft = hypot(center.x.toDouble(), (size.height - center.y).toDouble()).toFloat()
+    val bottomRight = hypot((size.width - center.x).toDouble(), (size.height - center.y).toDouble()).toFloat()
+    return max(max(topLeft, topRight), max(bottomLeft, bottomRight))
 }
 
 internal fun shouldShowBottomInfoOverlay(
@@ -4516,6 +4697,7 @@ internal fun buildWebReaderCssFingerprint(
     oledEdgeGradient: Boolean,
     fontFamilyName: String?,
     customCss: String,
+    textShadowCss: String?,
 ): String {
     return buildString {
         append(chapterId)
@@ -4532,6 +4714,7 @@ internal fun buildWebReaderCssFingerprint(
         append('|').append(oledEdgeGradient)
         append('|').append(fontFamilyName.orEmpty())
         append('|').append(customCss)
+        append('|').append(textShadowCss ?: "<none>")
     }
 }
 
@@ -4664,6 +4847,71 @@ internal fun resolveWebViewFirstLineIndentCss(
     }
 }
 
+internal fun resolveAutoReaderShadowColor(
+    customShadowColor: Color?,
+    textColor: Color,
+    backgroundColor: Color,
+): Color {
+    if (customShadowColor != null) return customShadowColor
+    val prefersLightShadow = backgroundColor.luminance() < 0.5f || textColor.luminance() > 0.5f
+    return if (prefersLightShadow) {
+        Color.White.copy(alpha = 0.55f)
+    } else {
+        Color.Black.copy(alpha = 0.55f)
+    }
+}
+
+internal fun resolveWebReaderTextShadowCss(
+    textShadowEnabled: Boolean,
+    textShadowColor: String,
+    textShadowBlur: Float,
+    textShadowX: Float,
+    textShadowY: Float,
+    textColor: Color,
+    backgroundColor: Color,
+): String? {
+    if (!textShadowEnabled) return null
+    val customColor = parseReaderColor(textShadowColor)
+    val shadowColor = resolveAutoReaderShadowColor(
+        customShadowColor = customColor,
+        textColor = textColor,
+        backgroundColor = backgroundColor,
+    )
+    val blur = textShadowBlur.coerceAtLeast(0f)
+    return "${formatCssPixel(
+        textShadowX,
+    )} ${formatCssPixel(textShadowY)} ${formatCssPixel(blur)} ${colorToCssRgba(shadowColor)}"
+}
+
+internal fun resolvePageEdgeShadowColor(
+    pageEdgeShadowAlpha: Float,
+    backgroundColor: Color,
+): Color {
+    val alpha = pageEdgeShadowAlpha.coerceIn(0.05f, 1f)
+    return if (backgroundColor.luminance() < 0.5f) {
+        Color.White.copy(alpha = alpha * 0.35f)
+    } else {
+        Color.Black.copy(alpha = alpha)
+    }
+}
+
+private fun formatCssPixel(value: Float): String {
+    val rounded = ((value * 10f).roundToInt()) / 10f
+    return if (abs(rounded - rounded.roundToInt().toFloat()) < 0.001f) {
+        "${rounded.roundToInt()}px"
+    } else {
+        String.format(Locale.US, "%.1fpx", rounded)
+    }
+}
+
+private fun colorToCssRgba(color: Color): String {
+    val red = (color.red * 255f).roundToInt().coerceIn(0, 255)
+    val green = (color.green * 255f).roundToInt().coerceIn(0, 255)
+    val blue = (color.blue * 255f).roundToInt().coerceIn(0, 255)
+    val alpha = color.alpha.coerceIn(0f, 1f)
+    return String.format(Locale.US, "rgba(%d,%d,%d,%.3f)", red, green, blue, alpha)
+}
+
 @Composable
 private fun NovelRichNativeScrollItem(
     block: NovelRichContentBlock,
@@ -4676,6 +4924,7 @@ private fun NovelRichNativeScrollItem(
     novelUrl: String?,
     statusBarTopPadding: androidx.compose.ui.unit.Dp,
     textColor: Color,
+    backgroundColor: Color,
     fontSize: Int,
     lineHeight: Float,
     composeFontFamily: FontFamily?,
@@ -4684,8 +4933,40 @@ private fun NovelRichNativeScrollItem(
     textAlign: ReaderTextAlign,
     forceParagraphIndent: Boolean,
     preserveSourceTextAlignInNative: Boolean,
+    forceBoldText: Boolean,
+    forceItalicText: Boolean,
+    textShadow: Boolean,
+    textShadowColor: String,
+    textShadowBlur: Float,
+    textShadowX: Float,
+    textShadowY: Float,
 ) {
     val context = LocalContext.current
+    val textShadowImpl = remember(
+        textShadow,
+        textShadowColor,
+        textShadowBlur,
+        textShadowX,
+        textShadowY,
+        textColor,
+        backgroundColor,
+    ) {
+        if (textShadow) {
+            val customColor = parseReaderColor(textShadowColor)
+            val shadowColor = resolveAutoReaderShadowColor(
+                customShadowColor = customColor,
+                textColor = textColor,
+                backgroundColor = backgroundColor,
+            )
+            Shadow(
+                color = shadowColor,
+                offset = androidx.compose.ui.geometry.Offset(textShadowX, textShadowY),
+                blurRadius = textShadowBlur,
+            )
+        } else {
+            null
+        }
+    }
     val onLinkClick: (String) -> Unit = { rawUrl ->
         val resolvedUrl = resolveNovelReaderLinkUrl(
             rawUrl = rawUrl,
@@ -4712,7 +4993,15 @@ private fun NovelRichNativeScrollItem(
                 fontSize = if (isChapterTitle) (fontSize * 1.12f).sp else fontSize.sp,
                 lineHeight = if (isChapterTitle) (lineHeight * 1.08f).em else lineHeight.em,
                 fontFamily = if (isChapterTitle) chapterTitleFontFamily ?: composeFontFamily else composeFontFamily,
-                fontWeight = if (isChapterTitle) FontWeight.SemiBold else FontWeight.Normal,
+                fontWeight = if (isChapterTitle) {
+                    FontWeight.SemiBold
+                } else if (forceBoldText) {
+                    FontWeight.Bold
+                } else {
+                    FontWeight.Normal
+                },
+                fontStyle = if (forceItalicText) FontStyle.Italic else FontStyle.Normal,
+                shadow = textShadowImpl,
             ).withOptionalTextAlign(
                 resolveNativeTextAlign(
                     globalTextAlign = textAlign,
@@ -4771,7 +5060,9 @@ private fun NovelRichNativeScrollItem(
                     fontSize = (fontSize * headingScale).sp,
                     lineHeight = (lineHeight * 1.1f).em,
                     fontFamily = composeFontFamily,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = if (forceBoldText) FontWeight.Bold else FontWeight.SemiBold,
+                    fontStyle = if (forceItalicText) FontStyle.Italic else FontStyle.Normal,
+                    shadow = textShadowImpl,
                 ).withOptionalTextAlign(
                     resolveNativeTextAlign(
                         globalTextAlign = textAlign,
@@ -4794,6 +5085,9 @@ private fun NovelRichNativeScrollItem(
                     fontSize = fontSize.sp,
                     lineHeight = lineHeight.em,
                     fontFamily = composeFontFamily,
+                    fontWeight = if (forceBoldText) FontWeight.Bold else FontWeight.Normal,
+                    fontStyle = if (forceItalicText) FontStyle.Italic else FontStyle.Normal,
+                    shadow = textShadowImpl,
                 ).withOptionalTextAlign(
                     resolveNativeTextAlign(
                         globalTextAlign = textAlign,
@@ -5159,20 +5453,33 @@ private fun parseReaderColor(value: String?): Color? {
             val argb = (0xFF shl 24) or rgb
             Color(argb)
         }.getOrNull()
-        8 -> runCatching {
-            val rgba = hex.toLong(16).toInt()
-            val rr = (rgba shr 24) and 0xFF
-            val gg = (rgba shr 16) and 0xFF
-            val bb = (rgba shr 8) and 0xFF
-            val aa = rgba and 0xFF
-            val argb = (aa shl 24) or (rr shl 16) or (gg shl 8) or bb
-            Color(argb)
-        }.getOrNull() ?: runCatching {
-            Color(AndroidColor.parseColor(normalized))
-        }.getOrNull()
+        8 -> {
+            // Accept both #AARRGGBB (Android) and #RRGGBBAA (CSS-style).
+            runCatching {
+                val packed = hex.toLong(16).toInt()
+                val argbAlpha = (packed ushr 24) and 0xFF
+                val rgbaAlpha = packed and 0xFF
+                val shouldTreatAsArgb = when {
+                    argbAlpha == 0 && rgbaAlpha > 0 -> false
+                    rgbaAlpha == 0 && argbAlpha > 0 -> true
+                    else -> true
+                }
+                if (shouldTreatAsArgb) {
+                    Color(packed)
+                } else {
+                    val rr = (packed shr 24) and 0xFF
+                    val gg = (packed shr 16) and 0xFF
+                    val bb = (packed shr 8) and 0xFF
+                    val aa = packed and 0xFF
+                    Color((aa shl 24) or (rr shl 16) or (gg shl 8) or bb)
+                }
+            }.getOrNull()
+        }
         else -> runCatching { Color(AndroidColor.parseColor(normalized)) }.getOrNull()
     }
 }
+
+internal fun parseReaderColorForTest(value: String?): Color? = parseReaderColor(value)
 
 internal fun colorToCssHex(color: Color): String {
     val argb = color.toArgb()
