@@ -1275,6 +1275,13 @@
     <string name="novel_reader_appearance_mode_background">Режим подложки</string>
     <string name="novel_reader_theme_controls_disabled_summary">Настройки темы доступны только в режиме темы</string>
     <string name="novel_reader_background_controls_disabled_summary">Настройки подложки доступны только в режиме подложки</string>
+    <string name="novel_reader_font_section_local">Локальные</string>
+    <string name="novel_reader_font_section_imported">Мои шрифты</string>
+    <string name="novel_reader_font_section_selected">Выбран</string>
+    <string name="novel_reader_font_section_empty_local">Локальные шрифты не найдены</string>
+    <string name="novel_reader_font_section_empty_imported">Импортированных шрифтов пока нет</string>
+    <string name="novel_reader_font_add">Добавить шрифт</string>
+    <string name="novel_reader_font_remove">Удалить шрифт</string>
     <string name="novel_reader_theme_presets">Предустановки темы</string>
     <string name="novel_reader_theme_preset_none">Нет</string>
     <string name="novel_reader_background_color">Цвет фона</string>
@@ -1318,6 +1325,7 @@
     <string name="novel_reader_background_remove_custom">Удалить свою подложку</string>
     <string name="novel_reader_background_upload_hint">Для лучшей читаемости рекомендуется изображение без рамки или декоративной каймы.</string>
     <string name="novel_reader_background_custom_import_failed">Не удалось импортировать изображение подложки</string>
+    <string name="novel_reader_font_import_failed">Не удалось импортировать файл шрифта</string>
     <string name="novel_reader_background_custom_missing_fallback">Пользовательская подложка недоступна. Выбрана стандартная подложка.</string>
     <string name="novel_reader_background_action_replace">Заменить</string>
     <string name="novel_reader_background_action_cancel">Отмена</string>

@@ -466,21 +466,32 @@ fun NovelReaderScreen(
             Toast.makeText(context, missingCustomBackgroundMessage, Toast.LENGTH_SHORT).show()
         }
     }
-    val composeFontFamily = remember(state.readerSettings.fontFamily) {
-        novelReaderFonts.firstOrNull { it.id == state.readerSettings.fontFamily }
-            ?.fontResId
-            ?.let { FontFamily(Font(it)) }
+    val readerFontCatalog = remember(state.readerSettings.fontFamily) {
+        buildNovelReaderFontCatalog(context)
+    }
+    val selectedReaderFont = remember(state.readerSettings.fontFamily, readerFontCatalog) {
+        resolveNovelReaderSelectedFont(
+            fonts = readerFontCatalog,
+            selectedFontId = state.readerSettings.fontFamily,
+        )
+    }
+    val composeTypeface = remember(selectedReaderFont.id, context) {
+        loadNovelReaderTypeface(
+            context = context,
+            font = selectedReaderFont,
+        )
+    }
+    val composeFontFamily = remember(selectedReaderFont.id, composeTypeface) {
+        resolveNovelReaderComposeFontFamily(
+            font = selectedReaderFont,
+            typeface = composeTypeface,
+        )
     }
     val chapterTitleFontFamily = remember {
-        novelReaderFonts.firstOrNull { it.id == "domine" }?.fontResId?.let { FontFamily(Font(it)) }
+        novelReaderBuiltInFonts.firstOrNull { it.id == "domine" }?.fontResId?.let { FontFamily(Font(it)) }
     }
     val paragraphSpacing = remember(state.readerSettings.paragraphSpacing) {
         resolveParagraphSpacingDp(state.readerSettings.paragraphSpacing)
-    }
-    val composeTypeface = remember(state.readerSettings.fontFamily, context) {
-        novelReaderFonts.firstOrNull { it.id == state.readerSettings.fontFamily }?.fontResId?.let { fontRes ->
-            ResourcesCompat.getFont(context, fontRes)
-        }
     }
     val textListState = rememberLazyListState(
         initialFirstVisibleItemIndex = state.lastSavedIndex
@@ -1445,21 +1456,8 @@ fun NovelReaderScreen(
                     textColor = textColor,
                     backgroundColor = textBackground,
                 )
-                val initialSelectedFontFamily = state.readerSettings.fontFamily.takeIf { it.isNotBlank() }
-                val initialFontAssetFile = novelReaderFonts
-                    .firstOrNull { it.id == state.readerSettings.fontFamily }
-                    ?.assetFileName
-                    .orEmpty()
-                val initialFontFaceCss = if (initialFontAssetFile.isNotBlank()) {
-                    """
-                    @font-face {
-                        font-family: '${state.readerSettings.fontFamily}';
-                        src: url('file:///android_asset/fonts/$initialFontAssetFile');
-                    }
-                    """.trimIndent()
-                } else {
-                    ""
-                }
+                val initialSelectedFontFamily = selectedReaderFont.id.takeIf { it.isNotBlank() }
+                val initialFontFaceCss = buildNovelReaderFontFaceCss(selectedReaderFont)
                 val initialReaderCss = buildWebReaderCssText(
                     fontFaceCss = initialFontFaceCss,
                     paddingTop = initialPaddingTop,
@@ -1653,21 +1651,8 @@ fun NovelReaderScreen(
                         val cssFirstLineIndent = resolveWebViewFirstLineIndentCss(
                             forceParagraphIndent = state.readerSettings.forceParagraphIndent,
                         )
-                        val selectedFontFamily = state.readerSettings.fontFamily.takeIf { it.isNotBlank() }
-                        val fontAssetFile = novelReaderFonts
-                            .firstOrNull { it.id == state.readerSettings.fontFamily }
-                            ?.assetFileName
-                            .orEmpty()
-                        val fontFaceCss = if (fontAssetFile.isNotBlank()) {
-                            """
-                            @font-face {
-                                font-family: '${state.readerSettings.fontFamily}';
-                                src: url('file:///android_asset/fonts/$fontAssetFile');
-                            }
-                            """.trimIndent()
-                        } else {
-                            ""
-                        }
+                        val selectedFontFamily = selectedReaderFont.id.takeIf { it.isNotBlank() }
+                        val fontFaceCss = buildNovelReaderFontFaceCss(selectedReaderFont)
                         val currentTextColorCss = colorToCssHex(textColor)
                         val currentBackgroundCss = colorToCssHex(textBackground)
                         val currentCustomCss = state.readerSettings.customCSS
@@ -1746,6 +1731,12 @@ fun NovelReaderScreen(
                                     requestUrl = requestUrl,
                                     context = webView.context,
                                     selection = backgroundSelection,
+                                )?.let { response ->
+                                    return response
+                                }
+                                resolveReaderFontWebResourceResponse(
+                                    requestUrl = requestUrl,
+                                    selectedFont = selectedReaderFont,
                                 )?.let { response ->
                                     return response
                                 }
@@ -4886,6 +4877,7 @@ internal data class ReaderBackgroundSelection(
 
 private const val READER_BACKGROUND_PRESET_URL_PREFIX = "https://reader-background.local/preset/"
 private const val READER_BACKGROUND_CUSTOM_URL = "https://reader-background.local/custom"
+private const val READER_FONT_USER_URL_PREFIX = "https://reader-font.local/user/"
 
 internal fun resolveReaderBackgroundSelection(
     backgroundSource: NovelReaderBackgroundSource,
@@ -4994,6 +4986,101 @@ private fun resolveReaderBackgroundWebResourceResponse(
             customFile.inputStream(),
         )
     }.getOrNull()
+}
+
+internal fun loadNovelReaderTypeface(
+    context: Context,
+    font: NovelReaderFontOption,
+): android.graphics.Typeface? {
+    return runCatching {
+        when (font.source) {
+            NovelReaderFontSource.BUILT_IN -> font.fontResId?.let { ResourcesCompat.getFont(context, it) }
+            NovelReaderFontSource.LOCAL_PRIVATE -> {
+                if (font.assetPath.isBlank()) {
+                    null
+                } else {
+                    android.graphics.Typeface.createFromAsset(context.assets, font.assetPath)
+                }
+            }
+            NovelReaderFontSource.USER_IMPORTED ->
+                font.filePath
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { android.graphics.Typeface.createFromFile(it) }
+        }
+    }.getOrNull()
+}
+
+internal fun resolveNovelReaderComposeFontFamily(
+    font: NovelReaderFontOption,
+    typeface: android.graphics.Typeface?,
+): FontFamily? {
+    return when (font.source) {
+        NovelReaderFontSource.BUILT_IN -> font.fontResId?.let { FontFamily(Font(it)) }
+        NovelReaderFontSource.LOCAL_PRIVATE,
+        NovelReaderFontSource.USER_IMPORTED,
+        -> typeface?.let { FontFamily(it) }
+    }
+}
+
+internal fun buildNovelReaderFontFaceCss(font: NovelReaderFontOption): String {
+    val fontFamilyName = font.id.takeIf { it.isNotBlank() } ?: return ""
+    val fontUrl = when (font.source) {
+        NovelReaderFontSource.BUILT_IN,
+        NovelReaderFontSource.LOCAL_PRIVATE,
+        -> font.assetPath.takeIf {
+            it.isNotBlank()
+        }?.let { "file:///android_asset/${encodeReaderFontUrlPath(it, preserveSlashes = true)}" }
+        NovelReaderFontSource.USER_IMPORTED ->
+            font.filePath
+                ?.takeIf { it.isNotBlank() }
+                ?.let { "$READER_FONT_USER_URL_PREFIX${encodeReaderFontUrlPath(File(it).name)}" }
+    } ?: return ""
+    return """
+        @font-face {
+            font-family: '$fontFamilyName';
+            src: url('$fontUrl');
+        }
+    """.trimIndent()
+}
+
+private fun resolveReaderFontWebResourceResponse(
+    requestUrl: String,
+    selectedFont: NovelReaderFontOption,
+): WebResourceResponse? {
+    if (!requestUrl.startsWith(READER_FONT_USER_URL_PREFIX)) return null
+    if (selectedFont.source != NovelReaderFontSource.USER_IMPORTED) return null
+    val filePath = selectedFont.filePath ?: return null
+    val fontFile = File(filePath)
+    if (!fontFile.exists() || !fontFile.isFile) return null
+    val requestedFileName = requestUrl
+        .removePrefix(READER_FONT_USER_URL_PREFIX)
+        .substringBefore('?')
+    if (encodeReaderFontUrlPath(fontFile.name) != requestedFileName) return null
+    val mimeType = when {
+        fontFile.name.endsWith(".otf", ignoreCase = true) -> "font/otf"
+        else -> "font/ttf"
+    }
+    return runCatching {
+        WebResourceResponse(
+            mimeType,
+            null,
+            fontFile.inputStream(),
+        )
+    }.getOrNull()
+}
+
+private fun encodeReaderFontUrlPath(
+    value: String,
+    preserveSlashes: Boolean = false,
+): String {
+    return if (!preserveSlashes) {
+        URLEncoder.encode(value, Charsets.UTF_8).replace("+", "%20")
+    } else {
+        value.split('/')
+            .joinToString("/") { segment ->
+                URLEncoder.encode(segment, Charsets.UTF_8).replace("+", "%20")
+            }
+    }
 }
 
 private fun String.encodeUrlParam(): String {

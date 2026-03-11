@@ -23,11 +23,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.FormatAlignLeft
 import androidx.compose.material.icons.automirrored.filled.FormatAlignRight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FormatAlignCenter
 import androidx.compose.material.icons.filled.FormatAlignJustify
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -40,6 +45,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -604,13 +610,18 @@ private fun ReadingTab(
         (settings.customThemes + novelReaderPresetThemes).distinctBy { "${it.backgroundColor}:${it.textColor}" }
     }
     val importFailedMessage = stringResource(AYMR.strings.novel_reader_background_custom_import_failed)
+    val fontImportFailedMessage = stringResource(AYMR.strings.novel_reader_font_import_failed)
     val appearanceControlState = remember(settings.appearanceMode) {
         resolveAppearanceControlState(settings.appearanceMode)
     }
     var backgroundCatalogVersion by remember { mutableIntStateOf(0) }
+    var fontCatalogVersion by remember { mutableIntStateOf(0) }
     var renameTarget by remember { mutableStateOf<NovelReaderCustomBackgroundItem?>(null) }
     var renameInput by remember { mutableStateOf("") }
     var pendingReplaceCustomId by remember { mutableStateOf<String?>(null) }
+    val readerFontCatalog = remember(fontCatalogVersion, settings.fontFamily) {
+        buildNovelReaderFontCatalog(context)
+    }
 
     val customBackgroundItems = remember(
         settings.customBackgroundId,
@@ -711,6 +722,18 @@ private fun ReadingTab(
             )
         }
         backgroundCatalogVersion += 1
+    }
+    val fontPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val importedFont = importNovelReaderCustomFont(context, uri).getOrNull()
+        if (importedFont == null) {
+            Toast.makeText(context, fontImportFailedMessage, Toast.LENGTH_SHORT).show()
+            return@rememberLauncherForActivityResult
+        }
+        update(importedFont.id, { o, v -> o.copy(fontFamily = v) }, { preferences.fontFamily().set(it) })
+        fontCatalogVersion += 1
     }
 
     Column(
@@ -875,8 +898,19 @@ private fun ReadingTab(
 
         FontExamplesRow(
             selected = settings.fontFamily,
+            fonts = readerFontCatalog,
             onSelect = { font ->
                 update(font, { o, v -> o.copy(fontFamily = v) }, { preferences.fontFamily().set(it) })
+            },
+            onImport = {
+                fontPicker.launch(arrayOf("font/*", "application/octet-stream", "*/*"))
+            },
+            onRemoveImported = { font ->
+                removeNovelReaderCustomFont(font.filePath)
+                if (settings.fontFamily == font.id) {
+                    update("", { o, v -> o.copy(fontFamily = v) }, { preferences.fontFamily().set(it) })
+                }
+                fontCatalogVersion += 1
             },
         )
 
@@ -1513,15 +1547,25 @@ private fun AlignButtonsRow(
 @Composable
 private fun FontExamplesRow(
     selected: String,
+    fonts: List<NovelReaderFontOption>,
     onSelect: (String) -> Unit,
+    onImport: () -> Unit,
+    onRemoveImported: (NovelReaderFontOption) -> Unit,
 ) {
+    val context = LocalContext.current
+    val builtInFonts = remember(fonts) { fonts.filter { it.source == NovelReaderFontSource.BUILT_IN } }
+    val localFonts = remember(fonts) { fonts.filter { it.source == NovelReaderFontSource.LOCAL_PRIVATE } }
+    val importedFonts = remember(fonts) { fonts.filter { it.source == NovelReaderFontSource.USER_IMPORTED } }
+    var localExpanded by rememberSaveable { mutableStateOf(false) }
+    var importedExpanded by rememberSaveable { mutableStateOf(false) }
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             text = stringResource(AYMR.strings.novel_reader_font_family),
             style = MaterialTheme.typography.bodyMedium,
         )
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(novelReaderFonts) { option ->
+            items(builtInFonts) { option ->
                 val fontFamily = option.fontResId?.let { FontFamily(Font(it)) }
                 val isSelected = option.id == selected
                 Surface(
@@ -1538,6 +1582,154 @@ private fun FontExamplesRow(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                         style = MaterialTheme.typography.labelLarge.copy(fontFamily = fontFamily),
                     )
+                }
+            }
+        }
+        ReaderFontSection(
+            title = stringResource(AYMR.strings.novel_reader_font_section_local),
+            count = localFonts.size,
+            expanded = localExpanded,
+            selected = selected,
+            selectedInSection = localFonts.any { it.id == selected },
+            onToggle = { localExpanded = !localExpanded },
+            emptyLabel = stringResource(AYMR.strings.novel_reader_font_section_empty_local),
+            selectedLabel = stringResource(AYMR.strings.novel_reader_font_section_selected),
+            fonts = localFonts,
+            onSelect = onSelect,
+            onRemoveImported = onRemoveImported,
+            context = context,
+        )
+        ReaderFontSection(
+            title = stringResource(AYMR.strings.novel_reader_font_section_imported),
+            count = importedFonts.size,
+            expanded = importedExpanded,
+            selected = selected,
+            selectedInSection = importedFonts.any { it.id == selected },
+            onToggle = { importedExpanded = !importedExpanded },
+            emptyLabel = stringResource(AYMR.strings.novel_reader_font_section_empty_imported),
+            selectedLabel = stringResource(AYMR.strings.novel_reader_font_section_selected),
+            actionLabel = stringResource(AYMR.strings.novel_reader_font_add),
+            onAction = onImport,
+            fonts = importedFonts,
+            onSelect = onSelect,
+            onRemoveImported = onRemoveImported,
+            context = context,
+        )
+    }
+}
+
+@Composable
+private fun ReaderFontSection(
+    title: String,
+    count: Int,
+    expanded: Boolean,
+    selected: String,
+    selectedInSection: Boolean,
+    onToggle: () -> Unit,
+    emptyLabel: String,
+    selectedLabel: String,
+    fonts: List<NovelReaderFontOption>,
+    onSelect: (String) -> Unit,
+    onRemoveImported: (NovelReaderFontOption) -> Unit,
+    context: android.content.Context,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.clickable(onClick = onToggle),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        imageVector = if (expanded) {
+                            Icons.Filled.KeyboardArrowDown
+                        } else {
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight
+                        },
+                        contentDescription = null,
+                    )
+                    Text(
+                        text = buildString {
+                            append(title)
+                            append(" (")
+                            append(count)
+                            append(')')
+                            if (selectedInSection) {
+                                append(" • ")
+                                append(selectedLabel)
+                            }
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            }
+            if (actionLabel != null && onAction != null) {
+                TextButton(onClick = onAction) {
+                    Icon(Icons.Filled.Add, contentDescription = null)
+                    Text(text = actionLabel)
+                }
+            }
+        }
+        if (expanded) {
+            if (fonts.isEmpty()) {
+                Text(
+                    text = emptyLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    fonts.forEach { option ->
+                        val typeface = remember(option.id) { loadNovelReaderTypeface(context, option) }
+                        val fontFamily = remember(option.id, typeface) {
+                            resolveNovelReaderComposeFontFamily(option, typeface)
+                        }
+                        val isSelected = option.id == selected
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (isSelected) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            },
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onSelect(option.id) }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = option.label,
+                                    style = MaterialTheme.typography.labelLarge.copy(fontFamily = fontFamily),
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (option.source == NovelReaderFontSource.USER_IMPORTED) {
+                                    IconButton(onClick = { onRemoveImported(option) }) {
+                                        Icon(
+                                            imageVector = Icons.Filled.DeleteOutline,
+                                            contentDescription = stringResource(AYMR.strings.novel_reader_font_remove),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

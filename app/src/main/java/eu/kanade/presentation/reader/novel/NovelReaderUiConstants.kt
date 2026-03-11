@@ -6,9 +6,18 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 data class NovelReaderFontOption(
     val id: String,
     val label: String,
-    val assetFileName: String,
+    val assetFileName: String = "",
+    val assetPath: String = "",
     val fontResId: Int? = null,
+    val source: NovelReaderFontSource = NovelReaderFontSource.BUILT_IN,
+    val filePath: String? = null,
 )
+
+enum class NovelReaderFontSource {
+    BUILT_IN,
+    LOCAL_PRIVATE,
+    USER_IMPORTED,
+}
 
 data class NovelReaderBackgroundPreset(
     val id: String,
@@ -102,65 +111,78 @@ val novelReaderPresetThemes: List<NovelReaderColorTheme> = listOf(
     NovelReaderColorTheme(backgroundColor = "#000000", textColor = "#FFFFFFB3"),
 )
 
-val novelReaderFonts: List<NovelReaderFontOption> = listOf(
+val novelReaderBuiltInFonts: List<NovelReaderFontOption> = listOf(
     NovelReaderFontOption(
         id = "",
         label = "Original",
         assetFileName = "",
+        assetPath = "",
         fontResId = null,
     ),
     NovelReaderFontOption(
         id = "lora",
         label = "Lora",
         assetFileName = "lora.ttf",
+        assetPath = "fonts/lora.ttf",
         fontResId = R.font.lora,
     ),
     NovelReaderFontOption(
         id = "nunito",
         label = "Nunito",
         assetFileName = "nunito.ttf",
+        assetPath = "fonts/nunito.ttf",
         fontResId = R.font.nunito,
     ),
     NovelReaderFontOption(
         id = "noto-sans",
         label = "Noto Sans",
         assetFileName = "noto-sans.ttf",
+        assetPath = "fonts/noto-sans.ttf",
         fontResId = R.font.noto_sans,
     ),
     NovelReaderFontOption(
         id = "open-sans",
         label = "Open Sans",
         assetFileName = "open-sans.ttf",
+        assetPath = "fonts/open-sans.ttf",
         fontResId = R.font.open_sans,
     ),
     NovelReaderFontOption(
         id = "arbutus-slab",
         label = "Arbutus Slab",
         assetFileName = "arbutus-slab.ttf",
+        assetPath = "fonts/arbutus-slab.ttf",
         fontResId = R.font.arbutus_slab,
     ),
     NovelReaderFontOption(
         id = "domine",
         label = "Domine",
         assetFileName = "domine.ttf",
+        assetPath = "fonts/domine.ttf",
         fontResId = R.font.domine,
     ),
     NovelReaderFontOption(
         id = "lato",
         label = "Lato",
         assetFileName = "lato.ttf",
+        assetPath = "fonts/lato.ttf",
         fontResId = R.font.lato,
     ),
     NovelReaderFontOption(
         id = "pt-serif",
         label = "PT Serif",
         assetFileName = "pt-serif.ttf",
+        assetPath = "fonts/pt-serif.ttf",
         fontResId = R.font.pt_serif,
     ),
     NovelReaderFontOption(
         id = "OpenDyslexic3-Regular",
         label = "OpenDyslexic",
         assetFileName = "OpenDyslexic3-Regular.ttf",
+        assetPath = "fonts/OpenDyslexic3-Regular.ttf",
         fontResId = R.font.open_dyslexic3_regular,
     ),
 )
+
+val novelReaderFonts: List<NovelReaderFontOption>
+    get() = novelReaderBuiltInFonts

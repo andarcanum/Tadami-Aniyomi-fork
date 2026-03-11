@@ -1389,6 +1389,36 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `custom imported font css uses local reader font url`() {
+        val css = buildNovelReaderFontFaceCss(
+            NovelReaderFontOption(
+                id = "user:My Font.ttf",
+                label = "My Font",
+                source = NovelReaderFontSource.USER_IMPORTED,
+                filePath = "/tmp/My Font.ttf",
+            ),
+        )
+
+        assertTrue(css.contains("font-family: 'user:My Font.ttf';"))
+        assertTrue(css.contains("https://reader-font.local/user/My%20Font.ttf"))
+    }
+
+    @Test
+    fun `local asset font css uses android asset path`() {
+        val css = buildNovelReaderFontFaceCss(
+            NovelReaderFontOption(
+                id = "local:VeronaGothic.ttf",
+                label = "Verona Gothic",
+                assetFileName = "VeronaGothic.ttf",
+                assetPath = "local/fonts/VeronaGothic.ttf",
+                source = NovelReaderFontSource.LOCAL_PRIVATE,
+            ),
+        )
+
+        assertTrue(css.contains("file:///android_asset/local/fonts/VeronaGothic.ttf"))
+    }
+
+    @Test
     fun `webview css uses explicit image layer in background mode`() {
         val css = buildWebReaderCssText(
             fontFaceCss = "",
