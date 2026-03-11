@@ -1,6 +1,9 @@
 package eu.kanade.presentation.reader.novel
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -12,15 +15,274 @@ import eu.kanade.tachiyomi.ui.reader.novel.NovelRichBlockTextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichTextSegment
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichTextStyle
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderParagraphSpacing
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import kotlin.math.abs
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
 
 class NovelReaderUiVisibilityTest {
+
+    @Test
+    fun `background preset catalog exposes five unique built-ins`() {
+        assertTrue(novelReaderBackgroundPresets.size == 5)
+        assertTrue(novelReaderBackgroundPresets.map { it.id }.toSet().size == 5)
+    }
+
+    @Test
+    fun `background mode resolves dark text on bright backgrounds`() {
+        val textColor = resolveReaderTextColorForBackgroundMode(averageLuminance = 0.82f)
+        assertTrue(textColor.luminance() < 0.5f)
+    }
+
+    @Test
+    fun `background mode resolves light text on dark backgrounds`() {
+        val textColor = resolveReaderTextColorForBackgroundMode(averageLuminance = 0.18f)
+        assertTrue(textColor.luminance() > 0.5f)
+    }
+
+    @Test
+    fun `background mode falls back to preset when custom file is missing`() {
+        val selection = resolveReaderBackgroundSelection(
+            backgroundSource = NovelReaderBackgroundSource.CUSTOM,
+            backgroundPresetId = NOVEL_READER_BACKGROUND_PRESET_NIGHT_VELVET_ID,
+            customBackgroundPath = "D:/missing/custom.jpg",
+            customBackgroundExists = false,
+            customBackgroundId = "",
+            customBackgroundItems = emptyList(),
+        )
+
+        assertTrue(selection.source == NovelReaderBackgroundSource.PRESET)
+        assertTrue(selection.customPath == null)
+        assertTrue(selection.preset.id == NOVEL_READER_BACKGROUND_PRESET_NIGHT_VELVET_ID)
+    }
+
+    @Test
+    fun `background mode resolves selected custom background by id`() {
+        val selection = resolveReaderBackgroundSelection(
+            backgroundSource = NovelReaderBackgroundSource.CUSTOM,
+            backgroundPresetId = NOVEL_READER_BACKGROUND_PRESET_LINEN_PAPER_ID,
+            customBackgroundPath = "",
+            customBackgroundExists = false,
+            customBackgroundId = "custom-2",
+            customBackgroundItems = listOf(
+                NovelReaderCustomBackgroundItem(
+                    id = "custom-1",
+                    displayName = "Custom One",
+                    fileName = "custom-1.jpg",
+                    absolutePath = "D:/reader/custom-1.jpg",
+                    isDarkHint = false,
+                    createdAt = 1L,
+                    updatedAt = 1L,
+                ),
+                NovelReaderCustomBackgroundItem(
+                    id = "custom-2",
+                    displayName = "Custom Two",
+                    fileName = "custom-2.jpg",
+                    absolutePath = "D:/reader/custom-2.jpg",
+                    isDarkHint = true,
+                    createdAt = 2L,
+                    updatedAt = 2L,
+                ),
+            ),
+        )
+
+        assertTrue(selection.source == NovelReaderBackgroundSource.CUSTOM)
+        assertTrue(selection.customId == "custom-2")
+        assertTrue(selection.customPath == "D:/reader/custom-2.jpg")
+    }
+
+    @Test
+    fun `custom background web identity uses selected custom id`() {
+        val selection = ReaderBackgroundSelection(
+            source = NovelReaderBackgroundSource.CUSTOM,
+            preset = novelReaderBackgroundPresets.first(),
+            customId = "custom-2",
+            customPath = "D:/reader/custom-2.jpg",
+            customIsDarkHint = true,
+        )
+
+        val imageUrl = resolveReaderBackgroundWebImageUrl(selection)
+        val identity = resolveReaderBackgroundIdentity(selection)
+
+        assertTrue(imageUrl.contains("id=custom-2"))
+        assertTrue(identity == "custom:custom-2")
+    }
+
+    @Test
+    fun `unified background cards include presets and custom items`() {
+        val customItems = listOf(
+            ReaderBackgroundCatalogItem(
+                id = "custom-1",
+                displayName = "Custom One",
+                fileName = "custom-1.jpg",
+                createdAt = 1L,
+                updatedAt = 1L,
+                isDarkHint = false,
+            ),
+            ReaderBackgroundCatalogItem(
+                id = "custom-2",
+                displayName = "Custom Two",
+                fileName = "custom-2.jpg",
+                createdAt = 2L,
+                updatedAt = 2L,
+                isDarkHint = true,
+            ),
+        )
+
+        val cards = buildNovelReaderBackgroundCards(customItems = customItems)
+
+        assertTrue(cards.size == 7)
+        assertTrue(cards.take(5).all { it.isBuiltIn })
+        assertTrue(cards.drop(5).all { !it.isBuiltIn })
+        assertTrue(cards.drop(5).map { it.id } == listOf("custom-1", "custom-2"))
+    }
+
+    @Test
+    fun `web atmosphere css keeps parchment and oled stop thresholds`() {
+        val css = buildWebReaderAtmosphereCss(
+            appearanceMode = NovelReaderAppearanceMode.THEME,
+            backgroundTexture = NovelReaderBackgroundTexture.PARCHMENT,
+            oledEdgeGradient = true,
+            backgroundImageUrl = null,
+        )
+
+        assertTrue(css.contains("radial-gradient(circle at 20% 20%, rgba(255,255,255,0.14), transparent 45%)"))
+        assertTrue(css.contains("radial-gradient(circle at 80% 75%, rgba(0,0,0,0.12), transparent 42%)"))
+        assertTrue(css.contains("radial-gradient(circle at center, rgba(0,0,0,0.0) 38%, rgba(0,0,0,0.36) 100%)"))
+    }
+
+    @Test
+    fun `native atmosphere specs use css matching color stops`() {
+        val layers = buildReaderAtmosphereRadialLayers(
+            backgroundTexture = NovelReaderBackgroundTexture.PARCHMENT,
+            oledEdgeGradient = true,
+            isDarkTheme = true,
+            intensityFactor = 1f,
+        )
+
+        assertTrue(layers.size == 3)
+        assertTrue(
+            layers.any {
+                it.colorStops ==
+                    listOf(0f to Color.Transparent, 0.38f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.36f))
+            },
+        )
+        assertTrue(
+            layers.any {
+                it.colorStops ==
+                    listOf(0f to Color.White.copy(alpha = 0.14f), 0.45f to Color.Transparent, 1f to Color.Transparent)
+            },
+        )
+        assertTrue(
+            layers.any {
+                it.colorStops ==
+                    listOf(0f to Color.Black.copy(alpha = 0.12f), 0.42f to Color.Transparent, 1f to Color.Transparent)
+            },
+        )
+    }
+
+    @Test
+    fun `native atmosphere keeps oled vignette disabled on light theme`() {
+        val layers = buildReaderAtmosphereRadialLayers(
+            backgroundTexture = NovelReaderBackgroundTexture.NONE,
+            oledEdgeGradient = true,
+            isDarkTheme = false,
+            intensityFactor = 1f,
+        )
+
+        assertTrue(layers.isEmpty())
+    }
+
+    @Test
+    fun `native atmosphere layer order matches css stacking`() {
+        val layers = buildReaderAtmosphereRadialLayers(
+            backgroundTexture = NovelReaderBackgroundTexture.PARCHMENT,
+            oledEdgeGradient = true,
+            isDarkTheme = true,
+            intensityFactor = 1f,
+        )
+
+        assertTrue(layers.size == 3)
+        assertTrue(
+            layers[0].colorStops ==
+                listOf(0f to Color.Black.copy(alpha = 0.12f), 0.42f to Color.Transparent, 1f to Color.Transparent),
+        )
+        assertTrue(
+            layers[1].colorStops ==
+                listOf(0f to Color.White.copy(alpha = 0.14f), 0.45f to Color.Transparent, 1f to Color.Transparent),
+        )
+        assertTrue(
+            layers[2].colorStops ==
+                listOf(0f to Color.Transparent, 0.38f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.36f)),
+        )
+    }
+
+    @Test
+    fun `farthest corner radius matches geometric expectation`() {
+        val centered = calculateRadialGradientFarthestCornerRadius(
+            size = Size(100f, 50f),
+            center = Offset(50f, 25f),
+        )
+        val offset = calculateRadialGradientFarthestCornerRadius(
+            size = Size(100f, 50f),
+            center = Offset(20f, 10f),
+        )
+
+        assertTrue(abs(centered - 55.9017f) < 0.001f)
+        assertTrue(abs(offset - 89.44272f) < 0.001f)
+    }
+
+    @Test
+    fun `native texture strength maps baseline at fifty percent`() {
+        assertTrue(resolveNativeTextureIntensityFactor(50) == 1f)
+    }
+
+    @Test
+    fun `native texture strength clamps out of range and scales monotonically`() {
+        val zero = resolveNativeTextureIntensityFactor(0)
+        val fifty = resolveNativeTextureIntensityFactor(50)
+        val hundred = resolveNativeTextureIntensityFactor(100)
+        val twoHundred = resolveNativeTextureIntensityFactor(200)
+        val clampedLow = resolveNativeTextureIntensityFactor(-999)
+        val clampedHigh = resolveNativeTextureIntensityFactor(999)
+
+        assertTrue(zero == 0f)
+        assertTrue(fifty == 1f)
+        assertTrue(hundred > fifty)
+        assertTrue(twoHundred > hundred)
+        assertTrue(clampedLow == zero)
+        assertTrue(clampedHigh == twoHundred)
+    }
+
+    @Test
+    fun `native texture strength increases parchment alpha contribution`() {
+        val base = buildReaderAtmosphereRadialLayers(
+            backgroundTexture = NovelReaderBackgroundTexture.PARCHMENT,
+            oledEdgeGradient = false,
+            isDarkTheme = true,
+            intensityFactor = resolveNativeTextureIntensityFactor(50),
+        )
+        val boosted = buildReaderAtmosphereRadialLayers(
+            backgroundTexture = NovelReaderBackgroundTexture.PARCHMENT,
+            oledEdgeGradient = false,
+            isDarkTheme = true,
+            intensityFactor = resolveNativeTextureIntensityFactor(120),
+        )
+
+        val baseDarkAlpha = base[0].colorStops.first().second.alpha
+        val boostedDarkAlpha = boosted[0].colorStops.first().second.alpha
+        val baseLightAlpha = base[1].colorStops.first().second.alpha
+        val boostedLightAlpha = boosted[1].colorStops.first().second.alpha
+
+        assertTrue(boostedDarkAlpha > baseDarkAlpha)
+        assertTrue(boostedLightAlpha > baseLightAlpha)
+    }
 
     @Test
     fun `bottom overlay hidden when reader ui hidden`() {
@@ -1017,16 +1279,237 @@ class NovelReaderUiVisibilityTest {
             firstLineIndentCss = "2em",
             textColorHex = "#111111",
             backgroundHex = "#FFFFFF",
+            appearanceMode = NovelReaderAppearanceMode.THEME,
             backgroundTexture = NovelReaderBackgroundTexture.PAPER_GRAIN,
             oledEdgeGradient = false,
+            backgroundImageUrl = null,
             fontFamilyName = null,
             customCss = "",
+            textShadowCss = null,
         )
 
         assertTrue(css.contains("--an-reader-align: justify;"))
         assertTrue(css.contains("--an-reader-first-line-indent: 2em;"))
         assertTrue(css.contains("text-align: var(--an-reader-align) !important;"))
         assertTrue(css.contains("text-indent: var(--an-reader-first-line-indent) !important;"))
+    }
+
+    @Test
+    fun `auto shadow color uses light shadow on dark background`() {
+        val shadow = resolveAutoReaderShadowColor(
+            customShadowColor = null,
+            textColor = Color(0xFFEDEDED),
+            backgroundColor = Color(0xFF121212),
+        )
+
+        assertTrue(shadow.luminance() > 0.5f)
+    }
+
+    @Test
+    fun `auto shadow color uses dark shadow on light background`() {
+        val shadow = resolveAutoReaderShadowColor(
+            customShadowColor = null,
+            textColor = Color(0xFF1A1A1A),
+            backgroundColor = Color(0xFFFFFFFF),
+        )
+
+        assertTrue(shadow.luminance() < 0.5f)
+    }
+
+    @Test
+    fun `webview css includes text-shadow when enabled`() {
+        val textShadowCss = resolveWebReaderTextShadowCss(
+            textShadowEnabled = true,
+            textShadowColor = "",
+            textShadowBlur = 4f,
+            textShadowX = 0f,
+            textShadowY = 1f,
+            textColor = Color(0xFFEDEDED),
+            backgroundColor = Color(0xFF121212),
+        )
+        val css = buildWebReaderCssText(
+            fontFaceCss = "",
+            paddingTop = 0,
+            paddingBottom = 0,
+            paddingHorizontal = 16,
+            fontSizePx = 16,
+            lineHeightMultiplier = 1.6f,
+            textAlignCss = null,
+            firstLineIndentCss = null,
+            textColorHex = "#EDEDED",
+            backgroundHex = "#121212",
+            appearanceMode = NovelReaderAppearanceMode.THEME,
+            backgroundTexture = NovelReaderBackgroundTexture.NONE,
+            oledEdgeGradient = false,
+            backgroundImageUrl = null,
+            fontFamilyName = null,
+            customCss = "",
+            textShadowCss = textShadowCss,
+        )
+
+        assertTrue(textShadowCss != null)
+        assertTrue(css.contains("--an-reader-text-shadow:"))
+        assertTrue(css.contains("text-shadow: var(--an-reader-text-shadow) !important;"))
+    }
+
+    @Test
+    fun `webview css omits text-shadow when disabled`() {
+        val textShadowCss = resolveWebReaderTextShadowCss(
+            textShadowEnabled = false,
+            textShadowColor = "",
+            textShadowBlur = 4f,
+            textShadowX = 0f,
+            textShadowY = 1f,
+            textColor = Color(0xFFEDEDED),
+            backgroundColor = Color(0xFF121212),
+        )
+        val css = buildWebReaderCssText(
+            fontFaceCss = "",
+            paddingTop = 0,
+            paddingBottom = 0,
+            paddingHorizontal = 16,
+            fontSizePx = 16,
+            lineHeightMultiplier = 1.6f,
+            textAlignCss = null,
+            firstLineIndentCss = null,
+            textColorHex = "#EDEDED",
+            backgroundHex = "#121212",
+            appearanceMode = NovelReaderAppearanceMode.THEME,
+            backgroundTexture = NovelReaderBackgroundTexture.NONE,
+            oledEdgeGradient = false,
+            backgroundImageUrl = null,
+            fontFamilyName = null,
+            customCss = "",
+            textShadowCss = textShadowCss,
+        )
+
+        assertTrue(textShadowCss == null)
+        assertFalse(css.contains("--an-reader-text-shadow:"))
+        assertFalse(css.contains("text-shadow: var(--an-reader-text-shadow) !important;"))
+    }
+
+    @Test
+    fun `custom imported font css uses local reader font url`() {
+        val css = buildNovelReaderFontFaceCss(
+            NovelReaderFontOption(
+                id = "user:My Font.ttf",
+                label = "My Font",
+                source = NovelReaderFontSource.USER_IMPORTED,
+                filePath = "/tmp/My Font.ttf",
+            ),
+        )
+
+        assertTrue(css.contains("font-family: 'user:My Font.ttf';"))
+        assertTrue(css.contains("https://reader-font.local/user/My%20Font.ttf"))
+    }
+
+    @Test
+    fun `local asset font css uses android asset path`() {
+        val css = buildNovelReaderFontFaceCss(
+            NovelReaderFontOption(
+                id = "local:VeronaGothic.ttf",
+                label = "Verona Gothic",
+                assetFileName = "VeronaGothic.ttf",
+                assetPath = "local/fonts/VeronaGothic.ttf",
+                source = NovelReaderFontSource.LOCAL_PRIVATE,
+            ),
+        )
+
+        assertTrue(css.contains("file:///android_asset/local/fonts/VeronaGothic.ttf"))
+    }
+
+    @Test
+    fun `webview css uses explicit image layer in background mode`() {
+        val css = buildWebReaderCssText(
+            fontFaceCss = "",
+            paddingTop = 0,
+            paddingBottom = 0,
+            paddingHorizontal = 16,
+            fontSizePx = 16,
+            lineHeightMultiplier = 1.6f,
+            textAlignCss = null,
+            firstLineIndentCss = null,
+            textColorHex = "#EDEDED",
+            backgroundHex = "#121212",
+            appearanceMode = NovelReaderAppearanceMode.BACKGROUND,
+            backgroundTexture = NovelReaderBackgroundTexture.PAPER_GRAIN,
+            oledEdgeGradient = true,
+            backgroundImageUrl = "https://reader-background.local/preset/night_velvet",
+            fontFamilyName = null,
+            customCss = "",
+            textShadowCss = null,
+        )
+
+        assertTrue(css.contains("url('https://reader-background.local/preset/night_velvet')"))
+        assertFalse(css.contains("texture_paper.webp"))
+    }
+
+    @Test
+    fun `webview css fingerprint changes when background identity changes`() {
+        val first = buildWebReaderCssFingerprint(
+            chapterId = 1L,
+            paddingTop = 0,
+            paddingBottom = 0,
+            paddingHorizontal = 16,
+            fontSizePx = 16,
+            lineHeightMultiplier = 1.6f,
+            textAlignCss = null,
+            firstLineIndentCss = null,
+            textColorHex = "#111111",
+            backgroundHex = "#FFFFFF",
+            appearanceMode = NovelReaderAppearanceMode.BACKGROUND,
+            backgroundTexture = NovelReaderBackgroundTexture.NONE,
+            oledEdgeGradient = false,
+            backgroundImageIdentity = "preset:linen_paper",
+            fontFamilyName = null,
+            customCss = "",
+            textShadowCss = null,
+        )
+        val second = buildWebReaderCssFingerprint(
+            chapterId = 1L,
+            paddingTop = 0,
+            paddingBottom = 0,
+            paddingHorizontal = 16,
+            fontSizePx = 16,
+            lineHeightMultiplier = 1.6f,
+            textAlignCss = null,
+            firstLineIndentCss = null,
+            textColorHex = "#111111",
+            backgroundHex = "#FFFFFF",
+            appearanceMode = NovelReaderAppearanceMode.BACKGROUND,
+            backgroundTexture = NovelReaderBackgroundTexture.NONE,
+            oledEdgeGradient = false,
+            backgroundImageIdentity = "preset:night_velvet",
+            fontFamilyName = null,
+            customCss = "",
+            textShadowCss = null,
+        )
+
+        assertNotEquals(first, second)
+    }
+
+    @Test
+    fun `page edge shadow color is not pure black on dark background`() {
+        val color = resolvePageEdgeShadowColor(
+            pageEdgeShadowAlpha = 0.25f,
+            backgroundColor = Color(0xFF121212),
+        )
+
+        assertTrue(color.luminance() > 0f)
+    }
+
+    @Test
+    fun `reader color parser supports android argb format`() {
+        val parsed = parseReaderColorForTest("#66000000")
+        assertTrue(parsed != null)
+        assertTrue(parsed!!.alpha > 0f)
+    }
+
+    @Test
+    fun `reader color parser supports css rgba format`() {
+        val parsed = parseReaderColorForTest("#00000066")
+        assertTrue(parsed != null)
+        assertTrue(parsed!!.alpha > 0f)
     }
 
     @Test

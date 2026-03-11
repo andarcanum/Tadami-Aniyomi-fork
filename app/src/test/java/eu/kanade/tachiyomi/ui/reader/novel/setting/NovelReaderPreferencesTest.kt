@@ -34,6 +34,12 @@ class NovelReaderPreferencesTest {
         prefs.showTimeToEnd().get() shouldBe true
         prefs.showWordCount().get() shouldBe true
         prefs.backgroundTexture().get() shouldBe NovelReaderBackgroundTexture.PAPER_GRAIN
+        prefs.nativeTextureStrengthPercent().get() shouldBe 50
+        prefs.appearanceMode().get() shouldBe NovelReaderAppearanceMode.THEME
+        prefs.backgroundSource().get() shouldBe NovelReaderBackgroundSource.PRESET
+        prefs.backgroundPresetId().get() shouldBe "linen_paper"
+        prefs.customBackgroundPath().get() shouldBe ""
+        prefs.customBackgroundId().get() shouldBe ""
         prefs.oledEdgeGradient().get() shouldBe false
         prefs.verticalSeekbar().get() shouldBe true
         prefs.swipeToNextChapter().get() shouldBe false
@@ -82,6 +88,12 @@ class NovelReaderPreferencesTest {
         prefs.showTimeToEnd().set(false)
         prefs.showWordCount().set(false)
         prefs.backgroundTexture().set(NovelReaderBackgroundTexture.PARCHMENT)
+        prefs.nativeTextureStrengthPercent().set(120)
+        prefs.appearanceMode().set(NovelReaderAppearanceMode.BACKGROUND)
+        prefs.backgroundSource().set(NovelReaderBackgroundSource.CUSTOM)
+        prefs.backgroundPresetId().set("night_velvet")
+        prefs.customBackgroundPath().set("/data/user/0/test/custom.jpg")
+        prefs.customBackgroundId().set("custom-1")
         prefs.oledEdgeGradient().set(false)
         prefs.preferWebViewRenderer().set(false)
         prefs.richNativeRendererExperimental().set(true)
@@ -140,6 +152,12 @@ class NovelReaderPreferencesTest {
         override?.showTimeToEnd shouldBe false
         override?.showWordCount shouldBe false
         override?.backgroundTexture shouldBe NovelReaderBackgroundTexture.PARCHMENT
+        override?.nativeTextureStrengthPercent shouldBe 120
+        override?.appearanceMode shouldBe NovelReaderAppearanceMode.BACKGROUND
+        override?.backgroundSource shouldBe NovelReaderBackgroundSource.CUSTOM
+        override?.backgroundPresetId shouldBe "night_velvet"
+        override?.customBackgroundPath shouldBe "/data/user/0/test/custom.jpg"
+        override?.customBackgroundId shouldBe "custom-1"
         override?.oledEdgeGradient shouldBe false
         override?.preferWebViewRenderer shouldBe false
         override?.richNativeRendererExperimental shouldBe true
@@ -199,6 +217,12 @@ class NovelReaderPreferencesTest {
         prefs.showTimeToEnd().set(true)
         prefs.showWordCount().set(true)
         prefs.backgroundTexture().set(NovelReaderBackgroundTexture.PAPER_GRAIN)
+        prefs.nativeTextureStrengthPercent().set(40)
+        prefs.appearanceMode().set(NovelReaderAppearanceMode.THEME)
+        prefs.backgroundSource().set(NovelReaderBackgroundSource.PRESET)
+        prefs.backgroundPresetId().set("linen_paper")
+        prefs.customBackgroundPath().set("")
+        prefs.customBackgroundId().set("")
         prefs.oledEdgeGradient().set(true)
         prefs.preferWebViewRenderer().set(true)
         prefs.richNativeRendererExperimental().set(false)
@@ -257,6 +281,12 @@ class NovelReaderPreferencesTest {
                 showTimeToEnd = false,
                 showWordCount = false,
                 backgroundTexture = NovelReaderBackgroundTexture.LINEN,
+                nativeTextureStrengthPercent = 135,
+                appearanceMode = NovelReaderAppearanceMode.BACKGROUND,
+                backgroundSource = NovelReaderBackgroundSource.CUSTOM,
+                backgroundPresetId = "dark_wood",
+                customBackgroundPath = "/data/user/0/test/override.jpg",
+                customBackgroundId = "custom-override-1",
                 oledEdgeGradient = false,
                 preferWebViewRenderer = false,
                 richNativeRendererExperimental = true,
@@ -314,6 +344,12 @@ class NovelReaderPreferencesTest {
         settings.showTimeToEnd shouldBe false
         settings.showWordCount shouldBe false
         settings.backgroundTexture shouldBe NovelReaderBackgroundTexture.LINEN
+        settings.nativeTextureStrengthPercent shouldBe 135
+        settings.appearanceMode shouldBe NovelReaderAppearanceMode.BACKGROUND
+        settings.backgroundSource shouldBe NovelReaderBackgroundSource.CUSTOM
+        settings.backgroundPresetId shouldBe "dark_wood"
+        settings.customBackgroundPath shouldBe "/data/user/0/test/override.jpg"
+        settings.customBackgroundId shouldBe "custom-override-1"
         settings.oledEdgeGradient shouldBe false
         settings.preferWebViewRenderer shouldBe false
         settings.richNativeRendererExperimental shouldBe true
@@ -360,6 +396,18 @@ class NovelReaderPreferencesTest {
         settings.customThemes shouldBe listOf(
             NovelReaderColorTheme(backgroundColor = "#000000", textColor = "#ffffff"),
         )
+    }
+
+    @Test
+    fun `legacy custom background path migrates to custom background id`() {
+        val prefs = createPrefs()
+        val legacyPath = "/data/user/0/test/legacy_custom.jpg"
+        prefs.customBackgroundPath().set(legacyPath)
+        prefs.customBackgroundId().set("")
+
+        prefs.migrateLegacyBackgroundSelectionIfNeeded()
+
+        prefs.customBackgroundId().get() shouldBe legacyPath
     }
 
     private class FakePreferenceStore : PreferenceStore {

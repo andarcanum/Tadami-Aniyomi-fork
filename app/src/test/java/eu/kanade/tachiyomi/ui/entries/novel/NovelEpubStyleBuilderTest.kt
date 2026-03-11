@@ -1,5 +1,7 @@
 package eu.kanade.tachiyomi.ui.entries.novel
 
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderParagraphSpacing
@@ -101,6 +103,15 @@ class NovelEpubStyleBuilderTest {
         margin: Int = 20,
         textAlign: TextAlign = TextAlign.JUSTIFY,
         fontFamily: String = "",
+        forceBoldText: Boolean = false,
+        forceItalicText: Boolean = false,
+        textShadow: Boolean = false,
+        textShadowColor: String = "",
+        textShadowBlur: Float = 4f,
+        textShadowX: Float = 0f,
+        textShadowY: Float = 0f,
+        pageEdgeShadow: Boolean = false,
+        pageEdgeShadowAlpha: Float = 0.25f,
         theme: NovelReaderTheme = NovelReaderTheme.DARK,
         backgroundColor: String = "#101010",
         textColor: String = "#EFEFEF",
@@ -116,10 +127,24 @@ class NovelEpubStyleBuilderTest {
             forceParagraphIndent = false,
             preserveSourceTextAlignInNative = true,
             fontFamily = fontFamily,
+            forceBoldText = forceBoldText,
+            forceItalicText = forceItalicText,
+            textShadow = textShadow,
+            textShadowColor = textShadowColor,
+            textShadowBlur = textShadowBlur,
+            textShadowX = textShadowX,
+            textShadowY = textShadowY,
+            pageEdgeShadow = pageEdgeShadow,
+            pageEdgeShadowAlpha = pageEdgeShadowAlpha,
             theme = theme,
             backgroundColor = backgroundColor,
             textColor = textColor,
             backgroundTexture = NovelReaderBackgroundTexture.PAPER_GRAIN,
+            nativeTextureStrengthPercent = 50,
+            appearanceMode = NovelReaderAppearanceMode.THEME,
+            backgroundSource = NovelReaderBackgroundSource.PRESET,
+            backgroundPresetId = "linen_paper",
+            customBackgroundPath = "",
             oledEdgeGradient = true,
             customThemes = listOf(
                 NovelReaderColorTheme(backgroundColor = "#101010", textColor = "#EFEFEF"),

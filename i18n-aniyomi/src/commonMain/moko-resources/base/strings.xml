@@ -408,7 +408,19 @@
     <string name="novel_reader_theme_system">System</string>
     <string name="novel_reader_theme_light">Light</string>
     <string name="novel_reader_theme_dark">Dark</string>
+    <string name="novel_reader_appearance_mode">Appearance mode</string>
+    <string name="novel_reader_appearance_mode_theme">Theme mode</string>
+    <string name="novel_reader_appearance_mode_background">Background mode</string>
+    <string name="novel_reader_theme_controls_disabled_summary">Theme controls are available only in Theme mode</string>
+    <string name="novel_reader_background_controls_disabled_summary">Background controls are available only in Background mode</string>
     <string name="novel_reader_font_family">Font family</string>
+    <string name="novel_reader_font_section_local">Local</string>
+    <string name="novel_reader_font_section_imported">My fonts</string>
+    <string name="novel_reader_font_section_selected">Selected</string>
+    <string name="novel_reader_font_section_empty_local">No local fonts found</string>
+    <string name="novel_reader_font_section_empty_imported">No imported fonts yet</string>
+    <string name="novel_reader_font_add">Add font</string>
+    <string name="novel_reader_font_remove">Remove font</string>
     <string name="novel_reader_theme_presets">Theme presets</string>
     <string name="novel_reader_theme_preset_none">None</string>
     <string name="novel_reader_background_color">Background color</string>
@@ -437,6 +449,20 @@
     <string name="novel_reader_text_align_right">Right</string>
     <string name="novel_reader_force_paragraph_indent">Force first-line indent for paragraphs</string>
     <string name="novel_reader_force_paragraph_indent_summary">Apply a fixed first-line indent to each paragraph in reader mode</string>
+    <string name="novel_reader_force_bold_text">Bold text</string>
+    <string name="novel_reader_force_bold_text_summary">Force all text to be displayed in bold font weight</string>
+    <string name="novel_reader_force_italic_text">Italic text</string>
+    <string name="novel_reader_force_italic_text_summary">Force all text to be displayed in italic font style</string>
+    <string name="novel_reader_text_shadow">Text shadow</string>
+    <string name="novel_reader_text_shadow_summary">Apply a drop shadow to the text for better contrast</string>
+    <string name="novel_reader_text_shadow_color">Text shadow color</string>
+    <string name="novel_reader_text_shadow_color_summary">Custom shadow color (empty = auto). 8-digit: #AARRGGBB or #RRGGBBAA.</string>
+    <string name="novel_reader_text_shadow_blur">Shadow blur radius</string>
+    <string name="novel_reader_text_shadow_x">Shadow X offset</string>
+    <string name="novel_reader_text_shadow_y">Shadow Y offset</string>
+    <string name="novel_reader_page_edge_shadow">Page edge shadow</string>
+    <string name="novel_reader_page_edge_shadow_summary">Draw dark gradients on the side edges for a book feel</string>
+    <string name="novel_reader_page_edge_shadow_alpha">Edge shadow intensity</string>
     <string name="novel_reader_preserve_source_text_align_native">Preserve source text alignment in native reader</string>
     <string name="novel_reader_preserve_source_text_align_native_summary">Do not force the global text alignment in native mode; keep source alignment where supported</string>
 
@@ -492,6 +518,27 @@
     <string name="novel_reader_background_texture_paper_grain">Paper grain</string>
     <string name="novel_reader_background_texture_linen">Linen</string>
     <string name="novel_reader_background_texture_parchment">Parchment</string>
+    <string name="novel_reader_background_presets">Background presets</string>
+    <string name="novel_reader_background_upload">Upload custom background</string>
+    <string name="novel_reader_background_remove_custom">Remove custom background</string>
+    <string name="novel_reader_background_upload_hint">For readability, prefer images without decorative frames.</string>
+    <string name="novel_reader_background_custom_import_failed">Failed to import background image</string>
+    <string name="novel_reader_font_import_failed">Failed to import font file</string>
+    <string name="novel_reader_background_custom_missing_fallback">Custom background is unavailable. Switched to built-in background.</string>
+    <string name="novel_reader_background_action_replace">Replace</string>
+    <string name="novel_reader_background_action_cancel">Cancel</string>
+    <string name="novel_reader_background_preset_linen_paper_title">Linen paper</string>
+    <string name="novel_reader_background_preset_linen_paper_description">Soft warm paper texture for daytime reading.</string>
+    <string name="novel_reader_background_preset_aged_page_title">Aged page</string>
+    <string name="novel_reader_background_preset_aged_page_description">Classic worn page style with gentle contrast.</string>
+    <string name="novel_reader_background_preset_crumpled_sheet_title">Crumpled sheet</string>
+    <string name="novel_reader_background_preset_crumpled_sheet_description">Light wrinkled paper look with subtle depth.</string>
+    <string name="novel_reader_background_preset_night_velvet_title">Night velvet</string>
+    <string name="novel_reader_background_preset_night_velvet_description">Deep dark texture for low-light reading sessions.</string>
+    <string name="novel_reader_background_preset_dark_wood_title">Dark wood</string>
+    <string name="novel_reader_background_preset_dark_wood_description">Dark wooden texture with cinematic atmosphere.</string>
+    <string name="novel_reader_native_texture_strength">Texture strength (Native-Rich)</string>
+    <string name="novel_reader_native_texture_strength_summary">Applies only to Native-Rich. 50% = current look</string>
     <string name="novel_reader_oled_edge_gradient">OLED edge gradient</string>
     <string name="novel_reader_oled_edge_gradient_summary">Use a deep edge darkening in dark theme for smoother OLED scrolling</string>
 

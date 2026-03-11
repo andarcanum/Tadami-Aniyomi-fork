@@ -1,12 +1,17 @@
 package eu.kanade.presentation.more.settings.screen
 
 import android.text.format.Formatter
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
@@ -16,30 +21,53 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.widget.BasePreferenceWidget
 import eu.kanade.presentation.more.settings.widget.PrefsHorizontalPadding
+import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_AGED_PAGE_ID
+import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_CRUMPLED_SHEET_ID
+import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_DARK_WOOD_ID
+import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_LINEN_PAPER_ID
+import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_NIGHT_VELVET_ID
+import eu.kanade.presentation.reader.novel.NovelReaderBackgroundCard
 import eu.kanade.presentation.reader.novel.autoScrollSpeedToInterval
+import eu.kanade.presentation.reader.novel.buildNovelReaderBackgroundCardsFromCustomItems
+import eu.kanade.presentation.reader.novel.ensureLegacyNovelReaderBackgroundItem
+import eu.kanade.presentation.reader.novel.importNovelReaderCustomBackgroundItem
 import eu.kanade.presentation.reader.novel.intervalToAutoScrollSpeed
+import eu.kanade.presentation.reader.novel.novelReaderBackgroundPresets
 import eu.kanade.presentation.reader.novel.novelReaderFonts
 import eu.kanade.presentation.reader.novel.novelReaderPresetThemes
+import eu.kanade.presentation.reader.novel.readNovelReaderCustomBackgroundItems
+import eu.kanade.presentation.reader.novel.removeNovelReaderCustomBackgroundItem
+import eu.kanade.presentation.reader.novel.renameNovelReaderCustomBackgroundItem
+import eu.kanade.presentation.reader.novel.replaceNovelReaderCustomBackgroundItem
+import eu.kanade.presentation.reader.novel.resolveCustomBackgroundDeletion
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderChapterDiskCache
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderChapterDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderParagraphSpacing
@@ -55,6 +83,7 @@ import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.io.File
 import android.graphics.Color as AndroidColor
 
 object SettingsNovelReaderScreen : SearchableSettings {
@@ -184,12 +213,91 @@ object SettingsNovelReaderScreen : SearchableSettings {
 
     @Composable
     private fun getThemeGroup(prefs: NovelReaderPreferences): Preference.PreferenceGroup {
+        val context = LocalContext.current
+        val appearanceModePref = prefs.appearanceMode()
+        val appearanceMode by appearanceModePref.collectAsState()
         val bgPref = prefs.backgroundColor()
         val bg by bgPref.collectAsState()
         val textPref = prefs.textColor()
         val text by textPref.collectAsState()
+        val backgroundSourcePref = prefs.backgroundSource()
+        val backgroundSource by backgroundSourcePref.collectAsState()
+        val backgroundPresetIdPref = prefs.backgroundPresetId()
+        val backgroundPresetId by backgroundPresetIdPref.collectAsState()
+        val customBackgroundPathPref = prefs.customBackgroundPath()
+        val customBackgroundPath by customBackgroundPathPref.collectAsState()
+        val customBackgroundIdPref = prefs.customBackgroundId()
+        val customBackgroundId by customBackgroundIdPref.collectAsState()
         val customThemesPref = prefs.customThemes()
         val customThemes by customThemesPref.collectAsState()
+        val importFailedMessage = stringResource(AYMR.strings.novel_reader_background_custom_import_failed)
+        var backgroundCatalogVersion by remember { mutableIntStateOf(0) }
+        var renameTargetId by remember { mutableStateOf<String?>(null) }
+        var renameInput by remember { mutableStateOf("") }
+        var pendingReplaceCustomId by remember { mutableStateOf<String?>(null) }
+
+        val customBackgroundItems = remember(
+            customBackgroundId,
+            customBackgroundPath,
+            backgroundCatalogVersion,
+        ) {
+            if (
+                customBackgroundPath.isNotBlank() &&
+                customBackgroundId.isNotBlank() &&
+                customBackgroundId == customBackgroundPath
+            ) {
+                ensureLegacyNovelReaderBackgroundItem(
+                    context = context,
+                    legacyPath = customBackgroundPath,
+                    preferredId = customBackgroundId,
+                )
+            }
+            readNovelReaderCustomBackgroundItems(context)
+        }
+        val backgroundCards = remember(customBackgroundItems) {
+            buildNovelReaderBackgroundCardsFromCustomItems(customBackgroundItems)
+        }
+        val selectedCustomBackgroundId = customBackgroundId.ifBlank { customBackgroundPath }
+        val renameTarget = remember(renameTargetId, customBackgroundItems) {
+            customBackgroundItems.firstOrNull { it.id == renameTargetId }
+        }
+
+        val backgroundPicker = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.GetContent(),
+        ) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            val imported = importNovelReaderCustomBackgroundItem(context, uri).getOrNull()
+            if (imported == null) {
+                Toast.makeText(context, importFailedMessage, Toast.LENGTH_SHORT).show()
+                return@rememberLauncherForActivityResult
+            }
+            appearanceModePref.set(eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode.BACKGROUND)
+            backgroundSourcePref.set(NovelReaderBackgroundSource.CUSTOM)
+            customBackgroundIdPref.set(imported.id)
+            customBackgroundPathPref.set(imported.absolutePath)
+            backgroundCatalogVersion += 1
+        }
+
+        val replaceBackgroundPicker = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.GetContent(),
+        ) { uri ->
+            val targetId = pendingReplaceCustomId
+            pendingReplaceCustomId = null
+            if (uri == null || targetId.isNullOrBlank()) return@rememberLauncherForActivityResult
+            val replaced = replaceNovelReaderCustomBackgroundItem(
+                context = context,
+                id = targetId,
+                uri = uri,
+            ).getOrNull()
+            if (replaced == null) {
+                Toast.makeText(context, importFailedMessage, Toast.LENGTH_SHORT).show()
+                return@rememberLauncherForActivityResult
+            }
+            if (selectedCustomBackgroundId == targetId) {
+                customBackgroundPathPref.set(replaced.absolutePath)
+            }
+            backgroundCatalogVersion += 1
+        }
 
         val currentTheme = currentTheme(bg, text)
         val isPreset = currentTheme != null && novelReaderPresetThemes.contains(currentTheme)
@@ -197,81 +305,216 @@ object SettingsNovelReaderScreen : SearchableSettings {
 
         val items = mutableListOf<Preference.PreferenceItem<out Any>>(
             Preference.PreferenceItem.ListPreference(
-                preference = prefs.theme(),
+                preference = appearanceModePref,
                 entries = persistentMapOf(
-                    NovelReaderTheme.SYSTEM to stringResource(AYMR.strings.novel_reader_theme_system),
-                    NovelReaderTheme.LIGHT to stringResource(AYMR.strings.novel_reader_theme_light),
-                    NovelReaderTheme.DARK to stringResource(AYMR.strings.novel_reader_theme_dark),
+                    eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode.THEME to
+                        stringResource(AYMR.strings.novel_reader_appearance_mode_theme),
+                    eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode.BACKGROUND to
+                        stringResource(AYMR.strings.novel_reader_appearance_mode_background),
                 ),
+                title = stringResource(AYMR.strings.novel_reader_appearance_mode),
+            ),
+        )
+
+        if (appearanceMode == eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode.THEME) {
+            items += listOf(
+                Preference.PreferenceItem.ListPreference(
+                    preference = prefs.theme(),
+                    entries = persistentMapOf(
+                        NovelReaderTheme.SYSTEM to stringResource(AYMR.strings.novel_reader_theme_system),
+                        NovelReaderTheme.LIGHT to stringResource(AYMR.strings.novel_reader_theme_light),
+                        NovelReaderTheme.DARK to stringResource(AYMR.strings.novel_reader_theme_dark),
+                    ),
+                    title = stringResource(AYMR.strings.novel_reader_theme),
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = prefs.backgroundTexture(),
+                    entries = persistentMapOf(
+                        NovelReaderBackgroundTexture.NONE to
+                            stringResource(AYMR.strings.novel_reader_background_texture_none),
+                        NovelReaderBackgroundTexture.PAPER_GRAIN to
+                            stringResource(AYMR.strings.novel_reader_background_texture_paper_grain),
+                        NovelReaderBackgroundTexture.LINEN to
+                            stringResource(AYMR.strings.novel_reader_background_texture_linen),
+                        NovelReaderBackgroundTexture.PARCHMENT to
+                            stringResource(AYMR.strings.novel_reader_background_texture_parchment),
+                    ),
+                    title = stringResource(AYMR.strings.novel_reader_background_texture),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = prefs.oledEdgeGradient(),
+                    title = stringResource(AYMR.strings.novel_reader_oled_edge_gradient),
+                    subtitle = stringResource(AYMR.strings.novel_reader_oled_edge_gradient_summary),
+                ),
+                Preference.PreferenceItem.CustomPreference(
+                    title = stringResource(AYMR.strings.novel_reader_theme_presets),
+                ) {
+                    BasePreferenceWidget(
+                        title = stringResource(AYMR.strings.novel_reader_theme_presets),
+                        subcomponent = {
+                            NovelReaderThemePresetRow(
+                                selectedTheme = currentTheme,
+                                onSelect = { preset ->
+                                    bgPref.set(preset.backgroundColor)
+                                    textPref.set(preset.textColor)
+                                },
+                            )
+                        },
+                    )
+                },
+                Preference.PreferenceItem.EditTextInfoPreference(
+                    preference = bgPref,
+                    title = stringResource(AYMR.strings.novel_reader_background_color),
+                    subtitle = "%s",
+                    dialogSubtitle = stringResource(AYMR.strings.novel_reader_color_input_hint),
+                    validate = ::isValidColorOrBlank,
+                ),
+                Preference.PreferenceItem.EditTextInfoPreference(
+                    preference = textPref,
+                    title = stringResource(AYMR.strings.novel_reader_text_color),
+                    subtitle = "%s",
+                    dialogSubtitle = stringResource(AYMR.strings.novel_reader_color_input_hint),
+                    validate = ::isValidColorOrBlank,
+                ),
+            )
+
+            if (currentTheme != null && !isPreset && !isCustom) {
+                items += Preference.PreferenceItem.TextPreference(
+                    title = stringResource(AYMR.strings.novel_reader_save_custom_theme),
+                    subtitle = "${currentTheme.backgroundColor} / ${currentTheme.textColor}",
+                    onClick = {
+                        customThemesPref.set(listOf(currentTheme) + customThemes.filterNot { it == currentTheme })
+                    },
+                )
+            }
+
+            if (currentTheme != null && isCustom) {
+                items += Preference.PreferenceItem.TextPreference(
+                    title = stringResource(AYMR.strings.novel_reader_delete_custom_theme),
+                    subtitle = "${currentTheme.backgroundColor} / ${currentTheme.textColor}",
+                    onClick = {
+                        customThemesPref.set(customThemes.filterNot { it == currentTheme })
+                    },
+                )
+            }
+        } else {
+            items += Preference.PreferenceItem.TextPreference(
                 title = stringResource(AYMR.strings.novel_reader_theme),
-            ),
-            Preference.PreferenceItem.ListPreference(
-                preference = prefs.backgroundTexture(),
-                entries = persistentMapOf(
-                    NovelReaderBackgroundTexture.NONE to
-                        stringResource(AYMR.strings.novel_reader_background_texture_none),
-                    NovelReaderBackgroundTexture.PAPER_GRAIN to
-                        stringResource(AYMR.strings.novel_reader_background_texture_paper_grain),
-                    NovelReaderBackgroundTexture.LINEN to
-                        stringResource(AYMR.strings.novel_reader_background_texture_linen),
-                    NovelReaderBackgroundTexture.PARCHMENT to
-                        stringResource(AYMR.strings.novel_reader_background_texture_parchment),
-                ),
-                title = stringResource(AYMR.strings.novel_reader_background_texture),
-            ),
-            Preference.PreferenceItem.SwitchPreference(
-                preference = prefs.oledEdgeGradient(),
-                title = stringResource(AYMR.strings.novel_reader_oled_edge_gradient),
-                subtitle = stringResource(AYMR.strings.novel_reader_oled_edge_gradient_summary),
-            ),
-            Preference.PreferenceItem.CustomPreference(
-                title = stringResource(AYMR.strings.novel_reader_theme_presets),
+                subtitle = stringResource(AYMR.strings.novel_reader_theme_controls_disabled_summary),
+            )
+            items += Preference.PreferenceItem.CustomPreference(
+                title = stringResource(AYMR.strings.novel_reader_background_presets),
             ) {
                 BasePreferenceWidget(
-                    title = stringResource(AYMR.strings.novel_reader_theme_presets),
+                    title = stringResource(AYMR.strings.novel_reader_background_presets),
                     subcomponent = {
-                        NovelReaderThemePresetRow(
-                            selectedTheme = currentTheme,
-                            onSelect = { preset ->
-                                bgPref.set(preset.backgroundColor)
-                                textPref.set(preset.textColor)
+                        NovelReaderBackgroundCatalogRow(
+                            cards = backgroundCards,
+                            selectedSource = backgroundSource,
+                            selectedPresetId = backgroundPresetId,
+                            selectedCustomId = selectedCustomBackgroundId,
+                            onSelectPreset = { presetId ->
+                                appearanceModePref.set(
+                                    eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode.BACKGROUND,
+                                )
+                                backgroundSourcePref.set(NovelReaderBackgroundSource.PRESET)
+                                backgroundPresetIdPref.set(presetId)
+                            },
+                            onSelectCustom = { customId, customPath ->
+                                appearanceModePref.set(
+                                    eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode.BACKGROUND,
+                                )
+                                backgroundSourcePref.set(NovelReaderBackgroundSource.CUSTOM)
+                                customBackgroundIdPref.set(customId)
+                                customBackgroundPathPref.set(customPath)
+                            },
+                            onRenameCustom = { customId, currentName ->
+                                renameTargetId = customId
+                                renameInput = currentName
+                            },
+                            onReplaceCustom = { customId ->
+                                pendingReplaceCustomId = customId
+                                replaceBackgroundPicker.launch("image/*")
+                            },
+                            onDeleteCustom = { customId ->
+                                val removed = removeNovelReaderCustomBackgroundItem(context, customId)
+                                    .getOrDefault(false)
+                                if (!removed) {
+                                    Toast.makeText(context, importFailedMessage, Toast.LENGTH_SHORT).show()
+                                    return@NovelReaderBackgroundCatalogRow
+                                }
+                                if (selectedCustomBackgroundId == customId) {
+                                    val remaining = readNovelReaderCustomBackgroundItems(context)
+                                    val deletion = resolveCustomBackgroundDeletion(
+                                        selectedId = selectedCustomBackgroundId,
+                                        deletedId = customId,
+                                        remainingCustomIds = remaining.map { it.id },
+                                        fallbackPresetId = backgroundPresetId.ifBlank {
+                                            NOVEL_READER_BACKGROUND_PRESET_LINEN_PAPER_ID
+                                        },
+                                    )
+                                    customBackgroundIdPref.set(deletion.nextCustomId)
+                                    customBackgroundPathPref.set(
+                                        remaining.firstOrNull { it.id == deletion.nextCustomId }
+                                            ?.absolutePath
+                                            .orEmpty(),
+                                    )
+                                    if (deletion.keepCustomSource) {
+                                        backgroundSourcePref.set(NovelReaderBackgroundSource.CUSTOM)
+                                    } else {
+                                        backgroundPresetIdPref.set(deletion.fallbackPresetId)
+                                        backgroundSourcePref.set(NovelReaderBackgroundSource.PRESET)
+                                    }
+                                }
+                                backgroundCatalogVersion += 1
+                            },
+                            onUpload = {
+                                backgroundPicker.launch("image/*")
                             },
                         )
                     },
                 )
-            },
-            Preference.PreferenceItem.EditTextInfoPreference(
-                preference = bgPref,
-                title = stringResource(AYMR.strings.novel_reader_background_color),
-                subtitle = "%s",
-                dialogSubtitle = stringResource(AYMR.strings.novel_reader_color_input_hint),
-                validate = ::isValidColorOrBlank,
-            ),
-            Preference.PreferenceItem.EditTextInfoPreference(
-                preference = textPref,
-                title = stringResource(AYMR.strings.novel_reader_text_color),
-                subtitle = "%s",
-                dialogSubtitle = stringResource(AYMR.strings.novel_reader_color_input_hint),
-                validate = ::isValidColorOrBlank,
-            ),
-        )
-
-        if (currentTheme != null && !isPreset && !isCustom) {
+            }
             items += Preference.PreferenceItem.TextPreference(
-                title = stringResource(AYMR.strings.novel_reader_save_custom_theme),
-                subtitle = "${currentTheme.backgroundColor} / ${currentTheme.textColor}",
-                onClick = {
-                    customThemesPref.set(listOf(currentTheme) + customThemes.filterNot { it == currentTheme })
-                },
+                title = stringResource(AYMR.strings.novel_reader_background_texture),
+                subtitle = stringResource(AYMR.strings.novel_reader_background_controls_disabled_summary),
             )
         }
 
-        if (currentTheme != null && isCustom) {
-            items += Preference.PreferenceItem.TextPreference(
-                title = stringResource(AYMR.strings.novel_reader_delete_custom_theme),
-                subtitle = "${currentTheme.backgroundColor} / ${currentTheme.textColor}",
-                onClick = {
-                    customThemesPref.set(customThemes.filterNot { it == currentTheme })
+        renameTarget?.let { target ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { renameTargetId = null },
+                title = { Text(text = stringResource(AYMR.strings.editor_action_rename)) },
+                text = {
+                    TextField(
+                        value = renameInput,
+                        onValueChange = { renameInput = it },
+                        singleLine = true,
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val renamed = renameNovelReaderCustomBackgroundItem(
+                                context = context,
+                                id = target.id,
+                                displayName = renameInput,
+                            ).getOrNull()
+                            if (renamed == null) {
+                                Toast.makeText(context, importFailedMessage, Toast.LENGTH_SHORT).show()
+                            } else {
+                                backgroundCatalogVersion += 1
+                                renameTargetId = null
+                            }
+                        },
+                    ) {
+                        Text(text = stringResource(AYMR.strings.editor_action_rename))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { renameTargetId = null }) {
+                        Text(text = stringResource(AYMR.strings.novel_reader_background_action_cancel))
+                    }
                 },
             )
         }
@@ -582,6 +825,258 @@ private fun NovelReaderThemePresetRow(
                 onClick = { onSelect(theme) },
             )
         }
+    }
+}
+
+@Composable
+private fun NovelReaderBackgroundPresetRow(
+    selectedPresetId: String,
+    onSelect: (String) -> Unit,
+) {
+    LazyRow(
+        modifier = Modifier.padding(horizontal = PrefsHorizontalPadding),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        items(novelReaderBackgroundPresets, key = { it.id }) { preset ->
+            val selected = preset.id == selectedPresetId
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (selected) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant
+                },
+                modifier = Modifier.clickable { onSelect(preset.id) },
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(6.dp)
+                        .size(width = 148.dp, height = 150.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Image(
+                        painter = painterResource(id = preset.imageResId),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .size(height = 92.dp, width = 136.dp),
+                    )
+                    Text(
+                        text = readerBackgroundPresetTitle(preset.id),
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = readerBackgroundPresetDescription(preset.id),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NovelReaderBackgroundCatalogRow(
+    cards: List<NovelReaderBackgroundCard>,
+    selectedSource: NovelReaderBackgroundSource,
+    selectedPresetId: String,
+    selectedCustomId: String,
+    onSelectPreset: (String) -> Unit,
+    onSelectCustom: (String, String) -> Unit,
+    onRenameCustom: (String, String) -> Unit,
+    onReplaceCustom: (String) -> Unit,
+    onDeleteCustom: (String) -> Unit,
+    onUpload: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyRow(
+            modifier = Modifier.padding(horizontal = PrefsHorizontalPadding),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            items(cards, key = { it.id }) { card ->
+                val selected = if (card.isBuiltIn) {
+                    selectedSource == NovelReaderBackgroundSource.PRESET && selectedPresetId == card.id
+                } else {
+                    selectedSource == NovelReaderBackgroundSource.CUSTOM && selectedCustomId == card.id
+                }
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
+                    modifier = Modifier.clickable {
+                        if (card.isBuiltIn) {
+                            onSelectPreset(card.id)
+                        } else {
+                            val customItem = card.customItem ?: return@clickable
+                            onSelectCustom(customItem.id, customItem.absolutePath)
+                        }
+                    },
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(6.dp)
+                            .size(
+                                width = 160.dp,
+                                height = if (card.isBuiltIn) 164.dp else 214.dp,
+                            ),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        if (card.isBuiltIn) {
+                            val preset = card.preset ?: return@Column
+                            Image(
+                                painter = painterResource(id = preset.imageResId),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .size(height = 92.dp, width = 148.dp),
+                            )
+                        } else {
+                            val custom = card.customItem ?: return@Column
+                            AsyncImage(
+                                model = File(custom.absolutePath),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .size(height = 92.dp, width = 148.dp),
+                            )
+                        }
+                        Text(
+                            text = if (card.isBuiltIn) {
+                                readerBackgroundPresetTitle(card.id)
+                            } else {
+                                card.customItem?.displayName.orEmpty()
+                            },
+                            style = MaterialTheme.typography.labelLarge,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = if (card.isBuiltIn) {
+                                readerBackgroundPresetDescription(card.id)
+                            } else {
+                                card.customItem?.absolutePath.orEmpty()
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (!card.isBuiltIn) {
+                            val custom = card.customItem ?: return@Column
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                ReaderBackgroundActionChip(
+                                    label = stringResource(AYMR.strings.editor_action_rename),
+                                    onClick = { onRenameCustom(custom.id, custom.displayName) },
+                                )
+                                ReaderBackgroundActionChip(
+                                    label = stringResource(AYMR.strings.novel_reader_background_action_replace),
+                                    onClick = { onReplaceCustom(custom.id) },
+                                )
+                                ReaderBackgroundActionChip(
+                                    label = stringResource(AYMR.strings.editor_action_delete),
+                                    highlighted = true,
+                                    onClick = { onDeleteCustom(custom.id) },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.primaryContainer,
+            modifier = Modifier
+                .padding(horizontal = PrefsHorizontalPadding)
+                .fillMaxWidth()
+                .clickable(onClick = onUpload),
+        ) {
+            Text(
+                text = stringResource(AYMR.strings.novel_reader_background_upload),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            )
+        }
+        Text(
+            text = stringResource(AYMR.strings.novel_reader_background_upload_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = PrefsHorizontalPadding),
+        )
+    }
+}
+
+@Composable
+private fun ReaderBackgroundActionChip(
+    label: String,
+    highlighted: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = if (highlighted) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer
+        },
+        modifier = Modifier.clickable(onClick = onClick),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (highlighted) {
+                MaterialTheme.colorScheme.onErrorContainer
+            } else {
+                MaterialTheme.colorScheme.onSecondaryContainer
+            },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun readerBackgroundPresetTitle(presetId: String): String {
+    return when (presetId) {
+        NOVEL_READER_BACKGROUND_PRESET_LINEN_PAPER_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_linen_paper_title)
+        NOVEL_READER_BACKGROUND_PRESET_AGED_PAGE_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_aged_page_title)
+        NOVEL_READER_BACKGROUND_PRESET_CRUMPLED_SHEET_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_crumpled_sheet_title)
+        NOVEL_READER_BACKGROUND_PRESET_NIGHT_VELVET_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_night_velvet_title)
+        NOVEL_READER_BACKGROUND_PRESET_DARK_WOOD_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_dark_wood_title)
+        else -> presetId
+    }
+}
+
+@Composable
+private fun readerBackgroundPresetDescription(presetId: String): String {
+    return when (presetId) {
+        NOVEL_READER_BACKGROUND_PRESET_LINEN_PAPER_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_linen_paper_description)
+        NOVEL_READER_BACKGROUND_PRESET_AGED_PAGE_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_aged_page_description)
+        NOVEL_READER_BACKGROUND_PRESET_CRUMPLED_SHEET_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_crumpled_sheet_description)
+        NOVEL_READER_BACKGROUND_PRESET_NIGHT_VELVET_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_night_velvet_description)
+        NOVEL_READER_BACKGROUND_PRESET_DARK_WOOD_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_dark_wood_description)
+        else -> ""
     }
 }
 
