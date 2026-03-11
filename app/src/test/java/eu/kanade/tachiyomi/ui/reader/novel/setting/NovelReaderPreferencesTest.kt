@@ -27,7 +27,7 @@ class NovelReaderPreferencesTest {
         prefs.richNativeRendererExperimental().get() shouldBe true
         prefs.forceParagraphIndent().get() shouldBe true
         prefs.preserveSourceTextAlignInNative().get() shouldBe true
-        prefs.paragraphSpacing().get() shouldBe NovelReaderParagraphSpacing.NORMAL
+        prefs.paragraphSpacing().get() shouldBe 12
         prefs.showScrollPercentage().get() shouldBe true
         prefs.showBatteryAndTime().get() shouldBe false
         prefs.showKindleInfoBlock().get() shouldBe true
@@ -99,7 +99,7 @@ class NovelReaderPreferencesTest {
         prefs.richNativeRendererExperimental().set(true)
         prefs.forceParagraphIndent().set(true)
         prefs.preserveSourceTextAlignInNative().set(false)
-        prefs.paragraphSpacing().set(NovelReaderParagraphSpacing.SPACIOUS)
+        prefs.paragraphSpacing().set(24)
         prefs.verticalSeekbar().set(false)
         prefs.swipeToNextChapter().set(true)
         prefs.swipeToPrevChapter().set(true)
@@ -163,7 +163,7 @@ class NovelReaderPreferencesTest {
         override?.richNativeRendererExperimental shouldBe true
         override?.forceParagraphIndent shouldBe true
         override?.preserveSourceTextAlignInNative shouldBe false
-        override?.paragraphSpacing shouldBe NovelReaderParagraphSpacing.SPACIOUS
+        override?.paragraphSpacingDp shouldBe 24
         override?.verticalSeekbar shouldBe false
         override?.swipeToNextChapter shouldBe true
         override?.swipeToPrevChapter shouldBe true
@@ -228,7 +228,7 @@ class NovelReaderPreferencesTest {
         prefs.richNativeRendererExperimental().set(false)
         prefs.forceParagraphIndent().set(true)
         prefs.preserveSourceTextAlignInNative().set(true)
-        prefs.paragraphSpacing().set(NovelReaderParagraphSpacing.NORMAL)
+        prefs.paragraphSpacing().set(12)
         prefs.verticalSeekbar().set(true)
         prefs.swipeToNextChapter().set(false)
         prefs.swipeToPrevChapter().set(false)
@@ -292,7 +292,7 @@ class NovelReaderPreferencesTest {
                 richNativeRendererExperimental = true,
                 forceParagraphIndent = false,
                 preserveSourceTextAlignInNative = false,
-                paragraphSpacing = NovelReaderParagraphSpacing.COMPACT,
+                paragraphSpacingDp = 4,
                 verticalSeekbar = false,
                 swipeToNextChapter = true,
                 swipeToPrevChapter = true,
@@ -355,7 +355,7 @@ class NovelReaderPreferencesTest {
         settings.richNativeRendererExperimental shouldBe true
         settings.forceParagraphIndent shouldBe false
         settings.preserveSourceTextAlignInNative shouldBe false
-        settings.paragraphSpacing shouldBe NovelReaderParagraphSpacing.COMPACT
+        settings.paragraphSpacing shouldBe 4
         settings.verticalSeekbar shouldBe false
         settings.swipeToNextChapter shouldBe true
         settings.swipeToPrevChapter shouldBe true

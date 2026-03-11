@@ -168,7 +168,6 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderParagraphSpacing
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
@@ -569,7 +568,7 @@ fun NovelReaderScreen(
         resolvePageReaderBlocks(
             shouldPaginate = shouldPaginateForPageReader,
             textBlocks = state.textBlocks,
-            paragraphSpacing = state.readerSettings.paragraphSpacing,
+            paragraphSpacingDp = state.readerSettings.paragraphSpacing,
         ) { chapterText ->
             val screenWidthPx = pageViewportSize.width.takeIf { it > 0 }
                 ?: with(density) { configuration.screenWidthDp.dp.roundToPx() }
@@ -614,7 +613,7 @@ fun NovelReaderScreen(
         } else {
             val richChapterText = buildRichPageReaderChapterAnnotatedText(
                 richBlocks = state.richContentBlocks,
-                paragraphSpacing = state.readerSettings.paragraphSpacing,
+                paragraphSpacingDp = state.readerSettings.paragraphSpacing,
                 forcedParagraphFirstLineIndentEm = if (state.readerSettings.forceParagraphIndent) {
                     FORCED_PARAGRAPH_FIRST_LINE_INDENT_EM
                 } else {
@@ -1190,6 +1189,7 @@ fun NovelReaderScreen(
 
                                             when (
                                                 resolveVerticalChapterSwipeAction(
+                                                    swipeGesturesEnabled = state.readerSettings.swipeGestures,
                                                     swipeToNextChapter = state.readerSettings.swipeToNextChapter,
                                                     swipeToPrevChapter = state.readerSettings.swipeToPrevChapter,
                                                     deltaX = deltaX,
@@ -1474,6 +1474,7 @@ fun NovelReaderScreen(
                     paddingHorizontal = initialPaddingHorizontal,
                     fontSizePx = state.readerSettings.fontSize,
                     lineHeightMultiplier = state.readerSettings.lineHeight,
+                    paragraphSpacingPx = state.readerSettings.paragraphSpacing,
                     textAlignCss = initialCssTextAlign,
                     firstLineIndentCss = initialCssFirstLineIndent,
                     textColorHex = colorToCssHex(textColor),
@@ -1611,6 +1612,7 @@ fun NovelReaderScreen(
 
                                         when (
                                             resolveWebViewVerticalChapterSwipeAction(
+                                                swipeGesturesEnabled = state.readerSettings.swipeGestures,
                                                 swipeToNextChapter = state.readerSettings.swipeToNextChapter,
                                                 swipeToPrevChapter = state.readerSettings.swipeToPrevChapter,
                                                 deltaX = deltaX,
@@ -1684,6 +1686,7 @@ fun NovelReaderScreen(
                             paddingHorizontal = paddingHorizontal,
                             fontSizePx = state.readerSettings.fontSize,
                             lineHeightMultiplier = state.readerSettings.lineHeight,
+                            paragraphSpacingPx = state.readerSettings.paragraphSpacing,
                             textAlignCss = cssTextAlign,
                             firstLineIndentCss = cssFirstLineIndent,
                             textColorHex = colorToCssHex(textColor),
@@ -1708,6 +1711,7 @@ fun NovelReaderScreen(
                             paddingHorizontal = paddingHorizontal,
                             fontSizePx = currentFontSize,
                             lineHeightMultiplier = currentLineHeight,
+                            paragraphSpacingPx = state.readerSettings.paragraphSpacing,
                             textAlignCss = cssTextAlign,
                             firstLineIndentCss = cssFirstLineIndent,
                             textColorHex = currentTextColorCss,
@@ -1776,6 +1780,7 @@ fun NovelReaderScreen(
                                     paddingHorizontal = paddingHorizontal,
                                     fontSizePx = currentFontSize,
                                     lineHeightMultiplier = currentLineHeight,
+                                    paragraphSpacingPx = state.readerSettings.paragraphSpacing,
                                     textAlignCss = cssTextAlign,
                                     firstLineIndentCss = cssFirstLineIndent,
                                     textColorHex = currentTextColorCss,
@@ -1789,6 +1794,7 @@ fun NovelReaderScreen(
                                     textShadowCss = currentTextShadowCss,
                                     forceBoldText = state.readerSettings.forceBoldText,
                                     forceItalicText = state.readerSettings.forceItalicText,
+                                    bionicReadingEnabled = state.readerSettings.bionicReading,
                                 )
                                 appliedWebCssFingerprint = styleFingerprint
 
@@ -1857,6 +1863,7 @@ fun NovelReaderScreen(
                                 paddingHorizontal = paddingHorizontal,
                                 fontSizePx = state.readerSettings.fontSize,
                                 lineHeightMultiplier = state.readerSettings.lineHeight,
+                                paragraphSpacingPx = state.readerSettings.paragraphSpacing,
                                 textAlignCss = cssTextAlign,
                                 firstLineIndentCss = cssFirstLineIndent,
                                 textColorHex = colorToCssHex(textColor),
@@ -1870,6 +1877,7 @@ fun NovelReaderScreen(
                                 textShadowCss = currentTextShadowCss,
                                 forceBoldText = state.readerSettings.forceBoldText,
                                 forceItalicText = state.readerSettings.forceItalicText,
+                                bionicReadingEnabled = state.readerSettings.bionicReading,
                             )
                             appliedWebCssFingerprint = styleFingerprint
                         }
@@ -2352,6 +2360,8 @@ fun NovelReaderScreen(
         if (showSettings) {
             NovelReaderSettingsDialog(
                 sourceId = state.novel.source,
+                currentWebViewActive = showWebView,
+                currentPageReaderActive = usePageReader,
                 onDismissRequest = { showSettings = false },
             )
         }
@@ -4035,6 +4045,7 @@ internal fun buildWebReaderCssText(
     paddingHorizontal: Int,
     fontSizePx: Int,
     lineHeightMultiplier: Float,
+    paragraphSpacingPx: Int,
     textAlignCss: String?,
     firstLineIndentCss: String?,
     textColorHex: String,
@@ -4053,6 +4064,7 @@ internal fun buildWebReaderCssText(
         ?.replace("\\", "\\\\")
         ?.replace("'", "\\'")
     val fontVariable = escapedFontFamily?.let { "'$it', sans-serif" }.orEmpty()
+    val resolvedParagraphSpacingPx = paragraphSpacingPx.coerceIn(0, 32)
 
     return buildString {
         append(fontFaceCss)
@@ -4068,6 +4080,7 @@ internal fun buildWebReaderCssText(
         }
         append("  --an-reader-size: ${fontSizePx}px;\n")
         append("  --an-reader-line-height: ${lineHeightMultiplier.coerceAtLeast(1f)};\n")
+        append("  --an-reader-paragraph-spacing: ${resolvedParagraphSpacingPx}px;\n")
         if (!textShadowCss.isNullOrBlank()) {
             append("  --an-reader-text-shadow: $textShadowCss;\n")
         }
@@ -4118,6 +4131,12 @@ internal fun buildWebReaderCssText(
         append("  font-size: 1.24em !important;\n")
         append("  margin-top: 0 !important;\n")
         append("  margin-bottom: 0.7em !important;\n")
+        append("}\n")
+        append("body p, body div, body article, body section, body blockquote, body pre, body li {\n")
+        append("  margin-bottom: ${resolvedParagraphSpacingPx}px !important;\n")
+        append("}\n")
+        append("body span.an-reader-bionic {\n")
+        append("  font-weight: 600 !important;\n")
         append("}\n")
         append("body h2 {\n")
         append("  font-size: 1.12em !important;\n")
@@ -4264,6 +4283,7 @@ private fun WebView.applyReaderCss(
     paddingHorizontal: Int,
     fontSizePx: Int,
     lineHeightMultiplier: Float,
+    paragraphSpacingPx: Int,
     textAlignCss: String?,
     firstLineIndentCss: String?,
     textColorHex: String,
@@ -4277,6 +4297,7 @@ private fun WebView.applyReaderCss(
     textShadowCss: String?,
     forceBoldText: Boolean,
     forceItalicText: Boolean,
+    bionicReadingEnabled: Boolean,
 ) {
     val css = buildWebReaderCssText(
         fontFaceCss = fontFaceCss,
@@ -4285,6 +4306,7 @@ private fun WebView.applyReaderCss(
         paddingHorizontal = paddingHorizontal,
         fontSizePx = fontSizePx,
         lineHeightMultiplier = lineHeightMultiplier,
+        paragraphSpacingPx = paragraphSpacingPx,
         textAlignCss = textAlignCss,
         firstLineIndentCss = firstLineIndentCss,
         textColorHex = textColorHex,
@@ -4376,6 +4398,74 @@ private fun WebView.applyReaderCss(
         """.trimIndent(),
         null,
     )
+    val bionicJavascript = buildWebReaderBionicJavascript(bionicReadingEnabled)
+    evaluateJavascript(
+        if (bionicJavascript.isBlank()) buildWebReaderBionicResetJavascript() else bionicJavascript,
+        null,
+    )
+}
+
+internal fun buildWebReaderBionicJavascript(enabled: Boolean): String {
+    if (!enabled) return ""
+    return """
+        (function() {
+            const root = document.body;
+            if (!root) return;
+            const existing = Array.from(root.querySelectorAll('span.an-reader-bionic'));
+            for (const span of existing) {
+                span.replaceWith(document.createTextNode(span.textContent || ''));
+            }
+            root.normalize();
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+                acceptNode(node) {
+                    if (!node || !node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+                    const parent = node.parentElement;
+                    if (!parent) return NodeFilter.FILTER_REJECT;
+                    if (parent.closest('script,style,noscript,textarea,svg,.an-reader-bionic')) {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            });
+            const nodes = [];
+            while (walker.nextNode()) nodes.push(walker.currentNode);
+            for (const textNode of nodes) {
+                const text = textNode.nodeValue || '';
+                const fragment = document.createDocumentFragment();
+                const parts = text.match(/\S+|\s+/g) || [];
+                for (const token of parts) {
+                    if (/^\s+$/.test(token)) {
+                        fragment.appendChild(document.createTextNode(token));
+                        continue;
+                    }
+                    const emphasizeCount = Math.max(1, Math.ceil(token.length * 0.5));
+                    const span = document.createElement('span');
+                    span.className = 'an-reader-bionic';
+                    span.textContent = token.slice(0, emphasizeCount);
+                    fragment.appendChild(span);
+                    const remainder = token.slice(emphasizeCount);
+                    if (remainder) {
+                        fragment.appendChild(document.createTextNode(remainder));
+                    }
+                }
+                textNode.replaceWith(fragment);
+            }
+        })();
+    """.trimIndent()
+}
+
+private fun buildWebReaderBionicResetJavascript(): String {
+    return """
+        (function() {
+            const root = document.body;
+            if (!root) return;
+            const spans = Array.from(root.querySelectorAll('span.an-reader-bionic'));
+            for (const span of spans) {
+                span.replaceWith(document.createTextNode(span.textContent || ''));
+            }
+            root.normalize();
+        })();
+    """.trimIndent()
 }
 
 @Composable
@@ -4701,13 +4791,9 @@ internal fun shouldShowPersistentProgressLine(
 }
 
 internal fun resolveParagraphSpacingDp(
-    spacing: NovelReaderParagraphSpacing,
+    spacing: Int,
 ): androidx.compose.ui.unit.Dp {
-    return when (spacing) {
-        NovelReaderParagraphSpacing.COMPACT -> 8.dp
-        NovelReaderParagraphSpacing.NORMAL -> 12.dp
-        NovelReaderParagraphSpacing.SPACIOUS -> 16.dp
-    }
+    return spacing.coerceIn(0, 32).dp
 }
 
 internal data class NovelReaderReadingPaceState(
@@ -4831,13 +4917,13 @@ internal fun resolveReaderTapAction(
 internal fun resolvePageReaderBlocks(
     shouldPaginate: Boolean,
     textBlocks: List<String>,
-    paragraphSpacing: NovelReaderParagraphSpacing,
+    paragraphSpacingDp: Int,
     paginate: (String) -> List<String>,
 ): List<String> {
     val fallbackBlocks = textBlocks.takeIf { it.isNotEmpty() } ?: listOf("")
     if (!shouldPaginate) return fallbackBlocks
 
-    val chapterText = textBlocks.joinToString(resolvePageReaderParagraphSeparator(paragraphSpacing)).trim()
+    val chapterText = textBlocks.joinToString(resolvePageReaderParagraphSeparator(paragraphSpacingDp)).trim()
     if (chapterText.isBlank()) return fallbackBlocks
 
     return paginate(chapterText).ifEmpty { fallbackBlocks }
@@ -4845,12 +4931,12 @@ internal fun resolvePageReaderBlocks(
 
 internal fun buildRichPageReaderChapterAnnotatedText(
     richBlocks: List<NovelRichContentBlock>,
-    paragraphSpacing: NovelReaderParagraphSpacing,
+    paragraphSpacingDp: Int,
     forcedParagraphFirstLineIndentEm: Float? = null,
 ): AnnotatedString {
     if (richBlocks.isEmpty()) return AnnotatedString("")
 
-    val paragraphSeparator = resolvePageReaderParagraphSeparator(paragraphSpacing)
+    val paragraphSeparator = resolvePageReaderParagraphSeparator(paragraphSpacingDp)
 
     return buildAnnotatedString {
         var appendedAny = false
@@ -4885,21 +4971,79 @@ internal fun buildRichPageReaderChapterAnnotatedText(
 }
 
 internal fun resolvePageReaderParagraphSeparator(
-    paragraphSpacing: NovelReaderParagraphSpacing,
+    paragraphSpacingDp: Int,
 ): String {
-    return when (paragraphSpacing) {
-        NovelReaderParagraphSpacing.COMPACT,
-        NovelReaderParagraphSpacing.NORMAL,
-        -> "\n"
-        NovelReaderParagraphSpacing.SPACIOUS -> "\n\n"
-    }
+    return if (paragraphSpacingDp.coerceIn(0, 32) >= 20) "\n\n" else "\n"
 }
 
 internal fun shouldEnableJavaScriptInReaderWebView(
-    @Suppress("UNUSED_PARAMETER")
     pluginRequestsJavaScript: Boolean,
 ): Boolean {
-    return true
+    return pluginRequestsJavaScript
+}
+
+internal enum class RendererSettingDisableReason {
+    PAGE_MODE,
+    WEBVIEW_ACTIVE,
+    BIONIC_READING,
+}
+
+internal data class RendererSettingsAvailability(
+    val preferWebViewEnabled: Boolean,
+    val preferWebViewReason: RendererSettingDisableReason?,
+    val richNativeEnabled: Boolean,
+    val richNativeReason: RendererSettingDisableReason?,
+)
+
+internal fun resolveRendererSettingsAvailability(
+    pageReaderEnabled: Boolean,
+    showWebView: Boolean,
+    bionicReadingEnabled: Boolean,
+): RendererSettingsAvailability {
+    val preferWebViewReason = if (pageReaderEnabled) RendererSettingDisableReason.PAGE_MODE else null
+    val richNativeReason = when {
+        pageReaderEnabled -> RendererSettingDisableReason.PAGE_MODE
+        showWebView -> RendererSettingDisableReason.WEBVIEW_ACTIVE
+        bionicReadingEnabled -> RendererSettingDisableReason.BIONIC_READING
+        else -> null
+    }
+    return RendererSettingsAvailability(
+        preferWebViewEnabled = preferWebViewReason == null,
+        preferWebViewReason = preferWebViewReason,
+        richNativeEnabled = richNativeReason == null,
+        richNativeReason = richNativeReason,
+    )
+}
+
+internal enum class NovelReaderSettingsFamily {
+    SOURCE_ALIGNMENT_POLICY,
+    CHAPTER_CACHE_POLICY,
+    LIVE_TEXT_STYLING,
+    RENDERER_TUNING,
+}
+
+internal data class NovelReaderSettingsSurfaceStrategy(
+    val globalOnlyFamilies: Set<NovelReaderSettingsFamily>,
+    val quickDialogOnlyFamilies: Set<NovelReaderSettingsFamily>,
+)
+
+internal fun resolveNovelReaderSettingsSurfaceStrategy(): NovelReaderSettingsSurfaceStrategy {
+    return NovelReaderSettingsSurfaceStrategy(
+        globalOnlyFamilies = setOf(
+            NovelReaderSettingsFamily.SOURCE_ALIGNMENT_POLICY,
+            NovelReaderSettingsFamily.CHAPTER_CACHE_POLICY,
+        ),
+        quickDialogOnlyFamilies = setOf(
+            NovelReaderSettingsFamily.LIVE_TEXT_STYLING,
+            NovelReaderSettingsFamily.RENDERER_TUNING,
+        ),
+    )
+}
+
+internal fun areQuickDialogKindleDependentControlsEnabled(
+    showKindleInfoBlock: Boolean,
+): Boolean {
+    return showKindleInfoBlock
 }
 
 internal fun verticalSeekbarLabels(
@@ -5167,6 +5311,7 @@ internal fun buildWebReaderCssFingerprint(
     paddingHorizontal: Int,
     fontSizePx: Int,
     lineHeightMultiplier: Float,
+    paragraphSpacingPx: Int,
     textAlignCss: String?,
     firstLineIndentCss: String?,
     textColorHex: String,
@@ -5188,6 +5333,7 @@ internal fun buildWebReaderCssFingerprint(
         append('|').append(paddingHorizontal)
         append('|').append(fontSizePx)
         append('|').append(lineHeightMultiplier)
+        append('|').append(paragraphSpacingPx)
         append('|').append(textAlignCss ?: "<site>")
         append('|').append(firstLineIndentCss ?: "<site>")
         append('|').append(textColorHex)
@@ -5232,6 +5378,7 @@ internal fun resolveHorizontalChapterSwipeAction(
 }
 
 internal fun resolveVerticalChapterSwipeAction(
+    swipeGesturesEnabled: Boolean,
     swipeToNextChapter: Boolean,
     swipeToPrevChapter: Boolean,
     deltaX: Float,
@@ -5245,6 +5392,7 @@ internal fun resolveVerticalChapterSwipeAction(
     isNearChapterEnd: Boolean,
     isNearChapterStart: Boolean,
 ): VerticalChapterSwipeAction {
+    if (!swipeGesturesEnabled) return VerticalChapterSwipeAction.NONE
     if (gestureDurationMillis < minHoldDurationMillis) return VerticalChapterSwipeAction.NONE
 
     val absX = abs(deltaX)
@@ -5262,6 +5410,7 @@ internal fun resolveVerticalChapterSwipeAction(
 }
 
 internal fun resolveWebViewVerticalChapterSwipeAction(
+    swipeGesturesEnabled: Boolean,
     swipeToNextChapter: Boolean,
     swipeToPrevChapter: Boolean,
     deltaX: Float,
@@ -5275,6 +5424,7 @@ internal fun resolveWebViewVerticalChapterSwipeAction(
     isNearChapterEnd: Boolean,
     isNearChapterStart: Boolean,
 ): VerticalChapterSwipeAction {
+    if (!swipeGesturesEnabled) return VerticalChapterSwipeAction.NONE
     if (gestureDurationMillis < minHoldDurationMillis) return VerticalChapterSwipeAction.NONE
 
     val absX = abs(deltaX)

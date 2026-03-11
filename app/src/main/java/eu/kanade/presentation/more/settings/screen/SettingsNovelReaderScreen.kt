@@ -64,13 +64,14 @@ import eu.kanade.presentation.reader.novel.removeNovelReaderCustomBackgroundItem
 import eu.kanade.presentation.reader.novel.renameNovelReaderCustomBackgroundItem
 import eu.kanade.presentation.reader.novel.replaceNovelReaderCustomBackgroundItem
 import eu.kanade.presentation.reader.novel.resolveCustomBackgroundDeletion
+import eu.kanade.presentation.reader.novel.resolveNovelReaderSettingsSurfaceStrategy
+import eu.kanade.presentation.reader.novel.resolveRendererSettingsAvailability
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderChapterDiskCache
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderChapterDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderParagraphSpacing
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
@@ -112,9 +113,17 @@ object SettingsNovelReaderScreen : SearchableSettings {
         val lineHeight by lineHeightPref.collectAsState()
         val marginPref = prefs.margin()
         val margin by marginPref.collectAsState()
+        val paragraphSpacingPref = prefs.paragraphSpacing()
+        val paragraphSpacing by paragraphSpacingPref.collectAsState()
         val fontFamilyPref = prefs.fontFamily()
         val selectedFontFamily by fontFamilyPref.collectAsState()
         val geminiEnabled by prefs.geminiEnabled().collectAsState()
+        val surfaceStrategy = remember { resolveNovelReaderSettingsSurfaceStrategy() }
+        val settingsSurfaceSummary = if (surfaceStrategy.globalOnlyFamilies.isNotEmpty()) {
+            stringResource(AYMR.strings.novel_reader_global_settings_quick_dialog_summary)
+        } else {
+            stringResource(AYMR.strings.novel_reader_global_settings_quick_dialog_summary)
+        }
 
         return Preference.PreferenceGroup(
             title = stringResource(AYMR.strings.novel_reader_display),
@@ -172,17 +181,15 @@ object SettingsNovelReaderScreen : SearchableSettings {
                         .toImmutableMap(),
                     title = stringResource(AYMR.strings.novel_reader_text_align),
                 ),
-                Preference.PreferenceItem.ListPreference(
-                    preference = prefs.paragraphSpacing(),
-                    entries = persistentMapOf(
-                        NovelReaderParagraphSpacing.COMPACT to
-                            stringResource(AYMR.strings.novel_reader_paragraph_spacing_compact),
-                        NovelReaderParagraphSpacing.NORMAL to
-                            stringResource(AYMR.strings.novel_reader_paragraph_spacing_normal),
-                        NovelReaderParagraphSpacing.SPACIOUS to
-                            stringResource(AYMR.strings.novel_reader_paragraph_spacing_spacious),
-                    ),
+                Preference.PreferenceItem.SliderPreference(
+                    value = paragraphSpacing,
                     title = stringResource(AYMR.strings.novel_reader_paragraph_spacing),
+                    subtitle = "${paragraphSpacing}dp",
+                    valueRange = 0..32,
+                    onValueChanged = {
+                        paragraphSpacingPref.set(it)
+                        true
+                    },
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = prefs.forceParagraphIndent(),
@@ -193,6 +200,10 @@ object SettingsNovelReaderScreen : SearchableSettings {
                     preference = prefs.preserveSourceTextAlignInNative(),
                     title = stringResource(AYMR.strings.novel_reader_preserve_source_text_align_native),
                     subtitle = stringResource(AYMR.strings.novel_reader_preserve_source_text_align_native_summary),
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(AYMR.strings.novel_reader_settings_surface_strategy),
+                    subtitle = settingsSurfaceSummary,
                 ),
                 Preference.PreferenceItem.CustomPreference(
                     title = stringResource(AYMR.strings.novel_reader_font_family),
@@ -528,6 +539,19 @@ object SettingsNovelReaderScreen : SearchableSettings {
     @Composable
     private fun getNavigationGroup(prefs: NovelReaderPreferences): Preference.PreferenceGroup {
         val context = LocalContext.current
+        val swipeGesturesPref = prefs.swipeGestures()
+        val swipeGestures by swipeGesturesPref.collectAsState()
+        val pageReaderPref = prefs.pageReader()
+        val pageReader by pageReaderPref.collectAsState()
+        val bionicReadingPref = prefs.bionicReading()
+        val bionicReading by bionicReadingPref.collectAsState()
+        val rendererAvailability = remember(pageReader, bionicReading) {
+            resolveRendererSettingsAvailability(
+                pageReaderEnabled = pageReader,
+                showWebView = false,
+                bionicReadingEnabled = bionicReading,
+            )
+        }
         val autoScrollIntervalPref = prefs.autoScrollInterval()
         val autoScrollInterval by autoScrollIntervalPref.collectAsState()
         val autoScrollSpeed = intervalToAutoScrollSpeed(autoScrollInterval)
@@ -570,6 +594,28 @@ object SettingsNovelReaderScreen : SearchableSettings {
                 NovelReaderChapterDiskCache.DEFAULT_MAX_ENTRIES.toString(),
             )
         }
+        fun rendererSubtitle(baseSubtitle: String, enabled: Boolean, reason: String): String {
+            return if (enabled) {
+                baseSubtitle
+            } else {
+                "$baseSubtitle $reason"
+            }
+        }
+        val preferWebViewSubtitle = rendererSubtitle(
+            baseSubtitle = stringResource(AYMR.strings.novel_reader_prefer_webview_renderer_summary),
+            enabled = rendererAvailability.preferWebViewEnabled,
+            reason = stringResource(AYMR.strings.novel_reader_renderer_disabled_page_mode_summary),
+        )
+        val richNativeDisableReason = when {
+            pageReader -> stringResource(AYMR.strings.novel_reader_renderer_disabled_page_mode_summary)
+            bionicReading -> stringResource(AYMR.strings.novel_reader_renderer_disabled_bionic_summary)
+            else -> stringResource(AYMR.strings.novel_reader_renderer_disabled_webview_summary)
+        }
+        val richNativeSubtitle = rendererSubtitle(
+            baseSubtitle = stringResource(AYMR.strings.novel_reader_rich_native_renderer_experimental_summary),
+            enabled = rendererAvailability.richNativeEnabled,
+            reason = richNativeDisableReason,
+        )
 
         return Preference.PreferenceGroup(
             title = stringResource(AYMR.strings.novel_reader_navigation),
@@ -584,36 +630,40 @@ object SettingsNovelReaderScreen : SearchableSettings {
                     title = stringResource(AYMR.strings.novel_reader_vertical_seekbar),
                 ),
                 Preference.PreferenceItem.SwitchPreference(
-                    preference = prefs.swipeGestures(),
+                    preference = swipeGesturesPref,
                     title = stringResource(AYMR.strings.novel_reader_swipe_gestures),
                     subtitle = stringResource(AYMR.strings.novel_reader_swipe_gestures_summary),
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = prefs.swipeToNextChapter(),
                     title = stringResource(AYMR.strings.novel_reader_swipe_to_next),
+                    enabled = swipeGestures,
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = prefs.swipeToPrevChapter(),
                     title = stringResource(AYMR.strings.novel_reader_swipe_to_prev),
+                    enabled = swipeGestures,
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = prefs.tapToScroll(),
                     title = stringResource(AYMR.strings.novel_reader_tap_to_scroll),
                 ),
                 Preference.PreferenceItem.SwitchPreference(
-                    preference = prefs.pageReader(),
+                    preference = pageReaderPref,
                     title = stringResource(AYMR.strings.novel_reader_page_mode),
                     subtitle = stringResource(AYMR.strings.novel_reader_page_mode_summary),
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = prefs.preferWebViewRenderer(),
                     title = stringResource(AYMR.strings.novel_reader_prefer_webview_renderer),
-                    subtitle = stringResource(AYMR.strings.novel_reader_prefer_webview_renderer_summary),
+                    subtitle = preferWebViewSubtitle,
+                    enabled = rendererAvailability.preferWebViewEnabled,
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = prefs.richNativeRendererExperimental(),
                     title = stringResource(AYMR.strings.novel_reader_rich_native_renderer_experimental),
-                    subtitle = stringResource(AYMR.strings.novel_reader_rich_native_renderer_experimental_summary),
+                    subtitle = richNativeSubtitle,
+                    enabled = rendererAvailability.richNativeEnabled,
                 ),
                 Preference.PreferenceItem.SliderPreference(
                     value = autoScrollSpeed,

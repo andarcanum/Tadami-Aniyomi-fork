@@ -18,7 +18,6 @@ import eu.kanade.tachiyomi.ui.reader.novel.NovelRichTextStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderParagraphSpacing
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
@@ -378,10 +377,11 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `paragraph spacing presets resolve to expected dp values`() {
-        assertTrue(resolveParagraphSpacingDp(NovelReaderParagraphSpacing.COMPACT).value == 8f)
-        assertTrue(resolveParagraphSpacingDp(NovelReaderParagraphSpacing.NORMAL).value == 12f)
-        assertTrue(resolveParagraphSpacingDp(NovelReaderParagraphSpacing.SPACIOUS).value == 16f)
+    fun `paragraph spacing slider resolves exact dp values within bounds`() {
+        assertTrue(resolveParagraphSpacingDp(0).value == 0f)
+        assertTrue(resolveParagraphSpacingDp(12).value == 12f)
+        assertTrue(resolveParagraphSpacingDp(32).value == 32f)
+        assertTrue(resolveParagraphSpacingDp(99).value == 32f)
     }
 
     @Test
@@ -794,7 +794,7 @@ class NovelReaderUiVisibilityTest {
         val blocks = resolvePageReaderBlocks(
             shouldPaginate = false,
             textBlocks = listOf("First", "Second"),
-            paragraphSpacing = NovelReaderParagraphSpacing.NORMAL,
+            paragraphSpacingDp = 12,
         ) {
             invocationCount++
             listOf("paged")
@@ -805,24 +805,25 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `page reader joins paragraphs without full blank line for normal spacing`() {
+    fun `page reader spacing slider changes pagination separator`() {
         var paginatedInput: String? = null
 
         resolvePageReaderBlocks(
             shouldPaginate = true,
             textBlocks = listOf("First paragraph", "Second paragraph"),
-            paragraphSpacing = NovelReaderParagraphSpacing.NORMAL,
+            paragraphSpacingDp = 24,
         ) { chapterText ->
             paginatedInput = chapterText
             listOf(chapterText)
         }
 
-        assertTrue(paginatedInput == "First paragraph\nSecond paragraph")
+        assertTrue(paginatedInput == "First paragraph\n\nSecond paragraph")
     }
 
     @Test
     fun `vertical swipe up near chapter end opens next chapter`() {
         val result = resolveVerticalChapterSwipeAction(
+            swipeGesturesEnabled = true,
             swipeToNextChapter = true,
             swipeToPrevChapter = true,
             deltaX = 40f,
@@ -843,6 +844,7 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `vertical swipe down near chapter start opens previous chapter`() {
         val result = resolveVerticalChapterSwipeAction(
+            swipeGesturesEnabled = true,
             swipeToNextChapter = true,
             swipeToPrevChapter = true,
             deltaX = 20f,
@@ -863,6 +865,7 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `horizontal dominant swipe does not trigger vertical chapter switch`() {
         val result = resolveVerticalChapterSwipeAction(
+            swipeGesturesEnabled = true,
             swipeToNextChapter = true,
             swipeToPrevChapter = true,
             deltaX = 320f,
@@ -883,6 +886,7 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `webview vertical swipe up near chapter end opens next chapter`() {
         val result = resolveWebViewVerticalChapterSwipeAction(
+            swipeGesturesEnabled = true,
             swipeToNextChapter = true,
             swipeToPrevChapter = true,
             deltaX = 8f,
@@ -903,6 +907,7 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `webview vertical swipe requires minimum distance`() {
         val result = resolveWebViewVerticalChapterSwipeAction(
+            swipeGesturesEnabled = true,
             swipeToNextChapter = true,
             swipeToPrevChapter = true,
             deltaX = 2f,
@@ -923,6 +928,7 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `webview vertical swipe ignores horizontal dominant gesture`() {
         val result = resolveWebViewVerticalChapterSwipeAction(
+            swipeGesturesEnabled = true,
             swipeToNextChapter = true,
             swipeToPrevChapter = true,
             deltaX = 220f,
@@ -943,6 +949,7 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `vertical swipe requires deliberate hold duration`() {
         val result = resolveVerticalChapterSwipeAction(
+            swipeGesturesEnabled = true,
             swipeToNextChapter = true,
             swipeToPrevChapter = false,
             deltaX = 4f,
@@ -963,6 +970,7 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `webview vertical swipe requires starting near chapter boundary`() {
         val result = resolveWebViewVerticalChapterSwipeAction(
+            swipeGesturesEnabled = true,
             swipeToNextChapter = true,
             swipeToPrevChapter = false,
             deltaX = 2f,
@@ -972,6 +980,48 @@ class NovelReaderUiVisibilityTest {
             gestureDurationMillis = 220L,
             minHoldDurationMillis = 160L,
             wasNearChapterEndAtDown = false,
+            wasNearChapterStartAtDown = false,
+            isNearChapterEnd = true,
+            isNearChapterStart = false,
+        )
+
+        assertTrue(result == VerticalChapterSwipeAction.NONE)
+    }
+
+    @Test
+    fun `vertical chapter swipe ignores gestures when master switch is off`() {
+        val result = resolveVerticalChapterSwipeAction(
+            swipeGesturesEnabled = false,
+            swipeToNextChapter = true,
+            swipeToPrevChapter = true,
+            deltaX = 8f,
+            deltaY = -260f,
+            minSwipeDistancePx = 140f,
+            horizontalTolerancePx = 24f,
+            gestureDurationMillis = 220L,
+            minHoldDurationMillis = 160L,
+            wasNearChapterEndAtDown = true,
+            wasNearChapterStartAtDown = false,
+            isNearChapterEnd = true,
+            isNearChapterStart = false,
+        )
+
+        assertTrue(result == VerticalChapterSwipeAction.NONE)
+    }
+
+    @Test
+    fun `webview vertical chapter swipe ignores gestures when master switch is off`() {
+        val result = resolveWebViewVerticalChapterSwipeAction(
+            swipeGesturesEnabled = false,
+            swipeToNextChapter = true,
+            swipeToPrevChapter = true,
+            deltaX = 8f,
+            deltaY = -180f,
+            minSwipeDistancePx = 72f,
+            horizontalTolerancePx = 20f,
+            gestureDurationMillis = 220L,
+            minHoldDurationMillis = 160L,
+            wasNearChapterEndAtDown = true,
             wasNearChapterStartAtDown = false,
             isNearChapterEnd = true,
             isNearChapterStart = false,
@@ -1199,6 +1249,54 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `kindle dependent toggles disable when kindle info block is off`() {
+        assertFalse(areQuickDialogKindleDependentControlsEnabled(showKindleInfoBlock = false))
+        assertTrue(areQuickDialogKindleDependentControlsEnabled(showKindleInfoBlock = true))
+    }
+
+    @Test
+    fun `renderer control state explains disabled combinations`() {
+        val pageModeState = resolveRendererSettingsAvailability(
+            pageReaderEnabled = true,
+            showWebView = false,
+            bionicReadingEnabled = false,
+        )
+        assertFalse(pageModeState.preferWebViewEnabled)
+        assertTrue(pageModeState.preferWebViewReason == RendererSettingDisableReason.PAGE_MODE)
+        assertFalse(pageModeState.richNativeEnabled)
+        assertTrue(pageModeState.richNativeReason == RendererSettingDisableReason.PAGE_MODE)
+
+        val webViewState = resolveRendererSettingsAvailability(
+            pageReaderEnabled = false,
+            showWebView = true,
+            bionicReadingEnabled = false,
+        )
+        assertTrue(webViewState.preferWebViewEnabled)
+        assertTrue(webViewState.preferWebViewReason == null)
+        assertFalse(webViewState.richNativeEnabled)
+        assertTrue(webViewState.richNativeReason == RendererSettingDisableReason.WEBVIEW_ACTIVE)
+
+        val bionicState = resolveRendererSettingsAvailability(
+            pageReaderEnabled = false,
+            showWebView = false,
+            bionicReadingEnabled = true,
+        )
+        assertTrue(bionicState.preferWebViewEnabled)
+        assertFalse(bionicState.richNativeEnabled)
+        assertTrue(bionicState.richNativeReason == RendererSettingDisableReason.BIONIC_READING)
+    }
+
+    @Test
+    fun `settings surface strategy exposes ownership summaries`() {
+        val strategy = resolveNovelReaderSettingsSurfaceStrategy()
+
+        assertTrue(NovelReaderSettingsFamily.SOURCE_ALIGNMENT_POLICY in strategy.globalOnlyFamilies)
+        assertTrue(NovelReaderSettingsFamily.CHAPTER_CACHE_POLICY in strategy.globalOnlyFamilies)
+        assertTrue(NovelReaderSettingsFamily.LIVE_TEXT_STYLING in strategy.quickDialogOnlyFamilies)
+        assertTrue(NovelReaderSettingsFamily.RENDERER_TUNING in strategy.quickDialogOnlyFamilies)
+    }
+
+    @Test
     fun `native text align uses source alignment when preserve is enabled`() {
         assertTrue(
             resolveNativeTextAlign(
@@ -1279,8 +1377,8 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `reader webview keeps javascript enabled even without plugin script`() {
-        assertTrue(shouldEnableJavaScriptInReaderWebView(pluginRequestsJavaScript = false))
+    fun `reader webview javascript follows plugin request flag`() {
+        assertFalse(shouldEnableJavaScriptInReaderWebView(pluginRequestsJavaScript = false))
         assertTrue(shouldEnableJavaScriptInReaderWebView(pluginRequestsJavaScript = true))
     }
 
@@ -1293,6 +1391,7 @@ class NovelReaderUiVisibilityTest {
             paddingHorizontal = 16,
             fontSizePx = 16,
             lineHeightMultiplier = 1.6f,
+            paragraphSpacingPx = 12,
             textAlignCss = "justify",
             firstLineIndentCss = "2em",
             textColorHex = "#111111",
@@ -1354,6 +1453,7 @@ class NovelReaderUiVisibilityTest {
             paddingHorizontal = 16,
             fontSizePx = 16,
             lineHeightMultiplier = 1.6f,
+            paragraphSpacingPx = 12,
             textAlignCss = null,
             firstLineIndentCss = null,
             textColorHex = "#EDEDED",
@@ -1392,6 +1492,7 @@ class NovelReaderUiVisibilityTest {
             paddingHorizontal = 16,
             fontSizePx = 16,
             lineHeightMultiplier = 1.6f,
+            paragraphSpacingPx = 12,
             textAlignCss = null,
             firstLineIndentCss = null,
             textColorHex = "#EDEDED",
@@ -1451,6 +1552,7 @@ class NovelReaderUiVisibilityTest {
             paddingHorizontal = 16,
             fontSizePx = 16,
             lineHeightMultiplier = 1.6f,
+            paragraphSpacingPx = 12,
             textAlignCss = null,
             firstLineIndentCss = null,
             textColorHex = "#111111",
@@ -1489,6 +1591,7 @@ class NovelReaderUiVisibilityTest {
             paddingHorizontal = 16,
             fontSizePx = 16,
             lineHeightMultiplier = 1.6f,
+            paragraphSpacingPx = 12,
             textAlignCss = null,
             firstLineIndentCss = null,
             textColorHex = "#EDEDED",
@@ -1517,6 +1620,7 @@ class NovelReaderUiVisibilityTest {
             paddingHorizontal = 16,
             fontSizePx = 16,
             lineHeightMultiplier = 1.6f,
+            paragraphSpacingPx = 12,
             textAlignCss = null,
             firstLineIndentCss = null,
             textColorHex = "#111111",
@@ -1538,6 +1642,7 @@ class NovelReaderUiVisibilityTest {
             paddingHorizontal = 16,
             fontSizePx = 16,
             lineHeightMultiplier = 1.6f,
+            paragraphSpacingPx = 12,
             textAlignCss = null,
             firstLineIndentCss = null,
             textColorHex = "#111111",
@@ -1901,7 +2006,7 @@ class NovelReaderUiVisibilityTest {
                     firstLineIndentEm = null,
                 ),
             ),
-            paragraphSpacing = NovelReaderParagraphSpacing.NORMAL,
+            paragraphSpacingDp = 12,
         )
 
         val hasIndent = chapter.paragraphStyles.any { range ->
@@ -1911,7 +2016,7 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `rich page builder uses single newline for normal paragraph spacing`() {
+    fun `rich page builder uses slider-based paragraph separator`() {
         val chapter = buildRichPageReaderChapterAnnotatedText(
             listOf(
                 NovelRichContentBlock.Paragraph(
@@ -1921,9 +2026,50 @@ class NovelReaderUiVisibilityTest {
                     segments = listOf(NovelRichTextSegment(text = "Second paragraph")),
                 ),
             ),
-            paragraphSpacing = NovelReaderParagraphSpacing.NORMAL,
+            paragraphSpacingDp = 24,
         )
 
-        assertTrue(chapter.text == "First paragraph\nSecond paragraph")
+        assertTrue(chapter.text == "First paragraph\n\nSecond paragraph")
+    }
+
+    @Test
+    fun `webview css uses requested paragraph spacing value`() {
+        val css = buildWebReaderCssText(
+            fontFaceCss = "",
+            paddingTop = 0,
+            paddingBottom = 0,
+            paddingHorizontal = 16,
+            fontSizePx = 16,
+            lineHeightMultiplier = 1.6f,
+            paragraphSpacingPx = 18,
+            textAlignCss = null,
+            firstLineIndentCss = null,
+            textColorHex = "#111111",
+            backgroundHex = "#FFFFFF",
+            appearanceMode = NovelReaderAppearanceMode.THEME,
+            backgroundTexture = NovelReaderBackgroundTexture.NONE,
+            oledEdgeGradient = false,
+            backgroundImageUrl = null,
+            fontFamilyName = null,
+            customCss = "",
+            textShadowCss = null,
+            forceBoldText = false,
+            forceItalicText = false,
+        )
+
+        assertTrue(css.contains("margin-bottom: 18px !important;"))
+    }
+
+    @Test
+    fun `webview bionic script does not override selected font family`() {
+        val script = buildWebReaderBionicJavascript(enabled = true)
+
+        assertTrue(script.contains("an-reader-bionic"))
+        assertFalse(script.contains("font-family"))
+    }
+
+    @Test
+    fun `webview bionic script is empty when disabled`() {
+        assertTrue(buildWebReaderBionicJavascript(enabled = false).isBlank())
     }
 }

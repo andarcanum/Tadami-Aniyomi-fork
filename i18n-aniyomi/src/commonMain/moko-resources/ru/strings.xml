@@ -313,6 +313,12 @@
     <string name="novel_reader_prefer_webview_renderer_summary">По умолчанию открывать главу в WebView. Отключите, чтобы вернуться к нативному рендереру.</string>
     <string name="novel_reader_rich_native_renderer_experimental">Расширенный нативный рендер (экспериментально)</string>
     <string name="novel_reader_rich_native_renderer_experimental_summary">Сохранять базовые HTML-стили в нативном ридере с автоматическим переходом в WebView для неподдерживаемого содержимого.</string>
+    <string name="novel_reader_renderer_disabled_page_mode_summary">Недоступно, пока включён постраничный режим.</string>
+    <string name="novel_reader_renderer_disabled_webview_summary">Недоступно, пока глава открыта в WebView.</string>
+    <string name="novel_reader_renderer_disabled_bionic_summary">Недоступно, пока включено Bionic Reading.</string>
+    <string name="novel_reader_settings_surface_strategy">Доступность настроек</string>
+    <string name="novel_reader_quick_dialog_global_policy_summary">Подробные политики выравнивания текста источника и кэша глав остаются в глобальных настройках; это быстрое меню оставлено для часто меняемых параметров во время чтения.</string>
+    <string name="novel_reader_global_settings_quick_dialog_summary">Глобальные настройки хранят долгоживущие значения по умолчанию, вроде выравнивания текста источника и кэша глав; быстрое меню в ридере оставлено для параметров, которые меняют прямо во время чтения.</string>
     <string name="novel_reader_clear_chapter_cache">Очистить кэш глав</string>
     <string name="novel_reader_clear_chapter_cache_summary">Удалить весь кэш прочитанных глав (не влияет на загрузки)</string>
 

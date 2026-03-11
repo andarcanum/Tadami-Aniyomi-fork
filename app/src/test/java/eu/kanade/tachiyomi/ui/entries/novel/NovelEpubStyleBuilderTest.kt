@@ -4,7 +4,6 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderParagraphSpacing
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
@@ -123,7 +122,7 @@ class NovelEpubStyleBuilderTest {
             lineHeight = lineHeight,
             margin = margin,
             textAlign = textAlign,
-            paragraphSpacing = NovelReaderParagraphSpacing.NORMAL,
+            paragraphSpacing = 12,
             forceParagraphIndent = false,
             preserveSourceTextAlignInNative = true,
             fontFamily = fontFamily,

@@ -20,7 +20,7 @@ data class NovelReaderSettings(
     val lineHeight: Float,
     val margin: Int,
     val textAlign: TextAlign,
-    val paragraphSpacing: NovelReaderParagraphSpacing,
+    val paragraphSpacing: Int,
     val forceParagraphIndent: Boolean,
     val preserveSourceTextAlignInNative: Boolean,
     val fontFamily: String,
@@ -184,7 +184,7 @@ data class NovelReaderOverride(
     val lineHeight: Float? = null,
     val margin: Int? = null,
     val textAlign: TextAlign? = null,
-    val paragraphSpacing: NovelReaderParagraphSpacing? = null,
+    val paragraphSpacingDp: Int? = null,
     val forceParagraphIndent: Boolean? = null,
     val preserveSourceTextAlignInNative: Boolean? = null,
     val fontFamily: String? = null,
@@ -282,6 +282,7 @@ class NovelReaderPreferences(
     private val json: Json = Injekt.get(),
 ) {
     init {
+        migrateLegacyParagraphSpacingIfNeeded()
         migrateLegacyBackgroundSelectionIfNeeded()
     }
 
@@ -295,7 +296,15 @@ class NovelReaderPreferences(
     fun textAlign() = preferenceStore.getEnum("novel_reader_text_align", TextAlign.SOURCE)
 
     fun paragraphSpacing() =
-        preferenceStore.getEnum("novel_reader_paragraph_spacing", NovelReaderParagraphSpacing.NORMAL)
+        preferenceStore.getInt("novel_reader_paragraph_spacing_dp", DEFAULT_PARAGRAPH_SPACING_DP)
+
+    private fun migrateLegacyParagraphSpacingIfNeeded() {
+        val legacyValue = preferenceStore
+            .getString("novel_reader_paragraph_spacing", "")
+            .get()
+            .ifBlank { return }
+        paragraphSpacing().set(resolveLegacyParagraphSpacingDp(legacyValue))
+    }
 
     fun forceParagraphIndent() = preferenceStore.getBoolean("novel_reader_force_paragraph_indent", true)
 
@@ -554,7 +563,7 @@ class NovelReaderPreferences(
                 lineHeight = lineHeight().get(),
                 margin = margin().get(),
                 textAlign = textAlign().get(),
-                paragraphSpacing = paragraphSpacing().get(),
+                paragraphSpacingDp = paragraphSpacing().get(),
                 forceParagraphIndent = forceParagraphIndent().get(),
                 preserveSourceTextAlignInNative = preserveSourceTextAlignInNative().get(),
                 fontFamily = fontFamily().get(),
@@ -646,7 +655,7 @@ class NovelReaderPreferences(
             lineHeight = override?.lineHeight ?: lineHeight().get(),
             margin = override?.margin ?: margin().get(),
             textAlign = override?.textAlign ?: textAlign().get(),
-            paragraphSpacing = override?.paragraphSpacing ?: paragraphSpacing().get(),
+            paragraphSpacing = override?.paragraphSpacingDp ?: paragraphSpacing().get(),
             forceParagraphIndent = override?.forceParagraphIndent ?: forceParagraphIndent().get(),
             preserveSourceTextAlignInNative =
             override?.preserveSourceTextAlignInNative ?: preserveSourceTextAlignInNative().get(),
@@ -764,7 +773,7 @@ class NovelReaderPreferences(
                 values[1] as Float,
                 values[2] as Int,
                 values[3] as TextAlign,
-                values[4] as NovelReaderParagraphSpacing,
+                values[4] as Int,
                 values[5] as Boolean,
                 values[6] as Boolean,
                 values[7] as String,
@@ -966,7 +975,7 @@ class NovelReaderPreferences(
                 lineHeight = override?.lineHeight ?: display.lineHeight,
                 margin = override?.margin ?: display.margin,
                 textAlign = override?.textAlign ?: display.textAlign,
-                paragraphSpacing = override?.paragraphSpacing ?: display.paragraphSpacing,
+                paragraphSpacing = override?.paragraphSpacingDp ?: display.paragraphSpacing,
                 forceParagraphIndent = override?.forceParagraphIndent ?: display.forceParagraphIndent,
                 preserveSourceTextAlignInNative =
                 override?.preserveSourceTextAlignInNative ?: display.preserveSourceTextAlignInNative,
@@ -1063,7 +1072,7 @@ class NovelReaderPreferences(
         val lineHeight: Float,
         val margin: Int,
         val textAlign: TextAlign,
-        val paragraphSpacing: NovelReaderParagraphSpacing,
+        val paragraphSpacing: Int,
         val forceParagraphIndent: Boolean,
         val preserveSourceTextAlignInNative: Boolean,
         val fontFamily: String,
@@ -1165,6 +1174,7 @@ class NovelReaderPreferences(
         const val DEFAULT_FONT_SIZE = 16
         const val DEFAULT_LINE_HEIGHT = 1.6f
         const val DEFAULT_MARGIN = 16
+        const val DEFAULT_PARAGRAPH_SPACING_DP = 12
         const val DEFAULT_AUTO_SCROLL_INTERVAL = 10
         const val DEFAULT_AUTO_SCROLL_OFFSET = 0
         const val DEFAULT_BACKGROUND_PRESET_ID = "linen_paper"
@@ -1175,5 +1185,13 @@ class NovelReaderPreferences(
         )
         private val customThemesSerializer = ListSerializer(NovelReaderColorTheme.serializer())
         private val stringListSerializer = ListSerializer(String.serializer())
+    }
+}
+
+private fun resolveLegacyParagraphSpacingDp(rawValue: String): Int {
+    return when (rawValue) {
+        NovelReaderParagraphSpacing.COMPACT.name -> 8
+        NovelReaderParagraphSpacing.SPACIOUS.name -> 16
+        else -> NovelReaderPreferences.DEFAULT_PARAGRAPH_SPACING_DP
     }
 }

@@ -67,7 +67,6 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderOverride
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderParagraphSpacing
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
@@ -86,6 +85,8 @@ import android.graphics.Color as AndroidColor
 @Composable
 fun NovelReaderSettingsDialog(
     sourceId: Long,
+    currentWebViewActive: Boolean,
+    currentPageReaderActive: Boolean,
     onDismissRequest: () -> Unit,
 ) {
     val preferences = remember { Injekt.get<NovelReaderPreferences>() }
@@ -110,6 +111,8 @@ fun NovelReaderSettingsDialog(
                 GeneralTab(
                     settings = settings,
                     sourceId = sourceId,
+                    currentWebViewActive = currentWebViewActive,
+                    currentPageReaderActive = currentPageReaderActive,
                     overrideEnabled = overrideEnabled,
                     preferences = preferences,
                 )
@@ -130,6 +133,8 @@ fun NovelReaderSettingsDialog(
 private fun GeneralTab(
     settings: eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings,
     sourceId: Long,
+    currentWebViewActive: Boolean,
+    currentPageReaderActive: Boolean,
     overrideEnabled: Boolean,
     preferences: NovelReaderPreferences,
 ) {
@@ -145,6 +150,36 @@ private fun GeneralTab(
         } else {
             setGlobal(value)
         }
+    }
+
+    val rendererAvailability = remember(
+        currentPageReaderActive,
+        currentWebViewActive,
+        settings.bionicReading,
+    ) {
+        resolveRendererSettingsAvailability(
+            pageReaderEnabled = currentPageReaderActive,
+            showWebView = currentWebViewActive,
+            bionicReadingEnabled = settings.bionicReading,
+        )
+    }
+    val surfaceStrategy = remember { resolveNovelReaderSettingsSurfaceStrategy() }
+
+    @Composable
+    fun rendererSubtitle(
+        baseSubtitle: String,
+        reason: RendererSettingDisableReason?,
+    ): String {
+        val reasonText = when (reason) {
+            RendererSettingDisableReason.PAGE_MODE ->
+                stringResource(AYMR.strings.novel_reader_renderer_disabled_page_mode_summary)
+            RendererSettingDisableReason.WEBVIEW_ACTIVE ->
+                stringResource(AYMR.strings.novel_reader_renderer_disabled_webview_summary)
+            RendererSettingDisableReason.BIONIC_READING ->
+                stringResource(AYMR.strings.novel_reader_renderer_disabled_bionic_summary)
+            null -> null
+        }
+        return if (reasonText != null) "$baseSubtitle\n$reasonText" else baseSubtitle
     }
 
     LaunchedEffect(settings.translationProvider) {
@@ -189,6 +224,13 @@ private fun GeneralTab(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (surfaceStrategy.globalOnlyFamilies.isNotEmpty()) {
+            Text(
+                text = stringResource(AYMR.strings.novel_reader_quick_dialog_global_policy_summary),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_page_mode),
@@ -198,8 +240,12 @@ private fun GeneralTab(
         )
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_prefer_webview_renderer),
-            subtitle = stringResource(AYMR.strings.novel_reader_prefer_webview_renderer_summary),
+            subtitle = rendererSubtitle(
+                baseSubtitle = stringResource(AYMR.strings.novel_reader_prefer_webview_renderer_summary),
+                reason = rendererAvailability.preferWebViewReason,
+            ),
             checked = settings.preferWebViewRenderer,
+            enabled = rendererAvailability.preferWebViewEnabled,
             onCheckedChanged = {
                 update(
                     it,
@@ -210,8 +256,12 @@ private fun GeneralTab(
         )
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_rich_native_renderer_experimental),
-            subtitle = stringResource(AYMR.strings.novel_reader_rich_native_renderer_experimental_summary),
+            subtitle = rendererSubtitle(
+                baseSubtitle = stringResource(AYMR.strings.novel_reader_rich_native_renderer_experimental_summary),
+                reason = rendererAvailability.richNativeReason,
+            ),
             checked = settings.richNativeRendererExperimental,
+            enabled = rendererAvailability.richNativeEnabled,
             onCheckedChanged = {
                 update(
                     it,
@@ -246,6 +296,7 @@ private fun GeneralTab(
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_swipe_to_next),
             checked = settings.swipeToNextChapter,
+            enabled = settings.swipeGestures,
             onCheckedChanged = {
                 update(
                     it,
@@ -257,6 +308,7 @@ private fun GeneralTab(
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_swipe_to_prev),
             checked = settings.swipeToPrevChapter,
+            enabled = settings.swipeGestures,
             onCheckedChanged = {
                 update(
                     it,
@@ -352,16 +404,16 @@ private fun GeneralTab(
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_show_time_to_end),
             checked = settings.showTimeToEnd,
+            enabled = areQuickDialogKindleDependentControlsEnabled(settings.showKindleInfoBlock),
             onCheckedChanged = {
-                if (!settings.showKindleInfoBlock) return@SwitchPreferenceWidget
                 update(it, { o, v -> o.copy(showTimeToEnd = v) }, { preferences.showTimeToEnd().set(it) })
             },
         )
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_show_word_count),
             checked = settings.showWordCount,
+            enabled = areQuickDialogKindleDependentControlsEnabled(settings.showKindleInfoBlock),
             onCheckedChanged = {
-                if (!settings.showKindleInfoBlock) return@SwitchPreferenceWidget
                 update(it, { o, v -> o.copy(showWordCount = v) }, { preferences.showWordCount().set(it) })
             },
         )
@@ -759,43 +811,20 @@ private fun ReadingTab(
             steps = 7,
             onChange = { update(it, { o, v -> o.copy(lineHeight = v) }, { preferences.lineHeight().set(it) }) },
         )
-        Text(
-            text = stringResource(AYMR.strings.novel_reader_paragraph_spacing),
-            style = MaterialTheme.typography.bodyMedium,
+        LnReaderSliderRow(
+            label = stringResource(AYMR.strings.novel_reader_paragraph_spacing),
+            valueText = "${settings.paragraphSpacing}dp",
+            value = settings.paragraphSpacing.toFloat(),
+            range = 0f..32f,
+            steps = 31,
+            onChange = {
+                update(
+                    it.toInt(),
+                    { o, v -> o.copy(paragraphSpacingDp = v) },
+                    { preferences.paragraphSpacing().set(it) },
+                )
+            },
         )
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(NovelReaderParagraphSpacing.entries) { option ->
-                val selected = settings.paragraphSpacing == option
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (selected) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    },
-                    modifier = Modifier.clickable {
-                        update(
-                            option,
-                            { o, v -> o.copy(paragraphSpacing = v) },
-                            { preferences.paragraphSpacing().set(it) },
-                        )
-                    },
-                ) {
-                    Text(
-                        text = when (option) {
-                            NovelReaderParagraphSpacing.COMPACT ->
-                                stringResource(AYMR.strings.novel_reader_paragraph_spacing_compact)
-                            NovelReaderParagraphSpacing.NORMAL ->
-                                stringResource(AYMR.strings.novel_reader_paragraph_spacing_normal)
-                            NovelReaderParagraphSpacing.SPACIOUS ->
-                                stringResource(AYMR.strings.novel_reader_paragraph_spacing_spacious)
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                }
-            }
-        }
         LnReaderSliderRow(
             label = stringResource(AYMR.strings.novel_reader_margins),
             valueText = "${settings.margin}dp",
