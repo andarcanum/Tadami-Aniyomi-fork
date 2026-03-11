@@ -19,6 +19,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderParagraphSpacing
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -793,6 +794,7 @@ class NovelReaderUiVisibilityTest {
         val blocks = resolvePageReaderBlocks(
             shouldPaginate = false,
             textBlocks = listOf("First", "Second"),
+            paragraphSpacing = NovelReaderParagraphSpacing.NORMAL,
         ) {
             invocationCount++
             listOf("paged")
@@ -800,6 +802,22 @@ class NovelReaderUiVisibilityTest {
 
         assertTrue(blocks == listOf("First", "Second"))
         assertTrue(invocationCount == 0)
+    }
+
+    @Test
+    fun `page reader joins paragraphs without full blank line for normal spacing`() {
+        var paginatedInput: String? = null
+
+        resolvePageReaderBlocks(
+            shouldPaginate = true,
+            textBlocks = listOf("First paragraph", "Second paragraph"),
+            paragraphSpacing = NovelReaderParagraphSpacing.NORMAL,
+        ) { chapterText ->
+            paginatedInput = chapterText
+            listOf(chapterText)
+        }
+
+        assertTrue(paginatedInput == "First paragraph\nSecond paragraph")
     }
 
     @Test
@@ -1286,6 +1304,8 @@ class NovelReaderUiVisibilityTest {
             fontFamilyName = null,
             customCss = "",
             textShadowCss = null,
+            forceBoldText = false,
+            forceItalicText = false,
         )
 
         assertTrue(css.contains("--an-reader-align: justify;"))
@@ -1345,6 +1365,8 @@ class NovelReaderUiVisibilityTest {
             fontFamilyName = null,
             customCss = "",
             textShadowCss = textShadowCss,
+            forceBoldText = false,
+            forceItalicText = false,
         )
 
         assertTrue(textShadowCss != null)
@@ -1381,6 +1403,8 @@ class NovelReaderUiVisibilityTest {
             fontFamilyName = null,
             customCss = "",
             textShadowCss = textShadowCss,
+            forceBoldText = false,
+            forceItalicText = false,
         )
 
         assertTrue(textShadowCss == null)
@@ -1419,6 +1443,44 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `webview css applies forced bold and italic to body`() {
+        val css = buildWebReaderCssText(
+            fontFaceCss = "",
+            paddingTop = 0,
+            paddingBottom = 0,
+            paddingHorizontal = 16,
+            fontSizePx = 16,
+            lineHeightMultiplier = 1.6f,
+            textAlignCss = null,
+            firstLineIndentCss = null,
+            textColorHex = "#111111",
+            backgroundHex = "#FFFFFF",
+            appearanceMode = NovelReaderAppearanceMode.THEME,
+            backgroundTexture = NovelReaderBackgroundTexture.NONE,
+            oledEdgeGradient = false,
+            backgroundImageUrl = null,
+            fontFamilyName = null,
+            customCss = "",
+            textShadowCss = null,
+            forceBoldText = true,
+            forceItalicText = true,
+        )
+
+        assertTrue(css.contains("--an-reader-font-weight: 700;"))
+        assertTrue(css.contains("--an-reader-font-style: italic;"))
+        assertTrue(css.contains("font-weight: var(--an-reader-font-weight) !important;"))
+        assertTrue(css.contains("font-style: var(--an-reader-font-style) !important;"))
+    }
+
+    @Test
+    fun `forced typeface style resolves combined style`() {
+        assertEquals(android.graphics.Typeface.NORMAL, resolveForcedReaderTypefaceStyle(false, false))
+        assertEquals(android.graphics.Typeface.BOLD, resolveForcedReaderTypefaceStyle(true, false))
+        assertEquals(android.graphics.Typeface.ITALIC, resolveForcedReaderTypefaceStyle(false, true))
+        assertEquals(android.graphics.Typeface.BOLD_ITALIC, resolveForcedReaderTypefaceStyle(true, true))
+    }
+
+    @Test
     fun `webview css uses explicit image layer in background mode`() {
         val css = buildWebReaderCssText(
             fontFaceCss = "",
@@ -1438,6 +1500,8 @@ class NovelReaderUiVisibilityTest {
             fontFamilyName = null,
             customCss = "",
             textShadowCss = null,
+            forceBoldText = false,
+            forceItalicText = false,
         )
 
         assertTrue(css.contains("url('https://reader-background.local/preset/night_velvet')"))
@@ -1464,6 +1528,8 @@ class NovelReaderUiVisibilityTest {
             fontFamilyName = null,
             customCss = "",
             textShadowCss = null,
+            forceBoldText = false,
+            forceItalicText = false,
         )
         val second = buildWebReaderCssFingerprint(
             chapterId = 1L,
@@ -1483,6 +1549,8 @@ class NovelReaderUiVisibilityTest {
             fontFamilyName = null,
             customCss = "",
             textShadowCss = null,
+            forceBoldText = false,
+            forceItalicText = false,
         )
 
         assertNotEquals(first, second)
@@ -1833,11 +1901,29 @@ class NovelReaderUiVisibilityTest {
                     firstLineIndentEm = null,
                 ),
             ),
+            paragraphSpacing = NovelReaderParagraphSpacing.NORMAL,
         )
 
         val hasIndent = chapter.paragraphStyles.any { range ->
             range.item.textIndent == TextIndent(firstLine = 2.em)
         }
         assertTrue(hasIndent)
+    }
+
+    @Test
+    fun `rich page builder uses single newline for normal paragraph spacing`() {
+        val chapter = buildRichPageReaderChapterAnnotatedText(
+            listOf(
+                NovelRichContentBlock.Paragraph(
+                    segments = listOf(NovelRichTextSegment(text = "First paragraph")),
+                ),
+                NovelRichContentBlock.Paragraph(
+                    segments = listOf(NovelRichTextSegment(text = "Second paragraph")),
+                ),
+            ),
+            paragraphSpacing = NovelReaderParagraphSpacing.NORMAL,
+        )
+
+        assertTrue(chapter.text == "First paragraph\nSecond paragraph")
     }
 }

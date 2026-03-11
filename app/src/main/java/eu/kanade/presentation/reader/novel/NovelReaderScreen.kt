@@ -475,10 +475,17 @@ fun NovelReaderScreen(
             selectedFontId = state.readerSettings.fontFamily,
         )
     }
-    val composeTypeface = remember(selectedReaderFont.id, context) {
+    val composeTypeface = remember(
+        selectedReaderFont.id,
+        state.readerSettings.forceBoldText,
+        state.readerSettings.forceItalicText,
+        context,
+    ) {
         loadNovelReaderTypeface(
             context = context,
             font = selectedReaderFont,
+            forceBoldText = state.readerSettings.forceBoldText,
+            forceItalicText = state.readerSettings.forceItalicText,
         )
     }
     val composeFontFamily = remember(selectedReaderFont.id, composeTypeface) {
@@ -562,6 +569,7 @@ fun NovelReaderScreen(
         resolvePageReaderBlocks(
             shouldPaginate = shouldPaginateForPageReader,
             textBlocks = state.textBlocks,
+            paragraphSpacing = state.readerSettings.paragraphSpacing,
         ) { chapterText ->
             val screenWidthPx = pageViewportSize.width.takeIf { it > 0 }
                 ?: with(density) { configuration.screenWidthDp.dp.roundToPx() }
@@ -606,6 +614,7 @@ fun NovelReaderScreen(
         } else {
             val richChapterText = buildRichPageReaderChapterAnnotatedText(
                 richBlocks = state.richContentBlocks,
+                paragraphSpacing = state.readerSettings.paragraphSpacing,
                 forcedParagraphFirstLineIndentEm = if (state.readerSettings.forceParagraphIndent) {
                     FORCED_PARAGRAPH_FIRST_LINE_INDENT_EM
                 } else {
@@ -1476,6 +1485,8 @@ fun NovelReaderScreen(
                     fontFamilyName = initialSelectedFontFamily,
                     customCss = state.readerSettings.customCSS,
                     textShadowCss = initialTextShadowCss,
+                    forceBoldText = state.readerSettings.forceBoldText,
+                    forceItalicText = state.readerSettings.forceItalicText,
                 )
                 val initialFactoryWebViewHtml = buildInitialWebReaderHtml(
                     rawHtml = state.html,
@@ -1684,6 +1695,8 @@ fun NovelReaderScreen(
                             fontFamilyName = selectedFontFamily,
                             customCss = state.readerSettings.customCSS,
                             textShadowCss = currentTextShadowCss,
+                            forceBoldText = state.readerSettings.forceBoldText,
+                            forceItalicText = state.readerSettings.forceItalicText,
                         )
                         val currentRestoreProgress = state.lastSavedWebProgressPercent.coerceIn(0, 100)
                         val currentFontSize = state.readerSettings.fontSize
@@ -1706,6 +1719,8 @@ fun NovelReaderScreen(
                             fontFamilyName = selectedFontFamily,
                             customCss = currentCustomCss,
                             textShadowCss = currentTextShadowCss,
+                            forceBoldText = state.readerSettings.forceBoldText,
+                            forceItalicText = state.readerSettings.forceItalicText,
                         )
                         val initialWebViewHtml = buildInitialWebReaderHtml(
                             rawHtml = state.html,
@@ -1772,6 +1787,8 @@ fun NovelReaderScreen(
                                     fontFamilyName = selectedFontFamily,
                                     customCss = currentCustomCss,
                                     textShadowCss = currentTextShadowCss,
+                                    forceBoldText = state.readerSettings.forceBoldText,
+                                    forceItalicText = state.readerSettings.forceItalicText,
                                 )
                                 appliedWebCssFingerprint = styleFingerprint
 
@@ -1851,6 +1868,8 @@ fun NovelReaderScreen(
                                 fontFamilyName = selectedFontFamily,
                                 customCss = state.readerSettings.customCSS,
                                 textShadowCss = currentTextShadowCss,
+                                forceBoldText = state.readerSettings.forceBoldText,
+                                forceItalicText = state.readerSettings.forceItalicText,
                             )
                             appliedWebCssFingerprint = styleFingerprint
                         }
@@ -4027,6 +4046,8 @@ internal fun buildWebReaderCssText(
     fontFamilyName: String?,
     customCss: String,
     textShadowCss: String?,
+    forceBoldText: Boolean,
+    forceItalicText: Boolean,
 ): String {
     val escapedFontFamily = fontFamilyName
         ?.replace("\\", "\\\\")
@@ -4053,6 +4074,8 @@ internal fun buildWebReaderCssText(
         if (fontVariable.isNotBlank()) {
             append("  --an-reader-font: $fontVariable;\n")
         }
+        append("  --an-reader-font-weight: ${if (forceBoldText) "700" else "400"};\n")
+        append("  --an-reader-font-style: ${if (forceItalicText) "italic" else "normal"};\n")
         append("}\n")
         append("html, body {\n")
         append("  margin: 0 !important;\n")
@@ -4080,6 +4103,8 @@ internal fun buildWebReaderCssText(
         if (fontVariable.isNotBlank()) {
             append("  font-family: var(--an-reader-font) !important;\n")
         }
+        append("  font-weight: var(--an-reader-font-weight) !important;\n")
+        append("  font-style: var(--an-reader-font-style) !important;\n")
         append("}\n")
         append("body > * {\n")
         append("  margin-top: 0 !important;\n")
@@ -4250,6 +4275,8 @@ private fun WebView.applyReaderCss(
     fontFamilyName: String?,
     customCss: String,
     textShadowCss: String?,
+    forceBoldText: Boolean,
+    forceItalicText: Boolean,
 ) {
     val css = buildWebReaderCssText(
         fontFaceCss = fontFaceCss,
@@ -4269,6 +4296,8 @@ private fun WebView.applyReaderCss(
         fontFamilyName = fontFamilyName,
         customCss = customCss,
         textShadowCss = textShadowCss,
+        forceBoldText = forceBoldText,
+        forceItalicText = forceItalicText,
     )
     val escapedFontFamily = fontFamilyName
         ?.replace("\\", "\\\\")
@@ -4802,12 +4831,13 @@ internal fun resolveReaderTapAction(
 internal fun resolvePageReaderBlocks(
     shouldPaginate: Boolean,
     textBlocks: List<String>,
+    paragraphSpacing: NovelReaderParagraphSpacing,
     paginate: (String) -> List<String>,
 ): List<String> {
     val fallbackBlocks = textBlocks.takeIf { it.isNotEmpty() } ?: listOf("")
     if (!shouldPaginate) return fallbackBlocks
 
-    val chapterText = textBlocks.joinToString("\n\n").trim()
+    val chapterText = textBlocks.joinToString(resolvePageReaderParagraphSeparator(paragraphSpacing)).trim()
     if (chapterText.isBlank()) return fallbackBlocks
 
     return paginate(chapterText).ifEmpty { fallbackBlocks }
@@ -4815,9 +4845,12 @@ internal fun resolvePageReaderBlocks(
 
 internal fun buildRichPageReaderChapterAnnotatedText(
     richBlocks: List<NovelRichContentBlock>,
+    paragraphSpacing: NovelReaderParagraphSpacing,
     forcedParagraphFirstLineIndentEm: Float? = null,
 ): AnnotatedString {
     if (richBlocks.isEmpty()) return AnnotatedString("")
+
+    val paragraphSeparator = resolvePageReaderParagraphSeparator(paragraphSpacing)
 
     return buildAnnotatedString {
         var appendedAny = false
@@ -4830,7 +4863,7 @@ internal fun buildRichPageReaderChapterAnnotatedText(
                 is NovelRichContentBlock.Image -> AnnotatedString("")
             }
             if (blockText.text.isBlank()) return@forEach
-            if (appendedAny) append("\n\n")
+            if (appendedAny) append(paragraphSeparator)
             val start = length
             append(blockText)
             val end = length
@@ -4848,6 +4881,17 @@ internal fun buildRichPageReaderChapterAnnotatedText(
             }
             appendedAny = true
         }
+    }
+}
+
+internal fun resolvePageReaderParagraphSeparator(
+    paragraphSpacing: NovelReaderParagraphSpacing,
+): String {
+    return when (paragraphSpacing) {
+        NovelReaderParagraphSpacing.COMPACT,
+        NovelReaderParagraphSpacing.NORMAL,
+        -> "\n"
+        NovelReaderParagraphSpacing.SPACIOUS -> "\n\n"
     }
 }
 
@@ -4991,8 +5035,10 @@ private fun resolveReaderBackgroundWebResourceResponse(
 internal fun loadNovelReaderTypeface(
     context: Context,
     font: NovelReaderFontOption,
+    forceBoldText: Boolean = false,
+    forceItalicText: Boolean = false,
 ): android.graphics.Typeface? {
-    return runCatching {
+    val baseTypeface = runCatching {
         when (font.source) {
             NovelReaderFontSource.BUILT_IN -> font.fontResId?.let { ResourcesCompat.getFont(context, it) }
             NovelReaderFontSource.LOCAL_PRIVATE -> {
@@ -5008,6 +5054,33 @@ internal fun loadNovelReaderTypeface(
                     ?.let { android.graphics.Typeface.createFromFile(it) }
         }
     }.getOrNull()
+    return resolveForcedReaderTypeface(
+        typeface = baseTypeface,
+        forceBoldText = forceBoldText,
+        forceItalicText = forceItalicText,
+    )
+}
+
+internal fun resolveForcedReaderTypeface(
+    typeface: android.graphics.Typeface?,
+    forceBoldText: Boolean,
+    forceItalicText: Boolean,
+): android.graphics.Typeface? {
+    if (typeface == null) return null
+    val style = resolveForcedReaderTypefaceStyle(forceBoldText, forceItalicText)
+    return android.graphics.Typeface.create(typeface, style)
+}
+
+internal fun resolveForcedReaderTypefaceStyle(
+    forceBoldText: Boolean,
+    forceItalicText: Boolean,
+): Int {
+    return when {
+        forceBoldText && forceItalicText -> android.graphics.Typeface.BOLD_ITALIC
+        forceBoldText -> android.graphics.Typeface.BOLD
+        forceItalicText -> android.graphics.Typeface.ITALIC
+        else -> android.graphics.Typeface.NORMAL
+    }
 }
 
 internal fun resolveNovelReaderComposeFontFamily(
@@ -5105,6 +5178,8 @@ internal fun buildWebReaderCssFingerprint(
     fontFamilyName: String?,
     customCss: String,
     textShadowCss: String?,
+    forceBoldText: Boolean,
+    forceItalicText: Boolean,
 ): String {
     return buildString {
         append(chapterId)
@@ -5124,6 +5199,8 @@ internal fun buildWebReaderCssFingerprint(
         append('|').append(fontFamilyName.orEmpty())
         append('|').append(customCss)
         append('|').append(textShadowCss ?: "<none>")
+        append('|').append(forceBoldText)
+        append('|').append(forceItalicText)
     }
 }
 
