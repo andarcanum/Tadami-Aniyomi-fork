@@ -12,6 +12,18 @@ The format is a modified version of [Keep a Changelog](https://keepachangelog.co
 
 ## Unreleased
 
+## [v0.29] - 2026-03-11
+
+### Added
+
+- Added a novel reader custom font catalog with support for built-in fonts, local private fonts, and user-imported fonts.
+- Added collapsible `Local` and `My fonts` sections in the novel reader settings, including import and removal actions for user fonts.
+
+### Changed
+
+- Moved local private novel reader fonts to the ignored `app/src/main/assets/local/fonts/` path so public builds stay clean while local builds can preload extra fonts.
+- Improved novel reader WebView font handling so file-backed fonts resolve through the same selection pipeline as built-in fonts.
+
 ### Added
 
 - Added a description for the horizontal seek gesture setting ([@kenkoro](https://github.com/kenkoro)) ([#2224](https://github.com/aniyomiorg/aniyomi/pull/2224))
