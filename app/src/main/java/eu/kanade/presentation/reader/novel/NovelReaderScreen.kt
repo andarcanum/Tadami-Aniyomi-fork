@@ -192,6 +192,8 @@ import uy.kohesive.injekt.api.get
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.net.URLConnection
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
@@ -320,19 +322,49 @@ fun NovelReaderScreen(
     val timeText by rememberCurrentTimeText(context)
     val missingCustomBackgroundMessage =
         stringResource(AYMR.strings.novel_reader_background_custom_missing_fallback)
+    val customBackgroundId = state.readerSettings.customBackgroundId
     val customBackgroundPath = state.readerSettings.customBackgroundPath
-    val customBackgroundExists = remember(customBackgroundPath) {
-        customBackgroundPath.isNotBlank() && File(customBackgroundPath).exists()
+    val customBackgroundItems = remember(
+        customBackgroundId,
+        customBackgroundPath,
+    ) {
+        if (
+            customBackgroundPath.isNotBlank() &&
+            customBackgroundId.isNotBlank() &&
+            customBackgroundId == customBackgroundPath
+        ) {
+            ensureLegacyNovelReaderBackgroundItem(
+                context = context,
+                legacyPath = customBackgroundPath,
+                preferredId = customBackgroundId,
+            )
+        }
+        readNovelReaderCustomBackgroundItems(context)
+    }
+    val customBackgroundExists = remember(
+        customBackgroundId,
+        customBackgroundPath,
+        customBackgroundItems,
+    ) {
+        val selectedPathFromCatalog = customBackgroundItems
+            .firstOrNull { it.id == customBackgroundId }
+            ?.absolutePath
+        val candidatePath = selectedPathFromCatalog ?: customBackgroundPath
+        candidatePath.isNotBlank() && File(candidatePath).exists()
     }
     val backgroundSelection = remember(
         state.readerSettings.backgroundSource,
         state.readerSettings.backgroundPresetId,
+        customBackgroundId,
         customBackgroundPath,
+        customBackgroundItems,
         customBackgroundExists,
     ) {
         resolveReaderBackgroundSelection(
             backgroundSource = state.readerSettings.backgroundSource,
             backgroundPresetId = state.readerSettings.backgroundPresetId,
+            customBackgroundId = customBackgroundId,
+            customBackgroundItems = customBackgroundItems,
             customBackgroundPath = customBackgroundPath,
             customBackgroundExists = customBackgroundExists,
         )
@@ -361,7 +393,11 @@ fun NovelReaderScreen(
                 }
             }
             NovelReaderBackgroundSource.CUSTOM -> {
-                customBackgroundLuminance ?: if (backgroundSelection.preset.isDarkPreferred) 0.2f else 0.8f
+                customBackgroundLuminance ?: when (backgroundSelection.customIsDarkHint) {
+                    true -> 0.2f
+                    false -> 0.8f
+                    null -> if (backgroundSelection.preset.isDarkPreferred) 0.2f else 0.8f
+                }
             }
         }
     }
@@ -4843,7 +4879,9 @@ internal fun verticalSeekbarLabels(
 internal data class ReaderBackgroundSelection(
     val source: NovelReaderBackgroundSource,
     val preset: NovelReaderBackgroundPreset,
+    val customId: String?,
     val customPath: String?,
+    val customIsDarkHint: Boolean?,
 )
 
 private const val READER_BACKGROUND_PRESET_URL_PREFIX = "https://reader-background.local/preset/"
@@ -4854,25 +4892,43 @@ internal fun resolveReaderBackgroundSelection(
     backgroundPresetId: String,
     customBackgroundPath: String,
     customBackgroundExists: Boolean,
+    customBackgroundId: String = "",
+    customBackgroundItems: List<NovelReaderCustomBackgroundItem> = emptyList(),
 ): ReaderBackgroundSelection {
     val fallbackPreset = novelReaderBackgroundPresets.first()
     val preset = novelReaderBackgroundPresets
         .firstOrNull { it.id == backgroundPresetId }
         ?: fallbackPreset
-    val hasUsableCustom = backgroundSource == NovelReaderBackgroundSource.CUSTOM &&
+    val selectedCustomFromCatalog = customBackgroundItems.firstOrNull { item ->
+        item.id == customBackgroundId &&
+            item.absolutePath.isNotBlank()
+    }
+    val hasLegacyCustom = backgroundSource == NovelReaderBackgroundSource.CUSTOM &&
         customBackgroundPath.isNotBlank() &&
         customBackgroundExists
-    return if (hasUsableCustom) {
+    return if (backgroundSource == NovelReaderBackgroundSource.CUSTOM && selectedCustomFromCatalog != null) {
         ReaderBackgroundSelection(
             source = NovelReaderBackgroundSource.CUSTOM,
             preset = preset,
+            customId = selectedCustomFromCatalog.id,
+            customPath = selectedCustomFromCatalog.absolutePath,
+            customIsDarkHint = selectedCustomFromCatalog.isDarkHint,
+        )
+    } else if (hasLegacyCustom) {
+        ReaderBackgroundSelection(
+            source = NovelReaderBackgroundSource.CUSTOM,
+            preset = preset,
+            customId = customBackgroundId.ifBlank { customBackgroundPath },
             customPath = customBackgroundPath,
+            customIsDarkHint = null,
         )
     } else {
         ReaderBackgroundSelection(
             source = NovelReaderBackgroundSource.PRESET,
             preset = preset,
+            customId = null,
             customPath = null,
+            customIsDarkHint = null,
         )
     }
 }
@@ -4888,14 +4944,21 @@ internal fun resolveReaderTextColorForBackgroundMode(averageLuminance: Float): C
 internal fun resolveReaderBackgroundWebImageUrl(selection: ReaderBackgroundSelection): String {
     return when (selection.source) {
         NovelReaderBackgroundSource.PRESET -> "$READER_BACKGROUND_PRESET_URL_PREFIX${selection.preset.id}"
-        NovelReaderBackgroundSource.CUSTOM -> READER_BACKGROUND_CUSTOM_URL
+        NovelReaderBackgroundSource.CUSTOM -> {
+            val selectedId = selection.customId.orEmpty()
+            if (selectedId.isBlank()) {
+                READER_BACKGROUND_CUSTOM_URL
+            } else {
+                "$READER_BACKGROUND_CUSTOM_URL?id=${selectedId.encodeUrlParam()}"
+            }
+        }
     }
 }
 
 internal fun resolveReaderBackgroundIdentity(selection: ReaderBackgroundSelection): String {
     return when (selection.source) {
         NovelReaderBackgroundSource.PRESET -> "preset:${selection.preset.id}"
-        NovelReaderBackgroundSource.CUSTOM -> "custom:${selection.customPath.orEmpty()}"
+        NovelReaderBackgroundSource.CUSTOM -> "custom:${selection.customId ?: selection.customPath.orEmpty()}"
     }
 }
 
@@ -4931,6 +4994,10 @@ private fun resolveReaderBackgroundWebResourceResponse(
             customFile.inputStream(),
         )
     }.getOrNull()
+}
+
+private fun String.encodeUrlParam(): String {
+    return URLEncoder.encode(this, StandardCharsets.UTF_8.name())
 }
 
 internal fun buildWebReaderCssFingerprint(

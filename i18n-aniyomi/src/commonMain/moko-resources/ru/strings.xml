@@ -1319,6 +1319,8 @@
     <string name="novel_reader_background_upload_hint">Для лучшей читаемости рекомендуется изображение без рамки или декоративной каймы.</string>
     <string name="novel_reader_background_custom_import_failed">Не удалось импортировать изображение подложки</string>
     <string name="novel_reader_background_custom_missing_fallback">Пользовательская подложка недоступна. Выбрана стандартная подложка.</string>
+    <string name="novel_reader_background_action_replace">Заменить</string>
+    <string name="novel_reader_background_action_cancel">Отмена</string>
     <string name="novel_reader_background_preset_linen_paper_title">Льняная бумага</string>
     <string name="novel_reader_background_preset_linen_paper_description">Мягкая тёплая бумажная текстура для дневного чтения.</string>
     <string name="novel_reader_background_preset_aged_page_title">Состаренный лист</string>

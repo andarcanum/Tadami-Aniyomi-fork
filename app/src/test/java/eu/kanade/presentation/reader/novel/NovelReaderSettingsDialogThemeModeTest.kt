@@ -32,4 +32,40 @@ class NovelReaderSettingsDialogThemeModeTest {
         assertFalse(state.themeControlsEnabled)
         assertTrue(state.backgroundControlsEnabled)
     }
+
+    @Test
+    fun `deleting selected custom background resolves to another custom selection`() {
+        val result = resolveCustomBackgroundDeletion(
+            selectedId = "custom-2",
+            deletedId = "custom-2",
+            remainingCustomIds = listOf("custom-1"),
+            fallbackPresetId = NOVEL_READER_BACKGROUND_PRESET_LINEN_PAPER_ID,
+        )
+
+        assertEquals("custom-1", result.nextCustomId)
+        assertTrue(result.keepCustomSource)
+    }
+
+    @Test
+    fun `deleting last custom background falls back to preset mode`() {
+        val result = resolveCustomBackgroundDeletion(
+            selectedId = "custom-1",
+            deletedId = "custom-1",
+            remainingCustomIds = emptyList(),
+            fallbackPresetId = NOVEL_READER_BACKGROUND_PRESET_LINEN_PAPER_ID,
+        )
+
+        assertEquals("", result.nextCustomId)
+        assertFalse(result.keepCustomSource)
+    }
+
+    @Test
+    fun `replacing selected custom background keeps selected id`() {
+        val nextSelectedId = resolveCustomBackgroundReplacement(
+            selectedId = "custom-2",
+            replacedId = "custom-2",
+        )
+
+        assertEquals("custom-2", nextSelectedId)
+    }
 }

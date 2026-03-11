@@ -44,6 +44,7 @@ data class NovelReaderSettings(
     val backgroundSource: NovelReaderBackgroundSource,
     val backgroundPresetId: String,
     val customBackgroundPath: String,
+    val customBackgroundId: String = "",
     val oledEdgeGradient: Boolean,
     val customThemes: List<NovelReaderColorTheme>,
 
@@ -207,6 +208,7 @@ data class NovelReaderOverride(
     val backgroundSource: NovelReaderBackgroundSource? = null,
     val backgroundPresetId: String? = null,
     val customBackgroundPath: String? = null,
+    val customBackgroundId: String? = null,
     val oledEdgeGradient: Boolean? = null,
     val customThemes: List<NovelReaderColorTheme>? = null,
 
@@ -279,6 +281,10 @@ class NovelReaderPreferences(
     private val preferenceStore: PreferenceStore,
     private val json: Json = Injekt.get(),
 ) {
+    init {
+        migrateLegacyBackgroundSelectionIfNeeded()
+    }
+
     // Display
     fun fontSize() = preferenceStore.getInt("novel_reader_font_size", DEFAULT_FONT_SIZE)
 
@@ -335,6 +341,8 @@ class NovelReaderPreferences(
         preferenceStore.getString("novel_reader_background_preset_id", DEFAULT_BACKGROUND_PRESET_ID)
 
     fun customBackgroundPath() = preferenceStore.getString("novel_reader_custom_background_path", "")
+
+    fun customBackgroundId() = preferenceStore.getString("novel_reader_custom_background_id", "")
 
     fun oledEdgeGradient() = preferenceStore.getBoolean("novel_reader_oled_edge_gradient", false)
 
@@ -515,6 +523,28 @@ class NovelReaderPreferences(
         sourceOverrides().set(updated)
     }
 
+    fun migrateLegacyBackgroundSelectionIfNeeded() {
+        val selectedCustomId = customBackgroundId().get()
+        val legacyCustomPath = customBackgroundPath().get()
+        if (selectedCustomId.isBlank() && legacyCustomPath.isNotBlank()) {
+            customBackgroundId().set(legacyCustomPath)
+        }
+
+        val overrides = sourceOverrides().get()
+        var hasChanges = false
+        val migrated = overrides.mapValues { (_, value) ->
+            if (value.customBackgroundId.isNullOrBlank() && !value.customBackgroundPath.isNullOrBlank()) {
+                hasChanges = true
+                value.copy(customBackgroundId = value.customBackgroundPath)
+            } else {
+                value
+            }
+        }
+        if (hasChanges) {
+            sourceOverrides().set(migrated)
+        }
+    }
+
     fun enableSourceOverride(sourceId: Long) {
         if (getSourceOverride(sourceId) != null) return
         setSourceOverride(
@@ -540,6 +570,7 @@ class NovelReaderPreferences(
                 backgroundSource = backgroundSource().get(),
                 backgroundPresetId = backgroundPresetId().get(),
                 customBackgroundPath = customBackgroundPath().get(),
+                customBackgroundId = customBackgroundId().get(),
                 oledEdgeGradient = oledEdgeGradient().get(),
                 customThemes = customThemes().get(),
                 useVolumeButtons = useVolumeButtons().get(),
@@ -639,6 +670,7 @@ class NovelReaderPreferences(
             backgroundSource = override?.backgroundSource ?: backgroundSource().get(),
             backgroundPresetId = override?.backgroundPresetId ?: backgroundPresetId().get(),
             customBackgroundPath = override?.customBackgroundPath ?: customBackgroundPath().get(),
+            customBackgroundId = override?.customBackgroundId ?: customBackgroundId().get(),
             oledEdgeGradient = override?.oledEdgeGradient ?: oledEdgeGradient().get(),
             customThemes = override?.customThemes ?: customThemes().get(),
             useVolumeButtons = override?.useVolumeButtons ?: useVolumeButtons().get(),
@@ -758,6 +790,7 @@ class NovelReaderPreferences(
             backgroundSource().changes(),
             backgroundPresetId().changes(),
             customBackgroundPath().changes(),
+            customBackgroundId().changes(),
             oledEdgeGradient().changes(),
             customThemes().changes(),
         ) { values: Array<Any?> ->
@@ -771,8 +804,9 @@ class NovelReaderPreferences(
                 values[6] as NovelReaderBackgroundSource,
                 values[7] as String,
                 values[8] as String,
-                values[9] as Boolean,
-                values[10] as List<NovelReaderColorTheme>,
+                values[9] as String,
+                values[10] as Boolean,
+                values[11] as List<NovelReaderColorTheme>,
             )
         }
 
@@ -956,6 +990,7 @@ class NovelReaderPreferences(
                 backgroundSource = override?.backgroundSource ?: theme.backgroundSource,
                 backgroundPresetId = override?.backgroundPresetId ?: theme.backgroundPresetId,
                 customBackgroundPath = override?.customBackgroundPath ?: theme.customBackgroundPath,
+                customBackgroundId = override?.customBackgroundId ?: theme.customBackgroundId,
                 oledEdgeGradient = override?.oledEdgeGradient ?: theme.oledEdgeGradient,
                 customThemes = override?.customThemes ?: theme.customThemes,
                 useVolumeButtons = override?.useVolumeButtons ?: navigation.useVolumeButtons,
@@ -1053,6 +1088,7 @@ class NovelReaderPreferences(
         val backgroundSource: NovelReaderBackgroundSource,
         val backgroundPresetId: String,
         val customBackgroundPath: String,
+        val customBackgroundId: String,
         val oledEdgeGradient: Boolean,
         val customThemes: List<NovelReaderColorTheme>,
     )

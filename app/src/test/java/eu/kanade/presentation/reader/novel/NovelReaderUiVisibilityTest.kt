@@ -53,11 +53,94 @@ class NovelReaderUiVisibilityTest {
             backgroundPresetId = NOVEL_READER_BACKGROUND_PRESET_NIGHT_VELVET_ID,
             customBackgroundPath = "D:/missing/custom.jpg",
             customBackgroundExists = false,
+            customBackgroundId = "",
+            customBackgroundItems = emptyList(),
         )
 
         assertTrue(selection.source == NovelReaderBackgroundSource.PRESET)
         assertTrue(selection.customPath == null)
         assertTrue(selection.preset.id == NOVEL_READER_BACKGROUND_PRESET_NIGHT_VELVET_ID)
+    }
+
+    @Test
+    fun `background mode resolves selected custom background by id`() {
+        val selection = resolveReaderBackgroundSelection(
+            backgroundSource = NovelReaderBackgroundSource.CUSTOM,
+            backgroundPresetId = NOVEL_READER_BACKGROUND_PRESET_LINEN_PAPER_ID,
+            customBackgroundPath = "",
+            customBackgroundExists = false,
+            customBackgroundId = "custom-2",
+            customBackgroundItems = listOf(
+                NovelReaderCustomBackgroundItem(
+                    id = "custom-1",
+                    displayName = "Custom One",
+                    fileName = "custom-1.jpg",
+                    absolutePath = "D:/reader/custom-1.jpg",
+                    isDarkHint = false,
+                    createdAt = 1L,
+                    updatedAt = 1L,
+                ),
+                NovelReaderCustomBackgroundItem(
+                    id = "custom-2",
+                    displayName = "Custom Two",
+                    fileName = "custom-2.jpg",
+                    absolutePath = "D:/reader/custom-2.jpg",
+                    isDarkHint = true,
+                    createdAt = 2L,
+                    updatedAt = 2L,
+                ),
+            ),
+        )
+
+        assertTrue(selection.source == NovelReaderBackgroundSource.CUSTOM)
+        assertTrue(selection.customId == "custom-2")
+        assertTrue(selection.customPath == "D:/reader/custom-2.jpg")
+    }
+
+    @Test
+    fun `custom background web identity uses selected custom id`() {
+        val selection = ReaderBackgroundSelection(
+            source = NovelReaderBackgroundSource.CUSTOM,
+            preset = novelReaderBackgroundPresets.first(),
+            customId = "custom-2",
+            customPath = "D:/reader/custom-2.jpg",
+            customIsDarkHint = true,
+        )
+
+        val imageUrl = resolveReaderBackgroundWebImageUrl(selection)
+        val identity = resolveReaderBackgroundIdentity(selection)
+
+        assertTrue(imageUrl.contains("id=custom-2"))
+        assertTrue(identity == "custom:custom-2")
+    }
+
+    @Test
+    fun `unified background cards include presets and custom items`() {
+        val customItems = listOf(
+            ReaderBackgroundCatalogItem(
+                id = "custom-1",
+                displayName = "Custom One",
+                fileName = "custom-1.jpg",
+                createdAt = 1L,
+                updatedAt = 1L,
+                isDarkHint = false,
+            ),
+            ReaderBackgroundCatalogItem(
+                id = "custom-2",
+                displayName = "Custom Two",
+                fileName = "custom-2.jpg",
+                createdAt = 2L,
+                updatedAt = 2L,
+                isDarkHint = true,
+            ),
+        )
+
+        val cards = buildNovelReaderBackgroundCards(customItems = customItems)
+
+        assertTrue(cards.size == 7)
+        assertTrue(cards.take(5).all { it.isBuiltIn })
+        assertTrue(cards.drop(5).all { !it.isBuiltIn })
+        assertTrue(cards.drop(5).map { it.id } == listOf("custom-1", "custom-2"))
     }
 
     @Test

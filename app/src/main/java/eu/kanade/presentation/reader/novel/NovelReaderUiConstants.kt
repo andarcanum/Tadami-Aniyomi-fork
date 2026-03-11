@@ -16,6 +16,15 @@ data class NovelReaderBackgroundPreset(
     val isDarkPreferred: Boolean,
 )
 
+data class NovelReaderBackgroundCard(
+    val id: String,
+    val preset: NovelReaderBackgroundPreset? = null,
+    val customItem: NovelReaderCustomBackgroundItem? = null,
+) {
+    val isBuiltIn: Boolean
+        get() = preset != null
+}
+
 const val NOVEL_READER_BACKGROUND_PRESET_LINEN_PAPER_ID = "linen_paper"
 const val NOVEL_READER_BACKGROUND_PRESET_AGED_PAGE_ID = "aged_page"
 const val NOVEL_READER_BACKGROUND_PRESET_CRUMPLED_SHEET_ID = "crumpled_sheet"
@@ -49,6 +58,41 @@ val novelReaderBackgroundPresets: List<NovelReaderBackgroundPreset> = listOf(
         isDarkPreferred = true,
     ),
 )
+
+fun buildNovelReaderBackgroundCards(
+    customItems: List<ReaderBackgroundCatalogItem>,
+): List<NovelReaderBackgroundCard> {
+    val resolvedCustomItems = customItems.map { item ->
+        NovelReaderCustomBackgroundItem(
+            id = item.id,
+            displayName = item.displayName,
+            fileName = item.fileName,
+            absolutePath = item.fileName,
+            isDarkHint = item.isDarkHint,
+            createdAt = item.createdAt,
+            updatedAt = item.updatedAt,
+        )
+    }
+    return buildNovelReaderBackgroundCardsFromCustomItems(resolvedCustomItems)
+}
+
+fun buildNovelReaderBackgroundCardsFromCustomItems(
+    customItems: List<NovelReaderCustomBackgroundItem>,
+): List<NovelReaderBackgroundCard> {
+    val presetCards = novelReaderBackgroundPresets.map { preset ->
+        NovelReaderBackgroundCard(
+            id = preset.id,
+            preset = preset,
+        )
+    }
+    val customCards = customItems.map { item ->
+        NovelReaderBackgroundCard(
+            id = item.id,
+            customItem = item,
+        )
+    }
+    return presetCards + customCards
+}
 
 val novelReaderPresetThemes: List<NovelReaderColorTheme> = listOf(
     NovelReaderColorTheme(backgroundColor = "#f5f5fa", textColor = "#111111"),

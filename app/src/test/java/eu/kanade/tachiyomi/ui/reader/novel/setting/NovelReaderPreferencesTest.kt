@@ -39,6 +39,7 @@ class NovelReaderPreferencesTest {
         prefs.backgroundSource().get() shouldBe NovelReaderBackgroundSource.PRESET
         prefs.backgroundPresetId().get() shouldBe "linen_paper"
         prefs.customBackgroundPath().get() shouldBe ""
+        prefs.customBackgroundId().get() shouldBe ""
         prefs.oledEdgeGradient().get() shouldBe false
         prefs.verticalSeekbar().get() shouldBe true
         prefs.swipeToNextChapter().get() shouldBe false
@@ -92,6 +93,7 @@ class NovelReaderPreferencesTest {
         prefs.backgroundSource().set(NovelReaderBackgroundSource.CUSTOM)
         prefs.backgroundPresetId().set("night_velvet")
         prefs.customBackgroundPath().set("/data/user/0/test/custom.jpg")
+        prefs.customBackgroundId().set("custom-1")
         prefs.oledEdgeGradient().set(false)
         prefs.preferWebViewRenderer().set(false)
         prefs.richNativeRendererExperimental().set(true)
@@ -155,6 +157,7 @@ class NovelReaderPreferencesTest {
         override?.backgroundSource shouldBe NovelReaderBackgroundSource.CUSTOM
         override?.backgroundPresetId shouldBe "night_velvet"
         override?.customBackgroundPath shouldBe "/data/user/0/test/custom.jpg"
+        override?.customBackgroundId shouldBe "custom-1"
         override?.oledEdgeGradient shouldBe false
         override?.preferWebViewRenderer shouldBe false
         override?.richNativeRendererExperimental shouldBe true
@@ -219,6 +222,7 @@ class NovelReaderPreferencesTest {
         prefs.backgroundSource().set(NovelReaderBackgroundSource.PRESET)
         prefs.backgroundPresetId().set("linen_paper")
         prefs.customBackgroundPath().set("")
+        prefs.customBackgroundId().set("")
         prefs.oledEdgeGradient().set(true)
         prefs.preferWebViewRenderer().set(true)
         prefs.richNativeRendererExperimental().set(false)
@@ -282,6 +286,7 @@ class NovelReaderPreferencesTest {
                 backgroundSource = NovelReaderBackgroundSource.CUSTOM,
                 backgroundPresetId = "dark_wood",
                 customBackgroundPath = "/data/user/0/test/override.jpg",
+                customBackgroundId = "custom-override-1",
                 oledEdgeGradient = false,
                 preferWebViewRenderer = false,
                 richNativeRendererExperimental = true,
@@ -344,6 +349,7 @@ class NovelReaderPreferencesTest {
         settings.backgroundSource shouldBe NovelReaderBackgroundSource.CUSTOM
         settings.backgroundPresetId shouldBe "dark_wood"
         settings.customBackgroundPath shouldBe "/data/user/0/test/override.jpg"
+        settings.customBackgroundId shouldBe "custom-override-1"
         settings.oledEdgeGradient shouldBe false
         settings.preferWebViewRenderer shouldBe false
         settings.richNativeRendererExperimental shouldBe true
@@ -390,6 +396,18 @@ class NovelReaderPreferencesTest {
         settings.customThemes shouldBe listOf(
             NovelReaderColorTheme(backgroundColor = "#000000", textColor = "#ffffff"),
         )
+    }
+
+    @Test
+    fun `legacy custom background path migrates to custom background id`() {
+        val prefs = createPrefs()
+        val legacyPath = "/data/user/0/test/legacy_custom.jpg"
+        prefs.customBackgroundPath().set(legacyPath)
+        prefs.customBackgroundId().set("")
+
+        prefs.migrateLegacyBackgroundSelectionIfNeeded()
+
+        prefs.customBackgroundId().get() shouldBe legacyPath
     }
 
     private class FakePreferenceStore : PreferenceStore {
