@@ -10,6 +10,46 @@ data class NovelReaderFontOption(
     val fontResId: Int? = null,
 )
 
+data class NovelReaderBackgroundPreset(
+    val id: String,
+    val imageResId: Int,
+    val isDarkPreferred: Boolean,
+)
+
+const val NOVEL_READER_BACKGROUND_PRESET_LINEN_PAPER_ID = "linen_paper"
+const val NOVEL_READER_BACKGROUND_PRESET_AGED_PAGE_ID = "aged_page"
+const val NOVEL_READER_BACKGROUND_PRESET_CRUMPLED_SHEET_ID = "crumpled_sheet"
+const val NOVEL_READER_BACKGROUND_PRESET_NIGHT_VELVET_ID = "night_velvet"
+const val NOVEL_READER_BACKGROUND_PRESET_DARK_WOOD_ID = "dark_wood"
+
+val novelReaderBackgroundPresets: List<NovelReaderBackgroundPreset> = listOf(
+    NovelReaderBackgroundPreset(
+        id = NOVEL_READER_BACKGROUND_PRESET_LINEN_PAPER_ID,
+        imageResId = R.drawable.novel_bg_linen_paper,
+        isDarkPreferred = false,
+    ),
+    NovelReaderBackgroundPreset(
+        id = NOVEL_READER_BACKGROUND_PRESET_AGED_PAGE_ID,
+        imageResId = R.drawable.novel_bg_aged_page,
+        isDarkPreferred = false,
+    ),
+    NovelReaderBackgroundPreset(
+        id = NOVEL_READER_BACKGROUND_PRESET_CRUMPLED_SHEET_ID,
+        imageResId = R.drawable.novel_bg_crumpled_sheet,
+        isDarkPreferred = false,
+    ),
+    NovelReaderBackgroundPreset(
+        id = NOVEL_READER_BACKGROUND_PRESET_NIGHT_VELVET_ID,
+        imageResId = R.drawable.novel_bg_night_velvet,
+        isDarkPreferred = true,
+    ),
+    NovelReaderBackgroundPreset(
+        id = NOVEL_READER_BACKGROUND_PRESET_DARK_WOOD_ID,
+        imageResId = R.drawable.novel_bg_dark_wood,
+        isDarkPreferred = true,
+    ),
+)
+
 val novelReaderPresetThemes: List<NovelReaderColorTheme> = listOf(
     NovelReaderColorTheme(backgroundColor = "#f5f5fa", textColor = "#111111"),
     NovelReaderColorTheme(backgroundColor = "#F7DFC6", textColor = "#593100"),

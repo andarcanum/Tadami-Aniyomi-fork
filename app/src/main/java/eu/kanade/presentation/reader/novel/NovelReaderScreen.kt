@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.BitmapFactory
 import android.os.BatteryManager
 import android.os.Build
 import android.os.SystemClock
@@ -20,6 +21,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -163,6 +165,8 @@ import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
 import eu.kanade.tachiyomi.ui.reader.novel.encodeNativeScrollProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodeWebScrollProgressPercent
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderParagraphSpacing
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
@@ -186,6 +190,8 @@ import tachiyomi.presentation.core.i18n.stringResource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.ByteArrayInputStream
+import java.io.File
+import java.net.URLConnection
 import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
@@ -312,6 +318,80 @@ fun NovelReaderScreen(
     val configuration = LocalConfiguration.current
     val batteryLevel by rememberBatteryLevel(context)
     val timeText by rememberCurrentTimeText(context)
+    val missingCustomBackgroundMessage =
+        stringResource(AYMR.strings.novel_reader_background_custom_missing_fallback)
+    val customBackgroundPath = state.readerSettings.customBackgroundPath
+    val customBackgroundExists = remember(customBackgroundPath) {
+        customBackgroundPath.isNotBlank() && File(customBackgroundPath).exists()
+    }
+    val backgroundSelection = remember(
+        state.readerSettings.backgroundSource,
+        state.readerSettings.backgroundPresetId,
+        customBackgroundPath,
+        customBackgroundExists,
+    ) {
+        resolveReaderBackgroundSelection(
+            backgroundSource = state.readerSettings.backgroundSource,
+            backgroundPresetId = state.readerSettings.backgroundPresetId,
+            customBackgroundPath = customBackgroundPath,
+            customBackgroundExists = customBackgroundExists,
+        )
+    }
+    val backgroundImageModel =
+        remember(backgroundSelection.source, backgroundSelection.preset.id, backgroundSelection.customPath) {
+            when (backgroundSelection.source) {
+                NovelReaderBackgroundSource.PRESET -> backgroundSelection.preset.imageResId
+                NovelReaderBackgroundSource.CUSTOM -> backgroundSelection.customPath?.let(::File)
+            }
+        }
+    val customBackgroundLuminance = remember(backgroundSelection.customPath) {
+        backgroundSelection.customPath?.let(::sampleReaderBackgroundLuminance)
+    }
+    val effectiveBackgroundLuminance = remember(
+        backgroundSelection.source,
+        backgroundSelection.preset.isDarkPreferred,
+        customBackgroundLuminance,
+    ) {
+        when (backgroundSelection.source) {
+            NovelReaderBackgroundSource.PRESET -> {
+                if (backgroundSelection.preset.isDarkPreferred) {
+                    0.2f
+                } else {
+                    0.8f
+                }
+            }
+            NovelReaderBackgroundSource.CUSTOM -> {
+                customBackgroundLuminance ?: if (backgroundSelection.preset.isDarkPreferred) 0.2f else 0.8f
+            }
+        }
+    }
+    val backgroundModeTextColor = remember(effectiveBackgroundLuminance) {
+        resolveReaderTextColorForBackgroundMode(effectiveBackgroundLuminance)
+    }
+    val backgroundModeBaseColor = remember(backgroundModeTextColor) {
+        if (backgroundModeTextColor.luminance() > 0.5f) {
+            Color(0xFF121212)
+        } else {
+            Color(0xFFF6F2E7)
+        }
+    }
+    val backgroundModeWebImageUrl = remember(backgroundSelection) {
+        resolveReaderBackgroundWebImageUrl(backgroundSelection)
+    }
+    val backgroundModeIdentity = remember(backgroundSelection) {
+        resolveReaderBackgroundIdentity(backgroundSelection)
+    }
+    val isBackgroundMode = state.readerSettings.appearanceMode == NovelReaderAppearanceMode.BACKGROUND
+    val activeBackgroundTexture = if (isBackgroundMode) {
+        NovelReaderBackgroundTexture.NONE
+    } else {
+        state.readerSettings.backgroundTexture
+    }
+    val activeOledEdgeGradient = if (isBackgroundMode) {
+        false
+    } else {
+        state.readerSettings.oledEdgeGradient
+    }
     val isDarkTheme = when (state.readerSettings.theme) {
         NovelReaderTheme.SYSTEM -> MaterialTheme.colorScheme.background.luminance() < 0.5f
         NovelReaderTheme.DARK -> true
@@ -327,12 +407,29 @@ fun NovelReaderScreen(
     } else {
         androidx.compose.ui.graphics.Color.White
     }
-    val textColor = parseReaderColor(state.readerSettings.textColor)
+    val themeModeTextColor = parseReaderColor(state.readerSettings.textColor)
         .takeIf { state.readerSettings.textColor?.isNotBlank() == true }
         ?: fallbackTextColor
-    val textBackground = parseReaderColor(state.readerSettings.backgroundColor)
+    val themeModeBackground = parseReaderColor(state.readerSettings.backgroundColor)
         .takeIf { state.readerSettings.backgroundColor?.isNotBlank() == true }
         ?: fallbackBackground
+    val textColor = if (isBackgroundMode) backgroundModeTextColor else themeModeTextColor
+    val textBackground = if (isBackgroundMode) backgroundModeBaseColor else themeModeBackground
+
+    LaunchedEffect(
+        isBackgroundMode,
+        state.readerSettings.backgroundSource,
+        customBackgroundPath,
+        customBackgroundExists,
+    ) {
+        if (isBackgroundMode &&
+            state.readerSettings.backgroundSource == NovelReaderBackgroundSource.CUSTOM &&
+            customBackgroundPath.isNotBlank() &&
+            !customBackgroundExists
+        ) {
+            Toast.makeText(context, missingCustomBackgroundMessage, Toast.LENGTH_SHORT).show()
+        }
+    }
     val composeFontFamily = remember(state.readerSettings.fontFamily) {
         novelReaderFonts.firstOrNull { it.id == state.readerSettings.fontFamily }
             ?.fontResId
@@ -781,12 +878,17 @@ fun NovelReaderScreen(
     ) {
         ReaderAtmosphereBackground(
             backgroundColor = textBackground,
-            backgroundTexture = state.readerSettings.backgroundTexture,
-            nativeTextureStrengthPercent = state.readerSettings.nativeTextureStrengthPercent,
-            oledEdgeGradient = state.readerSettings.oledEdgeGradient,
+            backgroundTexture = activeBackgroundTexture,
+            nativeTextureStrengthPercent = if (isBackgroundMode) {
+                0
+            } else {
+                state.readerSettings.nativeTextureStrengthPercent
+            },
+            oledEdgeGradient = activeOledEdgeGradient,
             isDarkTheme = isDarkTheme,
             pageEdgeShadow = state.readerSettings.pageEdgeShadow,
             pageEdgeShadowAlpha = state.readerSettings.pageEdgeShadowAlpha,
+            backgroundImageModel = if (isBackgroundMode) backgroundImageModel else null,
         )
         // Контент (текст главы) - занимает весь экран, padding ВНУТРИ через contentPadding
         androidx.compose.foundation.layout.Box(
@@ -1333,8 +1435,10 @@ fun NovelReaderScreen(
                     firstLineIndentCss = initialCssFirstLineIndent,
                     textColorHex = colorToCssHex(textColor),
                     backgroundHex = colorToCssHex(textBackground),
-                    backgroundTexture = state.readerSettings.backgroundTexture,
-                    oledEdgeGradient = state.readerSettings.oledEdgeGradient && isDarkTheme,
+                    appearanceMode = state.readerSettings.appearanceMode,
+                    backgroundTexture = activeBackgroundTexture,
+                    oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
+                    backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
                     fontFamilyName = initialSelectedFontFamily,
                     customCss = state.readerSettings.customCSS,
                     textShadowCss = initialTextShadowCss,
@@ -1552,8 +1656,10 @@ fun NovelReaderScreen(
                             firstLineIndentCss = cssFirstLineIndent,
                             textColorHex = colorToCssHex(textColor),
                             backgroundHex = colorToCssHex(textBackground),
-                            backgroundTexture = state.readerSettings.backgroundTexture,
-                            oledEdgeGradient = state.readerSettings.oledEdgeGradient && isDarkTheme,
+                            appearanceMode = state.readerSettings.appearanceMode,
+                            backgroundTexture = activeBackgroundTexture,
+                            oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
+                            backgroundImageIdentity = if (isBackgroundMode) backgroundModeIdentity else null,
                             fontFamilyName = selectedFontFamily,
                             customCss = state.readerSettings.customCSS,
                             textShadowCss = currentTextShadowCss,
@@ -1572,8 +1678,10 @@ fun NovelReaderScreen(
                             firstLineIndentCss = cssFirstLineIndent,
                             textColorHex = currentTextColorCss,
                             backgroundHex = currentBackgroundCss,
-                            backgroundTexture = state.readerSettings.backgroundTexture,
-                            oledEdgeGradient = state.readerSettings.oledEdgeGradient && isDarkTheme,
+                            appearanceMode = state.readerSettings.appearanceMode,
+                            backgroundTexture = activeBackgroundTexture,
+                            oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
+                            backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
                             fontFamilyName = selectedFontFamily,
                             customCss = currentCustomCss,
                             textShadowCss = currentTextShadowCss,
@@ -1598,6 +1706,13 @@ fun NovelReaderScreen(
                                 request: WebResourceRequest?,
                             ): WebResourceResponse? {
                                 val requestUrl = request?.url?.toString().orEmpty()
+                                resolveReaderBackgroundWebResourceResponse(
+                                    requestUrl = requestUrl,
+                                    context = webView.context,
+                                    selection = backgroundSelection,
+                                )?.let { response ->
+                                    return response
+                                }
                                 if (!NovelPluginImage.isSupported(requestUrl)) {
                                     return super.shouldInterceptRequest(view, request)
                                 }
@@ -1623,8 +1738,10 @@ fun NovelReaderScreen(
                                     firstLineIndentCss = cssFirstLineIndent,
                                     textColorHex = currentTextColorCss,
                                     backgroundHex = currentBackgroundCss,
-                                    backgroundTexture = state.readerSettings.backgroundTexture,
-                                    oledEdgeGradient = state.readerSettings.oledEdgeGradient && isDarkTheme,
+                                    appearanceMode = state.readerSettings.appearanceMode,
+                                    backgroundTexture = activeBackgroundTexture,
+                                    oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
+                                    backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
                                     fontFamilyName = selectedFontFamily,
                                     customCss = currentCustomCss,
                                     textShadowCss = currentTextShadowCss,
@@ -1700,8 +1817,10 @@ fun NovelReaderScreen(
                                 firstLineIndentCss = cssFirstLineIndent,
                                 textColorHex = colorToCssHex(textColor),
                                 backgroundHex = colorToCssHex(textBackground),
-                                backgroundTexture = state.readerSettings.backgroundTexture,
-                                oledEdgeGradient = state.readerSettings.oledEdgeGradient && isDarkTheme,
+                                appearanceMode = state.readerSettings.appearanceMode,
+                                backgroundTexture = activeBackgroundTexture,
+                                oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
+                                backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
                                 fontFamilyName = selectedFontFamily,
                                 customCss = state.readerSettings.customCSS,
                                 textShadowCss = currentTextShadowCss,
@@ -3874,8 +3993,10 @@ internal fun buildWebReaderCssText(
     firstLineIndentCss: String?,
     textColorHex: String,
     backgroundHex: String,
+    appearanceMode: NovelReaderAppearanceMode,
     backgroundTexture: NovelReaderBackgroundTexture,
     oledEdgeGradient: Boolean,
+    backgroundImageUrl: String?,
     fontFamilyName: String?,
     customCss: String,
     textShadowCss: String?,
@@ -4012,15 +4133,38 @@ internal fun buildWebReaderCssText(
             append("  text-indent: 0 !important;\n")
             append("}\n")
         }
-        append(buildWebReaderAtmosphereCss(backgroundTexture, oledEdgeGradient))
+        append(
+            buildWebReaderAtmosphereCss(
+                appearanceMode = appearanceMode,
+                backgroundTexture = backgroundTexture,
+                oledEdgeGradient = oledEdgeGradient,
+                backgroundImageUrl = backgroundImageUrl,
+            ),
+        )
         append(customCss)
     }
 }
 
 internal fun buildWebReaderAtmosphereCss(
+    appearanceMode: NovelReaderAppearanceMode,
     backgroundTexture: NovelReaderBackgroundTexture,
     oledEdgeGradient: Boolean,
+    backgroundImageUrl: String?,
 ): String {
+    if (appearanceMode == NovelReaderAppearanceMode.BACKGROUND) {
+        if (backgroundImageUrl.isNullOrBlank()) return ""
+        return buildString {
+            append("html, body {\n")
+            append("  background-color: var(--an-reader-bg) !important;\n")
+            append("  background-image: url('$backgroundImageUrl') !important;\n")
+            append("  background-repeat: no-repeat !important;\n")
+            append("  background-size: cover !important;\n")
+            append("  background-position: center center !important;\n")
+            append("  background-attachment: fixed !important;\n")
+            append("}\n")
+        }
+    }
+
     val textureLayers = when (backgroundTexture) {
         NovelReaderBackgroundTexture.NONE -> null
         NovelReaderBackgroundTexture.PAPER_GRAIN ->
@@ -4072,8 +4216,10 @@ private fun WebView.applyReaderCss(
     firstLineIndentCss: String?,
     textColorHex: String,
     backgroundHex: String,
+    appearanceMode: NovelReaderAppearanceMode,
     backgroundTexture: NovelReaderBackgroundTexture,
     oledEdgeGradient: Boolean,
+    backgroundImageUrl: String?,
     fontFamilyName: String?,
     customCss: String,
     textShadowCss: String?,
@@ -4089,8 +4235,10 @@ private fun WebView.applyReaderCss(
         firstLineIndentCss = firstLineIndentCss,
         textColorHex = textColorHex,
         backgroundHex = backgroundHex,
+        appearanceMode = appearanceMode,
         backgroundTexture = backgroundTexture,
         oledEdgeGradient = oledEdgeGradient,
+        backgroundImageUrl = backgroundImageUrl,
         fontFamilyName = fontFamilyName,
         customCss = customCss,
         textShadowCss = textShadowCss,
@@ -4300,6 +4448,7 @@ private fun ReaderAtmosphereBackground(
     isDarkTheme: Boolean,
     pageEdgeShadow: Boolean,
     pageEdgeShadowAlpha: Float,
+    backgroundImageModel: Any?,
 ) {
     val textureIntensityFactor = remember(nativeTextureStrengthPercent) {
         resolveNativeTextureIntensityFactor(nativeTextureStrengthPercent)
@@ -4318,6 +4467,15 @@ private fun ReaderAtmosphereBackground(
             .fillMaxSize()
             .background(backgroundColor),
     ) {
+        if (backgroundImageModel != null) {
+            AsyncImage(
+                model = backgroundImageModel,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
         if (backgroundTexture == NovelReaderBackgroundTexture.PAPER_GRAIN ||
             backgroundTexture == NovelReaderBackgroundTexture.LINEN
         ) {
@@ -4682,6 +4840,99 @@ internal fun verticalSeekbarLabels(
     return clamped.toString() to "100"
 }
 
+internal data class ReaderBackgroundSelection(
+    val source: NovelReaderBackgroundSource,
+    val preset: NovelReaderBackgroundPreset,
+    val customPath: String?,
+)
+
+private const val READER_BACKGROUND_PRESET_URL_PREFIX = "https://reader-background.local/preset/"
+private const val READER_BACKGROUND_CUSTOM_URL = "https://reader-background.local/custom"
+
+internal fun resolveReaderBackgroundSelection(
+    backgroundSource: NovelReaderBackgroundSource,
+    backgroundPresetId: String,
+    customBackgroundPath: String,
+    customBackgroundExists: Boolean,
+): ReaderBackgroundSelection {
+    val fallbackPreset = novelReaderBackgroundPresets.first()
+    val preset = novelReaderBackgroundPresets
+        .firstOrNull { it.id == backgroundPresetId }
+        ?: fallbackPreset
+    val hasUsableCustom = backgroundSource == NovelReaderBackgroundSource.CUSTOM &&
+        customBackgroundPath.isNotBlank() &&
+        customBackgroundExists
+    return if (hasUsableCustom) {
+        ReaderBackgroundSelection(
+            source = NovelReaderBackgroundSource.CUSTOM,
+            preset = preset,
+            customPath = customBackgroundPath,
+        )
+    } else {
+        ReaderBackgroundSelection(
+            source = NovelReaderBackgroundSource.PRESET,
+            preset = preset,
+            customPath = null,
+        )
+    }
+}
+
+internal fun resolveReaderTextColorForBackgroundMode(averageLuminance: Float): Color {
+    return if (averageLuminance >= 0.55f) {
+        Color(0xFF111111)
+    } else {
+        Color(0xFFEDEDED)
+    }
+}
+
+internal fun resolveReaderBackgroundWebImageUrl(selection: ReaderBackgroundSelection): String {
+    return when (selection.source) {
+        NovelReaderBackgroundSource.PRESET -> "$READER_BACKGROUND_PRESET_URL_PREFIX${selection.preset.id}"
+        NovelReaderBackgroundSource.CUSTOM -> READER_BACKGROUND_CUSTOM_URL
+    }
+}
+
+internal fun resolveReaderBackgroundIdentity(selection: ReaderBackgroundSelection): String {
+    return when (selection.source) {
+        NovelReaderBackgroundSource.PRESET -> "preset:${selection.preset.id}"
+        NovelReaderBackgroundSource.CUSTOM -> "custom:${selection.customPath.orEmpty()}"
+    }
+}
+
+private fun resolveReaderBackgroundWebResourceResponse(
+    requestUrl: String,
+    context: Context,
+    selection: ReaderBackgroundSelection,
+): WebResourceResponse? {
+    if (requestUrl.startsWith(READER_BACKGROUND_PRESET_URL_PREFIX)) {
+        val requestedPresetId = requestUrl
+            .removePrefix(READER_BACKGROUND_PRESET_URL_PREFIX)
+            .substringBefore('?')
+        val requestedPreset = novelReaderBackgroundPresets
+            .firstOrNull { it.id == requestedPresetId }
+            ?: selection.preset
+        return runCatching {
+            WebResourceResponse(
+                "image/jpeg",
+                null,
+                context.resources.openRawResource(requestedPreset.imageResId),
+            )
+        }.getOrNull()
+    }
+    if (!requestUrl.startsWith(READER_BACKGROUND_CUSTOM_URL)) return null
+    val customPath = selection.customPath ?: return null
+    val customFile = File(customPath)
+    if (!customFile.exists() || !customFile.isFile) return null
+    val mimeType = URLConnection.guessContentTypeFromName(customFile.name) ?: "image/*"
+    return runCatching {
+        WebResourceResponse(
+            mimeType,
+            null,
+            customFile.inputStream(),
+        )
+    }.getOrNull()
+}
+
 internal fun buildWebReaderCssFingerprint(
     chapterId: Long,
     paddingTop: Int,
@@ -4693,8 +4944,10 @@ internal fun buildWebReaderCssFingerprint(
     firstLineIndentCss: String?,
     textColorHex: String,
     backgroundHex: String,
+    appearanceMode: NovelReaderAppearanceMode,
     backgroundTexture: NovelReaderBackgroundTexture,
     oledEdgeGradient: Boolean,
+    backgroundImageIdentity: String?,
     fontFamilyName: String?,
     customCss: String,
     textShadowCss: String?,
@@ -4710,8 +4963,10 @@ internal fun buildWebReaderCssFingerprint(
         append('|').append(firstLineIndentCss ?: "<site>")
         append('|').append(textColorHex)
         append('|').append(backgroundHex)
+        append('|').append(appearanceMode.name)
         append('|').append(backgroundTexture.name)
         append('|').append(oledEdgeGradient)
+        append('|').append(backgroundImageIdentity ?: "<none>")
         append('|').append(fontFamilyName.orEmpty())
         append('|').append(customCss)
         append('|').append(textShadowCss ?: "<none>")
@@ -5441,6 +5696,44 @@ internal fun resolveBatteryLevelPercent(
 
 private fun currentTimeString(context: Context): String {
     return DateFormat.getTimeFormat(context).format(Date())
+}
+
+private fun sampleReaderBackgroundLuminance(path: String): Float? {
+    return runCatching {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
+        val maxDimension = max(bounds.outWidth, bounds.outHeight).coerceAtLeast(1)
+        val sampleSize = (maxDimension / 96).coerceAtLeast(1)
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+            inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
+        }
+        val sampled = BitmapFactory.decodeFile(path, options) ?: return@runCatching null
+        try {
+            val width = sampled.width.coerceAtLeast(1)
+            val height = sampled.height.coerceAtLeast(1)
+            val stepX = (width / 12).coerceAtLeast(1)
+            val stepY = (height / 12).coerceAtLeast(1)
+            var luminanceSum = 0f
+            var sampledPixels = 0
+            var x = 0
+            while (x < width) {
+                var y = 0
+                while (y < height) {
+                    val pixel = sampled.getPixel(x, y)
+                    val color = Color(pixel)
+                    luminanceSum += color.luminance()
+                    sampledPixels++
+                    y += stepY
+                }
+                x += stepX
+            }
+            if (sampledPixels == 0) null else (luminanceSum / sampledPixels).coerceIn(0f, 1f)
+        } finally {
+            sampled.recycle()
+        }
+    }.getOrNull()
 }
 
 private fun parseReaderColor(value: String?): Color? {

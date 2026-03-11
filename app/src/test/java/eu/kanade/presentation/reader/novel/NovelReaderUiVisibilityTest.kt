@@ -15,6 +15,8 @@ import eu.kanade.tachiyomi.ui.reader.novel.NovelRichBlockTextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichTextSegment
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichTextStyle
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderParagraphSpacing
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -27,10 +29,44 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
 class NovelReaderUiVisibilityTest {
 
     @Test
+    fun `background preset catalog exposes five unique built-ins`() {
+        assertTrue(novelReaderBackgroundPresets.size == 5)
+        assertTrue(novelReaderBackgroundPresets.map { it.id }.toSet().size == 5)
+    }
+
+    @Test
+    fun `background mode resolves dark text on bright backgrounds`() {
+        val textColor = resolveReaderTextColorForBackgroundMode(averageLuminance = 0.82f)
+        assertTrue(textColor.luminance() < 0.5f)
+    }
+
+    @Test
+    fun `background mode resolves light text on dark backgrounds`() {
+        val textColor = resolveReaderTextColorForBackgroundMode(averageLuminance = 0.18f)
+        assertTrue(textColor.luminance() > 0.5f)
+    }
+
+    @Test
+    fun `background mode falls back to preset when custom file is missing`() {
+        val selection = resolveReaderBackgroundSelection(
+            backgroundSource = NovelReaderBackgroundSource.CUSTOM,
+            backgroundPresetId = NOVEL_READER_BACKGROUND_PRESET_NIGHT_VELVET_ID,
+            customBackgroundPath = "D:/missing/custom.jpg",
+            customBackgroundExists = false,
+        )
+
+        assertTrue(selection.source == NovelReaderBackgroundSource.PRESET)
+        assertTrue(selection.customPath == null)
+        assertTrue(selection.preset.id == NOVEL_READER_BACKGROUND_PRESET_NIGHT_VELVET_ID)
+    }
+
+    @Test
     fun `web atmosphere css keeps parchment and oled stop thresholds`() {
         val css = buildWebReaderAtmosphereCss(
+            appearanceMode = NovelReaderAppearanceMode.THEME,
             backgroundTexture = NovelReaderBackgroundTexture.PARCHMENT,
             oledEdgeGradient = true,
+            backgroundImageUrl = null,
         )
 
         assertTrue(css.contains("radial-gradient(circle at 20% 20%, rgba(255,255,255,0.14), transparent 45%)"))
@@ -1160,8 +1196,10 @@ class NovelReaderUiVisibilityTest {
             firstLineIndentCss = "2em",
             textColorHex = "#111111",
             backgroundHex = "#FFFFFF",
+            appearanceMode = NovelReaderAppearanceMode.THEME,
             backgroundTexture = NovelReaderBackgroundTexture.PAPER_GRAIN,
             oledEdgeGradient = false,
+            backgroundImageUrl = null,
             fontFamilyName = null,
             customCss = "",
             textShadowCss = null,
@@ -1217,8 +1255,10 @@ class NovelReaderUiVisibilityTest {
             firstLineIndentCss = null,
             textColorHex = "#EDEDED",
             backgroundHex = "#121212",
+            appearanceMode = NovelReaderAppearanceMode.THEME,
             backgroundTexture = NovelReaderBackgroundTexture.NONE,
             oledEdgeGradient = false,
+            backgroundImageUrl = null,
             fontFamilyName = null,
             customCss = "",
             textShadowCss = textShadowCss,
@@ -1251,8 +1291,10 @@ class NovelReaderUiVisibilityTest {
             firstLineIndentCss = null,
             textColorHex = "#EDEDED",
             backgroundHex = "#121212",
+            appearanceMode = NovelReaderAppearanceMode.THEME,
             backgroundTexture = NovelReaderBackgroundTexture.NONE,
             oledEdgeGradient = false,
+            backgroundImageUrl = null,
             fontFamilyName = null,
             customCss = "",
             textShadowCss = textShadowCss,
@@ -1261,6 +1303,76 @@ class NovelReaderUiVisibilityTest {
         assertTrue(textShadowCss == null)
         assertFalse(css.contains("--an-reader-text-shadow:"))
         assertFalse(css.contains("text-shadow: var(--an-reader-text-shadow) !important;"))
+    }
+
+    @Test
+    fun `webview css uses explicit image layer in background mode`() {
+        val css = buildWebReaderCssText(
+            fontFaceCss = "",
+            paddingTop = 0,
+            paddingBottom = 0,
+            paddingHorizontal = 16,
+            fontSizePx = 16,
+            lineHeightMultiplier = 1.6f,
+            textAlignCss = null,
+            firstLineIndentCss = null,
+            textColorHex = "#EDEDED",
+            backgroundHex = "#121212",
+            appearanceMode = NovelReaderAppearanceMode.BACKGROUND,
+            backgroundTexture = NovelReaderBackgroundTexture.PAPER_GRAIN,
+            oledEdgeGradient = true,
+            backgroundImageUrl = "https://reader-background.local/preset/night_velvet",
+            fontFamilyName = null,
+            customCss = "",
+            textShadowCss = null,
+        )
+
+        assertTrue(css.contains("url('https://reader-background.local/preset/night_velvet')"))
+        assertFalse(css.contains("texture_paper.webp"))
+    }
+
+    @Test
+    fun `webview css fingerprint changes when background identity changes`() {
+        val first = buildWebReaderCssFingerprint(
+            chapterId = 1L,
+            paddingTop = 0,
+            paddingBottom = 0,
+            paddingHorizontal = 16,
+            fontSizePx = 16,
+            lineHeightMultiplier = 1.6f,
+            textAlignCss = null,
+            firstLineIndentCss = null,
+            textColorHex = "#111111",
+            backgroundHex = "#FFFFFF",
+            appearanceMode = NovelReaderAppearanceMode.BACKGROUND,
+            backgroundTexture = NovelReaderBackgroundTexture.NONE,
+            oledEdgeGradient = false,
+            backgroundImageIdentity = "preset:linen_paper",
+            fontFamilyName = null,
+            customCss = "",
+            textShadowCss = null,
+        )
+        val second = buildWebReaderCssFingerprint(
+            chapterId = 1L,
+            paddingTop = 0,
+            paddingBottom = 0,
+            paddingHorizontal = 16,
+            fontSizePx = 16,
+            lineHeightMultiplier = 1.6f,
+            textAlignCss = null,
+            firstLineIndentCss = null,
+            textColorHex = "#111111",
+            backgroundHex = "#FFFFFF",
+            appearanceMode = NovelReaderAppearanceMode.BACKGROUND,
+            backgroundTexture = NovelReaderBackgroundTexture.NONE,
+            oledEdgeGradient = false,
+            backgroundImageIdentity = "preset:night_velvet",
+            fontFamilyName = null,
+            customCss = "",
+            textShadowCss = null,
+        )
+
+        assertNotEquals(first, second)
     }
 
     @Test

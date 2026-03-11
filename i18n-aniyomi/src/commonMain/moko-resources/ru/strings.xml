@@ -1270,6 +1270,11 @@
     <string name="achievements">Достижения</string>
     <string name="stats">Статистика</string>
     <string name="novel_reader_font_family">Шрифт</string>
+    <string name="novel_reader_appearance_mode">Режим оформления</string>
+    <string name="novel_reader_appearance_mode_theme">Режим темы</string>
+    <string name="novel_reader_appearance_mode_background">Режим подложки</string>
+    <string name="novel_reader_theme_controls_disabled_summary">Настройки темы доступны только в режиме темы</string>
+    <string name="novel_reader_background_controls_disabled_summary">Настройки подложки доступны только в режиме подложки</string>
     <string name="novel_reader_theme_presets">Предустановки темы</string>
     <string name="novel_reader_theme_preset_none">Нет</string>
     <string name="novel_reader_background_color">Цвет фона</string>
@@ -1308,6 +1313,22 @@
     <string name="novel_reader_background_texture_paper_grain">Бумажное зерно</string>
     <string name="novel_reader_background_texture_linen">Лен</string>
     <string name="novel_reader_background_texture_parchment">Пергамент</string>
+    <string name="novel_reader_background_presets">Предустановки подложки</string>
+    <string name="novel_reader_background_upload">Загрузить свою подложку</string>
+    <string name="novel_reader_background_remove_custom">Удалить свою подложку</string>
+    <string name="novel_reader_background_upload_hint">Для лучшей читаемости рекомендуется изображение без рамки или декоративной каймы.</string>
+    <string name="novel_reader_background_custom_import_failed">Не удалось импортировать изображение подложки</string>
+    <string name="novel_reader_background_custom_missing_fallback">Пользовательская подложка недоступна. Выбрана стандартная подложка.</string>
+    <string name="novel_reader_background_preset_linen_paper_title">Льняная бумага</string>
+    <string name="novel_reader_background_preset_linen_paper_description">Мягкая тёплая бумажная текстура для дневного чтения.</string>
+    <string name="novel_reader_background_preset_aged_page_title">Состаренный лист</string>
+    <string name="novel_reader_background_preset_aged_page_description">Классический слегка потёртый лист с умеренным контрастом.</string>
+    <string name="novel_reader_background_preset_crumpled_sheet_title">Мятая бумага</string>
+    <string name="novel_reader_background_preset_crumpled_sheet_description">Светлая мятая фактура с лёгкой глубиной.</string>
+    <string name="novel_reader_background_preset_night_velvet_title">Ночной бархат</string>
+    <string name="novel_reader_background_preset_night_velvet_description">Глубокая тёмная фактура для чтения в темноте.</string>
+    <string name="novel_reader_background_preset_dark_wood_title">Тёмное дерево</string>
+    <string name="novel_reader_background_preset_dark_wood_description">Тёмная древесная фактура с кинематографичной атмосферой.</string>
     <string name="novel_reader_native_texture_strength">Сила текстуры (Native-Rich)</string>
     <string name="novel_reader_native_texture_strength_summary">Действует только в Native-Rich. 50% = текущий вид</string>
     <string name="novel_reader_oled_edge_gradient">OLED-градиент по краям</string>

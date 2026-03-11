@@ -40,6 +40,10 @@ data class NovelReaderSettings(
     val textColor: String?,
     val backgroundTexture: NovelReaderBackgroundTexture,
     val nativeTextureStrengthPercent: Int,
+    val appearanceMode: NovelReaderAppearanceMode,
+    val backgroundSource: NovelReaderBackgroundSource,
+    val backgroundPresetId: String,
+    val customBackgroundPath: String,
     val oledEdgeGradient: Boolean,
     val customThemes: List<NovelReaderColorTheme>,
 
@@ -121,6 +125,16 @@ enum class NovelReaderBackgroundTexture {
     PARCHMENT,
 }
 
+enum class NovelReaderAppearanceMode {
+    THEME,
+    BACKGROUND,
+}
+
+enum class NovelReaderBackgroundSource {
+    PRESET,
+    CUSTOM,
+}
+
 enum class TextAlign {
     SOURCE,
     LEFT,
@@ -189,6 +203,10 @@ data class NovelReaderOverride(
     val textColor: String? = null,
     val backgroundTexture: NovelReaderBackgroundTexture? = null,
     val nativeTextureStrengthPercent: Int? = null,
+    val appearanceMode: NovelReaderAppearanceMode? = null,
+    val backgroundSource: NovelReaderBackgroundSource? = null,
+    val backgroundPresetId: String? = null,
+    val customBackgroundPath: String? = null,
     val oledEdgeGradient: Boolean? = null,
     val customThemes: List<NovelReaderColorTheme>? = null,
 
@@ -306,6 +324,17 @@ class NovelReaderPreferences(
         preferenceStore.getEnum("novel_reader_background_texture", NovelReaderBackgroundTexture.PAPER_GRAIN)
 
     fun nativeTextureStrengthPercent() = preferenceStore.getInt("novel_reader_native_texture_strength_percent", 50)
+
+    fun appearanceMode() =
+        preferenceStore.getEnum("novel_reader_appearance_mode", NovelReaderAppearanceMode.THEME)
+
+    fun backgroundSource() =
+        preferenceStore.getEnum("novel_reader_background_source", NovelReaderBackgroundSource.PRESET)
+
+    fun backgroundPresetId() =
+        preferenceStore.getString("novel_reader_background_preset_id", DEFAULT_BACKGROUND_PRESET_ID)
+
+    fun customBackgroundPath() = preferenceStore.getString("novel_reader_custom_background_path", "")
 
     fun oledEdgeGradient() = preferenceStore.getBoolean("novel_reader_oled_edge_gradient", false)
 
@@ -507,6 +536,10 @@ class NovelReaderPreferences(
                 textColor = textColor().get(),
                 backgroundTexture = backgroundTexture().get(),
                 nativeTextureStrengthPercent = nativeTextureStrengthPercent().get(),
+                appearanceMode = appearanceMode().get(),
+                backgroundSource = backgroundSource().get(),
+                backgroundPresetId = backgroundPresetId().get(),
+                customBackgroundPath = customBackgroundPath().get(),
                 oledEdgeGradient = oledEdgeGradient().get(),
                 customThemes = customThemes().get(),
                 useVolumeButtons = useVolumeButtons().get(),
@@ -602,6 +635,10 @@ class NovelReaderPreferences(
             backgroundTexture = override?.backgroundTexture ?: backgroundTexture().get(),
             nativeTextureStrengthPercent =
             override?.nativeTextureStrengthPercent ?: nativeTextureStrengthPercent().get(),
+            appearanceMode = override?.appearanceMode ?: appearanceMode().get(),
+            backgroundSource = override?.backgroundSource ?: backgroundSource().get(),
+            backgroundPresetId = override?.backgroundPresetId ?: backgroundPresetId().get(),
+            customBackgroundPath = override?.customBackgroundPath ?: customBackgroundPath().get(),
             oledEdgeGradient = override?.oledEdgeGradient ?: oledEdgeGradient().get(),
             customThemes = override?.customThemes ?: customThemes().get(),
             useVolumeButtons = override?.useVolumeButtons ?: useVolumeButtons().get(),
@@ -717,6 +754,10 @@ class NovelReaderPreferences(
             textColor().changes(),
             backgroundTexture().changes(),
             nativeTextureStrengthPercent().changes(),
+            appearanceMode().changes(),
+            backgroundSource().changes(),
+            backgroundPresetId().changes(),
+            customBackgroundPath().changes(),
             oledEdgeGradient().changes(),
             customThemes().changes(),
         ) { values: Array<Any?> ->
@@ -726,8 +767,12 @@ class NovelReaderPreferences(
                 values[2] as String,
                 values[3] as NovelReaderBackgroundTexture,
                 values[4] as Int,
-                values[5] as Boolean,
-                values[6] as List<NovelReaderColorTheme>,
+                values[5] as NovelReaderAppearanceMode,
+                values[6] as NovelReaderBackgroundSource,
+                values[7] as String,
+                values[8] as String,
+                values[9] as Boolean,
+                values[10] as List<NovelReaderColorTheme>,
             )
         }
 
@@ -907,6 +952,10 @@ class NovelReaderPreferences(
                 backgroundTexture = override?.backgroundTexture ?: theme.backgroundTexture,
                 nativeTextureStrengthPercent =
                 override?.nativeTextureStrengthPercent ?: theme.nativeTextureStrengthPercent,
+                appearanceMode = override?.appearanceMode ?: theme.appearanceMode,
+                backgroundSource = override?.backgroundSource ?: theme.backgroundSource,
+                backgroundPresetId = override?.backgroundPresetId ?: theme.backgroundPresetId,
+                customBackgroundPath = override?.customBackgroundPath ?: theme.customBackgroundPath,
                 oledEdgeGradient = override?.oledEdgeGradient ?: theme.oledEdgeGradient,
                 customThemes = override?.customThemes ?: theme.customThemes,
                 useVolumeButtons = override?.useVolumeButtons ?: navigation.useVolumeButtons,
@@ -1000,6 +1049,10 @@ class NovelReaderPreferences(
         val textColor: String,
         val backgroundTexture: NovelReaderBackgroundTexture,
         val nativeTextureStrengthPercent: Int,
+        val appearanceMode: NovelReaderAppearanceMode,
+        val backgroundSource: NovelReaderBackgroundSource,
+        val backgroundPresetId: String,
+        val customBackgroundPath: String,
         val oledEdgeGradient: Boolean,
         val customThemes: List<NovelReaderColorTheme>,
     )
@@ -1078,6 +1131,7 @@ class NovelReaderPreferences(
         const val DEFAULT_MARGIN = 16
         const val DEFAULT_AUTO_SCROLL_INTERVAL = 10
         const val DEFAULT_AUTO_SCROLL_OFFSET = 0
+        const val DEFAULT_BACKGROUND_PRESET_ID = "linen_paper"
 
         private val overrideSerializer = MapSerializer(
             Long.serializer(),

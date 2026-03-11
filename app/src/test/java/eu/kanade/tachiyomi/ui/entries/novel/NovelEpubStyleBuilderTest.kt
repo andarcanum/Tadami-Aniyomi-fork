@@ -1,5 +1,7 @@
 package eu.kanade.tachiyomi.ui.entries.novel
 
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderParagraphSpacing
@@ -139,6 +141,10 @@ class NovelEpubStyleBuilderTest {
             textColor = textColor,
             backgroundTexture = NovelReaderBackgroundTexture.PAPER_GRAIN,
             nativeTextureStrengthPercent = 50,
+            appearanceMode = NovelReaderAppearanceMode.THEME,
+            backgroundSource = NovelReaderBackgroundSource.PRESET,
+            backgroundPresetId = "linen_paper",
+            customBackgroundPath = "",
             oledEdgeGradient = true,
             customThemes = listOf(
                 NovelReaderColorTheme(backgroundColor = "#101010", textColor = "#EFEFEF"),

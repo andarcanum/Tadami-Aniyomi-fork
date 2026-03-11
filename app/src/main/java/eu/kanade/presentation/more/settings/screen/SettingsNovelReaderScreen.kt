@@ -1,12 +1,14 @@
 package eu.kanade.presentation.more.settings.screen
 
 import android.text.format.Formatter
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
@@ -25,7 +27,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
@@ -33,8 +37,15 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.widget.BasePreferenceWidget
 import eu.kanade.presentation.more.settings.widget.PrefsHorizontalPadding
+import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_AGED_PAGE_ID
+import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_CRUMPLED_SHEET_ID
+import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_DARK_WOOD_ID
+import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_LINEN_PAPER_ID
+import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_NIGHT_VELVET_ID
 import eu.kanade.presentation.reader.novel.autoScrollSpeedToInterval
+import eu.kanade.presentation.reader.novel.clearNovelReaderCustomBackground
 import eu.kanade.presentation.reader.novel.intervalToAutoScrollSpeed
+import eu.kanade.presentation.reader.novel.novelReaderBackgroundPresets
 import eu.kanade.presentation.reader.novel.novelReaderFonts
 import eu.kanade.presentation.reader.novel.novelReaderPresetThemes
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderChapterDiskCache
@@ -184,10 +195,18 @@ object SettingsNovelReaderScreen : SearchableSettings {
 
     @Composable
     private fun getThemeGroup(prefs: NovelReaderPreferences): Preference.PreferenceGroup {
+        val appearanceModePref = prefs.appearanceMode()
+        val appearanceMode by appearanceModePref.collectAsState()
         val bgPref = prefs.backgroundColor()
         val bg by bgPref.collectAsState()
         val textPref = prefs.textColor()
         val text by textPref.collectAsState()
+        val backgroundSourcePref = prefs.backgroundSource()
+        val backgroundSource by backgroundSourcePref.collectAsState()
+        val backgroundPresetIdPref = prefs.backgroundPresetId()
+        val backgroundPresetId by backgroundPresetIdPref.collectAsState()
+        val customBackgroundPathPref = prefs.customBackgroundPath()
+        val customBackgroundPath by customBackgroundPathPref.collectAsState()
         val customThemesPref = prefs.customThemes()
         val customThemes by customThemesPref.collectAsState()
 
@@ -197,82 +216,154 @@ object SettingsNovelReaderScreen : SearchableSettings {
 
         val items = mutableListOf<Preference.PreferenceItem<out Any>>(
             Preference.PreferenceItem.ListPreference(
-                preference = prefs.theme(),
+                preference = appearanceModePref,
                 entries = persistentMapOf(
-                    NovelReaderTheme.SYSTEM to stringResource(AYMR.strings.novel_reader_theme_system),
-                    NovelReaderTheme.LIGHT to stringResource(AYMR.strings.novel_reader_theme_light),
-                    NovelReaderTheme.DARK to stringResource(AYMR.strings.novel_reader_theme_dark),
+                    eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode.THEME to
+                        stringResource(AYMR.strings.novel_reader_appearance_mode_theme),
+                    eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode.BACKGROUND to
+                        stringResource(AYMR.strings.novel_reader_appearance_mode_background),
                 ),
+                title = stringResource(AYMR.strings.novel_reader_appearance_mode),
+            ),
+        )
+
+        if (appearanceMode == eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode.THEME) {
+            items += listOf(
+                Preference.PreferenceItem.ListPreference(
+                    preference = prefs.theme(),
+                    entries = persistentMapOf(
+                        NovelReaderTheme.SYSTEM to stringResource(AYMR.strings.novel_reader_theme_system),
+                        NovelReaderTheme.LIGHT to stringResource(AYMR.strings.novel_reader_theme_light),
+                        NovelReaderTheme.DARK to stringResource(AYMR.strings.novel_reader_theme_dark),
+                    ),
+                    title = stringResource(AYMR.strings.novel_reader_theme),
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = prefs.backgroundTexture(),
+                    entries = persistentMapOf(
+                        NovelReaderBackgroundTexture.NONE to
+                            stringResource(AYMR.strings.novel_reader_background_texture_none),
+                        NovelReaderBackgroundTexture.PAPER_GRAIN to
+                            stringResource(AYMR.strings.novel_reader_background_texture_paper_grain),
+                        NovelReaderBackgroundTexture.LINEN to
+                            stringResource(AYMR.strings.novel_reader_background_texture_linen),
+                        NovelReaderBackgroundTexture.PARCHMENT to
+                            stringResource(AYMR.strings.novel_reader_background_texture_parchment),
+                    ),
+                    title = stringResource(AYMR.strings.novel_reader_background_texture),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = prefs.oledEdgeGradient(),
+                    title = stringResource(AYMR.strings.novel_reader_oled_edge_gradient),
+                    subtitle = stringResource(AYMR.strings.novel_reader_oled_edge_gradient_summary),
+                ),
+                Preference.PreferenceItem.CustomPreference(
+                    title = stringResource(AYMR.strings.novel_reader_theme_presets),
+                ) {
+                    BasePreferenceWidget(
+                        title = stringResource(AYMR.strings.novel_reader_theme_presets),
+                        subcomponent = {
+                            NovelReaderThemePresetRow(
+                                selectedTheme = currentTheme,
+                                onSelect = { preset ->
+                                    bgPref.set(preset.backgroundColor)
+                                    textPref.set(preset.textColor)
+                                },
+                            )
+                        },
+                    )
+                },
+                Preference.PreferenceItem.EditTextInfoPreference(
+                    preference = bgPref,
+                    title = stringResource(AYMR.strings.novel_reader_background_color),
+                    subtitle = "%s",
+                    dialogSubtitle = stringResource(AYMR.strings.novel_reader_color_input_hint),
+                    validate = ::isValidColorOrBlank,
+                ),
+                Preference.PreferenceItem.EditTextInfoPreference(
+                    preference = textPref,
+                    title = stringResource(AYMR.strings.novel_reader_text_color),
+                    subtitle = "%s",
+                    dialogSubtitle = stringResource(AYMR.strings.novel_reader_color_input_hint),
+                    validate = ::isValidColorOrBlank,
+                ),
+            )
+
+            if (currentTheme != null && !isPreset && !isCustom) {
+                items += Preference.PreferenceItem.TextPreference(
+                    title = stringResource(AYMR.strings.novel_reader_save_custom_theme),
+                    subtitle = "${currentTheme.backgroundColor} / ${currentTheme.textColor}",
+                    onClick = {
+                        customThemesPref.set(listOf(currentTheme) + customThemes.filterNot { it == currentTheme })
+                    },
+                )
+            }
+
+            if (currentTheme != null && isCustom) {
+                items += Preference.PreferenceItem.TextPreference(
+                    title = stringResource(AYMR.strings.novel_reader_delete_custom_theme),
+                    subtitle = "${currentTheme.backgroundColor} / ${currentTheme.textColor}",
+                    onClick = {
+                        customThemesPref.set(customThemes.filterNot { it == currentTheme })
+                    },
+                )
+            }
+        } else {
+            items += Preference.PreferenceItem.TextPreference(
                 title = stringResource(AYMR.strings.novel_reader_theme),
-            ),
-            Preference.PreferenceItem.ListPreference(
-                preference = prefs.backgroundTexture(),
-                entries = persistentMapOf(
-                    NovelReaderBackgroundTexture.NONE to
-                        stringResource(AYMR.strings.novel_reader_background_texture_none),
-                    NovelReaderBackgroundTexture.PAPER_GRAIN to
-                        stringResource(AYMR.strings.novel_reader_background_texture_paper_grain),
-                    NovelReaderBackgroundTexture.LINEN to
-                        stringResource(AYMR.strings.novel_reader_background_texture_linen),
-                    NovelReaderBackgroundTexture.PARCHMENT to
-                        stringResource(AYMR.strings.novel_reader_background_texture_parchment),
-                ),
-                title = stringResource(AYMR.strings.novel_reader_background_texture),
-            ),
-            Preference.PreferenceItem.SwitchPreference(
-                preference = prefs.oledEdgeGradient(),
-                title = stringResource(AYMR.strings.novel_reader_oled_edge_gradient),
-                subtitle = stringResource(AYMR.strings.novel_reader_oled_edge_gradient_summary),
-            ),
-            Preference.PreferenceItem.CustomPreference(
-                title = stringResource(AYMR.strings.novel_reader_theme_presets),
+                subtitle = stringResource(AYMR.strings.novel_reader_theme_controls_disabled_summary),
+            )
+            items += Preference.PreferenceItem.CustomPreference(
+                title = stringResource(AYMR.strings.novel_reader_background_presets),
             ) {
                 BasePreferenceWidget(
-                    title = stringResource(AYMR.strings.novel_reader_theme_presets),
+                    title = stringResource(AYMR.strings.novel_reader_background_presets),
                     subcomponent = {
-                        NovelReaderThemePresetRow(
-                            selectedTheme = currentTheme,
-                            onSelect = { preset ->
-                                bgPref.set(preset.backgroundColor)
-                                textPref.set(preset.textColor)
+                        NovelReaderBackgroundPresetRow(
+                            selectedPresetId = backgroundPresetId,
+                            onSelect = { presetId ->
+                                backgroundSourcePref.set(
+                                    eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource.PRESET,
+                                )
+                                backgroundPresetIdPref.set(presetId)
                             },
                         )
                     },
                 )
-            },
-            Preference.PreferenceItem.EditTextInfoPreference(
-                preference = bgPref,
-                title = stringResource(AYMR.strings.novel_reader_background_color),
-                subtitle = "%s",
-                dialogSubtitle = stringResource(AYMR.strings.novel_reader_color_input_hint),
-                validate = ::isValidColorOrBlank,
-            ),
-            Preference.PreferenceItem.EditTextInfoPreference(
-                preference = textPref,
-                title = stringResource(AYMR.strings.novel_reader_text_color),
-                subtitle = "%s",
-                dialogSubtitle = stringResource(AYMR.strings.novel_reader_color_input_hint),
-                validate = ::isValidColorOrBlank,
-            ),
-        )
-
-        if (currentTheme != null && !isPreset && !isCustom) {
+            }
+            if (customBackgroundPath.isNotBlank()) {
+                items += Preference.PreferenceItem.TextPreference(
+                    title = stringResource(AYMR.strings.novel_reader_background_upload),
+                    subtitle = customBackgroundPath,
+                    onClick = {
+                        backgroundSourcePref.set(
+                            eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource.CUSTOM,
+                        )
+                    },
+                )
+                items += Preference.PreferenceItem.TextPreference(
+                    title = stringResource(AYMR.strings.novel_reader_background_remove_custom),
+                    onClick = {
+                        clearNovelReaderCustomBackground(customBackgroundPath)
+                        customBackgroundPathPref.set("")
+                        if (backgroundSource ==
+                            eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource.CUSTOM
+                        ) {
+                            backgroundSourcePref.set(
+                                eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource.PRESET,
+                            )
+                        }
+                    },
+                )
+            } else {
+                items += Preference.PreferenceItem.TextPreference(
+                    title = stringResource(AYMR.strings.novel_reader_background_upload),
+                    subtitle = stringResource(AYMR.strings.novel_reader_background_upload_hint),
+                )
+            }
             items += Preference.PreferenceItem.TextPreference(
-                title = stringResource(AYMR.strings.novel_reader_save_custom_theme),
-                subtitle = "${currentTheme.backgroundColor} / ${currentTheme.textColor}",
-                onClick = {
-                    customThemesPref.set(listOf(currentTheme) + customThemes.filterNot { it == currentTheme })
-                },
-            )
-        }
-
-        if (currentTheme != null && isCustom) {
-            items += Preference.PreferenceItem.TextPreference(
-                title = stringResource(AYMR.strings.novel_reader_delete_custom_theme),
-                subtitle = "${currentTheme.backgroundColor} / ${currentTheme.textColor}",
-                onClick = {
-                    customThemesPref.set(customThemes.filterNot { it == currentTheme })
-                },
+                title = stringResource(AYMR.strings.novel_reader_background_texture),
+                subtitle = stringResource(AYMR.strings.novel_reader_background_controls_disabled_summary),
             )
         }
 
@@ -582,6 +673,93 @@ private fun NovelReaderThemePresetRow(
                 onClick = { onSelect(theme) },
             )
         }
+    }
+}
+
+@Composable
+private fun NovelReaderBackgroundPresetRow(
+    selectedPresetId: String,
+    onSelect: (String) -> Unit,
+) {
+    LazyRow(
+        modifier = Modifier.padding(horizontal = PrefsHorizontalPadding),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        items(novelReaderBackgroundPresets, key = { it.id }) { preset ->
+            val selected = preset.id == selectedPresetId
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (selected) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant
+                },
+                modifier = Modifier.clickable { onSelect(preset.id) },
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(6.dp)
+                        .size(width = 148.dp, height = 150.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Image(
+                        painter = painterResource(id = preset.imageResId),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .size(height = 92.dp, width = 136.dp),
+                    )
+                    Text(
+                        text = readerBackgroundPresetTitle(preset.id),
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = readerBackgroundPresetDescription(preset.id),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun readerBackgroundPresetTitle(presetId: String): String {
+    return when (presetId) {
+        NOVEL_READER_BACKGROUND_PRESET_LINEN_PAPER_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_linen_paper_title)
+        NOVEL_READER_BACKGROUND_PRESET_AGED_PAGE_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_aged_page_title)
+        NOVEL_READER_BACKGROUND_PRESET_CRUMPLED_SHEET_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_crumpled_sheet_title)
+        NOVEL_READER_BACKGROUND_PRESET_NIGHT_VELVET_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_night_velvet_title)
+        NOVEL_READER_BACKGROUND_PRESET_DARK_WOOD_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_dark_wood_title)
+        else -> presetId
+    }
+}
+
+@Composable
+private fun readerBackgroundPresetDescription(presetId: String): String {
+    return when (presetId) {
+        NOVEL_READER_BACKGROUND_PRESET_LINEN_PAPER_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_linen_paper_description)
+        NOVEL_READER_BACKGROUND_PRESET_AGED_PAGE_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_aged_page_description)
+        NOVEL_READER_BACKGROUND_PRESET_CRUMPLED_SHEET_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_crumpled_sheet_description)
+        NOVEL_READER_BACKGROUND_PRESET_NIGHT_VELVET_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_night_velvet_description)
+        NOVEL_READER_BACKGROUND_PRESET_DARK_WOOD_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_dark_wood_description)
+        else -> ""
     }
 }
 

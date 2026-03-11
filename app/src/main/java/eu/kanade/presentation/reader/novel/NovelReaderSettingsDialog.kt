@@ -1,5 +1,9 @@
 package eu.kanade.presentation.reader.novel
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +40,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -43,6 +50,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.kanade.presentation.components.TabbedDialog
 import eu.kanade.presentation.more.settings.widget.EditTextPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.SwitchPreferenceWidget
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderOverride
@@ -567,6 +576,8 @@ private fun ReadingTab(
     overrideEnabled: Boolean,
     preferences: NovelReaderPreferences,
 ) {
+    val context = LocalContext.current
+
     fun <T> update(
         value: T,
         copyOverride: (NovelReaderOverride, T) -> NovelReaderOverride,
@@ -584,6 +595,40 @@ private fun ReadingTab(
     val isCustom = selectedTheme != null && settings.customThemes.contains(selectedTheme)
     val colorTiles = remember(settings.customThemes) {
         (settings.customThemes + novelReaderPresetThemes).distinctBy { "${it.backgroundColor}:${it.textColor}" }
+    }
+    val importFailedMessage = stringResource(AYMR.strings.novel_reader_background_custom_import_failed)
+    val appearanceControlState = remember(settings.appearanceMode) {
+        resolveAppearanceControlState(settings.appearanceMode)
+    }
+    val backgroundPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val importResult = importNovelReaderCustomBackground(context, uri)
+        val importedPath = importResult.getOrNull()
+        if (importedPath.isNullOrBlank()) {
+            Toast.makeText(
+                context,
+                importFailedMessage,
+                Toast.LENGTH_SHORT,
+            ).show()
+            return@rememberLauncherForActivityResult
+        }
+        update(
+            NovelReaderAppearanceMode.BACKGROUND,
+            { o, v -> o.copy(appearanceMode = v) },
+            { preferences.appearanceMode().set(it) },
+        )
+        update(
+            NovelReaderBackgroundSource.CUSTOM,
+            { o, v -> o.copy(backgroundSource = v) },
+            { preferences.backgroundSource().set(it) },
+        )
+        update(
+            importedPath,
+            { o, v -> o.copy(customBackgroundPath = v) },
+            { preferences.customBackgroundPath().set(it) },
+        )
     }
 
     Column(
@@ -753,30 +798,13 @@ private fun ReadingTab(
             },
         )
 
-        ThemeModeRow(
-            selected = settings.theme,
-            onSelect = { mode ->
-                val selection = resolveThemeModeSelection(mode)
-                update(selection.theme, { o, v -> o.copy(theme = v) }, { preferences.theme().set(it) })
-                update(
-                    selection.backgroundColor,
-                    { o, v -> o.copy(backgroundColor = v) },
-                    { preferences.backgroundColor().set(it) },
-                )
-                update(
-                    selection.textColor,
-                    { o, v -> o.copy(textColor = v) },
-                    { preferences.textColor().set(it) },
-                )
-            },
-        )
         Text(
-            text = stringResource(AYMR.strings.novel_reader_background_texture),
+            text = stringResource(AYMR.strings.novel_reader_appearance_mode),
             style = MaterialTheme.typography.bodyMedium,
         )
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(NovelReaderBackgroundTexture.entries) { option ->
-                val selected = settings.backgroundTexture == option
+            items(NovelReaderAppearanceMode.entries) { mode ->
+                val selected = settings.appearanceMode == mode
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = if (selected) {
@@ -786,22 +814,18 @@ private fun ReadingTab(
                     },
                     modifier = Modifier.clickable {
                         update(
-                            option,
-                            { o, v -> o.copy(backgroundTexture = v) },
-                            { preferences.backgroundTexture().set(it) },
+                            mode,
+                            { o, v -> o.copy(appearanceMode = v) },
+                            { preferences.appearanceMode().set(it) },
                         )
                     },
                 ) {
                     Text(
-                        text = when (option) {
-                            NovelReaderBackgroundTexture.NONE ->
-                                stringResource(AYMR.strings.novel_reader_background_texture_none)
-                            NovelReaderBackgroundTexture.PAPER_GRAIN ->
-                                stringResource(AYMR.strings.novel_reader_background_texture_paper_grain)
-                            NovelReaderBackgroundTexture.LINEN ->
-                                stringResource(AYMR.strings.novel_reader_background_texture_linen)
-                            NovelReaderBackgroundTexture.PARCHMENT ->
-                                stringResource(AYMR.strings.novel_reader_background_texture_parchment)
+                        text = when (mode) {
+                            NovelReaderAppearanceMode.THEME ->
+                                stringResource(AYMR.strings.novel_reader_appearance_mode_theme)
+                            NovelReaderAppearanceMode.BACKGROUND ->
+                                stringResource(AYMR.strings.novel_reader_appearance_mode_background)
                         },
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                         style = MaterialTheme.typography.labelLarge,
@@ -809,34 +833,317 @@ private fun ReadingTab(
                 }
             }
         }
-        LnReaderSliderRow(
-            label = stringResource(AYMR.strings.novel_reader_native_texture_strength),
-            valueText = "${settings.nativeTextureStrengthPercent}%",
-            value = settings.nativeTextureStrengthPercent.toFloat(),
-            range = 0f..200f,
-            steps = 199,
-            onChange = { value ->
-                val rounded = value.roundToInt()
-                update(
-                    rounded,
-                    { o, v -> o.copy(nativeTextureStrengthPercent = v) },
-                    { preferences.nativeTextureStrengthPercent().set(it) },
+
+        if (appearanceControlState.themeControlsEnabled) {
+            ThemeModeRow(
+                selected = settings.theme,
+                onSelect = { mode ->
+                    val selection = resolveThemeModeSelection(mode)
+                    update(selection.theme, { o, v -> o.copy(theme = v) }, { preferences.theme().set(it) })
+                    update(
+                        selection.backgroundColor,
+                        { o, v -> o.copy(backgroundColor = v) },
+                        { preferences.backgroundColor().set(it) },
+                    )
+                    update(
+                        selection.textColor,
+                        { o, v -> o.copy(textColor = v) },
+                        { preferences.textColor().set(it) },
+                    )
+                },
+            )
+            Text(
+                text = stringResource(AYMR.strings.novel_reader_background_texture),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(NovelReaderBackgroundTexture.entries) { option ->
+                    val selected = settings.backgroundTexture == option
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                        modifier = Modifier.clickable {
+                            update(
+                                option,
+                                { o, v -> o.copy(backgroundTexture = v) },
+                                { preferences.backgroundTexture().set(it) },
+                            )
+                        },
+                    ) {
+                        Text(
+                            text = when (option) {
+                                NovelReaderBackgroundTexture.NONE ->
+                                    stringResource(AYMR.strings.novel_reader_background_texture_none)
+                                NovelReaderBackgroundTexture.PAPER_GRAIN ->
+                                    stringResource(AYMR.strings.novel_reader_background_texture_paper_grain)
+                                NovelReaderBackgroundTexture.LINEN ->
+                                    stringResource(AYMR.strings.novel_reader_background_texture_linen)
+                                NovelReaderBackgroundTexture.PARCHMENT ->
+                                    stringResource(AYMR.strings.novel_reader_background_texture_parchment)
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
+                }
+            }
+            LnReaderSliderRow(
+                label = stringResource(AYMR.strings.novel_reader_native_texture_strength),
+                valueText = "${settings.nativeTextureStrengthPercent}%",
+                value = settings.nativeTextureStrengthPercent.toFloat(),
+                range = 0f..200f,
+                steps = 199,
+                onChange = { value ->
+                    val rounded = value.roundToInt()
+                    update(
+                        rounded,
+                        { o, v -> o.copy(nativeTextureStrengthPercent = v) },
+                        { preferences.nativeTextureStrengthPercent().set(it) },
+                    )
+                },
+            )
+            Text(
+                text = stringResource(AYMR.strings.novel_reader_native_texture_strength_summary),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_oled_edge_gradient),
+                subtitle = stringResource(AYMR.strings.novel_reader_oled_edge_gradient_summary),
+                checked = settings.oledEdgeGradient,
+                onCheckedChanged = {
+                    update(it, { o, v -> o.copy(oledEdgeGradient = v) }, { preferences.oledEdgeGradient().set(it) })
+                },
+            )
+            Text(
+                text = stringResource(AYMR.strings.novel_reader_theme_presets),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(colorTiles) { theme ->
+                    ThemeTile(
+                        theme = theme,
+                        selected = selectedTheme == theme,
+                        onClick = {
+                            update(
+                                theme.backgroundColor,
+                                { o, v -> o.copy(backgroundColor = v) },
+                                { preferences.backgroundColor().set(it) },
+                            )
+                            update(
+                                theme.textColor,
+                                { o, v -> o.copy(textColor = v) },
+                                { preferences.textColor().set(it) },
+                            )
+                        },
+                    )
+                }
+            }
+
+            EditTextPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_background_color),
+                subtitle = "%s",
+                icon = null,
+                value = settings.backgroundColor.orEmpty(),
+                onConfirm = { value ->
+                    if (!isValidColorOrBlank(value)) return@EditTextPreferenceWidget false
+                    update(value, { o, v -> o.copy(backgroundColor = v) }, { preferences.backgroundColor().set(it) })
+                    true
+                },
+                canBeBlank = true,
+            )
+
+            EditTextPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_text_color),
+                subtitle = "%s",
+                icon = null,
+                value = settings.textColor.orEmpty(),
+                onConfirm = { value ->
+                    if (!isValidColorOrBlank(value)) return@EditTextPreferenceWidget false
+                    update(value, { o, v -> o.copy(textColor = v) }, { preferences.textColor().set(it) })
+                    true
+                },
+                canBeBlank = true,
+            )
+
+            if (selectedTheme != null && !isPreset && !isCustom) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val newThemes =
+                                listOf(selectedTheme) + settings.customThemes.filterNot { it == selectedTheme }
+                            update(newThemes, { o, v ->
+                                o.copy(customThemes = v)
+                            }, { preferences.customThemes().set(it) })
+                        },
+                ) {
+                    Text(
+                        text = stringResource(AYMR.strings.novel_reader_save_custom_theme),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    )
+                }
+            }
+            if (selectedTheme != null && isCustom) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val newThemes = settings.customThemes.filterNot { it == selectedTheme }
+                            update(newThemes, { o, v ->
+                                o.copy(customThemes = v)
+                            }, { preferences.customThemes().set(it) })
+                        },
+                ) {
+                    Text(
+                        text = stringResource(AYMR.strings.novel_reader_delete_custom_theme),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    )
+                }
+            }
+        } else {
+            Text(
+                text = stringResource(AYMR.strings.novel_reader_theme_controls_disabled_summary),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        if (appearanceControlState.backgroundControlsEnabled) {
+            Text(
+                text = stringResource(AYMR.strings.novel_reader_background_presets),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(novelReaderBackgroundPresets) { preset ->
+                    val selected =
+                        settings.backgroundSource == NovelReaderBackgroundSource.PRESET &&
+                            settings.backgroundPresetId == preset.id
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                        modifier = Modifier
+                            .size(width = 170.dp, height = 175.dp)
+                            .clickable {
+                                update(
+                                    NovelReaderBackgroundSource.PRESET,
+                                    { o, v -> o.copy(backgroundSource = v) },
+                                    { preferences.backgroundSource().set(it) },
+                                )
+                                update(
+                                    preset.id,
+                                    { o, v -> o.copy(backgroundPresetId = v) },
+                                    { preferences.backgroundPresetId().set(it) },
+                                )
+                            },
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Image(
+                                painter = painterResource(id = preset.imageResId),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .size(height = 90.dp, width = 154.dp),
+                            )
+                            Text(
+                                text = backgroundPresetTitle(preset.id),
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                            Text(
+                                text = backgroundPresetDescription(preset.id),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                            )
+                        }
+                    }
+                }
+            }
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { backgroundPicker.launch("image/*") },
+            ) {
+                Text(
+                    text = stringResource(AYMR.strings.novel_reader_background_upload),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 )
-            },
-        )
-        Text(
-            text = stringResource(AYMR.strings.novel_reader_native_texture_strength_summary),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_oled_edge_gradient),
-            subtitle = stringResource(AYMR.strings.novel_reader_oled_edge_gradient_summary),
-            checked = settings.oledEdgeGradient,
-            onCheckedChanged = {
-                update(it, { o, v -> o.copy(oledEdgeGradient = v) }, { preferences.oledEdgeGradient().set(it) })
-            },
-        )
+            }
+            Text(
+                text = stringResource(AYMR.strings.novel_reader_background_upload_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (settings.customBackgroundPath.isNotBlank()) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (settings.backgroundSource == NovelReaderBackgroundSource.CUSTOM) {
+                        MaterialTheme.colorScheme.tertiaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = settings.customBackgroundPath,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            clearNovelReaderCustomBackground(settings.customBackgroundPath)
+                            update(
+                                "",
+                                { o, v -> o.copy(customBackgroundPath = v) },
+                                { preferences.customBackgroundPath().set(it) },
+                            )
+                            update(
+                                NovelReaderBackgroundSource.PRESET,
+                                { o, v -> o.copy(backgroundSource = v) },
+                                { preferences.backgroundSource().set(it) },
+                            )
+                        },
+                ) {
+                    Text(
+                        text = stringResource(AYMR.strings.novel_reader_background_remove_custom),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    )
+                }
+            }
+        } else {
+            Text(
+                text = stringResource(AYMR.strings.novel_reader_background_controls_disabled_summary),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_page_edge_shadow),
             subtitle = stringResource(AYMR.strings.novel_reader_page_edge_shadow_summary),
@@ -858,92 +1165,6 @@ private fun ReadingTab(
                     }, { preferences.pageEdgeShadowAlpha().set(it) })
                 },
             )
-        }
-
-        Text(
-            text = stringResource(AYMR.strings.novel_reader_theme_presets),
-            style = MaterialTheme.typography.titleSmall,
-        )
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(colorTiles) { theme ->
-                ThemeTile(
-                    theme = theme,
-                    selected = selectedTheme == theme,
-                    onClick = {
-                        update(
-                            theme.backgroundColor,
-                            { o, v -> o.copy(backgroundColor = v) },
-                            { preferences.backgroundColor().set(it) },
-                        )
-                        update(
-                            theme.textColor,
-                            { o, v -> o.copy(textColor = v) },
-                            { preferences.textColor().set(it) },
-                        )
-                    },
-                )
-            }
-        }
-
-        EditTextPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_background_color),
-            subtitle = "%s",
-            icon = null,
-            value = settings.backgroundColor.orEmpty(),
-            onConfirm = { value ->
-                if (!isValidColorOrBlank(value)) return@EditTextPreferenceWidget false
-                update(value, { o, v -> o.copy(backgroundColor = v) }, { preferences.backgroundColor().set(it) })
-                true
-            },
-            canBeBlank = true,
-        )
-
-        EditTextPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_text_color),
-            subtitle = "%s",
-            icon = null,
-            value = settings.textColor.orEmpty(),
-            onConfirm = { value ->
-                if (!isValidColorOrBlank(value)) return@EditTextPreferenceWidget false
-                update(value, { o, v -> o.copy(textColor = v) }, { preferences.textColor().set(it) })
-                true
-            },
-            canBeBlank = true,
-        )
-
-        if (selectedTheme != null && !isPreset && !isCustom) {
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        val newThemes = listOf(selectedTheme) + settings.customThemes.filterNot { it == selectedTheme }
-                        update(newThemes, { o, v -> o.copy(customThemes = v) }, { preferences.customThemes().set(it) })
-                    },
-            ) {
-                Text(
-                    text = stringResource(AYMR.strings.novel_reader_save_custom_theme),
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                )
-            }
-        }
-        if (selectedTheme != null && isCustom) {
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.errorContainer,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        val newThemes = settings.customThemes.filterNot { it == selectedTheme }
-                        update(newThemes, { o, v -> o.copy(customThemes = v) }, { preferences.customThemes().set(it) })
-                    },
-            ) {
-                Text(
-                    text = stringResource(AYMR.strings.novel_reader_delete_custom_theme),
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                )
-            }
         }
     }
 }
@@ -1140,6 +1361,40 @@ private fun ThemeTile(
     }
 }
 
+@Composable
+private fun backgroundPresetTitle(presetId: String): String {
+    return when (presetId) {
+        NOVEL_READER_BACKGROUND_PRESET_LINEN_PAPER_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_linen_paper_title)
+        NOVEL_READER_BACKGROUND_PRESET_AGED_PAGE_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_aged_page_title)
+        NOVEL_READER_BACKGROUND_PRESET_CRUMPLED_SHEET_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_crumpled_sheet_title)
+        NOVEL_READER_BACKGROUND_PRESET_NIGHT_VELVET_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_night_velvet_title)
+        NOVEL_READER_BACKGROUND_PRESET_DARK_WOOD_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_dark_wood_title)
+        else -> presetId
+    }
+}
+
+@Composable
+private fun backgroundPresetDescription(presetId: String): String {
+    return when (presetId) {
+        NOVEL_READER_BACKGROUND_PRESET_LINEN_PAPER_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_linen_paper_description)
+        NOVEL_READER_BACKGROUND_PRESET_AGED_PAGE_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_aged_page_description)
+        NOVEL_READER_BACKGROUND_PRESET_CRUMPLED_SHEET_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_crumpled_sheet_description)
+        NOVEL_READER_BACKGROUND_PRESET_NIGHT_VELVET_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_night_velvet_description)
+        NOVEL_READER_BACKGROUND_PRESET_DARK_WOOD_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_dark_wood_description)
+        else -> ""
+    }
+}
+
 private fun parseColor(value: String): Color? {
     return runCatching { Color(AndroidColor.parseColor(value)) }.getOrNull()
 }
@@ -1155,6 +1410,26 @@ internal data class ThemeModeSelection(
     val backgroundColor: String,
     val textColor: String,
 )
+
+internal data class AppearanceControlState(
+    val themeControlsEnabled: Boolean,
+    val backgroundControlsEnabled: Boolean,
+)
+
+internal fun resolveAppearanceControlState(
+    appearanceMode: NovelReaderAppearanceMode,
+): AppearanceControlState {
+    return when (appearanceMode) {
+        NovelReaderAppearanceMode.THEME -> AppearanceControlState(
+            themeControlsEnabled = true,
+            backgroundControlsEnabled = false,
+        )
+        NovelReaderAppearanceMode.BACKGROUND -> AppearanceControlState(
+            themeControlsEnabled = false,
+            backgroundControlsEnabled = true,
+        )
+    }
+}
 
 internal fun resolveThemeModeSelection(theme: NovelReaderTheme): ThemeModeSelection {
     // Base mode selection must restore fallback theme colors from reader screen logic.
