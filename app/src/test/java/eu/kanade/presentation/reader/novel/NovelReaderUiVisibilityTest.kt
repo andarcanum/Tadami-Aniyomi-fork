@@ -2111,7 +2111,6 @@ class NovelReaderUiVisibilityTest {
             showReaderUi = false,
             fullScreenMode = true,
             base = base,
-            defaultLightStatusBars = true,
         )
 
         assertFalse(resolved.isLightStatusBars)
@@ -2123,7 +2122,7 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `reader active system bars keep base icon appearance when ui is visible`() {
+    fun `reader active system bars preserve base icon appearance when ui is visible`() {
         val base = ReaderSystemBarsState(
             isLightStatusBars = true,
             isLightNavigationBars = false,
@@ -2134,10 +2133,9 @@ class NovelReaderUiVisibilityTest {
             showReaderUi = true,
             fullScreenMode = true,
             base = base,
-            defaultLightStatusBars = false,
         )
 
-        assertFalse(resolved.isLightStatusBars)
+        assertTrue(resolved.isLightStatusBars)
         assertFalse(resolved.isLightNavigationBars)
         assertTrue(
             resolved.systemBarsBehavior ==
@@ -2146,7 +2144,7 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `reader active system bars keep base icon appearance when not fullscreen`() {
+    fun `reader active system bars preserve base icon appearance when not fullscreen`() {
         val base = ReaderSystemBarsState(
             isLightStatusBars = false,
             isLightNavigationBars = false,
@@ -2157,11 +2155,10 @@ class NovelReaderUiVisibilityTest {
             showReaderUi = false,
             fullScreenMode = false,
             base = base,
-            defaultLightStatusBars = true,
         )
 
-        assertTrue(resolved.isLightStatusBars)
-        assertTrue(resolved.isLightNavigationBars)
+        assertFalse(resolved.isLightStatusBars)
+        assertFalse(resolved.isLightNavigationBars)
         assertTrue(
             resolved.systemBarsBehavior ==
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE,

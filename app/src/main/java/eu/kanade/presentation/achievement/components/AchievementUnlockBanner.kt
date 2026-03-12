@@ -48,7 +48,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -380,6 +379,12 @@ private fun AchievementBannerItem(
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
+    val mutedGradient = remember(colors.accent, colors.surface) {
+        mutedUnlockBannerGradient(
+            accent = colors.accent,
+            surface = colors.surface,
+        )
+    }
 
     // Glow animation for rare achievements
     var glowScale by remember { mutableFloatStateOf(1f) }
@@ -416,13 +421,13 @@ private fun AchievementBannerItem(
                     AchievementPopupSizeTokens.unlockNormalShadowElevation
                 },
                 shape = RoundedCornerShape(AchievementPopupSizeTokens.unlockContainerCornerRadius),
-                ambientColor = if (isRare) colors.accent.copy(alpha = 0.6f) else colors.accent.copy(alpha = 0.5f),
+                ambientColor = if (isRare) colors.accent.copy(alpha = 0.6f) else colors.accent.copy(alpha = 0.3f),
                 spotColor = if (isRare) {
                     colors.progressCyan.copy(
                         alpha = 0.5f,
                     )
                 } else {
-                    colors.progressCyan.copy(alpha = 0.3f)
+                    colors.progressCyan.copy(alpha = 0.2f)
                 },
             )
             .clip(RoundedCornerShape(AchievementPopupSizeTokens.unlockContainerCornerRadius))
@@ -437,12 +442,7 @@ private fun AchievementBannerItem(
                             Color(0xFFFFD700), // Gold
                         )
                     } else {
-                        // Normal achievements use adaptive accent color
-                        listOf(
-                            colors.accent.copy(alpha = 0.7f).compositeOver(Color.White.copy(alpha = 0.3f)),
-                            colors.accent,
-                            colors.accent.copy(alpha = 0.8f).compositeOver(Color.Black.copy(alpha = 0.2f)),
-                        )
+                        mutedGradient
                     },
                     start = Offset(0f, 0f),
                     end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY),

@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.AlertDialog
@@ -282,6 +283,7 @@ class MainActivity : BaseActivity() {
                         AchievementUnlockBanner(
                             modifier = Modifier
                                 .align(Alignment.TopCenter)
+                                .windowInsetsPadding(WindowInsets.statusBars)
                                 .padding(top = AchievementPopupSizeTokens.overlayTopPadding),
                         )
                         // Achievement group notification (for multiple achievements after reader/player)
@@ -291,6 +293,7 @@ class MainActivity : BaseActivity() {
                         AchievementGroupNotification(
                             modifier = Modifier
                                 .align(Alignment.TopCenter)
+                                .windowInsetsPadding(WindowInsets.statusBars)
                                 .padding(top = AchievementPopupSizeTokens.overlayTopPadding),
                             onViewAll = { achievements ->
                                 // Get achievements directly from notification

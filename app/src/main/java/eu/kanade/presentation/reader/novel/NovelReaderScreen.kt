@@ -745,7 +745,6 @@ fun NovelReaderScreen(
         fullScreenMode = state.readerSettings.fullScreenMode,
         keepScreenOn = state.readerSettings.keepScreenOn,
         showReaderUi = showReaderUI,
-        defaultLightStatusBars = context.resources.getBoolean(R.bool.lightStatusBar),
     )
 
     // Volume Buttons Handler
@@ -7008,7 +7007,6 @@ private fun SystemUIController(
     fullScreenMode: Boolean,
     keepScreenOn: Boolean,
     showReaderUi: Boolean,
-    defaultLightStatusBars: Boolean,
 ) {
     val view = LocalView.current
 
@@ -7051,7 +7049,6 @@ private fun SystemUIController(
             showReaderUi = showReaderUi,
             fullScreenMode = fullScreenMode,
             base = baseSystemBarsState,
-            defaultLightStatusBars = defaultLightStatusBars,
         )
 
         // Keep Screen On
@@ -7090,19 +7087,14 @@ internal fun resolveActiveReaderSystemBarsState(
     showReaderUi: Boolean,
     fullScreenMode: Boolean,
     base: ReaderSystemBarsState,
-    defaultLightStatusBars: Boolean,
 ): ReaderSystemBarsState {
     if (showReaderUi) {
         return base.copy(
-            isLightStatusBars = defaultLightStatusBars,
-            isLightNavigationBars = defaultLightStatusBars,
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE,
         )
     }
     if (!fullScreenMode) {
         return base.copy(
-            isLightStatusBars = defaultLightStatusBars,
-            isLightNavigationBars = defaultLightStatusBars,
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE,
         )
     }

@@ -153,35 +153,38 @@ private fun AchievementGroupBannerItem(
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
+    val mutedGradient = remember(colors.accent, colors.progressCyan, colors.surface) {
+        mutedGroupBannerGradient(
+            accent = colors.accent,
+            secondary = colors.progressCyan,
+            surface = colors.surface,
+        )
+    }
 
     Box(
         modifier = modifier
             .graphicsLayer {
                 shadowElevation = AchievementPopupSizeTokens.groupShadowElevationPx
-                spotShadowColor = colors.accent.copy(alpha = 0.6f)
-                ambientShadowColor = colors.progressCyan.copy(alpha = 0.4f)
+                spotShadowColor = colors.accent.copy(alpha = 0.35f)
+                ambientShadowColor = colors.progressCyan.copy(alpha = 0.24f)
             }
             .shadow(
                 elevation = AchievementPopupSizeTokens.groupShadowElevation,
                 shape = RoundedCornerShape(AchievementPopupSizeTokens.groupContainerCornerRadius),
-                ambientColor = colors.accent.copy(alpha = 0.6f),
-                spotColor = colors.progressCyan.copy(alpha = 0.5f),
+                ambientColor = colors.accent.copy(alpha = 0.32f),
+                spotColor = colors.progressCyan.copy(alpha = 0.24f),
             )
             .clip(RoundedCornerShape(AchievementPopupSizeTokens.groupContainerCornerRadius))
             .background(
                 brush = Brush.linearGradient(
-                    colors = listOf(
-                        colors.accent.copy(alpha = 0.9f),
-                        colors.accent,
-                        colors.progressCyan.copy(alpha = 0.8f),
-                    ),
+                    colors = mutedGradient,
                     start = Offset(0f, 0f),
                     end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY),
                 ),
             )
             .border(
                 width = AchievementPopupSizeTokens.groupBorderWidth,
-                color = Color.White.copy(alpha = 0.5f),
+                color = Color.White.copy(alpha = 0.35f),
                 shape = RoundedCornerShape(AchievementPopupSizeTokens.groupContainerCornerRadius),
             )
             .clickable { onViewAll(achievements) }
