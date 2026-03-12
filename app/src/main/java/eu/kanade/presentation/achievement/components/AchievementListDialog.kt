@@ -43,6 +43,8 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.components.AdaptiveSheet
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.achievement.model.Achievement
+import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.presentation.core.i18n.stringResource
 
 /**
  * Full-screen dialog showing list of newly unlocked achievements
@@ -71,13 +73,17 @@ fun AchievementListDialog(
             ) {
                 Column {
                     Text(
-                        text = "Новые достижения!",
+                        text = stringResource(AYMR.strings.achievement_list_title),
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         color = AuroraTheme.colors.textPrimary,
                     )
                     Text(
-                        text = "${achievements.size} достижений • +$totalPoints очков",
+                        text = stringResource(
+                            AYMR.strings.achievement_list_summary,
+                            achievements.size,
+                            totalPoints,
+                        ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = AuroraTheme.colors.textSecondary,
                     )
@@ -86,7 +92,7 @@ fun AchievementListDialog(
                 IconButton(onClick = onDismiss) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Закрыть",
+                        contentDescription = stringResource(AYMR.strings.achievement_action_close),
                         tint = AuroraTheme.colors.textSecondary,
                     )
                 }
@@ -120,7 +126,7 @@ fun AchievementListDialog(
                 shape = RoundedCornerShape(12.dp),
             ) {
                 Text(
-                    text = "Отлично!",
+                    text = stringResource(AYMR.strings.achievement_list_confirm),
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(vertical = 8.dp),
                 )
@@ -236,7 +242,7 @@ private fun AchievementListItem(
                     modifier = Modifier.size(14.dp),
                 )
                 Text(
-                    text = "+${achievement.points} очков",
+                    text = stringResource(AYMR.strings.achievement_points_reward, achievement.points),
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Bold,
                     color = if (isRare) Color(0xFFFFD700) else colors.accent,

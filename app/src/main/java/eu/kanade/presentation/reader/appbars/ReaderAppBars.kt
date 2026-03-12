@@ -52,6 +52,7 @@ import eu.kanade.tachiyomi.ui.reader.viewer.Viewer
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.R2LPagerViewer
 import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
 
@@ -259,7 +260,11 @@ fun ReaderAppBars(
                                         .align(Alignment.CenterVertically),
                                 ) {
                                     Text(
-                                        text = "Скорость скролла: $autoScrollSpeed",
+                                        text = stringResource(
+                                            AYMR.strings.reader_auto_scroll_speed_value,
+                                            stringResource(AYMR.strings.novel_reader_auto_scroll_speed),
+                                            autoScrollSpeed,
+                                        ),
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurface,
                                     )

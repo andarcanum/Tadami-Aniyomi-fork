@@ -32,6 +32,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.theme.AuroraTheme
+import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.presentation.core.i18n.stringResource
 
 /**
  * Aniview Universal Content Card
@@ -189,7 +191,7 @@ fun AniviewHeroCard(
                     .padding(horizontal = 12.dp, vertical = 6.dp),
             ) {
                 Text(
-                    text = "ПРОДОЛЖИТЬ ПРОСМОТР",
+                    text = stringResource(AYMR.strings.aurora_continue_watching_header),
                     color = colors.textOnAccent,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
@@ -235,7 +237,7 @@ fun AniviewHeroCard(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "Смотреть",
+                    text = stringResource(AYMR.strings.aurora_play),
                     color = colors.textOnAccent,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,

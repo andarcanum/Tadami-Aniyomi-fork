@@ -14,6 +14,8 @@ import eu.kanade.presentation.achievement.screenmodel.AchievementScreenModel
 import eu.kanade.presentation.achievement.ui.AchievementScreen
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.ui.main.MainActivity
+import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
 
 data object AchievementsTab : Tab {
@@ -24,7 +26,7 @@ data object AchievementsTab : Tab {
             val isSelected = LocalTabNavigator.current.current.key == key
             return TabOptions(
                 index = 9u,
-                title = "Achievements",
+                title = stringResource(AYMR.strings.label_achievements),
             )
         }
 

@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsScreenModel
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.CheckboxItem
 import tachiyomi.presentation.core.components.SettingsChipRow
 import tachiyomi.presentation.core.components.SliderItem
@@ -53,17 +54,17 @@ import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
 
 private val sliderColors = listOf(
-    0 to "Тема",
-    0xFFE91E63.toInt() to "Розовый",
-    0xFFF44336.toInt() to "Красный",
-    0xFFFF9800.toInt() to "Оранжевый",
-    0xFFFFEB3B.toInt() to "Жёлтый",
-    0xFF4CAF50.toInt() to "Зелёный",
-    0xFF2196F3.toInt() to "Синий",
-    0xFF9C27B0.toInt() to "Фиолетовый",
-    0xFF00BCD4.toInt() to "Бирюзовый",
-    0xFF795548.toInt() to "Коричневый",
-    0xFF607D8B.toInt() to "Серый",
+    0 to AYMR.strings.reader_navigator_slider_color_theme,
+    0xFFE91E63.toInt() to AYMR.strings.reader_navigator_slider_color_pink,
+    0xFFF44336.toInt() to AYMR.strings.reader_navigator_slider_color_red,
+    0xFFFF9800.toInt() to AYMR.strings.reader_navigator_slider_color_orange,
+    0xFFFFEB3B.toInt() to AYMR.strings.reader_navigator_slider_color_yellow,
+    0xFF4CAF50.toInt() to AYMR.strings.reader_navigator_slider_color_green,
+    0xFF2196F3.toInt() to AYMR.strings.reader_navigator_slider_color_blue,
+    0xFF9C27B0.toInt() to AYMR.strings.reader_navigator_slider_color_purple,
+    0xFF00BCD4.toInt() to AYMR.strings.reader_navigator_slider_color_turquoise,
+    0xFF795548.toInt() to AYMR.strings.reader_navigator_slider_color_brown,
+    0xFF607D8B.toInt() to AYMR.strings.reader_navigator_slider_color_gray,
 )
 
 @Composable
@@ -117,7 +118,7 @@ fun NavigatorSettingsDialog(
                 // Preview of the navigator
                 if (showNavigator) {
                     Text(
-                        text = "Предпросмотр:",
+                        text = stringResource(AYMR.strings.reader_navigator_preview),
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )

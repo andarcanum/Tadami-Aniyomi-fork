@@ -52,6 +52,8 @@ import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.theme.AuroraTheme
 import kotlinx.coroutines.delay
 import tachiyomi.domain.achievement.model.Achievement
+import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.presentation.core.i18n.stringResource
 
 /**
  * Group notification for multiple achievements shown when user exits reader/player
@@ -276,7 +278,7 @@ private fun AchievementGroupBannerItem(
                 modifier = Modifier.weight(1f),
             ) {
                 Text(
-                    text = "НОВЫЕ ДОСТИЖЕНИЯ!",
+                    text = stringResource(AYMR.strings.achievement_group_title),
                     color = Color.White.copy(alpha = 0.95f),
                     fontSize = AchievementPopupSizeTokens.groupHeaderFontSize,
                     fontWeight = FontWeight.ExtraBold,
@@ -292,7 +294,7 @@ private fun AchievementGroupBannerItem(
                 Spacer(modifier = Modifier.height(AchievementPopupSizeTokens.groupSectionSpacing))
 
                 Text(
-                    text = "Получено $count достижений",
+                    text = stringResource(AYMR.strings.achievement_group_received, count),
                     color = Color.White,
                     fontSize = AchievementPopupSizeTokens.groupMiddleFontSize,
                     fontWeight = FontWeight.ExtraBold,
@@ -312,7 +314,7 @@ private fun AchievementGroupBannerItem(
                     horizontalArrangement = Arrangement.spacedBy(AchievementPopupSizeTokens.groupPointsRowSpacing),
                 ) {
                     Text(
-                        text = "+$totalPoints очков",
+                        text = stringResource(AYMR.strings.achievement_points_reward, totalPoints),
                         color = Color(0xFFFFD700),
                         fontSize = AchievementPopupSizeTokens.groupPointsFontSize,
                         fontWeight = FontWeight.ExtraBold,
@@ -329,7 +331,7 @@ private fun AchievementGroupBannerItem(
             // Arrow indicator
             Icon(
                 imageVector = Icons.Default.KeyboardArrowDown,
-                contentDescription = "Смотреть",
+                contentDescription = stringResource(AYMR.strings.achievement_action_view),
                 tint = Color.White.copy(alpha = 0.8f),
                 modifier = Modifier.size(AchievementPopupSizeTokens.groupArrowSize),
             )

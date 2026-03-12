@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.achievement.model.Achievement
 import tachiyomi.domain.achievement.model.AchievementProgress
+import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.presentation.core.i18n.stringResource
 
 /**
  * Aurora-themed Achievement Card with glassmorphism and neon effects
@@ -221,7 +223,10 @@ fun AchievementCard(
 
                             if (achievement.points > 0) {
                                 Spacer(modifier = Modifier.height(4.dp))
-                                val pointsText = "${achievement.points} очков"
+                                val pointsText = stringResource(
+                                    AYMR.strings.achievement_points_reward,
+                                    achievement.points,
+                                )
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
@@ -350,7 +355,7 @@ private fun HolographicProgressBar(
             horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
         ) {
             Text(
-                text = "ПРОГРЕСС",
+                text = stringResource(AYMR.strings.achievement_progress_label),
                 color = colors.textSecondary.copy(alpha = 0.6f),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,

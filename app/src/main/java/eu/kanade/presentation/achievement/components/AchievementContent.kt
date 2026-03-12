@@ -29,7 +29,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.achievement.screenmodel.AchievementScreenState
 import eu.kanade.presentation.theme.AuroraTheme
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.padding
+import tachiyomi.presentation.core.i18n.stringResource
 
 /**
  * Aurora-themed Achievement Content with loading and empty states
@@ -111,7 +113,7 @@ private fun AuroraLoadingState(
             }
 
             Text(
-                text = "Загрузка достижений...",
+                text = stringResource(AYMR.strings.achievement_loading),
                 color = colors.textSecondary,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
@@ -212,14 +214,14 @@ private fun AuroraEmptyState(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    text = "Нет достижений",
+                    text = stringResource(AYMR.strings.achievement_empty_title),
                     color = colors.textPrimary,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.5.sp,
                 )
                 Text(
-                    text = "В этой категории пока нет достижений",
+                    text = stringResource(AYMR.strings.achievement_empty_description),
                     color = colors.textSecondary.copy(alpha = 0.7f),
                     fontSize = 14.sp,
                 )

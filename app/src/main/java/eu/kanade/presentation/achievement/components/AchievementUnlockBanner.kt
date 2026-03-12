@@ -62,6 +62,8 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.R
 import kotlinx.coroutines.delay
 import tachiyomi.domain.achievement.model.Achievement
+import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.presentation.core.i18n.stringResource
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
@@ -550,7 +552,11 @@ private fun AchievementBannerItem(
                         modifier = Modifier.size(AchievementPopupSizeTokens.unlockHeaderIconSize),
                     )
                     Text(
-                        text = if (isRare) "РЕДКОЕ ДОСТИЖЕНИЕ!" else "ДОСТИЖЕНИЕ РАЗБЛОКИРОВАНО!",
+                        text = if (isRare) {
+                            stringResource(AYMR.strings.achievement_banner_rare_title)
+                        } else {
+                            stringResource(AYMR.strings.achievement_banner_unlocked_title)
+                        },
                         color = Color.White.copy(alpha = 0.95f),
                         fontSize = if (isRare) {
                             AchievementPopupSizeTokens.unlockLabelRareFontSize
@@ -620,7 +626,7 @@ private fun AchievementBannerItem(
                         )
                     }
                     Text(
-                        text = "+${achievement.points} очков",
+                        text = stringResource(AYMR.strings.achievement_points_reward, achievement.points),
                         color = if (isRare) Color(0xFFFFD700) else Color.White.copy(alpha = 0.95f),
                         fontSize = if (isRare) {
                             AchievementPopupSizeTokens.unlockPointsRareFontSize

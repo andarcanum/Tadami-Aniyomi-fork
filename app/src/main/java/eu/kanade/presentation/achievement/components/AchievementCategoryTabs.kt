@@ -32,6 +32,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.achievement.model.AchievementCategory
+import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
 fun AchievementCategoryTabs(
@@ -41,11 +43,11 @@ fun AchievementCategoryTabs(
 ) {
     val colors = AuroraTheme.colors
     val tabs = listOf(
-        AchievementCategory.BOTH to "ВСЕ",
-        AchievementCategory.ANIME to "АНИМЕ",
-        AchievementCategory.MANGA to "МАНГА",
-        AchievementCategory.NOVEL to "РАНОБЭ",
-        AchievementCategory.SECRET to "СКРЫТЫЕ",
+        AchievementCategory.BOTH to stringResource(AYMR.strings.achievement_category_all),
+        AchievementCategory.ANIME to stringResource(AYMR.strings.achievement_category_anime),
+        AchievementCategory.MANGA to stringResource(AYMR.strings.achievement_category_manga),
+        AchievementCategory.NOVEL to stringResource(AYMR.strings.achievement_category_novel),
+        AchievementCategory.SECRET to stringResource(AYMR.strings.achievement_category_secret),
     )
 
     BoxWithConstraints(

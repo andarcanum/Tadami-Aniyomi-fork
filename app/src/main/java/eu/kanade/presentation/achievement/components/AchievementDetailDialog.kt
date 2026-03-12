@@ -50,6 +50,8 @@ import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.data.achievement.UnlockableManager
 import tachiyomi.domain.achievement.model.Achievement
 import tachiyomi.domain.achievement.model.AchievementProgress
+import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.presentation.core.i18n.stringResource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.text.SimpleDateFormat
@@ -216,7 +218,7 @@ fun AchievementDetailDialog(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "${achievement.points} очков",
+                            text = stringResource(AYMR.strings.achievement_points, achievement.points),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = colors.accent,
@@ -293,7 +295,10 @@ fun AchievementDetailDialog(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Разблокировано: ${formatDate(unlockedAt)}",
+                                text = stringResource(
+                                    AYMR.strings.achievement_unlocked_at,
+                                    formatDate(unlockedAt),
+                                ),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
                                 color = colors.textSecondary.copy(alpha = 0.9f),
@@ -337,7 +342,7 @@ fun AchievementDetailDialog(
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = "ЗАКРЫТЬ",
+                                text = stringResource(AYMR.strings.achievement_action_close).uppercase(),
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 1.sp,
@@ -423,7 +428,7 @@ private fun AnimatedProgressSection(
     ) {
         // Header
         Text(
-            text = "ПРОГРЕСС",
+            text = stringResource(AYMR.strings.achievement_progress_label),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = colors.textSecondary.copy(alpha = 0.7f),
@@ -524,7 +529,7 @@ private fun AuroraRewardSection(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(
-            text = "НАГРАДЫ",
+            text = stringResource(AYMR.strings.achievement_rewards_label),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = colors.textSecondary.copy(alpha = 0.7f),
@@ -541,7 +546,7 @@ private fun AuroraRewardSection(
                     modifier = Modifier.size(20.dp),
                 )
             },
-            title = "+${achievement.points} очков",
+            title = stringResource(AYMR.strings.achievement_points_reward, achievement.points),
             subtitle = null,
             isUnlocked = isUnlocked,
         )
@@ -562,7 +567,11 @@ private fun AuroraRewardSection(
                     )
                 },
                 title = unlockableName,
-                subtitle = if (!isUnlockableUnlocked) "Разблокируется при выполнении достижения" else "Разблокировано",
+                subtitle = if (!isUnlockableUnlocked) {
+                    stringResource(AYMR.strings.achievement_unlockable_locked_subtitle)
+                } else {
+                    stringResource(AYMR.strings.achievement_unlockable_unlocked_subtitle)
+                },
                 isUnlocked = isUnlockableUnlocked,
             )
         }
