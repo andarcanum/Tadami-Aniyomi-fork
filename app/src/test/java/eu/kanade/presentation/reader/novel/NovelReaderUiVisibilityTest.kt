@@ -4,12 +4,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.style.TextIndent
-import androidx.compose.ui.unit.em
 import androidx.core.view.WindowInsetsControllerCompat
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichBlockTextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
@@ -795,7 +796,7 @@ class NovelReaderUiVisibilityTest {
             shouldPaginate = false,
             textBlocks = listOf("First", "Second"),
             paragraphSpacingDp = 12,
-        ) {
+        ) { _, _ ->
             invocationCount++
             listOf("paged")
         }
@@ -812,12 +813,310 @@ class NovelReaderUiVisibilityTest {
             shouldPaginate = true,
             textBlocks = listOf("First paragraph", "Second paragraph"),
             paragraphSpacingDp = 24,
-        ) { chapterText ->
-            paginatedInput = chapterText
-            listOf(chapterText)
+        ) { textBlocks, paragraphSpacingDp ->
+            paginatedInput = textBlocks.joinToString(resolvePageReaderParagraphSeparator(paragraphSpacingDp))
+            listOf(paginatedInput.orEmpty())
         }
 
         assertTrue(paginatedInput == "First paragraph\n\nSecond paragraph")
+    }
+
+    @Test
+    fun `paged plain renderer uses exact paragraph spacing when packing pages`() {
+        val textBlocks = listOf("First paragraph", "Second paragraph")
+
+        val compactPages = resolvePageReaderBlocks(
+            shouldPaginate = true,
+            textBlocks = textBlocks,
+            paragraphSpacingDp = 0,
+        ) { blocks, paragraphSpacingPx ->
+            paginatePlainPageBlocks(
+                textBlocks = blocks,
+                paragraphSpacingPx = paragraphSpacingPx,
+                widthPx = 600,
+                heightPx = 76,
+                textSizePx = 20f,
+                lineHeightMultiplier = 1.2f,
+                typeface = null,
+                textAlign = ReaderTextAlign.LEFT,
+            ).map { page ->
+                page.joinToString("\n") { slice ->
+                    blocks[slice.blockIndex].substring(slice.range.start, slice.range.endExclusive)
+                }
+            }
+        }
+        val spacedPages = resolvePageReaderBlocks(
+            shouldPaginate = true,
+            textBlocks = textBlocks,
+            paragraphSpacingDp = 32,
+        ) { blocks, paragraphSpacingPx ->
+            paginatePlainPageBlocks(
+                textBlocks = blocks,
+                paragraphSpacingPx = paragraphSpacingPx,
+                widthPx = 600,
+                heightPx = 76,
+                textSizePx = 20f,
+                lineHeightMultiplier = 1.2f,
+                typeface = null,
+                textAlign = ReaderTextAlign.LEFT,
+            ).map { page ->
+                page.joinToString("\n") { slice ->
+                    blocks[slice.blockIndex].substring(slice.range.start, slice.range.endExclusive)
+                }
+            }
+        }
+
+        assertEquals(1, compactPages.size)
+        assertEquals(2, spacedPages.size)
+        assertEquals("First paragraph", spacedPages.first())
+        assertEquals("Second paragraph", spacedPages.last())
+    }
+
+    @Test
+    fun `long paragraph continuation does not get paragraph spacing`() {
+        val pages = resolvePageReaderBlocks(
+            shouldPaginate = true,
+            textBlocks = listOf("Long paragraph ".repeat(40).trim()),
+            paragraphSpacingDp = 32,
+        ) { blocks, paragraphSpacingPx ->
+            paginatePlainPageBlocks(
+                textBlocks = blocks,
+                paragraphSpacingPx = paragraphSpacingPx,
+                widthPx = 260,
+                heightPx = 120,
+                textSizePx = 24f,
+                lineHeightMultiplier = 1.2f,
+                typeface = null,
+                textAlign = ReaderTextAlign.LEFT,
+            ).map { page ->
+                page.joinToString("\n") { slice ->
+                    blocks[slice.blockIndex].substring(slice.range.start, slice.range.endExclusive)
+                }
+            }
+        }
+
+        assertTrue(pages.size > 1)
+        val renderBlocks = buildPlainPageRenderBlocks(
+            page = paginatePlainPageBlocks(
+                textBlocks = listOf("Long paragraph ".repeat(40).trim()),
+                paragraphSpacingPx = 32,
+                widthPx = 260,
+                heightPx = 120,
+                textSizePx = 24f,
+                lineHeightMultiplier = 1.2f,
+                typeface = null,
+                textAlign = ReaderTextAlign.LEFT,
+            )[1],
+            textBlocks = listOf("Long paragraph ".repeat(40).trim()),
+            paragraphSpacingPx = 32,
+            forceParagraphIndent = true,
+        )
+
+        assertFalse(pages.drop(1).first().startsWith("\n"))
+        assertEquals(0, renderBlocks.first().spacingBeforePx)
+        assertEquals(null, renderBlocks.first().firstLineIndentEm)
+    }
+
+    @Test
+    fun `rich paged renderer uses exact paragraph spacing when packing pages`() {
+        val richBlocks = listOf(
+            NovelRichContentBlock.Paragraph(
+                segments = listOf(NovelRichTextSegment(text = "First paragraph")),
+            ),
+            NovelRichContentBlock.Paragraph(
+                segments = listOf(NovelRichTextSegment(text = "Second paragraph")),
+            ),
+        )
+        val blockTexts = richBlocks.map { block ->
+            buildRichPageReaderBlockText(block = block)
+        }
+
+        val compactPages = paginateRichPageBlocks(
+            blockTexts = blockTexts,
+            paragraphSpacingPx = 0,
+            widthPx = 600,
+            heightPx = 76,
+            textSizePx = 20f,
+            lineHeightMultiplier = 1.2f,
+            typeface = null,
+            textAlign = ReaderTextAlign.LEFT,
+        ).map { page ->
+            buildAnnotatedString {
+                page.forEachIndexed { index, slice ->
+                    if (index > 0) append('\n')
+                    append(
+                        blockTexts[slice.blockIndex].text.subSequence(
+                            TextRange(slice.range.start, slice.range.endExclusive),
+                        ),
+                    )
+                }
+            }
+        }
+        val spacedPages = paginateRichPageBlocks(
+            blockTexts = blockTexts,
+            paragraphSpacingPx = 32,
+            widthPx = 600,
+            heightPx = 76,
+            textSizePx = 20f,
+            lineHeightMultiplier = 1.2f,
+            typeface = null,
+            textAlign = ReaderTextAlign.LEFT,
+        ).map { page ->
+            buildAnnotatedString {
+                page.forEachIndexed { index, slice ->
+                    if (index > 0) append('\n')
+                    append(
+                        blockTexts[slice.blockIndex].text.subSequence(
+                            TextRange(slice.range.start, slice.range.endExclusive),
+                        ),
+                    )
+                }
+            }
+        }
+
+        assertEquals(1, compactPages.size)
+        assertEquals(2, spacedPages.size)
+        assertEquals("First paragraph", spacedPages.first().text)
+        assertEquals("Second paragraph", spacedPages.last().text)
+    }
+
+    @Test
+    fun `rich paragraph continuation does not get paragraph spacing`() {
+        val blockTexts = listOf(
+            buildRichPageReaderBlockText(
+                block = NovelRichContentBlock.Paragraph(
+                    segments = listOf(NovelRichTextSegment(text = "Long paragraph ".repeat(40).trim())),
+                ),
+            ),
+        )
+        val pages = paginateRichPageBlocks(
+            blockTexts = blockTexts,
+            paragraphSpacingPx = 32,
+            widthPx = 260,
+            heightPx = 120,
+            textSizePx = 24f,
+            lineHeightMultiplier = 1.2f,
+            typeface = null,
+            textAlign = ReaderTextAlign.LEFT,
+        ).map { page ->
+            buildAnnotatedString {
+                page.forEachIndexed { index, slice ->
+                    if (index > 0) append('\n')
+                    append(
+                        blockTexts[slice.blockIndex].text.subSequence(
+                            TextRange(slice.range.start, slice.range.endExclusive),
+                        ),
+                    )
+                }
+            }
+        }
+
+        assertTrue(pages.size > 1)
+        assertFalse(pages.drop(1).first().text.startsWith("\n"))
+        val renderBlocks = buildRichPageRenderBlocks(
+            page = paginateRichPageBlocks(
+                blockTexts = blockTexts,
+                paragraphSpacingPx = 32,
+                widthPx = 260,
+                heightPx = 120,
+                textSizePx = 24f,
+                lineHeightMultiplier = 1.2f,
+                typeface = null,
+                textAlign = ReaderTextAlign.LEFT,
+            )[1],
+            blockTexts = blockTexts,
+            paragraphSpacingPx = 32,
+        )
+        assertEquals(0, renderBlocks.first().spacingBeforePx)
+        assertEquals(null, renderBlocks.first().firstLineIndentEm)
+    }
+
+    @Test
+    fun `plain paged page assembly preserves paragraph boundaries`() {
+        val page = paginatePlainPageBlocks(
+            textBlocks = listOf("First paragraph", "Second paragraph"),
+            paragraphSpacingPx = 12,
+            widthPx = 600,
+            heightPx = 76,
+            textSizePx = 20f,
+            lineHeightMultiplier = 1.2f,
+            typeface = null,
+            textAlign = ReaderTextAlign.LEFT,
+        ).first()
+        val renderBlocks = buildPlainPageRenderBlocks(
+            page = page,
+            textBlocks = listOf("First paragraph", "Second paragraph"),
+            paragraphSpacingPx = 12,
+            forceParagraphIndent = true,
+        )
+
+        assertEquals(listOf("First paragraph", "Second paragraph"), renderBlocks.map { it.text })
+        assertEquals(listOf(0, 12), renderBlocks.map { it.spacingBeforePx })
+        assertEquals(listOf(2f, 2f), renderBlocks.map { it.firstLineIndentEm })
+    }
+
+    @Test
+    fun `rich paged page assembly preserves spans and paragraph boundaries`() {
+        val blockTexts = listOf(
+            buildRichPageReaderBlockText(
+                block = NovelRichContentBlock.Paragraph(
+                    segments = listOf(
+                        NovelRichTextSegment(text = "Alpha "),
+                        NovelRichTextSegment(text = "link", linkUrl = "https://example.org"),
+                    ),
+                ),
+            ),
+            buildRichPageReaderBlockText(
+                block = NovelRichContentBlock.Paragraph(
+                    segments = listOf(NovelRichTextSegment(text = "Second paragraph")),
+                ),
+            ),
+        )
+        val renderBlocks = buildRichPageRenderBlocks(
+            page = paginateRichPageBlocks(
+                blockTexts = blockTexts,
+                paragraphSpacingPx = 12,
+                widthPx = 600,
+                heightPx = 76,
+                textSizePx = 20f,
+                lineHeightMultiplier = 1.2f,
+                typeface = null,
+                textAlign = ReaderTextAlign.LEFT,
+            ).first(),
+            blockTexts = blockTexts,
+            paragraphSpacingPx = 12,
+        )
+
+        assertEquals(listOf("Alpha link", "Second paragraph"), renderBlocks.map { it.text.text })
+        assertEquals(listOf(0, 12), renderBlocks.map { it.spacingBeforePx })
+        assertTrue(
+            renderBlocks.first().text.getStringAnnotations(
+                tag = "URL",
+                start = 0,
+                end = renderBlocks.first().text.length,
+            )
+                .any { it.item == "https://example.org" },
+        )
+    }
+
+    @Test
+    fun `page mode no longer depends on separator heuristics`() {
+        var receivedBlocks: List<String>? = null
+        var receivedSpacing: Int? = null
+
+        val pages = resolvePageReaderBlocks(
+            shouldPaginate = true,
+            textBlocks = listOf("First paragraph", "Second paragraph"),
+            paragraphSpacingDp = 12,
+        ) { blocks, paragraphSpacingPx ->
+            receivedBlocks = blocks
+            receivedSpacing = paragraphSpacingPx
+            listOf("paged")
+        }
+
+        assertEquals(listOf("paged"), pages)
+        assertEquals(listOf("First paragraph", "Second paragraph"), receivedBlocks)
+        assertEquals(12, receivedSpacing)
     }
 
     @Test
@@ -1297,7 +1596,7 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `native text align uses source alignment when preserve is enabled`() {
+    fun `native text align uses source alignment with global fallback when preserve is enabled`() {
         assertTrue(
             resolveNativeTextAlign(
                 globalTextAlign = ReaderTextAlign.JUSTIFY,
@@ -1310,7 +1609,7 @@ class NovelReaderUiVisibilityTest {
                 globalTextAlign = ReaderTextAlign.JUSTIFY,
                 preserveSourceTextAlignInNative = true,
                 sourceTextAlign = null,
-            ) == null,
+            ) == TextAlign.Justify,
         )
     }
 
@@ -1355,12 +1654,12 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `page reader layout align avoids forced justify when preserve is enabled`() {
+    fun `page reader layout align follows global alignment with source fallback`() {
         assertTrue(
             resolvePageReaderLayoutTextAlign(
                 globalTextAlign = ReaderTextAlign.JUSTIFY,
                 preserveSourceTextAlignInNative = true,
-            ) == ReaderTextAlign.LEFT,
+            ) == ReaderTextAlign.JUSTIFY,
         )
         assertTrue(
             resolvePageReaderLayoutTextAlign(
@@ -1373,6 +1672,25 @@ class NovelReaderUiVisibilityTest {
                 globalTextAlign = ReaderTextAlign.SOURCE,
                 preserveSourceTextAlignInNative = false,
             ) == ReaderTextAlign.LEFT,
+        )
+    }
+
+    @Test
+    fun `page reader render align follows global alignment with source fallback`() {
+        assertTrue(
+            resolvePageReaderRenderTextAlign(
+                globalTextAlign = ReaderTextAlign.CENTER,
+            ) == TextAlign.Center,
+        )
+        assertTrue(
+            resolvePageReaderRenderTextAlign(
+                globalTextAlign = ReaderTextAlign.RIGHT,
+            ) == TextAlign.End,
+        )
+        assertTrue(
+            resolvePageReaderRenderTextAlign(
+                globalTextAlign = ReaderTextAlign.SOURCE,
+            ) == TextAlign.Start,
         )
     }
 
@@ -1994,25 +2312,55 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `rich page builder preserves first-line indent as paragraph style`() {
-        val chapter = buildRichPageReaderChapterAnnotatedText(
-            listOf(
-                NovelRichContentBlock.Paragraph(
-                    segments = listOf(NovelRichTextSegment(text = "Indented paragraph")),
-                    firstLineIndentEm = 2f,
-                ),
-                NovelRichContentBlock.Paragraph(
-                    segments = listOf(NovelRichTextSegment(text = "No indent paragraph")),
-                    firstLineIndentEm = null,
-                ),
+    fun `rich page block builder preserves first-line indent metadata`() {
+        val block = buildRichPageReaderBlockText(
+            block = NovelRichContentBlock.Paragraph(
+                segments = listOf(NovelRichTextSegment(text = "Indented paragraph")),
+                firstLineIndentEm = 2f,
             ),
-            paragraphSpacingDp = 12,
         )
 
-        val hasIndent = chapter.paragraphStyles.any { range ->
-            range.item.textIndent == TextIndent(firstLine = 2.em)
-        }
-        assertTrue(hasIndent)
+        assertEquals("Indented paragraph", block.text.text)
+        assertEquals(2f, block.firstLineIndentEm)
+    }
+
+    @Test
+    fun `rich page block builder preserves source text alignment metadata`() {
+        val block = buildRichPageReaderBlockText(
+            block = NovelRichContentBlock.BlockQuote(
+                segments = listOf(NovelRichTextSegment(text = "Centered quote")),
+                textAlign = NovelRichBlockTextAlign.CENTER,
+            ),
+        )
+
+        assertEquals("Centered quote", block.text.text)
+        assertEquals(NovelRichBlockTextAlign.CENTER, block.sourceTextAlign)
+    }
+
+    @Test
+    fun `page reader base text style applies forced bold italic and shadow`() {
+        val style = resolvePageReaderBaseTextStyle(
+            baseStyle = TextStyle.Default,
+            color = Color.Black,
+            backgroundColor = Color.White,
+            fontSize = 22,
+            lineHeight = 1.4f,
+            fontFamily = null,
+            textAlign = TextAlign.Center,
+            forceBoldText = true,
+            forceItalicText = true,
+            textShadow = true,
+            textShadowColor = "",
+            textShadowBlur = 3f,
+            textShadowX = 2f,
+            textShadowY = 1f,
+        )
+
+        assertEquals(FontWeight.Bold, style.fontWeight)
+        assertEquals(FontStyle.Italic, style.fontStyle)
+        assertEquals(TextAlign.Center, style.textAlign)
+        assertEquals(3f, style.shadow?.blurRadius)
+        assertEquals(Offset(2f, 1f), style.shadow?.offset)
     }
 
     @Test
