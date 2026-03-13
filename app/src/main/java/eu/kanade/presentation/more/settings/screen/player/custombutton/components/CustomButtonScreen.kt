@@ -18,14 +18,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Modifier
-import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.FloatingActionAddButton
+import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.screen.player.custombutton.CustomButtonScreenState
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import tachiyomi.domain.custombuttons.model.CustomButton
 import tachiyomi.i18n.aniyomi.AYMR
-import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.components.material.topSmallPaddingValues
 import tachiyomi.presentation.core.i18n.stringResource
@@ -44,21 +44,18 @@ fun CustomButtonScreen(
     navigateUp: () -> Unit,
 ) {
     val lazyListState = rememberLazyListState()
-    Scaffold(
-        topBar = { scrollBehavior ->
-            AppBar(
-                title = stringResource(AYMR.strings.pref_player_custom_button_header),
-                navigateUp = navigateUp,
-                actions = {
-                    IconButton(onClick = onClickFAQ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Outlined.HelpOutline,
-                            contentDescription = stringResource(AYMR.strings.pref_player_custom_button_guide),
-                        )
-                    }
-                },
-                scrollBehavior = scrollBehavior,
-            )
+    val uiStyle = rememberResolvedSettingsUiStyle()
+    SettingsScaffold(
+        title = stringResource(AYMR.strings.pref_player_custom_button_header),
+        uiStyle = uiStyle,
+        onBackPressed = navigateUp,
+        actions = {
+            IconButton(onClick = onClickFAQ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.HelpOutline,
+                    contentDescription = stringResource(AYMR.strings.pref_player_custom_button_guide),
+                )
+            }
         },
         floatingActionButton = {
             FloatingActionAddButton(
@@ -72,7 +69,7 @@ fun CustomButtonScreen(
                 stringRes = AYMR.strings.pref_player_custom_button_empty,
                 modifier = Modifier.padding(paddingValues),
             )
-            return@Scaffold
+            return@SettingsScaffold
         }
 
         CustomButtonContent(

@@ -10,6 +10,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -23,6 +24,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.more.settings.settingsAccentColor
+import eu.kanade.presentation.more.settings.settingsDialogContainerColor
+import eu.kanade.presentation.more.settings.settingsSubtitleColor
+import eu.kanade.presentation.more.settings.settingsTitleColor
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.ScrollbarLazyColumn
 import tachiyomi.presentation.core.i18n.stringResource
@@ -46,9 +51,10 @@ fun <T> ListPreferenceWidget(
     )
 
     if (isDialogShown) {
+        val accentColor = settingsAccentColor()
         AlertDialog(
             onDismissRequest = { isDialogShown = false },
-            title = { Text(text = title) },
+            title = { Text(text = title, color = settingsTitleColor()) },
             text = {
                 Box {
                     val state = rememberLazyListState()
@@ -59,6 +65,7 @@ fun <T> ListPreferenceWidget(
                                 DialogRow(
                                     label = current.value,
                                     isSelected = isSelected,
+                                    accentColor = accentColor,
                                     onSelected = {
                                         onValueChange(current.key!!)
                                         isDialogShown = false
@@ -76,6 +83,9 @@ fun <T> ListPreferenceWidget(
                     Text(text = stringResource(MR.strings.action_cancel))
                 }
             },
+            containerColor = settingsDialogContainerColor(),
+            titleContentColor = settingsTitleColor(),
+            textContentColor = settingsSubtitleColor(),
         )
     }
 }
@@ -84,6 +94,7 @@ fun <T> ListPreferenceWidget(
 private fun DialogRow(
     label: String,
     isSelected: Boolean,
+    accentColor: androidx.compose.ui.graphics.Color,
     onSelected: () -> Unit,
 ) {
     Row(
@@ -100,10 +111,14 @@ private fun DialogRow(
         RadioButton(
             selected = isSelected,
             onClick = null,
+            colors = RadioButtonDefaults.colors(
+                selectedColor = accentColor,
+            ),
         )
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge.merge(),
+            color = settingsTitleColor(),
             modifier = Modifier.padding(start = 24.dp),
         )
     }

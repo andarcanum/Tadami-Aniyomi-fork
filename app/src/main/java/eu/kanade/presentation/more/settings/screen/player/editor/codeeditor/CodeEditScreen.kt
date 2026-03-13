@@ -41,12 +41,13 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
+import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.screen.player.editor.components.UnsavedChangesDialog
 import eu.kanade.presentation.util.Screen
 import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.DISABLED_ALPHA
-import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
@@ -62,6 +63,7 @@ class CodeEditScreen(private val filePath: String) : Screen() {
         val state by screenModel.state.collectAsState()
         val dialogShown by screenModel.dialogShown.collectAsState()
         val hasModified by screenModel.hasModified.collectAsState()
+        val uiStyle = rememberResolvedSettingsUiStyle()
 
         BackHandler(enabled = hasModified) {
             screenModel.showDialog(CodeEditDialogs.GoBack)
@@ -77,32 +79,29 @@ class CodeEditScreen(private val filePath: String) : Screen() {
             }
         }
 
-        Scaffold(
-            topBar = { scrollBehavior ->
-                AppBar(
-                    navigateUp = {
-                        if (hasModified) {
-                            screenModel.showDialog(CodeEditDialogs.GoBack)
-                        } else {
-                            navigator.pop()
-                        }
-                    },
-                    titleContent = {
-                        Text(text = filePath.substringAfter("/"))
-                    },
-                    actions = {
-                        AppBarActions(
-                            actions = persistentListOf(
-                                AppBar.Action(
-                                    title = stringResource(MR.strings.action_save),
-                                    icon = Icons.Outlined.Save,
-                                    onClick = screenModel::save,
-                                    enabled = hasModified,
-                                ),
-                            ),
-                        )
-                    },
-                    scrollBehavior = scrollBehavior,
+        SettingsScaffold(
+            title = filePath.substringAfter("/"),
+            uiStyle = uiStyle,
+            onBackPressed = {
+                if (hasModified) {
+                    screenModel.showDialog(CodeEditDialogs.GoBack)
+                } else {
+                    navigator.pop()
+                }
+            },
+            titleContent = {
+                Text(text = filePath.substringAfter("/"))
+            },
+            actions = {
+                AppBarActions(
+                    actions = persistentListOf(
+                        AppBar.Action(
+                            title = stringResource(MR.strings.action_save),
+                            icon = Icons.Outlined.Save,
+                            onClick = screenModel::save,
+                            enabled = hasModified,
+                        ),
+                    ),
                 )
             },
         ) { contentPadding ->

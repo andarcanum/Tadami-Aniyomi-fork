@@ -32,6 +32,8 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.browse.manga.components.MangaSourceIcon
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
+import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.persistentListOf
@@ -48,7 +50,6 @@ import tachiyomi.domain.source.manga.model.Source
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.LazyColumnWithAction
-import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
 import tachiyomi.presentation.core.screens.LoadingScreen
@@ -65,6 +66,7 @@ class ClearDatabaseScreen : Screen() {
         val model = rememberScreenModel { ClearDatabaseScreenModel() }
         val state by model.state.collectAsState()
         val scope = rememberCoroutineScope()
+        val uiStyle = rememberResolvedSettingsUiStyle()
 
         when (val s = state) {
             is ClearDatabaseScreenModel.State.Loading -> LoadingScreen()
@@ -97,31 +99,27 @@ class ClearDatabaseScreen : Screen() {
                     )
                 }
 
-                Scaffold(
-                    topBar = { scrollBehavior ->
-                        AppBar(
-                            title = stringResource(AYMR.strings.pref_clear_manga_database),
-                            navigateUp = navigator::pop,
-                            actions = {
-                                if (s.items.isNotEmpty()) {
-                                    AppBarActions(
-                                        actions = persistentListOf(
-                                            AppBar.Action(
-                                                title = stringResource(MR.strings.action_select_all),
-                                                icon = Icons.Outlined.SelectAll,
-                                                onClick = model::selectAll,
-                                            ),
-                                            AppBar.Action(
-                                                title = stringResource(MR.strings.action_select_inverse),
-                                                icon = Icons.Outlined.FlipToBack,
-                                                onClick = model::invertSelection,
-                                            ),
-                                        ),
-                                    )
-                                }
-                            },
-                            scrollBehavior = scrollBehavior,
-                        )
+                SettingsScaffold(
+                    title = stringResource(AYMR.strings.pref_clear_manga_database),
+                    uiStyle = uiStyle,
+                    onBackPressed = navigator::pop,
+                    actions = {
+                        if (s.items.isNotEmpty()) {
+                            AppBarActions(
+                                actions = persistentListOf(
+                                    AppBar.Action(
+                                        title = stringResource(MR.strings.action_select_all),
+                                        icon = Icons.Outlined.SelectAll,
+                                        onClick = model::selectAll,
+                                    ),
+                                    AppBar.Action(
+                                        title = stringResource(MR.strings.action_select_inverse),
+                                        icon = Icons.Outlined.FlipToBack,
+                                        onClick = model::invertSelection,
+                                    ),
+                                ),
+                            )
+                        }
                     },
                 ) { contentPadding ->
                     if (s.items.isEmpty()) {

@@ -29,6 +29,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.more.settings.settingsAccentColor
+import eu.kanade.presentation.more.settings.settingsDialogContainerColor
+import eu.kanade.presentation.more.settings.settingsSubtitleColor
+import eu.kanade.presentation.more.settings.settingsTitleColor
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
@@ -61,14 +65,16 @@ fun <T> TriStateListDialog(
             }
             .toMutableStateList()
     }
+    val accentColor = settingsAccentColor()
     AlertDialog(
         onDismissRequest = onDismissRequest,
-        title = { Text(text = title) },
+        title = { Text(text = title, color = settingsTitleColor()) },
         text = {
             Column {
                 if (message != null) {
                     Text(
                         text = message,
+                        color = settingsSubtitleColor(),
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
                 }
@@ -102,7 +108,7 @@ fun <T> TriStateListDialog(
                                     tint = if (state == State.UNCHECKED) {
                                         LocalContentColor.current
                                     } else {
-                                        MaterialTheme.colorScheme.primary
+                                        accentColor
                                     },
                                     contentDescription = stringResource(
                                         when (state) {
@@ -142,5 +148,8 @@ fun <T> TriStateListDialog(
                 Text(text = stringResource(MR.strings.action_ok))
             }
         },
+        containerColor = settingsDialogContainerColor(),
+        titleContentColor = settingsTitleColor(),
+        textContentColor = settingsSubtitleColor(),
     )
 }

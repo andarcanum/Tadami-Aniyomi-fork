@@ -12,6 +12,8 @@ import androidx.compose.ui.Modifier
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.presentation.more.settings.LocalSettingsPaneContext
+import eu.kanade.presentation.more.settings.SettingsPaneContext
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsMainScreen
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsPlayerScreen
 import eu.kanade.presentation.util.DefaultNavigatorScreenTransition
@@ -35,7 +37,10 @@ class PlayerSettingsScreen(private val mainSettings: Boolean) : Screen() {
                             parentNavigator.pop()
                         }
                     }
-                    CompositionLocalProvider(LocalBackPress provides pop) {
+                    CompositionLocalProvider(
+                        LocalBackPress provides pop,
+                        LocalSettingsPaneContext provides SettingsPaneContext.SinglePane,
+                    ) {
                         DefaultNavigatorScreenTransition(navigator = it)
                     }
                 },
@@ -50,11 +55,20 @@ class PlayerSettingsScreen(private val mainSettings: Boolean) : Screen() {
                         .windowInsetsPadding(insets)
                         .consumeWindowInsets(insets),
                     startContent = {
-                        CompositionLocalProvider(LocalBackPress provides parentNavigator::pop) {
+                        CompositionLocalProvider(
+                            LocalBackPress provides parentNavigator::pop,
+                            LocalSettingsPaneContext provides SettingsPaneContext.TwoPanePrimary,
+                        ) {
                             PlayerSettingsMainScreen(mainSettings).Content(twoPane = true)
                         }
                     },
-                    endContent = { DefaultNavigatorScreenTransition(navigator = it) },
+                    endContent = {
+                        CompositionLocalProvider(
+                            LocalSettingsPaneContext provides SettingsPaneContext.TwoPaneSecondary,
+                        ) {
+                            DefaultNavigatorScreenTransition(navigator = it)
+                        }
+                    },
                 )
             }
         }

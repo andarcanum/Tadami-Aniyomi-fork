@@ -23,7 +23,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.os.LocaleListCompat
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import eu.kanade.presentation.components.AppBar
+import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.util.system.LocaleHelper
@@ -32,7 +33,6 @@ import kotlinx.collections.immutable.toImmutableList
 import org.xmlpull.v1.XmlPullParser
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.i18n.MR
-import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
 
 class AppLanguageScreen : Screen() {
@@ -41,6 +41,7 @@ class AppLanguageScreen : Screen() {
     override fun Content() {
         val context = LocalContext.current
         val navigator = LocalNavigator.currentOrThrow
+        val uiStyle = rememberResolvedSettingsUiStyle()
 
         val langs = remember { getLangs(context) }
         var currentLanguage by remember {
@@ -56,14 +57,10 @@ class AppLanguageScreen : Screen() {
             AppCompatDelegate.setApplicationLocales(locale)
         }
 
-        Scaffold(
-            topBar = { scrollBehavior ->
-                AppBar(
-                    title = stringResource(MR.strings.pref_app_language),
-                    navigateUp = navigator::pop,
-                    scrollBehavior = scrollBehavior,
-                )
-            },
+        SettingsScaffold(
+            title = stringResource(MR.strings.pref_app_language),
+            uiStyle = uiStyle,
+            onBackPressed = navigator::pop,
         ) { contentPadding ->
             LazyColumn(
                 modifier = Modifier.padding(contentPadding),

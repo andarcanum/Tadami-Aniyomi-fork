@@ -11,6 +11,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.PreferenceScaffold
+import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.screen.about.AboutScreen
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.util.system.DeviceUtil
@@ -25,8 +26,10 @@ class DebugInfoScreen : Screen() {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val uiStyle = rememberResolvedSettingsUiStyle()
         PreferenceScaffold(
             titleRes = MR.strings.pref_debug_info,
+            uiStyle = uiStyle,
             onBackPressed = navigator::pop,
             itemsProvider = {
                 listOf(

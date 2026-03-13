@@ -16,13 +16,14 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
+import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.util.system.copyToClipboard
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.serialization.protobuf.schema.ProtoBufSchemaGenerator
 import tachiyomi.i18n.MR
-import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
 
 class BackupSchemaScreen : Screen() {
@@ -35,6 +36,7 @@ class BackupSchemaScreen : Screen() {
     override fun Content() {
         val context = LocalContext.current
         val navigator = LocalNavigator.currentOrThrow
+        val uiStyle = rememberResolvedSettingsUiStyle()
 
         val schema = remember {
             ProtoBufSchemaGenerator.generateSchemaText(
@@ -42,25 +44,21 @@ class BackupSchemaScreen : Screen() {
             )
         }
 
-        Scaffold(
-            topBar = {
-                AppBar(
-                    title = TITLE,
-                    navigateUp = navigator::pop,
-                    actions = {
-                        AppBarActions(
-                            persistentListOf(
-                                AppBar.Action(
-                                    title = stringResource(MR.strings.action_copy_to_clipboard),
-                                    icon = Icons.Default.ContentCopy,
-                                    onClick = {
-                                        context.copyToClipboard(TITLE, schema)
-                                    },
-                                ),
-                            ),
-                        )
-                    },
-                    scrollBehavior = it,
+        SettingsScaffold(
+            title = TITLE,
+            uiStyle = uiStyle,
+            onBackPressed = navigator::pop,
+            actions = {
+                AppBarActions(
+                    persistentListOf(
+                        AppBar.Action(
+                            title = stringResource(MR.strings.action_copy_to_clipboard),
+                            icon = Icons.Default.ContentCopy,
+                            onClick = {
+                                context.copyToClipboard(TITLE, schema)
+                            },
+                        ),
+                    ),
                 )
             },
         ) { contentPadding ->

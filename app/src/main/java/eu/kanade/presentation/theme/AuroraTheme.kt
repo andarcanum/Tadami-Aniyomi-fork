@@ -122,7 +122,7 @@ data class AuroraColors(
                 gradientStart = gradientStart,
                 gradientEnd = gradientEnd,
                 glass = if (isDark) {
-                    Color.White.copy(alpha = 0.08f)
+                    Color.White.copy(alpha = 0.22f)
                 } else {
                     Color.Black.copy(alpha = 0.05f)
                 },
@@ -130,7 +130,7 @@ data class AuroraColors(
                 textSecondary = colorScheme.onSurfaceVariant,
                 textOnAccent = colorScheme.onPrimary,
                 cardBackground = if (isDark) {
-                    Color.White.copy(alpha = 0.05f)
+                    Color.White.copy(alpha = 0.12f)
                 } else {
                     Color.Black.copy(alpha = 0.03f)
                 },
@@ -156,11 +156,11 @@ data class AuroraColors(
             surface = AuroraColorScheme.aniviewDarkBg,
             gradientStart = AuroraColorScheme.auroraDarkGradientStart,
             gradientEnd = AuroraColorScheme.aniviewDarkBg,
-            glass = AuroraColorScheme.auroraGlass,
+            glass = Color.White.copy(alpha = 0.22f),
             textPrimary = Color.White,
             textSecondary = Color.White.copy(alpha = 0.7f),
             textOnAccent = Color.White,
-            cardBackground = Color.White.copy(alpha = 0.05f),
+            cardBackground = Color.White.copy(alpha = 0.12f),
             divider = Color.White.copy(alpha = 0.1f),
             isDark = true,
             progressCyan = AuroraColorScheme.aniviewCyan,

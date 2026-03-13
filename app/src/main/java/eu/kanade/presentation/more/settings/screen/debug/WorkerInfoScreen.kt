@@ -27,6 +27,8 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
+import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.util.Screen
 import eu.kanade.presentation.util.ioCoroutineScope
 import eu.kanade.tachiyomi.util.lang.toDateTimestampString
@@ -37,7 +39,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import tachiyomi.i18n.MR
-import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.plus
 import uy.kohesive.injekt.Injekt
@@ -56,34 +57,31 @@ class WorkerInfoScreen : Screen() {
     override fun Content() {
         val context = LocalContext.current
         val navigator = LocalNavigator.currentOrThrow
+        val uiStyle = rememberResolvedSettingsUiStyle()
 
         val screenModel = rememberScreenModel { Model(context) }
         val enqueued by screenModel.enqueued.collectAsState()
         val finished by screenModel.finished.collectAsState()
         val running by screenModel.running.collectAsState()
 
-        Scaffold(
-            topBar = {
-                AppBar(
-                    title = TITLE,
-                    navigateUp = navigator::pop,
-                    actions = {
-                        AppBarActions(
-                            persistentListOf(
-                                AppBar.Action(
-                                    title = stringResource(MR.strings.action_copy_to_clipboard),
-                                    icon = Icons.Default.ContentCopy,
-                                    onClick = {
-                                        context.copyToClipboard(
-                                            TITLE,
-                                            enqueued + finished + running,
-                                        )
-                                    },
-                                ),
-                            ),
-                        )
-                    },
-                    scrollBehavior = it,
+        SettingsScaffold(
+            title = TITLE,
+            uiStyle = uiStyle,
+            onBackPressed = navigator::pop,
+            actions = {
+                AppBarActions(
+                    persistentListOf(
+                        AppBar.Action(
+                            title = stringResource(MR.strings.action_copy_to_clipboard),
+                            icon = Icons.Default.ContentCopy,
+                            onClick = {
+                                context.copyToClipboard(
+                                    TITLE,
+                                    enqueued + finished + running,
+                                )
+                            },
+                        ),
+                    ),
                 )
             },
         ) { contentPadding ->

@@ -12,11 +12,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import eu.kanade.presentation.category.components.CategoryFloatingActionButton
-import eu.kanade.presentation.components.AppBar
+import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.screen.browse.RepoScreenState
 import mihon.domain.extensionrepo.model.ExtensionRepo
 import tachiyomi.i18n.MR
-import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.components.material.topSmallPaddingValues
 import tachiyomi.presentation.core.i18n.stringResource
@@ -34,21 +34,18 @@ fun ExtensionReposScreen(
     officialRepos: Map<String, String> = emptyMap(),
 ) {
     val lazyListState = rememberLazyListState()
-    Scaffold(
-        topBar = { scrollBehavior ->
-            AppBar(
-                navigateUp = navigateUp,
-                title = stringResource(MR.strings.label_extension_repos),
-                scrollBehavior = scrollBehavior,
-                actions = {
-                    IconButton(onClick = onClickRefresh) {
-                        Icon(
-                            imageVector = Icons.Outlined.Refresh,
-                            contentDescription = stringResource(resource = MR.strings.action_webview_refresh),
-                        )
-                    }
-                },
-            )
+    val uiStyle = rememberResolvedSettingsUiStyle()
+    SettingsScaffold(
+        title = stringResource(MR.strings.label_extension_repos),
+        uiStyle = uiStyle,
+        onBackPressed = navigateUp,
+        actions = {
+            IconButton(onClick = onClickRefresh) {
+                Icon(
+                    imageVector = Icons.Outlined.Refresh,
+                    contentDescription = stringResource(resource = MR.strings.action_webview_refresh),
+                )
+            }
         },
         floatingActionButton = {
             CategoryFloatingActionButton(

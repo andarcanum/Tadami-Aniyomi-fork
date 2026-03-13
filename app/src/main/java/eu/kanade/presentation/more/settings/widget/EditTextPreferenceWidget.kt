@@ -10,6 +10,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -23,6 +24,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.window.DialogProperties
+import eu.kanade.presentation.more.settings.settingsAccentColor
+import eu.kanade.presentation.more.settings.settingsDialogContainerColor
+import eu.kanade.presentation.more.settings.settingsSubtitleColor
+import eu.kanade.presentation.more.settings.settingsTitleColor
 import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -53,6 +58,7 @@ fun EditTextPreferenceWidget(
     if (isDialogShown) {
         val scope = rememberCoroutineScope()
         val onDismissRequest = { isDialogShown = false }
+        val accentColor = settingsAccentColor()
         var textFieldValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
             mutableStateOf(TextFieldValue(value))
         }
@@ -62,7 +68,11 @@ fun EditTextPreferenceWidget(
                 Column {
                     Text(text = title)
                     if (dialogSubtitle != null) {
-                        Text(text = dialogSubtitle, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = dialogSubtitle,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = settingsSubtitleColor(),
+                        )
                     }
                 }
             },
@@ -86,6 +96,11 @@ fun EditTextPreferenceWidget(
                     },
                     isError = (textFieldValue.text.isBlank() && !canBeBlank) || !validate(textFieldValue.text),
                     singleLine = singleLine,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = accentColor,
+                        focusedLabelColor = accentColor,
+                        cursorColor = accentColor,
+                    ),
                     modifier = Modifier.fillMaxWidth(),
                 )
             },
@@ -114,6 +129,9 @@ fun EditTextPreferenceWidget(
                     Text(text = stringResource(MR.strings.action_cancel))
                 }
             },
+            containerColor = settingsDialogContainerColor(),
+            titleContentColor = settingsTitleColor(),
+            textContentColor = settingsSubtitleColor(),
         )
     }
 }

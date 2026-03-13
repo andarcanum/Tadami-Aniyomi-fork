@@ -24,8 +24,9 @@ import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.WarningBanner
+import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.data.backup.BackupFileValidator
 import eu.kanade.tachiyomi.data.backup.restore.BackupRestoreJob
@@ -36,7 +37,6 @@ import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.LabeledCheckbox
 import tachiyomi.presentation.core.components.LazyColumnWithAction
 import tachiyomi.presentation.core.components.SectionCard
-import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
 
@@ -50,15 +50,12 @@ class RestoreBackupScreen(
         val navigator = LocalNavigator.currentOrThrow
         val model = rememberScreenModel { RestoreBackupScreenModel(context, uri) }
         val state by model.state.collectAsState()
+        val uiStyle = rememberResolvedSettingsUiStyle()
 
-        Scaffold(
-            topBar = {
-                AppBar(
-                    title = stringResource(MR.strings.pref_restore_backup),
-                    navigateUp = navigator::pop,
-                    scrollBehavior = it,
-                )
-            },
+        SettingsScaffold(
+            title = stringResource(MR.strings.pref_restore_backup),
+            uiStyle = uiStyle,
+            onBackPressed = navigator::pop,
         ) { contentPadding ->
             LazyColumnWithAction(
                 contentPadding = contentPadding,

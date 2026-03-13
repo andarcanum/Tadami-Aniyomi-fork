@@ -13,8 +13,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.PreviewLightDark
+import eu.kanade.presentation.more.settings.LocalSettingsUiStyle
+import eu.kanade.presentation.more.settings.SettingsUiStyle
+import eu.kanade.presentation.more.settings.settingsAccentColor
+import eu.kanade.presentation.more.settings.settingsSubtitleColor
 import eu.kanade.presentation.theme.TachiyomiPreviewTheme
-import tachiyomi.presentation.core.util.secondaryItemAlpha
 
 @Composable
 fun TextPreferenceWidget(
@@ -22,11 +25,13 @@ fun TextPreferenceWidget(
     title: String? = null,
     subtitle: String? = null,
     icon: ImageVector? = null,
-    iconTint: Color = MaterialTheme.colorScheme.primary,
+    iconTint: Color = Color.Unspecified,
     widget: @Composable (() -> Unit)? = null,
     onPreferenceClick: (() -> Unit)? = null,
     onPreferenceLongClick: (() -> Unit)? = null,
 ) {
+    val isAurora = LocalSettingsUiStyle.current == SettingsUiStyle.Aurora
+    val resolvedIconTint = if (iconTint == Color.Unspecified) settingsAccentColor() else iconTint
     BasePreferenceWidget(
         modifier = modifier,
         title = title,
@@ -35,10 +40,10 @@ fun TextPreferenceWidget(
                 Text(
                     text = subtitle,
                     modifier = Modifier
-                        .padding(horizontal = PrefsHorizontalPadding)
-                        .secondaryItemAlpha(),
+                        .padding(horizontal = PrefsHorizontalPadding),
                     style = MaterialTheme.typography.bodySmall,
-                    maxLines = 10,
+                    color = settingsSubtitleColor(),
+                    maxLines = if (isAurora) Int.MAX_VALUE else 10,
                 )
             }
         } else {
@@ -48,7 +53,7 @@ fun TextPreferenceWidget(
             {
                 Icon(
                     imageVector = icon,
-                    tint = iconTint,
+                    tint = resolvedIconTint,
                     contentDescription = null,
                 )
             }

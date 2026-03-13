@@ -33,8 +33,9 @@ import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.ui.UiPreferences
-import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.more.LogoHeader
+import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.widget.ListPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
 import eu.kanade.presentation.util.LocalBackPress
@@ -64,7 +65,6 @@ import tachiyomi.domain.release.service.AppUpdatePreferences
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.LinkIcon
 import tachiyomi.presentation.core.components.ScrollbarLazyColumn
-import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.icons.CustomIcons
@@ -94,6 +94,7 @@ object AboutScreen : Screen() {
         val uriHandler = LocalUriHandler.current
         val handleBack = LocalBackPress.current
         val navigator = LocalNavigator.currentOrThrow
+        val uiStyle = rememberResolvedSettingsUiStyle()
         val achievementHandler = remember { Injekt.get<AchievementHandler>() }
         val featureUsageCollector = remember { Injekt.get<FeatureUsageCollector>() }
         val hiddenFeatureConfig = remember(context) { loadAboutHiddenFeatureConfig(context) }
@@ -138,16 +139,11 @@ object AboutScreen : Screen() {
         }
 
         Box(modifier = Modifier.fillMaxSize()) {
-            Scaffold(
-                topBar = { scrollBehavior ->
-                    if (!isEasterEggVisible) {
-                        AppBar(
-                            title = stringResource(MR.strings.pref_category_about),
-                            navigateUp = if (handleBack != null) handleBack::invoke else null,
-                            scrollBehavior = scrollBehavior,
-                        )
-                    }
-                },
+            SettingsScaffold(
+                title = stringResource(MR.strings.pref_category_about),
+                uiStyle = uiStyle,
+                onBackPressed = if (handleBack != null) handleBack::invoke else null,
+                showTopBar = !isEasterEggVisible,
             ) { contentPadding ->
                 ScrollbarLazyColumn(
                     contentPadding = contentPadding,

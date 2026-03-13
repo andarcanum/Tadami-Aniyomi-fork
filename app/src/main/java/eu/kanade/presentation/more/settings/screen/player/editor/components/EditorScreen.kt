@@ -23,15 +23,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.DropdownMenu
 import eu.kanade.presentation.components.FloatingActionAddButton
+import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.screen.player.editor.EditorListItem
 import eu.kanade.presentation.more.settings.screen.player.editor.EditorListType
 import eu.kanade.presentation.more.settings.screen.player.editor.EditorScreenState
 import kotlinx.collections.immutable.toPersistentList
 import tachiyomi.i18n.aniyomi.AYMR
-import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
 import tachiyomi.presentation.core.screens.LoadingScreen
@@ -48,18 +48,16 @@ fun EditorScreen(
     navigateUp: () -> Unit,
 ) {
     val lazyListState = rememberLazyListState()
-    Scaffold(
-        topBar = { scrollBehavior ->
-            AppBar(
-                navigateUp = navigateUp,
-                titleContent = {
-                    EditorTypeDropDown(
-                        type = selectedType,
-                        values = EditorListType.entries.toPersistentList(),
-                        onSelect = onSelectType,
-                    )
-                },
-                scrollBehavior = scrollBehavior,
+    val uiStyle = rememberResolvedSettingsUiStyle()
+    SettingsScaffold(
+        title = "",
+        uiStyle = uiStyle,
+        onBackPressed = navigateUp,
+        titleContent = {
+            EditorTypeDropDown(
+                type = selectedType,
+                values = EditorListType.entries.toPersistentList(),
+                onSelect = onSelectType,
             )
         },
         floatingActionButton = {
@@ -79,7 +77,7 @@ fun EditorScreen(
                         stringRes = AYMR.strings.pref_player_no_items,
                         modifier = Modifier.padding(paddingValues),
                     )
-                    return@Scaffold
+                    return@SettingsScaffold
                 }
 
                 EditorListContent(

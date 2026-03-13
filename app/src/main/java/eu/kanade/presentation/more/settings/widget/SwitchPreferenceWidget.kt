@@ -6,11 +6,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Preview
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.PreviewLightDark
+import eu.kanade.presentation.more.settings.LocalSettingsUiStyle
+import eu.kanade.presentation.more.settings.SettingsUiStyle
+import eu.kanade.presentation.more.settings.settingsAccentColor
 import eu.kanade.presentation.theme.TachiyomiPreviewTheme
 
 @Composable
@@ -23,6 +27,8 @@ fun SwitchPreferenceWidget(
     enabled: Boolean = true,
     onCheckedChanged: (Boolean) -> Unit,
 ) {
+    val isAurora = LocalSettingsUiStyle.current == SettingsUiStyle.Aurora
+    val accent = settingsAccentColor()
     TextPreferenceWidget(
         modifier = modifier.alpha(if (enabled) 1f else 0.6f),
         title = title,
@@ -33,6 +39,14 @@ fun SwitchPreferenceWidget(
                 checked = checked,
                 enabled = enabled,
                 onCheckedChange = null,
+                colors = if (isAurora) {
+                    SwitchDefaults.colors(
+                        checkedThumbColor = accent,
+                        checkedTrackColor = accent.copy(alpha = 0.5f),
+                    )
+                } else {
+                    SwitchDefaults.colors()
+                },
                 modifier = Modifier.padding(start = TrailingWidgetBuffer),
             )
         },

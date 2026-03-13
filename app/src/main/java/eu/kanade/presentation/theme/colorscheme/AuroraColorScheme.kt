@@ -28,7 +28,7 @@ internal object AuroraColorScheme : BaseColorScheme() {
     val auroraLightGradientStart = Color(0xFFe0e7ff)
     val auroraLightGradientEnd = Color(0xFFf8fafc)
 
-    val auroraGlass = Color(0x33FFFFFF)
+    val auroraGlass = Color.White.copy(alpha = 0.22f)
     val auroraGlassLight = Color(0x1A000000)
 
     override val darkScheme = darkColorScheme(

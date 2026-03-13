@@ -12,6 +12,8 @@ import androidx.compose.ui.Modifier
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.presentation.more.settings.LocalSettingsPaneContext
+import eu.kanade.presentation.more.settings.SettingsPaneContext
 import eu.kanade.presentation.more.settings.screen.SettingsAppearanceScreen
 import eu.kanade.presentation.more.settings.screen.SettingsDataScreen
 import eu.kanade.presentation.more.settings.screen.SettingsMainScreen
@@ -48,7 +50,10 @@ class SettingsScreen(
                             parentNavigator.pop()
                         }
                     }
-                    CompositionLocalProvider(LocalBackPress provides pop) {
+                    CompositionLocalProvider(
+                        LocalBackPress provides pop,
+                        LocalSettingsPaneContext provides SettingsPaneContext.SinglePane,
+                    ) {
                         DefaultNavigatorScreenTransition(navigator = it)
                     }
                 },
@@ -68,11 +73,20 @@ class SettingsScreen(
                         .windowInsetsPadding(insets)
                         .consumeWindowInsets(insets),
                     startContent = {
-                        CompositionLocalProvider(LocalBackPress provides parentNavigator::pop) {
+                        CompositionLocalProvider(
+                            LocalBackPress provides parentNavigator::pop,
+                            LocalSettingsPaneContext provides SettingsPaneContext.TwoPanePrimary,
+                        ) {
                             SettingsMainScreen.Content(twoPane = true)
                         }
                     },
-                    endContent = { DefaultNavigatorScreenTransition(navigator = it) },
+                    endContent = {
+                        CompositionLocalProvider(
+                            LocalSettingsPaneContext provides SettingsPaneContext.TwoPaneSecondary,
+                        ) {
+                            DefaultNavigatorScreenTransition(navigator = it)
+                        }
+                    },
                 )
             }
         }

@@ -7,6 +7,7 @@ import cafe.adriel.voyager.core.screen.Screen
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.PreferenceScaffold
+import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.util.LocalBackPress
 
 interface SearchableSettings : Screen {
@@ -25,8 +26,10 @@ interface SearchableSettings : Screen {
     @Composable
     override fun Content() {
         val handleBack = LocalBackPress.current
+        val uiStyle = rememberResolvedSettingsUiStyle()
         PreferenceScaffold(
             titleRes = getTitleRes(),
+            uiStyle = uiStyle,
             onBackPressed = if (handleBack != null) handleBack::invoke else null,
             actions = { AppBarAction() },
             itemsProvider = { getPreferences() },
