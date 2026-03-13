@@ -23,6 +23,7 @@ import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
+import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_HORIZONTAL_INSET
 import eu.kanade.presentation.more.settings.SettingsScaffold
 import eu.kanade.presentation.more.settings.SettingsUiStyle
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
@@ -96,7 +97,12 @@ object SettingsMainScreen : Screen() {
                     key = { _, item -> item.hashCode() },
                 ) { index, item ->
                     val selected = indexSelected == index
-                    var modifier: Modifier = Modifier
+                    var modifier: Modifier =
+                        if (uiStyle == SettingsUiStyle.Aurora && !twoPane) {
+                            Modifier.padding(horizontal = AURORA_SETTINGS_CARD_HORIZONTAL_INSET)
+                        } else {
+                            Modifier
+                        }
                     var contentColor = LocalContentColor.current
                     if (twoPane) {
                         modifier = Modifier

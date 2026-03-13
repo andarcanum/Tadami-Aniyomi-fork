@@ -7,7 +7,6 @@ import androidx.compose.animation.core.StartOffsetType
 import androidx.compose.animation.core.repeatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,7 +36,6 @@ import eu.kanade.presentation.more.settings.LocalPreferenceHighlighted
 import eu.kanade.presentation.more.settings.LocalPreferenceMinHeight
 import eu.kanade.presentation.more.settings.LocalSettingsUiStyle
 import eu.kanade.presentation.more.settings.SettingsUiStyle
-import eu.kanade.presentation.more.settings.settingsCardBorderColor
 import eu.kanade.presentation.more.settings.settingsCardContainerColor
 import eu.kanade.presentation.more.settings.settingsTitleColor
 import kotlinx.coroutines.delay
@@ -66,11 +64,6 @@ internal fun BasePreferenceWidget(
                         .padding(vertical = 4.dp)
                         .clip(rowShape)
                         .background(settingsCardContainerColor())
-                        .border(
-                            width = 1.dp,
-                            color = settingsCardBorderColor(),
-                            shape = rowShape,
-                        )
                 } else {
                     Modifier
                 },

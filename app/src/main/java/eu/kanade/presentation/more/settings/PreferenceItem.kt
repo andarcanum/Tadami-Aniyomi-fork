@@ -6,7 +6,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -23,7 +22,6 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
 import eu.kanade.presentation.more.settings.LocalSettingsUiStyle
 import eu.kanade.presentation.more.settings.SettingsUiStyle
-import eu.kanade.presentation.more.settings.settingsCardBorderColor
 import eu.kanade.presentation.more.settings.settingsCardContainerColor
 import eu.kanade.presentation.more.settings.widget.EditTextPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.InfoWidget
@@ -113,12 +111,6 @@ internal fun PreferenceItem(
                                         .padding(vertical = 4.dp)
                                         .clip(AURORA_SETTINGS_CARD_SHAPE)
                                         .background(settingsCardContainerColor())
-                                        .border(
-                                            width = 1.dp,
-                                            color = settingsCardBorderColor(),
-                                            shape = AURORA_SETTINGS_CARD_SHAPE,
-                                        )
-                                        .padding(horizontal = 8.dp)
                                 } else {
                                     Modifier
                                 },

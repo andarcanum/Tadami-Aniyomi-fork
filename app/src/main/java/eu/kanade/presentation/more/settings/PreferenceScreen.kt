@@ -12,6 +12,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEachIndexed
+import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_HORIZONTAL_INSET
 import eu.kanade.presentation.more.settings.screen.SearchableSettings
 import eu.kanade.presentation.more.settings.widget.PreferenceGroupHeader
 import kotlinx.coroutines.delay
@@ -31,7 +32,7 @@ fun PreferenceScreen(
 ) {
     val state = rememberLazyListState()
     val isAurora = LocalSettingsUiStyle.current == SettingsUiStyle.Aurora
-    val itemHorizontalPadding = if (isAurora) 12.dp else 0.dp
+    val itemHorizontalPadding = if (isAurora) AURORA_SETTINGS_CARD_HORIZONTAL_INSET else 0.dp
     val groupGap = if (isAurora) 14.dp else 12.dp
     val highlightKey = SearchableSettings.highlightKey
     if (highlightKey != null) {

@@ -2,7 +2,6 @@ package eu.kanade.presentation.more.settings.screen
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -58,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.UpIcon
+import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_HORIZONTAL_INSET
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
 import eu.kanade.presentation.more.settings.LocalSettingsUiStyle
 import eu.kanade.presentation.more.settings.Preference
@@ -70,7 +70,6 @@ import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsDecoderS
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsGesturesScreen
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsPlayerScreen
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsSubtitleScreen
-import eu.kanade.presentation.more.settings.settingsCardBorderColor
 import eu.kanade.presentation.more.settings.settingsCardContainerColor
 import eu.kanade.presentation.more.settings.settingsSubtitleColor
 import eu.kanade.presentation.more.settings.settingsTitleColor
@@ -154,12 +153,12 @@ class SettingsSearchScreen(
                                     state = textFieldState,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clip(if (isAurora) RoundedCornerShape(16.dp) else RoundedCornerShape(0.dp))
+                                        .clip(if (isAurora) AURORA_SETTINGS_CARD_SHAPE else RoundedCornerShape(0.dp))
                                         .then(
                                             if (isAurora) {
                                                 Modifier
                                                     .background(settingsCardContainerColor())
-                                                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                                                    .padding(horizontal = 16.dp, vertical = 10.dp)
                                             } else {
                                                 Modifier
                                             },
@@ -219,7 +218,7 @@ class SettingsSearchScreen(
                         )
                         HorizontalDivider(
                             color = if (isAurora) {
-                                settingsCardBorderColor()
+                                auroraColors.textSecondary.copy(alpha = 0.18f)
                             } else {
                                 MaterialTheme.colorScheme.outlineVariant
                             },
@@ -344,14 +343,12 @@ private fun SearchResult(
                                 .then(
                                     if (isAurora) {
                                         Modifier
-                                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                                            .padding(
+                                                horizontal = AURORA_SETTINGS_CARD_HORIZONTAL_INSET,
+                                                vertical = 6.dp,
+                                            )
                                             .clip(AURORA_SETTINGS_CARD_SHAPE)
                                             .background(settingsCardContainerColor())
-                                            .border(
-                                                width = 1.dp,
-                                                color = settingsCardBorderColor(),
-                                                shape = AURORA_SETTINGS_CARD_SHAPE,
-                                            )
                                     } else {
                                         Modifier
                                     },

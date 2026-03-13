@@ -32,7 +32,9 @@ val LocalSettingsUiStyle = compositionLocalOf { SettingsUiStyle.Classic }
 internal const val AURORA_SETTINGS_DIALOG_ALPHA = 0.92f
 internal const val AURORA_SETTINGS_SELECTION_BACKGROUND_ALPHA = 0.25f
 internal const val AURORA_SETTINGS_SELECTION_BORDER_ALPHA = 0.42f
-internal val AURORA_SETTINGS_CARD_SHAPE: Shape = RoundedCornerShape(20.dp)
+internal val AURORA_SETTINGS_CARD_CORNER_RADIUS = 16.dp
+internal val AURORA_SETTINGS_CARD_HORIZONTAL_INSET = 16.dp
+internal val AURORA_SETTINGS_CARD_SHAPE: Shape = RoundedCornerShape(AURORA_SETTINGS_CARD_CORNER_RADIUS)
 
 fun resolveSettingsUiStyle(
     isAuroraTheme: Boolean,
@@ -62,6 +64,10 @@ internal fun resolveAuroraSelectionBorderColor(accent: Color): Color {
     return accent.copy(alpha = AURORA_SETTINGS_SELECTION_BORDER_ALPHA)
 }
 
+internal fun resolveAuroraCardBorderColor(accent: Color): Color {
+    return Color.Transparent
+}
+
 @Composable
 fun rememberResolvedSettingsUiStyle(
     paneContext: SettingsPaneContext = LocalSettingsPaneContext.current,
@@ -88,7 +94,7 @@ fun settingsCardContainerColor(): Color {
 @Composable
 fun settingsCardBorderColor(): Color {
     return if (LocalSettingsUiStyle.current == SettingsUiStyle.Aurora) {
-        AuroraTheme.colors.accent.copy(alpha = 0.16f)
+        resolveAuroraCardBorderColor(AuroraTheme.colors.accent)
     } else {
         Color.Transparent
     }

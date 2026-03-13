@@ -1,14 +1,12 @@
 package eu.kanade.presentation.more.settings.widget
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material3.Icon
@@ -20,10 +18,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
 import eu.kanade.presentation.more.settings.LocalPreferenceHighlighted
 import eu.kanade.presentation.more.settings.LocalSettingsUiStyle
 import eu.kanade.presentation.more.settings.SettingsUiStyle
-import eu.kanade.presentation.more.settings.settingsCardBorderColor
 import eu.kanade.presentation.more.settings.settingsCardContainerColor
 import eu.kanade.presentation.more.settings.settingsTitleColor
 import eu.kanade.presentation.track.components.TrackLogoIcon
@@ -40,7 +38,6 @@ fun TrackingPreferenceWidget(
 ) {
     val highlighted = LocalPreferenceHighlighted.current
     val isAurora = LocalSettingsUiStyle.current == SettingsUiStyle.Aurora
-    val cardShape = RoundedCornerShape(16.dp)
     Box(modifier = Modifier.highlightBackground(highlighted)) {
         Row(
             modifier = modifier
@@ -48,9 +45,8 @@ fun TrackingPreferenceWidget(
                     if (isAurora) {
                         Modifier
                             .padding(vertical = 4.dp)
-                            .clip(cardShape)
+                            .clip(AURORA_SETTINGS_CARD_SHAPE)
                             .background(settingsCardContainerColor())
-                            .border(1.dp, settingsCardBorderColor(), cardShape)
                     } else {
                         Modifier
                     },
