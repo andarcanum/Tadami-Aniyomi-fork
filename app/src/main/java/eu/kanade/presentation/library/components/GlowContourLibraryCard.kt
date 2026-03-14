@@ -1,6 +1,7 @@
 package eu.kanade.presentation.library.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,7 +9,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.FilledIconButton
@@ -50,6 +53,19 @@ import android.graphics.Matrix as AndroidMatrix
 
 private const val GLOW_CONTOUR_SVG_WIDTH = 256f
 private const val GLOW_CONTOUR_SVG_HEIGHT = 269f
+private val GLOW_CONTOUR_UNIFIED_OUTER_SHAPE = RoundedCornerShape(20.dp)
+private val GLOW_CONTOUR_UNIFIED_TOP_CLIP_SHAPE = RoundedCornerShape(
+    topStart = 20.dp,
+    topEnd = 20.dp,
+    bottomStart = 0.dp,
+    bottomEnd = 0.dp,
+)
+private val GLOW_CONTOUR_UNIFIED_TEXT_BLOCK_SHAPE = RoundedCornerShape(
+    topStart = 20.dp,
+    topEnd = 20.dp,
+    bottomStart = 20.dp,
+    bottomEnd = 20.dp,
+)
 
 private const val GLOW_CONTOUR_SHELL_PATH_DATA =
     "m210 3.43h-166.8c-23.41 0-41.57 20.48-41.57 43.58v176.2c0 23.63 18.43 42.17 42.65 42.17h63.45l0.68-0.12h101.8c23.68 0 43.99-20.54 43.99-42.26v-176.9c0-23.46-18.94-42.71-44.26-42.71z"
@@ -158,6 +174,34 @@ internal sealed interface GlowContourFooterContent {
     data object None : GlowContourFooterContent
 }
 
+internal data class GlowContourUnifiedBlendSpec(
+    val topCardBackgroundAlpha: Float,
+    val topCarryGlowAlpha: Float,
+    val textTopFadeSurfaceAlpha: Float,
+    val textBaseSurfaceAlpha: Float,
+    val textTopGlowAlpha: Float,
+)
+
+internal fun resolveGlowContourUnifiedBlendSpec(isDark: Boolean): GlowContourUnifiedBlendSpec {
+    return if (isDark) {
+        GlowContourUnifiedBlendSpec(
+            topCardBackgroundAlpha = 0f,
+            topCarryGlowAlpha = 0.18f,
+            textTopFadeSurfaceAlpha = 0.06f,
+            textBaseSurfaceAlpha = 0.18f,
+            textTopGlowAlpha = 0.2f,
+        )
+    } else {
+        GlowContourUnifiedBlendSpec(
+            topCardBackgroundAlpha = 0f,
+            topCarryGlowAlpha = 0.12f,
+            textTopFadeSurfaceAlpha = 0.04f,
+            textBaseSurfaceAlpha = 0.12f,
+            textTopGlowAlpha = 0.12f,
+        )
+    }
+}
+
 internal fun resolveGlowContourFooterContent(
     progressPercent: Int?,
     onClickContinueViewing: (() -> Unit)?,
@@ -243,51 +287,156 @@ fun GlowContourLibraryGridItem(
     isSelected: Boolean = false,
 ) {
     val colors = AuroraTheme.colors
+    val blendSpec = resolveGlowContourUnifiedBlendSpec(colors.isDark)
+    val isUnifiedTextContainer = textSpec.showTextBlock && textSpec.useUnifiedContainer
+    val itemShape = if (isUnifiedTextContainer) {
+        GLOW_CONTOUR_UNIFIED_OUTER_SHAPE
+    } else {
+        RoundedCornerShape(12.dp)
+    }
+    val itemBorderColor = if (isSelected) {
+        colors.accent.copy(alpha = 0.92f)
+    } else if (colors.isDark) {
+        Color.White.copy(alpha = 0.06f)
+    } else {
+        Color.LightGray.copy(alpha = 0.36f)
+    }
+    val itemBorderWidth = if (isSelected) 2.dp else 1.dp
+    val itemModifier = modifier.combinedClickable(
+        onClick = onClick,
+        onLongClick = onLongClick,
+    )
+
+    if (isUnifiedTextContainer) {
+        Column(
+            modifier = itemModifier
+                .fillMaxWidth()
+                .clip(itemShape)
+                .border(
+                    width = itemBorderWidth,
+                    color = itemBorderColor,
+                    shape = itemShape,
+                ),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
+        ) {
+            GlowContourLibraryCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(cardAspectRatio),
+                coverData = coverData,
+                progressPercent = progressPercent,
+                badge = badge,
+                isSelected = false,
+                isUnifiedContainerMode = true,
+                blendSpec = blendSpec,
+                onClickContinueViewing = onClickContinueViewing,
+            )
+            GlowContourLibraryTextBlock(
+                title = title,
+                subtitle = subtitle,
+                textSpec = textSpec,
+                blendSpec = blendSpec,
+                isUnifiedContainerMode = true,
+            )
+        }
+    } else {
+        Column(
+            modifier = itemModifier,
+            verticalArrangement = Arrangement.spacedBy(0.dp),
+        ) {
+            GlowContourLibraryCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(cardAspectRatio),
+                coverData = coverData,
+                progressPercent = progressPercent,
+                badge = badge,
+                isSelected = isSelected,
+                isUnifiedContainerMode = false,
+                blendSpec = blendSpec,
+                onClickContinueViewing = onClickContinueViewing,
+            )
+
+            if (textSpec.showTextBlock) {
+                GlowContourLibraryTextBlock(
+                    title = title,
+                    subtitle = subtitle,
+                    textSpec = textSpec,
+                    blendSpec = blendSpec,
+                    isUnifiedContainerMode = false,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GlowContourLibraryTextBlock(
+    title: String,
+    subtitle: String?,
+    textSpec: GlowContourLibraryTextSpec,
+    blendSpec: GlowContourUnifiedBlendSpec,
+    isUnifiedContainerMode: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AuroraTheme.colors
+    val containerModifier = if (isUnifiedContainerMode) {
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = 6.dp, vertical = 4.dp)
+            .clip(GLOW_CONTOUR_UNIFIED_TEXT_BLOCK_SHAPE)
+    } else {
+        modifier.fillMaxWidth()
+    }
 
     Column(
-        modifier = modifier.combinedClickable(
-            onClick = onClick,
-            onLongClick = onLongClick,
-        ),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        GlowContourLibraryCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(cardAspectRatio),
-            coverData = coverData,
-            progressPercent = progressPercent,
-            badge = badge,
-            isSelected = isSelected,
-            onClickContinueViewing = onClickContinueViewing,
-        )
-
-        if (textSpec.showTextBlock) {
-            Column(
-                modifier = Modifier.padding(horizontal = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                Text(
-                    text = title,
-                    color = colors.textPrimary,
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    minLines = if (textSpec.titleMaxLines > 1) 2 else 1,
-                    maxLines = textSpec.titleMaxLines,
-                    overflow = TextOverflow.Ellipsis,
+        modifier = containerModifier
+            .drawWithCache {
+                val textSurfaceBrush = Brush.verticalGradient(
+                    colorStops = arrayOf(
+                        0f to Color.Transparent,
+                        0.34f to colors.surface.copy(alpha = blendSpec.textTopFadeSurfaceAlpha),
+                        1f to colors.surface.copy(alpha = blendSpec.textBaseSurfaceAlpha),
+                    ),
+                    startY = 0f,
+                    endY = size.height,
                 )
-                if (!subtitle.isNullOrBlank() && textSpec.subtitleMaxLines > 0) {
-                    Text(
-                        text = subtitle,
-                        color = colors.textSecondary,
-                        fontSize = 11.sp,
-                        lineHeight = 14.sp,
-                        maxLines = textSpec.subtitleMaxLines,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                val textCarryGlowBrush = Brush.verticalGradient(
+                    colors = listOf(
+                        colors.gradientPurple.copy(alpha = blendSpec.textTopGlowAlpha),
+                        colors.progressCyan.copy(alpha = blendSpec.textTopGlowAlpha * 0.78f),
+                        Color.Transparent,
+                    ),
+                    startY = 0f,
+                    endY = size.height * 0.62f,
+                )
+                onDrawBehind {
+                    drawRect(brush = textSurfaceBrush)
+                    drawRect(brush = textCarryGlowBrush)
                 }
             }
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(
+            text = title,
+            color = colors.textPrimary,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+            fontWeight = FontWeight.Medium,
+            minLines = if (textSpec.titleMaxLines > 1) 2 else 1,
+            maxLines = textSpec.titleMaxLines,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (!subtitle.isNullOrBlank() && textSpec.subtitleMaxLines > 0) {
+            Text(
+                text = subtitle,
+                color = colors.textSecondary.copy(alpha = 0.8f),
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
+                maxLines = textSpec.subtitleMaxLines,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -298,6 +447,8 @@ private fun GlowContourLibraryCard(
     progressPercent: Int?,
     badge: @Composable (() -> Unit)?,
     isSelected: Boolean,
+    isUnifiedContainerMode: Boolean,
+    blendSpec: GlowContourUnifiedBlendSpec,
     onClickContinueViewing: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
@@ -335,8 +486,25 @@ private fun GlowContourLibraryCard(
                     }
                 }
             }
-            .background(colors.surface.copy(alpha = if (colors.isDark) 0.18f else 0.08f))
-            .clip(GlowContourCardShape),
+            .background(
+                colors.surface.copy(
+                    alpha = if (isUnifiedContainerMode) {
+                        blendSpec.topCardBackgroundAlpha
+                    } else if (colors.isDark) {
+                        0.18f
+                    } else {
+                        0.08f
+                    },
+                ),
+            )
+            .clip(GlowContourCardShape)
+            .then(
+                if (isUnifiedContainerMode) {
+                    Modifier.clip(GLOW_CONTOUR_UNIFIED_TOP_CLIP_SHAPE)
+                } else {
+                    Modifier
+                },
+            ),
     ) {
         AsyncImage(
             model = resolveAuroraCoverModel(coverData),
@@ -451,6 +619,27 @@ private fun GlowContourLibraryCard(
                 },
         )
 
+        if (isUnifiedContainerMode) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .drawWithCache {
+                        val carryGlowBrush = Brush.verticalGradient(
+                            colorStops = arrayOf(
+                                0f to Color.Transparent,
+                                0.72f to Color.Transparent,
+                                1f to colors.accent.copy(alpha = blendSpec.topCarryGlowAlpha),
+                            ),
+                            startY = 0f,
+                            endY = size.height,
+                        )
+                        onDrawBehind {
+                            drawRect(brush = carryGlowBrush)
+                        }
+                    },
+            )
+        }
+
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -469,6 +658,7 @@ private fun GlowContourLibraryCard(
                 GlowContourFooterContent.ContinueAction -> {
                     FilledIconButton(
                         onClick = { onClickContinueViewing?.invoke() },
+                        shape = CircleShape,
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = colors.accent.copy(alpha = 0.88f),
                             contentColor = colors.textOnAccent,
@@ -476,7 +666,7 @@ private fun GlowContourLibraryCard(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(bottom = 1.dp)
-                            .size(30.dp),
+                            .requiredSize(30.dp),
                     ) {
                         Icon(
                             imageVector = Icons.Filled.PlayArrow,

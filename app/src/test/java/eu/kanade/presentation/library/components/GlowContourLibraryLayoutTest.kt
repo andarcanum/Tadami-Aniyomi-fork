@@ -13,6 +13,7 @@ class GlowContourLibraryLayoutTest {
                 showTextBlock = true,
                 titleMaxLines = 2,
                 subtitleMaxLines = 1,
+                useUnifiedContainer = true,
             )
     }
 
@@ -23,6 +24,7 @@ class GlowContourLibraryLayoutTest {
                 showTextBlock = true,
                 titleMaxLines = 1,
                 subtitleMaxLines = 1,
+                useUnifiedContainer = true,
             )
     }
 
@@ -33,6 +35,18 @@ class GlowContourLibraryLayoutTest {
                 showTextBlock = false,
                 titleMaxLines = 0,
                 subtitleMaxLines = 0,
+                useUnifiedContainer = false,
+            )
+    }
+
+    @Test
+    fun `list mode keeps unified container disabled`() {
+        resolveGlowContourLibraryTextSpec(LibraryDisplayMode.List) shouldBe
+            GlowContourLibraryTextSpec(
+                showTextBlock = false,
+                titleMaxLines = 0,
+                subtitleMaxLines = 0,
+                useUnifiedContainer = false,
             )
     }
 
@@ -50,5 +64,27 @@ class GlowContourLibraryLayoutTest {
             progressPercent = 73,
             onClickContinueViewing = null,
         ) shouldBe GlowContourFooterContent.ProgressPercent(73)
+    }
+
+    @Test
+    fun `dark unified blend keeps top card transparent and text block readable`() {
+        resolveGlowContourUnifiedBlendSpec(isDark = true) shouldBe GlowContourUnifiedBlendSpec(
+            topCardBackgroundAlpha = 0f,
+            topCarryGlowAlpha = 0.18f,
+            textTopFadeSurfaceAlpha = 0.06f,
+            textBaseSurfaceAlpha = 0.18f,
+            textTopGlowAlpha = 0.2f,
+        )
+    }
+
+    @Test
+    fun `light unified blend keeps transparent top with softer carry glow`() {
+        resolveGlowContourUnifiedBlendSpec(isDark = false) shouldBe GlowContourUnifiedBlendSpec(
+            topCardBackgroundAlpha = 0f,
+            topCarryGlowAlpha = 0.12f,
+            textTopFadeSurfaceAlpha = 0.04f,
+            textBaseSurfaceAlpha = 0.12f,
+            textTopGlowAlpha = 0.12f,
+        )
     }
 }

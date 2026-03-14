@@ -6,6 +6,7 @@ data class GlowContourLibraryTextSpec(
     val showTextBlock: Boolean,
     val titleMaxLines: Int,
     val subtitleMaxLines: Int,
+    val useUnifiedContainer: Boolean,
 )
 
 fun resolveGlowContourLibraryTextSpec(
@@ -16,11 +17,13 @@ fun resolveGlowContourLibraryTextSpec(
             showTextBlock = true,
             titleMaxLines = 2,
             subtitleMaxLines = 1,
+            useUnifiedContainer = true,
         )
         LibraryDisplayMode.CompactGrid -> GlowContourLibraryTextSpec(
             showTextBlock = true,
             titleMaxLines = 1,
             subtitleMaxLines = 1,
+            useUnifiedContainer = true,
         )
         LibraryDisplayMode.CoverOnlyGrid,
         LibraryDisplayMode.List,
@@ -28,6 +31,7 @@ fun resolveGlowContourLibraryTextSpec(
             showTextBlock = false,
             titleMaxLines = 0,
             subtitleMaxLines = 0,
+            useUnifiedContainer = false,
         )
     }
 }
