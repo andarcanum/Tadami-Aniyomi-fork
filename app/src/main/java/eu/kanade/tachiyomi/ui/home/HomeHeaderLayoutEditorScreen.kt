@@ -44,6 +44,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -60,16 +61,20 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.domain.ui.model.HomeHeaderLayoutElement
 import eu.kanade.domain.ui.model.HomeHeaderLayoutSpec
-import eu.kanade.presentation.components.AppBar
+import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
 import eu.kanade.presentation.more.settings.LocalSettingsUiStyle
+import eu.kanade.presentation.more.settings.SettingsScaffold
 import eu.kanade.presentation.more.settings.SettingsUiStyle
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.settingsAccentColor
+import eu.kanade.presentation.more.settings.settingsCardBorderColor
+import eu.kanade.presentation.more.settings.settingsCardContainerColor
 import eu.kanade.presentation.more.settings.settingsDialogContainerColor
+import eu.kanade.presentation.more.settings.settingsSubtitleColor
+import eu.kanade.presentation.more.settings.settingsTitleColor
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.Screen
 import tachiyomi.i18n.aniyomi.AYMR
-import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -85,6 +90,8 @@ class HomeHeaderLayoutEditorScreen : Screen() {
         val isAurora = uiStyle == SettingsUiStyle.Aurora
         val accent = settingsAccentColor()
         val auroraColors = AuroraTheme.colors
+        val titleColor = settingsTitleColor()
+        val subtitleColor = settingsSubtitleColor()
 
         CompositionLocalProvider(LocalSettingsUiStyle provides uiStyle) {
             val initialLayout = remember { prefs.getHomeHeaderLayoutOrDefault() }
@@ -162,14 +169,10 @@ class HomeHeaderLayoutEditorScreen : Screen() {
                 )
             }
 
-            Scaffold(
-                topBar = { scrollBehavior ->
-                    AppBar(
-                        title = stringResource(AYMR.strings.home_header_layout_editor_title),
-                        navigateUp = navigator::pop,
-                        scrollBehavior = scrollBehavior,
-                    )
-                },
+            SettingsScaffold(
+                title = stringResource(AYMR.strings.home_header_layout_editor_title),
+                uiStyle = uiStyle,
+                onBackPressed = navigator::pop,
             ) { contentPadding ->
                 Column(
                     modifier = Modifier
@@ -180,192 +183,50 @@ class HomeHeaderLayoutEditorScreen : Screen() {
                     Text(
                         text = stringResource(AYMR.strings.home_header_layout_editor_description),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (isAurora) {
-                            auroraColors.textSecondary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
+                        color = subtitleColor,
                     )
                     Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(end = 12.dp),
-                            text = stringResource(AYMR.strings.home_header_layout_editor_show_grid),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (isAurora) {
-                                auroraColors.textPrimary
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                        )
-                        Switch(
-                            checked = showGrid,
-                            onCheckedChange = { showGrid = it },
-                            colors = if (isAurora) {
-                                SwitchDefaults.colors(
-                                    checkedThumbColor = accent,
-                                    checkedTrackColor = accent.copy(alpha = 0.5f),
-                                )
-                            } else {
-                                SwitchDefaults.colors()
-                            },
-                        )
-                    }
+                    HomeHeaderLayoutEditorSwitchRow(
+                        title = stringResource(AYMR.strings.home_header_layout_editor_show_grid),
+                        checked = showGrid,
+                        isAurora = isAurora,
+                        onCheckedChange = { showGrid = it },
+                    )
                     Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(end = 12.dp),
-                            text = stringResource(AYMR.strings.pref_show_home_greeting),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (isAurora) {
-                                auroraColors.textPrimary
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                        )
-                        Switch(
-                            checked = showHomeGreeting,
-                            onCheckedChange = { showHomeGreeting = it },
-                            colors = if (isAurora) {
-                                SwitchDefaults.colors(
-                                    checkedThumbColor = accent,
-                                    checkedTrackColor = accent.copy(alpha = 0.5f),
-                                )
-                            } else {
-                                SwitchDefaults.colors()
-                            },
-                        )
-                    }
+                    HomeHeaderLayoutEditorSwitchRow(
+                        title = stringResource(AYMR.strings.pref_show_home_greeting),
+                        checked = showHomeGreeting,
+                        isAurora = isAurora,
+                        onCheckedChange = { showHomeGreeting = it },
+                    )
                     Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(end = 12.dp),
-                            text = stringResource(AYMR.strings.pref_show_home_streak),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (isAurora) {
-                                auroraColors.textPrimary
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                        )
-                        Switch(
-                            checked = showHomeStreak,
-                            onCheckedChange = { showHomeStreak = it },
-                            colors = if (isAurora) {
-                                SwitchDefaults.colors(
-                                    checkedThumbColor = accent,
-                                    checkedTrackColor = accent.copy(alpha = 0.5f),
-                                )
-                            } else {
-                                SwitchDefaults.colors()
-                            },
-                        )
-                    }
+                    HomeHeaderLayoutEditorSwitchRow(
+                        title = stringResource(AYMR.strings.pref_show_home_streak),
+                        checked = showHomeStreak,
+                        isAurora = isAurora,
+                        onCheckedChange = { showHomeStreak = it },
+                    )
                     Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(end = 12.dp),
-                            text = stringResource(AYMR.strings.home_header_layout_editor_greeting_align_right),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (isAurora) {
-                                auroraColors.textPrimary
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                        )
-                        Switch(
-                            checked = greetingAlignRight,
-                            onCheckedChange = { greetingAlignRight = it },
-                            colors = if (isAurora) {
-                                SwitchDefaults.colors(
-                                    checkedThumbColor = accent,
-                                    checkedTrackColor = accent.copy(alpha = 0.5f),
-                                )
-                            } else {
-                                SwitchDefaults.colors()
-                            },
-                        )
-                    }
+                    HomeHeaderLayoutEditorSwitchRow(
+                        title = stringResource(AYMR.strings.home_header_layout_editor_greeting_align_right),
+                        checked = greetingAlignRight,
+                        isAurora = isAurora,
+                        onCheckedChange = { greetingAlignRight = it },
+                    )
                     Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(end = 12.dp),
-                            text = stringResource(AYMR.strings.home_header_layout_editor_nickname_align_right),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (isAurora) {
-                                auroraColors.textPrimary
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                        )
-                        Switch(
-                            checked = nicknameAlignRight,
-                            onCheckedChange = { nicknameAlignRight = it },
-                            colors = if (isAurora) {
-                                SwitchDefaults.colors(
-                                    checkedThumbColor = accent,
-                                    checkedTrackColor = accent.copy(alpha = 0.5f),
-                                )
-                            } else {
-                                SwitchDefaults.colors()
-                            },
-                        )
-                    }
+                    HomeHeaderLayoutEditorSwitchRow(
+                        title = stringResource(AYMR.strings.home_header_layout_editor_nickname_align_right),
+                        checked = nicknameAlignRight,
+                        isAurora = isAurora,
+                        onCheckedChange = { nicknameAlignRight = it },
+                    )
                     Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(end = 12.dp),
-                            text = stringResource(AYMR.strings.home_header_layout_editor_only_selected_overlay),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (isAurora) {
-                                auroraColors.textPrimary
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                        )
-                        Switch(
-                            checked = showOnlySelectedOverlay,
-                            onCheckedChange = { showOnlySelectedOverlay = it },
-                            colors = if (isAurora) {
-                                SwitchDefaults.colors(
-                                    checkedThumbColor = accent,
-                                    checkedTrackColor = accent.copy(alpha = 0.5f),
-                                )
-                            } else {
-                                SwitchDefaults.colors()
-                            },
-                        )
-                    }
+                    HomeHeaderLayoutEditorSwitchRow(
+                        title = stringResource(AYMR.strings.home_header_layout_editor_only_selected_overlay),
+                        checked = showOnlySelectedOverlay,
+                        isAurora = isAurora,
+                        onCheckedChange = { showOnlySelectedOverlay = it },
+                    )
                     Spacer(Modifier.height(12.dp))
 
                     HomeHeaderLayoutEditorCanvas(
@@ -388,11 +249,7 @@ class HomeHeaderLayoutEditorScreen : Screen() {
                             homeHeaderLayoutElementLabel(selectedElement),
                         ),
                         style = MaterialTheme.typography.labelLarge,
-                        color = if (isAurora) {
-                            auroraColors.textPrimary
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
+                        color = titleColor,
                     )
 
                     Spacer(Modifier.height(16.dp))
@@ -452,6 +309,64 @@ class HomeHeaderLayoutEditorScreen : Screen() {
 }
 
 @Composable
+private fun HomeHeaderLayoutEditorSwitchRow(
+    title: String,
+    checked: Boolean,
+    isAurora: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    val accent = settingsAccentColor()
+    val titleColor = settingsTitleColor()
+    val containerColor = settingsCardContainerColor()
+    val borderColor = settingsCardBorderColor()
+    val rowShape = if (isAurora) AURORA_SETTINGS_CARD_SHAPE else RoundedCornerShape(0.dp)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (isAurora) {
+                    Modifier
+                        .clip(rowShape)
+                        .background(containerColor)
+                        .then(
+                            if (borderColor.alpha > 0f) {
+                                Modifier.border(1.dp, borderColor, rowShape)
+                            } else {
+                                Modifier
+                            },
+                        )
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                } else {
+                    Modifier
+                },
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 12.dp),
+            text = title,
+            style = MaterialTheme.typography.bodyMedium,
+            color = titleColor,
+        )
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = if (isAurora) {
+                SwitchDefaults.colors(
+                    checkedThumbColor = accent,
+                    checkedTrackColor = accent.copy(alpha = 0.5f),
+                )
+            } else {
+                SwitchDefaults.colors()
+            },
+        )
+    }
+}
+
+@Composable
 private fun HomeHeaderLayoutEditorCanvas(
     layout: HomeHeaderLayoutSpec,
     selectedElement: HomeHeaderLayoutElement,
@@ -465,6 +380,7 @@ private fun HomeHeaderLayoutEditorCanvas(
     onLayoutChange: (HomeHeaderLayoutSpec) -> Unit,
 ) {
     val density = LocalDensity.current
+    val isAurora = LocalSettingsUiStyle.current == SettingsUiStyle.Aurora
     val elementSizes = remember { defaultHomeHeaderElementPixelSizes() }
     val latestLayout by rememberUpdatedState(layout)
     val guideColumns = 12
@@ -485,13 +401,30 @@ private fun HomeHeaderLayoutEditorCanvas(
         )
     }
     val textMeasurer = rememberTextMeasurer()
+    val containerShape = if (isAurora) AURORA_SETTINGS_CARD_SHAPE else RoundedCornerShape(16.dp)
+    val containerColor = if (isAurora) {
+        settingsCardContainerColor()
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    }
+    val borderColor = if (isAurora) {
+        settingsCardBorderColor()
+    } else {
+        MaterialTheme.colorScheme.outline
+    }
 
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
-            .height(144.dp)
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
+            .clip(containerShape)
+            .background(containerColor)
+            .then(
+                if (borderColor.alpha > 0f) {
+                    Modifier.border(1.dp, borderColor, containerShape)
+                } else {
+                    Modifier
+                },
+            )
             .padding(horizontal = 8.dp, vertical = 10.dp),
     ) {
         val canvasWidthPx = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
@@ -541,106 +474,114 @@ private fun HomeHeaderLayoutEditorCanvas(
             }
         }
 
-        HomeHeaderLayoutLivePreview(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(previewCanvasHeightDp),
-            layoutSpec = layout,
-            showGreeting = showGreeting,
-            showStreak = showStreak,
-            greetingAlignRight = greetingAlignRight,
-            nicknameAlignRight = nicknameAlignRight,
-        )
+        ) {
+            HomeHeaderLayoutLivePreview(
+                modifier = Modifier.matchParentSize(),
+                layoutSpec = layout,
+                showGreeting = showGreeting,
+                showStreak = showStreak,
+                greetingAlignRight = greetingAlignRight,
+                nicknameAlignRight = nicknameAlignRight,
+            )
 
-        if (showGrid) {
-            val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-            Canvas(Modifier.fillMaxSize()) {
-                for (col in 1 until guideColumns) {
-                    val x = col * size.width / guideColumns
-                    drawLine(gridColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = 1f)
+            if (showGrid) {
+                val gridColor = if (isAurora) {
+                    AuroraTheme.colors.textSecondary.copy(alpha = 0.35f)
+                } else {
+                    MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
                 }
-                for (row in 1 until guideRows) {
-                    val y = row * size.height / guideRows
-                    drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 1f)
+                Canvas(Modifier.matchParentSize()) {
+                    for (col in 1 until guideColumns) {
+                        val x = col * size.width / guideColumns
+                        drawLine(gridColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = 1f)
+                    }
+                    for (row in 1 until guideRows) {
+                        val y = row * size.height / guideRows
+                        drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 1f)
+                    }
                 }
             }
-        }
 
-        visibleElements.forEach { element ->
-            val elementSize = effectiveElementSizes.getValue(element)
-            val point = resolveHomeHeaderEffectivePoint(
-                element = element,
-                layoutSpec = layout,
-                elementSizes = effectiveElementSizes,
-                canvasWidth = designWidthPx,
-                canvasHeight = designHeightPx,
-                showGreeting = showGreeting,
-            )
-            val xPx = point.x * scaleX
-            val yPx = point.y * scaleY
-            val widthDp = with(density) { (elementSize.width * scaleX).toDp() }
-            val heightDp = with(density) { (elementSize.height * scaleY).toDp() }
+            visibleElements.forEach { element ->
+                val elementSize = effectiveElementSizes.getValue(element)
+                val point = resolveHomeHeaderEffectivePoint(
+                    element = element,
+                    layoutSpec = layout,
+                    elementSizes = effectiveElementSizes,
+                    canvasWidth = designWidthPx,
+                    canvasHeight = designHeightPx,
+                    showGreeting = showGreeting,
+                )
+                val xPx = point.x * scaleX
+                val yPx = point.y * scaleY
+                val widthDp = with(density) { (elementSize.width * scaleX).toDp() }
+                val heightDp = with(density) { (elementSize.height * scaleY).toDp() }
 
-            val latestOnLayoutChange by rememberUpdatedState(onLayoutChange)
-            val latestOnSelectedChange by rememberUpdatedState(onSelectedElementChange)
-            val latestSelected by rememberUpdatedState(selectedElement)
+                val latestOnLayoutChange by rememberUpdatedState(onLayoutChange)
+                val latestOnSelectedChange by rememberUpdatedState(onSelectedElementChange)
+                val latestSelected by rememberUpdatedState(selectedElement)
 
-            Box(
-                modifier = Modifier
-                    .offset { IntOffset(xPx.roundToInt(), yPx.roundToInt()) }
-                    .width(widthDp)
-                    .height(heightDp)
-                    .pointerInput(element, scaleX, scaleY, designWidthPx, designHeightPx) {
-                        var dragStart = point
-                        var dragAccum = Offset.Zero
-                        detectDragGestures(
-                            onDragStart = {
-                                dragStart = HomeHeaderPixelPoint(
-                                    x = latestLayout.positionOf(element).x,
-                                    y = latestLayout.positionOf(element).y,
+                Box(
+                    modifier = Modifier
+                        .offset { IntOffset(xPx.roundToInt(), yPx.roundToInt()) }
+                        .width(widthDp)
+                        .height(heightDp)
+                        .pointerInput(element, scaleX, scaleY, designWidthPx, designHeightPx) {
+                            var dragStart = point
+                            var dragAccum = Offset.Zero
+                            detectDragGestures(
+                                onDragStart = {
+                                    dragStart = HomeHeaderPixelPoint(
+                                        x = latestLayout.positionOf(element).x,
+                                        y = latestLayout.positionOf(element).y,
+                                    )
+                                    dragAccum = Offset.Zero
+                                    latestOnSelectedChange(element)
+                                },
+                                onDragEnd = {
+                                    dragAccum = Offset.Zero
+                                },
+                                onDragCancel = {
+                                    dragAccum = Offset.Zero
+                                },
+                            ) { change, dragAmount ->
+                                change.consume()
+                                dragAccum += dragAmount
+                                val deltaDesign = HomeHeaderPixelPoint(
+                                    x = if (scaleX == 0f) 0f else dragAccum.x / scaleX,
+                                    y = if (scaleY == 0f) 0f else dragAccum.y / scaleY,
                                 )
-                                dragAccum = Offset.Zero
-                                latestOnSelectedChange(element)
-                            },
-                            onDragEnd = {
-                                dragAccum = Offset.Zero
-                            },
-                            onDragCancel = {
-                                dragAccum = Offset.Zero
-                            },
-                        ) { change, dragAmount ->
-                            change.consume()
-                            dragAccum += dragAmount
-                            val deltaDesign = HomeHeaderPixelPoint(
-                                x = if (scaleX == 0f) 0f else dragAccum.x / scaleX,
-                                y = if (scaleY == 0f) 0f else dragAccum.y / scaleY,
-                            )
-                            val candidate = clampHomeHeaderPixelPoint(
-                                point = HomeHeaderPixelPoint(
-                                    x = dragStart.x + deltaDesign.x,
-                                    y = dragStart.y + deltaDesign.y,
-                                ),
-                                elementSize = elementSize,
-                                canvasWidth = designWidthPx,
-                                canvasHeight = designHeightPx,
-                            )
-                            latestOnLayoutChange(
-                                latestLayout.withPosition(
-                                    element = element,
-                                    x = candidate.x,
-                                    y = candidate.y,
-                                ),
-                            )
-                        }
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                val isSelected = latestSelected == element
-                if (!showOnlySelectedOverlay || isSelected) {
-                    EditorLayoutElementOverlay(
-                        element = element,
-                        selected = isSelected,
-                    )
+                                val candidate = clampHomeHeaderPixelPoint(
+                                    point = HomeHeaderPixelPoint(
+                                        x = dragStart.x + deltaDesign.x,
+                                        y = dragStart.y + deltaDesign.y,
+                                    ),
+                                    elementSize = elementSize,
+                                    canvasWidth = designWidthPx,
+                                    canvasHeight = designHeightPx,
+                                )
+                                latestOnLayoutChange(
+                                    latestLayout.withPosition(
+                                        element = element,
+                                        x = candidate.x,
+                                        y = candidate.y,
+                                    ),
+                                )
+                            }
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val isSelected = latestSelected == element
+                    if (!showOnlySelectedOverlay || isSelected) {
+                        EditorLayoutElementOverlay(
+                            element = element,
+                            selected = isSelected,
+                        )
+                    }
                 }
             }
         }
@@ -667,50 +608,51 @@ private fun EditorLayoutElementOverlay(
     element: HomeHeaderLayoutElement,
     selected: Boolean,
 ) {
+    val isAurora = LocalSettingsUiStyle.current == SettingsUiStyle.Aurora
+    val accent = settingsAccentColor()
     val border = if (selected) {
-        MaterialTheme.colorScheme.primary
+        if (isAurora) accent.copy(alpha = 0.9f) else MaterialTheme.colorScheme.primary
+    } else if (isAurora) {
+        AuroraTheme.colors.textSecondary.copy(alpha = 0.22f)
     } else {
-        MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+        MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
     }
-    val chipBg = if (selected) {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.92f)
+    val chipBg = if (isAurora) {
+        AuroraTheme.colors.glass.copy(alpha = 0.85f)
     } else {
-        MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
+        MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
     }
-    val chipText = if (selected) {
-        MaterialTheme.colorScheme.onPrimary
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
+    val chipText = if (isAurora) AuroraTheme.colors.textPrimary else MaterialTheme.colorScheme.onSurface
 
     Box(
         modifier = Modifier
-            .fillMaxWidth()
             .fillMaxSize()
             .background(Color.Transparent, RoundedCornerShape(12.dp))
             .border(1.dp, border, RoundedCornerShape(12.dp)),
     ) {
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(4.dp)
-                .background(chipBg, RoundedCornerShape(999.dp))
-                .border(1.dp, border.copy(alpha = 0.75f), RoundedCornerShape(999.dp))
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                text = homeHeaderLayoutElementLabel(element),
-                color = chipText,
-                style = MaterialTheme.typography.labelSmall,
-            )
-            Icon(
-                imageVector = Icons.Filled.DragIndicator,
-                contentDescription = null,
-                tint = chipText,
-                modifier = Modifier.size(12.dp),
-            )
+        if (selected) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(4.dp)
+                    .background(chipBg, RoundedCornerShape(999.dp))
+                    .border(1.dp, border.copy(alpha = 0.7f), RoundedCornerShape(999.dp))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = homeHeaderLayoutElementLabel(element),
+                    color = chipText,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                Icon(
+                    imageVector = Icons.Filled.DragIndicator,
+                    contentDescription = null,
+                    tint = chipText,
+                    modifier = Modifier.size(12.dp),
+                )
+            }
         }
     }
 }
