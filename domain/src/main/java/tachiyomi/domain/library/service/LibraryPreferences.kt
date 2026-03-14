@@ -128,7 +128,7 @@ class LibraryPreferences(
 
     fun auroraLibraryCardStyle() = preferenceStore.getEnum(
         "pref_aurora_library_card_style",
-        AuroraLibraryCardStyle.Standard,
+        AuroraLibraryCardStyle.GlowContour,
     )
 
     // Common Category
