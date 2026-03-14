@@ -1,8 +1,0 @@
-{
-  "track_id": "fix_foreground_service_crash_20260129",
-  "type": "bug",
-  "status": "new",
-  "created_at": "2026-01-29T15:52:18Z",
-  "updated_at": "2026-01-29T15:52:18Z",
-  "description": "Fix ForegroundServiceDidNotStartInTimeException crash related to WorkManager's SystemForegroundService."
-}
