@@ -30,9 +30,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +61,12 @@ import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.domain.ui.model.HomeHeaderLayoutElement
 import eu.kanade.domain.ui.model.HomeHeaderLayoutSpec
 import eu.kanade.presentation.components.AppBar
+import eu.kanade.presentation.more.settings.LocalSettingsUiStyle
+import eu.kanade.presentation.more.settings.SettingsUiStyle
+import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
+import eu.kanade.presentation.more.settings.settingsAccentColor
+import eu.kanade.presentation.more.settings.settingsDialogContainerColor
+import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.Screen
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.Scaffold
@@ -73,231 +81,369 @@ class HomeHeaderLayoutEditorScreen : Screen() {
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val prefs = remember { Injekt.get<UserProfilePreferences>() }
-        val initialLayout = remember { prefs.getHomeHeaderLayoutOrDefault() }
-        var workingLayout by remember { mutableStateOf(initialLayout) }
-        var selectedElement by remember { mutableStateOf(HomeHeaderLayoutElement.Nickname) }
-        var showGrid by rememberSaveable { mutableStateOf(true) }
-        var showOnlySelectedOverlay by rememberSaveable { mutableStateOf(false) }
-        var showHomeGreeting by rememberSaveable { mutableStateOf(prefs.showHomeGreeting().get()) }
-        var showHomeStreak by rememberSaveable { mutableStateOf(prefs.showHomeStreak().get()) }
-        var greetingAlignRight by rememberSaveable { mutableStateOf(prefs.homeHeaderGreetingAlignRight().get()) }
-        var nicknameAlignRight by rememberSaveable { mutableStateOf(prefs.homeHeaderNicknameAlignRight().get()) }
-        var showResetConfirm by rememberSaveable { mutableStateOf(false) }
-        val visibleElements = remember(showHomeGreeting, showHomeStreak) {
-            homeHeaderLayoutEditorVisibleElements(
-                showGreeting = showHomeGreeting,
-                showStreak = showHomeStreak,
-            )
-        }
+        val uiStyle = rememberResolvedSettingsUiStyle()
+        val isAurora = uiStyle == SettingsUiStyle.Aurora
+        val accent = settingsAccentColor()
+        val auroraColors = AuroraTheme.colors
 
-        LaunchedEffect(visibleElements, selectedElement) {
-            if (selectedElement !in visibleElements && visibleElements.isNotEmpty()) {
-                selectedElement = visibleElements.first()
-            }
-        }
-
-        if (showResetConfirm) {
-            AlertDialog(
-                onDismissRequest = { showResetConfirm = false },
-                title = { Text(stringResource(AYMR.strings.home_header_layout_editor_reset_confirm_title)) },
-                text = { Text(stringResource(AYMR.strings.home_header_layout_editor_reset_confirm_message)) },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            workingLayout = HomeHeaderLayoutSpec.default()
-                            showResetConfirm = false
-                        },
-                    ) {
-                        Text(stringResource(AYMR.strings.home_header_layout_editor_reset_confirm_action))
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showResetConfirm = false }) {
-                        Text(stringResource(AYMR.strings.home_header_layout_editor_cancel))
-                    }
-                },
-            )
-        }
-
-        Scaffold(
-            topBar = { scrollBehavior ->
-                AppBar(
-                    title = stringResource(AYMR.strings.home_header_layout_editor_title),
-                    navigateUp = navigator::pop,
-                    scrollBehavior = scrollBehavior,
-                )
-            },
-        ) { contentPadding ->
-            Column(
-                modifier = Modifier
-                    .padding(contentPadding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-            ) {
-                Text(
-                    text = stringResource(AYMR.strings.home_header_layout_editor_description),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 12.dp),
-                        text = stringResource(AYMR.strings.home_header_layout_editor_show_grid),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Switch(
-                        checked = showGrid,
-                        onCheckedChange = { showGrid = it },
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 12.dp),
-                        text = stringResource(AYMR.strings.pref_show_home_greeting),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Switch(
-                        checked = showHomeGreeting,
-                        onCheckedChange = { showHomeGreeting = it },
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 12.dp),
-                        text = stringResource(AYMR.strings.pref_show_home_streak),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Switch(
-                        checked = showHomeStreak,
-                        onCheckedChange = { showHomeStreak = it },
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 12.dp),
-                        text = stringResource(AYMR.strings.home_header_layout_editor_greeting_align_right),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Switch(
-                        checked = greetingAlignRight,
-                        onCheckedChange = { greetingAlignRight = it },
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 12.dp),
-                        text = stringResource(AYMR.strings.home_header_layout_editor_nickname_align_right),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Switch(
-                        checked = nicknameAlignRight,
-                        onCheckedChange = { nicknameAlignRight = it },
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 12.dp),
-                        text = stringResource(AYMR.strings.home_header_layout_editor_only_selected_overlay),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Switch(
-                        checked = showOnlySelectedOverlay,
-                        onCheckedChange = { showOnlySelectedOverlay = it },
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-
-                HomeHeaderLayoutEditorCanvas(
-                    layout = workingLayout,
-                    selectedElement = selectedElement,
-                    showGrid = showGrid,
-                    showOnlySelectedOverlay = showOnlySelectedOverlay,
+        CompositionLocalProvider(LocalSettingsUiStyle provides uiStyle) {
+            val initialLayout = remember { prefs.getHomeHeaderLayoutOrDefault() }
+            var workingLayout by remember { mutableStateOf(initialLayout) }
+            var selectedElement by remember { mutableStateOf(HomeHeaderLayoutElement.Nickname) }
+            var showGrid by rememberSaveable { mutableStateOf(true) }
+            var showOnlySelectedOverlay by rememberSaveable { mutableStateOf(false) }
+            var showHomeGreeting by rememberSaveable { mutableStateOf(prefs.showHomeGreeting().get()) }
+            var showHomeStreak by rememberSaveable { mutableStateOf(prefs.showHomeStreak().get()) }
+            var greetingAlignRight by rememberSaveable { mutableStateOf(prefs.homeHeaderGreetingAlignRight().get()) }
+            var nicknameAlignRight by rememberSaveable { mutableStateOf(prefs.homeHeaderNicknameAlignRight().get()) }
+            var showResetConfirm by rememberSaveable { mutableStateOf(false) }
+            val visibleElements = remember(showHomeGreeting, showHomeStreak) {
+                homeHeaderLayoutEditorVisibleElements(
                     showGreeting = showHomeGreeting,
                     showStreak = showHomeStreak,
-                    greetingAlignRight = greetingAlignRight,
-                    nicknameAlignRight = nicknameAlignRight,
-                    onSelectedElementChange = { selectedElement = it },
-                    onLayoutChange = { workingLayout = it },
                 )
+            }
 
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = stringResource(
-                        AYMR.strings.home_header_layout_editor_selected,
-                        homeHeaderLayoutElementLabel(selectedElement),
-                    ),
-                    style = MaterialTheme.typography.labelLarge,
+            LaunchedEffect(visibleElements, selectedElement) {
+                if (selectedElement !in visibleElements && visibleElements.isNotEmpty()) {
+                    selectedElement = visibleElements.first()
+                }
+            }
+
+            if (showResetConfirm) {
+                AlertDialog(
+                    onDismissRequest = { showResetConfirm = false },
+                    containerColor = if (isAurora) {
+                        settingsDialogContainerColor()
+                    } else {
+                        MaterialTheme.colorScheme.surface
+                    },
+                    title = {
+                        Text(
+                            text = stringResource(AYMR.strings.home_header_layout_editor_reset_confirm_title),
+                            color = if (isAurora) {
+                                auroraColors.textPrimary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = stringResource(AYMR.strings.home_header_layout_editor_reset_confirm_message),
+                            color = if (isAurora) {
+                                auroraColors.textSecondary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                workingLayout = HomeHeaderLayoutSpec.default()
+                                showResetConfirm = false
+                            },
+                        ) {
+                            Text(
+                                text = stringResource(AYMR.strings.home_header_layout_editor_reset_confirm_action),
+                                color = if (isAurora) accent else MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showResetConfirm = false }) {
+                            Text(
+                                text = stringResource(AYMR.strings.home_header_layout_editor_cancel),
+                                color = if (isAurora) accent else MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    },
                 )
+            }
 
-                Spacer(Modifier.height(16.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            Scaffold(
+                topBar = { scrollBehavior ->
+                    AppBar(
+                        title = stringResource(AYMR.strings.home_header_layout_editor_title),
+                        navigateUp = navigator::pop,
+                        scrollBehavior = scrollBehavior,
+                    )
+                },
+            ) { contentPadding ->
+                Column(
+                    modifier = Modifier
+                        .padding(contentPadding)
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
                 ) {
-                    OutlinedButton(
-                        onClick = { showResetConfirm = true },
-                    ) {
-                        Text(stringResource(AYMR.strings.home_header_layout_editor_reset))
-                    }
-                    TextButton(
-                        onClick = navigator::pop,
-                    ) {
-                        Text(stringResource(AYMR.strings.home_header_layout_editor_cancel))
-                    }
-                    Button(
-                        contentPadding = PaddingValues(
-                            horizontal = 10.dp,
-                            vertical = ButtonDefaults.ContentPadding.calculateTopPadding(),
-                        ),
-                        onClick = {
-                            prefs.setHomeHeaderLayout(workingLayout)
-                            prefs.showHomeGreeting().set(showHomeGreeting)
-                            prefs.showHomeStreak().set(showHomeStreak)
-                            prefs.homeHeaderGreetingAlignRight().set(greetingAlignRight)
-                            prefs.homeHeaderNicknameAlignRight().set(nicknameAlignRight)
-                            navigator.pop()
+                    Text(
+                        text = stringResource(AYMR.strings.home_header_layout_editor_description),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (isAurora) {
+                            auroraColors.textSecondary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
                         },
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = stringResource(AYMR.strings.home_header_layout_editor_save),
-                            softWrap = false,
-                            maxLines = 1,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 12.dp),
+                            text = stringResource(AYMR.strings.home_header_layout_editor_show_grid),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (isAurora) {
+                                auroraColors.textPrimary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
                         )
+                        Switch(
+                            checked = showGrid,
+                            onCheckedChange = { showGrid = it },
+                            colors = if (isAurora) {
+                                SwitchDefaults.colors(
+                                    checkedThumbColor = accent,
+                                    checkedTrackColor = accent.copy(alpha = 0.5f),
+                                )
+                            } else {
+                                SwitchDefaults.colors()
+                            },
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 12.dp),
+                            text = stringResource(AYMR.strings.pref_show_home_greeting),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (isAurora) {
+                                auroraColors.textPrimary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        )
+                        Switch(
+                            checked = showHomeGreeting,
+                            onCheckedChange = { showHomeGreeting = it },
+                            colors = if (isAurora) {
+                                SwitchDefaults.colors(
+                                    checkedThumbColor = accent,
+                                    checkedTrackColor = accent.copy(alpha = 0.5f),
+                                )
+                            } else {
+                                SwitchDefaults.colors()
+                            },
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 12.dp),
+                            text = stringResource(AYMR.strings.pref_show_home_streak),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (isAurora) {
+                                auroraColors.textPrimary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        )
+                        Switch(
+                            checked = showHomeStreak,
+                            onCheckedChange = { showHomeStreak = it },
+                            colors = if (isAurora) {
+                                SwitchDefaults.colors(
+                                    checkedThumbColor = accent,
+                                    checkedTrackColor = accent.copy(alpha = 0.5f),
+                                )
+                            } else {
+                                SwitchDefaults.colors()
+                            },
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 12.dp),
+                            text = stringResource(AYMR.strings.home_header_layout_editor_greeting_align_right),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (isAurora) {
+                                auroraColors.textPrimary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        )
+                        Switch(
+                            checked = greetingAlignRight,
+                            onCheckedChange = { greetingAlignRight = it },
+                            colors = if (isAurora) {
+                                SwitchDefaults.colors(
+                                    checkedThumbColor = accent,
+                                    checkedTrackColor = accent.copy(alpha = 0.5f),
+                                )
+                            } else {
+                                SwitchDefaults.colors()
+                            },
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 12.dp),
+                            text = stringResource(AYMR.strings.home_header_layout_editor_nickname_align_right),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (isAurora) {
+                                auroraColors.textPrimary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        )
+                        Switch(
+                            checked = nicknameAlignRight,
+                            onCheckedChange = { nicknameAlignRight = it },
+                            colors = if (isAurora) {
+                                SwitchDefaults.colors(
+                                    checkedThumbColor = accent,
+                                    checkedTrackColor = accent.copy(alpha = 0.5f),
+                                )
+                            } else {
+                                SwitchDefaults.colors()
+                            },
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 12.dp),
+                            text = stringResource(AYMR.strings.home_header_layout_editor_only_selected_overlay),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (isAurora) {
+                                auroraColors.textPrimary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        )
+                        Switch(
+                            checked = showOnlySelectedOverlay,
+                            onCheckedChange = { showOnlySelectedOverlay = it },
+                            colors = if (isAurora) {
+                                SwitchDefaults.colors(
+                                    checkedThumbColor = accent,
+                                    checkedTrackColor = accent.copy(alpha = 0.5f),
+                                )
+                            } else {
+                                SwitchDefaults.colors()
+                            },
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+
+                    HomeHeaderLayoutEditorCanvas(
+                        layout = workingLayout,
+                        selectedElement = selectedElement,
+                        showGrid = showGrid,
+                        showOnlySelectedOverlay = showOnlySelectedOverlay,
+                        showGreeting = showHomeGreeting,
+                        showStreak = showHomeStreak,
+                        greetingAlignRight = greetingAlignRight,
+                        nicknameAlignRight = nicknameAlignRight,
+                        onSelectedElementChange = { selectedElement = it },
+                        onLayoutChange = { workingLayout = it },
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = stringResource(
+                            AYMR.strings.home_header_layout_editor_selected,
+                            homeHeaderLayoutElementLabel(selectedElement),
+                        ),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (isAurora) {
+                            auroraColors.textPrimary
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                    )
+
+                    Spacer(Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    ) {
+                        OutlinedButton(
+                            onClick = { showResetConfirm = true },
+                        ) {
+                            Text(
+                                text = stringResource(AYMR.strings.home_header_layout_editor_reset),
+                                color = if (isAurora) accent else MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        TextButton(
+                            onClick = navigator::pop,
+                        ) {
+                            Text(
+                                text = stringResource(AYMR.strings.home_header_layout_editor_cancel),
+                                color = if (isAurora) accent else MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        Button(
+                            contentPadding = PaddingValues(
+                                horizontal = 10.dp,
+                                vertical = ButtonDefaults.ContentPadding.calculateTopPadding(),
+                            ),
+                            onClick = {
+                                prefs.setHomeHeaderLayout(workingLayout)
+                                prefs.showHomeGreeting().set(showHomeGreeting)
+                                prefs.showHomeStreak().set(showHomeStreak)
+                                prefs.homeHeaderGreetingAlignRight().set(greetingAlignRight)
+                                prefs.homeHeaderNicknameAlignRight().set(nicknameAlignRight)
+                                navigator.pop()
+                            },
+                            colors = if (isAurora) {
+                                ButtonDefaults.buttonColors(
+                                    containerColor = accent,
+                                    contentColor = auroraColors.textPrimary,
+                                )
+                            } else {
+                                ButtonDefaults.buttonColors()
+                            },
+                        ) {
+                            Text(
+                                text = stringResource(AYMR.strings.home_header_layout_editor_save),
+                                softWrap = false,
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
             }
