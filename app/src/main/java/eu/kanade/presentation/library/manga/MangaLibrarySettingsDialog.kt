@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.components.TabbedDialog
 import eu.kanade.presentation.components.TabbedDialogPaddings
+import eu.kanade.presentation.library.auroraLibraryCardStyleOptions
 import eu.kanade.tachiyomi.ui.library.manga.MangaLibrarySettingsScreenModel
 import eu.kanade.tachiyomi.util.system.isReleaseBuildType
 import kotlinx.collections.immutable.persistentListOf
@@ -263,6 +264,18 @@ private fun ColumnScope.DisplayPage(
             FilterChip(
                 selected = displayMode == mode,
                 onClick = { screenModel.setDisplayMode(mode) },
+                label = { Text(stringResource(titleRes)) },
+            )
+        }
+    }
+
+    val auroraCardStylePref = screenModel.libraryPreferences.auroraLibraryCardStyle()
+    val auroraCardStyle by auroraCardStylePref.collectAsState()
+    SettingsChipRow(MR.strings.pref_aurora_library_card_style) {
+        auroraLibraryCardStyleOptions().map { (titleRes, style) ->
+            FilterChip(
+                selected = auroraCardStyle == style,
+                onClick = { auroraCardStylePref.set(style) },
                 label = { Text(stringResource(titleRes)) },
             )
         }

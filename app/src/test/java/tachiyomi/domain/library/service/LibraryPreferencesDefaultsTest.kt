@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test
 import tachiyomi.core.common.preference.InMemoryPreferenceStore
 import tachiyomi.domain.library.anime.model.AnimeLibrarySort
 import tachiyomi.domain.library.manga.model.MangaLibrarySort
+import tachiyomi.domain.library.model.AuroraLibraryCardStyle
 import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.library.novel.model.NovelLibrarySort
 
@@ -40,8 +41,19 @@ class LibraryPreferencesDefaultsTest {
         prefs.novelLandscapeColumns().get() shouldBe 3
 
         prefs.showContinueViewingButton().get() shouldBe true
+        prefs.auroraLibraryCardStyle().get() shouldBe AuroraLibraryCardStyle.Standard
 
         prefs.autoUpdateItemRestrictions().get() shouldBe emptySet()
         prefs.autoUpdateWifiAndChargingOnly().get() shouldBe false
+    }
+
+    @Test
+    fun `aurora library card style preference persists`() {
+        val prefs = LibraryPreferences(InMemoryPreferenceStore())
+        val cardStylePref = prefs.auroraLibraryCardStyle()
+
+        cardStylePref.set(AuroraLibraryCardStyle.GlowContour)
+
+        cardStylePref.get() shouldBe AuroraLibraryCardStyle.GlowContour
     }
 }

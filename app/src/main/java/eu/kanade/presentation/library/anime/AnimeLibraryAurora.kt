@@ -11,21 +11,28 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastAny
 import eu.kanade.presentation.components.AuroraCard
 import eu.kanade.presentation.library.components.GlobalSearchItem
+import eu.kanade.presentation.library.components.GlowContourLibraryGridItem
 import eu.kanade.presentation.library.components.LazyLibraryGrid
 import eu.kanade.presentation.library.components.globalSearchItem
+import eu.kanade.presentation.library.components.resolveGlowContourLibraryTextSpec
+import eu.kanade.presentation.library.resolveAnimeLibraryCardProgressPercent
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.tachiyomi.ui.library.anime.AnimeLibraryItem
 import tachiyomi.domain.entries.anime.model.AnimeCover
 import tachiyomi.domain.library.anime.LibraryAnime
+import tachiyomi.domain.library.model.AuroraLibraryCardStyle
 import tachiyomi.domain.library.model.LibraryDisplayMode
+import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.Badge
@@ -33,7 +40,10 @@ import tachiyomi.presentation.core.components.BadgeGroup
 import tachiyomi.presentation.core.components.FastScrollLazyColumn
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
+import tachiyomi.presentation.core.util.collectAsState
 import tachiyomi.presentation.core.util.plus
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items as listItems
 
@@ -53,6 +63,9 @@ fun AnimeLibraryAuroraContent(
     contentPadding: PaddingValues,
 ) {
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
+    val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
+    val auroraCardStyle by libraryPreferences.auroraLibraryCardStyle().collectAsState()
+    val useGlowContourCards = auroraCardStyle == AuroraLibraryCardStyle.GlowContour
 
     if (items.isEmpty()) {
         AnimeLibraryAuroraEmptyScreen(
@@ -92,18 +105,37 @@ fun AnimeLibraryAuroraContent(
 
         LibraryDisplayMode.CompactGrid,
         -> {
-            AnimeLibraryCompactGrid(
-                items = items,
-                showTitle = true,
-                columns = safeColumns,
-                contentPadding = contentPadding,
-                selection = selection,
-                onClick = onClickAnime,
-                onLongClick = onToggleRangeSelection,
-                onClickContinueWatching = onContinueWatchingClicked,
-                searchQuery = searchQuery,
-                onGlobalSearchClicked = onGlobalSearchClicked,
-            )
+            if (useGlowContourCards) {
+                AnimeLibraryAuroraCardGrid(
+                    items = items,
+                    columns = safeColumns,
+                    contentPadding = contentPadding,
+                    selection = selection,
+                    searchQuery = searchQuery,
+                    onGlobalSearchClicked = onGlobalSearchClicked,
+                    showMetadata = true,
+                    onClick = onClickAnime,
+                    onLongClick = onToggleRangeSelection,
+                    onClickContinueWatching = onContinueWatchingClicked,
+                    listMaxWidthDp = auroraAdaptiveSpec.listMaxWidthDp,
+                    adaptiveMinCellDp = auroraAdaptiveSpec.compactGridAdaptiveMinCellDp,
+                    cardStyle = auroraCardStyle,
+                    glowDisplayMode = LibraryDisplayMode.CompactGrid,
+                )
+            } else {
+                AnimeLibraryCompactGrid(
+                    items = items,
+                    showTitle = true,
+                    columns = safeColumns,
+                    contentPadding = contentPadding,
+                    selection = selection,
+                    onClick = onClickAnime,
+                    onLongClick = onToggleRangeSelection,
+                    onClickContinueWatching = onContinueWatchingClicked,
+                    searchQuery = searchQuery,
+                    onGlobalSearchClicked = onGlobalSearchClicked,
+                )
+            }
         }
 
         LibraryDisplayMode.CoverOnlyGrid -> {
@@ -120,6 +152,8 @@ fun AnimeLibraryAuroraContent(
                 onClickContinueWatching = onContinueWatchingClicked,
                 listMaxWidthDp = auroraAdaptiveSpec.listMaxWidthDp,
                 adaptiveMinCellDp = auroraAdaptiveSpec.coverOnlyGridAdaptiveMinCellDp,
+                cardStyle = auroraCardStyle,
+                glowDisplayMode = LibraryDisplayMode.CoverOnlyGrid,
             )
         }
 
@@ -137,6 +171,8 @@ fun AnimeLibraryAuroraContent(
                 onClickContinueWatching = onContinueWatchingClicked,
                 listMaxWidthDp = auroraAdaptiveSpec.listMaxWidthDp,
                 adaptiveMinCellDp = auroraAdaptiveSpec.comfortableGridAdaptiveMinCellDp,
+                cardStyle = auroraCardStyle,
+                glowDisplayMode = LibraryDisplayMode.ComfortableGrid,
             )
         }
     }
@@ -272,8 +308,10 @@ private fun AnimeLibraryAuroraCardGrid(
     onClickContinueWatching: ((LibraryAnime) -> Unit)?,
     listMaxWidthDp: Int?,
     adaptiveMinCellDp: Int,
+    cardStyle: AuroraLibraryCardStyle,
+    glowDisplayMode: LibraryDisplayMode,
 ) {
-    val colors = AuroraTheme.colors
+    val useGlowContourCards = cardStyle == AuroraLibraryCardStyle.GlowContour
 
     LazyLibraryGrid(
         modifier = Modifier
@@ -306,67 +344,131 @@ private fun AnimeLibraryAuroraCardGrid(
                 libraryItem.unseenCount > 0 ||
                 libraryItem.isLocal ||
                 libraryItem.sourceLanguage.isNotBlank()
+            val progressPercent = resolveAnimeLibraryCardProgressPercent(
+                seenCount = libraryAnime.seenCount,
+                totalCount = libraryAnime.totalCount,
+            )
+            val textSpec = resolveGlowContourLibraryTextSpec(glowDisplayMode)
 
-            AuroraCard(
-                modifier = Modifier.aspectRatio(if (showMetadata) 0.66f else 0.6f),
-                title = anime.title,
-                coverData = AnimeCover(
-                    animeId = anime.id,
-                    sourceId = anime.source,
-                    isAnimeFavorite = anime.favorite,
-                    url = anime.thumbnailUrl,
-                    lastModified = anime.coverLastModified,
-                ),
-                subtitle = subtitle,
-                badge = if (hasBadge) {
-                    {
-                        BadgeGroup {
-                            if (libraryItem.downloadCount > 0) {
-                                Badge(
-                                    text = libraryItem.downloadCount.toString(),
-                                    color = colors.accent,
-                                    textColor = colors.textOnAccent,
-                                    shape = RoundedCornerShape(4.dp),
-                                )
-                            }
-                            if (libraryItem.unseenCount > 0) {
-                                Badge(
-                                    text = libraryItem.unseenCount.toString(),
-                                    color = colors.accent,
-                                    textColor = colors.textOnAccent,
-                                    shape = RoundedCornerShape(4.dp),
-                                )
-                            }
-                            if (libraryItem.isLocal) {
-                                Badge(
-                                    text = stringResource(AYMR.strings.aurora_local),
-                                    color = colors.accent,
-                                    textColor = colors.textOnAccent,
-                                    shape = RoundedCornerShape(4.dp),
-                                )
-                            } else if (libraryItem.sourceLanguage.isNotBlank()) {
-                                Badge(
-                                    text = libraryItem.sourceLanguage.uppercase(),
-                                    color = colors.accent,
-                                    textColor = colors.textOnAccent,
-                                    shape = RoundedCornerShape(4.dp),
-                                )
-                            }
+            if (useGlowContourCards) {
+                GlowContourLibraryGridItem(
+                    modifier = Modifier,
+                    title = anime.title,
+                    subtitle = subtitle,
+                    coverData = AnimeCover(
+                        animeId = anime.id,
+                        sourceId = anime.source,
+                        isAnimeFavorite = anime.favorite,
+                        url = anime.thumbnailUrl,
+                        lastModified = anime.coverLastModified,
+                    ),
+                    progressPercent = progressPercent,
+                    cardAspectRatio = 0.76f,
+                    textSpec = textSpec,
+                    badge = if (hasBadge) {
+                        {
+                            AnimeAuroraBadgeGroup(
+                                item = libraryItem,
+                                glowStyle = true,
+                            )
                         }
-                    }
-                } else {
-                    null
-                },
-                onClick = { onClick(libraryAnime) },
-                onLongClick = { onLongClick(libraryAnime) },
-                onClickContinueViewing = if (onClickContinueWatching != null && libraryItem.unseenCount > 0) {
-                    { onClickContinueWatching(libraryAnime) }
-                } else {
-                    null
-                },
-                isSelected = selection.fastAny { it.id == libraryAnime.id },
-                coverHeightFraction = if (showMetadata) 0.68f else 1f,
-                titleMaxLines = if (showMetadata) 1 else 2,
+                    } else {
+                        null
+                    },
+                    onClick = { onClick(libraryAnime) },
+                    onLongClick = { onLongClick(libraryAnime) },
+                    onClickContinueViewing = if (onClickContinueWatching != null && libraryItem.unseenCount > 0) {
+                        { onClickContinueWatching(libraryAnime) }
+                    } else {
+                        null
+                    },
+                    isSelected = selection.fastAny { it.id == libraryAnime.id },
+                )
+            } else {
+                AuroraCard(
+                    modifier = Modifier.aspectRatio(if (showMetadata) 0.66f else 0.6f),
+                    title = anime.title,
+                    coverData = AnimeCover(
+                        animeId = anime.id,
+                        sourceId = anime.source,
+                        isAnimeFavorite = anime.favorite,
+                        url = anime.thumbnailUrl,
+                        lastModified = anime.coverLastModified,
+                    ),
+                    subtitle = subtitle,
+                    badge = if (hasBadge) {
+                        {
+                            AnimeAuroraBadgeGroup(
+                                item = libraryItem,
+                                glowStyle = false,
+                            )
+                        }
+                    } else {
+                        null
+                    },
+                    onClick = { onClick(libraryAnime) },
+                    onLongClick = { onLongClick(libraryAnime) },
+                    onClickContinueViewing = if (onClickContinueWatching != null && libraryItem.unseenCount > 0) {
+                        { onClickContinueWatching(libraryAnime) }
+                    } else {
+                        null
+                    },
+                    isSelected = selection.fastAny { it.id == libraryAnime.id },
+                    coverHeightFraction = if (showMetadata) 0.68f else 1f,
+                    titleMaxLines = if (showMetadata) 1 else 2,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AnimeAuroraBadgeGroup(
+    item: AnimeLibraryItem,
+    glowStyle: Boolean,
+) {
+    val colors = AuroraTheme.colors
+    val badgeContainerColor = if (glowStyle) {
+        colors.surface.copy(alpha = 0.82f)
+    } else {
+        colors.accent
+    }
+    val badgeTextColor = if (glowStyle) {
+        colors.textPrimary
+    } else {
+        colors.textOnAccent
+    }
+
+    BadgeGroup {
+        if (item.downloadCount > 0) {
+            Badge(
+                text = item.downloadCount.toString(),
+                color = badgeContainerColor,
+                textColor = badgeTextColor,
+                shape = RoundedCornerShape(4.dp),
+            )
+        }
+        if (item.unseenCount > 0) {
+            Badge(
+                text = item.unseenCount.toString(),
+                color = badgeContainerColor,
+                textColor = badgeTextColor,
+                shape = RoundedCornerShape(4.dp),
+            )
+        }
+        if (item.isLocal) {
+            Badge(
+                text = stringResource(AYMR.strings.aurora_local),
+                color = badgeContainerColor,
+                textColor = badgeTextColor,
+                shape = RoundedCornerShape(4.dp),
+            )
+        } else if (item.sourceLanguage.isNotBlank()) {
+            Badge(
+                text = item.sourceLanguage.uppercase(),
+                color = badgeContainerColor,
+                textColor = badgeTextColor,
+                shape = RoundedCornerShape(4.dp),
             )
         }
     }

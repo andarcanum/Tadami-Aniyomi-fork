@@ -62,14 +62,19 @@ import eu.kanade.presentation.components.LocalTabState
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.library.components.EntryCompactGridItem
+import eu.kanade.presentation.library.components.GlowContourLibraryGridItem
 import eu.kanade.presentation.library.components.LanguageBadge
 import eu.kanade.presentation.library.components.LazyLibraryGrid
 import eu.kanade.presentation.library.components.UnviewedBadge
+import eu.kanade.presentation.library.components.resolveGlowContourLibraryTextSpec
+import eu.kanade.presentation.library.resolveNovelLibraryCardProgressPercent
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import tachiyomi.domain.entries.novel.model.asNovelCover
+import tachiyomi.domain.library.model.AuroraLibraryCardStyle
+import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.novel.service.NovelSourceManager
@@ -128,6 +133,8 @@ fun NovelLibraryAuroraContent(
         }
     }
     val columns by columnPreference.collectAsState()
+    val auroraCardStyle by libraryPreferences.auroraLibraryCardStyle().collectAsState()
+    val useGlowContourCards = auroraCardStyle == AuroraLibraryCardStyle.GlowContour
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val displaySpec = remember(displayMode, columns, auroraAdaptiveSpec) {
         resolveNovelLibraryAuroraDisplaySpec(
@@ -235,6 +242,8 @@ fun NovelLibraryAuroraContent(
                         onLongClick = onLongClickNovelItem?.let { { it(item) } },
                         onClickContinueReading = onContinueReadingClicked,
                         isSelected = selection.fastAny { it.id == item.id },
+                        cardStyle = AuroraLibraryCardStyle.Standard,
+                        glowDisplayMode = LibraryDisplayMode.List,
                     )
                 }
             }
@@ -277,7 +286,7 @@ fun NovelLibraryAuroraContent(
                         showLanguageBadge = showLanguageBadge,
                         sourceLanguage = sourceLanguageByNovelId[item.novel.id].orEmpty(),
                     )
-                    if (displaySpec.useCompactGridEntryStyle) {
+                    if (displaySpec.useCompactGridEntryStyle && !useGlowContourCards) {
                         NovelLibraryCompactGridItem(
                             item = item,
                             badgeState = badgeState,
@@ -292,12 +301,18 @@ fun NovelLibraryAuroraContent(
                             context = context,
                             badgeState = badgeState,
                             showMetadata = displaySpec.showMetadata,
-                            modifier = Modifier.aspectRatio(displaySpec.gridCardAspectRatio),
+                            modifier = if (useGlowContourCards) {
+                                Modifier
+                            } else {
+                                Modifier.aspectRatio(displaySpec.gridCardAspectRatio)
+                            },
                             coverHeightFraction = displaySpec.gridCoverHeightFraction,
                             onNovelClicked = { onClickNovelItem(item) },
                             onLongClick = onLongClickNovelItem?.let { { it(item) } },
                             onClickContinueReading = onContinueReadingClicked,
                             isSelected = selection.fastAny { it.id == item.id },
+                            cardStyle = auroraCardStyle,
+                            glowDisplayMode = displayMode,
                         )
                     }
                 }
@@ -362,7 +377,10 @@ private fun NovelLibraryAuroraCard(
     onLongClick: (() -> Unit)?,
     onClickContinueReading: ((LibraryNovel) -> Unit)?,
     isSelected: Boolean,
+    cardStyle: AuroraLibraryCardStyle,
+    glowDisplayMode: LibraryDisplayMode,
 ) {
+    val useGlowContourCards = cardStyle == AuroraLibraryCardStyle.GlowContour
     val progressText = if (showMetadata && item.totalChapters > 0) {
         "${item.totalChapters - item.unreadCount}/${item.totalChapters} ${stringResource(
             MR.strings.chapters,
@@ -370,6 +388,11 @@ private fun NovelLibraryAuroraCard(
     } else {
         null
     }
+    val progressPercent = resolveNovelLibraryCardProgressPercent(
+        readCount = item.readCount,
+        totalCount = item.totalChapters,
+    )
+    val textSpec = resolveGlowContourLibraryTextSpec(glowDisplayMode)
     val coverRequest = remember(item.novel.id, item.novel.thumbnailUrl, item.novel.coverLastModified) {
         ImageRequest.Builder(context)
             .data(resolveAuroraCoverModel(item.novel.thumbnailUrl))
@@ -377,7 +400,35 @@ private fun NovelLibraryAuroraCard(
             .build()
     }
 
-    if (showMetadata) {
+    if (useGlowContourCards) {
+        GlowContourLibraryGridItem(
+            modifier = modifier,
+            title = item.novel.title,
+            subtitle = progressText,
+            coverData = coverRequest,
+            progressPercent = progressPercent,
+            cardAspectRatio = 0.76f,
+            textSpec = textSpec,
+            badge = if (badgeState.hasBadge()) {
+                {
+                    NovelAuroraBadgeGroup(
+                        badgeState = badgeState,
+                        glowStyle = true,
+                    )
+                }
+            } else {
+                null
+            },
+            onClick = onNovelClicked,
+            onLongClick = onLongClick,
+            onClickContinueViewing = if (onClickContinueReading != null && item.unreadCount > 0) {
+                { onClickContinueReading(item) }
+            } else {
+                null
+            },
+            isSelected = isSelected,
+        )
+    } else if (showMetadata) {
         val colors = AuroraTheme.colors
         AuroraCard(
             modifier = modifier,
@@ -387,32 +438,10 @@ private fun NovelLibraryAuroraCard(
             coverHeightFraction = coverHeightFraction,
             badge = if (badgeState.hasBadge()) {
                 {
-                    BadgeGroup {
-                        if (badgeState.showDownloaded) {
-                            Badge(
-                                text = stringResource(AYMR.strings.aurora_downloaded),
-                                color = colors.accent,
-                                textColor = colors.textOnAccent,
-                                shape = RoundedCornerShape(4.dp),
-                            )
-                        }
-                        badgeState.unreadCount?.let {
-                            Badge(
-                                text = it.toString(),
-                                color = colors.accent,
-                                textColor = colors.textOnAccent,
-                                shape = RoundedCornerShape(4.dp),
-                            )
-                        }
-                        badgeState.language?.let {
-                            Badge(
-                                text = it.uppercase(),
-                                color = colors.accent,
-                                textColor = colors.textOnAccent,
-                                shape = RoundedCornerShape(4.dp),
-                            )
-                        }
-                    }
+                    NovelAuroraBadgeGroup(
+                        badgeState = badgeState,
+                        glowStyle = false,
+                    )
                 }
             } else {
                 null
@@ -441,6 +470,51 @@ private fun NovelLibraryAuroraCard(
             onClick = onNovelClicked,
             onLongClick = onLongClick,
         )
+    }
+}
+
+@Composable
+private fun NovelAuroraBadgeGroup(
+    badgeState: NovelLibraryBadgeState,
+    glowStyle: Boolean,
+) {
+    val colors = AuroraTheme.colors
+    val badgeContainerColor = if (glowStyle) {
+        colors.surface.copy(alpha = 0.82f)
+    } else {
+        colors.accent
+    }
+    val badgeTextColor = if (glowStyle) {
+        colors.textPrimary
+    } else {
+        colors.textOnAccent
+    }
+
+    BadgeGroup {
+        if (badgeState.showDownloaded) {
+            Badge(
+                text = stringResource(AYMR.strings.aurora_downloaded),
+                color = badgeContainerColor,
+                textColor = badgeTextColor,
+                shape = RoundedCornerShape(4.dp),
+            )
+        }
+        badgeState.unreadCount?.let {
+            Badge(
+                text = it.toString(),
+                color = badgeContainerColor,
+                textColor = badgeTextColor,
+                shape = RoundedCornerShape(4.dp),
+            )
+        }
+        badgeState.language?.let {
+            Badge(
+                text = it.uppercase(),
+                color = badgeContainerColor,
+                textColor = badgeTextColor,
+                shape = RoundedCornerShape(4.dp),
+            )
+        }
     }
 }
 
