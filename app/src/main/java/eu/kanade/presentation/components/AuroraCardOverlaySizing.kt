@@ -17,6 +17,7 @@ internal data class AuroraCardOverlaySpec(
     val progressTextSizeSp: TextUnit,
     val footerHorizontalPaddingDp: Dp,
     val footerVerticalPaddingDp: Dp,
+    val progressTextEndInsetDp: Dp,
 )
 
 internal fun resolveAuroraOverlayScaleTier(
@@ -53,6 +54,7 @@ internal fun resolveAuroraCardOverlaySpec(
             progressTextSizeSp = 13.sp,
             footerHorizontalPaddingDp = 10.dp,
             footerVerticalPaddingDp = 9.dp,
+            progressTextEndInsetDp = 3.dp,
         )
         AuroraOverlayScaleTier.Medium -> AuroraCardOverlaySpec(
             buttonSizeDp = 27.dp,
@@ -60,6 +62,7 @@ internal fun resolveAuroraCardOverlaySpec(
             progressTextSizeSp = 12.sp,
             footerHorizontalPaddingDp = 8.dp,
             footerVerticalPaddingDp = 7.dp,
+            progressTextEndInsetDp = 2.dp,
         )
         AuroraOverlayScaleTier.Small -> AuroraCardOverlaySpec(
             buttonSizeDp = 24.dp,
@@ -67,6 +70,7 @@ internal fun resolveAuroraCardOverlaySpec(
             progressTextSizeSp = 11.sp,
             footerHorizontalPaddingDp = 6.dp,
             footerVerticalPaddingDp = 6.dp,
+            progressTextEndInsetDp = 1.dp,
         )
     }
 }

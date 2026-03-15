@@ -60,6 +60,7 @@ class AuroraCardOverlaySizingTest {
             spec.progressTextSizeSp.value shouldBe 13f
             spec.footerHorizontalPaddingDp.value shouldBe 10f
             spec.footerVerticalPaddingDp.value shouldBe 9f
+            spec.progressTextEndInsetDp.value shouldBe 3f
         }
 
         resolveAuroraCardOverlaySpec(
@@ -71,6 +72,7 @@ class AuroraCardOverlaySizingTest {
             spec.progressTextSizeSp.value shouldBe 12f
             spec.footerHorizontalPaddingDp.value shouldBe 8f
             spec.footerVerticalPaddingDp.value shouldBe 7f
+            spec.progressTextEndInsetDp.value shouldBe 2f
         }
 
         resolveAuroraCardOverlaySpec(
@@ -82,6 +84,7 @@ class AuroraCardOverlaySizingTest {
             spec.progressTextSizeSp.value shouldBe 11f
             spec.footerHorizontalPaddingDp.value shouldBe 6f
             spec.footerVerticalPaddingDp.value shouldBe 6f
+            spec.progressTextEndInsetDp.value shouldBe 1f
         }
     }
 }

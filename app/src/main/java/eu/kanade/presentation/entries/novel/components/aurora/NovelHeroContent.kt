@@ -105,8 +105,8 @@ fun NovelHeroContent(
             fontWeight = FontWeight.Black,
             color = Color.White,
             lineHeight = 36.sp,
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis,
+            maxLines = Int.MAX_VALUE,
+            overflow = TextOverflow.Clip,
             style = TextStyle(
                 fontFamily = coverTitleFontFamily,
                 lineBreak = LineBreak.Heading,

@@ -708,7 +708,9 @@ private fun GlowContourLibraryCard(
                         maxLines = 1,
                         softWrap = false,
                         overflow = TextOverflow.Clip,
-                        modifier = Modifier.align(Alignment.BottomEnd),
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = overlaySpec.progressTextEndInsetDp),
                     )
                 }
                 GlowContourFooterContent.None -> Unit
