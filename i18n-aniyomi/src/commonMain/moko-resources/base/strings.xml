@@ -1365,6 +1365,10 @@
     <string name="home_header_layout_editor_greeting_align_right">Align greeting to right side</string>
     <string name="home_header_layout_editor_nickname_align_right">Align nickname to right side</string>
     <string name="home_header_layout_editor_only_selected_overlay">Show only selected outline</string>
+    <string name="home_header_layout_editor_streak_style_title">Streak counter style</string>
+    <string name="home_header_layout_editor_streak_style_classic_badge">Classic badge</string>
+    <string name="home_header_layout_editor_streak_style_number_badge_only">Number badge only</string>
+    <string name="home_header_layout_editor_streak_style_no_badge">No badge</string>
     <string name="home_header_layout_editor_selected">Selected: %s</string>
     <string name="home_header_layout_editor_reset">Reset</string>
     <string name="home_header_layout_editor_reset_confirm_title">Reset layout?</string>

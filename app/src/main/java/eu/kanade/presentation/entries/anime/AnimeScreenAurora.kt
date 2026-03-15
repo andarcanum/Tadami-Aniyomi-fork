@@ -80,7 +80,9 @@ import eu.kanade.presentation.entries.anime.components.aurora.EpisodesHeader
 import eu.kanade.presentation.entries.anime.components.aurora.FullscreenPosterBackground
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
+import eu.kanade.presentation.entries.components.AuroraEntryHoldToRefresh
 import eu.kanade.presentation.entries.components.EntryBottomActionMenu
+import eu.kanade.presentation.entries.components.normalizeAuroraGlobalSearchQuery
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
@@ -146,6 +148,7 @@ fun AnimeScreenAuroraImpl(
     onSettingsClicked: (() -> Unit)?,
 ) {
     val anime = state.anime
+    val globalSearchQuery = remember(anime.title) { normalizeAuroraGlobalSearchQuery(anime.title) }
     val episodes = state.episodeListItems
     val selectedEpisodes = remember(episodes) {
         episodes.filterIsInstance<EpisodeList.Item>().filter { it.selected }
@@ -252,31 +255,236 @@ fun AnimeScreenAuroraImpl(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        // Fixed background poster
-        FullscreenPosterBackground(
-            anime = anime,
-            scrollOffset = scrollOffset,
-            firstVisibleItemIndex = firstVisibleItemIndex,
-            resolvedCoverUrl = resolvedCover.url,
-            resolvedCoverUrlFallback = resolvedCover.fallbackUrl,
-        )
+    AuroraEntryHoldToRefresh(
+        refreshing = state.isRefreshingData,
+        onRefresh = onRefresh,
+        enabled = !isAnyEpisodeSelected,
+        modifier = Modifier.fillMaxSize(),
+        indicatorPadding = WindowInsets.statusBars.asPaddingValues(),
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            // Fixed background poster
+            FullscreenPosterBackground(
+                anime = anime,
+                scrollOffset = scrollOffset,
+                firstVisibleItemIndex = firstVisibleItemIndex,
+                resolvedCoverUrl = resolvedCover.url,
+                resolvedCoverUrlFallback = resolvedCover.fallbackUrl,
+            )
 
-        if (useTwoPaneLayout) {
-            val topContentPadding = 96.dp
-            TwoPanelBox(
-                modifier = Modifier.fillMaxSize(),
-                startContent = {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(start = 12.dp, end = 6.dp, top = topContentPadding, bottom = 20.dp)
-                            .verticalScroll(rememberScrollState()),
-                    ) {
+            if (useTwoPaneLayout) {
+                val topContentPadding = 96.dp
+                TwoPanelBox(
+                    modifier = Modifier.fillMaxSize(),
+                    startContent = {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(start = 12.dp, end = 6.dp, top = topContentPadding, bottom = 20.dp)
+                                .verticalScroll(rememberScrollState()),
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .auroraCenteredMaxWidth(420)
+                                    .animateContentSize(
+                                        animationSpec = spring(
+                                            dampingRatio = Spring.DampingRatioNoBouncy,
+                                            stiffness = Spring.StiffnessLow,
+                                        ),
+                                        alignment = Alignment.TopStart,
+                                    ),
+                            ) {
+                                AnimeHeroContent(
+                                    anime = anime,
+                                    episodeCount = episodes.size,
+                                    hasWatchingProgress = hasWatchingProgress,
+                                    onContinueWatching = onContinueWatching,
+                                    onDubbingClicked = onDubbingClicked,
+                                    selectedDubbing = selectedDubbing,
+                                    animeMetadata = state.animeMetadata,
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                AnimeInfoCard(
+                                    anime = anime,
+                                    episodeCount = episodes.size,
+                                    nextUpdate = nextUpdate,
+                                    onTagSearch = onTagSearch,
+                                    descriptionExpanded = descriptionExpanded,
+                                    genresExpanded = genresExpanded,
+                                    onToggleDescription = {
+                                        descriptionExpanded = !descriptionExpanded
+                                        if (descriptionExpanded) {
+                                            coroutineScope.launch {
+                                                statsBringIntoViewRequester.bringIntoView()
+                                            }
+                                        }
+                                    },
+                                    onToggleGenres = { genresExpanded = !genresExpanded },
+                                    animeMetadata = state.animeMetadata,
+                                    isMetadataLoading = state.isMetadataLoading,
+                                    metadataError = state.metadataError,
+                                    onRetryMetadata = onRetryMetadata,
+                                    onLoginClick = { onTrackingClicked?.invoke() },
+                                    statsRequester = statsBringIntoViewRequester,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                AnimeActionCard(
+                                    anime = anime,
+                                    trackingCount = state.trackingCount,
+                                    onAddToLibraryClicked = onAddToLibraryClicked,
+                                    onWebViewClicked = onWebViewClicked,
+                                    onTrackingClicked = onTrackingClicked,
+                                    onShareClicked = onShareClicked,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Spacer(modifier = Modifier.height(24.dp))
+                            }
+                        }
+                    },
+                    endContent = {
+                        LazyColumn(
+                            state = lazyListState,
+                            contentPadding = PaddingValues(top = topContentPadding, bottom = 100.dp),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(start = 6.dp, end = 12.dp),
+                        ) {
+                            item {
+                                EpisodesHeader(episodeCount = episodes.size)
+                            }
+
+                            if (episodes.isEmpty()) {
+                                item {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(32.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            text = stringResource(MR.strings.no_chapters_error),
+                                            color = Color.White.copy(alpha = 0.7f),
+                                            fontSize = 14.sp,
+                                        )
+                                    }
+                                }
+                            }
+
+                            items(
+                                items = episodesToShow,
+                                key = { (it as? EpisodeList.Item)?.episode?.id ?: it.hashCode() },
+                                contentType = { "episode" },
+                            ) { item ->
+                                if (item is EpisodeList.Item) {
+                                    AnimeEpisodeCardCompact(
+                                        anime = anime,
+                                        item = item,
+                                        selected = item.selected,
+                                        isAnyEpisodeSelected = isAnyEpisodeSelected,
+                                        episodeSwipeStartAction = episodeSwipeStartAction,
+                                        episodeSwipeEndAction = episodeSwipeEndAction,
+                                        onClick = {
+                                            when (
+                                                resolveAuroraEpisodeClickAction(
+                                                    isEpisodeSelected = item.selected,
+                                                    isAnyEpisodeSelected = isAnyEpisodeSelected,
+                                                )
+                                            ) {
+                                                AuroraEpisodeClickAction.OpenEpisode -> {
+                                                    onEpisodeClicked(item.episode, false)
+                                                }
+                                                AuroraEpisodeClickAction.SelectEpisode -> {
+                                                    onEpisodeSelected(item, true, true, false)
+                                                    if (shouldAutoExpandAuroraEpisodesList(
+                                                            episodesExpanded,
+                                                            episodes.size,
+                                                        )
+                                                    ) {
+                                                        episodesExpanded = true
+                                                    }
+                                                }
+                                                AuroraEpisodeClickAction.UnselectEpisode -> {
+                                                    onEpisodeSelected(item, false, true, false)
+                                                }
+                                            }
+                                        },
+                                        onLongClick = {
+                                            onEpisodeSelected(item, !item.selected, true, true)
+                                            if (!item.selected &&
+                                                shouldAutoExpandAuroraEpisodesList(episodesExpanded, episodes.size)
+                                            ) {
+                                                episodesExpanded = true
+                                            }
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        },
+                                        onEpisodeSwipe = { action -> onEpisodeSwipe(item, action) },
+                                        onDownloadEpisode = onDownloadEpisode,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                                    )
+                                }
+                            }
+
+                            if (episodes.size > 5) {
+                                item {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(16.dp))
+                                                .background(
+                                                    brush = Brush.linearGradient(
+                                                        colors = listOf(
+                                                            Color.White.copy(alpha = 0.12f),
+                                                            Color.White.copy(alpha = 0.08f),
+                                                        ),
+                                                    ),
+                                                )
+                                                .clickable { episodesExpanded = !episodesExpanded }
+                                                .padding(horizontal = 24.dp, vertical = 12.dp),
+                                        ) {
+                                            Text(
+                                                text = if (episodesExpanded) {
+                                                    "Показать меньше"
+                                                } else {
+                                                    "Показать все ${episodes.size} эпизодов"
+                                                },
+                                                color = colors.accent,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                )
+            } else {
+                // Scrollable content
+                LazyColumn(
+                    state = lazyListState,
+                    contentPadding = PaddingValues(bottom = 100.dp),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    // Spacer for poster/hero area
+                    item {
+                        Spacer(modifier = Modifier.height(screenHeight))
+                    }
+
+                    // Info and Action cards merged into one item for layout stability
+                    item {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .auroraCenteredMaxWidth(420)
+                                .auroraCenteredMaxWidth(contentMaxWidthDp)
                                 .animateContentSize(
                                     animationSpec = spring(
                                         dampingRatio = Spring.DampingRatioNoBouncy,
@@ -285,16 +493,7 @@ fun AnimeScreenAuroraImpl(
                                     alignment = Alignment.TopStart,
                                 ),
                         ) {
-                            AnimeHeroContent(
-                                anime = anime,
-                                episodeCount = episodes.size,
-                                hasWatchingProgress = hasWatchingProgress,
-                                onContinueWatching = onContinueWatching,
-                                onDubbingClicked = onDubbingClicked,
-                                selectedDubbing = selectedDubbing,
-                                animeMetadata = state.animeMetadata,
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
                             AnimeInfoCard(
                                 anime = anime,
                                 episodeCount = episodes.size,
@@ -310,15 +509,21 @@ fun AnimeScreenAuroraImpl(
                                         }
                                     }
                                 },
-                                onToggleGenres = { genresExpanded = !genresExpanded },
+                                onToggleGenres = {
+                                    genresExpanded = !genresExpanded
+                                },
                                 animeMetadata = state.animeMetadata,
                                 isMetadataLoading = state.isMetadataLoading,
                                 metadataError = state.metadataError,
                                 onRetryMetadata = onRetryMetadata,
-                                onLoginClick = { onTrackingClicked?.invoke() },
+                                onLoginClick = {
+                                    onTrackingClicked?.invoke()
+                                },
+
                                 statsRequester = statsBringIntoViewRequester,
                                 modifier = Modifier.fillMaxWidth(),
                             )
+
                             Spacer(modifier = Modifier.height(12.dp))
                             AnimeActionCard(
                                 anime = anime,
@@ -329,493 +534,308 @@ fun AnimeScreenAuroraImpl(
                                 onShareClicked = onShareClicked,
                                 modifier = Modifier.fillMaxWidth(),
                             )
-                            Spacer(modifier = Modifier.height(24.dp))
                         }
                     }
-                },
-                endContent = {
-                    LazyColumn(
-                        state = lazyListState,
-                        contentPadding = PaddingValues(top = topContentPadding, bottom = 100.dp),
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(start = 6.dp, end = 12.dp),
-                    ) {
-                        item {
-                            EpisodesHeader(episodeCount = episodes.size)
-                        }
 
-                        if (episodes.isEmpty()) {
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(32.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text(
-                                        text = stringResource(MR.strings.no_chapters_error),
-                                        color = Color.White.copy(alpha = 0.7f),
-                                        fontSize = 14.sp,
-                                    )
-                                }
-                            }
-                        }
-
-                        items(
-                            items = episodesToShow,
-                            key = { (it as? EpisodeList.Item)?.episode?.id ?: it.hashCode() },
-                            contentType = { "episode" },
-                        ) { item ->
-                            if (item is EpisodeList.Item) {
-                                AnimeEpisodeCardCompact(
-                                    anime = anime,
-                                    item = item,
-                                    selected = item.selected,
-                                    isAnyEpisodeSelected = isAnyEpisodeSelected,
-                                    episodeSwipeStartAction = episodeSwipeStartAction,
-                                    episodeSwipeEndAction = episodeSwipeEndAction,
-                                    onClick = {
-                                        when (
-                                            resolveAuroraEpisodeClickAction(
-                                                isEpisodeSelected = item.selected,
-                                                isAnyEpisodeSelected = isAnyEpisodeSelected,
-                                            )
-                                        ) {
-                                            AuroraEpisodeClickAction.OpenEpisode -> {
-                                                onEpisodeClicked(item.episode, false)
-                                            }
-                                            AuroraEpisodeClickAction.SelectEpisode -> {
-                                                onEpisodeSelected(item, true, true, false)
-                                                if (shouldAutoExpandAuroraEpisodesList(
-                                                        episodesExpanded,
-                                                        episodes.size,
-                                                    )
-                                                ) {
-                                                    episodesExpanded = true
-                                                }
-                                            }
-                                            AuroraEpisodeClickAction.UnselectEpisode -> {
-                                                onEpisodeSelected(item, false, true, false)
-                                            }
-                                        }
-                                    },
-                                    onLongClick = {
-                                        onEpisodeSelected(item, !item.selected, true, true)
-                                        if (!item.selected &&
-                                            shouldAutoExpandAuroraEpisodesList(episodesExpanded, episodes.size)
-                                        ) {
-                                            episodesExpanded = true
-                                        }
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    },
-                                    onEpisodeSwipe = { action -> onEpisodeSwipe(item, action) },
-                                    onDownloadEpisode = onDownloadEpisode,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                                )
-                            }
-                        }
-
-                        if (episodes.size > 5) {
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .background(
-                                                brush = Brush.linearGradient(
-                                                    colors = listOf(
-                                                        Color.White.copy(alpha = 0.12f),
-                                                        Color.White.copy(alpha = 0.08f),
-                                                    ),
-                                                ),
-                                            )
-                                            .clickable { episodesExpanded = !episodesExpanded }
-                                            .padding(horizontal = 24.dp, vertical = 12.dp),
-                                    ) {
-                                        Text(
-                                            text = if (episodesExpanded) {
-                                                "Показать меньше"
-                                            } else {
-                                                "Показать все ${episodes.size} эпизодов"
-                                            },
-                                            color = colors.accent,
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-            )
-        } else {
-            // Scrollable content
-            LazyColumn(
-                state = lazyListState,
-                contentPadding = PaddingValues(bottom = 100.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                // Spacer for poster/hero area
-                item {
-                    Spacer(modifier = Modifier.height(screenHeight))
-                }
-
-                // Info and Action cards merged into one item for layout stability
-                item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .auroraCenteredMaxWidth(contentMaxWidthDp)
-                            .animateContentSize(
-                                animationSpec = spring(
-                                    dampingRatio = Spring.DampingRatioNoBouncy,
-                                    stiffness = Spring.StiffnessLow,
-                                ),
-                                alignment = Alignment.TopStart,
-                            ),
-                    ) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        AnimeInfoCard(
-                            anime = anime,
+                    // Episodes header
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        EpisodesHeader(
                             episodeCount = episodes.size,
-                            nextUpdate = nextUpdate,
-                            onTagSearch = onTagSearch,
-                            descriptionExpanded = descriptionExpanded,
-                            genresExpanded = genresExpanded,
-                            onToggleDescription = {
-                                descriptionExpanded = !descriptionExpanded
-                                if (descriptionExpanded) {
-                                    coroutineScope.launch {
-                                        statsBringIntoViewRequester.bringIntoView()
-                                    }
-                                }
-                            },
-                            onToggleGenres = {
-                                genresExpanded = !genresExpanded
-                            },
-                            animeMetadata = state.animeMetadata,
-                            isMetadataLoading = state.isMetadataLoading,
-                            metadataError = state.metadataError,
-                            onRetryMetadata = onRetryMetadata,
-                            onLoginClick = {
-                                onTrackingClicked?.invoke()
-                            },
-
-                            statsRequester = statsBringIntoViewRequester,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-                        AnimeActionCard(
-                            anime = anime,
-                            trackingCount = state.trackingCount,
-                            onAddToLibraryClicked = onAddToLibraryClicked,
-                            onWebViewClicked = onWebViewClicked,
-                            onTrackingClicked = onTrackingClicked,
-                            onShareClicked = onShareClicked,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
                         )
                     }
-                }
 
-                // Episodes header
-                item {
-                    Spacer(modifier = Modifier.height(20.dp))
-                    EpisodesHeader(
-                        episodeCount = episodes.size,
-                        modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
-                    )
-                }
-
-                // Empty state for episodes
-                if (episodes.isEmpty()) {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .auroraCenteredMaxWidth(contentMaxWidthDp)
-                                .padding(32.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = stringResource(MR.strings.no_chapters_error),
-                                color = Color.White.copy(alpha = 0.7f),
-                                fontSize = 14.sp,
-                            )
-                        }
-                    }
-                }
-
-                // Episode list
-                items(
-                    items = episodesToShow,
-                    key = { (it as? EpisodeList.Item)?.episode?.id ?: it.hashCode() },
-                    contentType = { "episode" },
-                ) { item ->
-                    if (item is EpisodeList.Item) {
-                        AnimeEpisodeCardCompact(
-                            anime = anime,
-                            item = item,
-                            selected = item.selected,
-                            isAnyEpisodeSelected = isAnyEpisodeSelected,
-                            episodeSwipeStartAction = episodeSwipeStartAction,
-                            episodeSwipeEndAction = episodeSwipeEndAction,
-                            onClick = {
-                                when (
-                                    resolveAuroraEpisodeClickAction(
-                                        isEpisodeSelected = item.selected,
-                                        isAnyEpisodeSelected = isAnyEpisodeSelected,
-                                    )
-                                ) {
-                                    AuroraEpisodeClickAction.OpenEpisode -> {
-                                        onEpisodeClicked(item.episode, false)
-                                    }
-                                    AuroraEpisodeClickAction.SelectEpisode -> {
-                                        onEpisodeSelected(item, true, true, false)
-                                        if (shouldAutoExpandAuroraEpisodesList(episodesExpanded, episodes.size)) {
-                                            episodesExpanded = true
-                                        }
-                                    }
-                                    AuroraEpisodeClickAction.UnselectEpisode -> {
-                                        onEpisodeSelected(item, false, true, false)
-                                    }
-                                }
-                            },
-                            onLongClick = {
-                                onEpisodeSelected(item, !item.selected, true, true)
-                                if (!item.selected &&
-                                    shouldAutoExpandAuroraEpisodesList(episodesExpanded, episodes.size)
-                                ) {
-                                    episodesExpanded = true
-                                }
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            },
-                            onEpisodeSwipe = { action -> onEpisodeSwipe(item, action) },
-                            onDownloadEpisode = onDownloadEpisode,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .auroraCenteredMaxWidth(contentMaxWidthDp)
-                                .padding(horizontal = 16.dp, vertical = 4.dp),
-                        )
-                    }
-                }
-
-                // Show More button if there are more than 5 episodes
-                if (episodes.size > 5) {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .auroraCenteredMaxWidth(contentMaxWidthDp)
-                                .padding(16.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
+                    // Empty state for episodes
+                    if (episodes.isEmpty()) {
+                        item {
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(
-                                        brush = Brush.linearGradient(
-                                            colors = listOf(
-                                                Color.White.copy(alpha = 0.12f),
-                                                Color.White.copy(alpha = 0.08f),
-                                            ),
-                                        ),
-                                    )
-                                    .clickable { episodesExpanded = !episodesExpanded }
-                                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                                    .fillMaxWidth()
+                                    .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                    .padding(32.dp),
+                                contentAlignment = Alignment.Center,
                             ) {
                                 Text(
-                                    text = if (episodesExpanded) {
-                                        "Показать меньше"
-                                    } else {
-                                        "Показать все ${episodes.size} эпизодов"
-                                    },
-                                    color = colors.accent,
+                                    text = stringResource(MR.strings.no_chapters_error),
+                                    color = Color.White.copy(alpha = 0.7f),
                                     fontSize = 14.sp,
-                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                        }
+                    }
+
+                    // Episode list
+                    items(
+                        items = episodesToShow,
+                        key = { (it as? EpisodeList.Item)?.episode?.id ?: it.hashCode() },
+                        contentType = { "episode" },
+                    ) { item ->
+                        if (item is EpisodeList.Item) {
+                            AnimeEpisodeCardCompact(
+                                anime = anime,
+                                item = item,
+                                selected = item.selected,
+                                isAnyEpisodeSelected = isAnyEpisodeSelected,
+                                episodeSwipeStartAction = episodeSwipeStartAction,
+                                episodeSwipeEndAction = episodeSwipeEndAction,
+                                onClick = {
+                                    when (
+                                        resolveAuroraEpisodeClickAction(
+                                            isEpisodeSelected = item.selected,
+                                            isAnyEpisodeSelected = isAnyEpisodeSelected,
+                                        )
+                                    ) {
+                                        AuroraEpisodeClickAction.OpenEpisode -> {
+                                            onEpisodeClicked(item.episode, false)
+                                        }
+                                        AuroraEpisodeClickAction.SelectEpisode -> {
+                                            onEpisodeSelected(item, true, true, false)
+                                            if (shouldAutoExpandAuroraEpisodesList(episodesExpanded, episodes.size)) {
+                                                episodesExpanded = true
+                                            }
+                                        }
+                                        AuroraEpisodeClickAction.UnselectEpisode -> {
+                                            onEpisodeSelected(item, false, true, false)
+                                        }
+                                    }
+                                },
+                                onLongClick = {
+                                    onEpisodeSelected(item, !item.selected, true, true)
+                                    if (!item.selected &&
+                                        shouldAutoExpandAuroraEpisodesList(episodesExpanded, episodes.size)
+                                    ) {
+                                        episodesExpanded = true
+                                    }
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                },
+                                onEpisodeSwipe = { action -> onEpisodeSwipe(item, action) },
+                                onDownloadEpisode = onDownloadEpisode,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                            )
+                        }
+                    }
+
+                    // Show More button if there are more than 5 episodes
+                    if (episodes.size > 5) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(
+                                            brush = Brush.linearGradient(
+                                                colors = listOf(
+                                                    Color.White.copy(alpha = 0.12f),
+                                                    Color.White.copy(alpha = 0.08f),
+                                                ),
+                                            ),
+                                        )
+                                        .clickable { episodesExpanded = !episodesExpanded }
+                                        .padding(horizontal = 24.dp, vertical = 12.dp),
+                                ) {
+                                    Text(
+                                        text = if (episodesExpanded) {
+                                            "Показать меньше"
+                                        } else {
+                                            "Показать все ${episodes.size} эпизодов"
+                                        },
+                                        color = colors.accent,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Hero content (fixed at bottom of first screen) - fades out on scroll
+            val heroThreshold = (screenHeight.value * 0.7f).toInt()
+            if (!useTwoPaneLayout && firstVisibleItemIndex == 0 && scrollOffset < heroThreshold) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = 0.dp),
+                    contentAlignment = Alignment.BottomStart,
+                ) {
+                    val heroAlpha = (1f - (scrollOffset / heroThreshold.toFloat())).coerceIn(0f, 1f)
+
+                    Box(modifier = Modifier.graphicsLayer { alpha = heroAlpha }) {
+                        AnimeHeroContent(
+                            anime = anime,
+                            episodeCount = episodes.size,
+                            hasWatchingProgress = hasWatchingProgress,
+                            onContinueWatching = onContinueWatching,
+                            onDubbingClicked = onDubbingClicked,
+                            selectedDubbing = selectedDubbing,
+                            animeMetadata = state.animeMetadata,
+                        )
+                    }
+                }
+            }
+
+            // Floating Play button (shows after Hero Content is hidden)
+            val showFab = firstVisibleItemIndex > 0 || scrollOffset > heroThreshold
+            if (!useTwoPaneLayout && showFab && !isAnyEpisodeSelected) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(end = 20.dp, bottom = 20.dp),
+                    contentAlignment = Alignment.BottomEnd,
+                ) {
+                    FloatingActionButton(
+                        onClick = onContinueWatching,
+                        containerColor = colors.accent,
+                        contentColor = colors.textOnAccent,
+                        modifier = Modifier.size(64.dp),
+                    ) {
+                        Icon(
+                            Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(32.dp),
+                        )
+                    }
+                }
+            }
+
+            if (!isAnyEpisodeSelected) {
+                // Top header bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(WindowInsets.statusBars.asPaddingValues())
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    // Back button - Aurora glassmorphism style
+                    AuroraActionButton(
+                        onClick = navigateUp,
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = null,
+                    )
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // Filter button - Aurora glassmorphism style
+                    AuroraActionButton(
+                        onClick = onFilterButtonClicked,
+                        icon = Icons.Default.FilterList,
+                        contentDescription = null,
+                    )
+
+                    // Download menu - Aurora glassmorphism style
+                    if (onDownloadActionClicked != null) {
+                        var downloadExpanded by remember { mutableStateOf(false) }
+                        Box(contentAlignment = Alignment.TopEnd) {
+                            AuroraActionButton(
+                                onClick = { downloadExpanded = !downloadExpanded },
+                                icon = Icons.Filled.Download,
+                                contentDescription = null,
+                            )
+                            EntryDownloadDropdownMenu(
+                                expanded = downloadExpanded,
+                                onDismissRequest = { downloadExpanded = false },
+                                onDownloadClicked = { onDownloadActionClicked.invoke(it) },
+                                isManga = false,
+                                useAuroraStyle = true,
+                            )
+                        }
+                    }
+
+                    // More menu - Aurora glassmorphism style
+                    var showMenu by remember { mutableStateOf(false) }
+                    Box(contentAlignment = Alignment.TopEnd) {
+                        AuroraActionButton(
+                            onClick = { showMenu = !showMenu },
+                            icon = Icons.Default.MoreVert,
+                            contentDescription = null,
+                        )
+                        AuroraEntryDropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false },
+                        ) {
+                            AuroraEntryDropdownMenuItem(
+                                text = stringResource(MR.strings.action_webview_refresh),
+                                onClick = {
+                                    onRefresh()
+                                    showMenu = false
+                                },
+                            )
+                            if (globalSearchQuery != null) {
+                                AuroraEntryDropdownMenuItem(
+                                    text = stringResource(MR.strings.action_global_search),
+                                    onClick = {
+                                        onSearch(globalSearchQuery, true)
+                                        showMenu = false
+                                    },
+                                )
+                            }
+                            if (onShareClicked != null) {
+                                AuroraEntryDropdownMenuItem(
+                                    text = stringResource(MR.strings.action_share),
+                                    onClick = {
+                                        onShareClicked()
+                                        showMenu = false
+                                    },
+                                )
+                            }
+                            if (onSettingsClicked != null) {
+                                AuroraEntryDropdownMenuItem(
+                                    text = stringResource(MR.strings.action_settings),
+                                    onClick = {
+                                        onSettingsClicked()
+                                        showMenu = false
+                                    },
                                 )
                             }
                         }
                     }
                 }
             }
-        }
 
-        // Hero content (fixed at bottom of first screen) - fades out on scroll
-        val heroThreshold = (screenHeight.value * 0.7f).toInt()
-        if (!useTwoPaneLayout && firstVisibleItemIndex == 0 && scrollOffset < heroThreshold) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(bottom = 0.dp),
-                contentAlignment = Alignment.BottomStart,
-            ) {
-                val heroAlpha = (1f - (scrollOffset / heroThreshold.toFloat())).coerceIn(0f, 1f)
-
-                Box(modifier = Modifier.graphicsLayer { alpha = heroAlpha }) {
-                    AnimeHeroContent(
-                        anime = anime,
-                        episodeCount = episodes.size,
-                        hasWatchingProgress = hasWatchingProgress,
-                        onContinueWatching = onContinueWatching,
-                        onDubbingClicked = onDubbingClicked,
-                        selectedDubbing = selectedDubbing,
-                        animeMetadata = state.animeMetadata,
-                    )
-                }
-            }
-        }
-
-        // Floating Play button (shows after Hero Content is hidden)
-        val showFab = firstVisibleItemIndex > 0 || scrollOffset > heroThreshold
-        if (!useTwoPaneLayout && showFab && !isAnyEpisodeSelected) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(end = 20.dp, bottom = 20.dp),
-                contentAlignment = Alignment.BottomEnd,
-            ) {
-                FloatingActionButton(
-                    onClick = onContinueWatching,
-                    containerColor = colors.accent,
-                    contentColor = colors.textOnAccent,
-                    modifier = Modifier.size(64.dp),
+            AuroraEpisodeSelectionBottomStack(
+                selected = selectedEpisodes,
+                onSelectAll = { onAllEpisodeSelected(true) },
+                onInvertSelection = onInvertSelection,
+                onCancel = { onAllEpisodeSelected(false) },
+                onEpisodeClicked = onEpisodeClicked,
+                onMultiBookmarkClicked = onMultiBookmarkClicked,
+                onMultiFillermarkClicked = onMultiFillermarkClicked,
+                onMultiMarkAsSeenClicked = onMultiMarkAsSeenClicked,
+                onMarkPreviousAsSeenClicked = onMarkPreviousAsSeenClicked,
+                onDownloadEpisode = onDownloadEpisode,
+                onMultiDeleteClicked = onMultiDeleteClicked,
+                fillFraction = if (auroraSelectionControlsPlacement() == AuroraSelectionControlsPlacement.BottomStack &&
+                    useTwoPaneLayout
                 ) {
-                    Icon(
-                        Icons.Filled.PlayArrow,
-                        contentDescription = null,
-                        modifier = Modifier.size(32.dp),
-                    )
-                }
-            }
-        }
-
-        if (!isAnyEpisodeSelected) {
-            // Top header bar
-            Row(
+                    0.5f
+                } else {
+                    1f
+                },
+                alwaysUseExternalPlayer = alwaysUseExternalPlayer,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(WindowInsets.statusBars.asPaddingValues())
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                // Back button - Aurora glassmorphism style
-                AuroraActionButton(
-                    onClick = navigateUp,
-                    icon = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = null,
-                )
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                // Filter button - Aurora glassmorphism style
-                AuroraActionButton(
-                    onClick = onFilterButtonClicked,
-                    icon = Icons.Default.FilterList,
-                    contentDescription = null,
-                )
-
-                // Download menu - Aurora glassmorphism style
-                if (onDownloadActionClicked != null) {
-                    var downloadExpanded by remember { mutableStateOf(false) }
-                    Box(contentAlignment = Alignment.TopEnd) {
-                        AuroraActionButton(
-                            onClick = { downloadExpanded = !downloadExpanded },
-                            icon = Icons.Filled.Download,
-                            contentDescription = null,
-                        )
-                        EntryDownloadDropdownMenu(
-                            expanded = downloadExpanded,
-                            onDismissRequest = { downloadExpanded = false },
-                            onDownloadClicked = { onDownloadActionClicked.invoke(it) },
-                            isManga = false,
-                            useAuroraStyle = true,
-                        )
-                    }
-                }
-
-                // More menu - Aurora glassmorphism style
-                var showMenu by remember { mutableStateOf(false) }
-                Box(contentAlignment = Alignment.TopEnd) {
-                    AuroraActionButton(
-                        onClick = { showMenu = !showMenu },
-                        icon = Icons.Default.MoreVert,
-                        contentDescription = null,
-                    )
-                    AuroraEntryDropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false },
-                    ) {
-                        AuroraEntryDropdownMenuItem(
-                            text = stringResource(MR.strings.action_webview_refresh),
-                            onClick = {
-                                onRefresh()
-                                showMenu = false
-                            },
-                        )
-                        if (onShareClicked != null) {
-                            AuroraEntryDropdownMenuItem(
-                                text = stringResource(MR.strings.action_share),
-                                onClick = {
-                                    onShareClicked()
-                                    showMenu = false
-                                },
-                            )
-                        }
-                        if (onSettingsClicked != null) {
-                            AuroraEntryDropdownMenuItem(
-                                text = stringResource(MR.strings.action_settings),
-                                onClick = {
-                                    onSettingsClicked()
-                                    showMenu = false
-                                },
-                            )
-                        }
-                    }
-                }
-            }
+                    .align(if (useTwoPaneLayout) Alignment.BottomEnd else Alignment.BottomCenter)
+                    .padding(WindowInsets.systemBars.asPaddingValues()),
+            )
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(WindowInsets.systemBars.asPaddingValues()),
+            )
         }
-
-        AuroraEpisodeSelectionBottomStack(
-            selected = selectedEpisodes,
-            onSelectAll = { onAllEpisodeSelected(true) },
-            onInvertSelection = onInvertSelection,
-            onCancel = { onAllEpisodeSelected(false) },
-            onEpisodeClicked = onEpisodeClicked,
-            onMultiBookmarkClicked = onMultiBookmarkClicked,
-            onMultiFillermarkClicked = onMultiFillermarkClicked,
-            onMultiMarkAsSeenClicked = onMultiMarkAsSeenClicked,
-            onMarkPreviousAsSeenClicked = onMarkPreviousAsSeenClicked,
-            onDownloadEpisode = onDownloadEpisode,
-            onMultiDeleteClicked = onMultiDeleteClicked,
-            fillFraction = if (auroraSelectionControlsPlacement() == AuroraSelectionControlsPlacement.BottomStack &&
-                useTwoPaneLayout
-            ) {
-                0.5f
-            } else {
-                1f
-            },
-            alwaysUseExternalPlayer = alwaysUseExternalPlayer,
-            modifier = Modifier
-                .align(if (useTwoPaneLayout) Alignment.BottomEnd else Alignment.BottomCenter)
-                .padding(WindowInsets.systemBars.asPaddingValues()),
-        )
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(WindowInsets.systemBars.asPaddingValues()),
-        )
     }
 }
 

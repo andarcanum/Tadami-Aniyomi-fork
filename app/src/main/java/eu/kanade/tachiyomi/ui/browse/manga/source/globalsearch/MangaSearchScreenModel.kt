@@ -204,7 +204,7 @@ abstract class MangaSearchScreenModel(
     data class State(
         val fromSourceId: Long? = null,
         val searchQuery: String? = null,
-        val sourceFilter: MangaSourceFilter = MangaSourceFilter.PinnedOnly,
+        val sourceFilter: MangaSourceFilter = MangaSourceFilter.All,
         val onlyShowHasResults: Boolean = false,
         val items: PersistentMap<CatalogueSource, MangaSearchItemResult> = persistentMapOf(),
     ) {

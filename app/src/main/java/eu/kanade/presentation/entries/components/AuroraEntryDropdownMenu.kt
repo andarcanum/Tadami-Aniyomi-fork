@@ -1,7 +1,6 @@
 package eu.kanade.presentation.entries.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -11,7 +10,6 @@ import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
@@ -32,15 +30,15 @@ fun AuroraEntryDropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismissRequest,
         offset = DpOffset(x = 0.dp, y = 8.dp),
-        modifier = modifier
-            .widthIn(min = 168.dp, max = 236.dp)
-            .clip(shape)
-            .background(colors.surface.copy(alpha = 0.92f), shape)
-            .border(
-                width = 1.dp,
-                color = colors.accent.copy(alpha = 0.26f),
-                shape = shape,
-            ),
+        shape = shape,
+        containerColor = colors.surface.copy(alpha = 0.92f),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = colors.accent.copy(alpha = 0.26f),
+        ),
+        modifier = modifier.widthIn(min = 168.dp, max = 236.dp),
         content = content,
     )
 }

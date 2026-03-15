@@ -69,7 +69,9 @@ import eu.kanade.presentation.components.EntryDownloadDropdownMenu
 import eu.kanade.presentation.entries.DownloadAction
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
+import eu.kanade.presentation.entries.components.AuroraEntryHoldToRefresh
 import eu.kanade.presentation.entries.components.EntryBottomActionMenu
+import eu.kanade.presentation.entries.components.normalizeAuroraGlobalSearchQuery
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadAction
 import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
 import eu.kanade.presentation.entries.manga.components.aurora.ChaptersHeader
@@ -135,6 +137,7 @@ fun MangaScreenAuroraImpl(
     onSettingsClicked: (() -> Unit)?,
 ) {
     val manga = state.manga
+    val globalSearchQuery = remember(manga.title) { normalizeAuroraGlobalSearchQuery(manga.title) }
     val chapters = state.chapterListItems
     val selectedChapters = remember(chapters) {
         chapters.filterIsInstance<ChapterList.Item>().filter { it.selected }
@@ -192,29 +195,239 @@ fun MangaScreenAuroraImpl(
     var descriptionExpanded by remember { mutableStateOf(false) }
     var genresExpanded by remember { mutableStateOf(false) }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        // Fixed background poster
-        FullscreenPosterBackground(
-            manga = manga,
-            scrollOffset = scrollOffset,
-            firstVisibleItemIndex = firstVisibleItemIndex,
-        )
+    AuroraEntryHoldToRefresh(
+        refreshing = state.isRefreshingData,
+        onRefresh = onRefresh,
+        enabled = !isAnyChapterSelected,
+        modifier = Modifier.fillMaxSize(),
+        indicatorPadding = WindowInsets.statusBars.asPaddingValues(),
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            // Fixed background poster
+            FullscreenPosterBackground(
+                manga = manga,
+                scrollOffset = scrollOffset,
+                firstVisibleItemIndex = firstVisibleItemIndex,
+            )
 
-        if (useTwoPaneLayout) {
-            val topContentPadding = 96.dp
-            TwoPanelBox(
-                modifier = Modifier.fillMaxSize(),
-                startContent = {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(start = 12.dp, end = 6.dp, top = topContentPadding, bottom = 20.dp)
-                            .verticalScroll(rememberScrollState()),
-                    ) {
+            if (useTwoPaneLayout) {
+                val topContentPadding = 96.dp
+                TwoPanelBox(
+                    modifier = Modifier.fillMaxSize(),
+                    startContent = {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(start = 12.dp, end = 6.dp, top = topContentPadding, bottom = 20.dp)
+                                .verticalScroll(rememberScrollState()),
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .auroraCenteredMaxWidth(420)
+                                    .animateContentSize(
+                                        animationSpec = spring(
+                                            dampingRatio = Spring.DampingRatioNoBouncy,
+                                            stiffness = Spring.StiffnessLow,
+                                        ),
+                                        alignment = Alignment.TopStart,
+                                    ),
+                            ) {
+                                MangaHeroContent(
+                                    manga = manga,
+                                    chapterCount = chapters.size,
+                                    hasReadingProgress = hasReadingProgress,
+                                    onContinueReading = onContinueReading,
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                MangaInfoCard(
+                                    manga = manga,
+                                    chapterCount = chapters.size,
+                                    nextUpdate = nextUpdate,
+                                    onTagSearch = onTagSearch,
+                                    descriptionExpanded = descriptionExpanded,
+                                    genresExpanded = genresExpanded,
+                                    onToggleDescription = {
+                                        descriptionExpanded = !descriptionExpanded
+                                        if (descriptionExpanded) {
+                                            scope.launch {
+                                                statsBringIntoViewRequester.bringIntoView()
+                                            }
+                                        }
+                                    },
+                                    onToggleGenres = { genresExpanded = !genresExpanded },
+                                    statsRequester = statsBringIntoViewRequester,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                MangaActionCard(
+                                    manga = manga,
+                                    trackingCount = state.trackingCount,
+                                    onAddToLibraryClicked = onAddToLibraryClicked,
+                                    onWebViewClicked = onWebViewClicked,
+                                    onTrackingClicked = onTrackingClicked,
+                                    onShareClicked = onShareClicked,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Spacer(modifier = Modifier.height(24.dp))
+                            }
+                        }
+                    },
+                    endContent = {
+                        LazyColumn(
+                            state = lazyListState,
+                            contentPadding = PaddingValues(top = topContentPadding, bottom = 100.dp),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(start = 6.dp, end = 12.dp),
+                        ) {
+                            item {
+                                ChaptersHeader(chapterCount = chapters.size)
+                            }
+
+                            if (showScanlatorSelector) {
+                                item {
+                                    ScanlatorBranchSelector(
+                                        scanlatorChapterCounts = scanlatorChapterCounts,
+                                        selectedScanlator = selectedScanlator,
+                                        onScanlatorSelected = onScanlatorSelected,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    )
+                                }
+                            }
+
+                            if (chapters.isEmpty()) {
+                                item {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(32.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            text = stringResource(MR.strings.no_chapters_error),
+                                            color = Color.White.copy(alpha = 0.7f),
+                                            fontSize = 14.sp,
+                                        )
+                                    }
+                                }
+                            }
+
+                            items(
+                                items = chaptersToShow,
+                                key = { (it as? ChapterList.Item)?.chapter?.id ?: it.hashCode() },
+                                contentType = { "chapter" },
+                            ) { item ->
+                                if (item is ChapterList.Item) {
+                                    MangaChapterCardCompact(
+                                        manga = manga,
+                                        item = item,
+                                        selected = item.selected,
+                                        isAnyChapterSelected = isAnyChapterSelected,
+                                        chapterSwipeStartAction = chapterSwipeStartAction,
+                                        chapterSwipeEndAction = chapterSwipeEndAction,
+                                        onChapterClicked = {
+                                            when (
+                                                resolveAuroraChapterClickAction(
+                                                    isChapterSelected = item.selected,
+                                                    isAnyChapterSelected = isAnyChapterSelected,
+                                                )
+                                            ) {
+                                                AuroraChapterClickAction.OpenChapter -> {
+                                                    onChapterClicked(item.chapter)
+                                                }
+                                                AuroraChapterClickAction.SelectChapter -> {
+                                                    onChapterSelected(item, true, true, false)
+                                                    if (shouldAutoExpandAuroraChaptersList(
+                                                            chaptersExpanded,
+                                                            chapters.size,
+                                                        )
+                                                    ) {
+                                                        chaptersExpanded = true
+                                                    }
+                                                }
+                                                AuroraChapterClickAction.UnselectChapter -> {
+                                                    onChapterSelected(item, false, true, false)
+                                                }
+                                            }
+                                        },
+                                        onLongClick = {
+                                            onChapterSelected(item, !item.selected, true, true)
+                                            if (!item.selected &&
+                                                shouldAutoExpandAuroraChaptersList(chaptersExpanded, chapters.size)
+                                            ) {
+                                                chaptersExpanded = true
+                                            }
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        },
+                                        onChapterSwipe = { action -> onChapterSwipe(item, action) },
+                                        onDownloadChapter = onDownloadChapter,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    )
+                                }
+                            }
+
+                            if (chapters.size > 5) {
+                                item {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(16.dp))
+                                                .background(
+                                                    brush = Brush.linearGradient(
+                                                        colors = listOf(
+                                                            Color.White.copy(alpha = 0.12f),
+                                                            Color.White.copy(alpha = 0.08f),
+                                                        ),
+                                                    ),
+                                                )
+                                                .clickable { chaptersExpanded = !chaptersExpanded }
+                                                .padding(horizontal = 24.dp, vertical = 12.dp),
+                                        ) {
+                                            Text(
+                                                text = if (chaptersExpanded) {
+                                                    "Показать меньше"
+                                                } else {
+                                                    "Показать все ${chapters.size} глав"
+                                                },
+                                                color = colors.accent,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                )
+            } else {
+                // Scrollable content
+                LazyColumn(
+                    state = lazyListState,
+                    contentPadding = PaddingValues(bottom = 100.dp),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    // Spacer for poster/hero area
+                    item {
+                        Spacer(modifier = Modifier.height(screenHeight))
+                    }
+
+                    // Info and Action cards merged into one item for layout stability
+                    item {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .auroraCenteredMaxWidth(420)
+                                .auroraCenteredMaxWidth(contentMaxWidthDp)
                                 .animateContentSize(
                                     animationSpec = spring(
                                         dampingRatio = Spring.DampingRatioNoBouncy,
@@ -223,13 +436,7 @@ fun MangaScreenAuroraImpl(
                                     alignment = Alignment.TopStart,
                                 ),
                         ) {
-                            MangaHeroContent(
-                                manga = manga,
-                                chapterCount = chapters.size,
-                                hasReadingProgress = hasReadingProgress,
-                                onContinueReading = onContinueReading,
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
                             MangaInfoCard(
                                 manga = manga,
                                 chapterCount = chapters.size,
@@ -249,6 +456,7 @@ fun MangaScreenAuroraImpl(
                                 statsRequester = statsBringIntoViewRequester,
                                 modifier = Modifier.fillMaxWidth(),
                             )
+
                             Spacer(modifier = Modifier.height(12.dp))
                             MangaActionCard(
                                 manga = manga,
@@ -259,501 +467,313 @@ fun MangaScreenAuroraImpl(
                                 onShareClicked = onShareClicked,
                                 modifier = Modifier.fillMaxWidth(),
                             )
-                            Spacer(modifier = Modifier.height(24.dp))
                         }
                     }
-                },
-                endContent = {
-                    LazyColumn(
-                        state = lazyListState,
-                        contentPadding = PaddingValues(top = topContentPadding, bottom = 100.dp),
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(start = 6.dp, end = 12.dp),
-                    ) {
-                        item {
-                            ChaptersHeader(chapterCount = chapters.size)
-                        }
 
-                        if (showScanlatorSelector) {
-                            item {
-                                ScanlatorBranchSelector(
-                                    scanlatorChapterCounts = scanlatorChapterCounts,
-                                    selectedScanlator = selectedScanlator,
-                                    onScanlatorSelected = onScanlatorSelected,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                                )
-                            }
-                        }
-
-                        if (chapters.isEmpty()) {
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(32.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text(
-                                        text = stringResource(MR.strings.no_chapters_error),
-                                        color = Color.White.copy(alpha = 0.7f),
-                                        fontSize = 14.sp,
-                                    )
-                                }
-                            }
-                        }
-
-                        items(
-                            items = chaptersToShow,
-                            key = { (it as? ChapterList.Item)?.chapter?.id ?: it.hashCode() },
-                            contentType = { "chapter" },
-                        ) { item ->
-                            if (item is ChapterList.Item) {
-                                MangaChapterCardCompact(
-                                    manga = manga,
-                                    item = item,
-                                    selected = item.selected,
-                                    isAnyChapterSelected = isAnyChapterSelected,
-                                    chapterSwipeStartAction = chapterSwipeStartAction,
-                                    chapterSwipeEndAction = chapterSwipeEndAction,
-                                    onChapterClicked = {
-                                        when (
-                                            resolveAuroraChapterClickAction(
-                                                isChapterSelected = item.selected,
-                                                isAnyChapterSelected = isAnyChapterSelected,
-                                            )
-                                        ) {
-                                            AuroraChapterClickAction.OpenChapter -> {
-                                                onChapterClicked(item.chapter)
-                                            }
-                                            AuroraChapterClickAction.SelectChapter -> {
-                                                onChapterSelected(item, true, true, false)
-                                                if (shouldAutoExpandAuroraChaptersList(
-                                                        chaptersExpanded,
-                                                        chapters.size,
-                                                    )
-                                                ) {
-                                                    chaptersExpanded = true
-                                                }
-                                            }
-                                            AuroraChapterClickAction.UnselectChapter -> {
-                                                onChapterSelected(item, false, true, false)
-                                            }
-                                        }
-                                    },
-                                    onLongClick = {
-                                        onChapterSelected(item, !item.selected, true, true)
-                                        if (!item.selected &&
-                                            shouldAutoExpandAuroraChaptersList(chaptersExpanded, chapters.size)
-                                        ) {
-                                            chaptersExpanded = true
-                                        }
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    },
-                                    onChapterSwipe = { action -> onChapterSwipe(item, action) },
-                                    onDownloadChapter = onDownloadChapter,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                                )
-                            }
-                        }
-
-                        if (chapters.size > 5) {
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .background(
-                                                brush = Brush.linearGradient(
-                                                    colors = listOf(
-                                                        Color.White.copy(alpha = 0.12f),
-                                                        Color.White.copy(alpha = 0.08f),
-                                                    ),
-                                                ),
-                                            )
-                                            .clickable { chaptersExpanded = !chaptersExpanded }
-                                            .padding(horizontal = 24.dp, vertical = 12.dp),
-                                    ) {
-                                        Text(
-                                            text = if (chaptersExpanded) {
-                                                "Показать меньше"
-                                            } else {
-                                                "Показать все ${chapters.size} глав"
-                                            },
-                                            color = colors.accent,
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-            )
-        } else {
-            // Scrollable content
-            LazyColumn(
-                state = lazyListState,
-                contentPadding = PaddingValues(bottom = 100.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                // Spacer for poster/hero area
-                item {
-                    Spacer(modifier = Modifier.height(screenHeight))
-                }
-
-                // Info and Action cards merged into one item for layout stability
-                item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .auroraCenteredMaxWidth(contentMaxWidthDp)
-                            .animateContentSize(
-                                animationSpec = spring(
-                                    dampingRatio = Spring.DampingRatioNoBouncy,
-                                    stiffness = Spring.StiffnessLow,
-                                ),
-                                alignment = Alignment.TopStart,
-                            ),
-                    ) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        MangaInfoCard(
-                            manga = manga,
+                    // Chapters header
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        ChaptersHeader(
                             chapterCount = chapters.size,
-                            nextUpdate = nextUpdate,
-                            onTagSearch = onTagSearch,
-                            descriptionExpanded = descriptionExpanded,
-                            genresExpanded = genresExpanded,
-                            onToggleDescription = {
-                                descriptionExpanded = !descriptionExpanded
-                                if (descriptionExpanded) {
-                                    scope.launch {
-                                        statsBringIntoViewRequester.bringIntoView()
-                                    }
-                                }
-                            },
-                            onToggleGenres = { genresExpanded = !genresExpanded },
-                            statsRequester = statsBringIntoViewRequester,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-                        MangaActionCard(
-                            manga = manga,
-                            trackingCount = state.trackingCount,
-                            onAddToLibraryClicked = onAddToLibraryClicked,
-                            onWebViewClicked = onWebViewClicked,
-                            onTrackingClicked = onTrackingClicked,
-                            onShareClicked = onShareClicked,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
                         )
                     }
-                }
 
-                // Chapters header
-                item {
-                    Spacer(modifier = Modifier.height(20.dp))
-                    ChaptersHeader(
-                        chapterCount = chapters.size,
-                        modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
-                    )
-                }
-
-                if (showScanlatorSelector) {
-                    item {
-                        ScanlatorBranchSelector(
-                            scanlatorChapterCounts = scanlatorChapterCounts,
-                            selectedScanlator = selectedScanlator,
-                            onScanlatorSelected = onScanlatorSelected,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .auroraCenteredMaxWidth(contentMaxWidthDp)
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                        )
-                    }
-                }
-
-                // Empty state for chapters
-                if (chapters.isEmpty()) {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .auroraCenteredMaxWidth(contentMaxWidthDp)
-                                .padding(32.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = stringResource(MR.strings.no_chapters_error),
-                                color = Color.White.copy(alpha = 0.7f),
-                                fontSize = 14.sp,
+                    if (showScanlatorSelector) {
+                        item {
+                            ScanlatorBranchSelector(
+                                scanlatorChapterCounts = scanlatorChapterCounts,
+                                selectedScanlator = selectedScanlator,
+                                onScanlatorSelected = onScanlatorSelected,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
                             )
                         }
                     }
-                }
 
-                // Chapter list
-                items(
-                    items = chaptersToShow,
-                    key = { (it as? ChapterList.Item)?.chapter?.id ?: it.hashCode() },
-                    contentType = { "chapter" },
-                ) { item ->
-                    if (item is ChapterList.Item) {
-                        MangaChapterCardCompact(
-                            manga = manga,
-                            item = item,
-                            selected = item.selected,
-                            isAnyChapterSelected = isAnyChapterSelected,
-                            chapterSwipeStartAction = chapterSwipeStartAction,
-                            chapterSwipeEndAction = chapterSwipeEndAction,
-                            onChapterClicked = {
-                                when (
-                                    resolveAuroraChapterClickAction(
-                                        isChapterSelected = item.selected,
-                                        isAnyChapterSelected = isAnyChapterSelected,
-                                    )
-                                ) {
-                                    AuroraChapterClickAction.OpenChapter -> {
-                                        onChapterClicked(item.chapter)
-                                    }
-                                    AuroraChapterClickAction.SelectChapter -> {
-                                        onChapterSelected(item, true, true, false)
-                                        if (shouldAutoExpandAuroraChaptersList(chaptersExpanded, chapters.size)) {
-                                            chaptersExpanded = true
-                                        }
-                                    }
-                                    AuroraChapterClickAction.UnselectChapter -> {
-                                        onChapterSelected(item, false, true, false)
-                                    }
-                                }
-                            },
-                            onLongClick = {
-                                onChapterSelected(item, !item.selected, true, true)
-                                if (!item.selected &&
-                                    shouldAutoExpandAuroraChaptersList(chaptersExpanded, chapters.size)
-                                ) {
-                                    chaptersExpanded = true
-                                }
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            },
-                            onChapterSwipe = { action -> onChapterSwipe(item, action) },
-                            onDownloadChapter = onDownloadChapter,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .auroraCenteredMaxWidth(contentMaxWidthDp)
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                        )
-                    }
-                }
-
-                // Show More button if there are more than 5 chapters
-                if (chapters.size > 5) {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .auroraCenteredMaxWidth(contentMaxWidthDp)
-                                .padding(16.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
+                    // Empty state for chapters
+                    if (chapters.isEmpty()) {
+                        item {
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(
-                                        brush = Brush.linearGradient(
-                                            colors = listOf(
-                                                Color.White.copy(alpha = 0.12f),
-                                                Color.White.copy(alpha = 0.08f),
-                                            ),
-                                        ),
-                                    )
-                                    .clickable { chaptersExpanded = !chaptersExpanded }
-                                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                                    .fillMaxWidth()
+                                    .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                    .padding(32.dp),
+                                contentAlignment = Alignment.Center,
                             ) {
                                 Text(
-                                    text = if (chaptersExpanded) {
-                                        "Показать меньше"
-                                    } else {
-                                        "Показать все ${chapters.size} глав"
-                                    },
-                                    color = colors.accent,
+                                    text = stringResource(MR.strings.no_chapters_error),
+                                    color = Color.White.copy(alpha = 0.7f),
                                     fontSize = 14.sp,
-                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                        }
+                    }
+
+                    // Chapter list
+                    items(
+                        items = chaptersToShow,
+                        key = { (it as? ChapterList.Item)?.chapter?.id ?: it.hashCode() },
+                        contentType = { "chapter" },
+                    ) { item ->
+                        if (item is ChapterList.Item) {
+                            MangaChapterCardCompact(
+                                manga = manga,
+                                item = item,
+                                selected = item.selected,
+                                isAnyChapterSelected = isAnyChapterSelected,
+                                chapterSwipeStartAction = chapterSwipeStartAction,
+                                chapterSwipeEndAction = chapterSwipeEndAction,
+                                onChapterClicked = {
+                                    when (
+                                        resolveAuroraChapterClickAction(
+                                            isChapterSelected = item.selected,
+                                            isAnyChapterSelected = isAnyChapterSelected,
+                                        )
+                                    ) {
+                                        AuroraChapterClickAction.OpenChapter -> {
+                                            onChapterClicked(item.chapter)
+                                        }
+                                        AuroraChapterClickAction.SelectChapter -> {
+                                            onChapterSelected(item, true, true, false)
+                                            if (shouldAutoExpandAuroraChaptersList(chaptersExpanded, chapters.size)) {
+                                                chaptersExpanded = true
+                                            }
+                                        }
+                                        AuroraChapterClickAction.UnselectChapter -> {
+                                            onChapterSelected(item, false, true, false)
+                                        }
+                                    }
+                                },
+                                onLongClick = {
+                                    onChapterSelected(item, !item.selected, true, true)
+                                    if (!item.selected &&
+                                        shouldAutoExpandAuroraChaptersList(chaptersExpanded, chapters.size)
+                                    ) {
+                                        chaptersExpanded = true
+                                    }
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                },
+                                onChapterSwipe = { action -> onChapterSwipe(item, action) },
+                                onDownloadChapter = onDownloadChapter,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                            )
+                        }
+                    }
+
+                    // Show More button if there are more than 5 chapters
+                    if (chapters.size > 5) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(
+                                            brush = Brush.linearGradient(
+                                                colors = listOf(
+                                                    Color.White.copy(alpha = 0.12f),
+                                                    Color.White.copy(alpha = 0.08f),
+                                                ),
+                                            ),
+                                        )
+                                        .clickable { chaptersExpanded = !chaptersExpanded }
+                                        .padding(horizontal = 24.dp, vertical = 12.dp),
+                                ) {
+                                    Text(
+                                        text = if (chaptersExpanded) {
+                                            "Показать меньше"
+                                        } else {
+                                            "Показать все ${chapters.size} глав"
+                                        },
+                                        color = colors.accent,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Hero content (fixed at bottom of first screen) - fades out on scroll
+            // Show when we haven't scrolled much (index 0 with scroll less than 70% of screen height)
+            val heroThreshold = (screenHeight.value * 0.7f).toInt()
+            if (!useTwoPaneLayout && firstVisibleItemIndex == 0 && scrollOffset < heroThreshold) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = 0.dp),
+                    contentAlignment = Alignment.BottomStart,
+                ) {
+                    // Calculate fade out alpha based on scroll (0-70% range)
+                    val heroAlpha = (1f - (scrollOffset / heroThreshold.toFloat())).coerceIn(0f, 1f)
+
+                    Box(modifier = Modifier.graphicsLayer { alpha = heroAlpha }) {
+                        MangaHeroContent(
+                            manga = manga,
+                            chapterCount = chapters.size,
+                            hasReadingProgress = hasReadingProgress,
+                            onContinueReading = onContinueReading,
+                        )
+                    }
+                }
+            }
+
+            // Floating Play button (shows after Hero Content is hidden)
+            val showFab = firstVisibleItemIndex > 0 || scrollOffset > heroThreshold
+            if (!useTwoPaneLayout && showFab && !isAnyChapterSelected) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(end = 20.dp, bottom = 20.dp),
+                    contentAlignment = Alignment.BottomEnd,
+                ) {
+                    androidx.compose.material3.FloatingActionButton(
+                        onClick = onContinueReading,
+                        containerColor = colors.accent,
+                        contentColor = colors.textOnAccent,
+                        modifier = Modifier.size(64.dp),
+                    ) {
+                        Icon(
+                            Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(32.dp),
+                        )
+                    }
+                }
+            }
+
+            if (!isAnyChapterSelected) {
+                // Top header bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(WindowInsets.statusBars.asPaddingValues())
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    // Back button - Aurora glassmorphism style
+                    AuroraActionButton(
+                        onClick = navigateUp,
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = null,
+                    )
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // Filter button - Aurora glassmorphism style
+                    AuroraActionButton(
+                        onClick = onFilterButtonClicked,
+                        icon = Icons.Default.FilterList,
+                        contentDescription = null,
+                        iconTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f),
+                    )
+
+                    // Download menu - Aurora glassmorphism style
+                    if (onDownloadActionClicked != null) {
+                        var downloadExpanded by remember { mutableStateOf(false) }
+                        Box(contentAlignment = Alignment.TopEnd) {
+                            AuroraActionButton(
+                                onClick = { downloadExpanded = !downloadExpanded },
+                                icon = Icons.Filled.Download,
+                                contentDescription = null,
+                            )
+                            EntryDownloadDropdownMenu(
+                                expanded = downloadExpanded,
+                                onDismissRequest = { downloadExpanded = false },
+                                onDownloadClicked = { onDownloadActionClicked.invoke(it) },
+                                isManga = true,
+                                useAuroraStyle = true,
+                            )
+                        }
+                    }
+
+                    // More menu - Aurora glassmorphism style
+                    var showMenu by remember { mutableStateOf(false) }
+                    Box(contentAlignment = Alignment.TopEnd) {
+                        AuroraActionButton(
+                            onClick = { showMenu = !showMenu },
+                            icon = Icons.Default.MoreVert,
+                            contentDescription = null,
+                        )
+                        AuroraEntryDropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false },
+                        ) {
+                            AuroraEntryDropdownMenuItem(
+                                text = stringResource(MR.strings.action_webview_refresh),
+                                onClick = {
+                                    onRefresh()
+                                    showMenu = false
+                                },
+                            )
+                            if (globalSearchQuery != null) {
+                                AuroraEntryDropdownMenuItem(
+                                    text = stringResource(MR.strings.action_global_search),
+                                    onClick = {
+                                        onSearch(globalSearchQuery, true)
+                                        showMenu = false
+                                    },
+                                )
+                            }
+                            if (onShareClicked != null) {
+                                AuroraEntryDropdownMenuItem(
+                                    text = stringResource(MR.strings.action_share),
+                                    onClick = {
+                                        onShareClicked()
+                                        showMenu = false
+                                    },
+                                )
+                            }
+                            if (onSettingsClicked != null) {
+                                AuroraEntryDropdownMenuItem(
+                                    text = stringResource(MR.strings.action_settings),
+                                    onClick = {
+                                        onSettingsClicked()
+                                        showMenu = false
+                                    },
                                 )
                             }
                         }
                     }
                 }
             }
-        }
 
-        // Hero content (fixed at bottom of first screen) - fades out on scroll
-        // Show when we haven't scrolled much (index 0 with scroll less than 70% of screen height)
-        val heroThreshold = (screenHeight.value * 0.7f).toInt()
-        if (!useTwoPaneLayout && firstVisibleItemIndex == 0 && scrollOffset < heroThreshold) {
-            Box(
+            AuroraChapterSelectionBottomStack(
+                selected = selectedChapters,
+                onSelectAll = { onAllChapterSelected(true) },
+                onInvertSelection = onInvertSelection,
+                onCancel = { onAllChapterSelected(false) },
+                onMultiBookmarkClicked = onMultiBookmarkClicked,
+                onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
+                onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
+                onDownloadChapter = onDownloadChapter,
+                onMultiDeleteClicked = onMultiDeleteClicked,
+                fillFraction = if (useTwoPaneLayout) 0.5f else 1f,
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(bottom = 0.dp),
-                contentAlignment = Alignment.BottomStart,
-            ) {
-                // Calculate fade out alpha based on scroll (0-70% range)
-                val heroAlpha = (1f - (scrollOffset / heroThreshold.toFloat())).coerceIn(0f, 1f)
-
-                Box(modifier = Modifier.graphicsLayer { alpha = heroAlpha }) {
-                    MangaHeroContent(
-                        manga = manga,
-                        chapterCount = chapters.size,
-                        hasReadingProgress = hasReadingProgress,
-                        onContinueReading = onContinueReading,
-                    )
-                }
-            }
-        }
-
-        // Floating Play button (shows after Hero Content is hidden)
-        val showFab = firstVisibleItemIndex > 0 || scrollOffset > heroThreshold
-        if (!useTwoPaneLayout && showFab && !isAnyChapterSelected) {
-            Box(
+                    .align(if (useTwoPaneLayout) Alignment.BottomEnd else Alignment.BottomCenter)
+                    .padding(WindowInsets.systemBars.asPaddingValues()),
+            )
+            SnackbarHost(
+                hostState = snackbarHostState,
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(end = 20.dp, bottom = 20.dp),
-                contentAlignment = Alignment.BottomEnd,
-            ) {
-                androidx.compose.material3.FloatingActionButton(
-                    onClick = onContinueReading,
-                    containerColor = colors.accent,
-                    contentColor = colors.textOnAccent,
-                    modifier = Modifier.size(64.dp),
-                ) {
-                    Icon(
-                        Icons.Filled.PlayArrow,
-                        contentDescription = null,
-                        modifier = Modifier.size(32.dp),
-                    )
-                }
-            }
+                    .align(Alignment.BottomCenter)
+                    .padding(WindowInsets.systemBars.asPaddingValues()),
+            )
         }
-
-        if (!isAnyChapterSelected) {
-            // Top header bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(WindowInsets.statusBars.asPaddingValues())
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                // Back button - Aurora glassmorphism style
-                AuroraActionButton(
-                    onClick = navigateUp,
-                    icon = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = null,
-                )
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                // Filter button - Aurora glassmorphism style
-                AuroraActionButton(
-                    onClick = onFilterButtonClicked,
-                    icon = Icons.Default.FilterList,
-                    contentDescription = null,
-                    iconTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f),
-                )
-
-                // Download menu - Aurora glassmorphism style
-                if (onDownloadActionClicked != null) {
-                    var downloadExpanded by remember { mutableStateOf(false) }
-                    Box(contentAlignment = Alignment.TopEnd) {
-                        AuroraActionButton(
-                            onClick = { downloadExpanded = !downloadExpanded },
-                            icon = Icons.Filled.Download,
-                            contentDescription = null,
-                        )
-                        EntryDownloadDropdownMenu(
-                            expanded = downloadExpanded,
-                            onDismissRequest = { downloadExpanded = false },
-                            onDownloadClicked = { onDownloadActionClicked.invoke(it) },
-                            isManga = true,
-                            useAuroraStyle = true,
-                        )
-                    }
-                }
-
-                // More menu - Aurora glassmorphism style
-                var showMenu by remember { mutableStateOf(false) }
-                Box(contentAlignment = Alignment.TopEnd) {
-                    AuroraActionButton(
-                        onClick = { showMenu = !showMenu },
-                        icon = Icons.Default.MoreVert,
-                        contentDescription = null,
-                    )
-                    AuroraEntryDropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false },
-                    ) {
-                        AuroraEntryDropdownMenuItem(
-                            text = stringResource(MR.strings.action_webview_refresh),
-                            onClick = {
-                                onRefresh()
-                                showMenu = false
-                            },
-                        )
-                        if (onShareClicked != null) {
-                            AuroraEntryDropdownMenuItem(
-                                text = stringResource(MR.strings.action_share),
-                                onClick = {
-                                    onShareClicked()
-                                    showMenu = false
-                                },
-                            )
-                        }
-                        if (onSettingsClicked != null) {
-                            AuroraEntryDropdownMenuItem(
-                                text = stringResource(MR.strings.action_settings),
-                                onClick = {
-                                    onSettingsClicked()
-                                    showMenu = false
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        AuroraChapterSelectionBottomStack(
-            selected = selectedChapters,
-            onSelectAll = { onAllChapterSelected(true) },
-            onInvertSelection = onInvertSelection,
-            onCancel = { onAllChapterSelected(false) },
-            onMultiBookmarkClicked = onMultiBookmarkClicked,
-            onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
-            onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
-            onDownloadChapter = onDownloadChapter,
-            onMultiDeleteClicked = onMultiDeleteClicked,
-            fillFraction = if (useTwoPaneLayout) 0.5f else 1f,
-            modifier = Modifier
-                .align(if (useTwoPaneLayout) Alignment.BottomEnd else Alignment.BottomCenter)
-                .padding(WindowInsets.systemBars.asPaddingValues()),
-        )
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(WindowInsets.systemBars.asPaddingValues()),
-        )
     }
 }
 

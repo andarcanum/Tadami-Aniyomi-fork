@@ -111,6 +111,7 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.domain.ui.model.HomeHeaderLayoutElement
 import eu.kanade.domain.ui.model.HomeHeaderLayoutSpec
+import eu.kanade.domain.ui.model.HomeStreakCounterStyle
 import eu.kanade.presentation.components.AuroraCard
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
 import eu.kanade.presentation.components.AuroraTabRow
@@ -591,6 +592,10 @@ object HomeHubTab : Tab {
         val isNameEdited by userProfilePreferences.nameEdited().collectAsState()
         val showHomeGreeting by userProfilePreferences.showHomeGreeting().collectAsState()
         val showHomeStreak by userProfilePreferences.showHomeStreak().collectAsState()
+        val homeStreakCounterStyleKey by userProfilePreferences.homeStreakCounterStyle().collectAsState()
+        val homeStreakCounterStyle = remember(homeStreakCounterStyleKey) {
+            HomeStreakCounterStyle.fromKey(homeStreakCounterStyleKey)
+        }
         val homeHeaderGreetingAlignRight by userProfilePreferences.homeHeaderGreetingAlignRight().collectAsState()
         val homeHeaderNicknameAlignRight by userProfilePreferences.homeHeaderNicknameAlignRight().collectAsState()
         val homeHeaderLayoutJson by userProfilePreferences.homeHeaderLayoutJson().collectAsState()
@@ -845,6 +850,7 @@ object HomeHubTab : Tab {
                     showNameEditHint = showNameEditHint,
                     currentStreak = currentStreak,
                     showStreak = showHomeStreak,
+                    streakStyle = homeStreakCounterStyle,
                     greetingAlignRight = homeHeaderGreetingAlignRight,
                     nicknameAlignRight = homeHeaderNicknameAlignRight,
                     homeHeaderLayout = homeHeaderLayout,
@@ -979,6 +985,7 @@ private fun HomeHubPinnedHeader(
     showNameEditHint: Boolean,
     currentStreak: Int,
     showStreak: Boolean,
+    streakStyle: HomeStreakCounterStyle,
     greetingAlignRight: Boolean,
     nicknameAlignRight: Boolean,
     homeHeaderLayout: HomeHeaderLayoutSpec,
@@ -1026,6 +1033,7 @@ private fun HomeHubPinnedHeader(
                     showNameEditHint = showNameEditHint,
                     currentStreak = currentStreak,
                     showStreak = showStreak,
+                    streakStyle = streakStyle,
                     greetingAlignRight = greetingAlignRight,
                     nicknameAlignRight = nicknameAlignRight,
                     onAvatarClick = onAvatarClick,
@@ -1080,6 +1088,7 @@ private fun HomeHubProfileHeaderCanvas(
     showNameEditHint: Boolean,
     currentStreak: Int,
     showStreak: Boolean,
+    streakStyle: HomeStreakCounterStyle,
     greetingAlignRight: Boolean,
     nicknameAlignRight: Boolean,
     onAvatarClick: () -> Unit,
@@ -1471,33 +1480,12 @@ private fun HomeHubProfileHeaderCanvas(
                 val (slotModifier, contentModifier) = frameFor(HomeHeaderLayoutElement.Streak)
                 Box(slotModifier) {
                     Box(contentModifier, contentAlignment = Alignment.Center) {
-                        Row(
-                            modifier = Modifier
-                                .offset(y = if (isTabletHeaderLayout) (-3).dp else 0.dp)
-                                .clip(RoundedCornerShape(50))
-                                .background(colors.accent.copy(alpha = 0.14f))
-                                .border(
-                                    width = 1.dp,
-                                    color = colors.accent.copy(alpha = 0.35f),
-                                    shape = RoundedCornerShape(50),
-                                )
-                                .padding(horizontal = 8.dp, vertical = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.LocalFireDepartment,
-                                contentDescription = null,
-                                tint = colors.accent,
-                                modifier = Modifier.size(12.dp),
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = currentStreak.toString(),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = colors.textPrimary,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
+                        HomeStreakCounterContent(
+                            currentStreak = currentStreak,
+                            style = streakStyle,
+                            isTabletHeaderLayout = isTabletHeaderLayout,
+                            colors = colors,
+                        )
                     }
                 }
             }
@@ -1512,32 +1500,12 @@ private fun HomeHubProfileHeaderCanvas(
                                     .align(Alignment.Center)
                                     .offset(x = (-42).dp),
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(50))
-                                        .background(colors.accent.copy(alpha = 0.14f))
-                                        .border(
-                                            width = 1.dp,
-                                            color = colors.accent.copy(alpha = 0.35f),
-                                            shape = RoundedCornerShape(50),
-                                        )
-                                        .padding(horizontal = 8.dp, vertical = 3.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.LocalFireDepartment,
-                                        contentDescription = null,
-                                        tint = colors.accent,
-                                        modifier = Modifier.size(12.dp),
-                                    )
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(
-                                        text = currentStreak.toString(),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = colors.textPrimary,
-                                        fontWeight = FontWeight.Bold,
-                                    )
-                                }
+                                HomeStreakCounterContent(
+                                    currentStreak = currentStreak,
+                                    style = streakStyle,
+                                    isTabletHeaderLayout = isTabletHeaderLayout,
+                                    colors = colors,
+                                )
                             }
                         }
 
@@ -1588,11 +1556,105 @@ private fun HomeHubProfileHeaderCanvas(
 }
 
 @Composable
+private fun HomeStreakCounterContent(
+    currentStreak: Int,
+    style: HomeStreakCounterStyle,
+    isTabletHeaderLayout: Boolean,
+    colors: AuroraColors,
+) {
+    val contentModifier = Modifier.offset(y = if (isTabletHeaderLayout) (-3).dp else 0.dp)
+    val labelText = currentStreak.toString()
+    when (style) {
+        HomeStreakCounterStyle.ClassicBadge -> {
+            Row(
+                modifier = contentModifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(colors.surface.copy(alpha = 0.28f))
+                    .border(
+                        width = 1.dp,
+                        color = colors.accent.copy(alpha = 0.35f),
+                        shape = RoundedCornerShape(999.dp),
+                    )
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.LocalFireDepartment,
+                    contentDescription = null,
+                    tint = colors.accent,
+                    modifier = Modifier.size(12.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = labelText,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.textPrimary,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+        HomeStreakCounterStyle.NumberBadgeOnly -> {
+            Row(
+                modifier = contentModifier,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.LocalFireDepartment,
+                    contentDescription = null,
+                    tint = colors.accent,
+                    modifier = Modifier.size(12.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(colors.surface.copy(alpha = 0.28f))
+                        .border(
+                            width = 1.dp,
+                            color = colors.accent.copy(alpha = 0.45f),
+                            shape = RoundedCornerShape(999.dp),
+                        )
+                        .padding(horizontal = 7.dp, vertical = 2.dp),
+                ) {
+                    Text(
+                        text = labelText,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.textPrimary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+        HomeStreakCounterStyle.NoBadge -> {
+            Row(
+                modifier = contentModifier,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.LocalFireDepartment,
+                    contentDescription = null,
+                    tint = colors.accent,
+                    modifier = Modifier.size(12.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = labelText,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.textPrimary,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 internal fun HomeHeaderLayoutLivePreview(
     modifier: Modifier = Modifier,
     layoutSpec: HomeHeaderLayoutSpec,
     showGreeting: Boolean = true,
     showStreak: Boolean = true,
+    streakStyle: HomeStreakCounterStyle = HomeStreakCounterStyle.NoBadge,
     greetingAlignRight: Boolean = false,
     nicknameAlignRight: Boolean = false,
 ) {
@@ -1632,6 +1694,7 @@ internal fun HomeHeaderLayoutLivePreview(
         showNameEditHint = false,
         currentStreak = 7,
         showStreak = showStreak,
+        streakStyle = streakStyle,
         greetingAlignRight = greetingAlignRight,
         nicknameAlignRight = nicknameAlignRight,
         onAvatarClick = {},

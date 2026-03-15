@@ -1,6 +1,7 @@
 package eu.kanade.domain.ui
 
 import eu.kanade.domain.ui.model.HomeHeaderLayoutSpec
+import eu.kanade.domain.ui.model.HomeStreakCounterStyle
 import tachiyomi.core.common.preference.PreferenceStore
 
 class UserProfilePreferences(
@@ -26,6 +27,10 @@ class UserProfilePreferences(
 
     fun showHomeGreeting() = preferenceStore.getBoolean("user_profile_show_home_greeting", true)
     fun showHomeStreak() = preferenceStore.getBoolean("user_profile_show_home_streak", true)
+    fun homeStreakCounterStyle() = preferenceStore.getString(
+        "user_profile_home_streak_counter_style",
+        HomeStreakCounterStyle.NoBadge.key,
+    )
     fun homeHeaderGreetingAlignRight() = preferenceStore.getBoolean(
         "user_profile_home_header_greeting_align_right",
         false,

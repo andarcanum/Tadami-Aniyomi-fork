@@ -204,7 +204,7 @@ abstract class AnimeSearchScreenModel(
     data class State(
         val fromSourceId: Long? = null,
         val searchQuery: String? = null,
-        val sourceFilter: AnimeSourceFilter = AnimeSourceFilter.PinnedOnly,
+        val sourceFilter: AnimeSourceFilter = AnimeSourceFilter.All,
         val onlyShowHasResults: Boolean = false,
         val items: PersistentMap<AnimeCatalogueSource, AnimeSearchItemResult> = persistentMapOf(),
     ) {

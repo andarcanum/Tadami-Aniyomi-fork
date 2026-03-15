@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.home
 
 import eu.kanade.domain.ui.model.HomeHeaderLayoutElement
+import eu.kanade.domain.ui.model.HomeStreakCounterStyle
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
@@ -33,6 +34,11 @@ class HomeHubTabLayoutTest {
             HomeHeaderLayoutElement.Nickname,
             HomeHeaderLayoutElement.Avatar,
         )
+    }
+
+    @Test
+    fun `home streak style parser falls back to no badge`() {
+        HomeStreakCounterStyle.fromKey("unknown") shouldBe HomeStreakCounterStyle.NoBadge
     }
 
     @Test

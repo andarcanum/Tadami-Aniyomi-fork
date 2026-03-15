@@ -185,7 +185,7 @@ abstract class NovelSearchScreenModel(
     @Immutable
     data class State(
         val searchQuery: String? = null,
-        val sourceFilter: NovelSourceFilter = NovelSourceFilter.PinnedOnly,
+        val sourceFilter: NovelSourceFilter = NovelSourceFilter.All,
         val onlyShowHasResults: Boolean = false,
         val items: PersistentMap<NovelCatalogueSource, NovelSearchItemResult> = persistentMapOf(),
     ) {

@@ -1402,6 +1402,10 @@
     <string name="home_header_layout_editor_show_grid">Показывать сетку</string>
     <string name="home_header_layout_editor_greeting_align_right">Выравнивать приветствие по правому краю блока</string>
     <string name="home_header_layout_editor_nickname_align_right">Выравнивать никнейм по правому краю блока</string>
+    <string name="home_header_layout_editor_streak_style_title">Стиль счетчика стрика</string>
+    <string name="home_header_layout_editor_streak_style_classic_badge">Классический блок</string>
+    <string name="home_header_layout_editor_streak_style_number_badge_only">Блок только для числа</string>
+    <string name="home_header_layout_editor_streak_style_no_badge">Без блока</string>
     <string name="home_header_layout_editor_selected">Выбрано: %s</string>
     <string name="home_header_layout_editor_reset">Сбросить</string>
     <string name="home_header_layout_editor_cancel">Отмена</string>

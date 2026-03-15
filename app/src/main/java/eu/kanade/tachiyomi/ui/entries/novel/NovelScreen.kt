@@ -79,7 +79,11 @@ import eu.kanade.tachiyomi.source.novel.NovelSiteSource
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
 import eu.kanade.tachiyomi.ui.browse.novel.extension.details.NovelSourcePreferencesScreen
 import eu.kanade.tachiyomi.ui.browse.novel.migration.search.MigrateNovelSearchScreen
+import eu.kanade.tachiyomi.ui.browse.novel.source.browse.BrowseNovelSourceScreen
+import eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch.GlobalNovelSearchScreen
 import eu.kanade.tachiyomi.ui.entries.manga.track.MangaTrackInfoDialogHomeScreen
+import eu.kanade.tachiyomi.ui.home.HomeScreen
+import eu.kanade.tachiyomi.ui.library.novel.NovelLibraryTab
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.setting.SettingsScreen
@@ -251,6 +255,15 @@ class NovelScreen(
             isReading = isReading,
             onToggleFavorite = screenModel::toggleFavorite,
             onRefresh = screenModel::refreshChapters,
+            onSearch = { query, global ->
+                coroutineScope.launch {
+                    performSearch(
+                        navigator = navigator,
+                        query = query,
+                        global = global,
+                    )
+                }
+            },
             onToggleAllChaptersRead = screenModel::toggleAllChaptersRead,
             onShare = if (canOpenNovelWebView) {
                 {
@@ -488,6 +501,32 @@ class NovelScreen(
                     enableSwipeDismiss = { it.lastItem is MangaTrackInfoDialogHomeScreen },
                     onDismissRequest = screenModel::dismissDialog,
                 )
+            }
+        }
+    }
+
+    private suspend fun performSearch(
+        navigator: cafe.adriel.voyager.navigator.Navigator,
+        query: String,
+        global: Boolean,
+    ) {
+        if (global) {
+            navigator.push(GlobalNovelSearchScreen(query))
+            return
+        }
+
+        if (navigator.size < 2) {
+            return
+        }
+
+        when (val previousController = navigator.items[navigator.size - 2]) {
+            is HomeScreen -> {
+                navigator.pop()
+                NovelLibraryTab.search(query)
+            }
+            is BrowseNovelSourceScreen -> {
+                navigator.pop()
+                navigator.push(BrowseNovelSourceScreen(previousController.sourceId, query))
             }
         }
     }

@@ -51,16 +51,20 @@ import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_DARK_W
 import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_LINEN_PAPER_ID
 import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_NIGHT_VELVET_ID
 import eu.kanade.presentation.reader.novel.NovelReaderBackgroundCard
+import eu.kanade.presentation.reader.novel.NovelReaderFontOption
+import eu.kanade.presentation.reader.novel.NovelReaderFontSource
 import eu.kanade.presentation.reader.novel.autoScrollSpeedToInterval
 import eu.kanade.presentation.reader.novel.buildNovelReaderBackgroundCardsFromCustomItems
+import eu.kanade.presentation.reader.novel.buildNovelReaderFontCatalog
 import eu.kanade.presentation.reader.novel.ensureLegacyNovelReaderBackgroundItem
 import eu.kanade.presentation.reader.novel.importNovelReaderCustomBackgroundItem
+import eu.kanade.presentation.reader.novel.importNovelReaderCustomFont
 import eu.kanade.presentation.reader.novel.intervalToAutoScrollSpeed
 import eu.kanade.presentation.reader.novel.novelReaderBackgroundPresets
-import eu.kanade.presentation.reader.novel.novelReaderFonts
 import eu.kanade.presentation.reader.novel.novelReaderPresetThemes
 import eu.kanade.presentation.reader.novel.readNovelReaderCustomBackgroundItems
 import eu.kanade.presentation.reader.novel.removeNovelReaderCustomBackgroundItem
+import eu.kanade.presentation.reader.novel.removeNovelReaderCustomFont
 import eu.kanade.presentation.reader.novel.renameNovelReaderCustomBackgroundItem
 import eu.kanade.presentation.reader.novel.replaceNovelReaderCustomBackgroundItem
 import eu.kanade.presentation.reader.novel.resolveCustomBackgroundDeletion
@@ -74,11 +78,14 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPrivateBridge
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
+import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
@@ -107,6 +114,7 @@ object SettingsNovelReaderScreen : SearchableSettings {
 
     @Composable
     private fun getDisplayGroup(prefs: NovelReaderPreferences): Preference.PreferenceGroup {
+        val context = LocalContext.current
         val fontSizePref = prefs.fontSize()
         val fontSize by fontSizePref.collectAsState()
         val lineHeightPref = prefs.lineHeight()
@@ -117,8 +125,37 @@ object SettingsNovelReaderScreen : SearchableSettings {
         val paragraphSpacing by paragraphSpacingPref.collectAsState()
         val fontFamilyPref = prefs.fontFamily()
         val selectedFontFamily by fontFamilyPref.collectAsState()
+        val forceBoldTextPref = prefs.forceBoldText()
+        val forceItalicTextPref = prefs.forceItalicText()
+        val textShadowPref = prefs.textShadow()
+        val textShadowEnabled by textShadowPref.collectAsState()
+        val textShadowColorPref = prefs.textShadowColor()
+        val textShadowColor by textShadowColorPref.collectAsState()
+        val textShadowBlurPref = prefs.textShadowBlur()
+        val textShadowBlur by textShadowBlurPref.collectAsState()
+        val textShadowXPref = prefs.textShadowX()
+        val textShadowX by textShadowXPref.collectAsState()
+        val textShadowYPref = prefs.textShadowY()
+        val textShadowY by textShadowYPref.collectAsState()
         val geminiEnabled by prefs.geminiEnabled().collectAsState()
+        val fontImportFailedMessage = stringResource(AYMR.strings.novel_reader_font_import_failed)
         val surfaceStrategy = remember { resolveNovelReaderSettingsSurfaceStrategy() }
+        var fontCatalogVersion by remember { mutableIntStateOf(0) }
+        val readerFontCatalog = remember(fontCatalogVersion, selectedFontFamily) {
+            buildNovelReaderFontCatalog(context)
+        }
+        val fontPicker = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocument(),
+        ) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            val importedFont = importNovelReaderCustomFont(context, uri).getOrNull()
+            if (importedFont == null) {
+                Toast.makeText(context, fontImportFailedMessage, Toast.LENGTH_SHORT).show()
+                return@rememberLauncherForActivityResult
+            }
+            fontFamilyPref.set(importedFont.id)
+            fontCatalogVersion += 1
+        }
         val settingsSurfaceSummary = if (surfaceStrategy.globalOnlyFamilies.isNotEmpty()) {
             stringResource(AYMR.strings.novel_reader_global_settings_quick_dialog_summary)
         } else {
@@ -197,6 +234,62 @@ object SettingsNovelReaderScreen : SearchableSettings {
                     subtitle = stringResource(AYMR.strings.novel_reader_force_paragraph_indent_summary),
                 ),
                 Preference.PreferenceItem.SwitchPreference(
+                    preference = forceBoldTextPref,
+                    title = stringResource(AYMR.strings.novel_reader_force_bold_text),
+                    subtitle = stringResource(AYMR.strings.novel_reader_force_bold_text_summary),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = forceItalicTextPref,
+                    title = stringResource(AYMR.strings.novel_reader_force_italic_text),
+                    subtitle = stringResource(AYMR.strings.novel_reader_force_italic_text_summary),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = textShadowPref,
+                    title = stringResource(AYMR.strings.novel_reader_text_shadow),
+                    subtitle = stringResource(AYMR.strings.novel_reader_text_shadow_summary),
+                ),
+                Preference.PreferenceItem.EditTextInfoPreference(
+                    preference = textShadowColorPref,
+                    title = stringResource(AYMR.strings.novel_reader_text_shadow_color),
+                    subtitle = "%s",
+                    dialogSubtitle = stringResource(AYMR.strings.novel_reader_text_shadow_color_summary),
+                    validate = ::isValidColorOrBlank,
+                    enabled = textShadowEnabled,
+                ),
+                Preference.PreferenceItem.SliderPreference(
+                    value = (textShadowBlur * 2f).toInt(),
+                    title = stringResource(AYMR.strings.novel_reader_text_shadow_blur),
+                    subtitle = String.format("%.1f", textShadowBlur),
+                    valueRange = 0..40,
+                    enabled = textShadowEnabled,
+                    onValueChanged = {
+                        textShadowBlurPref.set((it / 2f).coerceIn(0f, 20f))
+                        true
+                    },
+                ),
+                Preference.PreferenceItem.SliderPreference(
+                    value = (textShadowX * 2f).toInt(),
+                    title = stringResource(AYMR.strings.novel_reader_text_shadow_x),
+                    subtitle = String.format("%.1f", textShadowX),
+                    valueRange = -40..40,
+                    enabled = textShadowEnabled,
+                    onValueChanged = {
+                        textShadowXPref.set((it / 2f).coerceIn(-20f, 20f))
+                        true
+                    },
+                ),
+                Preference.PreferenceItem.SliderPreference(
+                    value = (textShadowY * 2f).toInt(),
+                    title = stringResource(AYMR.strings.novel_reader_text_shadow_y),
+                    subtitle = String.format("%.1f", textShadowY),
+                    valueRange = -40..40,
+                    enabled = textShadowEnabled,
+                    onValueChanged = {
+                        textShadowYPref.set((it / 2f).coerceIn(-20f, 20f))
+                        true
+                    },
+                ),
+                Preference.PreferenceItem.SwitchPreference(
                     preference = prefs.preserveSourceTextAlignInNative(),
                     title = stringResource(AYMR.strings.novel_reader_preserve_source_text_align_native),
                     subtitle = stringResource(AYMR.strings.novel_reader_preserve_source_text_align_native_summary),
@@ -213,7 +306,18 @@ object SettingsNovelReaderScreen : SearchableSettings {
                         subcomponent = {
                             NovelReaderFontPreviewRow(
                                 selectedFontId = selectedFontFamily,
+                                fonts = readerFontCatalog,
                                 onSelect = { fontFamilyPref.set(it) },
+                                onImport = {
+                                    fontPicker.launch(arrayOf("font/*", "application/octet-stream", "*/*"))
+                                },
+                                onRemoveImported = { option ->
+                                    removeNovelReaderCustomFont(option.filePath)
+                                    if (selectedFontFamily == option.id) {
+                                        fontFamilyPref.set("")
+                                    }
+                                    fontCatalogVersion += 1
+                                },
                             )
                         },
                     )
@@ -239,6 +343,12 @@ object SettingsNovelReaderScreen : SearchableSettings {
         val customBackgroundPath by customBackgroundPathPref.collectAsState()
         val customBackgroundIdPref = prefs.customBackgroundId()
         val customBackgroundId by customBackgroundIdPref.collectAsState()
+        val nativeTextureStrengthPref = prefs.nativeTextureStrengthPercent()
+        val nativeTextureStrength by nativeTextureStrengthPref.collectAsState()
+        val pageEdgeShadowPref = prefs.pageEdgeShadow()
+        val pageEdgeShadow by pageEdgeShadowPref.collectAsState()
+        val pageEdgeShadowAlphaPref = prefs.pageEdgeShadowAlpha()
+        val pageEdgeShadowAlpha by pageEdgeShadowAlphaPref.collectAsState()
         val customThemesPref = prefs.customThemes()
         val customThemes by customThemesPref.collectAsState()
         val importFailedMessage = stringResource(AYMR.strings.novel_reader_background_custom_import_failed)
@@ -356,6 +466,19 @@ object SettingsNovelReaderScreen : SearchableSettings {
                     preference = prefs.oledEdgeGradient(),
                     title = stringResource(AYMR.strings.novel_reader_oled_edge_gradient),
                     subtitle = stringResource(AYMR.strings.novel_reader_oled_edge_gradient_summary),
+                ),
+                Preference.PreferenceItem.SliderPreference(
+                    value = nativeTextureStrength,
+                    title = stringResource(AYMR.strings.novel_reader_native_texture_strength),
+                    subtitle = "$nativeTextureStrength%",
+                    valueRange = 0..200,
+                    onValueChanged = {
+                        nativeTextureStrengthPref.set(it.coerceIn(0, 200))
+                        true
+                    },
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(AYMR.strings.novel_reader_native_texture_strength_summary),
                 ),
                 Preference.PreferenceItem.CustomPreference(
                     title = stringResource(AYMR.strings.novel_reader_theme_presets),
@@ -491,6 +614,23 @@ object SettingsNovelReaderScreen : SearchableSettings {
                 subtitle = stringResource(AYMR.strings.novel_reader_background_controls_disabled_summary),
             )
         }
+
+        items += Preference.PreferenceItem.SwitchPreference(
+            preference = pageEdgeShadowPref,
+            title = stringResource(AYMR.strings.novel_reader_page_edge_shadow),
+            subtitle = stringResource(AYMR.strings.novel_reader_page_edge_shadow_summary),
+        )
+        items += Preference.PreferenceItem.SliderPreference(
+            value = (pageEdgeShadowAlpha * 100f).toInt(),
+            title = stringResource(AYMR.strings.novel_reader_page_edge_shadow_alpha),
+            subtitle = "${(pageEdgeShadowAlpha * 100f).toInt()}%",
+            valueRange = 5..100,
+            enabled = pageEdgeShadow,
+            onValueChanged = {
+                pageEdgeShadowAlphaPref.set((it / 100f).coerceIn(0.05f, 1f))
+                true
+            },
+        )
 
         renameTarget?.let { target ->
             androidx.compose.material3.AlertDialog(
@@ -776,22 +916,97 @@ object SettingsNovelReaderScreen : SearchableSettings {
 
     @Composable
     private fun getAdvancedGroup(prefs: NovelReaderPreferences): Preference.PreferenceGroup {
+        val translationProviderPref = prefs.translationProvider()
+        val translationProvider by translationProviderPref.collectAsState()
+        val privateProviderLabel = if (GeminiPrivateBridge.isInstalled()) {
+            GeminiPrivateBridge.providerLabel()
+        } else {
+            "Gemini Private"
+        }
+        val items = mutableListOf<Preference.PreferenceItem<out Any>>(
+            Preference.PreferenceItem.ListPreference(
+                preference = translationProviderPref,
+                entries = persistentMapOf(
+                    NovelTranslationProvider.GEMINI to
+                        stringResource(AYMR.strings.novel_reader_translation_provider_gemini),
+                    NovelTranslationProvider.GEMINI_PRIVATE to privateProviderLabel,
+                    NovelTranslationProvider.OPENROUTER to
+                        stringResource(AYMR.strings.novel_reader_translation_provider_openrouter),
+                    NovelTranslationProvider.DEEPSEEK to
+                        stringResource(AYMR.strings.novel_reader_translation_provider_deepseek),
+                ),
+                title = stringResource(AYMR.strings.novel_reader_translation_provider),
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                preference = prefs.geminiAutoTranslateEnglishSource(),
+                title = stringResource(AYMR.strings.novel_reader_translation_auto_english_title),
+                subtitle = stringResource(AYMR.strings.novel_reader_translation_auto_english_summary),
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                preference = prefs.geminiPrefetchNextChapterTranslation(),
+                title = stringResource(AYMR.strings.novel_reader_translation_prefetch_next_title),
+                subtitle = stringResource(AYMR.strings.novel_reader_translation_prefetch_next_summary),
+            ),
+        )
+
+        if (translationProvider == NovelTranslationProvider.OPENROUTER) {
+            items += Preference.PreferenceItem.EditTextInfoPreference(
+                preference = prefs.openRouterBaseUrl(),
+                dialogSubtitle = null,
+                title = stringResource(AYMR.strings.novel_reader_openrouter_base_url),
+                subtitle = "%s",
+            )
+            items += Preference.PreferenceItem.EditTextInfoPreference(
+                preference = prefs.openRouterApiKey(),
+                dialogSubtitle = null,
+                title = stringResource(AYMR.strings.novel_reader_openrouter_api_key),
+                subtitle = "%s",
+            )
+            items += Preference.PreferenceItem.EditTextInfoPreference(
+                preference = prefs.openRouterModel(),
+                dialogSubtitle = null,
+                title = stringResource(AYMR.strings.novel_reader_openrouter_model),
+                subtitle = "%s",
+            )
+        }
+
+        if (translationProvider == NovelTranslationProvider.DEEPSEEK) {
+            items += Preference.PreferenceItem.EditTextInfoPreference(
+                preference = prefs.deepSeekBaseUrl(),
+                dialogSubtitle = null,
+                title = stringResource(AYMR.strings.novel_reader_deepseek_base_url),
+                subtitle = "%s",
+            )
+            items += Preference.PreferenceItem.EditTextInfoPreference(
+                preference = prefs.deepSeekApiKey(),
+                dialogSubtitle = null,
+                title = stringResource(AYMR.strings.novel_reader_deepseek_api_key),
+                subtitle = "%s",
+            )
+            items += Preference.PreferenceItem.EditTextInfoPreference(
+                preference = prefs.deepSeekModel(),
+                dialogSubtitle = null,
+                title = stringResource(AYMR.strings.novel_reader_deepseek_model),
+                subtitle = "%s",
+            )
+        }
+
+        items += Preference.PreferenceItem.MultiLineEditTextPreference(
+            preference = prefs.customCSS(),
+            title = stringResource(AYMR.strings.novel_reader_custom_css),
+            subtitle = stringResource(AYMR.strings.novel_reader_custom_css_hint),
+            canBeBlank = true,
+        )
+        items += Preference.PreferenceItem.MultiLineEditTextPreference(
+            preference = prefs.customJS(),
+            title = stringResource(AYMR.strings.novel_reader_custom_js),
+            subtitle = stringResource(AYMR.strings.novel_reader_custom_js_hint),
+            canBeBlank = true,
+        )
+
         return Preference.PreferenceGroup(
             title = stringResource(AYMR.strings.novel_reader_advanced),
-            preferenceItems = persistentListOf(
-                Preference.PreferenceItem.MultiLineEditTextPreference(
-                    preference = prefs.customCSS(),
-                    title = stringResource(AYMR.strings.novel_reader_custom_css),
-                    subtitle = stringResource(AYMR.strings.novel_reader_custom_css_hint),
-                    canBeBlank = true,
-                ),
-                Preference.PreferenceItem.MultiLineEditTextPreference(
-                    preference = prefs.customJS(),
-                    title = stringResource(AYMR.strings.novel_reader_custom_js),
-                    subtitle = stringResource(AYMR.strings.novel_reader_custom_js_hint),
-                    canBeBlank = true,
-                ),
-            ),
+            preferenceItems = items.toImmutableList(),
         )
     }
 
@@ -821,13 +1036,41 @@ object SettingsNovelReaderScreen : SearchableSettings {
 @Composable
 private fun NovelReaderFontPreviewRow(
     selectedFontId: String,
+    fonts: List<NovelReaderFontOption>,
     onSelect: (String) -> Unit,
+    onImport: () -> Unit,
+    onRemoveImported: (NovelReaderFontOption) -> Unit,
 ) {
+    val builtInFonts = remember(fonts) { fonts.filter { it.source == NovelReaderFontSource.BUILT_IN } }
+    val localFonts = remember(fonts) { fonts.filter { it.source == NovelReaderFontSource.LOCAL_PRIVATE } }
+    val importedFonts = remember(fonts) { fonts.filter { it.source == NovelReaderFontSource.USER_IMPORTED } }
+
     LazyRow(
         modifier = Modifier.padding(horizontal = PrefsHorizontalPadding),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        items(novelReaderFonts, key = { it.id }) { option ->
+        item("import_font") {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                modifier = Modifier.clickable(onClick = onImport),
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = "+",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = stringResource(MR.strings.action_add),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
+        }
+        items(builtInFonts + localFonts + importedFonts, key = { it.id }) { option ->
             val fontFamily = option.fontResId?.let { FontFamily(Font(it)) }
             val isSelected = option.id == selectedFontId
             Surface(
@@ -853,6 +1096,33 @@ private fun NovelReaderFontPreviewRow(
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.labelMedium.copy(fontFamily = fontFamily),
                     )
+                    if (isSelected) {
+                        Text(
+                            text = stringResource(AYMR.strings.novel_reader_font_section_selected),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    } else if (option.source == NovelReaderFontSource.LOCAL_PRIVATE) {
+                        Text(
+                            text = stringResource(AYMR.strings.novel_reader_font_section_local),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else if (option.source == NovelReaderFontSource.USER_IMPORTED) {
+                        Text(
+                            text = stringResource(AYMR.strings.novel_reader_font_section_imported),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (option.source == NovelReaderFontSource.USER_IMPORTED) {
+                        Text(
+                            text = stringResource(MR.strings.action_delete),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.clickable { onRemoveImported(option) },
+                        )
+                    }
                 }
             }
         }

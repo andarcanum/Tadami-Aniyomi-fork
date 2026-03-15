@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.home
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -61,6 +63,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.domain.ui.model.HomeHeaderLayoutElement
 import eu.kanade.domain.ui.model.HomeHeaderLayoutSpec
+import eu.kanade.domain.ui.model.HomeStreakCounterStyle
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
 import eu.kanade.presentation.more.settings.LocalSettingsUiStyle
 import eu.kanade.presentation.more.settings.SettingsScaffold
@@ -101,6 +104,9 @@ class HomeHeaderLayoutEditorScreen : Screen() {
             var showOnlySelectedOverlay by rememberSaveable { mutableStateOf(false) }
             var showHomeGreeting by rememberSaveable { mutableStateOf(prefs.showHomeGreeting().get()) }
             var showHomeStreak by rememberSaveable { mutableStateOf(prefs.showHomeStreak().get()) }
+            var homeStreakCounterStyle by rememberSaveable {
+                mutableStateOf(HomeStreakCounterStyle.fromKey(prefs.homeStreakCounterStyle().get()))
+            }
             var greetingAlignRight by rememberSaveable { mutableStateOf(prefs.homeHeaderGreetingAlignRight().get()) }
             var nicknameAlignRight by rememberSaveable { mutableStateOf(prefs.homeHeaderNicknameAlignRight().get()) }
             var showResetConfirm by rememberSaveable { mutableStateOf(false) }
@@ -206,6 +212,14 @@ class HomeHeaderLayoutEditorScreen : Screen() {
                         isAurora = isAurora,
                         onCheckedChange = { showHomeStreak = it },
                     )
+                    if (showHomeStreak) {
+                        Spacer(Modifier.height(8.dp))
+                        HomeHeaderLayoutEditorStreakStyleRow(
+                            selectedStyle = homeStreakCounterStyle,
+                            isAurora = isAurora,
+                            onStyleSelected = { homeStreakCounterStyle = it },
+                        )
+                    }
                     Spacer(Modifier.height(8.dp))
                     HomeHeaderLayoutEditorSwitchRow(
                         title = stringResource(AYMR.strings.home_header_layout_editor_greeting_align_right),
@@ -236,6 +250,7 @@ class HomeHeaderLayoutEditorScreen : Screen() {
                         showOnlySelectedOverlay = showOnlySelectedOverlay,
                         showGreeting = showHomeGreeting,
                         showStreak = showHomeStreak,
+                        streakStyle = homeStreakCounterStyle,
                         greetingAlignRight = greetingAlignRight,
                         nicknameAlignRight = nicknameAlignRight,
                         onSelectedElementChange = { selectedElement = it },
@@ -282,6 +297,7 @@ class HomeHeaderLayoutEditorScreen : Screen() {
                                 prefs.setHomeHeaderLayout(workingLayout)
                                 prefs.showHomeGreeting().set(showHomeGreeting)
                                 prefs.showHomeStreak().set(showHomeStreak)
+                                prefs.homeStreakCounterStyle().set(homeStreakCounterStyle.key)
                                 prefs.homeHeaderGreetingAlignRight().set(greetingAlignRight)
                                 prefs.homeHeaderNicknameAlignRight().set(nicknameAlignRight)
                                 navigator.pop()
@@ -367,6 +383,95 @@ private fun HomeHeaderLayoutEditorSwitchRow(
 }
 
 @Composable
+private fun HomeHeaderLayoutEditorStreakStyleRow(
+    selectedStyle: HomeStreakCounterStyle,
+    isAurora: Boolean,
+    onStyleSelected: (HomeStreakCounterStyle) -> Unit,
+) {
+    val accent = settingsAccentColor()
+    val titleColor = settingsTitleColor()
+    val subtitleColor = settingsSubtitleColor()
+    val containerColor = settingsCardContainerColor()
+    val borderColor = settingsCardBorderColor()
+    val rowShape = if (isAurora) AURORA_SETTINGS_CARD_SHAPE else RoundedCornerShape(0.dp)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (isAurora) {
+                    Modifier
+                        .clip(rowShape)
+                        .background(containerColor)
+                        .then(
+                            if (borderColor.alpha > 0f) {
+                                Modifier.border(1.dp, borderColor, rowShape)
+                            } else {
+                                Modifier
+                            },
+                        )
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
+        Text(
+            text = stringResource(AYMR.strings.home_header_layout_editor_streak_style_title),
+            style = MaterialTheme.typography.bodyMedium,
+            color = titleColor,
+        )
+        Spacer(Modifier.height(8.dp))
+        HomeStreakCounterStyle.entries.forEachIndexed { index, style ->
+            val selected = selectedStyle == style
+            val optionShape = RoundedCornerShape(12.dp)
+            val optionBorder = if (selected) {
+                accent.copy(alpha = if (isAurora) 0.7f else 0.55f)
+            } else if (isAurora) {
+                AuroraTheme.colors.textSecondary.copy(alpha = 0.25f)
+            } else {
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+            }
+            val optionBackground = if (selected) {
+                accent.copy(alpha = if (isAurora) 0.22f else 0.12f)
+            } else {
+                Color.Transparent
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(optionShape)
+                    .background(optionBackground)
+                    .border(1.dp, optionBorder, optionShape)
+                    .clickable { onStyleSelected(style) }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    modifier = Modifier.weight(1f),
+                    text = homeStreakCounterStyleLabel(style),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (selected) titleColor else subtitleColor,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (selected) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = accent,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+            if (index != HomeStreakCounterStyle.entries.lastIndex) {
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+    }
+}
+
+@Composable
 private fun HomeHeaderLayoutEditorCanvas(
     layout: HomeHeaderLayoutSpec,
     selectedElement: HomeHeaderLayoutElement,
@@ -374,6 +479,7 @@ private fun HomeHeaderLayoutEditorCanvas(
     showOnlySelectedOverlay: Boolean,
     showGreeting: Boolean,
     showStreak: Boolean,
+    streakStyle: HomeStreakCounterStyle,
     greetingAlignRight: Boolean,
     nicknameAlignRight: Boolean,
     onSelectedElementChange: (HomeHeaderLayoutElement) -> Unit,
@@ -484,6 +590,7 @@ private fun HomeHeaderLayoutEditorCanvas(
                 layoutSpec = layout,
                 showGreeting = showGreeting,
                 showStreak = showStreak,
+                streakStyle = streakStyle,
                 greetingAlignRight = greetingAlignRight,
                 nicknameAlignRight = nicknameAlignRight,
             )
@@ -664,5 +771,20 @@ private fun homeHeaderLayoutElementLabel(element: HomeHeaderLayoutElement): Stri
         HomeHeaderLayoutElement.Nickname -> stringResource(AYMR.strings.home_header_layout_element_nickname)
         HomeHeaderLayoutElement.Avatar -> stringResource(AYMR.strings.home_header_layout_element_avatar)
         HomeHeaderLayoutElement.Streak -> stringResource(AYMR.strings.home_header_layout_element_streak)
+    }
+}
+
+@Composable
+private fun homeStreakCounterStyleLabel(style: HomeStreakCounterStyle): String {
+    return when (style) {
+        HomeStreakCounterStyle.ClassicBadge -> {
+            stringResource(AYMR.strings.home_header_layout_editor_streak_style_classic_badge)
+        }
+        HomeStreakCounterStyle.NumberBadgeOnly -> {
+            stringResource(AYMR.strings.home_header_layout_editor_streak_style_number_badge_only)
+        }
+        HomeStreakCounterStyle.NoBadge -> {
+            stringResource(AYMR.strings.home_header_layout_editor_streak_style_no_badge)
+        }
     }
 }

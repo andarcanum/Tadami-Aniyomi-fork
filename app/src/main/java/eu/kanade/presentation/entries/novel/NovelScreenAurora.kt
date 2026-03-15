@@ -58,6 +58,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
+import eu.kanade.presentation.entries.components.AuroraEntryHoldToRefresh
+import eu.kanade.presentation.entries.components.normalizeAuroraGlobalSearchQuery
 import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
 import eu.kanade.presentation.entries.novel.components.aurora.ChaptersHeader
 import eu.kanade.presentation.entries.novel.components.aurora.FullscreenPosterBackground
@@ -87,6 +89,7 @@ fun NovelScreenAuroraImpl(
     isReading: Boolean,
     onToggleFavorite: () -> Unit,
     onRefresh: () -> Unit,
+    onSearch: (query: String, global: Boolean) -> Unit,
     onShare: (() -> Unit)?,
     onWebView: (() -> Unit)?,
     onMigrateClicked: (() -> Unit)?,
@@ -118,6 +121,7 @@ fun NovelScreenAuroraImpl(
     onMultiMarkAsReadClicked: (Boolean) -> Unit,
 ) {
     val novel = state.novel
+    val globalSearchQuery = remember(novel.title) { normalizeAuroraGlobalSearchQuery(novel.title) }
     val chapters = state.processedChapters
     val totalChapterCount = if (state.chapterPageEnabled) {
         maxOf(state.chapters.size, state.chapterPageEstimatedTotal)
@@ -156,185 +160,307 @@ fun NovelScreenAuroraImpl(
     if (useTwoPaneLayout) {
         val topContentPadding = 96.dp
 
-        Box(modifier = Modifier.fillMaxSize()) {
-            FullscreenPosterBackground(
-                novel = novel,
-                scrollOffset = 0,
-                firstVisibleItemIndex = 0,
-            )
+        AuroraEntryHoldToRefresh(
+            refreshing = state.isRefreshingData,
+            onRefresh = onRefresh,
+            enabled = !isSelectionMode,
+            modifier = Modifier.fillMaxSize(),
+            indicatorPadding = WindowInsets.statusBars.asPaddingValues(),
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                FullscreenPosterBackground(
+                    novel = novel,
+                    scrollOffset = 0,
+                    firstVisibleItemIndex = 0,
+                )
 
-            TwoPanelBox(
-                modifier = Modifier.fillMaxSize(),
-                startContent = {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(start = 12.dp, end = 6.dp, top = topContentPadding, bottom = 20.dp)
-                            .verticalScroll(rememberScrollState()),
-                    ) {
+                TwoPanelBox(
+                    modifier = Modifier.fillMaxSize(),
+                    startContent = {
                         Column(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .auroraCenteredMaxWidth(420),
+                                .fillMaxSize()
+                                .padding(start = 12.dp, end = 6.dp, top = topContentPadding, bottom = 20.dp)
+                                .verticalScroll(rememberScrollState()),
                         ) {
-                            NovelHeroContent(
-                                novel = novel,
-                                chapterCount = totalChapterCount,
-                                onContinueReading = onStartReading,
-                                isReading = isReading,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            NovelInfoCard(
-                                novel = novel,
-                                chapterCount = totalChapterCount,
-                                nextUpdate = nextUpdate,
-                                onTagSearch = {},
-                                descriptionExpanded = descriptionExpanded,
-                                genresExpanded = genresExpanded,
-                                onToggleDescription = { descriptionExpanded = !descriptionExpanded },
-                                onToggleGenres = { genresExpanded = !genresExpanded },
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-
-                            Spacer(modifier = Modifier.height(12.dp))
-                            NovelActionCard(
-                                novel = novel,
-                                trackingCount = trackingCount,
-                                onAddToLibraryClicked = onToggleFavorite,
-                                onTrackingClicked = onTrackingClicked,
-                                onBatchDownloadClicked = onOpenBatchDownloadDialog,
-                                onTranslatedDownloadClicked = onOpenTranslatedDownloadDialog,
-                                onExportEpubClicked = onOpenEpubExportDialog,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            Spacer(modifier = Modifier.height(24.dp))
-                        }
-                    }
-                },
-                endContent = {
-                    val chapterListState = rememberLazyListState()
-                    LazyColumn(
-                        state = chapterListState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(start = 6.dp, end = 12.dp),
-                        contentPadding = PaddingValues(
-                            top = topContentPadding,
-                            bottom = 112.dp,
-                        ),
-                    ) {
-                        if (isSelectionMode) {
-                            item {
-                                SelectionBar(
-                                    selectedCount = selectedIds.size,
-                                    canMarkRead = selectedChapters.any { !it.read },
-                                    canMarkUnread = selectedChapters.any { it.read || it.lastPageRead > 0L },
-                                    canBookmark = selectedChapters.any { !it.bookmark },
-                                    canUnbookmark = selectedChapters.any { it.bookmark },
-                                    onClear = { onToggleAllSelection(false) },
-                                    onSelectAll = { onToggleAllSelection(true) },
-                                    onInvert = onInvertSelection,
-                                    onMarkRead = { onMultiMarkAsReadClicked(true) },
-                                    onMarkUnread = { onMultiMarkAsReadClicked(false) },
-                                    onBookmark = { onMultiBookmarkClicked(true) },
-                                    onUnbookmark = { onMultiBookmarkClicked(false) },
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .auroraCenteredMaxWidth(420),
+                            ) {
+                                NovelHeroContent(
+                                    novel = novel,
+                                    chapterCount = totalChapterCount,
+                                    onContinueReading = onStartReading,
+                                    isReading = isReading,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
-                            }
-                        }
-
-                        item {
-                            ChaptersHeader(chapterCount = totalChapterCount)
-                        }
-
-                        if (chapterPageEnabled) {
-                            item {
-                                AuroraChapterPageControls(
-                                    chapterPageCurrent = chapterPageCurrent,
-                                    chapterPageTotal = chapterPageTotal,
-                                    chapterPageLoading = chapterPageLoading,
-                                    onChapterPageChange = onChapterPageChange,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp),
+                                NovelInfoCard(
+                                    novel = novel,
+                                    chapterCount = totalChapterCount,
+                                    nextUpdate = nextUpdate,
+                                    onTagSearch = {},
+                                    descriptionExpanded = descriptionExpanded,
+                                    genresExpanded = genresExpanded,
+                                    onToggleDescription = { descriptionExpanded = !descriptionExpanded },
+                                    onToggleGenres = { genresExpanded = !genresExpanded },
+                                    modifier = Modifier.fillMaxWidth(),
                                 )
-                            }
-                        }
 
-                        if (state.showScanlatorSelector) {
-                            item {
-                                ScanlatorBranchSelector(
-                                    scanlatorChapterCounts = scanlatorChapterCounts,
-                                    selectedScanlator = selectedScanlator,
-                                    onScanlatorSelected = onScanlatorSelected,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                Spacer(modifier = Modifier.height(12.dp))
+                                NovelActionCard(
+                                    novel = novel,
+                                    trackingCount = trackingCount,
+                                    onAddToLibraryClicked = onToggleFavorite,
+                                    onTrackingClicked = onTrackingClicked,
+                                    onBatchDownloadClicked = onOpenBatchDownloadDialog,
+                                    onTranslatedDownloadClicked = onOpenTranslatedDownloadDialog,
+                                    onExportEpubClicked = onOpenEpubExportDialog,
+                                    modifier = Modifier.fillMaxWidth(),
                                 )
+                                Spacer(modifier = Modifier.height(24.dp))
                             }
                         }
+                    },
+                    endContent = {
+                        val chapterListState = rememberLazyListState()
+                        LazyColumn(
+                            state = chapterListState,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(start = 6.dp, end = 12.dp),
+                            contentPadding = PaddingValues(
+                                top = topContentPadding,
+                                bottom = 112.dp,
+                            ),
+                        ) {
+                            if (isSelectionMode) {
+                                item {
+                                    SelectionBar(
+                                        selectedCount = selectedIds.size,
+                                        canMarkRead = selectedChapters.any { !it.read },
+                                        canMarkUnread = selectedChapters.any {
+                                            it.read || it.lastPageRead > 0L
+                                        },
+                                        canBookmark = selectedChapters.any { !it.bookmark },
+                                        canUnbookmark = selectedChapters.any { it.bookmark },
+                                        onClear = { onToggleAllSelection(false) },
+                                        onSelectAll = { onToggleAllSelection(true) },
+                                        onInvert = onInvertSelection,
+                                        onMarkRead = { onMultiMarkAsReadClicked(true) },
+                                        onMarkUnread = { onMultiMarkAsReadClicked(false) },
+                                        onBookmark = { onMultiBookmarkClicked(true) },
+                                        onUnbookmark = { onMultiBookmarkClicked(false) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
+                            }
 
-                        if (chapters.isEmpty()) {
                             item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(32.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text(
-                                        text = stringResource(MR.strings.no_chapters_error),
-                                        color = Color.White.copy(alpha = 0.7f),
-                                        fontSize = 14.sp,
+                                ChaptersHeader(chapterCount = totalChapterCount)
+                            }
+
+                            if (chapterPageEnabled) {
+                                item {
+                                    AuroraChapterPageControls(
+                                        chapterPageCurrent = chapterPageCurrent,
+                                        chapterPageTotal = chapterPageTotal,
+                                        chapterPageLoading = chapterPageLoading,
+                                        onChapterPageChange = onChapterPageChange,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp),
                                     )
                                 }
                             }
-                        } else {
-                            items(
-                                items = visibleChapters,
-                                key = { it.id },
-                                contentType = { "chapter" },
-                            ) { chapter ->
-                                NovelChapterCardCompact(
-                                    novel = novel,
-                                    chapter = chapter,
-                                    selected = chapter.id in selectedIds,
-                                    selectionMode = isSelectionMode,
-                                    onClick = { onChapterClick(chapter.id) },
-                                    onLongClick = { onChapterLongClick(chapter.id) },
-                                    onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
-                                    onToggleRead = { onChapterReadToggle(chapter.id) },
-                                    onToggleDownload = { onChapterDownloadToggle(chapter.id) },
-                                    chapterSwipeStartAction = chapterSwipeStartAction,
-                                    chapterSwipeEndAction = chapterSwipeEndAction,
-                                    onChapterSwipe = { action -> onChapterSwipe(chapter.id, action) },
-                                    downloaded = chapter.id in state.downloadedChapterIds,
-                                    downloading = chapter.id in state.downloadingChapterIds,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 8.dp, vertical = 2.dp),
-                                )
+
+                            if (state.showScanlatorSelector) {
+                                item {
+                                    ScanlatorBranchSelector(
+                                        scanlatorChapterCounts = scanlatorChapterCounts,
+                                        selectedScanlator = selectedScanlator,
+                                        onScanlatorSelected = onScanlatorSelected,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    )
+                                }
                             }
 
-                            if (visibleChapterCount < chapters.size) {
+                            if (chapters.isEmpty()) {
                                 item {
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                                            .padding(32.dp),
                                         contentAlignment = Alignment.Center,
                                     ) {
-                                        SelectionChip(
-                                            text = "${stringResource(MR.strings.label_more)} " +
-                                                "(${chapters.size - visibleChapterCount})",
+                                        Text(
+                                            text = stringResource(MR.strings.no_chapters_error),
+                                            color = Color.White.copy(alpha = 0.7f),
+                                            fontSize = 14.sp,
+                                        )
+                                    }
+                                }
+                            } else {
+                                items(
+                                    items = visibleChapters,
+                                    key = { it.id },
+                                    contentType = { "chapter" },
+                                ) { chapter ->
+                                    NovelChapterCardCompact(
+                                        novel = novel,
+                                        chapter = chapter,
+                                        selected = chapter.id in selectedIds,
+                                        selectionMode = isSelectionMode,
+                                        onClick = { onChapterClick(chapter.id) },
+                                        onLongClick = { onChapterLongClick(chapter.id) },
+                                        onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
+                                        onToggleRead = { onChapterReadToggle(chapter.id) },
+                                        onToggleDownload = { onChapterDownloadToggle(chapter.id) },
+                                        chapterSwipeStartAction = chapterSwipeStartAction,
+                                        chapterSwipeEndAction = chapterSwipeEndAction,
+                                        onChapterSwipe = { action -> onChapterSwipe(chapter.id, action) },
+                                        downloaded = chapter.id in state.downloadedChapterIds,
+                                        downloading = chapter.id in state.downloadingChapterIds,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                                    )
+                                }
+
+                                if (visibleChapterCount < chapters.size) {
+                                    item {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            SelectionChip(
+                                                text = "${stringResource(MR.strings.label_more)} " +
+                                                    "(${chapters.size - visibleChapterCount})",
+                                                onClick = {
+                                                    visibleChapterCount = nextVisibleChapterCount(
+                                                        currentCount = visibleChapterCount,
+                                                        totalCount = chapters.size,
+                                                        step = NOVEL_CHAPTERS_PAGE_SIZE,
+                                                    )
+                                                },
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(WindowInsets.statusBars.asPaddingValues())
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    AuroraActionButton(
+                        onClick = onBack,
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = null,
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    AuroraActionButton(
+                        onClick = onFilterButtonClicked,
+                        icon = Icons.Default.FilterList,
+                        contentDescription = null,
+                        iconTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f),
+                    )
+                    if (!isFromSource) {
+                        AuroraActionButton(
+                            onClick = onRefresh,
+                            icon = Icons.Default.Refresh,
+                            contentDescription = null,
+                        )
+                    }
+                    if (onWebView != null) {
+                        AuroraActionButton(
+                            onClick = onWebView,
+                            icon = Icons.Filled.Public,
+                            contentDescription = null,
+                        )
+                    }
+
+                    var showMenu by remember { mutableStateOf(false) }
+                    val hasMenuActions = if (isFromSource) {
+                        true
+                    } else {
+                        onShare != null || onMigrateClicked != null || globalSearchQuery != null
+                    }
+                    if (hasMenuActions) {
+                        Box(contentAlignment = Alignment.TopEnd) {
+                            AuroraActionButton(
+                                onClick = { showMenu = !showMenu },
+                                icon = Icons.Default.MoreVert,
+                                contentDescription = null,
+                            )
+                            AuroraEntryDropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false },
+                            ) {
+                                if (isFromSource) {
+                                    AuroraEntryDropdownMenuItem(
+                                        text = stringResource(MR.strings.action_webview_refresh),
+                                        onClick = {
+                                            onRefresh()
+                                            showMenu = false
+                                        },
+                                    )
+                                    if (globalSearchQuery != null) {
+                                        AuroraEntryDropdownMenuItem(
+                                            text = stringResource(MR.strings.action_global_search),
                                             onClick = {
-                                                visibleChapterCount = nextVisibleChapterCount(
-                                                    currentCount = visibleChapterCount,
-                                                    totalCount = chapters.size,
-                                                    step = NOVEL_CHAPTERS_PAGE_SIZE,
-                                                )
+                                                onSearch(globalSearchQuery, true)
+                                                showMenu = false
+                                            },
+                                        )
+                                    }
+                                    if (onShare != null) {
+                                        AuroraEntryDropdownMenuItem(
+                                            text = stringResource(MR.strings.action_share),
+                                            onClick = {
+                                                onShare()
+                                                showMenu = false
+                                            },
+                                        )
+                                    }
+                                } else {
+                                    if (globalSearchQuery != null) {
+                                        AuroraEntryDropdownMenuItem(
+                                            text = stringResource(MR.strings.action_global_search),
+                                            onClick = {
+                                                onSearch(globalSearchQuery, true)
+                                                showMenu = false
+                                            },
+                                        )
+                                    }
+                                    if (onShare != null) {
+                                        AuroraEntryDropdownMenuItem(
+                                            text = stringResource(MR.strings.action_share),
+                                            onClick = {
+                                                onShare()
+                                                showMenu = false
+                                            },
+                                        )
+                                    }
+                                    if (onMigrateClicked != null) {
+                                        AuroraEntryDropdownMenuItem(
+                                            text = stringResource(MR.strings.action_migrate),
+                                            onClick = {
+                                                onMigrateClicked()
+                                                showMenu = false
                                             },
                                         )
                                     }
@@ -342,8 +468,247 @@ fun NovelScreenAuroraImpl(
                             }
                         }
                     }
-                },
+                }
+
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    snackbar = { data ->
+                        Snackbar(
+                            snackbarData = data,
+                            containerColor = colors.surface.copy(alpha = 0.96f),
+                            contentColor = colors.textPrimary,
+                            actionColor = colors.accent,
+                            dismissActionContentColor = colors.textSecondary,
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                        )
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 16.dp, vertical = 20.dp),
+                )
+            }
+        }
+        return
+    }
+
+    AuroraEntryHoldToRefresh(
+        refreshing = state.isRefreshingData,
+        onRefresh = onRefresh,
+        enabled = !isSelectionMode,
+        modifier = Modifier.fillMaxSize(),
+        indicatorPadding = WindowInsets.statusBars.asPaddingValues(),
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            FullscreenPosterBackground(
+                novel = novel,
+                scrollOffset = scrollOffset,
+                firstVisibleItemIndex = firstVisibleItemIndex,
             )
+
+            LazyColumn(
+                state = lazyListState,
+                contentPadding = PaddingValues(bottom = 112.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                item { Spacer(modifier = Modifier.height(screenHeight)) }
+
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .auroraCenteredMaxWidth(contentMaxWidthDp),
+                    ) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        NovelInfoCard(
+                            novel = novel,
+                            chapterCount = totalChapterCount,
+                            nextUpdate = nextUpdate,
+                            onTagSearch = {},
+                            descriptionExpanded = descriptionExpanded,
+                            genresExpanded = genresExpanded,
+                            onToggleDescription = { descriptionExpanded = !descriptionExpanded },
+                            onToggleGenres = { genresExpanded = !genresExpanded },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        NovelActionCard(
+                            novel = novel,
+                            trackingCount = trackingCount,
+                            onAddToLibraryClicked = onToggleFavorite,
+                            onTrackingClicked = onTrackingClicked,
+                            onBatchDownloadClicked = onOpenBatchDownloadDialog,
+                            onTranslatedDownloadClicked = onOpenTranslatedDownloadDialog,
+                            onExportEpubClicked = onOpenEpubExportDialog,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+
+                if (isSelectionMode) {
+                    item {
+                        SelectionBar(
+                            selectedCount = selectedIds.size,
+                            canMarkRead = selectedChapters.any { !it.read },
+                            canMarkUnread = selectedChapters.any { it.read || it.lastPageRead > 0L },
+                            canBookmark = selectedChapters.any { !it.bookmark },
+                            canUnbookmark = selectedChapters.any { it.bookmark },
+                            onClear = { onToggleAllSelection(false) },
+                            onSelectAll = { onToggleAllSelection(true) },
+                            onInvert = onInvertSelection,
+                            onMarkRead = { onMultiMarkAsReadClicked(true) },
+                            onMarkUnread = { onMultiMarkAsReadClicked(false) },
+                            onBookmark = { onMultiBookmarkClicked(true) },
+                            onUnbookmark = { onMultiBookmarkClicked(false) },
+                            modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
+                        )
+                    }
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    ChaptersHeader(
+                        chapterCount = totalChapterCount,
+                        modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
+                    )
+                }
+
+                if (chapterPageEnabled) {
+                    item {
+                        AuroraChapterPageControls(
+                            chapterPageCurrent = chapterPageCurrent,
+                            chapterPageTotal = chapterPageTotal,
+                            chapterPageLoading = chapterPageLoading,
+                            onChapterPageChange = onChapterPageChange,
+                            modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
+                        )
+                    }
+                }
+
+                if (state.showScanlatorSelector) {
+                    item {
+                        ScanlatorBranchSelector(
+                            scanlatorChapterCounts = scanlatorChapterCounts,
+                            selectedScanlator = selectedScanlator,
+                            onScanlatorSelected = onScanlatorSelected,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                    }
+                }
+
+                if (chapters.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                .padding(32.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = stringResource(MR.strings.no_chapters_error),
+                                color = Color.White.copy(alpha = 0.7f),
+                                fontSize = 14.sp,
+                            )
+                        }
+                    }
+                } else {
+                    items(
+                        items = visibleChapters,
+                        key = { it.id },
+                        contentType = { "chapter" },
+                    ) { chapter ->
+                        NovelChapterCardCompact(
+                            novel = novel,
+                            chapter = chapter,
+                            selected = chapter.id in selectedIds,
+                            selectionMode = isSelectionMode,
+                            onClick = { onChapterClick(chapter.id) },
+                            onLongClick = { onChapterLongClick(chapter.id) },
+                            onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
+                            onToggleRead = { onChapterReadToggle(chapter.id) },
+                            onToggleDownload = { onChapterDownloadToggle(chapter.id) },
+                            chapterSwipeStartAction = chapterSwipeStartAction,
+                            chapterSwipeEndAction = chapterSwipeEndAction,
+                            onChapterSwipe = { action -> onChapterSwipe(chapter.id, action) },
+                            downloaded = chapter.id in state.downloadedChapterIds,
+                            downloading = chapter.id in state.downloadingChapterIds,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                        )
+                    }
+
+                    if (visibleChapterCount < chapters.size) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                SelectionChip(
+                                    text = "${stringResource(MR.strings.label_more)} " +
+                                        "(${chapters.size - visibleChapterCount})",
+                                    onClick = {
+                                        visibleChapterCount = nextVisibleChapterCount(
+                                            currentCount = visibleChapterCount,
+                                            totalCount = chapters.size,
+                                            step = NOVEL_CHAPTERS_PAGE_SIZE,
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            val heroThreshold = (screenHeight.value * 0.7f).toInt()
+            if (firstVisibleItemIndex == 0 && scrollOffset < heroThreshold) {
+                val heroAlpha = (1f - (scrollOffset / heroThreshold.toFloat())).coerceIn(0f, 1f)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = heroAlpha },
+                    contentAlignment = Alignment.BottomStart,
+                ) {
+                    NovelHeroContent(
+                        novel = novel,
+                        chapterCount = totalChapterCount,
+                        onContinueReading = onStartReading,
+                        isReading = isReading,
+                    )
+                }
+            }
+
+            val showFab = onStartReading != null && (firstVisibleItemIndex > 0 || scrollOffset > heroThreshold)
+            if (showFab) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(end = 20.dp, bottom = 20.dp),
+                    contentAlignment = Alignment.BottomEnd,
+                ) {
+                    FloatingActionButton(
+                        onClick = onStartReading!!,
+                        containerColor = colors.accent,
+                        contentColor = colors.textOnAccent,
+                        modifier = Modifier.size(64.dp),
+                    ) {
+                        Icon(
+                            Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(32.dp),
+                        )
+                    }
+                }
+            }
 
             Row(
                 modifier = Modifier
@@ -358,25 +723,37 @@ fun NovelScreenAuroraImpl(
                     icon = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = null,
                 )
+
                 Spacer(modifier = Modifier.weight(1f))
+
                 AuroraActionButton(
                     onClick = onFilterButtonClicked,
                     icon = Icons.Default.FilterList,
                     contentDescription = null,
                     iconTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f),
                 )
+
                 if (!isFromSource) {
-                    AuroraActionButton(onClick = onRefresh, icon = Icons.Default.Refresh, contentDescription = null)
+                    AuroraActionButton(
+                        onClick = onRefresh,
+                        icon = Icons.Default.Refresh,
+                        contentDescription = null,
+                    )
                 }
+
                 if (onWebView != null) {
-                    AuroraActionButton(onClick = onWebView, icon = Icons.Filled.Public, contentDescription = null)
+                    AuroraActionButton(
+                        onClick = onWebView,
+                        icon = Icons.Filled.Public,
+                        contentDescription = null,
+                    )
                 }
 
                 var showMenu by remember { mutableStateOf(false) }
                 val hasMenuActions = if (isFromSource) {
                     true
                 } else {
-                    onShare != null || onMigrateClicked != null
+                    onShare != null || onMigrateClicked != null || globalSearchQuery != null
                 }
                 if (hasMenuActions) {
                     Box(contentAlignment = Alignment.TopEnd) {
@@ -385,6 +762,7 @@ fun NovelScreenAuroraImpl(
                             icon = Icons.Default.MoreVert,
                             contentDescription = null,
                         )
+
                         AuroraEntryDropdownMenu(
                             expanded = showMenu,
                             onDismissRequest = { showMenu = false },
@@ -397,6 +775,15 @@ fun NovelScreenAuroraImpl(
                                         showMenu = false
                                     },
                                 )
+                                if (globalSearchQuery != null) {
+                                    AuroraEntryDropdownMenuItem(
+                                        text = stringResource(MR.strings.action_global_search),
+                                        onClick = {
+                                            onSearch(globalSearchQuery, true)
+                                            showMenu = false
+                                        },
+                                    )
+                                }
                                 if (onShare != null) {
                                     AuroraEntryDropdownMenuItem(
                                         text = stringResource(MR.strings.action_share),
@@ -407,6 +794,15 @@ fun NovelScreenAuroraImpl(
                                     )
                                 }
                             } else {
+                                if (globalSearchQuery != null) {
+                                    AuroraEntryDropdownMenuItem(
+                                        text = stringResource(MR.strings.action_global_search),
+                                        onClick = {
+                                            onSearch(globalSearchQuery, true)
+                                            showMenu = false
+                                        },
+                                    )
+                                }
                                 if (onShare != null) {
                                     AuroraEntryDropdownMenuItem(
                                         text = stringResource(MR.strings.action_share),
@@ -448,332 +844,6 @@ fun NovelScreenAuroraImpl(
                     .padding(horizontal = 16.dp, vertical = 20.dp),
             )
         }
-        return
-    }
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        FullscreenPosterBackground(
-            novel = novel,
-            scrollOffset = scrollOffset,
-            firstVisibleItemIndex = firstVisibleItemIndex,
-        )
-
-        LazyColumn(
-            state = lazyListState,
-            contentPadding = PaddingValues(bottom = 112.dp),
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            item { Spacer(modifier = Modifier.height(screenHeight)) }
-
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .auroraCenteredMaxWidth(contentMaxWidthDp),
-                ) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    NovelInfoCard(
-                        novel = novel,
-                        chapterCount = totalChapterCount,
-                        nextUpdate = nextUpdate,
-                        onTagSearch = {},
-                        descriptionExpanded = descriptionExpanded,
-                        genresExpanded = genresExpanded,
-                        onToggleDescription = { descriptionExpanded = !descriptionExpanded },
-                        onToggleGenres = { genresExpanded = !genresExpanded },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-                    NovelActionCard(
-                        novel = novel,
-                        trackingCount = trackingCount,
-                        onAddToLibraryClicked = onToggleFavorite,
-                        onTrackingClicked = onTrackingClicked,
-                        onBatchDownloadClicked = onOpenBatchDownloadDialog,
-                        onTranslatedDownloadClicked = onOpenTranslatedDownloadDialog,
-                        onExportEpubClicked = onOpenEpubExportDialog,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            }
-
-            if (isSelectionMode) {
-                item {
-                    SelectionBar(
-                        selectedCount = selectedIds.size,
-                        canMarkRead = selectedChapters.any { !it.read },
-                        canMarkUnread = selectedChapters.any { it.read || it.lastPageRead > 0L },
-                        canBookmark = selectedChapters.any { !it.bookmark },
-                        canUnbookmark = selectedChapters.any { it.bookmark },
-                        onClear = { onToggleAllSelection(false) },
-                        onSelectAll = { onToggleAllSelection(true) },
-                        onInvert = onInvertSelection,
-                        onMarkRead = { onMultiMarkAsReadClicked(true) },
-                        onMarkUnread = { onMultiMarkAsReadClicked(false) },
-                        onBookmark = { onMultiBookmarkClicked(true) },
-                        onUnbookmark = { onMultiBookmarkClicked(false) },
-                        modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
-                    )
-                }
-            }
-
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                ChaptersHeader(
-                    chapterCount = totalChapterCount,
-                    modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
-                )
-            }
-
-            if (chapterPageEnabled) {
-                item {
-                    AuroraChapterPageControls(
-                        chapterPageCurrent = chapterPageCurrent,
-                        chapterPageTotal = chapterPageTotal,
-                        chapterPageLoading = chapterPageLoading,
-                        onChapterPageChange = onChapterPageChange,
-                        modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
-                    )
-                }
-            }
-
-            if (state.showScanlatorSelector) {
-                item {
-                    ScanlatorBranchSelector(
-                        scanlatorChapterCounts = scanlatorChapterCounts,
-                        selectedScanlator = selectedScanlator,
-                        onScanlatorSelected = onScanlatorSelected,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .auroraCenteredMaxWidth(contentMaxWidthDp)
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                    )
-                }
-            }
-
-            if (chapters.isEmpty()) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .auroraCenteredMaxWidth(contentMaxWidthDp)
-                            .padding(32.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = stringResource(MR.strings.no_chapters_error),
-                            color = Color.White.copy(alpha = 0.7f),
-                            fontSize = 14.sp,
-                        )
-                    }
-                }
-            } else {
-                items(
-                    items = visibleChapters,
-                    key = { it.id },
-                    contentType = { "chapter" },
-                ) { chapter ->
-                    NovelChapterCardCompact(
-                        novel = novel,
-                        chapter = chapter,
-                        selected = chapter.id in selectedIds,
-                        selectionMode = isSelectionMode,
-                        onClick = { onChapterClick(chapter.id) },
-                        onLongClick = { onChapterLongClick(chapter.id) },
-                        onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
-                        onToggleRead = { onChapterReadToggle(chapter.id) },
-                        onToggleDownload = { onChapterDownloadToggle(chapter.id) },
-                        chapterSwipeStartAction = chapterSwipeStartAction,
-                        chapterSwipeEndAction = chapterSwipeEndAction,
-                        onChapterSwipe = { action -> onChapterSwipe(chapter.id, action) },
-                        downloaded = chapter.id in state.downloadedChapterIds,
-                        downloading = chapter.id in state.downloadingChapterIds,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .auroraCenteredMaxWidth(contentMaxWidthDp)
-                            .padding(horizontal = 8.dp, vertical = 2.dp),
-                    )
-                }
-
-                if (visibleChapterCount < chapters.size) {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .auroraCenteredMaxWidth(contentMaxWidthDp)
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            SelectionChip(
-                                text = "${stringResource(MR.strings.label_more)} " +
-                                    "(${chapters.size - visibleChapterCount})",
-                                onClick = {
-                                    visibleChapterCount = nextVisibleChapterCount(
-                                        currentCount = visibleChapterCount,
-                                        totalCount = chapters.size,
-                                        step = NOVEL_CHAPTERS_PAGE_SIZE,
-                                    )
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        val heroThreshold = (screenHeight.value * 0.7f).toInt()
-        if (firstVisibleItemIndex == 0 && scrollOffset < heroThreshold) {
-            val heroAlpha = (1f - (scrollOffset / heroThreshold.toFloat())).coerceIn(0f, 1f)
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = heroAlpha },
-                contentAlignment = Alignment.BottomStart,
-            ) {
-                NovelHeroContent(
-                    novel = novel,
-                    chapterCount = totalChapterCount,
-                    onContinueReading = onStartReading,
-                    isReading = isReading,
-                )
-            }
-        }
-
-        val showFab = onStartReading != null && (firstVisibleItemIndex > 0 || scrollOffset > heroThreshold)
-        if (showFab) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(end = 20.dp, bottom = 20.dp),
-                contentAlignment = Alignment.BottomEnd,
-            ) {
-                FloatingActionButton(
-                    onClick = onStartReading!!,
-                    containerColor = colors.accent,
-                    contentColor = colors.textOnAccent,
-                    modifier = Modifier.size(64.dp),
-                ) {
-                    Icon(
-                        Icons.Filled.PlayArrow,
-                        contentDescription = null,
-                        modifier = Modifier.size(32.dp),
-                    )
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(WindowInsets.statusBars.asPaddingValues())
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            AuroraActionButton(onClick = onBack, icon = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            AuroraActionButton(
-                onClick = onFilterButtonClicked,
-                icon = Icons.Default.FilterList,
-                contentDescription = null,
-                iconTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f),
-            )
-
-            if (!isFromSource) {
-                AuroraActionButton(
-                    onClick = onRefresh,
-                    icon = Icons.Default.Refresh,
-                    contentDescription = null,
-                )
-            }
-
-            if (onWebView != null) {
-                AuroraActionButton(
-                    onClick = onWebView,
-                    icon = Icons.Filled.Public,
-                    contentDescription = null,
-                )
-            }
-
-            var showMenu by remember { mutableStateOf(false) }
-            val hasMenuActions = if (isFromSource) {
-                true
-            } else {
-                onShare != null || onMigrateClicked != null
-            }
-            if (hasMenuActions) {
-                Box(contentAlignment = Alignment.TopEnd) {
-                    AuroraActionButton(
-                        onClick = { showMenu = !showMenu },
-                        icon = Icons.Default.MoreVert,
-                        contentDescription = null,
-                    )
-
-                    AuroraEntryDropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false },
-                    ) {
-                        if (isFromSource) {
-                            AuroraEntryDropdownMenuItem(
-                                text = stringResource(MR.strings.action_webview_refresh),
-                                onClick = {
-                                    onRefresh()
-                                    showMenu = false
-                                },
-                            )
-                            if (onShare != null) {
-                                AuroraEntryDropdownMenuItem(
-                                    text = stringResource(MR.strings.action_share),
-                                    onClick = {
-                                        onShare()
-                                        showMenu = false
-                                    },
-                                )
-                            }
-                        } else {
-                            if (onShare != null) {
-                                AuroraEntryDropdownMenuItem(
-                                    text = stringResource(MR.strings.action_share),
-                                    onClick = {
-                                        onShare()
-                                        showMenu = false
-                                    },
-                                )
-                            }
-                            if (onMigrateClicked != null) {
-                                AuroraEntryDropdownMenuItem(
-                                    text = stringResource(MR.strings.action_migrate),
-                                    onClick = {
-                                        onMigrateClicked()
-                                        showMenu = false
-                                    },
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        SnackbarHost(
-            hostState = snackbarHostState,
-            snackbar = { data ->
-                Snackbar(
-                    snackbarData = data,
-                    containerColor = colors.surface.copy(alpha = 0.96f),
-                    contentColor = colors.textPrimary,
-                    actionColor = colors.accent,
-                    dismissActionContentColor = colors.textSecondary,
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
-                )
-            },
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(horizontal = 16.dp, vertical = 20.dp),
-        )
     }
 }
 
@@ -881,14 +951,24 @@ private fun SelectionBar(
 
         SelectionChip(text = stringResource(MR.strings.action_select_all), onClick = onSelectAll)
         SelectionChip(text = stringResource(MR.strings.action_select_inverse), onClick = onInvert)
-        if (canBookmark) SelectionChip(text = stringResource(MR.strings.action_bookmark), onClick = onBookmark)
+        if (canBookmark) {
+            SelectionChip(
+                text = stringResource(MR.strings.action_bookmark),
+                onClick = onBookmark,
+            )
+        }
         if (canUnbookmark) {
             SelectionChip(
                 text = stringResource(MR.strings.action_remove_bookmark),
                 onClick = onUnbookmark,
             )
         }
-        if (canMarkRead) SelectionChip(text = stringResource(MR.strings.action_mark_as_read), onClick = onMarkRead)
+        if (canMarkRead) {
+            SelectionChip(
+                text = stringResource(MR.strings.action_mark_as_read),
+                onClick = onMarkRead,
+            )
+        }
         if (canMarkUnread) {
             SelectionChip(
                 text = stringResource(MR.strings.action_mark_as_unread),
@@ -909,7 +989,12 @@ private fun SelectionChip(
         modifier = Modifier
             .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
             .background(
-                Brush.horizontalGradient(listOf(colors.accent.copy(alpha = 0.20f), colors.accent.copy(alpha = 0.10f))),
+                Brush.horizontalGradient(
+                    listOf(
+                        colors.accent.copy(alpha = 0.20f),
+                        colors.accent.copy(alpha = 0.10f),
+                    ),
+                ),
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 6.dp),
