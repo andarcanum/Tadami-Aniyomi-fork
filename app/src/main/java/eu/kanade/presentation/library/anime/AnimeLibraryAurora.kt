@@ -23,6 +23,7 @@ import eu.kanade.presentation.library.components.GlowContourLibraryGridItem
 import eu.kanade.presentation.library.components.LazyLibraryGrid
 import eu.kanade.presentation.library.components.globalSearchItem
 import eu.kanade.presentation.library.components.resolveGlowContourLibraryTextSpec
+import eu.kanade.presentation.library.components.shouldShowContinueViewingAction
 import eu.kanade.presentation.library.resolveAnimeLibraryCardProgressPercent
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
@@ -281,8 +282,13 @@ private fun AnimeLibraryAuroraList(
                 },
                 onClick = { onClick(libraryAnime) },
                 onLongClick = { onLongClick(libraryAnime) },
-                onClickContinueViewing = if (onClickContinueWatching != null && libraryItem.unseenCount > 0) {
-                    { onClickContinueWatching(libraryAnime) }
+                onClickContinueViewing = if (
+                    shouldShowContinueViewingAction(
+                        hasContinueAction = onClickContinueWatching != null,
+                        remainingCount = libraryItem.libraryAnime.unseenCount,
+                    )
+                ) {
+                    { onClickContinueWatching?.invoke(libraryAnime) }
                 } else {
                     null
                 },
@@ -377,8 +383,13 @@ private fun AnimeLibraryAuroraCardGrid(
                     },
                     onClick = { onClick(libraryAnime) },
                     onLongClick = { onLongClick(libraryAnime) },
-                    onClickContinueViewing = if (onClickContinueWatching != null && libraryItem.unseenCount > 0) {
-                        { onClickContinueWatching(libraryAnime) }
+                    onClickContinueViewing = if (
+                        shouldShowContinueViewingAction(
+                            hasContinueAction = onClickContinueWatching != null,
+                            remainingCount = libraryItem.libraryAnime.unseenCount,
+                        )
+                    ) {
+                        { onClickContinueWatching?.invoke(libraryAnime) }
                     } else {
                         null
                     },
@@ -409,8 +420,13 @@ private fun AnimeLibraryAuroraCardGrid(
                     },
                     onClick = { onClick(libraryAnime) },
                     onLongClick = { onLongClick(libraryAnime) },
-                    onClickContinueViewing = if (onClickContinueWatching != null && libraryItem.unseenCount > 0) {
-                        { onClickContinueWatching(libraryAnime) }
+                    onClickContinueViewing = if (
+                        shouldShowContinueViewingAction(
+                            hasContinueAction = onClickContinueWatching != null,
+                            remainingCount = libraryItem.libraryAnime.unseenCount,
+                        )
+                    ) {
+                        { onClickContinueWatching?.invoke(libraryAnime) }
                     } else {
                         null
                     },

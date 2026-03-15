@@ -23,6 +23,7 @@ import eu.kanade.presentation.library.components.GlowContourLibraryGridItem
 import eu.kanade.presentation.library.components.LazyLibraryGrid
 import eu.kanade.presentation.library.components.globalSearchItem
 import eu.kanade.presentation.library.components.resolveGlowContourLibraryTextSpec
+import eu.kanade.presentation.library.components.shouldShowContinueViewingAction
 import eu.kanade.presentation.library.resolveMangaLibraryCardProgressPercent
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
@@ -281,8 +282,13 @@ private fun MangaLibraryAuroraList(
                 },
                 onClick = { onClick(libraryManga) },
                 onLongClick = { onLongClick(libraryManga) },
-                onClickContinueViewing = if (onClickContinueReading != null && libraryItem.unreadCount > 0) {
-                    { onClickContinueReading(libraryManga) }
+                onClickContinueViewing = if (
+                    shouldShowContinueViewingAction(
+                        hasContinueAction = onClickContinueReading != null,
+                        remainingCount = libraryItem.libraryManga.unreadCount,
+                    )
+                ) {
+                    { onClickContinueReading?.invoke(libraryManga) }
                 } else {
                     null
                 },
@@ -377,8 +383,13 @@ private fun MangaLibraryAuroraCardGrid(
                     },
                     onClick = { onClick(libraryManga) },
                     onLongClick = { onLongClick(libraryManga) },
-                    onClickContinueViewing = if (onClickContinueReading != null && libraryItem.unreadCount > 0) {
-                        { onClickContinueReading(libraryManga) }
+                    onClickContinueViewing = if (
+                        shouldShowContinueViewingAction(
+                            hasContinueAction = onClickContinueReading != null,
+                            remainingCount = libraryItem.libraryManga.unreadCount,
+                        )
+                    ) {
+                        { onClickContinueReading?.invoke(libraryManga) }
                     } else {
                         null
                     },
@@ -409,8 +420,13 @@ private fun MangaLibraryAuroraCardGrid(
                     },
                     onClick = { onClick(libraryManga) },
                     onLongClick = { onLongClick(libraryManga) },
-                    onClickContinueViewing = if (onClickContinueReading != null && libraryItem.unreadCount > 0) {
-                        { onClickContinueReading(libraryManga) }
+                    onClickContinueViewing = if (
+                        shouldShowContinueViewingAction(
+                            hasContinueAction = onClickContinueReading != null,
+                            remainingCount = libraryItem.libraryManga.unreadCount,
+                        )
+                    ) {
+                        { onClickContinueReading?.invoke(libraryManga) }
                     } else {
                         null
                     },

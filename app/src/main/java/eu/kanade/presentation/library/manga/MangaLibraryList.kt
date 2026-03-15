@@ -13,6 +13,7 @@ import eu.kanade.presentation.library.components.EntryListItem
 import eu.kanade.presentation.library.components.GlobalSearchItem
 import eu.kanade.presentation.library.components.LanguageBadge
 import eu.kanade.presentation.library.components.UnviewedBadge
+import eu.kanade.presentation.library.components.shouldShowContinueViewingAction
 import eu.kanade.tachiyomi.ui.library.manga.MangaLibraryItem
 import tachiyomi.domain.entries.manga.model.MangaCover
 import tachiyomi.domain.library.manga.LibraryManga
@@ -71,8 +72,13 @@ internal fun MangaLibraryList(
                 },
                 onLongClick = { onLongClick(libraryItem.libraryManga) },
                 onClick = { onClick(libraryItem.libraryManga) },
-                onClickContinueViewing = if (onClickContinueReading != null && libraryItem.unreadCount > 0) {
-                    { onClickContinueReading(libraryItem.libraryManga) }
+                onClickContinueViewing = if (
+                    shouldShowContinueViewingAction(
+                        hasContinueAction = onClickContinueReading != null,
+                        remainingCount = libraryItem.libraryManga.unreadCount,
+                    )
+                ) {
+                    { onClickContinueReading?.invoke(libraryItem.libraryManga) }
                 } else {
                     null
                 },
