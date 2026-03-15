@@ -383,6 +383,7 @@ private fun MangaLibraryAuroraCardGrid(
                         null
                     },
                     isSelected = selection.fastAny { it.id == libraryManga.id },
+                    gridColumns = columns,
                 )
             } else {
                 AuroraCard(
@@ -416,6 +417,7 @@ private fun MangaLibraryAuroraCardGrid(
                     isSelected = selection.fastAny { it.id == libraryManga.id },
                     coverHeightFraction = if (showMetadata) 0.68f else 1f,
                     titleMaxLines = if (showMetadata) 1 else 2,
+                    gridColumns = columns,
                 )
             }
         }

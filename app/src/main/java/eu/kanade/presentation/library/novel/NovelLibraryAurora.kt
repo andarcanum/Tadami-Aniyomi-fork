@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -58,6 +59,7 @@ import eu.kanade.presentation.components.AuroraCard
 import eu.kanade.presentation.components.AuroraTabRow
 import eu.kanade.presentation.components.LocalTabState
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
+import eu.kanade.presentation.components.resolveAuroraCardOverlaySpec
 import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
@@ -244,6 +246,7 @@ fun NovelLibraryAuroraContent(
                         isSelected = selection.fastAny { it.id == item.id },
                         cardStyle = AuroraLibraryCardStyle.Standard,
                         glowDisplayMode = LibraryDisplayMode.List,
+                        gridColumns = null,
                     )
                 }
             }
@@ -313,6 +316,7 @@ fun NovelLibraryAuroraContent(
                             isSelected = selection.fastAny { it.id == item.id },
                             cardStyle = auroraCardStyle,
                             glowDisplayMode = displayMode,
+                            gridColumns = columns.coerceAtLeast(0),
                         )
                     }
                 }
@@ -379,6 +383,7 @@ private fun NovelLibraryAuroraCard(
     isSelected: Boolean,
     cardStyle: AuroraLibraryCardStyle,
     glowDisplayMode: LibraryDisplayMode,
+    gridColumns: Int?,
 ) {
     val useGlowContourCards = cardStyle == AuroraLibraryCardStyle.GlowContour
     val progressText = if (showMetadata && item.totalChapters > 0) {
@@ -427,6 +432,7 @@ private fun NovelLibraryAuroraCard(
                 null
             },
             isSelected = isSelected,
+            gridColumns = gridColumns,
         )
     } else if (showMetadata) {
         val colors = AuroraTheme.colors
@@ -455,6 +461,7 @@ private fun NovelLibraryAuroraCard(
             },
             isSelected = isSelected,
             titleMaxLines = if (showMetadata) 1 else 2,
+            gridColumns = gridColumns,
         )
     } else {
         NovelLibraryAuroraCoverOnlyCard(
@@ -462,6 +469,7 @@ private fun NovelLibraryAuroraCard(
             badgeState = badgeState,
             modifier = modifier,
             isSelected = isSelected,
+            gridColumns = gridColumns,
             onClickContinueViewing = if (onClickContinueReading != null && item.unreadCount > 0) {
                 { onClickContinueReading(item) }
             } else {
@@ -524,6 +532,7 @@ private fun NovelLibraryAuroraCoverOnlyCard(
     badgeState: NovelLibraryBadgeState,
     modifier: Modifier,
     isSelected: Boolean,
+    gridColumns: Int?,
     onClickContinueViewing: (() -> Unit)?,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)?,
@@ -549,11 +558,16 @@ private fun NovelLibraryAuroraCoverOnlyCard(
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.1f)),
         ) {
+            val overlaySpec = resolveAuroraCardOverlaySpec(
+                gridColumns = gridColumns,
+                cardWidthDp = maxWidth.value,
+            )
+
             AsyncImage(
                 model = resolveAuroraCoverModel(coverData),
                 contentDescription = null,
@@ -604,7 +618,7 @@ private fun NovelLibraryAuroraCoverOnlyCard(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(6.dp)
-                        .size(30.dp),
+                        .size(overlaySpec.buttonSizeDp),
                     colors = IconButtonDefaults.filledIconButtonColors(
                         containerColor = colors.accent.copy(alpha = 0.9f),
                         contentColor = colors.textOnAccent,
@@ -613,7 +627,7 @@ private fun NovelLibraryAuroraCoverOnlyCard(
                     Icon(
                         imageVector = Icons.Filled.PlayArrow,
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(overlaySpec.buttonIconSizeDp),
                     )
                 }
             }

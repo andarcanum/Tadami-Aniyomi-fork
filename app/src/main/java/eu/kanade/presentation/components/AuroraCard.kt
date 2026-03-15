@@ -3,6 +3,7 @@ package eu.kanade.presentation.components
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -49,6 +50,7 @@ fun AuroraCard(
     coverHeightFraction: Float = 0.65f, // Image takes 65% of height
     imagePadding: Dp = 0.dp,
     titleMaxLines: Int = 2,
+    gridColumns: Int? = null,
 ) {
     val colors = AuroraTheme.colors
     val normalizedCoverHeightFraction = coverHeightFraction.coerceIn(0.01f, 1f)
@@ -81,12 +83,17 @@ fun AuroraCard(
             modifier = Modifier.fillMaxSize(),
         ) {
             // Cover Image
-            Box(
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(if (showTextContent) normalizedCoverHeightFraction else 1f)
                     .padding(imagePadding),
             ) {
+                val overlaySpec = resolveAuroraCardOverlaySpec(
+                    gridColumns = gridColumns,
+                    cardWidthDp = maxWidth.value,
+                )
+
                 AsyncImage(
                     model = resolveAuroraCoverModel(coverData),
                     contentDescription = null,
@@ -125,7 +132,7 @@ fun AuroraCard(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(6.dp)
-                            .size(30.dp),
+                            .size(overlaySpec.buttonSizeDp),
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = colors.accent.copy(alpha = 0.9f),
                             contentColor = colors.textOnAccent,
@@ -134,7 +141,7 @@ fun AuroraCard(
                         Icon(
                             imageVector = Icons.Filled.PlayArrow,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(overlaySpec.buttonIconSizeDp),
                         )
                     }
                 }

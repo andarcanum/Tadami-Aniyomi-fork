@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -48,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.graphics.PathParser
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
+import eu.kanade.presentation.components.resolveAuroraCardOverlaySpec
 import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
@@ -289,6 +291,7 @@ fun GlowContourLibraryGridItem(
     onLongClick: (() -> Unit)? = null,
     onClickContinueViewing: (() -> Unit)? = null,
     isSelected: Boolean = false,
+    gridColumns: Int? = null,
 ) {
     val colors = AuroraTheme.colors
     val blendSpec = resolveGlowContourUnifiedBlendSpec(colors.isDark)
@@ -334,6 +337,7 @@ fun GlowContourLibraryGridItem(
                 isUnifiedContainerMode = true,
                 blendSpec = blendSpec,
                 onClickContinueViewing = onClickContinueViewing,
+                gridColumns = gridColumns,
             )
             GlowContourLibraryTextBlock(
                 title = title,
@@ -359,6 +363,7 @@ fun GlowContourLibraryGridItem(
                 isUnifiedContainerMode = false,
                 blendSpec = blendSpec,
                 onClickContinueViewing = onClickContinueViewing,
+                gridColumns = gridColumns,
             )
 
             if (textSpec.showTextBlock) {
@@ -460,6 +465,7 @@ private fun GlowContourLibraryCard(
     isUnifiedContainerMode: Boolean,
     blendSpec: GlowContourUnifiedBlendSpec,
     onClickContinueViewing: (() -> Unit)?,
+    gridColumns: Int?,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
@@ -469,7 +475,7 @@ private fun GlowContourLibraryCard(
         onClickContinueViewing = onClickContinueViewing,
     )
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .drawWithCache {
@@ -516,6 +522,11 @@ private fun GlowContourLibraryCard(
                 },
             ),
     ) {
+        val overlaySpec = resolveAuroraCardOverlaySpec(
+            gridColumns = gridColumns,
+            cardWidthDp = maxWidth.value,
+        )
+
         AsyncImage(
             model = resolveAuroraCoverModel(coverData),
             contentDescription = null,
@@ -662,7 +673,10 @@ private fun GlowContourLibraryCard(
                         ),
                     ),
                 )
-                .padding(horizontal = 10.dp, vertical = 9.dp),
+                .padding(
+                    horizontal = overlaySpec.footerHorizontalPaddingDp,
+                    vertical = overlaySpec.footerVerticalPaddingDp,
+                ),
         ) {
             when (val content = footerContent) {
                 GlowContourFooterContent.ContinueAction -> {
@@ -676,11 +690,12 @@ private fun GlowContourLibraryCard(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(bottom = 1.dp)
-                            .requiredSize(30.dp),
+                            .requiredSize(overlaySpec.buttonSizeDp),
                     ) {
                         Icon(
                             imageVector = Icons.Filled.PlayArrow,
                             contentDescription = stringResource(MR.strings.action_resume),
+                            modifier = Modifier.requiredSize(overlaySpec.buttonIconSizeDp),
                         )
                     }
                 }
@@ -688,7 +703,7 @@ private fun GlowContourLibraryCard(
                     Text(
                         text = "${content.value}%",
                         color = colors.textPrimary.copy(alpha = 0.98f),
-                        fontSize = 13.sp,
+                        fontSize = overlaySpec.progressTextSizeSp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         softWrap = false,
