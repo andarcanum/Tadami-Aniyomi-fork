@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -710,6 +711,7 @@ private fun GlowContourLibraryCard(
                         overflow = TextOverflow.Clip,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
+                            .wrapContentWidth(unbounded = true, align = Alignment.End)
                             .padding(end = overlaySpec.progressTextEndInsetDp),
                     )
                 }
