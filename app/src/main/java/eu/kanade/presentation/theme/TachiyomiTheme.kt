@@ -95,6 +95,7 @@ private fun BaseTachiyomiTheme(
     CompositionLocalProvider(
         LocalAuroraColors provides auroraColors,
         LocalIsAuroraTheme provides appTheme.isAuroraStyle,
+        LocalIsDefaultAppUiFont provides (appUiFontId == UiPreferences.DEFAULT_APP_UI_FONT_ID),
         LocalCoverTitleFontFamily provides coverTitleFontFamily,
     ) {
         MaterialTheme(
@@ -140,6 +141,7 @@ val playerRippleConfiguration
     )
 
 val LocalIsAuroraTheme = staticCompositionLocalOf { false }
+val LocalIsDefaultAppUiFont = staticCompositionLocalOf { true }
 
 private val colorSchemes: Map<AppTheme, BaseColorScheme> = mapOf(
     AppTheme.DEFAULT to AuroraColorScheme,

@@ -40,6 +40,7 @@ sealed class Preference {
             override val icon: ImageVector? = null,
             override val enabled: Boolean = true,
             val onClick: (() -> Unit)? = null,
+            val widget: (@Composable () -> Unit)? = null,
         ) : PreferenceItem<String>() {
             override val onValueChanged: suspend (value: String) -> Boolean = { true }
         }

@@ -6,9 +6,15 @@ import androidx.compose.ui.unit.sp
 
 internal fun auroraPrimaryMenuTitleTextStyle(
     baseStyle: TextStyle,
+    useMediumWeight: Boolean,
 ): TextStyle {
+    val resolvedWeight = if (useMediumWeight) {
+        FontWeight.Medium
+    } else {
+        FontWeight.Normal
+    }
     return baseStyle.copy(
         fontSize = 16.sp,
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = resolvedWeight,
     )
 }

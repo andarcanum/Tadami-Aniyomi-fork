@@ -4,6 +4,10 @@ import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
@@ -13,7 +17,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -27,6 +34,7 @@ import eu.kanade.domain.ui.model.ThemeMode
 import eu.kanade.domain.ui.model.setAppCompatDelegateThemeMode
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.screen.appearance.AppLanguageScreen
+import eu.kanade.presentation.more.settings.settingsSubtitleColor
 import eu.kanade.presentation.more.settings.widget.AppThemeModePreferenceWidget
 import eu.kanade.presentation.more.settings.widget.AppThemePreferenceWidget
 import eu.kanade.presentation.more.settings.widget.ListPreferenceWidget
@@ -184,16 +192,8 @@ object SettingsAppearanceScreen : SearchableSettings {
         val greetingColorPref = userProfilePreferences.greetingColor()
         val greetingColor by greetingColorPref.collectAsState()
         var isGreetingSettingsExpanded by rememberSaveable { mutableStateOf(false) }
-        val greetingSettingsToggleTitle = if (isGreetingSettingsExpanded) {
-            "▼ ${stringResource(AYMR.strings.aurora_change_greeting_style)}"
-        } else {
-            "► ${stringResource(AYMR.strings.aurora_change_greeting_style)}"
-        }
-        val fontSettingsToggleTitle = if (isFontSettingsExpanded) {
-            "[-] ${stringResource(AYMR.strings.pref_fonts_settings)}"
-        } else {
-            "[+] ${stringResource(AYMR.strings.pref_fonts_settings)}"
-        }
+        val greetingSettingsToggleTitle = stringResource(AYMR.strings.aurora_change_greeting_style)
+        val fontSettingsToggleTitle = stringResource(AYMR.strings.pref_fonts_settings)
         val greetingCustomizationItems = if (isGreetingSettingsExpanded) {
             listOf(
                 Preference.PreferenceItem.ListPreference(
@@ -425,6 +425,7 @@ object SettingsAppearanceScreen : SearchableSettings {
                     Preference.PreferenceItem.TextPreference(
                         title = fontSettingsToggleTitle,
                         onClick = { isFontSettingsExpanded = !isFontSettingsExpanded },
+                        widget = { ExpandablePreferenceChevron(expanded = isFontSettingsExpanded) },
                     ),
                 )
                 if (isFontSettingsExpanded) {
@@ -505,6 +506,7 @@ object SettingsAppearanceScreen : SearchableSettings {
                         onClick = {
                             isGreetingSettingsExpanded = toggleGreetingSettingsExpanded(isGreetingSettingsExpanded)
                         },
+                        widget = { ExpandablePreferenceChevron(expanded = isGreetingSettingsExpanded) },
                     ),
                 )
                 addAll(greetingCustomizationItems)
@@ -573,6 +575,18 @@ private fun FontListPreferenceWidget(
             }
         },
         onValueChange = onValueChange,
+    )
+}
+
+@Composable
+private fun ExpandablePreferenceChevron(expanded: Boolean) {
+    Icon(
+        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+        contentDescription = null,
+        tint = settingsSubtitleColor(),
+        modifier = Modifier
+            .rotate(if (expanded) 90f else 0f)
+            .size(20.dp),
     )
 }
 

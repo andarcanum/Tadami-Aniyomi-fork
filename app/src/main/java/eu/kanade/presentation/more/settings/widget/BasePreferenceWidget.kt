@@ -39,6 +39,7 @@ import eu.kanade.presentation.more.settings.LocalSettingsUiStyle
 import eu.kanade.presentation.more.settings.SettingsUiStyle
 import eu.kanade.presentation.more.settings.settingsCardContainerColor
 import eu.kanade.presentation.more.settings.settingsTitleColor
+import eu.kanade.presentation.theme.LocalIsDefaultAppUiFont
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.seconds
 
@@ -55,6 +56,7 @@ internal fun BasePreferenceWidget(
     val highlighted = LocalPreferenceHighlighted.current
     val minHeight = LocalPreferenceMinHeight.current
     val isAurora = LocalSettingsUiStyle.current == SettingsUiStyle.Aurora
+    val useMediumWeight = LocalIsDefaultAppUiFont.current
     val rowShape = if (isAurora) AURORA_SETTINGS_CARD_SHAPE else MaterialTheme.shapes.medium
     Row(
         modifier = modifier
@@ -91,7 +93,10 @@ internal fun BasePreferenceWidget(
         ) {
             if (!title.isNullOrBlank()) {
                 val titleTextStyle = if (isAurora) {
-                    auroraPrimaryMenuTitleTextStyle(MaterialTheme.typography.bodyLarge)
+                    auroraPrimaryMenuTitleTextStyle(
+                        baseStyle = MaterialTheme.typography.bodyLarge,
+                        useMediumWeight = useMediumWeight,
+                    )
                 } else {
                     MaterialTheme.typography.titleLarge.copy(fontSize = TitleFontSize)
                 }

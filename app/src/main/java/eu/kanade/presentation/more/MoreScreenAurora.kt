@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.presentation.components.AuroraBackground
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.LocalIsDefaultAppUiFont
 import eu.kanade.tachiyomi.ui.more.DownloadQueueState
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -197,6 +198,7 @@ fun AuroraSettingItem(
     subtitle: String? = null,
 ) {
     val colors = AuroraTheme.colors
+    val useMediumWeight = LocalIsDefaultAppUiFont.current
 
     Row(
         modifier = Modifier
@@ -219,7 +221,10 @@ fun AuroraSettingItem(
             Text(
                 text = title,
                 color = colors.textPrimary,
-                style = auroraPrimaryMenuTitleTextStyle(MaterialTheme.typography.bodyLarge),
+                style = auroraPrimaryMenuTitleTextStyle(
+                    baseStyle = MaterialTheme.typography.bodyLarge,
+                    useMediumWeight = useMediumWeight,
+                ),
             )
             if (subtitle != null) {
                 Text(
@@ -240,6 +245,7 @@ fun AuroraToggleItem(
     onCheckedChange: (Boolean) -> Unit,
 ) {
     val colors = AuroraTheme.colors
+    val useMediumWeight = LocalIsDefaultAppUiFont.current
 
     Row(
         modifier = Modifier
@@ -263,7 +269,10 @@ fun AuroraToggleItem(
             Text(
                 text = title,
                 color = colors.textPrimary,
-                style = auroraPrimaryMenuTitleTextStyle(MaterialTheme.typography.bodyLarge),
+                style = auroraPrimaryMenuTitleTextStyle(
+                    baseStyle = MaterialTheme.typography.bodyLarge,
+                    useMediumWeight = useMediumWeight,
+                ),
             )
         }
 
