@@ -1163,6 +1163,8 @@
     <string name="pref_fonts_settings">Шрифты</string>
     <string name="pref_app_font_family">Шрифт приложения</string>
     <string name="pref_cover_title_font_family">Шрифт карточек тайтлов</string>
+    <string name="pref_font_reset_defaults">Сбросить шрифты по умолчанию</string>
+    <string name="pref_font_reset_defaults_summary">Сбросить шрифт приложения и карточек тайтлов на системный по умолчанию</string>
     <string name="pref_font_import">Импорт шрифта</string>
     <string name="pref_font_import_summary">Загрузить пользовательский TTF/OTF для приложения и карточек тайтлов</string>
     <string name="pref_font_remove_named">Удалить шрифт: %s</string>

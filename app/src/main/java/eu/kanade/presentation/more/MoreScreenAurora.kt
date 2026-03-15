@@ -29,6 +29,7 @@ import androidx.compose.material.icons.outlined.VideoSettings
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -218,8 +219,7 @@ fun AuroraSettingItem(
             Text(
                 text = title,
                 color = colors.textPrimary,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
+                style = auroraPrimaryMenuTitleTextStyle(MaterialTheme.typography.bodyLarge),
             )
             if (subtitle != null) {
                 Text(
@@ -263,8 +263,7 @@ fun AuroraToggleItem(
             Text(
                 text = title,
                 color = colors.textPrimary,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
+                style = auroraPrimaryMenuTitleTextStyle(MaterialTheme.typography.bodyLarge),
             )
         }
 

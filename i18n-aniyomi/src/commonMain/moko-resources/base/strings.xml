@@ -1307,6 +1307,8 @@
     <string name="pref_fonts_settings">Fonts</string>
     <string name="pref_app_font_family">App font</string>
     <string name="pref_cover_title_font_family">Title card font</string>
+    <string name="pref_font_reset_defaults">Reset fonts to default</string>
+    <string name="pref_font_reset_defaults_summary">Reset app and title card fonts to system default</string>
     <string name="pref_font_import">Import font</string>
     <string name="pref_font_import_summary">Load a custom TTF/OTF font for the app and title cards</string>
     <string name="pref_font_remove_named">Remove font: %s</string>

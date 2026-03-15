@@ -154,6 +154,10 @@ object SettingsAppearanceScreen : SearchableSettings {
         val showNovelSection by showNovelSectionPref.collectAsState()
         val appUiFontId by appUiFontPref.collectAsState()
         val coverTitleFontId by coverTitleFontPref.collectAsState()
+        val canResetAppearanceFonts = shouldEnableAppearanceFontsReset(
+            appUiFontId = appUiFontId,
+            coverTitleFontId = coverTitleFontId,
+        )
         var fontCatalogVersion by rememberSaveable { mutableIntStateOf(0) }
         val fontCatalog = remember(context, fontCatalogVersion) {
             buildNovelReaderFontCatalog(context)
@@ -450,6 +454,17 @@ object SettingsAppearanceScreen : SearchableSettings {
                     )
                     add(
                         Preference.PreferenceItem.TextPreference(
+                            title = stringResource(AYMR.strings.pref_font_reset_defaults),
+                            subtitle = stringResource(AYMR.strings.pref_font_reset_defaults_summary),
+                            enabled = canResetAppearanceFonts,
+                            onClick = {
+                                appUiFontPref.set(UiPreferences.DEFAULT_APP_UI_FONT_ID)
+                                coverTitleFontPref.set(UiPreferences.DEFAULT_COVER_TITLE_FONT_ID)
+                            },
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.TextPreference(
                             title = stringResource(AYMR.strings.pref_font_import),
                             subtitle = stringResource(AYMR.strings.pref_font_import_summary),
                             onClick = {
@@ -563,6 +578,14 @@ private fun FontListPreferenceWidget(
 
 internal fun toggleGreetingSettingsExpanded(currentlyExpanded: Boolean): Boolean {
     return !currentlyExpanded
+}
+
+internal fun shouldEnableAppearanceFontsReset(
+    appUiFontId: String,
+    coverTitleFontId: String,
+): Boolean {
+    return appUiFontId != UiPreferences.DEFAULT_APP_UI_FONT_ID ||
+        coverTitleFontId != UiPreferences.DEFAULT_COVER_TITLE_FONT_ID
 }
 
 private val DateFormats = listOf(

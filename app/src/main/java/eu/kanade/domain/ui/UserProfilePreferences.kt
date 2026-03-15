@@ -29,7 +29,7 @@ class UserProfilePreferences(
     fun showHomeStreak() = preferenceStore.getBoolean("user_profile_show_home_streak", true)
     fun homeStreakCounterStyle() = preferenceStore.getString(
         "user_profile_home_streak_counter_style",
-        HomeStreakCounterStyle.NoBadge.key,
+        HomeStreakCounterStyle.ClassicBadge.key,
     )
     fun homeHeaderGreetingAlignRight() = preferenceStore.getBoolean(
         "user_profile_home_header_greeting_align_right",

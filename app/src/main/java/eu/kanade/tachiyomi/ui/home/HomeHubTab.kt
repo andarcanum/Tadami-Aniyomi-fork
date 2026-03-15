@@ -258,6 +258,14 @@ internal fun shouldShowNicknameEditHint(
     return !isNameEdited && currentName == UserProfilePreferences.DEFAULT_NAME
 }
 
+internal fun resolveHomeStreakStylePickerOptions(): List<HomeStreakCounterStyle> {
+    return listOf(
+        HomeStreakCounterStyle.ClassicBadge,
+        HomeStreakCounterStyle.NumberBadgeOnly,
+        HomeStreakCounterStyle.NoBadge,
+    )
+}
+
 internal fun shouldFillNicknameRowSpace(showNameEditHint: Boolean): Boolean {
     // Keep the edit hint visually attached to the nickname instead of pushing it near the avatar.
     return !showNameEditHint
@@ -721,6 +729,17 @@ object HomeHubTab : Tab {
                 },
             )
         }
+        var showStreakStyleDialog by remember { mutableStateOf(false) }
+        if (showStreakStyleDialog) {
+            HomeStreakStyleDialog(
+                currentStyle = homeStreakCounterStyle,
+                onDismiss = { showStreakStyleDialog = false },
+                onConfirm = { selectedStyle ->
+                    userProfilePreferences.homeStreakCounterStyle().set(selectedStyle.key)
+                    showStreakStyleDialog = false
+                },
+            )
+        }
 
         // Do not persist collapsed header position across app relaunches.
         var headerOffsetPx by remember { mutableStateOf(0f) }
@@ -860,6 +879,7 @@ object HomeHubTab : Tab {
                     onAvatarClick = { photoPickerLauncher.launch("image/*") },
                     onNameClick = { showNameDialog = true },
                     onGreetingClick = { showGreetingDialog = true },
+                    onStreakClick = { showStreakStyleDialog = true },
                 )
             },
         )
@@ -995,6 +1015,7 @@ private fun HomeHubPinnedHeader(
     onAvatarClick: () -> Unit,
     onNameClick: () -> Unit,
     onGreetingClick: () -> Unit,
+    onStreakClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
@@ -1039,6 +1060,7 @@ private fun HomeHubPinnedHeader(
                     onAvatarClick = onAvatarClick,
                     onNameClick = onNameClick,
                     onGreetingClick = onGreetingClick,
+                    onStreakClick = onStreakClick,
                 )
 
                 Spacer(Modifier.height(16.dp))
@@ -1094,6 +1116,7 @@ private fun HomeHubProfileHeaderCanvas(
     onAvatarClick: () -> Unit,
     onNameClick: () -> Unit,
     onGreetingClick: () -> Unit,
+    onStreakClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
     val density = LocalDensity.current
@@ -1485,6 +1508,7 @@ private fun HomeHubProfileHeaderCanvas(
                             style = streakStyle,
                             isTabletHeaderLayout = isTabletHeaderLayout,
                             colors = colors,
+                            onClick = onStreakClick,
                         )
                     }
                 }
@@ -1505,6 +1529,7 @@ private fun HomeHubProfileHeaderCanvas(
                                     style = streakStyle,
                                     isTabletHeaderLayout = isTabletHeaderLayout,
                                     colors = colors,
+                                    onClick = onStreakClick,
                                 )
                             }
                         }
@@ -1561,8 +1586,14 @@ private fun HomeStreakCounterContent(
     style: HomeStreakCounterStyle,
     isTabletHeaderLayout: Boolean,
     colors: AuroraColors,
+    onClick: (() -> Unit)? = null,
 ) {
     val contentModifier = Modifier.offset(y = if (isTabletHeaderLayout) (-3).dp else 0.dp)
+    val clickModifier = if (onClick != null) {
+        Modifier.clickable(onClick = onClick)
+    } else {
+        Modifier
+    }
     val labelText = currentStreak.toString()
     when (style) {
         HomeStreakCounterStyle.ClassicBadge -> {
@@ -1575,6 +1606,7 @@ private fun HomeStreakCounterContent(
                         color = colors.accent.copy(alpha = 0.35f),
                         shape = RoundedCornerShape(999.dp),
                     )
+                    .then(clickModifier)
                     .padding(horizontal = 8.dp, vertical = 3.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -1595,7 +1627,7 @@ private fun HomeStreakCounterContent(
         }
         HomeStreakCounterStyle.NumberBadgeOnly -> {
             Row(
-                modifier = contentModifier,
+                modifier = contentModifier.then(clickModifier),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
@@ -1627,7 +1659,7 @@ private fun HomeStreakCounterContent(
         }
         HomeStreakCounterStyle.NoBadge -> {
             Row(
-                modifier = contentModifier,
+                modifier = contentModifier.then(clickModifier),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
@@ -1700,7 +1732,67 @@ internal fun HomeHeaderLayoutLivePreview(
         onAvatarClick = {},
         onNameClick = {},
         onGreetingClick = {},
+        onStreakClick = {},
     )
+}
+
+@Composable
+private fun HomeStreakStyleDialog(
+    currentStyle: HomeStreakCounterStyle,
+    onDismiss: () -> Unit,
+    onConfirm: (HomeStreakCounterStyle) -> Unit,
+) {
+    var selectedStyle by remember(currentStyle) { mutableStateOf(currentStyle) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(stringResource(AYMR.strings.home_header_layout_editor_streak_style_title))
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 320.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                resolveHomeStreakStylePickerOptions().forEach { style ->
+                    NameStyleChip(
+                        title = homeStreakCounterStyleLabel(style),
+                        selected = selectedStyle == style,
+                        onClick = { selectedStyle = style },
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(selectedStyle) },
+            ) {
+                Text(stringResource(AYMR.strings.aurora_nickname_apply))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(AYMR.strings.aurora_nickname_cancel))
+            }
+        },
+    )
+}
+
+@Composable
+private fun homeStreakCounterStyleLabel(style: HomeStreakCounterStyle): String {
+    return when (style) {
+        HomeStreakCounterStyle.ClassicBadge -> {
+            stringResource(AYMR.strings.home_header_layout_editor_streak_style_classic_badge)
+        }
+        HomeStreakCounterStyle.NumberBadgeOnly -> {
+            stringResource(AYMR.strings.home_header_layout_editor_streak_style_number_badge_only)
+        }
+        HomeStreakCounterStyle.NoBadge -> {
+            stringResource(AYMR.strings.home_header_layout_editor_streak_style_no_badge)
+        }
+    }
 }
 
 @Composable

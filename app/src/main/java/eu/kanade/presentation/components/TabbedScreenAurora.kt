@@ -35,6 +35,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -609,9 +610,10 @@ internal fun AuroraTab(
             Text(
                 text = text,
                 color = if (isSelected) colors.textPrimary else colors.textSecondary,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                fontSize = 14.sp,
-                style = TextStyle(hyphens = Hyphens.None),
+                style = resolveAuroraTabTextStyle(
+                    baseStyle = MaterialTheme.typography.bodyLarge,
+                    isSelected = isSelected,
+                ),
             )
 
             if (badgeCount != null && badgeCount > 0) {
@@ -632,6 +634,18 @@ internal fun AuroraTab(
             }
         }
     }
+}
+
+internal fun resolveAuroraTabTextStyle(
+    baseStyle: TextStyle,
+    isSelected: Boolean,
+): TextStyle {
+    return TextStyle(
+        fontFamily = baseStyle.fontFamily,
+        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+        fontSize = 14.sp,
+        hyphens = Hyphens.None,
+    )
 }
 
 internal fun auroraMenuRimLightAlphaStops(): List<Pair<Float, Float>> {

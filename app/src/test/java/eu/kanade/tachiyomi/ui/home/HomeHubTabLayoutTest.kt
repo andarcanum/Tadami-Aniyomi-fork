@@ -42,6 +42,15 @@ class HomeHubTabLayoutTest {
     }
 
     @Test
+    fun `home streak style picker options keep stable visual order`() {
+        resolveHomeStreakStylePickerOptions() shouldBe listOf(
+            HomeStreakCounterStyle.ClassicBadge,
+            HomeStreakCounterStyle.NumberBadgeOnly,
+            HomeStreakCounterStyle.NoBadge,
+        )
+    }
+
+    @Test
     fun `reserve hero slot while loading prevents top item jump`() {
         shouldReserveHomeHubHeroSlot(
             hasHero = false,
