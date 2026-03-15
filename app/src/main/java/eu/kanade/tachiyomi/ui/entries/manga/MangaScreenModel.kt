@@ -1339,36 +1339,13 @@ internal fun resolveSelectedScanlator(
     return included.singleOrNull()
 }
 
+@Suppress("UNUSED_PARAMETER")
 internal fun resolveDefaultExcludedScanlatorsByChapterCount(
     scanlatorChapterCounts: Map<String, Int>,
     availableScanlators: Set<String>,
     excludedScanlators: Set<String>,
 ): Set<String>? {
-    if (availableScanlators.size < 2) return null
-    if (excludedScanlators.intersect(availableScanlators).isNotEmpty()) return null
-
-    val availableByNormalized = availableScanlators
-        .asSequence()
-        .map { it.trim() to it }
-        .filter { (normalized, _) -> normalized.isNotEmpty() }
-        .associate { it }
-    if (availableByNormalized.size < 2) return null
-
-    val preferredScanlator = scanlatorChapterCounts
-        .asSequence()
-        .map { it.key.trim() to it.value }
-        .filter { (normalized, _) -> normalized in availableByNormalized.keys }
-        .sortedWith(
-            compareByDescending<Pair<String, Int>> { it.second }
-                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.first },
-        )
-        .map { it.first }
-        .firstOrNull() ?: return null
-
-    return availableByNormalized
-        .filterKeys { it != preferredScanlator }
-        .values
-        .toSet()
+    return null
 }
 
 internal fun resolveExcludedScanlatorsForSelection(

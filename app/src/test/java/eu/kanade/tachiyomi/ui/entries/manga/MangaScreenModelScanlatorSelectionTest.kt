@@ -70,7 +70,7 @@ class MangaScreenModelScanlatorSelectionTest {
     }
 
     @Test
-    fun `resolveDefaultExcludedScanlatorsByChapterCount selects largest branch by default`() {
+    fun `resolveDefaultExcludedScanlatorsByChapterCount keeps all branches by default`() {
         resolveDefaultExcludedScanlatorsByChapterCount(
             scanlatorChapterCounts = mapOf(
                 "Team A" to 3,
@@ -79,7 +79,7 @@ class MangaScreenModelScanlatorSelectionTest {
             ),
             availableScanlators = setOf("Team A", "Team B", "Team C"),
             excludedScanlators = emptySet(),
-        ) shouldBe setOf("Team A", "Team C")
+        ) shouldBe null
     }
 
     @Test
