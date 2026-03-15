@@ -19,4 +19,18 @@ class UiPreferencesTest {
 
         prefs.animatedAuroraBackground().get() shouldBe true
     }
+
+    @Test
+    fun `app ui font defaults to system font`() {
+        val prefs = UiPreferences(InMemoryPreferenceStore())
+
+        prefs.appUiFontId().get() shouldBe UiPreferences.DEFAULT_APP_UI_FONT_ID
+    }
+
+    @Test
+    fun `cover title font defaults to system font`() {
+        val prefs = UiPreferences(InMemoryPreferenceStore())
+
+        prefs.coverTitleFontId().get() shouldBe UiPreferences.DEFAULT_COVER_TITLE_FONT_ID
+    }
 }

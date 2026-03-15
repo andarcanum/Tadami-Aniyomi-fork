@@ -1,10 +1,14 @@
 package eu.kanade.presentation.more.settings.screen
 
 import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -25,6 +29,13 @@ import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.screen.appearance.AppLanguageScreen
 import eu.kanade.presentation.more.settings.widget.AppThemeModePreferenceWidget
 import eu.kanade.presentation.more.settings.widget.AppThemePreferenceWidget
+import eu.kanade.presentation.more.settings.widget.ListPreferenceWidget
+import eu.kanade.presentation.reader.novel.NovelReaderFontOption
+import eu.kanade.presentation.reader.novel.NovelReaderFontSource
+import eu.kanade.presentation.reader.novel.buildNovelReaderFontCatalog
+import eu.kanade.presentation.reader.novel.importNovelReaderCustomFont
+import eu.kanade.presentation.reader.novel.removeNovelReaderCustomFont
+import eu.kanade.presentation.theme.rememberAppFontFamily
 import eu.kanade.tachiyomi.ui.home.HomeHeaderLayoutEditorScreen
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.persistentListOf
@@ -136,9 +147,32 @@ object SettingsAppearanceScreen : SearchableSettings {
         val showMangaSectionPref = uiPreferences.showMangaSection()
         val showNovelSectionPref = uiPreferences.showNovelSection()
         val showMangaScanlatorBranchesPref = uiPreferences.showMangaScanlatorBranches()
+        val appUiFontPref = uiPreferences.appUiFontId()
+        val coverTitleFontPref = uiPreferences.coverTitleFontId()
         val showAnimeSection by showAnimeSectionPref.collectAsState()
         val showMangaSection by showMangaSectionPref.collectAsState()
         val showNovelSection by showNovelSectionPref.collectAsState()
+        val appUiFontId by appUiFontPref.collectAsState()
+        val coverTitleFontId by coverTitleFontPref.collectAsState()
+        var fontCatalogVersion by rememberSaveable { mutableIntStateOf(0) }
+        val fontCatalog = remember(context, fontCatalogVersion) {
+            buildNovelReaderFontCatalog(context)
+        }
+        val importedFonts = remember(fontCatalog) {
+            fontCatalog.filter { it.source == NovelReaderFontSource.USER_IMPORTED }
+        }
+        var isFontSettingsExpanded by rememberSaveable { mutableStateOf(false) }
+        val importFontLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocument(),
+        ) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            val importedFont = importNovelReaderCustomFont(context, uri).getOrNull()
+            if (importedFont == null) {
+                context.toast(AYMR.strings.novel_reader_font_import_failed)
+                return@rememberLauncherForActivityResult
+            }
+            fontCatalogVersion += 1
+        }
         val greetingFontSizePref = userProfilePreferences.greetingFontSize()
         val greetingFontSize by greetingFontSizePref.collectAsState()
         val greetingAlphaPref = userProfilePreferences.greetingAlpha()
@@ -150,6 +184,11 @@ object SettingsAppearanceScreen : SearchableSettings {
             "▼ ${stringResource(AYMR.strings.aurora_change_greeting_style)}"
         } else {
             "► ${stringResource(AYMR.strings.aurora_change_greeting_style)}"
+        }
+        val fontSettingsToggleTitle = if (isFontSettingsExpanded) {
+            "[-] ${stringResource(AYMR.strings.pref_fonts_settings)}"
+        } else {
+            "[+] ${stringResource(AYMR.strings.pref_fonts_settings)}"
         }
         val greetingCustomizationItems = if (isGreetingSettingsExpanded) {
             listOf(
@@ -380,6 +419,73 @@ object SettingsAppearanceScreen : SearchableSettings {
                 )
                 add(
                     Preference.PreferenceItem.TextPreference(
+                        title = fontSettingsToggleTitle,
+                        onClick = { isFontSettingsExpanded = !isFontSettingsExpanded },
+                    ),
+                )
+                if (isFontSettingsExpanded) {
+                    add(
+                        Preference.PreferenceItem.CustomPreference(
+                            title = stringResource(AYMR.strings.pref_app_font_family),
+                        ) {
+                            FontListPreferenceWidget(
+                                title = stringResource(AYMR.strings.pref_app_font_family),
+                                value = appUiFontId,
+                                fontCatalog = fontCatalog,
+                                onValueChange = { appUiFontPref.set(it) },
+                            )
+                        },
+                    )
+                    add(
+                        Preference.PreferenceItem.CustomPreference(
+                            title = stringResource(AYMR.strings.pref_cover_title_font_family),
+                        ) {
+                            FontListPreferenceWidget(
+                                title = stringResource(AYMR.strings.pref_cover_title_font_family),
+                                value = coverTitleFontId,
+                                fontCatalog = fontCatalog,
+                                onValueChange = { coverTitleFontPref.set(it) },
+                            )
+                        },
+                    )
+                    add(
+                        Preference.PreferenceItem.TextPreference(
+                            title = stringResource(AYMR.strings.pref_font_import),
+                            subtitle = stringResource(AYMR.strings.pref_font_import_summary),
+                            onClick = {
+                                importFontLauncher.launch(arrayOf("*/*"))
+                            },
+                        ),
+                    )
+                    if (importedFonts.isEmpty()) {
+                        add(
+                            Preference.PreferenceItem.InfoPreference(
+                                title = stringResource(AYMR.strings.novel_reader_font_section_empty_imported),
+                            ),
+                        )
+                    } else {
+                        importedFonts.forEach { font ->
+                            add(
+                                Preference.PreferenceItem.TextPreference(
+                                    title = stringResource(AYMR.strings.pref_font_remove_named, font.label),
+                                    onClick = {
+                                        if (removeNovelReaderCustomFont(font.filePath).isSuccess) {
+                                            if (appUiFontId == font.id) {
+                                                appUiFontPref.set(UiPreferences.DEFAULT_APP_UI_FONT_ID)
+                                            }
+                                            if (coverTitleFontId == font.id) {
+                                                coverTitleFontPref.set(UiPreferences.DEFAULT_COVER_TITLE_FONT_ID)
+                                            }
+                                            fontCatalogVersion += 1
+                                        }
+                                    },
+                                ),
+                            )
+                        }
+                    }
+                }
+                add(
+                    Preference.PreferenceItem.TextPreference(
                         title = greetingSettingsToggleTitle,
                         onClick = {
                             isGreetingSettingsExpanded = toggleGreetingSettingsExpanded(isGreetingSettingsExpanded)
@@ -415,6 +521,44 @@ object SettingsAppearanceScreen : SearchableSettings {
             ),
         )
     }
+}
+
+@Composable
+private fun FontListPreferenceWidget(
+    title: String,
+    value: String,
+    fontCatalog: List<NovelReaderFontOption>,
+    onValueChange: (String) -> Unit,
+) {
+    val fallbackLabel = stringResource(MR.strings.label_default)
+    val entries = remember(fontCatalog, fallbackLabel) {
+        fontCatalog.associate { font ->
+            font.id to if (font.label.isBlank()) fallbackLabel else font.label
+        }
+    }
+    val subtitle = remember(value, fontCatalog, fallbackLabel) {
+        fontCatalog.firstOrNull { it.id == value }?.label
+            ?.takeIf { it.isNotBlank() }
+            ?: fallbackLabel
+    }
+
+    ListPreferenceWidget(
+        value = value,
+        title = title,
+        subtitle = subtitle,
+        icon = null,
+        entries = entries,
+        entryTextStyle = { fontId ->
+            val fontOption = fontCatalog.firstOrNull { it.id == fontId }
+            if (fontOption == null) {
+                null
+            } else {
+                val fontFamily = rememberAppFontFamily(fontOption)
+                MaterialTheme.typography.bodyLarge.copy(fontFamily = fontFamily)
+            }
+        },
+        onValueChange = onValueChange,
+    )
 }
 
 internal fun toggleGreetingSettingsExpanded(currentlyExpanded: Boolean): Boolean {

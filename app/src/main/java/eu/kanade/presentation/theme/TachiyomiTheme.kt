@@ -5,9 +5,11 @@ import androidx.compose.material.ripple.RippleAlpha
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RippleConfiguration
+import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -44,9 +46,13 @@ fun TachiyomiTheme(
     content: @Composable () -> Unit,
 ) {
     val uiPreferences = Injekt.get<UiPreferences>()
+    val appUiFontId = uiPreferences.appUiFontId().get()
+    val coverTitleFontId = uiPreferences.coverTitleFontId().get()
     BaseTachiyomiTheme(
         appTheme = appTheme ?: uiPreferences.appTheme().get(),
         isAmoled = amoled ?: uiPreferences.themeDarkAmoled().get(),
+        appUiFontId = appUiFontId,
+        coverTitleFontId = coverTitleFontId,
         content = content,
     )
 }
@@ -56,16 +62,29 @@ fun TachiyomiPreviewTheme(
     appTheme: AppTheme = AppTheme.DEFAULT,
     isAmoled: Boolean = false,
     content: @Composable () -> Unit,
-) = BaseTachiyomiTheme(appTheme, isAmoled, content)
+) = BaseTachiyomiTheme(
+    appTheme = appTheme,
+    isAmoled = isAmoled,
+    appUiFontId = UiPreferences.DEFAULT_APP_UI_FONT_ID,
+    coverTitleFontId = UiPreferences.DEFAULT_COVER_TITLE_FONT_ID,
+    content = content,
+)
 
 @Composable
 private fun BaseTachiyomiTheme(
     appTheme: AppTheme,
     isAmoled: Boolean,
+    appUiFontId: String,
+    coverTitleFontId: String,
     content: @Composable () -> Unit,
 ) {
     val isDark = isSystemInDarkTheme()
     val colorScheme = getThemeColorScheme(appTheme, isAmoled)
+    val appFontFamily = rememberAppFontFamily(appUiFontId)
+    val coverTitleFontFamily = rememberAppFontFamily(coverTitleFontId)
+    val typography = remember(appFontFamily) {
+        Typography().withDefaultFontFamily(appFontFamily)
+    }
 
     val auroraColors = AuroraColors.fromColorScheme(
         colorScheme = colorScheme,
@@ -76,9 +95,11 @@ private fun BaseTachiyomiTheme(
     CompositionLocalProvider(
         LocalAuroraColors provides auroraColors,
         LocalIsAuroraTheme provides appTheme.isAuroraStyle,
+        LocalCoverTitleFontFamily provides coverTitleFontFamily,
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
+            typography = typography,
             content = content,
         )
     }

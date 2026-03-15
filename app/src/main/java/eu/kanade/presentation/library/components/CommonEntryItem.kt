@@ -36,11 +36,14 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.Hyphens
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.entries.components.ItemCover
+import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.BadgeGroup
 import tachiyomi.presentation.core.i18n.stringResource
@@ -279,6 +282,7 @@ private fun GridItemTitle(
     modifier: Modifier = Modifier,
     maxLines: Int = 2,
 ) {
+    val coverTitleFontFamily = LocalCoverTitleFontFamily.current
     Text(
         modifier = modifier,
         text = title,
@@ -287,7 +291,11 @@ private fun GridItemTitle(
         minLines = minLines,
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
-        style = style,
+        style = style.copy(
+            fontFamily = coverTitleFontFamily,
+            lineBreak = LineBreak.Heading,
+            hyphens = Hyphens.None,
+        ),
     )
 }
 

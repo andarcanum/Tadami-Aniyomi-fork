@@ -34,8 +34,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -79,6 +77,8 @@ import eu.kanade.presentation.category.visualName
 import eu.kanade.presentation.components.AuroraTabRow
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.components.TabbedScreenAurora
+import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
+import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.LibraryBottomActionMenu
 import eu.kanade.presentation.library.DeleteLibraryEntryDialog
 import eu.kanade.presentation.library.anime.AnimeLibraryAuroraContent
@@ -1350,33 +1350,33 @@ private fun AuroraLibraryPinnedHeader(
                                 tint = colors.textPrimary,
                             )
                         }
-                        DropdownMenu(
+                        AuroraEntryDropdownMenu(
                             expanded = showMenu,
                             onDismissRequest = { showMenu = false },
                         ) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(MR.strings.action_update_library)) },
+                            AuroraEntryDropdownMenuItem(
+                                text = stringResource(MR.strings.action_update_library),
+                                leadingIcon = Icons.Filled.Refresh,
                                 onClick = {
                                     onRefreshCurrent()
                                     showMenu = false
                                 },
-                                leadingIcon = { Icon(Icons.Filled.Refresh, null) },
                             )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(MR.strings.pref_category_library_update)) },
+                            AuroraEntryDropdownMenuItem(
+                                text = stringResource(MR.strings.pref_category_library_update),
+                                leadingIcon = Icons.Filled.Refresh,
                                 onClick = {
                                     onRefreshGlobal()
                                     showMenu = false
                                 },
-                                leadingIcon = { Icon(Icons.Filled.Refresh, null) },
                             )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(MR.strings.action_open_random_manga)) },
+                            AuroraEntryDropdownMenuItem(
+                                text = stringResource(MR.strings.action_open_random_manga),
+                                leadingIcon = Icons.Filled.Shuffle,
                                 onClick = {
                                     onOpenRandomEntry()
                                     showMenu = false
                                 },
-                                leadingIcon = { Icon(Icons.Filled.Shuffle, null) },
                             )
                         }
                     }

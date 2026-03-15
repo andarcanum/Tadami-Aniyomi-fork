@@ -54,10 +54,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import eu.kanade.presentation.components.DropdownMenu
+import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
+import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
 import eu.kanade.presentation.entries.novel.components.aurora.ChaptersHeader
 import eu.kanade.presentation.entries.novel.components.aurora.FullscreenPosterBackground
@@ -385,12 +385,12 @@ fun NovelScreenAuroraImpl(
                             icon = Icons.Default.MoreVert,
                             contentDescription = null,
                         )
-                        AuroraDropdownMenu(
+                        AuroraEntryDropdownMenu(
                             expanded = showMenu,
                             onDismissRequest = { showMenu = false },
                         ) {
                             if (isFromSource) {
-                                AuroraDropdownMenuItem(
+                                AuroraEntryDropdownMenuItem(
                                     text = stringResource(MR.strings.action_webview_refresh),
                                     onClick = {
                                         onRefresh()
@@ -398,7 +398,7 @@ fun NovelScreenAuroraImpl(
                                     },
                                 )
                                 if (onShare != null) {
-                                    AuroraDropdownMenuItem(
+                                    AuroraEntryDropdownMenuItem(
                                         text = stringResource(MR.strings.action_share),
                                         onClick = {
                                             onShare()
@@ -408,7 +408,7 @@ fun NovelScreenAuroraImpl(
                                 }
                             } else {
                                 if (onShare != null) {
-                                    AuroraDropdownMenuItem(
+                                    AuroraEntryDropdownMenuItem(
                                         text = stringResource(MR.strings.action_share),
                                         onClick = {
                                             onShare()
@@ -417,7 +417,7 @@ fun NovelScreenAuroraImpl(
                                     )
                                 }
                                 if (onMigrateClicked != null) {
-                                    AuroraDropdownMenuItem(
+                                    AuroraEntryDropdownMenuItem(
                                         text = stringResource(MR.strings.action_migrate),
                                         onClick = {
                                             onMigrateClicked()
@@ -712,12 +712,12 @@ fun NovelScreenAuroraImpl(
                         contentDescription = null,
                     )
 
-                    AuroraDropdownMenu(
+                    AuroraEntryDropdownMenu(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false },
                     ) {
                         if (isFromSource) {
-                            AuroraDropdownMenuItem(
+                            AuroraEntryDropdownMenuItem(
                                 text = stringResource(MR.strings.action_webview_refresh),
                                 onClick = {
                                     onRefresh()
@@ -725,7 +725,7 @@ fun NovelScreenAuroraImpl(
                                 },
                             )
                             if (onShare != null) {
-                                AuroraDropdownMenuItem(
+                                AuroraEntryDropdownMenuItem(
                                     text = stringResource(MR.strings.action_share),
                                     onClick = {
                                         onShare()
@@ -735,7 +735,7 @@ fun NovelScreenAuroraImpl(
                             }
                         } else {
                             if (onShare != null) {
-                                AuroraDropdownMenuItem(
+                                AuroraEntryDropdownMenuItem(
                                     text = stringResource(MR.strings.action_share),
                                     onClick = {
                                         onShare()
@@ -744,7 +744,7 @@ fun NovelScreenAuroraImpl(
                                 )
                             }
                             if (onMigrateClicked != null) {
-                                AuroraDropdownMenuItem(
+                                AuroraEntryDropdownMenuItem(
                                     text = stringResource(MR.strings.action_migrate),
                                     onClick = {
                                         onMigrateClicked()
@@ -970,45 +970,4 @@ private fun AuroraActionButton(
             modifier = Modifier.size(22.dp),
         )
     }
-}
-
-@Composable
-private fun AuroraDropdownMenu(
-    expanded: Boolean,
-    onDismissRequest: () -> Unit,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
-) {
-    DropdownMenu(
-        expanded = expanded,
-        onDismissRequest = onDismissRequest,
-        offset = DpOffset(x = 0.dp, y = 8.dp),
-        modifier = modifier,
-    ) {
-        content()
-    }
-}
-
-@Composable
-private fun AuroraDropdownMenuItem(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val colors = AuroraTheme.colors
-    androidx.compose.material3.DropdownMenuItem(
-        text = {
-            Text(
-                text = text,
-                color = colors.textPrimary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-            )
-        },
-        onClick = onClick,
-        modifier = modifier,
-        colors = androidx.compose.material3.MenuDefaults.itemColors(
-            textColor = colors.textPrimary,
-        ),
-    )
 }

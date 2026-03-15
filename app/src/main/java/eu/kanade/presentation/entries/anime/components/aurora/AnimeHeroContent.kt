@@ -30,14 +30,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.Hyphens
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreenModel
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.i18n.MR
@@ -88,6 +92,7 @@ fun AnimeHeroContent(
     val uiPreferences = remember { Injekt.get<UiPreferences>() }
     val showOriginalTitle by uiPreferences.showOriginalTitle().collectAsState()
     val colors = AuroraTheme.colors
+    val coverTitleFontFamily = LocalCoverTitleFontFamily.current
 
     val originalTitle = remember(anime.description) {
         parseOriginalTitle(anime.description)
@@ -127,11 +132,16 @@ fun AnimeHeroContent(
         }
         Text(
             text = displayTitle,
-            fontSize = 26.sp,
+            fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
-            lineHeight = 32.sp,
+            lineHeight = 30.sp,
             maxLines = 4,
             overflow = TextOverflow.Ellipsis,
+            style = TextStyle(
+                fontFamily = coverTitleFontFamily,
+                lineBreak = LineBreak.Heading,
+                hyphens = Hyphens.None,
+            ),
         )
 
         // Genres preview (first 3)

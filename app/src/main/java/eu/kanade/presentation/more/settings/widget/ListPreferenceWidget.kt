@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.more.settings.settingsAccentColor
 import eu.kanade.presentation.more.settings.settingsDialogContainerColor
@@ -39,6 +40,7 @@ fun <T> ListPreferenceWidget(
     subtitle: String?,
     icon: ImageVector?,
     entries: Map<out T, String>,
+    entryTextStyle: (@Composable (key: T) -> TextStyle?)? = null,
     onValueChange: (T) -> Unit,
 ) {
     var isDialogShown by remember { mutableStateOf(false) }
@@ -66,6 +68,7 @@ fun <T> ListPreferenceWidget(
                                     label = current.value,
                                     isSelected = isSelected,
                                     accentColor = accentColor,
+                                    textStyle = entryTextStyle?.invoke(current.key!!),
                                     onSelected = {
                                         onValueChange(current.key!!)
                                         isDialogShown = false
@@ -95,6 +98,7 @@ private fun DialogRow(
     label: String,
     isSelected: Boolean,
     accentColor: androidx.compose.ui.graphics.Color,
+    textStyle: TextStyle?,
     onSelected: () -> Unit,
 ) {
     Row(
@@ -117,7 +121,7 @@ private fun DialogRow(
         )
         Text(
             text = label,
-            style = MaterialTheme.typography.bodyLarge.merge(),
+            style = (textStyle ?: MaterialTheme.typography.bodyLarge).merge(),
             color = settingsTitleColor(),
             modifier = Modifier.padding(start = 24.dp),
         )

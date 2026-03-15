@@ -26,11 +26,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.Hyphens
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.pluralStringResource
@@ -51,6 +55,7 @@ fun MangaHeroContent(
 ) {
     val colors = AuroraTheme.colors
     val haptic = LocalHapticFeedback.current
+    val coverTitleFontFamily = LocalCoverTitleFontFamily.current
 
     Column(
         modifier = modifier
@@ -87,12 +92,17 @@ fun MangaHeroContent(
         // Manga title
         Text(
             text = manga.title,
-            fontSize = 36.sp,
+            fontSize = 32.sp,
             fontWeight = FontWeight.Black,
             color = Color.White,
-            lineHeight = 40.sp,
+            lineHeight = 36.sp,
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
+            style = TextStyle(
+                fontFamily = coverTitleFontFamily,
+                lineBreak = LineBreak.Heading,
+                hyphens = Hyphens.None,
+            ),
         )
 
         // Compact statistics row

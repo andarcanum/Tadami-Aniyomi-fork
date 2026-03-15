@@ -36,7 +36,10 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.Hyphens
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
@@ -47,6 +50,7 @@ import coil3.compose.AsyncImage
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import android.graphics.Matrix as AndroidMatrix
@@ -380,6 +384,7 @@ private fun GlowContourLibraryTextBlock(
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
+    val coverTitleFontFamily = LocalCoverTitleFontFamily.current
     val containerModifier = if (isUnifiedContainerMode) {
         modifier
             .fillMaxWidth()
@@ -427,6 +432,11 @@ private fun GlowContourLibraryTextBlock(
             minLines = if (textSpec.titleMaxLines > 1) 2 else 1,
             maxLines = textSpec.titleMaxLines,
             overflow = TextOverflow.Ellipsis,
+            style = TextStyle(
+                fontFamily = coverTitleFontFamily,
+                lineBreak = LineBreak.Heading,
+                hyphens = Hyphens.None,
+            ),
         )
         if (!subtitle.isNullOrBlank() && textSpec.subtitleMaxLines > 0) {
             Text(

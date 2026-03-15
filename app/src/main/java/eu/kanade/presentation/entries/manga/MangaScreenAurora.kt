@@ -63,12 +63,12 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import eu.kanade.presentation.components.DropdownMenu
 import eu.kanade.presentation.components.EntryDownloadDropdownMenu
 import eu.kanade.presentation.entries.DownloadAction
+import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
+import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.EntryBottomActionMenu
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadAction
 import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
@@ -686,6 +686,7 @@ fun MangaScreenAuroraImpl(
                             onDismissRequest = { downloadExpanded = false },
                             onDownloadClicked = { onDownloadActionClicked.invoke(it) },
                             isManga = true,
+                            useAuroraStyle = true,
                         )
                     }
                 }
@@ -698,11 +699,11 @@ fun MangaScreenAuroraImpl(
                         icon = Icons.Default.MoreVert,
                         contentDescription = null,
                     )
-                    AuroraDropdownMenu(
+                    AuroraEntryDropdownMenu(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false },
                     ) {
-                        AuroraDropdownMenuItem(
+                        AuroraEntryDropdownMenuItem(
                             text = stringResource(MR.strings.action_webview_refresh),
                             onClick = {
                                 onRefresh()
@@ -710,7 +711,7 @@ fun MangaScreenAuroraImpl(
                             },
                         )
                         if (onShareClicked != null) {
-                            AuroraDropdownMenuItem(
+                            AuroraEntryDropdownMenuItem(
                                 text = stringResource(MR.strings.action_share),
                                 onClick = {
                                     onShareClicked()
@@ -719,7 +720,7 @@ fun MangaScreenAuroraImpl(
                             )
                         }
                         if (onSettingsClicked != null) {
-                            AuroraDropdownMenuItem(
+                            AuroraEntryDropdownMenuItem(
                                 text = stringResource(MR.strings.action_settings),
                                 onClick = {
                                     onSettingsClicked()
@@ -959,54 +960,4 @@ private fun AuroraActionButton(
             modifier = Modifier.size(22.dp),
         )
     }
-}
-
-/**
- * Aurora-styled dropdown menu container
- */
-@Composable
-private fun AuroraDropdownMenu(
-    expanded: Boolean,
-    onDismissRequest: () -> Unit,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
-) {
-    val colors = AuroraTheme.colors
-
-    DropdownMenu(
-        expanded = expanded,
-        onDismissRequest = onDismissRequest,
-        offset = DpOffset(x = 0.dp, y = 8.dp),
-        modifier = modifier,
-    ) {
-        content()
-    }
-}
-
-/**
- * Aurora-styled dropdown menu item
- */
-@Composable
-private fun AuroraDropdownMenuItem(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val colors = AuroraTheme.colors
-
-    androidx.compose.material3.DropdownMenuItem(
-        text = {
-            Text(
-                text = text,
-                color = colors.textPrimary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-            )
-        },
-        onClick = onClick,
-        modifier = modifier,
-        colors = androidx.compose.material3.MenuDefaults.itemColors(
-            textColor = colors.textPrimary,
-        ),
-    )
 }

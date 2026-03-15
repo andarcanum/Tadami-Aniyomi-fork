@@ -10,6 +10,8 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.entries.DownloadAction
+import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
+import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.theme.AuroraTheme
 import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.i18n.MR
@@ -23,6 +25,7 @@ fun EntryDownloadDropdownMenu(
     onDismissRequest: () -> Unit,
     onDownloadClicked: (DownloadAction) -> Unit,
     isManga: Boolean,
+    useAuroraStyle: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
@@ -36,31 +39,49 @@ fun EntryDownloadDropdownMenu(
         DownloadAction.UNVIEWED_ITEMS to stringResource(downloadUnviewed),
     )
 
-    DropdownMenu(
-        expanded = expanded,
-        onDismissRequest = onDismissRequest,
-        offset = DpOffset(x = 0.dp, y = 8.dp),
-        modifier = modifier,
-    ) {
-        options.map { (downloadAction, string) ->
-            DropdownMenuItem(
-                text = {
-                    Text(
-                        text = string,
-                        color = colors.textPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
-                },
-                onClick = {
-                    onDownloadClicked(downloadAction)
-                    onDismissRequest()
-                },
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                colors = androidx.compose.material3.MenuDefaults.itemColors(
-                    textColor = colors.textPrimary,
-                ),
-            )
+    if (useAuroraStyle) {
+        AuroraEntryDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = onDismissRequest,
+            modifier = modifier,
+        ) {
+            options.forEach { (downloadAction, string) ->
+                AuroraEntryDropdownMenuItem(
+                    text = string,
+                    onClick = {
+                        onDownloadClicked(downloadAction)
+                        onDismissRequest()
+                    },
+                )
+            }
+        }
+    } else {
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = onDismissRequest,
+            offset = DpOffset(x = 0.dp, y = 8.dp),
+            modifier = modifier,
+        ) {
+            options.forEach { (downloadAction, string) ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = string,
+                            color = colors.textPrimary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    },
+                    onClick = {
+                        onDownloadClicked(downloadAction)
+                        onDismissRequest()
+                    },
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    colors = androidx.compose.material3.MenuDefaults.itemColors(
+                        textColor = colors.textPrimary,
+                    ),
+                )
+            }
         }
     }
 }

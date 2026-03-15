@@ -1304,6 +1304,12 @@
     <string name="pref_show_achievement_notifications_summary">Show popup when unlocking achievements</string>
     <string name="pref_animated_aurora_background">Animated Aurora background</string>
     <string name="pref_animated_aurora_background_summary">Show soft animated color glows on Aurora screens</string>
+    <string name="pref_fonts_settings">Fonts</string>
+    <string name="pref_app_font_family">App font</string>
+    <string name="pref_cover_title_font_family">Title card font</string>
+    <string name="pref_font_import">Import font</string>
+    <string name="pref_font_import_summary">Load a custom TTF/OTF font for the app and title cards</string>
+    <string name="pref_font_remove_named">Remove font: %s</string>
 
     <!-- Achievements -->
     <string name="label_achievements">Achievements</string>

@@ -76,7 +76,14 @@ class UiPreferences(
 
     fun animatedAuroraBackground() = preferenceStore.getBoolean("animated_aurora_background", true)
 
+    fun appUiFontId() = preferenceStore.getString("app_ui_font_id", DEFAULT_APP_UI_FONT_ID)
+
+    fun coverTitleFontId() = preferenceStore.getString("cover_title_font_id", DEFAULT_COVER_TITLE_FONT_ID)
+
     companion object {
+        const val DEFAULT_APP_UI_FONT_ID = ""
+        const val DEFAULT_COVER_TITLE_FONT_ID = ""
+
         fun dateFormat(format: String): DateTimeFormatter = when (format) {
             "" -> DateTimeFormatter.ofLocalizedDate(FormatStyle.SHORT)
             else -> DateTimeFormatter.ofPattern(format, Locale.getDefault())
