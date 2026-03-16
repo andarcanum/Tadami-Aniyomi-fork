@@ -1,6 +1,7 @@
 package eu.kanade.presentation.more.settings.screen
 
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.model.HomeHeroCtaMode
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 
@@ -34,5 +35,13 @@ class SettingsAppearanceGreetingExpansionTest {
             appUiFontId = UiPreferences.DEFAULT_APP_UI_FONT_ID,
             coverTitleFontId = "custom-cover",
         ) shouldBe true
+    }
+
+    @Test
+    fun `home hero cta mode picker options keep stable visual order`() {
+        resolveHomeHeroCtaModeOptions() shouldBe listOf(
+            HomeHeroCtaMode.Aurora,
+            HomeHeroCtaMode.Classic,
+        )
     }
 }

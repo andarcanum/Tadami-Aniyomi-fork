@@ -1,10 +1,13 @@
 package eu.kanade.tachiyomi.ui.home
 
 import eu.kanade.domain.ui.model.HomeHeaderLayoutElement
+import eu.kanade.domain.ui.model.HomeHeroCtaMode
 import eu.kanade.domain.ui.model.HomeStreakCounterStyle
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
+import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 
 class HomeHubTabLayoutTest {
 
@@ -68,5 +71,98 @@ class HomeHubTabLayoutTest {
             showWelcome = false,
             isFiltering = false,
         ) shouldBe false
+    }
+
+    @Test
+    fun `aurora anime hero cta uses resume with play icon when progress exists`() {
+        resolveHomeHubHeroActionSpec(
+            section = HomeHubSection.Anime,
+            progressNumber = 7.0,
+            mode = HomeHeroCtaMode.Aurora,
+        ) shouldBe HomeHubHeroActionSpec(
+            labelRes = MR.strings.action_resume,
+            progressLabelRes = AYMR.strings.aurora_episode_progress,
+            icon = HomeHubHeroActionIcon.Play,
+        )
+    }
+
+    @Test
+    fun `aurora manga hero cta uses resume with read icon when progress exists`() {
+        resolveHomeHubHeroActionSpec(
+            section = HomeHubSection.Manga,
+            progressNumber = 14.0,
+            mode = HomeHeroCtaMode.Aurora,
+        ) shouldBe HomeHubHeroActionSpec(
+            labelRes = MR.strings.action_resume,
+            progressLabelRes = AYMR.strings.aurora_chapter_progress,
+            icon = HomeHubHeroActionIcon.Read,
+        )
+    }
+
+    @Test
+    fun `aurora novel hero cta uses resume with read icon when progress exists`() {
+        resolveHomeHubHeroActionSpec(
+            section = HomeHubSection.Novel,
+            progressNumber = 4.0,
+            mode = HomeHeroCtaMode.Aurora,
+        ) shouldBe HomeHubHeroActionSpec(
+            labelRes = MR.strings.action_resume,
+            progressLabelRes = AYMR.strings.aurora_chapter_progress,
+            icon = HomeHubHeroActionIcon.Read,
+        )
+    }
+
+    @Test
+    fun `aurora hero cta falls back to media-specific start labels without progress`() {
+        resolveHomeHubHeroActionSpec(
+            section = HomeHubSection.Anime,
+            progressNumber = 0.0,
+            mode = HomeHeroCtaMode.Aurora,
+        ) shouldBe HomeHubHeroActionSpec(
+            labelRes = AYMR.strings.aurora_play,
+            progressLabelRes = AYMR.strings.aurora_episode_progress,
+            icon = HomeHubHeroActionIcon.Play,
+        )
+
+        resolveHomeHubHeroActionSpec(
+            section = HomeHubSection.Manga,
+            progressNumber = 0.0,
+            mode = HomeHeroCtaMode.Aurora,
+        ) shouldBe HomeHubHeroActionSpec(
+            labelRes = AYMR.strings.aurora_read,
+            progressLabelRes = AYMR.strings.aurora_chapter_progress,
+            icon = HomeHubHeroActionIcon.Read,
+        )
+    }
+
+    @Test
+    fun `classic hero cta keeps legacy labels and play icon`() {
+        resolveHomeHubHeroActionSpec(
+            section = HomeHubSection.Anime,
+            progressNumber = 9.0,
+            mode = HomeHeroCtaMode.Classic,
+        ) shouldBe HomeHubHeroActionSpec(
+            labelRes = AYMR.strings.aurora_play,
+            progressLabelRes = AYMR.strings.aurora_episode_progress,
+            icon = HomeHubHeroActionIcon.Play,
+        )
+
+        resolveHomeHubHeroActionSpec(
+            section = HomeHubSection.Manga,
+            progressNumber = 9.0,
+            mode = HomeHeroCtaMode.Classic,
+        ) shouldBe HomeHubHeroActionSpec(
+            labelRes = AYMR.strings.aurora_read,
+            progressLabelRes = AYMR.strings.aurora_chapter_progress,
+            icon = HomeHubHeroActionIcon.Play,
+        )
+    }
+
+    @Test
+    fun `hero cta visual mode switches between aurora glass and classic solid`() {
+        resolveHomeHubHeroButtonVisualMode(HomeHeroCtaMode.Aurora) shouldBe
+            HomeHubHeroButtonVisualMode.AuroraGlass
+        resolveHomeHubHeroButtonVisualMode(HomeHeroCtaMode.Classic) shouldBe
+            HomeHubHeroButtonVisualMode.ClassicSolid
     }
 }

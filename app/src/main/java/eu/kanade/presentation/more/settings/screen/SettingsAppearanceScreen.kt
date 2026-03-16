@@ -27,6 +27,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.domain.ui.model.AnimeMetadataSource
+import eu.kanade.domain.ui.model.HomeHeroCtaMode
 import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.domain.ui.model.StartScreen
 import eu.kanade.domain.ui.model.TabletUiMode
@@ -422,6 +423,21 @@ object SettingsAppearanceScreen : SearchableSettings {
                     ),
                 )
                 add(
+                    Preference.PreferenceItem.ListPreference(
+                        preference = userProfilePreferences.homeHeroCtaMode(),
+                        entries = resolveHomeHeroCtaModeOptions()
+                            .associate { it.key to stringResource(it.titleRes) }
+                            .toImmutableMap(),
+                        title = stringResource(AYMR.strings.pref_home_hero_cta_mode),
+                        subtitleProvider = { value, entries ->
+                            stringResource(
+                                AYMR.strings.pref_home_hero_cta_mode_summary,
+                                entries[value].orEmpty(),
+                            )
+                        },
+                    ),
+                )
+                add(
                     Preference.PreferenceItem.TextPreference(
                         title = fontSettingsToggleTitle,
                         onClick = { isFontSettingsExpanded = !isFontSettingsExpanded },
@@ -592,6 +608,13 @@ private fun ExpandablePreferenceChevron(expanded: Boolean) {
 
 internal fun toggleGreetingSettingsExpanded(currentlyExpanded: Boolean): Boolean {
     return !currentlyExpanded
+}
+
+internal fun resolveHomeHeroCtaModeOptions(): List<HomeHeroCtaMode> {
+    return listOf(
+        HomeHeroCtaMode.Aurora,
+        HomeHeroCtaMode.Classic,
+    )
 }
 
 internal fun shouldEnableAppearanceFontsReset(

@@ -39,6 +39,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Edit
@@ -111,6 +112,7 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.domain.ui.model.HomeHeaderLayoutElement
 import eu.kanade.domain.ui.model.HomeHeaderLayoutSpec
+import eu.kanade.domain.ui.model.HomeHeroCtaMode
 import eu.kanade.domain.ui.model.HomeStreakCounterStyle
 import eu.kanade.presentation.components.AuroraCard
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
@@ -143,6 +145,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.launch
 import tachiyomi.domain.achievement.model.DayActivity
+import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
@@ -151,7 +154,7 @@ import java.time.LocalDate
 import kotlin.math.roundToInt
 import android.graphics.Color as AndroidColor
 
-private enum class HomeHubSection {
+internal enum class HomeHubSection {
     Anime,
     Manga,
     Novel,
@@ -219,6 +222,74 @@ internal fun resolveHomeHubHeaderVisibility(
         HomeHubScrollDirection.Down -> false
         HomeHubScrollDirection.Up -> true
         HomeHubScrollDirection.Idle -> currentlyVisible
+    }
+}
+
+internal enum class HomeHubHeroActionIcon {
+    Play,
+    Read,
+}
+
+internal data class HomeHubHeroActionSpec(
+    val labelRes: dev.icerock.moko.resources.StringResource,
+    val progressLabelRes: dev.icerock.moko.resources.StringResource,
+    val icon: HomeHubHeroActionIcon,
+)
+
+internal enum class HomeHubHeroButtonVisualMode {
+    AuroraGlass,
+    ClassicSolid,
+}
+
+internal fun resolveHomeHubHeroActionSpec(
+    section: HomeHubSection,
+    progressNumber: Double,
+    mode: HomeHeroCtaMode,
+): HomeHubHeroActionSpec {
+    val progressLabelRes = when (section) {
+        HomeHubSection.Anime -> AYMR.strings.aurora_episode_progress
+        HomeHubSection.Manga, HomeHubSection.Novel -> AYMR.strings.aurora_chapter_progress
+    }
+    val hasProgress = progressNumber > 0.0
+
+    return when (mode) {
+        HomeHeroCtaMode.Classic -> {
+            val labelRes = when (section) {
+                HomeHubSection.Anime -> AYMR.strings.aurora_play
+                HomeHubSection.Manga, HomeHubSection.Novel -> AYMR.strings.aurora_read
+            }
+            HomeHubHeroActionSpec(
+                labelRes = labelRes,
+                progressLabelRes = progressLabelRes,
+                icon = HomeHubHeroActionIcon.Play,
+            )
+        }
+        HomeHeroCtaMode.Aurora -> {
+            val labelRes = if (hasProgress) {
+                MR.strings.action_resume
+            } else {
+                when (section) {
+                    HomeHubSection.Anime -> AYMR.strings.aurora_play
+                    HomeHubSection.Manga, HomeHubSection.Novel -> AYMR.strings.aurora_read
+                }
+            }
+            val icon = when (section) {
+                HomeHubSection.Anime -> HomeHubHeroActionIcon.Play
+                HomeHubSection.Manga, HomeHubSection.Novel -> HomeHubHeroActionIcon.Read
+            }
+            HomeHubHeroActionSpec(
+                labelRes = labelRes,
+                progressLabelRes = progressLabelRes,
+                icon = icon,
+            )
+        }
+    }
+}
+
+internal fun resolveHomeHubHeroButtonVisualMode(mode: HomeHeroCtaMode): HomeHubHeroButtonVisualMode {
+    return when (mode) {
+        HomeHeroCtaMode.Aurora -> HomeHubHeroButtonVisualMode.AuroraGlass
+        HomeHeroCtaMode.Classic -> HomeHubHeroButtonVisualMode.ClassicSolid
     }
 }
 
@@ -604,6 +675,10 @@ object HomeHubTab : Tab {
         val homeStreakCounterStyle = remember(homeStreakCounterStyleKey) {
             HomeStreakCounterStyle.fromKey(homeStreakCounterStyleKey)
         }
+        val homeHeroCtaModeKey by userProfilePreferences.homeHeroCtaMode().collectAsState()
+        val homeHeroCtaMode = remember(homeHeroCtaModeKey) {
+            HomeHeroCtaMode.fromKey(homeHeroCtaModeKey)
+        }
         val homeHeaderGreetingAlignRight by userProfilePreferences.homeHeaderGreetingAlignRight().collectAsState()
         val homeHeaderNicknameAlignRight by userProfilePreferences.homeHeaderNicknameAlignRight().collectAsState()
         val homeHeaderLayoutJson by userProfilePreferences.homeHeaderLayoutJson().collectAsState()
@@ -766,6 +841,7 @@ object HomeHubTab : Tab {
                         AnimeHomeHub(
                             contentPadding = contentPadding,
                             searchQuery = animeSearchQuery,
+                            heroCtaMode = homeHeroCtaMode,
                             activeSection = selectedSection,
                             scrollResetToken = scrollResetToken,
                             onScrollSignal = onScrollSignal,
@@ -779,6 +855,7 @@ object HomeHubTab : Tab {
                         MangaHomeHub(
                             contentPadding = contentPadding,
                             searchQuery = mangaSearchQuery,
+                            heroCtaMode = homeHeroCtaMode,
                             activeSection = selectedSection,
                             scrollResetToken = scrollResetToken,
                             onScrollSignal = onScrollSignal,
@@ -792,6 +869,7 @@ object HomeHubTab : Tab {
                         NovelHomeHub(
                             contentPadding = contentPadding,
                             searchQuery = novelSearchQuery,
+                            heroCtaMode = homeHeroCtaMode,
                             activeSection = selectedSection,
                             scrollResetToken = scrollResetToken,
                             onScrollSignal = onScrollSignal,
@@ -1799,6 +1877,7 @@ private fun homeStreakCounterStyleLabel(style: HomeStreakCounterStyle): String {
 private fun AnimeHomeHub(
     contentPadding: PaddingValues,
     searchQuery: String?,
+    heroCtaMode: HomeHeroCtaMode,
     activeSection: HomeHubSection,
     scrollResetToken: Int,
     onScrollSignal: (HomeHubSection, Float, Boolean) -> Unit,
@@ -1824,9 +1903,8 @@ private fun AnimeHomeHub(
         state = state.toUiState(),
         searchQuery = searchQuery,
         lastSourceName = lastSourceName,
+        heroCtaMode = heroCtaMode,
         contentPadding = contentPadding,
-        heroActionLabelRes = AYMR.strings.aurora_play,
-        heroProgressLabelRes = AYMR.strings.aurora_episode_progress,
         onEntryClick = { navigator.push(AnimeScreen(it)) },
         onPlayHero = { screenModel.playHeroEpisode(context) },
         onSourceClick = {
@@ -1851,6 +1929,7 @@ private fun AnimeHomeHub(
 private fun MangaHomeHub(
     contentPadding: PaddingValues,
     searchQuery: String?,
+    heroCtaMode: HomeHeroCtaMode,
     activeSection: HomeHubSection,
     scrollResetToken: Int,
     onScrollSignal: (HomeHubSection, Float, Boolean) -> Unit,
@@ -1876,9 +1955,8 @@ private fun MangaHomeHub(
         state = state.toUiState(),
         searchQuery = searchQuery,
         lastSourceName = lastSourceName,
+        heroCtaMode = heroCtaMode,
         contentPadding = contentPadding,
-        heroActionLabelRes = AYMR.strings.aurora_read,
-        heroProgressLabelRes = AYMR.strings.aurora_chapter_progress,
         onEntryClick = { navigator.push(MangaScreen(it)) },
         onPlayHero = { screenModel.readHeroChapter(context) },
         onSourceClick = {
@@ -1903,6 +1981,7 @@ private fun MangaHomeHub(
 private fun NovelHomeHub(
     contentPadding: PaddingValues,
     searchQuery: String?,
+    heroCtaMode: HomeHeroCtaMode,
     activeSection: HomeHubSection,
     scrollResetToken: Int,
     onScrollSignal: (HomeHubSection, Float, Boolean) -> Unit,
@@ -1927,9 +2006,8 @@ private fun NovelHomeHub(
         state = state.toUiState(),
         searchQuery = searchQuery,
         lastSourceName = lastSourceName,
+        heroCtaMode = heroCtaMode,
         contentPadding = contentPadding,
-        heroActionLabelRes = AYMR.strings.aurora_read,
-        heroProgressLabelRes = AYMR.strings.aurora_chapter_progress,
         onEntryClick = { navigator.push(NovelScreen(it)) },
         onPlayHero = {
             screenModel.getHeroChapterId()?.let { chapterId ->
@@ -1966,9 +2044,8 @@ private fun HomeHubScreen(
     state: HomeHubUiState,
     searchQuery: String?,
     lastSourceName: String?,
+    heroCtaMode: HomeHeroCtaMode,
     contentPadding: PaddingValues,
-    heroActionLabelRes: dev.icerock.moko.resources.StringResource,
-    heroProgressLabelRes: dev.icerock.moko.resources.StringResource,
     onEntryClick: (Long) -> Unit,
     onPlayHero: () -> Unit,
     onSourceClick: () -> Unit,
@@ -2041,8 +2118,8 @@ private fun HomeHubScreen(
                     hero?.let { heroData ->
                         HeroSection(
                             hero = heroData,
-                            actionLabelRes = heroActionLabelRes,
-                            progressLabelRes = heroProgressLabelRes,
+                            section = section,
+                            ctaMode = heroCtaMode,
                             onPlayClick = onPlayHero,
                             onEntryClick = { onEntryClick(heroData.entryId) },
                         )
@@ -2186,12 +2263,22 @@ internal fun homeHubRimLightBrush(): Brush {
 @Composable
 private fun HeroSection(
     hero: HomeHubHero,
-    actionLabelRes: dev.icerock.moko.resources.StringResource,
-    progressLabelRes: dev.icerock.moko.resources.StringResource,
+    section: HomeHubSection,
+    ctaMode: HomeHeroCtaMode,
     onPlayClick: () -> Unit,
     onEntryClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
+    val actionSpec = remember(section, hero.progressNumber, ctaMode) {
+        resolveHomeHubHeroActionSpec(
+            section = section,
+            progressNumber = hero.progressNumber,
+            mode = ctaMode,
+        )
+    }
+    val buttonVisualMode = remember(ctaMode) {
+        resolveHomeHubHeroButtonVisualMode(ctaMode)
+    }
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val contentMaxWidthDp = auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp
     val heroCardShape = RoundedCornerShape(24.dp)
@@ -2225,15 +2312,46 @@ private fun HeroSection(
     }
     val rimLightBrush = remember { homeHubRimLightBrush() }
     val actionButtonShape = RoundedCornerShape(12.dp)
-    val actionButtonBrush = remember(colors.accent) {
-        Brush.linearGradient(
-            colors = listOf(
-                lerp(colors.accent, Color.White, 0.16f),
-                lerp(colors.accent, Color.Black, 0.08f),
-            ),
-            start = Offset(0f, 0f),
-            end = Offset(0f, 420f),
-        )
+    val actionButtonBrush = remember(colors, buttonVisualMode) {
+        when (buttonVisualMode) {
+            HomeHubHeroButtonVisualMode.ClassicSolid -> {
+                Brush.linearGradient(
+                    colors = listOf(
+                        lerp(colors.accent, Color.White, 0.16f),
+                        lerp(colors.accent, Color.Black, 0.08f),
+                    ),
+                    start = Offset(0f, 0f),
+                    end = Offset(0f, 420f),
+                )
+            }
+            HomeHubHeroButtonVisualMode.AuroraGlass -> {
+                Brush.linearGradient(
+                    colors = listOf(
+                        lerp(colors.accent, Color.White, 0.28f).copy(alpha = 0.28f),
+                        lerp(colors.accent, colors.glass, 0.42f).copy(alpha = 0.88f),
+                        lerp(colors.accent, colors.glass, 0.20f).copy(alpha = 0.94f),
+                    ),
+                    start = Offset(0f, 0f),
+                    end = Offset(0f, 420f),
+                )
+            }
+        }
+    }
+    val actionButtonBorderColor = when (buttonVisualMode) {
+        HomeHubHeroButtonVisualMode.ClassicSolid -> Color.White.copy(alpha = 0.12f)
+        HomeHubHeroButtonVisualMode.AuroraGlass -> Color.Transparent
+    }
+    val actionButtonContentColor = when (buttonVisualMode) {
+        HomeHubHeroButtonVisualMode.ClassicSolid -> colors.textOnAccent
+        HomeHubHeroButtonVisualMode.AuroraGlass -> Color.White
+    }
+    val actionButtonPadding = when (buttonVisualMode) {
+        HomeHubHeroButtonVisualMode.ClassicSolid -> {
+            PaddingValues(start = 22.dp, end = 24.dp, top = 8.dp, bottom = 8.dp)
+        }
+        HomeHubHeroButtonVisualMode.AuroraGlass -> {
+            PaddingValues(start = 20.dp, end = 22.dp, top = 8.dp, bottom = 8.dp)
+        }
     }
 
     Box(
@@ -2278,7 +2396,7 @@ private fun HeroSection(
                 Box(Modifier.size(6.dp).background(colors.accent, CircleShape))
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    stringResource(progressLabelRes, (hero.progressNumber % 1000).toInt()),
+                    stringResource(actionSpec.progressLabelRes, (hero.progressNumber % 1000).toInt()),
                     color = Color.White.copy(alpha = 0.92f),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
@@ -2292,18 +2410,26 @@ private fun HeroSection(
                 onClick = onPlayClick,
                 colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
                 shape = actionButtonShape,
-                contentPadding = PaddingValues(start = 22.dp, end = 24.dp, top = 8.dp, bottom = 8.dp),
+                contentPadding = actionButtonPadding,
                 modifier = Modifier
                     .height(52.dp)
                     .clip(actionButtonShape)
                     .background(actionButtonBrush)
-                    .border(1.dp, Color.White.copy(alpha = 0.12f), actionButtonShape),
+                    .border(1.dp, actionButtonBorderColor, actionButtonShape),
             ) {
-                Icon(Icons.Filled.PlayArrow, null, tint = colors.textOnAccent, modifier = Modifier.size(21.dp))
+                Icon(
+                    imageVector = when (actionSpec.icon) {
+                        HomeHubHeroActionIcon.Play -> Icons.Filled.PlayArrow
+                        HomeHubHeroActionIcon.Read -> Icons.AutoMirrored.Outlined.MenuBook
+                    },
+                    contentDescription = null,
+                    tint = actionButtonContentColor,
+                    modifier = Modifier.size(21.dp),
+                )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    stringResource(actionLabelRes),
-                    color = colors.textOnAccent,
+                    stringResource(actionSpec.labelRes),
+                    color = actionButtonContentColor,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                 )
