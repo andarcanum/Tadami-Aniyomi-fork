@@ -249,6 +249,8 @@ internal data class HomeHubHeroButtonSurfaceSpec(
     val containerAlpha: Float,
     val usesGradient: Boolean,
     val borderAlpha: Float,
+    val innerGlowAlpha: Float,
+    val highlightAlpha: Float,
 )
 
 internal fun resolveHomeHubHeroActionSpec(
@@ -302,14 +304,18 @@ internal fun resolveHomeHubHeroButtonSurfaceSpec(
 ): HomeHubHeroButtonSurfaceSpec {
     return when (mode) {
         HomeHeroCtaMode.Aurora -> HomeHubHeroButtonSurfaceSpec(
-            containerAlpha = if (isDark) 0.88f else 0.82f,
+            containerAlpha = if (isDark) 0.82f else 0.78f,
             usesGradient = false,
             borderAlpha = 0f,
+            innerGlowAlpha = if (isDark) 0.42f else 0.34f,
+            highlightAlpha = if (isDark) 0.18f else 0.14f,
         )
         HomeHeroCtaMode.Classic -> HomeHubHeroButtonSurfaceSpec(
             containerAlpha = 1f,
             usesGradient = true,
             borderAlpha = 0.12f,
+            innerGlowAlpha = 0f,
+            highlightAlpha = 0f,
         )
     }
 }
@@ -2450,6 +2456,26 @@ private fun HeroSection(
             )
         }
     }
+    val actionButtonInnerGlowBrush = remember(colors.accent, actionButtonSurfaceSpec) {
+        Brush.verticalGradient(
+            colorStops = arrayOf(
+                0.00f to Color.Transparent,
+                0.46f to colors.accent.copy(alpha = actionButtonSurfaceSpec.innerGlowAlpha * 0.18f),
+                0.78f to colors.accent.copy(alpha = actionButtonSurfaceSpec.innerGlowAlpha * 0.58f),
+                1.00f to colors.accent.copy(alpha = actionButtonSurfaceSpec.innerGlowAlpha),
+            ),
+        )
+    }
+    val actionButtonHighlightBrush = remember(actionButtonSurfaceSpec) {
+        Brush.verticalGradient(
+            colorStops = arrayOf(
+                0.00f to Color.White.copy(alpha = actionButtonSurfaceSpec.highlightAlpha),
+                0.34f to Color.White.copy(alpha = actionButtonSurfaceSpec.highlightAlpha * 0.48f),
+                0.68f to Color.Transparent,
+                1.00f to Color.Transparent,
+            ),
+        )
+    }
     val actionButtonBorderBrush = remember(colors, buttonVisualMode, actionButtonSurfaceSpec) {
         when (buttonVisualMode) {
             HomeHubHeroButtonVisualMode.ClassicSolid -> Brush.linearGradient(
@@ -2475,14 +2501,26 @@ private fun HeroSection(
     }
     val actionButtonModifier = remember(
         actionButtonBrush,
+        actionButtonInnerGlowBrush,
+        actionButtonHighlightBrush,
         actionButtonBorderBrush,
         actionButtonShape,
+        buttonVisualMode,
         actionButtonSurfaceSpec,
     ) {
         Modifier
             .height(52.dp)
             .clip(actionButtonShape)
             .background(actionButtonBrush)
+            .let { baseModifier ->
+                if (buttonVisualMode == HomeHubHeroButtonVisualMode.AuroraGlass) {
+                    baseModifier
+                        .background(actionButtonInnerGlowBrush)
+                        .background(actionButtonHighlightBrush)
+                } else {
+                    baseModifier
+                }
+            }
             .let { baseModifier ->
                 if (actionButtonSurfaceSpec.borderAlpha > 0f) {
                     baseModifier.border(1.dp, actionButtonBorderBrush, actionButtonShape)

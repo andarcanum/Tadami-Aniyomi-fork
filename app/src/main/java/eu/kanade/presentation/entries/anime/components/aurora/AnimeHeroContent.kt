@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -77,6 +78,18 @@ private fun parseOriginalTitle(description: String?): String? {
  * Hero content displayed at the bottom of the first screen.
  * Shows anime title, basic info, Continue/Start button, and Dubbing selector.
  */
+internal data class AnimeHeroPrimaryActionLayoutSpec(
+    val heightDp: Int,
+    val horizontalPaddingDp: Int,
+)
+
+internal fun resolveAnimeHeroPrimaryActionLayoutSpec(): AnimeHeroPrimaryActionLayoutSpec {
+    return AnimeHeroPrimaryActionLayoutSpec(
+        heightDp = 52,
+        horizontalPaddingDp = 14,
+    )
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AnimeHeroContent(
@@ -93,6 +106,9 @@ fun AnimeHeroContent(
     val showOriginalTitle by uiPreferences.showOriginalTitle().collectAsState()
     val colors = AuroraTheme.colors
     val coverTitleFontFamily = LocalCoverTitleFontFamily.current
+    val primaryActionLayoutSpec = remember {
+        resolveAnimeHeroPrimaryActionLayoutSpec()
+    }
 
     val originalTitle = remember(anime.description) {
         parseOriginalTitle(anime.description)
@@ -223,10 +239,10 @@ fun AnimeHeroContent(
                 onClick = onContinueWatching,
                 modifier = Modifier
                     .weight(1f)
-                    .padding(vertical = 14.dp),
+                    .height(primaryActionLayoutSpec.heightDp.dp),
                 cornerRadius = 12.dp,
                 iconSize = 20.dp,
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+                contentPadding = PaddingValues(horizontal = primaryActionLayoutSpec.horizontalPaddingDp.dp),
                 textSize = 15.sp,
                 textWeight = FontWeight.SemiBold,
             )
@@ -236,6 +252,7 @@ fun AnimeHeroContent(
                 Box(
                     modifier = Modifier
                         .width(100.dp)
+                        .height(primaryActionLayoutSpec.heightDp.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(
                             if (selectedDubbing?.isNotBlank() == true) {
@@ -245,7 +262,7 @@ fun AnimeHeroContent(
                             },
                         )
                         .clickable { onDubbingClicked() }
-                        .padding(vertical = 14.dp, horizontal = 12.dp),
+                        .padding(horizontal = primaryActionLayoutSpec.horizontalPaddingDp.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Row(

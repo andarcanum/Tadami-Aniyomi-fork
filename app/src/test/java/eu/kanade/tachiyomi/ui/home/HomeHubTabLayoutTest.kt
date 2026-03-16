@@ -178,9 +178,11 @@ class HomeHubTabLayoutTest {
             mode = HomeHeroCtaMode.Aurora,
             isDark = true,
         ) shouldBe HomeHubHeroButtonSurfaceSpec(
-            containerAlpha = 0.88f,
+            containerAlpha = 0.82f,
             usesGradient = false,
             borderAlpha = 0f,
+            innerGlowAlpha = 0.42f,
+            highlightAlpha = 0.18f,
         )
     }
 
@@ -193,6 +195,8 @@ class HomeHubTabLayoutTest {
             containerAlpha = 1f,
             usesGradient = true,
             borderAlpha = 0.12f,
+            innerGlowAlpha = 0f,
+            highlightAlpha = 0f,
         )
     }
 

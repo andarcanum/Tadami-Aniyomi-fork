@@ -22,8 +22,10 @@ class AuroraTitleHeroActionButtonTest {
             mode = AuroraTitleHeroCtaMode.Aurora,
             isDark = true,
         ) shouldBe AuroraTitleHeroCtaSurfaceSpec(
-            containerAlpha = 0.88f,
+            containerAlpha = 0.82f,
             usesGradient = false,
+            innerGlowAlpha = 0.42f,
+            highlightAlpha = 0.18f,
         )
     }
 
@@ -35,6 +37,8 @@ class AuroraTitleHeroActionButtonTest {
         ) shouldBe AuroraTitleHeroCtaSurfaceSpec(
             containerAlpha = 1f,
             usesGradient = false,
+            innerGlowAlpha = 0f,
+            highlightAlpha = 0f,
         )
     }
 

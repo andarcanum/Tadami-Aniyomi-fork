@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.TextStyle
@@ -47,6 +48,8 @@ internal enum class AuroraTitleHeroCtaVisualMode {
 internal data class AuroraTitleHeroCtaSurfaceSpec(
     val containerAlpha: Float,
     val usesGradient: Boolean,
+    val innerGlowAlpha: Float,
+    val highlightAlpha: Float,
 )
 
 internal fun resolveAuroraTitleHeroCtaVisualMode(
@@ -64,12 +67,16 @@ internal fun resolveAuroraTitleHeroCtaSurfaceSpec(
 ): AuroraTitleHeroCtaSurfaceSpec {
     return when (mode) {
         AuroraTitleHeroCtaMode.Aurora -> AuroraTitleHeroCtaSurfaceSpec(
-            containerAlpha = if (isDark) 0.88f else 0.82f,
+            containerAlpha = if (isDark) 0.82f else 0.78f,
             usesGradient = false,
+            innerGlowAlpha = if (isDark) 0.42f else 0.34f,
+            highlightAlpha = if (isDark) 0.18f else 0.14f,
         )
         AuroraTitleHeroCtaMode.Classic -> AuroraTitleHeroCtaSurfaceSpec(
             containerAlpha = 1f,
             usesGradient = false,
+            innerGlowAlpha = 0f,
+            highlightAlpha = 0f,
         )
     }
 }
@@ -106,10 +113,38 @@ private fun AuroraTitleHeroActionSurface(
         AuroraTitleHeroCtaVisualMode.AuroraGlass -> Color.White
         AuroraTitleHeroCtaVisualMode.ClassicSolid -> colors.textOnAccent
     }
+    val auroraInnerGlowBrush = remember(colors.accent, surfaceSpec) {
+        Brush.verticalGradient(
+            colorStops = arrayOf(
+                0.00f to Color.Transparent,
+                0.46f to colors.accent.copy(alpha = surfaceSpec.innerGlowAlpha * 0.18f),
+                0.78f to colors.accent.copy(alpha = surfaceSpec.innerGlowAlpha * 0.58f),
+                1.00f to colors.accent.copy(alpha = surfaceSpec.innerGlowAlpha),
+            ),
+        )
+    }
+    val auroraHighlightBrush = remember(surfaceSpec) {
+        Brush.verticalGradient(
+            colorStops = arrayOf(
+                0.00f to Color.White.copy(alpha = surfaceSpec.highlightAlpha),
+                0.34f to Color.White.copy(alpha = surfaceSpec.highlightAlpha * 0.48f),
+                0.68f to Color.Transparent,
+                1.00f to Color.Transparent,
+            ),
+        )
+    }
     Box(
         modifier = modifier
             .clip(shape)
             .background(colors.accent.copy(alpha = surfaceSpec.containerAlpha))
+            .background(
+                brush = auroraInnerGlowBrush,
+                alpha = if (visualMode == AuroraTitleHeroCtaVisualMode.AuroraGlass) 1f else 0f,
+            )
+            .background(
+                brush = auroraHighlightBrush,
+                alpha = if (visualMode == AuroraTitleHeroCtaVisualMode.AuroraGlass) 1f else 0f,
+            )
             .clickable(onClick = onClick)
             .padding(contentPadding),
         contentAlignment = Alignment.Center,
