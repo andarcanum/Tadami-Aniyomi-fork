@@ -11,17 +11,18 @@
 
 ## About
 
-Tadami is a community fork of Aniyomi with a stronger focus on UI quality and reading experience, including active novel/ranobe support.
+Tadami is a community fork of Aniyomi with a stronger focus on UI quality, Aurora-style surfaces, and a better reading experience across anime, manga, and novels.
 
 Current source version:
-- `versionName`: `0.29`
-- `versionCode`: `145`
+- `versionName`: `0.30.5`
+- `versionCode`: `147`
 
 ## What Is Different In This Fork
 
-- Aurora-inspired UI polish and cleaner navigation.
+- Aurora-focused UI direction with dedicated Home, library, title, and settings polish.
 - Full anime, manga, and novel support in one app.
-- Novel-oriented development (including compatibility tooling for LNReader plugin ecosystems).
+- Novel-oriented development, including compatibility work for LNReader-style ecosystems.
+- User-facing Aurora customization toggles for key Home and title-card interactions.
 
 ## Features
 
@@ -29,9 +30,11 @@ Current source version:
 | --- | --- |
 | Media types | Anime, manga, and novels in one app |
 | Sources and extensions | Separate browsing for anime, manga, and novel sources/extensions |
-| Library and updates | Unified library management, updates, history, and download queues |
+| Home and discovery | Aurora Home hub with greeting header, hero card, recent blocks, and media-specific sections |
+| Library and updates | Unified library management, updates, history, tracking, and download queues |
+| Aurora customization | Display settings for Home recent card style, Home action button style, and title-card action button style |
 | Backup and restore | Backup/restore support across media types |
-| Customization | Theme and behavior settings for player/reader experience |
+| Customization | Theme, reader/player behavior, and Aurora-specific visual preferences |
 
 ## Screenshots
 
@@ -48,6 +51,7 @@ Current source version:
 Requires Android 8.0+ (API 26+).
 
 - Stable builds and APKs: [Releases](https://github.com/andarcanum/Tadami-Aniyomi-fork/releases)
+- Package name: `com.tadami.aurora`
 
 ## Build From Source
 
@@ -70,6 +74,12 @@ On Windows:
 
 APK output:
 - `app/build/outputs/apk/release/`
+
+For local debug builds:
+
+```bash
+./gradlew assembleDebug
+```
 
 ## Contributing
 
