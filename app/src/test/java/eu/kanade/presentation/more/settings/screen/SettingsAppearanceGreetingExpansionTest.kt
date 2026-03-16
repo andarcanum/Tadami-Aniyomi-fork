@@ -2,6 +2,7 @@ package eu.kanade.presentation.more.settings.screen
 
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.HomeHeroCtaMode
+import eu.kanade.domain.ui.model.HomeHubRecentCardMode
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 
@@ -42,6 +43,14 @@ class SettingsAppearanceGreetingExpansionTest {
         resolveHomeHeroCtaModeOptions() shouldBe listOf(
             HomeHeroCtaMode.Aurora,
             HomeHeroCtaMode.Classic,
+        )
+    }
+
+    @Test
+    fun `home recent card mode picker options keep stable visual order`() {
+        resolveHomeHubRecentCardModeOptions() shouldBe listOf(
+            HomeHubRecentCardMode.Aurora,
+            HomeHubRecentCardMode.Classic,
         )
     }
 }

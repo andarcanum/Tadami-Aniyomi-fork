@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.home
 
 import eu.kanade.domain.ui.model.HomeHeaderLayoutElement
 import eu.kanade.domain.ui.model.HomeHeroCtaMode
+import eu.kanade.domain.ui.model.HomeHubRecentCardMode
 import eu.kanade.domain.ui.model.HomeStreakCounterStyle
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import io.kotest.matchers.shouldBe
@@ -164,5 +165,34 @@ class HomeHubTabLayoutTest {
             HomeHubHeroButtonVisualMode.AuroraGlass
         resolveHomeHubHeroButtonVisualMode(HomeHeroCtaMode.Classic) shouldBe
             HomeHubHeroButtonVisualMode.ClassicSolid
+    }
+
+    @Test
+    fun `home recent card mode switches between poster aurora and classic aurora card`() {
+        resolveHomeHubRecentCardRenderMode(HomeHubRecentCardMode.Aurora) shouldBe
+            HomeHubRecentCardRenderMode.AuroraPoster
+        resolveHomeHubRecentCardRenderMode(HomeHubRecentCardMode.Classic) shouldBe
+            HomeHubRecentCardRenderMode.ClassicAuroraCard
+    }
+
+    @Test
+    fun `home recent aurora poster spec preserves vertical poster priority`() {
+        resolveHomeHubRecentPosterCardSpec(AuroraDeviceClass.Phone) shouldBe
+            HomeHubRecentPosterCardSpec(
+                posterAspectRatio = 0.9f,
+                titleMaxLines = 2,
+                textHorizontalPaddingDp = 2,
+                textTopSpacingDp = 8,
+                textBlockMinHeightDp = 58,
+            )
+    }
+
+    @Test
+    fun `home recent aurora poster surface uses subtle translucent container`() {
+        resolveHomeHubRecentPosterSurfaceSpec(isDark = true) shouldBe
+            HomeHubRecentPosterSurfaceSpec(
+                containerAlpha = 0.06f,
+                posterAlpha = 0.10f,
+            )
     }
 }

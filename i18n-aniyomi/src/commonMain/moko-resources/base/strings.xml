@@ -1304,6 +1304,10 @@
     <string name="pref_show_achievement_notifications_summary">Show popup when unlocking achievements</string>
     <string name="pref_animated_aurora_background">Animated Aurora background</string>
     <string name="pref_animated_aurora_background_summary">Show soft animated color glows on Aurora screens</string>
+    <string name="pref_home_recent_card_mode">Home recent blocks</string>
+    <string name="pref_home_recent_card_mode_summary">Style for Recently watched and Recently added cards: %s</string>
+    <string name="pref_home_recent_card_mode_aurora">Aurora</string>
+    <string name="pref_home_recent_card_mode_classic">Classic</string>
     <string name="pref_home_hero_cta_mode">Home hero button</string>
     <string name="pref_home_hero_cta_mode_summary">Behavior and style on the Home hero card: %s</string>
     <string name="pref_home_hero_cta_mode_aurora">Aurora</string>

@@ -1160,6 +1160,10 @@
     <string name="pref_show_achievement_notifications_summary">Показывать всплывающее окно при получении достижений</string>
     <string name="pref_animated_aurora_background">Анимированный фон Aurora</string>
     <string name="pref_animated_aurora_background_summary">Показывать мягкие анимированные цветовые переливы на экранах Aurora</string>
+    <string name="pref_home_recent_card_mode">Блоки recent на Home</string>
+    <string name="pref_home_recent_card_mode_summary">Стиль карточек в блоках «Недавно просмотренные» и «Недавно добавленные»: %s</string>
+    <string name="pref_home_recent_card_mode_aurora">Аврора</string>
+    <string name="pref_home_recent_card_mode_classic">Классический</string>
     <string name="pref_home_hero_cta_mode">Кнопка Hero на Home</string>
     <string name="pref_home_hero_cta_mode_summary">Поведение и стиль кнопки в Hero-блоке Home: %s</string>
     <string name="pref_home_hero_cta_mode_aurora">Aurora</string>

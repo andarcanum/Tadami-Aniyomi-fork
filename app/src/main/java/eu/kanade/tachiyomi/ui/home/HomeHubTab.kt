@@ -113,6 +113,7 @@ import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.domain.ui.model.HomeHeaderLayoutElement
 import eu.kanade.domain.ui.model.HomeHeaderLayoutSpec
 import eu.kanade.domain.ui.model.HomeHeroCtaMode
+import eu.kanade.domain.ui.model.HomeHubRecentCardMode
 import eu.kanade.domain.ui.model.HomeStreakCounterStyle
 import eu.kanade.presentation.components.AuroraCard
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
@@ -121,6 +122,7 @@ import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.components.TabbedScreenAurora
 import eu.kanade.presentation.components.auroraMenuRimLightBrush
 import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
+import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.more.settings.screen.browse.AnimeExtensionReposScreen
 import eu.kanade.presentation.more.settings.screen.browse.MangaExtensionReposScreen
 import eu.kanade.presentation.more.settings.screen.browse.NovelExtensionReposScreen
@@ -290,6 +292,66 @@ internal fun resolveHomeHubHeroButtonVisualMode(mode: HomeHeroCtaMode): HomeHubH
     return when (mode) {
         HomeHeroCtaMode.Aurora -> HomeHubHeroButtonVisualMode.AuroraGlass
         HomeHeroCtaMode.Classic -> HomeHubHeroButtonVisualMode.ClassicSolid
+    }
+}
+
+internal enum class HomeHubRecentCardRenderMode {
+    AuroraPoster,
+    ClassicAuroraCard,
+}
+
+internal data class HomeHubRecentPosterCardSpec(
+    val posterAspectRatio: Float,
+    val titleMaxLines: Int,
+    val textHorizontalPaddingDp: Int,
+    val textTopSpacingDp: Int,
+    val textBlockMinHeightDp: Int,
+)
+
+internal data class HomeHubRecentPosterSurfaceSpec(
+    val containerAlpha: Float,
+    val posterAlpha: Float,
+)
+
+internal fun resolveHomeHubRecentCardRenderMode(mode: HomeHubRecentCardMode): HomeHubRecentCardRenderMode {
+    return when (mode) {
+        HomeHubRecentCardMode.Aurora -> HomeHubRecentCardRenderMode.AuroraPoster
+        HomeHubRecentCardMode.Classic -> HomeHubRecentCardRenderMode.ClassicAuroraCard
+    }
+}
+
+internal fun resolveHomeHubRecentPosterCardSpec(deviceClass: AuroraDeviceClass): HomeHubRecentPosterCardSpec {
+    return when (deviceClass) {
+        AuroraDeviceClass.Phone -> HomeHubRecentPosterCardSpec(
+            posterAspectRatio = 0.9f,
+            titleMaxLines = 2,
+            textHorizontalPaddingDp = 2,
+            textTopSpacingDp = 8,
+            textBlockMinHeightDp = 58,
+        )
+        AuroraDeviceClass.TabletCompact,
+        AuroraDeviceClass.TabletExpanded,
+        -> HomeHubRecentPosterCardSpec(
+            posterAspectRatio = 0.9f,
+            titleMaxLines = 2,
+            textHorizontalPaddingDp = 2,
+            textTopSpacingDp = 8,
+            textBlockMinHeightDp = 54,
+        )
+    }
+}
+
+internal fun resolveHomeHubRecentPosterSurfaceSpec(isDark: Boolean): HomeHubRecentPosterSurfaceSpec {
+    return if (isDark) {
+        HomeHubRecentPosterSurfaceSpec(
+            containerAlpha = 0.06f,
+            posterAlpha = 0.10f,
+        )
+    } else {
+        HomeHubRecentPosterSurfaceSpec(
+            containerAlpha = 0.02f,
+            posterAlpha = 0.05f,
+        )
     }
 }
 
@@ -679,6 +741,10 @@ object HomeHubTab : Tab {
         val homeHeroCtaMode = remember(homeHeroCtaModeKey) {
             HomeHeroCtaMode.fromKey(homeHeroCtaModeKey)
         }
+        val homeHubRecentCardModeKey by userProfilePreferences.homeHubRecentCardMode().collectAsState()
+        val homeHubRecentCardMode = remember(homeHubRecentCardModeKey) {
+            HomeHubRecentCardMode.fromKey(homeHubRecentCardModeKey)
+        }
         val homeHeaderGreetingAlignRight by userProfilePreferences.homeHeaderGreetingAlignRight().collectAsState()
         val homeHeaderNicknameAlignRight by userProfilePreferences.homeHeaderNicknameAlignRight().collectAsState()
         val homeHeaderLayoutJson by userProfilePreferences.homeHeaderLayoutJson().collectAsState()
@@ -842,6 +908,7 @@ object HomeHubTab : Tab {
                             contentPadding = contentPadding,
                             searchQuery = animeSearchQuery,
                             heroCtaMode = homeHeroCtaMode,
+                            recentCardMode = homeHubRecentCardMode,
                             activeSection = selectedSection,
                             scrollResetToken = scrollResetToken,
                             onScrollSignal = onScrollSignal,
@@ -856,6 +923,7 @@ object HomeHubTab : Tab {
                             contentPadding = contentPadding,
                             searchQuery = mangaSearchQuery,
                             heroCtaMode = homeHeroCtaMode,
+                            recentCardMode = homeHubRecentCardMode,
                             activeSection = selectedSection,
                             scrollResetToken = scrollResetToken,
                             onScrollSignal = onScrollSignal,
@@ -870,6 +938,7 @@ object HomeHubTab : Tab {
                             contentPadding = contentPadding,
                             searchQuery = novelSearchQuery,
                             heroCtaMode = homeHeroCtaMode,
+                            recentCardMode = homeHubRecentCardMode,
                             activeSection = selectedSection,
                             scrollResetToken = scrollResetToken,
                             onScrollSignal = onScrollSignal,
@@ -1878,6 +1947,7 @@ private fun AnimeHomeHub(
     contentPadding: PaddingValues,
     searchQuery: String?,
     heroCtaMode: HomeHeroCtaMode,
+    recentCardMode: HomeHubRecentCardMode,
     activeSection: HomeHubSection,
     scrollResetToken: Int,
     onScrollSignal: (HomeHubSection, Float, Boolean) -> Unit,
@@ -1904,6 +1974,7 @@ private fun AnimeHomeHub(
         searchQuery = searchQuery,
         lastSourceName = lastSourceName,
         heroCtaMode = heroCtaMode,
+        recentCardMode = recentCardMode,
         contentPadding = contentPadding,
         onEntryClick = { navigator.push(AnimeScreen(it)) },
         onPlayHero = { screenModel.playHeroEpisode(context) },
@@ -1930,6 +2001,7 @@ private fun MangaHomeHub(
     contentPadding: PaddingValues,
     searchQuery: String?,
     heroCtaMode: HomeHeroCtaMode,
+    recentCardMode: HomeHubRecentCardMode,
     activeSection: HomeHubSection,
     scrollResetToken: Int,
     onScrollSignal: (HomeHubSection, Float, Boolean) -> Unit,
@@ -1956,6 +2028,7 @@ private fun MangaHomeHub(
         searchQuery = searchQuery,
         lastSourceName = lastSourceName,
         heroCtaMode = heroCtaMode,
+        recentCardMode = recentCardMode,
         contentPadding = contentPadding,
         onEntryClick = { navigator.push(MangaScreen(it)) },
         onPlayHero = { screenModel.readHeroChapter(context) },
@@ -1982,6 +2055,7 @@ private fun NovelHomeHub(
     contentPadding: PaddingValues,
     searchQuery: String?,
     heroCtaMode: HomeHeroCtaMode,
+    recentCardMode: HomeHubRecentCardMode,
     activeSection: HomeHubSection,
     scrollResetToken: Int,
     onScrollSignal: (HomeHubSection, Float, Boolean) -> Unit,
@@ -2007,6 +2081,7 @@ private fun NovelHomeHub(
         searchQuery = searchQuery,
         lastSourceName = lastSourceName,
         heroCtaMode = heroCtaMode,
+        recentCardMode = recentCardMode,
         contentPadding = contentPadding,
         onEntryClick = { navigator.push(NovelScreen(it)) },
         onPlayHero = {
@@ -2045,6 +2120,7 @@ private fun HomeHubScreen(
     searchQuery: String?,
     lastSourceName: String?,
     heroCtaMode: HomeHeroCtaMode,
+    recentCardMode: HomeHubRecentCardMode,
     contentPadding: PaddingValues,
     onEntryClick: (Long) -> Unit,
     onPlayHero: () -> Unit,
@@ -2135,6 +2211,7 @@ private fun HomeHubScreen(
                 item(key = "history") {
                     HistoryRow(
                         history = history,
+                        recentCardMode = recentCardMode,
                         onEntryClick = onEntryClick,
                         onViewAllClick = onHistoryClick,
                     )
@@ -2145,6 +2222,7 @@ private fun HomeHubScreen(
                 item(key = "recommendations") {
                     RecommendationsGrid(
                         recommendations = recommendations,
+                        recentCardMode = recentCardMode,
                         onEntryClick = onEntryClick,
                         onMoreClick = onLibraryClick,
                     )
@@ -2501,6 +2579,7 @@ private fun QuickSourceButton(sourceName: String?, onClick: () -> Unit) {
 @Composable
 private fun HistoryRow(
     history: List<HomeHubHistory>,
+    recentCardMode: HomeHubRecentCardMode,
     onEntryClick: (Long) -> Unit,
     onViewAllClick: () -> Unit,
 ) {
@@ -2523,6 +2602,9 @@ private fun HistoryRow(
         AuroraDeviceClass.TabletExpanded -> 18.dp
     }
     val useWrappedSections = shouldUseHomeHubWrappedSections(auroraAdaptiveSpec.deviceClass)
+    val cardRenderMode = remember(recentCardMode) {
+        resolveHomeHubRecentCardRenderMode(recentCardMode)
+    }
 
     Column(modifier = Modifier.padding(top = 24.dp)) {
         Row(
@@ -2558,8 +2640,9 @@ private fun HistoryRow(
                 verticalArrangement = Arrangement.spacedBy(rowSpacing),
             ) {
                 history.forEach { item ->
-                    AuroraCard(
-                        modifier = Modifier.width(cardWidth).aspectRatio(0.68f),
+                    HomeHubRecentCard(
+                        mode = cardRenderMode,
+                        modifier = Modifier.width(cardWidth),
                         title = item.title,
                         coverData = item.coverData,
                         subtitle = stringResource(
@@ -2567,7 +2650,7 @@ private fun HistoryRow(
                             (item.progressNumber % 1000).toInt().toString(),
                         ),
                         onClick = { onEntryClick(item.entryId) },
-                        imagePadding = 6.dp,
+                        deviceClass = auroraAdaptiveSpec.deviceClass,
                     )
                 }
             }
@@ -2580,8 +2663,9 @@ private fun HistoryRow(
                 horizontalArrangement = Arrangement.spacedBy(rowSpacing),
             ) {
                 items(history, key = { it.entryId }) { item ->
-                    AuroraCard(
-                        modifier = Modifier.width(cardWidth).aspectRatio(0.68f),
+                    HomeHubRecentCard(
+                        mode = cardRenderMode,
+                        modifier = Modifier.width(cardWidth),
                         title = item.title,
                         coverData = item.coverData,
                         subtitle = stringResource(
@@ -2589,7 +2673,7 @@ private fun HistoryRow(
                             (item.progressNumber % 1000).toInt().toString(),
                         ),
                         onClick = { onEntryClick(item.entryId) },
-                        imagePadding = 6.dp,
+                        deviceClass = auroraAdaptiveSpec.deviceClass,
                     )
                 }
             }
@@ -2601,6 +2685,7 @@ private fun HistoryRow(
 @Composable
 private fun RecommendationsGrid(
     recommendations: List<HomeHubRecommendation>,
+    recentCardMode: HomeHubRecentCardMode,
     onEntryClick: (Long) -> Unit,
     onMoreClick: () -> Unit,
 ) {
@@ -2623,6 +2708,9 @@ private fun RecommendationsGrid(
         AuroraDeviceClass.TabletExpanded -> 18.dp
     }
     val useWrappedSections = shouldUseHomeHubWrappedSections(auroraAdaptiveSpec.deviceClass)
+    val cardRenderMode = remember(recentCardMode) {
+        resolveHomeHubRecentCardRenderMode(recentCardMode)
+    }
 
     Column(modifier = Modifier.padding(top = 32.dp)) {
         Row(
@@ -2659,13 +2747,14 @@ private fun RecommendationsGrid(
                 verticalArrangement = Arrangement.spacedBy(rowSpacing),
             ) {
                 recommendations.forEach { item ->
-                    AuroraCard(
-                        modifier = Modifier.width(cardWidth).aspectRatio(0.68f),
+                    HomeHubRecentCard(
+                        mode = cardRenderMode,
+                        modifier = Modifier.width(cardWidth),
                         title = item.title,
                         coverData = item.coverData,
                         subtitle = item.subtitle,
                         onClick = { onEntryClick(item.entryId) },
-                        imagePadding = 6.dp,
+                        deviceClass = auroraAdaptiveSpec.deviceClass,
                     )
                 }
             }
@@ -2679,15 +2768,137 @@ private fun RecommendationsGrid(
                 horizontalArrangement = Arrangement.spacedBy(rowSpacing),
             ) {
                 items(recommendations, key = { it.entryId }) { item ->
-                    AuroraCard(
-                        modifier = Modifier.width(cardWidth).aspectRatio(0.68f),
+                    HomeHubRecentCard(
+                        mode = cardRenderMode,
+                        modifier = Modifier.width(cardWidth),
                         title = item.title,
                         coverData = item.coverData,
                         subtitle = item.subtitle,
                         onClick = { onEntryClick(item.entryId) },
-                        imagePadding = 6.dp,
+                        deviceClass = auroraAdaptiveSpec.deviceClass,
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeHubRecentCard(
+    mode: HomeHubRecentCardRenderMode,
+    title: String,
+    coverData: Any?,
+    subtitle: String?,
+    deviceClass: AuroraDeviceClass,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    when (mode) {
+        HomeHubRecentCardRenderMode.ClassicAuroraCard -> {
+            AuroraCard(
+                modifier = modifier.aspectRatio(0.68f),
+                title = title,
+                coverData = coverData,
+                subtitle = subtitle,
+                onClick = onClick,
+                imagePadding = 6.dp,
+            )
+        }
+        HomeHubRecentCardRenderMode.AuroraPoster -> {
+            HomeHubRecentPosterCard(
+                modifier = modifier,
+                title = title,
+                coverData = coverData,
+                subtitle = subtitle,
+                deviceClass = deviceClass,
+                onClick = onClick,
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeHubRecentPosterCard(
+    title: String,
+    coverData: Any?,
+    subtitle: String?,
+    deviceClass: AuroraDeviceClass,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AuroraTheme.colors
+    val posterSpec = remember(deviceClass) {
+        resolveHomeHubRecentPosterCardSpec(deviceClass)
+    }
+    val surfaceSpec = remember(colors.isDark) {
+        resolveHomeHubRecentPosterSurfaceSpec(colors.isDark)
+    }
+    val cardShape = RoundedCornerShape(18.dp)
+    val posterShape = RoundedCornerShape(16.dp)
+    val fallbackPainter = rememberThemeAwareCoverErrorPainter(
+        variant = AuroraCoverPlaceholderVariant.Portrait,
+    )
+
+    Column(
+        modifier = modifier
+            .clip(cardShape)
+            .clickable(onClick = onClick)
+            .background(colors.glass.copy(alpha = surfaceSpec.containerAlpha))
+            .padding(6.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(posterSpec.posterAspectRatio)
+                .clip(posterShape)
+                .background(colors.cardBackground.copy(alpha = surfaceSpec.posterAlpha))
+                .border(
+                    width = 1.dp,
+                    color = if (colors.isDark) {
+                        Color.White.copy(alpha = 0.06f)
+                    } else {
+                        Color.Black.copy(alpha = 0.04f)
+                    },
+                    shape = posterShape,
+                ),
+        ) {
+            AsyncImage(
+                model = resolveAuroraCoverModel(coverData),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+                error = fallbackPainter,
+                fallback = fallbackPainter,
+            )
+        }
+
+        Spacer(Modifier.height(posterSpec.textTopSpacingDp.dp))
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = posterSpec.textBlockMinHeightDp.dp)
+                .padding(horizontal = posterSpec.textHorizontalPaddingDp.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = title,
+                color = colors.textPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = posterSpec.titleMaxLines,
+                overflow = TextOverflow.Ellipsis,
+                lineHeight = 17.sp,
+            )
+
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    color = colors.textSecondary,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }

@@ -3,6 +3,7 @@ package eu.kanade.domain.ui
 import eu.kanade.domain.ui.model.HomeHeaderLayoutElement
 import eu.kanade.domain.ui.model.HomeHeaderLayoutSpec
 import eu.kanade.domain.ui.model.HomeHeroCtaMode
+import eu.kanade.domain.ui.model.HomeHubRecentCardMode
 import eu.kanade.domain.ui.model.HomeStreakCounterStyle
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
@@ -25,6 +26,7 @@ class UserProfilePreferencesTest {
         prefs.showHomeStreak().get() shouldBe true
         prefs.homeStreakCounterStyle().get() shouldBe HomeStreakCounterStyle.ClassicBadge.key
         prefs.homeHeroCtaMode().get() shouldBe HomeHeroCtaMode.Aurora.key
+        prefs.homeHubRecentCardMode().get() shouldBe HomeHubRecentCardMode.Aurora.key
         prefs.homeHeaderNicknameAlignRight().get() shouldBe false
         prefs.homeHubLastSection().get() shouldBe "anime"
         prefs.greetingFont().get() shouldBe "default"

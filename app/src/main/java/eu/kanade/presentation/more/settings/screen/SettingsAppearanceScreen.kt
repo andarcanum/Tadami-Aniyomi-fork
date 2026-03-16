@@ -28,6 +28,7 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.domain.ui.model.AnimeMetadataSource
 import eu.kanade.domain.ui.model.HomeHeroCtaMode
+import eu.kanade.domain.ui.model.HomeHubRecentCardMode
 import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.domain.ui.model.StartScreen
 import eu.kanade.domain.ui.model.TabletUiMode
@@ -424,6 +425,21 @@ object SettingsAppearanceScreen : SearchableSettings {
                 )
                 add(
                     Preference.PreferenceItem.ListPreference(
+                        preference = userProfilePreferences.homeHubRecentCardMode(),
+                        entries = resolveHomeHubRecentCardModeOptions()
+                            .associate { it.key to stringResource(it.titleRes) }
+                            .toImmutableMap(),
+                        title = stringResource(AYMR.strings.pref_home_recent_card_mode),
+                        subtitleProvider = { value, entries ->
+                            stringResource(
+                                AYMR.strings.pref_home_recent_card_mode_summary,
+                                entries[value].orEmpty(),
+                            )
+                        },
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.ListPreference(
                         preference = userProfilePreferences.homeHeroCtaMode(),
                         entries = resolveHomeHeroCtaModeOptions()
                             .associate { it.key to stringResource(it.titleRes) }
@@ -614,6 +630,13 @@ internal fun resolveHomeHeroCtaModeOptions(): List<HomeHeroCtaMode> {
     return listOf(
         HomeHeroCtaMode.Aurora,
         HomeHeroCtaMode.Classic,
+    )
+}
+
+internal fun resolveHomeHubRecentCardModeOptions(): List<HomeHubRecentCardMode> {
+    return listOf(
+        HomeHubRecentCardMode.Aurora,
+        HomeHubRecentCardMode.Classic,
     )
 }
 

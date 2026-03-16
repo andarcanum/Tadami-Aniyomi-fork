@@ -2,6 +2,7 @@ package eu.kanade.domain.ui
 
 import eu.kanade.domain.ui.model.HomeHeaderLayoutSpec
 import eu.kanade.domain.ui.model.HomeHeroCtaMode
+import eu.kanade.domain.ui.model.HomeHubRecentCardMode
 import eu.kanade.domain.ui.model.HomeStreakCounterStyle
 import tachiyomi.core.common.preference.PreferenceStore
 
@@ -35,6 +36,10 @@ class UserProfilePreferences(
     fun homeHeroCtaMode() = preferenceStore.getString(
         "user_profile_home_hero_cta_mode",
         HomeHeroCtaMode.Aurora.key,
+    )
+    fun homeHubRecentCardMode() = preferenceStore.getString(
+        "user_profile_home_hub_recent_card_mode",
+        HomeHubRecentCardMode.Aurora.key,
     )
     fun homeHeaderGreetingAlignRight() = preferenceStore.getBoolean(
         "user_profile_home_header_greeting_align_right",
