@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.RecordVoiceOver
 import androidx.compose.material3.Icon
@@ -40,6 +39,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionButton
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreenModel
@@ -218,38 +218,18 @@ fun AnimeHeroContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // Continue/Start button
-            Box(
+            AuroraTitleHeroActionButton(
+                hasProgress = hasWatchingProgress,
+                onClick = onContinueWatching,
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(colors.accent)
-                    .clickable { onContinueWatching() }
                     .padding(vertical = 14.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        Icons.Filled.PlayArrow,
-                        contentDescription = null,
-                        tint = colors.textOnAccent,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Text(
-                        text = if (hasWatchingProgress) {
-                            stringResource(MR.strings.action_resume)
-                        } else {
-                            stringResource(MR.strings.action_start)
-                        },
-                        color = colors.textOnAccent,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            }
+                cornerRadius = 12.dp,
+                iconSize = 20.dp,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+                textSize = 15.sp,
+                textWeight = FontWeight.SemiBold,
+            )
 
             // Dubbing selector button (if available)
             if (onDubbingClicked != null) {

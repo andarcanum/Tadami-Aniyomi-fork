@@ -96,7 +96,7 @@ class HomeHubTabLayoutTest {
         ) shouldBe HomeHubHeroActionSpec(
             labelRes = MR.strings.action_resume,
             progressLabelRes = AYMR.strings.aurora_chapter_progress,
-            icon = HomeHubHeroActionIcon.Read,
+            icon = HomeHubHeroActionIcon.Play,
         )
     }
 
@@ -109,7 +109,7 @@ class HomeHubTabLayoutTest {
         ) shouldBe HomeHubHeroActionSpec(
             labelRes = MR.strings.action_resume,
             progressLabelRes = AYMR.strings.aurora_chapter_progress,
-            icon = HomeHubHeroActionIcon.Read,
+            icon = HomeHubHeroActionIcon.Play,
         )
     }
 
@@ -132,7 +132,7 @@ class HomeHubTabLayoutTest {
         ) shouldBe HomeHubHeroActionSpec(
             labelRes = AYMR.strings.aurora_read,
             progressLabelRes = AYMR.strings.aurora_chapter_progress,
-            icon = HomeHubHeroActionIcon.Read,
+            icon = HomeHubHeroActionIcon.Play,
         )
     }
 

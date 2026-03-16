@@ -39,7 +39,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Edit
@@ -229,7 +228,6 @@ internal fun resolveHomeHubHeaderVisibility(
 
 internal enum class HomeHubHeroActionIcon {
     Play,
-    Read,
 }
 
 internal data class HomeHubHeroActionSpec(
@@ -275,14 +273,10 @@ internal fun resolveHomeHubHeroActionSpec(
                     HomeHubSection.Manga, HomeHubSection.Novel -> AYMR.strings.aurora_read
                 }
             }
-            val icon = when (section) {
-                HomeHubSection.Anime -> HomeHubHeroActionIcon.Play
-                HomeHubSection.Manga, HomeHubSection.Novel -> HomeHubHeroActionIcon.Read
-            }
             HomeHubHeroActionSpec(
                 labelRes = labelRes,
                 progressLabelRes = progressLabelRes,
-                icon = icon,
+                icon = HomeHubHeroActionIcon.Play,
             )
         }
     }
@@ -2498,7 +2492,6 @@ private fun HeroSection(
                 Icon(
                     imageVector = when (actionSpec.icon) {
                         HomeHubHeroActionIcon.Play -> Icons.Filled.PlayArrow
-                        HomeHubHeroActionIcon.Read -> Icons.AutoMirrored.Outlined.MenuBook
                     },
                     contentDescription = null,
                     tint = actionButtonContentColor,

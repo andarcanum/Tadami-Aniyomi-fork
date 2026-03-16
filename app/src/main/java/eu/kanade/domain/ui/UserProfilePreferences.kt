@@ -1,5 +1,6 @@
 package eu.kanade.domain.ui
 
+import eu.kanade.domain.ui.model.AuroraTitleHeroCtaMode
 import eu.kanade.domain.ui.model.HomeHeaderLayoutSpec
 import eu.kanade.domain.ui.model.HomeHeroCtaMode
 import eu.kanade.domain.ui.model.HomeHubRecentCardMode
@@ -40,6 +41,10 @@ class UserProfilePreferences(
     fun homeHubRecentCardMode() = preferenceStore.getString(
         "user_profile_home_hub_recent_card_mode",
         HomeHubRecentCardMode.Aurora.key,
+    )
+    fun auroraTitleHeroCtaMode() = preferenceStore.getString(
+        "user_profile_aurora_title_hero_cta_mode",
+        AuroraTitleHeroCtaMode.Aurora.key,
     )
     fun homeHeaderGreetingAlignRight() = preferenceStore.getBoolean(
         "user_profile_home_header_greeting_align_right",

@@ -27,6 +27,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.domain.ui.model.AnimeMetadataSource
+import eu.kanade.domain.ui.model.AuroraTitleHeroCtaMode
 import eu.kanade.domain.ui.model.HomeHeroCtaMode
 import eu.kanade.domain.ui.model.HomeHubRecentCardMode
 import eu.kanade.domain.ui.model.NavStyle
@@ -193,7 +194,9 @@ object SettingsAppearanceScreen : SearchableSettings {
         val greetingAlpha by greetingAlphaPref.collectAsState()
         val greetingColorPref = userProfilePreferences.greetingColor()
         val greetingColor by greetingColorPref.collectAsState()
+        var isAuroraCustomizationExpanded by rememberSaveable { mutableStateOf(false) }
         var isGreetingSettingsExpanded by rememberSaveable { mutableStateOf(false) }
+        val auroraCustomizationTitle = stringResource(AYMR.strings.pref_aurora_customization)
         val greetingSettingsToggleTitle = stringResource(AYMR.strings.aurora_change_greeting_style)
         val fontSettingsToggleTitle = stringResource(AYMR.strings.pref_fonts_settings)
         val greetingCustomizationItems = if (isGreetingSettingsExpanded) {
@@ -424,35 +427,62 @@ object SettingsAppearanceScreen : SearchableSettings {
                     ),
                 )
                 add(
-                    Preference.PreferenceItem.ListPreference(
-                        preference = userProfilePreferences.homeHubRecentCardMode(),
-                        entries = resolveHomeHubRecentCardModeOptions()
-                            .associate { it.key to stringResource(it.titleRes) }
-                            .toImmutableMap(),
-                        title = stringResource(AYMR.strings.pref_home_recent_card_mode),
-                        subtitleProvider = { value, entries ->
-                            stringResource(
-                                AYMR.strings.pref_home_recent_card_mode_summary,
-                                entries[value].orEmpty(),
-                            )
+                    Preference.PreferenceItem.TextPreference(
+                        title = auroraCustomizationTitle,
+                        onClick = {
+                            isAuroraCustomizationExpanded =
+                                toggleAuroraCustomizationExpanded(isAuroraCustomizationExpanded)
                         },
+                        widget = { ExpandablePreferenceChevron(expanded = isAuroraCustomizationExpanded) },
                     ),
                 )
-                add(
-                    Preference.PreferenceItem.ListPreference(
-                        preference = userProfilePreferences.homeHeroCtaMode(),
-                        entries = resolveHomeHeroCtaModeOptions()
-                            .associate { it.key to stringResource(it.titleRes) }
-                            .toImmutableMap(),
-                        title = stringResource(AYMR.strings.pref_home_hero_cta_mode),
-                        subtitleProvider = { value, entries ->
-                            stringResource(
-                                AYMR.strings.pref_home_hero_cta_mode_summary,
-                                entries[value].orEmpty(),
-                            )
-                        },
-                    ),
-                )
+                if (isAuroraCustomizationExpanded) {
+                    add(
+                        Preference.PreferenceItem.ListPreference(
+                            preference = userProfilePreferences.homeHubRecentCardMode(),
+                            entries = resolveHomeHubRecentCardModeOptions()
+                                .associate { it.key to stringResource(it.titleRes) }
+                                .toImmutableMap(),
+                            title = stringResource(AYMR.strings.pref_home_recent_card_mode),
+                            subtitleProvider = { value, entries ->
+                                stringResource(
+                                    AYMR.strings.pref_home_recent_card_mode_summary,
+                                    entries[value].orEmpty(),
+                                )
+                            },
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.ListPreference(
+                            preference = userProfilePreferences.homeHeroCtaMode(),
+                            entries = resolveHomeHeroCtaModeOptions()
+                                .associate { it.key to stringResource(it.titleRes) }
+                                .toImmutableMap(),
+                            title = stringResource(AYMR.strings.pref_home_hero_cta_mode),
+                            subtitleProvider = { value, entries ->
+                                stringResource(
+                                    AYMR.strings.pref_home_hero_cta_mode_summary,
+                                    entries[value].orEmpty(),
+                                )
+                            },
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.ListPreference(
+                            preference = userProfilePreferences.auroraTitleHeroCtaMode(),
+                            entries = resolveAuroraTitleHeroCtaModeOptions()
+                                .associate { it.key to stringResource(it.titleRes) }
+                                .toImmutableMap(),
+                            title = stringResource(AYMR.strings.pref_aurora_title_hero_cta_mode),
+                            subtitleProvider = { value, entries ->
+                                stringResource(
+                                    AYMR.strings.pref_aurora_title_hero_cta_mode_summary,
+                                    entries[value].orEmpty(),
+                                )
+                            },
+                        ),
+                    )
+                }
                 add(
                     Preference.PreferenceItem.TextPreference(
                         title = fontSettingsToggleTitle,
@@ -626,6 +656,10 @@ internal fun toggleGreetingSettingsExpanded(currentlyExpanded: Boolean): Boolean
     return !currentlyExpanded
 }
 
+internal fun toggleAuroraCustomizationExpanded(currentlyExpanded: Boolean): Boolean {
+    return !currentlyExpanded
+}
+
 internal fun resolveHomeHeroCtaModeOptions(): List<HomeHeroCtaMode> {
     return listOf(
         HomeHeroCtaMode.Aurora,
@@ -637,6 +671,13 @@ internal fun resolveHomeHubRecentCardModeOptions(): List<HomeHubRecentCardMode> 
     return listOf(
         HomeHubRecentCardMode.Aurora,
         HomeHubRecentCardMode.Classic,
+    )
+}
+
+internal fun resolveAuroraTitleHeroCtaModeOptions(): List<AuroraTitleHeroCtaMode> {
+    return listOf(
+        AuroraTitleHeroCtaMode.Aurora,
+        AuroraTitleHeroCtaMode.Classic,
     )
 }
 

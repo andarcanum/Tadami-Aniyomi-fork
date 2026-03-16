@@ -1,20 +1,18 @@
 package eu.kanade.presentation.entries.manga.components.aurora
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -33,12 +31,12 @@ import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionButton
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.pluralStringResource
-import tachiyomi.presentation.core.i18n.stringResource
 
 /**
  * Hero content displayed at bottom of first screen over poster gradient.
@@ -168,39 +166,20 @@ fun MangaHeroContent(
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // Continue Reading button
-        Box(
+        AuroraTitleHeroActionButton(
+            hasProgress = hasReadingProgress,
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onContinueReading()
+            },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(60.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(colors.accent)
-                .clickable {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onContinueReading()
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                Icon(
-                    Icons.Filled.PlayArrow,
-                    contentDescription = null,
-                    tint = colors.textOnAccent,
-                    modifier = Modifier.size(28.dp),
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = stringResource(
-                        if (hasReadingProgress) MR.strings.action_resume else MR.strings.action_start,
-                    ),
-                    color = colors.textOnAccent,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                )
-            }
-        }
+                .height(60.dp),
+            cornerRadius = 16.dp,
+            iconSize = 28.dp,
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            textSize = 18.sp,
+            textWeight = FontWeight.Bold,
+        )
     }
 }
