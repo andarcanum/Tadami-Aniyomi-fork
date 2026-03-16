@@ -36,7 +36,7 @@ class UserProfilePreferences(
     )
     fun homeHeroCtaMode() = preferenceStore.getString(
         "user_profile_home_hero_cta_mode",
-        HomeHeroCtaMode.Aurora.key,
+        HomeHeroCtaMode.Classic.key,
     )
     fun homeHubRecentCardMode() = preferenceStore.getString(
         "user_profile_home_hub_recent_card_mode",
@@ -44,7 +44,7 @@ class UserProfilePreferences(
     )
     fun auroraTitleHeroCtaMode() = preferenceStore.getString(
         "user_profile_aurora_title_hero_cta_mode",
-        AuroraTitleHeroCtaMode.Aurora.key,
+        AuroraTitleHeroCtaMode.Classic.key,
     )
     fun homeHeaderGreetingAlignRight() = preferenceStore.getBoolean(
         "user_profile_home_header_greeting_align_right",
@@ -57,7 +57,7 @@ class UserProfilePreferences(
     fun homeHubLastSection() = preferenceStore.getString("user_profile_home_hub_last_section", "anime")
     fun greetingFont() = preferenceStore.getString("user_profile_greeting_font", "default")
     fun greetingFontSize() = preferenceStore.getInt("user_profile_greeting_font_size", 12)
-    fun greetingColor() = preferenceStore.getString("user_profile_greeting_color", "accent")
+    fun greetingColor() = preferenceStore.getString("user_profile_greeting_color", "theme")
     fun greetingCustomColorHex() = preferenceStore.getString("user_profile_greeting_custom_color_hex", "#FFFFFF")
     fun greetingDecoration() = preferenceStore.getString("user_profile_greeting_decoration", "sparkle")
     fun greetingItalic() = preferenceStore.getBoolean("user_profile_greeting_italic", true)

@@ -1,9 +1,14 @@
 package eu.kanade.tachiyomi.ui.home
 
+import androidx.compose.ui.unit.dp
 import eu.kanade.domain.ui.model.HomeHeaderLayoutElement
 import eu.kanade.domain.ui.model.HomeHeroCtaMode
 import eu.kanade.domain.ui.model.HomeHubRecentCardMode
 import eu.kanade.domain.ui.model.HomeStreakCounterStyle
+import eu.kanade.presentation.components.AuroraCtaIconShadowSpec
+import eu.kanade.presentation.components.AuroraCtaLabelShadowSpec
+import eu.kanade.presentation.components.resolveAuroraCtaLabelShadowSpec
+import eu.kanade.presentation.components.resolveAuroraHomeIconShadowSpec
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
@@ -143,17 +148,17 @@ class HomeHubTabLayoutTest {
             progressNumber = 9.0,
             mode = HomeHeroCtaMode.Classic,
         ) shouldBe HomeHubHeroActionSpec(
-            labelRes = AYMR.strings.aurora_play,
+            labelRes = MR.strings.action_resume,
             progressLabelRes = AYMR.strings.aurora_episode_progress,
             icon = HomeHubHeroActionIcon.Play,
         )
 
         resolveHomeHubHeroActionSpec(
             section = HomeHubSection.Manga,
-            progressNumber = 9.0,
+            progressNumber = 0.0,
             mode = HomeHeroCtaMode.Classic,
         ) shouldBe HomeHubHeroActionSpec(
-            labelRes = AYMR.strings.aurora_read,
+            labelRes = MR.strings.action_start,
             progressLabelRes = AYMR.strings.aurora_chapter_progress,
             icon = HomeHubHeroActionIcon.Play,
         )
@@ -165,6 +170,68 @@ class HomeHubTabLayoutTest {
             HomeHubHeroButtonVisualMode.AuroraGlass
         resolveHomeHubHeroButtonVisualMode(HomeHeroCtaMode.Classic) shouldBe
             HomeHubHeroButtonVisualMode.ClassicSolid
+    }
+
+    @Test
+    fun `aurora hero cta surface uses bright accent glass without gradient`() {
+        resolveHomeHubHeroButtonSurfaceSpec(
+            mode = HomeHeroCtaMode.Aurora,
+            isDark = true,
+        ) shouldBe HomeHubHeroButtonSurfaceSpec(
+            containerAlpha = 0.88f,
+            usesGradient = false,
+            borderAlpha = 0f,
+        )
+    }
+
+    @Test
+    fun `classic hero cta surface keeps legacy filled treatment`() {
+        resolveHomeHubHeroButtonSurfaceSpec(
+            mode = HomeHeroCtaMode.Classic,
+            isDark = true,
+        ) shouldBe HomeHubHeroButtonSurfaceSpec(
+            containerAlpha = 1f,
+            usesGradient = true,
+            borderAlpha = 0.12f,
+        )
+    }
+
+    @Test
+    fun `aurora hero cta no longer uses a standalone glow layer`() {
+        resolveHomeHubHeroButtonGlowEnabled(
+            mode = HomeHeroCtaMode.Aurora,
+        ) shouldBe false
+
+        resolveHomeHubHeroButtonGlowEnabled(
+            mode = HomeHeroCtaMode.Classic,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `home hero cta content uses readability shadows only in aurora mode`() {
+        resolveAuroraCtaLabelShadowSpec(enabled = true) shouldBe AuroraCtaLabelShadowSpec(
+            alpha = 0.26f,
+            offsetY = 1.5f,
+            blurRadius = 3.5f,
+        )
+
+        resolveAuroraCtaLabelShadowSpec(enabled = false) shouldBe AuroraCtaLabelShadowSpec(
+            alpha = 0f,
+            offsetY = 0f,
+            blurRadius = 0f,
+        )
+
+        resolveAuroraHomeIconShadowSpec(enabled = true) shouldBe AuroraCtaIconShadowSpec(
+            alpha = 0.24f,
+            offsetXDp = 0.dp,
+            offsetYDp = 1.dp,
+        )
+
+        resolveAuroraHomeIconShadowSpec(enabled = false) shouldBe AuroraCtaIconShadowSpec(
+            alpha = 0f,
+            offsetXDp = 0.dp,
+            offsetYDp = 0.dp,
+        )
     }
 
     @Test

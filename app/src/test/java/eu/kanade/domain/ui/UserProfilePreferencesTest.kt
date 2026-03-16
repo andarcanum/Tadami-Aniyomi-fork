@@ -26,15 +26,15 @@ class UserProfilePreferencesTest {
         prefs.showHomeGreeting().get() shouldBe true
         prefs.showHomeStreak().get() shouldBe true
         prefs.homeStreakCounterStyle().get() shouldBe HomeStreakCounterStyle.ClassicBadge.key
-        prefs.homeHeroCtaMode().get() shouldBe HomeHeroCtaMode.Aurora.key
+        prefs.homeHeroCtaMode().get() shouldBe HomeHeroCtaMode.Classic.key
         prefs.homeHubRecentCardMode().get() shouldBe HomeHubRecentCardMode.Aurora.key
-        prefs.auroraTitleHeroCtaMode().get() shouldBe AuroraTitleHeroCtaMode.Aurora.key
+        prefs.auroraTitleHeroCtaMode().get() shouldBe AuroraTitleHeroCtaMode.Classic.key
         prefs.homeHeaderNicknameAlignRight().get() shouldBe false
         prefs.homeHubLastSection().get() shouldBe "anime"
         prefs.greetingFont().get() shouldBe "default"
         prefs.nicknameFontSize().get() shouldBe 24
         prefs.greetingFontSize().get() shouldBe 12
-        prefs.greetingColor().get() shouldBe "accent"
+        prefs.greetingColor().get() shouldBe "theme"
         prefs.greetingCustomColorHex().get() shouldBe "#FFFFFF"
         prefs.greetingDecoration().get() shouldBe "sparkle"
         prefs.greetingItalic().get() shouldBe true

@@ -78,6 +78,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -122,6 +123,9 @@ import eu.kanade.presentation.components.TabbedScreenAurora
 import eu.kanade.presentation.components.auroraMenuRimLightBrush
 import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
 import eu.kanade.presentation.components.resolveAuroraCoverModel
+import eu.kanade.presentation.components.resolveAuroraCtaLabelShadowSpec
+import eu.kanade.presentation.components.resolveAuroraHomeIconShadowSpec
+import eu.kanade.presentation.components.toComposeShadow
 import eu.kanade.presentation.more.settings.screen.browse.AnimeExtensionReposScreen
 import eu.kanade.presentation.more.settings.screen.browse.MangaExtensionReposScreen
 import eu.kanade.presentation.more.settings.screen.browse.NovelExtensionReposScreen
@@ -241,6 +245,12 @@ internal enum class HomeHubHeroButtonVisualMode {
     ClassicSolid,
 }
 
+internal data class HomeHubHeroButtonSurfaceSpec(
+    val containerAlpha: Float,
+    val usesGradient: Boolean,
+    val borderAlpha: Float,
+)
+
 internal fun resolveHomeHubHeroActionSpec(
     section: HomeHubSection,
     progressNumber: Double,
@@ -254,10 +264,7 @@ internal fun resolveHomeHubHeroActionSpec(
 
     return when (mode) {
         HomeHeroCtaMode.Classic -> {
-            val labelRes = when (section) {
-                HomeHubSection.Anime -> AYMR.strings.aurora_play
-                HomeHubSection.Manga, HomeHubSection.Novel -> AYMR.strings.aurora_read
-            }
+            val labelRes = if (hasProgress) MR.strings.action_resume else MR.strings.action_start
             HomeHubHeroActionSpec(
                 labelRes = labelRes,
                 progressLabelRes = progressLabelRes,
@@ -286,6 +293,33 @@ internal fun resolveHomeHubHeroButtonVisualMode(mode: HomeHeroCtaMode): HomeHubH
     return when (mode) {
         HomeHeroCtaMode.Aurora -> HomeHubHeroButtonVisualMode.AuroraGlass
         HomeHeroCtaMode.Classic -> HomeHubHeroButtonVisualMode.ClassicSolid
+    }
+}
+
+internal fun resolveHomeHubHeroButtonSurfaceSpec(
+    mode: HomeHeroCtaMode,
+    isDark: Boolean,
+): HomeHubHeroButtonSurfaceSpec {
+    return when (mode) {
+        HomeHeroCtaMode.Aurora -> HomeHubHeroButtonSurfaceSpec(
+            containerAlpha = if (isDark) 0.88f else 0.82f,
+            usesGradient = false,
+            borderAlpha = 0f,
+        )
+        HomeHeroCtaMode.Classic -> HomeHubHeroButtonSurfaceSpec(
+            containerAlpha = 1f,
+            usesGradient = true,
+            borderAlpha = 0.12f,
+        )
+    }
+}
+
+internal fun resolveHomeHubHeroButtonGlowEnabled(
+    mode: HomeHeroCtaMode,
+): Boolean {
+    return when (mode) {
+        HomeHeroCtaMode.Aurora -> false
+        HomeHeroCtaMode.Classic -> false
     }
 }
 
@@ -2384,7 +2418,22 @@ private fun HeroSection(
     }
     val rimLightBrush = remember { homeHubRimLightBrush() }
     val actionButtonShape = RoundedCornerShape(12.dp)
-    val actionButtonBrush = remember(colors, buttonVisualMode) {
+    val actionButtonSurfaceSpec = remember(ctaMode, colors.isDark) {
+        resolveHomeHubHeroButtonSurfaceSpec(
+            mode = ctaMode,
+            isDark = colors.isDark,
+        )
+    }
+    val actionButtonHasReadabilityEffects = buttonVisualMode == HomeHubHeroButtonVisualMode.AuroraGlass
+    val actionButtonLabelShadow = remember(actionButtonHasReadabilityEffects) {
+        resolveAuroraCtaLabelShadowSpec(
+            enabled = actionButtonHasReadabilityEffects,
+        ).toComposeShadow()
+    }
+    val actionButtonIconShadowSpec = remember(actionButtonHasReadabilityEffects) {
+        resolveAuroraHomeIconShadowSpec(enabled = actionButtonHasReadabilityEffects)
+    }
+    val actionButtonBrush = remember(colors, buttonVisualMode, actionButtonSurfaceSpec) {
         when (buttonVisualMode) {
             HomeHubHeroButtonVisualMode.ClassicSolid -> {
                 Brush.linearGradient(
@@ -2396,22 +2445,51 @@ private fun HeroSection(
                     end = Offset(0f, 420f),
                 )
             }
-            HomeHubHeroButtonVisualMode.AuroraGlass -> {
-                Brush.linearGradient(
-                    colors = listOf(
-                        lerp(colors.accent, Color.White, 0.28f).copy(alpha = 0.28f),
-                        lerp(colors.accent, colors.glass, 0.42f).copy(alpha = 0.88f),
-                        lerp(colors.accent, colors.glass, 0.20f).copy(alpha = 0.94f),
-                    ),
-                    start = Offset(0f, 0f),
-                    end = Offset(0f, 420f),
-                )
-            }
+            HomeHubHeroButtonVisualMode.AuroraGlass -> SolidColor(
+                colors.accent.copy(alpha = actionButtonSurfaceSpec.containerAlpha),
+            )
         }
     }
-    val actionButtonBorderColor = when (buttonVisualMode) {
-        HomeHubHeroButtonVisualMode.ClassicSolid -> Color.White.copy(alpha = 0.12f)
-        HomeHubHeroButtonVisualMode.AuroraGlass -> Color.Transparent
+    val actionButtonBorderBrush = remember(colors, buttonVisualMode, actionButtonSurfaceSpec) {
+        when (buttonVisualMode) {
+            HomeHubHeroButtonVisualMode.ClassicSolid -> Brush.linearGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = actionButtonSurfaceSpec.borderAlpha),
+                    Color.White.copy(alpha = actionButtonSurfaceSpec.borderAlpha),
+                ),
+            )
+            HomeHubHeroButtonVisualMode.AuroraGlass -> SolidColor(
+                Color.White.copy(alpha = actionButtonSurfaceSpec.borderAlpha),
+            )
+        }
+    }
+    val actionButtonElevation = when (buttonVisualMode) {
+        HomeHubHeroButtonVisualMode.ClassicSolid -> ButtonDefaults.buttonElevation()
+        HomeHubHeroButtonVisualMode.AuroraGlass -> ButtonDefaults.buttonElevation(
+            defaultElevation = 0.dp,
+            pressedElevation = 0.dp,
+            focusedElevation = 0.dp,
+            hoveredElevation = 0.dp,
+            disabledElevation = 0.dp,
+        )
+    }
+    val actionButtonModifier = remember(
+        actionButtonBrush,
+        actionButtonBorderBrush,
+        actionButtonShape,
+        actionButtonSurfaceSpec,
+    ) {
+        Modifier
+            .height(52.dp)
+            .clip(actionButtonShape)
+            .background(actionButtonBrush)
+            .let { baseModifier ->
+                if (actionButtonSurfaceSpec.borderAlpha > 0f) {
+                    baseModifier.border(1.dp, actionButtonBorderBrush, actionButtonShape)
+                } else {
+                    baseModifier
+                }
+            }
     }
     val actionButtonContentColor = when (buttonVisualMode) {
         HomeHubHeroButtonVisualMode.ClassicSolid -> colors.textOnAccent
@@ -2478,32 +2556,54 @@ private fun HeroSection(
 
             Spacer(Modifier.height(24.dp))
 
-            Button(
-                onClick = onPlayClick,
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                shape = actionButtonShape,
-                contentPadding = actionButtonPadding,
-                modifier = Modifier
-                    .height(52.dp)
-                    .clip(actionButtonShape)
-                    .background(actionButtonBrush)
-                    .border(1.dp, actionButtonBorderColor, actionButtonShape),
+            Box(
+                modifier = Modifier.height(52.dp),
+                contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    imageVector = when (actionSpec.icon) {
+                Button(
+                    onClick = onPlayClick,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    elevation = actionButtonElevation,
+                    shape = actionButtonShape,
+                    contentPadding = actionButtonPadding,
+                    modifier = actionButtonModifier,
+                ) {
+                    val actionIcon = when (actionSpec.icon) {
                         HomeHubHeroActionIcon.Play -> Icons.Filled.PlayArrow
-                    },
-                    contentDescription = null,
-                    tint = actionButtonContentColor,
-                    modifier = Modifier.size(21.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    stringResource(actionSpec.labelRes),
-                    color = actionButtonContentColor,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                )
+                    }
+                    Box(
+                        modifier = Modifier.size(21.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (actionButtonIconShadowSpec.alpha > 0f) {
+                            Icon(
+                                imageVector = actionIcon,
+                                contentDescription = null,
+                                tint = Color.Black.copy(alpha = actionButtonIconShadowSpec.alpha),
+                                modifier = Modifier
+                                    .size(21.dp)
+                                    .offset(
+                                        x = actionButtonIconShadowSpec.offsetXDp,
+                                        y = actionButtonIconShadowSpec.offsetYDp,
+                                    ),
+                            )
+                        }
+                        Icon(
+                            imageVector = actionIcon,
+                            contentDescription = null,
+                            tint = actionButtonContentColor,
+                            modifier = Modifier.size(21.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        stringResource(actionSpec.labelRes),
+                        color = actionButtonContentColor,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        style = TextStyle(shadow = actionButtonLabelShadow),
+                    )
+                }
             }
         }
     }

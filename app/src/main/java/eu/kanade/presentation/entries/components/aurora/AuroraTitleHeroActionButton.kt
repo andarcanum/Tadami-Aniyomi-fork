@@ -23,12 +23,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.domain.ui.model.AuroraTitleHeroCtaMode
+import eu.kanade.presentation.components.resolveAuroraCtaLabelShadowSpec
+import eu.kanade.presentation.components.toComposeShadow
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -61,7 +64,7 @@ internal fun resolveAuroraTitleHeroCtaSurfaceSpec(
 ): AuroraTitleHeroCtaSurfaceSpec {
     return when (mode) {
         AuroraTitleHeroCtaMode.Aurora -> AuroraTitleHeroCtaSurfaceSpec(
-            containerAlpha = if (isDark) 0.46f else 0.30f,
+            containerAlpha = if (isDark) 0.88f else 0.82f,
             usesGradient = false,
         )
         AuroraTitleHeroCtaMode.Classic -> AuroraTitleHeroCtaSurfaceSpec(
@@ -103,7 +106,6 @@ private fun AuroraTitleHeroActionSurface(
         AuroraTitleHeroCtaVisualMode.AuroraGlass -> Color.White
         AuroraTitleHeroCtaVisualMode.ClassicSolid -> colors.textOnAccent
     }
-
     Box(
         modifier = modifier
             .clip(shape)
@@ -128,6 +130,11 @@ internal fun AuroraTitleHeroActionButton(
     textWeight: FontWeight,
 ) {
     val titleHeroMode = rememberAuroraTitleHeroCtaMode()
+    val labelShadow = remember(titleHeroMode) {
+        resolveAuroraCtaLabelShadowSpec(
+            enabled = titleHeroMode == AuroraTitleHeroCtaMode.Aurora,
+        ).toComposeShadow()
+    }
 
     AuroraTitleHeroActionSurface(
         mode = titleHeroMode,
@@ -153,6 +160,7 @@ internal fun AuroraTitleHeroActionButton(
                 color = contentColor,
                 fontSize = textSize,
                 fontWeight = textWeight,
+                style = TextStyle(shadow = labelShadow),
             )
         }
     }
