@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.presentation.more.resolveAuroraMoreCardContainerColor
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
@@ -85,7 +86,10 @@ fun rememberResolvedSettingsUiStyle(
 @Composable
 fun settingsCardContainerColor(): Color {
     return if (LocalSettingsUiStyle.current == SettingsUiStyle.Aurora) {
-        AuroraTheme.colors.glass
+        resolveAuroraMoreCardContainerColor(
+            glass = AuroraTheme.colors.glass,
+            isDark = AuroraTheme.colors.isDark,
+        )
     } else {
         Color.Transparent
     }

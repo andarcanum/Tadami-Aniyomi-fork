@@ -205,7 +205,7 @@ fun AuroraSettingItem(
             .fillMaxWidth()
             .padding(vertical = 8.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(colors.glass)
+            .background(resolveAuroraMoreCardContainerColor(colors.glass, colors.isDark))
             .clickable(onClick = onClick)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -252,7 +252,7 @@ fun AuroraToggleItem(
             .fillMaxWidth()
             .padding(vertical = 8.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(colors.glass)
+            .background(resolveAuroraMoreCardContainerColor(colors.glass, colors.isDark))
             .clickable { onCheckedChange(!checked) }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -282,7 +282,10 @@ fun AuroraToggleItem(
                 onCheckedChange = onCheckedChange,
                 colors = androidx.compose.material3.SwitchDefaults.colors(
                     checkedThumbColor = colors.accent,
-                    checkedTrackColor = colors.accent.copy(alpha = 0.5f),
+                    checkedTrackColor = resolveAuroraMoreCheckedTrackColor(
+                        accent = colors.accent,
+                        isDark = colors.isDark,
+                    ),
                 ),
             )
         }

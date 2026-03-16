@@ -9,15 +9,15 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -60,19 +61,6 @@ import android.graphics.Matrix as AndroidMatrix
 
 private const val GLOW_CONTOUR_SVG_WIDTH = 256f
 private const val GLOW_CONTOUR_SVG_HEIGHT = 269f
-private val GLOW_CONTOUR_UNIFIED_OUTER_SHAPE = RoundedCornerShape(20.dp)
-private val GLOW_CONTOUR_UNIFIED_TOP_CLIP_SHAPE = RoundedCornerShape(
-    topStart = 20.dp,
-    topEnd = 20.dp,
-    bottomStart = 0.dp,
-    bottomEnd = 0.dp,
-)
-private val GLOW_CONTOUR_UNIFIED_TEXT_BLOCK_SHAPE = RoundedCornerShape(
-    topStart = 20.dp,
-    topEnd = 20.dp,
-    bottomStart = 20.dp,
-    bottomEnd = 20.dp,
-)
 
 private const val GLOW_CONTOUR_SHELL_PATH_DATA =
     "m210 3.43h-166.8c-23.41 0-41.57 20.48-41.57 43.58v176.2c0 23.63 18.43 42.17 42.65 42.17h63.45l0.68-0.12h101.8c23.68 0 43.99-20.54 43.99-42.26v-176.9c0-23.46-18.94-42.71-44.26-42.71z"
@@ -177,7 +165,6 @@ private fun deriveGlowContourZonePath(
 
 internal sealed interface GlowContourFooterContent {
     data object ContinueAction : GlowContourFooterContent
-    data class ProgressPercent(val value: Int) : GlowContourFooterContent
     data object None : GlowContourFooterContent
 }
 
@@ -209,15 +196,172 @@ internal fun resolveGlowContourUnifiedBlendSpec(isDark: Boolean): GlowContourUni
     }
 }
 
+internal data class GlowContourDividerRenderSpec(
+    val glowStrokeWidths: List<androidx.compose.ui.unit.Dp>,
+    val coreStrokeWidth: androidx.compose.ui.unit.Dp,
+    val glowAlphaBase: Float,
+    val coreAlpha: Float,
+    val clipBottomToProgressTop: Boolean,
+    val showBottomFrameGlow: Boolean,
+)
+
+internal fun resolveGlowContourDividerRenderSpec(): GlowContourDividerRenderSpec {
+    return GlowContourDividerRenderSpec(
+        glowStrokeWidths = listOf(3.dp),
+        coreStrokeWidth = 1.25.dp,
+        glowAlphaBase = 0.14f,
+        coreAlpha = 0.78f,
+        clipBottomToProgressTop = true,
+        showBottomFrameGlow = false,
+    )
+}
+
 internal fun resolveGlowContourFooterContent(
     progressPercent: Int?,
     onClickContinueViewing: (() -> Unit)?,
 ): GlowContourFooterContent {
     return when {
         onClickContinueViewing != null -> GlowContourFooterContent.ContinueAction
-        progressPercent != null -> GlowContourFooterContent.ProgressPercent(progressPercent)
         else -> GlowContourFooterContent.None
     }
+}
+
+internal data class GlowContourTextBlockRenderSpec(
+    val topSpacing: androidx.compose.ui.unit.Dp,
+    val titleSubtitleSpacing: androidx.compose.ui.unit.Dp,
+    val horizontalPadding: androidx.compose.ui.unit.Dp,
+    val verticalPadding: androidx.compose.ui.unit.Dp,
+    val useSurfaceBlend: Boolean,
+)
+
+internal fun resolveGlowContourTextBlockRenderSpec(): GlowContourTextBlockRenderSpec {
+    return GlowContourTextBlockRenderSpec(
+        topSpacing = 8.dp,
+        titleSubtitleSpacing = 2.dp,
+        horizontalPadding = 0.dp,
+        verticalPadding = 0.dp,
+        useSurfaceBlend = false,
+    )
+}
+
+internal data class GlowContourBottomMaskRenderSpec(
+    val accentTopAlpha: Float,
+    val accentMidAlpha: Float,
+    val accentBottomAlpha: Float,
+    val pocketTopAlpha: Float,
+    val pocketMidAlpha: Float,
+    val pocketBottomAlpha: Float,
+    val pocketBloomAlpha: Float,
+)
+
+internal fun resolveGlowContourBottomMaskRenderSpec(
+    isDark: Boolean,
+    hasActionPocket: Boolean,
+): GlowContourBottomMaskRenderSpec {
+    return when {
+        isDark && hasActionPocket -> GlowContourBottomMaskRenderSpec(
+            accentTopAlpha = 0f,
+            accentMidAlpha = 0.08f,
+            accentBottomAlpha = 0.24f,
+            pocketTopAlpha = 0.04f,
+            pocketMidAlpha = 0.12f,
+            pocketBottomAlpha = 0.26f,
+            pocketBloomAlpha = 0.12f,
+        )
+        isDark -> GlowContourBottomMaskRenderSpec(
+            accentTopAlpha = 0f,
+            accentMidAlpha = 0.07f,
+            accentBottomAlpha = 0.22f,
+            pocketTopAlpha = 0.02f,
+            pocketMidAlpha = 0.07f,
+            pocketBottomAlpha = 0.16f,
+            pocketBloomAlpha = 0.05f,
+        )
+        hasActionPocket -> GlowContourBottomMaskRenderSpec(
+            accentTopAlpha = 0f,
+            accentMidAlpha = 0.05f,
+            accentBottomAlpha = 0.18f,
+            pocketTopAlpha = 0.03f,
+            pocketMidAlpha = 0.09f,
+            pocketBottomAlpha = 0.2f,
+            pocketBloomAlpha = 0.1f,
+        )
+        else -> GlowContourBottomMaskRenderSpec(
+            accentTopAlpha = 0f,
+            accentMidAlpha = 0.04f,
+            accentBottomAlpha = 0.16f,
+            pocketTopAlpha = 0.02f,
+            pocketMidAlpha = 0.05f,
+            pocketBottomAlpha = 0.12f,
+            pocketBloomAlpha = 0.04f,
+        )
+    }
+}
+
+internal data class GlowContourPosterSurfaceSpec(
+    val backgroundAlpha: Float,
+    val clipBackgroundToShape: Boolean,
+)
+
+internal fun resolveGlowContourPosterSurfaceSpec(isDark: Boolean): GlowContourPosterSurfaceSpec {
+    return GlowContourPosterSurfaceSpec(
+        backgroundAlpha = if (isDark) 0.18f else 0.08f,
+        clipBackgroundToShape = true,
+    )
+}
+
+internal data class GlowContourActionButtonRenderSpec(
+    val containerTopAlpha: Float,
+    val containerBottomAlpha: Float,
+    val borderTopAlpha: Float,
+    val borderBottomAlpha: Float,
+    val glowAlpha: Float,
+    val glowElevation: androidx.compose.ui.unit.Dp,
+)
+
+internal fun resolveGlowContourActionButtonRenderSpec(): GlowContourActionButtonRenderSpec {
+    return GlowContourActionButtonRenderSpec(
+        containerTopAlpha = 0.22f,
+        containerBottomAlpha = 0.08f,
+        borderTopAlpha = 0.42f,
+        borderBottomAlpha = 0.14f,
+        glowAlpha = 0.58f,
+        glowElevation = 18.dp,
+    )
+}
+
+internal data class GlowContourProgressLineRenderSpec(
+    val lineHeight: androidx.compose.ui.unit.Dp,
+    val trackAlpha: Float,
+    val glowAlpha: Float,
+    val glowElevation: androidx.compose.ui.unit.Dp,
+)
+
+internal fun resolveGlowContourProgressLineRenderSpec(): GlowContourProgressLineRenderSpec {
+    return GlowContourProgressLineRenderSpec(
+        lineHeight = 2.5.dp,
+        trackAlpha = 0.15f,
+        glowAlpha = 0.56f,
+        glowElevation = 14.dp,
+    )
+}
+
+internal data class GlowContourProgressRenderState(
+    val showTrack: Boolean,
+    val fillFraction: Float?,
+    val showGlow: Boolean,
+)
+
+internal fun resolveGlowContourProgressRenderState(progressPercent: Int?): GlowContourProgressRenderState {
+    val normalized = progressPercent?.coerceIn(0, 100)
+    val fillFraction = normalized
+        ?.takeIf { it > 0 }
+        ?.div(100f)
+    return GlowContourProgressRenderState(
+        showTrack = normalized != null,
+        fillFraction = fillFraction,
+        showGlow = fillFraction != null,
+    )
 }
 
 private fun createGlowContourZonedPaths(
@@ -296,86 +440,37 @@ fun GlowContourLibraryGridItem(
 ) {
     val colors = AuroraTheme.colors
     val blendSpec = resolveGlowContourUnifiedBlendSpec(colors.isDark)
-    val isUnifiedTextContainer = textSpec.showTextBlock && textSpec.useUnifiedContainer
-    val itemShape = if (isUnifiedTextContainer) {
-        GLOW_CONTOUR_UNIFIED_OUTER_SHAPE
-    } else {
-        RoundedCornerShape(12.dp)
-    }
-    val itemBorderColor = if (isSelected) {
-        colors.accent.copy(alpha = 0.92f)
-    } else if (colors.isDark) {
-        Color.White.copy(alpha = 0.06f)
-    } else {
-        Color.LightGray.copy(alpha = 0.36f)
-    }
-    val itemBorderWidth = if (isSelected) 2.dp else 1.dp
     val itemModifier = modifier.combinedClickable(
         onClick = onClick,
         onLongClick = onLongClick,
     )
 
-    if (isUnifiedTextContainer) {
-        Column(
-            modifier = itemModifier
+    Column(
+        modifier = itemModifier,
+        verticalArrangement = Arrangement.spacedBy(0.dp),
+    ) {
+        GlowContourLibraryCard(
+            modifier = Modifier
                 .fillMaxWidth()
-                .clip(itemShape)
-                .border(
-                    width = itemBorderWidth,
-                    color = itemBorderColor,
-                    shape = itemShape,
-                ),
-            verticalArrangement = Arrangement.spacedBy(0.dp),
-        ) {
-            GlowContourLibraryCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(cardAspectRatio),
-                coverData = coverData,
-                progressPercent = progressPercent,
-                badge = badge,
-                isSelected = false,
-                isUnifiedContainerMode = true,
-                blendSpec = blendSpec,
-                onClickContinueViewing = onClickContinueViewing,
-                gridColumns = gridColumns,
-            )
+                .aspectRatio(cardAspectRatio),
+            coverData = coverData,
+            progressPercent = progressPercent,
+            badge = badge,
+            isSelected = isSelected,
+            isUnifiedContainerMode = false,
+            blendSpec = blendSpec,
+            onClickContinueViewing = onClickContinueViewing,
+            gridColumns = gridColumns,
+        )
+
+        if (textSpec.showTextBlock) {
             GlowContourLibraryTextBlock(
                 title = title,
                 subtitle = subtitle,
                 textSpec = textSpec,
                 blendSpec = blendSpec,
-                isUnifiedContainerMode = true,
-            )
-        }
-    } else {
-        Column(
-            modifier = itemModifier,
-            verticalArrangement = Arrangement.spacedBy(0.dp),
-        ) {
-            GlowContourLibraryCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(cardAspectRatio),
-                coverData = coverData,
-                progressPercent = progressPercent,
-                badge = badge,
-                isSelected = isSelected,
                 isUnifiedContainerMode = false,
-                blendSpec = blendSpec,
-                onClickContinueViewing = onClickContinueViewing,
-                gridColumns = gridColumns,
             )
-
-            if (textSpec.showTextBlock) {
-                GlowContourLibraryTextBlock(
-                    title = title,
-                    subtitle = subtitle,
-                    textSpec = textSpec,
-                    blendSpec = blendSpec,
-                    isUnifiedContainerMode = false,
-                )
-            }
         }
     }
 }
@@ -391,43 +486,46 @@ private fun GlowContourLibraryTextBlock(
 ) {
     val colors = AuroraTheme.colors
     val coverTitleFontFamily = LocalCoverTitleFontFamily.current
-    val containerModifier = if (isUnifiedContainerMode) {
-        modifier
-            .fillMaxWidth()
-            .padding(horizontal = 6.dp, vertical = 4.dp)
-            .clip(GLOW_CONTOUR_UNIFIED_TEXT_BLOCK_SHAPE)
+    val renderSpec = resolveGlowContourTextBlockRenderSpec()
+    val drawTextSurfaceModifier = if (renderSpec.useSurfaceBlend && isUnifiedContainerMode) {
+        Modifier.drawWithCache {
+            val textSurfaceBrush = Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0f to Color.Transparent,
+                    0.34f to colors.surface.copy(alpha = blendSpec.textTopFadeSurfaceAlpha),
+                    1f to colors.surface.copy(alpha = blendSpec.textBaseSurfaceAlpha),
+                ),
+                startY = 0f,
+                endY = size.height,
+            )
+            val textCarryGlowBrush = Brush.verticalGradient(
+                colors = listOf(
+                    colors.gradientPurple.copy(alpha = blendSpec.textTopGlowAlpha),
+                    colors.progressCyan.copy(alpha = blendSpec.textTopGlowAlpha * 0.78f),
+                    Color.Transparent,
+                ),
+                startY = 0f,
+                endY = size.height * 0.62f,
+            )
+            onDrawBehind {
+                drawRect(brush = textSurfaceBrush)
+                drawRect(brush = textCarryGlowBrush)
+            }
+        }
     } else {
-        modifier.fillMaxWidth()
+        Modifier
     }
 
     Column(
-        modifier = containerModifier
-            .drawWithCache {
-                val textSurfaceBrush = Brush.verticalGradient(
-                    colorStops = arrayOf(
-                        0f to Color.Transparent,
-                        0.34f to colors.surface.copy(alpha = blendSpec.textTopFadeSurfaceAlpha),
-                        1f to colors.surface.copy(alpha = blendSpec.textBaseSurfaceAlpha),
-                    ),
-                    startY = 0f,
-                    endY = size.height,
-                )
-                val textCarryGlowBrush = Brush.verticalGradient(
-                    colors = listOf(
-                        colors.gradientPurple.copy(alpha = blendSpec.textTopGlowAlpha),
-                        colors.progressCyan.copy(alpha = blendSpec.textTopGlowAlpha * 0.78f),
-                        Color.Transparent,
-                    ),
-                    startY = 0f,
-                    endY = size.height * 0.62f,
-                )
-                onDrawBehind {
-                    drawRect(brush = textSurfaceBrush)
-                    drawRect(brush = textCarryGlowBrush)
-                }
-            }
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = renderSpec.topSpacing)
+            .then(drawTextSurfaceModifier)
+            .padding(
+                horizontal = renderSpec.horizontalPadding,
+                vertical = renderSpec.verticalPadding,
+            ),
+        verticalArrangement = Arrangement.spacedBy(renderSpec.titleSubtitleSpacing),
     ) {
         Text(
             text = title,
@@ -471,10 +569,12 @@ private fun GlowContourLibraryCard(
 ) {
     val colors = AuroraTheme.colors
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
+    val posterSurfaceSpec = resolveGlowContourPosterSurfaceSpec(colors.isDark)
     val footerContent = resolveGlowContourFooterContent(
         progressPercent = progressPercent,
         onClickContinueViewing = onClickContinueViewing,
     )
+    val progressState = resolveGlowContourProgressRenderState(progressPercent)
 
     BoxWithConstraints(
         modifier = modifier
@@ -503,21 +603,12 @@ private fun GlowContourLibraryCard(
                     }
                 }
             }
-            .background(
-                colors.surface.copy(
-                    alpha = if (isUnifiedContainerMode) {
-                        blendSpec.topCardBackgroundAlpha
-                    } else if (colors.isDark) {
-                        0.18f
-                    } else {
-                        0.08f
-                    },
-                ),
-            )
             .clip(GlowContourCardShape)
             .then(
-                if (isUnifiedContainerMode) {
-                    Modifier.clip(GLOW_CONTOUR_UNIFIED_TOP_CLIP_SHAPE)
+                if (posterSurfaceSpec.clipBackgroundToShape) {
+                    Modifier.background(
+                        colors.surface.copy(alpha = posterSurfaceSpec.backgroundAlpha),
+                    )
                 } else {
                     Modifier
                 },
@@ -553,20 +644,26 @@ private fun GlowContourLibraryCard(
                     val zones = createGlowContourZonedPaths(size)
                     val accentBounds = zones.accentPath.getBounds()
                     val progressBounds = zones.progressPath.getBounds()
+                    val dividerSpec = resolveGlowContourDividerRenderSpec()
+                    val hasActionPocket = footerContent == GlowContourFooterContent.ContinueAction
+                    val bottomMaskSpec = resolveGlowContourBottomMaskRenderSpec(
+                        isDark = colors.isDark,
+                        hasActionPocket = hasActionPocket,
+                    )
                     val accentGlassBrush = Brush.verticalGradient(
                         colors = listOf(
-                            colors.surface.copy(alpha = if (colors.isDark) 0.28f else 0.2f),
-                            colors.glass.copy(alpha = if (colors.isDark) 0.45f else 0.3f),
-                            colors.surface.copy(alpha = if (colors.isDark) 0.58f else 0.42f),
+                            colors.surface.copy(alpha = bottomMaskSpec.accentTopAlpha),
+                            colors.glass.copy(alpha = bottomMaskSpec.accentMidAlpha),
+                            colors.surface.copy(alpha = bottomMaskSpec.accentBottomAlpha),
                         ),
                         startY = accentBounds.top,
                         endY = accentBounds.bottom,
                     )
                     val progressGlassBrush = Brush.verticalGradient(
                         colors = listOf(
-                            colors.surface.copy(alpha = if (colors.isDark) 0.72f else 0.54f),
-                            colors.glass.copy(alpha = if (colors.isDark) 0.84f else 0.7f),
-                            colors.surface.copy(alpha = if (colors.isDark) 0.94f else 0.82f),
+                            colors.surface.copy(alpha = bottomMaskSpec.pocketTopAlpha),
+                            colors.glass.copy(alpha = bottomMaskSpec.pocketMidAlpha),
+                            colors.surface.copy(alpha = bottomMaskSpec.pocketBottomAlpha),
                         ),
                         startY = progressBounds.top,
                         endY = progressBounds.bottom,
@@ -580,11 +677,15 @@ private fun GlowContourLibraryCard(
                         startX = accentBounds.left,
                         endX = accentBounds.right,
                     )
-                    val dividerGlowStrokeWidths = listOf(6.dp.toPx(), 3.dp.toPx())
-                    val bottomFrameGlowStrokeWidths = listOf(5.dp.toPx(), 2.4.dp.toPx())
+                    val dividerGlowStrokeWidths = dividerSpec.glowStrokeWidths.map { it.toPx() }
+                    val dividerClipBottom = if (dividerSpec.clipBottomToProgressTop) {
+                        progressBounds.top + 1.dp.toPx()
+                    } else {
+                        size.height
+                    }
                     val progressPocketBrush = Brush.radialGradient(
                         colors = listOf(
-                            colors.progressCyan.copy(alpha = 0.14f),
+                            colors.progressCyan.copy(alpha = bottomMaskSpec.pocketBloomAlpha),
                             Color.Transparent,
                         ),
                         center = Offset(
@@ -599,123 +700,165 @@ private fun GlowContourLibraryCard(
                             path = zones.accentPath,
                             brush = accentGlassBrush,
                         )
-                        drawPath(
-                            path = zones.progressPath,
-                            brush = progressGlassBrush,
-                        )
-                        drawPath(
-                            path = zones.progressPath,
-                            brush = progressPocketBrush,
-                        )
-                        dividerGlowStrokeWidths.forEachIndexed { index, strokeWidth ->
+                        if (hasActionPocket) {
                             drawPath(
-                                path = zones.accentBasePath,
-                                brush = dividerGlowBrush,
-                                alpha = 0.24f / (index + 1),
-                                style = Stroke(width = strokeWidth),
+                                path = zones.progressPath,
+                                brush = progressGlassBrush,
+                            )
+                            drawPath(
+                                path = zones.progressPath,
+                                brush = progressPocketBrush,
                             )
                         }
-                        drawPath(
-                            path = zones.accentBasePath,
-                            brush = dividerGlowBrush,
-                            alpha = 0.9f,
-                            style = Stroke(width = 1.6.dp.toPx()),
-                        )
-                        clipRect(top = size.height * 0.52f) {
-                            bottomFrameGlowStrokeWidths.forEachIndexed { index, strokeWidth ->
+                        clipRect(bottom = dividerClipBottom) {
+                            dividerGlowStrokeWidths.forEachIndexed { index, strokeWidth ->
                                 drawPath(
-                                    path = zones.shellPath,
+                                    path = zones.accentBasePath,
                                     brush = dividerGlowBrush,
-                                    alpha = 0.14f / (index + 1),
+                                    alpha = dividerSpec.glowAlphaBase / (index + 1),
                                     style = Stroke(width = strokeWidth),
                                 )
                             }
                             drawPath(
-                                path = zones.shellPath,
+                                path = zones.accentBasePath,
                                 brush = dividerGlowBrush,
-                                alpha = 0.42f,
-                                style = Stroke(width = 1.2.dp.toPx()),
+                                alpha = dividerSpec.coreAlpha,
+                                style = Stroke(width = dividerSpec.coreStrokeWidth.toPx()),
                             )
+                        }
+                        if (dividerSpec.showBottomFrameGlow) {
+                            clipRect(top = size.height * 0.52f) {
+                                drawPath(
+                                    path = zones.shellPath,
+                                    brush = dividerGlowBrush,
+                                    alpha = 0.14f,
+                                    style = Stroke(width = 2.4.dp.toPx()),
+                                )
+                            }
                         }
                     }
                 },
         )
 
-        if (isUnifiedContainerMode) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .drawWithCache {
-                        val carryGlowBrush = Brush.verticalGradient(
-                            colorStops = arrayOf(
-                                0f to Color.Transparent,
-                                0.72f to Color.Transparent,
-                                1f to colors.accent.copy(alpha = blendSpec.topCarryGlowAlpha),
-                            ),
-                            startY = 0f,
-                            endY = size.height,
-                        )
-                        onDrawBehind {
-                            drawRect(brush = carryGlowBrush)
-                        }
-                    },
-            )
-        }
-
         Box(
             modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .fillMaxWidth(0.4f)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            colors.surface.copy(alpha = if (colors.isDark) 0.12f else 0.08f),
+                .matchParentSize()
+                .drawWithCache {
+                    val carryGlowBrush = Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0f to Color.Transparent,
+                            0.78f to Color.Transparent,
+                            1f to colors.accent.copy(alpha = blendSpec.topCarryGlowAlpha * 0.7f),
                         ),
-                    ),
-                )
-                .padding(
-                    horizontal = overlaySpec.footerHorizontalPaddingDp,
-                    vertical = overlaySpec.footerVerticalPaddingDp,
-                ),
-        ) {
-            when (val content = footerContent) {
-                GlowContourFooterContent.ContinueAction -> {
-                    FilledIconButton(
-                        onClick = { onClickContinueViewing?.invoke() },
-                        shape = CircleShape,
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = colors.accent.copy(alpha = 0.88f),
-                            contentColor = colors.textOnAccent,
-                        ),
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(bottom = 1.dp)
-                            .requiredSize(overlaySpec.buttonSizeDp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.PlayArrow,
-                            contentDescription = stringResource(MR.strings.action_resume),
-                            modifier = Modifier.requiredSize(overlaySpec.buttonIconSizeDp),
-                        )
+                        startY = 0f,
+                        endY = size.height,
+                    )
+                    onDrawBehind {
+                        drawRect(brush = carryGlowBrush)
                     }
-                }
-                is GlowContourFooterContent.ProgressPercent -> {
-                    Text(
-                        text = "${content.value}%",
-                        color = colors.textPrimary.copy(alpha = 0.98f),
-                        fontSize = overlaySpec.progressTextSizeSp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Clip,
+                },
+        )
+
+        if (progressState.showTrack) {
+            val progressSpec = resolveGlowContourProgressLineRenderSpec()
+            val progressShape = RoundedCornerShape(percent = 50)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(progressSpec.lineHeight),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clip(progressShape)
+                        .background(Color.White.copy(alpha = progressSpec.trackAlpha)),
+                )
+                progressState.fillFraction?.let { fillFraction ->
+                    Box(
                         modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .wrapContentWidth(unbounded = true, align = Alignment.End)
-                            .padding(end = overlaySpec.progressTextEndInsetDp),
+                            .fillMaxWidth(fillFraction)
+                            .height(progressSpec.lineHeight)
+                            .then(
+                                if (progressState.showGlow) {
+                                    Modifier.shadow(
+                                        elevation = progressSpec.glowElevation,
+                                        shape = progressShape,
+                                        ambientColor = colors.progressCyan.copy(alpha = progressSpec.glowAlpha),
+                                        spotColor = colors.progressCyan.copy(alpha = progressSpec.glowAlpha),
+                                    )
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .clip(progressShape)
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(
+                                        colors.progressCyan.copy(alpha = 0.72f),
+                                        colors.progressCyan.copy(alpha = 1f),
+                                        colors.progressCyan.copy(alpha = 0.82f),
+                                    ),
+                                ),
+                            ),
                     )
                 }
-                GlowContourFooterContent.None -> Unit
+            }
+        }
+
+        if (footerContent == GlowContourFooterContent.ContinueAction) {
+            val buttonSpec = resolveGlowContourActionButtonRenderSpec()
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .fillMaxWidth(0.4f)
+                    .padding(
+                        horizontal = overlaySpec.footerHorizontalPaddingDp,
+                        vertical = overlaySpec.footerVerticalPaddingDp,
+                    ),
+            ) {
+                IconButton(
+                    onClick = { onClickContinueViewing?.invoke() },
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White.copy(alpha = 0.98f),
+                    ),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(bottom = 1.dp)
+                        .requiredSize(overlaySpec.buttonSizeDp)
+                        .shadow(
+                            elevation = buttonSpec.glowElevation,
+                            shape = CircleShape,
+                            ambientColor = colors.accent.copy(alpha = buttonSpec.glowAlpha),
+                            spotColor = colors.accent.copy(alpha = buttonSpec.glowAlpha),
+                        )
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = buttonSpec.containerTopAlpha),
+                                    Color.White.copy(alpha = buttonSpec.containerBottomAlpha),
+                                ),
+                            ),
+                        )
+                        .border(
+                            width = 1.dp,
+                            brush = Brush.linearGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = buttonSpec.borderTopAlpha),
+                                    Color.White.copy(alpha = buttonSpec.borderBottomAlpha),
+                                ),
+                            ),
+                            shape = CircleShape,
+                        ),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription = stringResource(MR.strings.action_resume),
+                        modifier = Modifier.requiredSize(overlaySpec.buttonIconSizeDp),
+                    )
+                }
             }
         }
 

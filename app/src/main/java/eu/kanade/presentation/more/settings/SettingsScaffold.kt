@@ -1,7 +1,6 @@
 package eu.kanade.presentation.more.settings
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -24,6 +23,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.components.AppBar
@@ -32,6 +32,8 @@ import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
+
+private val AuroraSettingsBottomContentInset = 16.dp
 
 @Composable
 fun SettingsScaffold(
@@ -74,6 +76,7 @@ fun SettingsScaffold(
                 )
             }
             SettingsUiStyle.Aurora -> {
+                val layoutDirection = LocalLayoutDirection.current
                 Scaffold(
                     containerColor = Color.Transparent,
                     floatingActionButton = floatingActionButton,
@@ -90,7 +93,14 @@ fun SettingsScaffold(
                 ) { contentPadding ->
                     SettingsAuroraBackground(modifier = Modifier.fillMaxSize()) {
                         Box(modifier = Modifier.fillMaxSize()) {
-                            content(contentPadding)
+                            content(
+                                PaddingValues(
+                                    start = contentPadding.calculateLeftPadding(layoutDirection),
+                                    top = contentPadding.calculateTopPadding(),
+                                    end = contentPadding.calculateRightPadding(layoutDirection),
+                                    bottom = contentPadding.calculateBottomPadding() + AuroraSettingsBottomContentInset,
+                                ),
+                            )
                         }
                     }
                 }
@@ -136,12 +146,7 @@ private fun SettingsAuroraTopBar(
                 onClick = onBackPressed,
                 modifier = Modifier
                     .size(40.dp)
-                    .background(colors.glass, CircleShape)
-                    .border(
-                        width = 1.dp,
-                        color = colors.accent.copy(alpha = 0.18f),
-                        shape = CircleShape,
-                    ),
+                    .background(colors.glass, CircleShape),
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,

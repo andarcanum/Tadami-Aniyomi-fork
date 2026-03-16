@@ -12,9 +12,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.PreviewLightDark
+import eu.kanade.presentation.more.resolveAuroraMoreCheckedTrackColor
 import eu.kanade.presentation.more.settings.LocalSettingsUiStyle
 import eu.kanade.presentation.more.settings.SettingsUiStyle
 import eu.kanade.presentation.more.settings.settingsAccentColor
+import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.TachiyomiPreviewTheme
 
 @Composable
@@ -29,6 +31,7 @@ fun SwitchPreferenceWidget(
 ) {
     val isAurora = LocalSettingsUiStyle.current == SettingsUiStyle.Aurora
     val accent = settingsAccentColor()
+    val auroraIsDark = AuroraTheme.colors.isDark
     TextPreferenceWidget(
         modifier = modifier.alpha(if (enabled) 1f else 0.6f),
         title = title,
@@ -42,7 +45,10 @@ fun SwitchPreferenceWidget(
                 colors = if (isAurora) {
                     SwitchDefaults.colors(
                         checkedThumbColor = accent,
-                        checkedTrackColor = accent.copy(alpha = 0.5f),
+                        checkedTrackColor = resolveAuroraMoreCheckedTrackColor(
+                            accent = accent,
+                            isDark = auroraIsDark,
+                        ),
                     )
                 } else {
                     SwitchDefaults.colors()

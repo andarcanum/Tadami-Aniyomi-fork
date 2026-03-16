@@ -17,13 +17,13 @@ fun resolveGlowContourLibraryTextSpec(
             showTextBlock = true,
             titleMaxLines = 2,
             subtitleMaxLines = 1,
-            useUnifiedContainer = true,
+            useUnifiedContainer = false,
         )
         LibraryDisplayMode.CompactGrid -> GlowContourLibraryTextSpec(
             showTextBlock = true,
-            titleMaxLines = 1,
+            titleMaxLines = 2,
             subtitleMaxLines = 1,
-            useUnifiedContainer = true,
+            useUnifiedContainer = false,
         )
         LibraryDisplayMode.CoverOnlyGrid,
         LibraryDisplayMode.List,
