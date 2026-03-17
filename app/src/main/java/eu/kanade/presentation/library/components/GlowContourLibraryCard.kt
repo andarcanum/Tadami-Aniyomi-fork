@@ -7,14 +7,19 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -50,12 +55,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.PathParser
 import coil3.compose.AsyncImage
+import dev.icerock.moko.resources.StringResource
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.components.resolveAuroraCardOverlaySpec
 import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 import android.graphics.Matrix as AndroidMatrix
 
@@ -168,6 +175,37 @@ internal sealed interface GlowContourFooterContent {
     data object None : GlowContourFooterContent
 }
 
+internal sealed interface GlowContourCornerIndicatorState {
+    data object ContinueAction : GlowContourCornerIndicatorState
+    data object CompletedJewel : GlowContourCornerIndicatorState
+    data object NewContentJewel : GlowContourCornerIndicatorState
+    data object NeutralJewel : GlowContourCornerIndicatorState
+}
+
+internal fun resolveGlowContourCornerIndicatorState(
+    hasContinueAction: Boolean,
+    remainingCount: Long,
+    isFinished: Boolean,
+): GlowContourCornerIndicatorState {
+    return when {
+        hasContinueAction && remainingCount > 0L -> GlowContourCornerIndicatorState.ContinueAction
+        remainingCount > 0L -> GlowContourCornerIndicatorState.NewContentJewel
+        isFinished -> GlowContourCornerIndicatorState.CompletedJewel
+        else -> GlowContourCornerIndicatorState.NeutralJewel
+    }
+}
+
+internal fun resolveGlowContourCornerIndicatorContentDescriptionRes(
+    state: GlowContourCornerIndicatorState,
+): StringResource? {
+    return when (state) {
+        GlowContourCornerIndicatorState.ContinueAction -> MR.strings.action_resume
+        GlowContourCornerIndicatorState.CompletedJewel -> MR.strings.completed
+        GlowContourCornerIndicatorState.NewContentJewel -> AYMR.strings.aurora_new_badge
+        GlowContourCornerIndicatorState.NeutralJewel -> MR.strings.status
+    }
+}
+
 internal data class GlowContourUnifiedBlendSpec(
     val topCardBackgroundAlpha: Float,
     val topCarryGlowAlpha: Float,
@@ -232,15 +270,19 @@ internal data class GlowContourTextBlockRenderSpec(
     val horizontalPadding: androidx.compose.ui.unit.Dp,
     val verticalPadding: androidx.compose.ui.unit.Dp,
     val useSurfaceBlend: Boolean,
+    val titleMinLines: Int,
+    val minTextBlockHeight: androidx.compose.ui.unit.Dp,
 )
 
 internal fun resolveGlowContourTextBlockRenderSpec(): GlowContourTextBlockRenderSpec {
     return GlowContourTextBlockRenderSpec(
         topSpacing = 8.dp,
         titleSubtitleSpacing = 2.dp,
-        horizontalPadding = 0.dp,
+        horizontalPadding = 6.dp,
         verticalPadding = 0.dp,
         useSurfaceBlend = false,
+        titleMinLines = 1,
+        minTextBlockHeight = 34.dp,
     )
 }
 
@@ -423,12 +465,13 @@ private fun createGlowContourZonedPaths(
 }
 
 @Composable
-fun GlowContourLibraryGridItem(
+internal fun GlowContourLibraryGridItem(
     title: String,
     subtitle: String?,
     coverData: Any?,
     progressPercent: Int?,
     cardAspectRatio: Float,
+    cornerIndicatorState: GlowContourCornerIndicatorState,
     modifier: Modifier = Modifier,
     textSpec: GlowContourLibraryTextSpec,
     badge: @Composable (() -> Unit)? = null,
@@ -459,6 +502,7 @@ fun GlowContourLibraryGridItem(
             isSelected = isSelected,
             isUnifiedContainerMode = false,
             blendSpec = blendSpec,
+            cornerIndicatorState = cornerIndicatorState,
             onClickContinueViewing = onClickContinueViewing,
             gridColumns = gridColumns,
         )
@@ -521,37 +565,42 @@ private fun GlowContourLibraryTextBlock(
             .fillMaxWidth()
             .padding(top = renderSpec.topSpacing)
             .then(drawTextSurfaceModifier)
+            .heightIn(min = renderSpec.minTextBlockHeight)
             .padding(
                 horizontal = renderSpec.horizontalPadding,
                 vertical = renderSpec.verticalPadding,
             ),
-        verticalArrangement = Arrangement.spacedBy(renderSpec.titleSubtitleSpacing),
     ) {
-        Text(
-            text = title,
-            color = colors.textPrimary,
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
-            fontWeight = FontWeight.Medium,
-            minLines = if (textSpec.titleMaxLines > 1) 2 else 1,
-            maxLines = textSpec.titleMaxLines,
-            overflow = TextOverflow.Ellipsis,
-            style = TextStyle(
-                fontFamily = coverTitleFontFamily,
-                lineBreak = LineBreak.Heading,
-                hyphens = Hyphens.None,
-            ),
-        )
-        if (!subtitle.isNullOrBlank() && textSpec.subtitleMaxLines > 0) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(renderSpec.titleSubtitleSpacing),
+        ) {
             Text(
-                text = subtitle,
-                color = colors.textSecondary.copy(alpha = 0.8f),
-                fontSize = 11.sp,
-                lineHeight = 14.sp,
-                maxLines = textSpec.subtitleMaxLines,
+                text = title,
+                color = colors.textPrimary,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+                fontWeight = FontWeight.Medium,
+                minLines = renderSpec.titleMinLines,
+                maxLines = textSpec.titleMaxLines,
                 overflow = TextOverflow.Ellipsis,
+                style = TextStyle(
+                    fontFamily = coverTitleFontFamily,
+                    lineBreak = LineBreak.Heading,
+                    hyphens = Hyphens.None,
+                ),
             )
+            if (!subtitle.isNullOrBlank() && textSpec.subtitleMaxLines > 0) {
+                Text(
+                    text = subtitle,
+                    color = colors.textSecondary.copy(alpha = 0.8f),
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
+                    maxLines = textSpec.subtitleMaxLines,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
+        Spacer(modifier = Modifier.weight(1f, fill = true))
     }
 }
 
@@ -559,6 +608,7 @@ private fun GlowContourLibraryTextBlock(
 private fun GlowContourLibraryCard(
     coverData: Any?,
     progressPercent: Int?,
+    cornerIndicatorState: GlowContourCornerIndicatorState,
     badge: @Composable (() -> Unit)?,
     isSelected: Boolean,
     isUnifiedContainerMode: Boolean,
@@ -806,8 +856,8 @@ private fun GlowContourLibraryCard(
             }
         }
 
+        val buttonSpec = resolveGlowContourActionButtonRenderSpec()
         if (footerContent == GlowContourFooterContent.ContinueAction) {
-            val buttonSpec = resolveGlowContourActionButtonRenderSpec()
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
@@ -860,6 +910,13 @@ private fun GlowContourLibraryCard(
                     )
                 }
             }
+        } else {
+            GlowContourStatusJewel(
+                state = cornerIndicatorState,
+                buttonSpec = buttonSpec,
+                overlaySpec = overlaySpec,
+                modifier = Modifier.align(Alignment.BottomEnd),
+            )
         }
 
         if (badge != null) {
@@ -873,3 +930,95 @@ private fun GlowContourLibraryCard(
         }
     }
 }
+
+@Composable
+private fun GlowContourStatusJewel(
+    state: GlowContourCornerIndicatorState,
+    buttonSpec: GlowContourActionButtonRenderSpec,
+    overlaySpec: eu.kanade.presentation.components.AuroraCardOverlaySpec,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AuroraTheme.colors
+    val contentDescription = resolveGlowContourCornerIndicatorContentDescriptionRes(state)
+        ?.let { stringResource(it) }
+    val (icon, alphaMultiplier, iconAlpha, iconSize) = when (state) {
+        GlowContourCornerIndicatorState.ContinueAction -> return
+        GlowContourCornerIndicatorState.CompletedJewel ->
+            JewelVisualSpec(
+                icon = Icons.Filled.Check,
+                alphaMultiplier = 0.9f,
+                iconAlpha = 0.96f,
+                iconSize = overlaySpec.buttonIconSizeDp,
+            )
+        GlowContourCornerIndicatorState.NewContentJewel ->
+            JewelVisualSpec(
+                icon = Icons.AutoMirrored.Filled.MenuBook,
+                alphaMultiplier = 0.88f,
+                iconAlpha = 0.96f,
+                iconSize = (overlaySpec.buttonIconSizeDp.value * 0.72f).dp,
+            )
+        GlowContourCornerIndicatorState.NeutralJewel ->
+            JewelVisualSpec(
+                icon = Icons.Filled.HourglassEmpty,
+                alphaMultiplier = 0.45f,
+                iconAlpha = 0.75f,
+                iconSize = (overlaySpec.buttonIconSizeDp.value * 0.72f).dp,
+            )
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth(0.4f)
+            .padding(
+                horizontal = overlaySpec.footerHorizontalPaddingDp,
+                vertical = overlaySpec.footerVerticalPaddingDp,
+            ),
+    ) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(bottom = 1.dp)
+                .requiredSize(overlaySpec.buttonSizeDp)
+                .shadow(
+                    elevation = buttonSpec.glowElevation,
+                    shape = CircleShape,
+                    ambientColor = colors.accent.copy(alpha = buttonSpec.glowAlpha * alphaMultiplier),
+                    spotColor = colors.accent.copy(alpha = buttonSpec.glowAlpha * alphaMultiplier),
+                )
+                .clip(CircleShape)
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = buttonSpec.containerTopAlpha * alphaMultiplier),
+                            Color.White.copy(alpha = buttonSpec.containerBottomAlpha * alphaMultiplier),
+                        ),
+                    ),
+                )
+                .border(
+                    width = 1.dp,
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = buttonSpec.borderTopAlpha * alphaMultiplier),
+                            Color.White.copy(alpha = buttonSpec.borderBottomAlpha * alphaMultiplier),
+                        ),
+                    ),
+                    shape = CircleShape,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = Color.White.copy(alpha = iconAlpha),
+                modifier = Modifier.requiredSize(iconSize),
+            )
+        }
+    }
+}
+
+private data class JewelVisualSpec(
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val alphaMultiplier: Float,
+    val iconAlpha: Float,
+    val iconSize: androidx.compose.ui.unit.Dp,
+)

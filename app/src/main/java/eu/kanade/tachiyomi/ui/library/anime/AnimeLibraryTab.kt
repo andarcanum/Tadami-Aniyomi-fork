@@ -1287,7 +1287,7 @@ private fun AuroraLibraryPinnedHeader(
                             Icon(
                                 imageVector = Icons.Filled.Close,
                                 contentDescription = null,
-                                tint = colors.textSecondary,
+                                tint = colors.accent,
                             )
                         }
                     },
@@ -1323,7 +1323,7 @@ private fun AuroraLibraryPinnedHeader(
                             tint = colors.accent,
                         )
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
                     IconButton(
                         onClick = onFilterClick,
                         modifier = Modifier
@@ -1333,10 +1333,10 @@ private fun AuroraLibraryPinnedHeader(
                         Icon(
                             imageVector = Icons.Filled.FilterList,
                             contentDescription = null,
-                            tint = colors.textPrimary,
+                            tint = colors.accent,
                         )
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
                     androidx.compose.foundation.layout.Box {
                         IconButton(
                             onClick = { showMenu = true },
@@ -1347,7 +1347,7 @@ private fun AuroraLibraryPinnedHeader(
                             Icon(
                                 imageVector = Icons.Filled.MoreVert,
                                 contentDescription = null,
-                                tint = colors.textPrimary,
+                                tint = colors.accent,
                             )
                         }
                         AuroraEntryDropdownMenu(

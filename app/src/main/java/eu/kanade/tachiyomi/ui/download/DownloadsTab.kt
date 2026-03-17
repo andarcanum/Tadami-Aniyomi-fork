@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.filled.MoreVert
@@ -28,7 +27,6 @@ import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.SnackbarHostState
@@ -69,6 +67,9 @@ import eu.kanade.presentation.components.AuroraTabRow
 import eu.kanade.presentation.components.DropdownMenu
 import eu.kanade.presentation.components.NestedMenuItem
 import eu.kanade.presentation.components.TabContent
+import eu.kanade.presentation.more.settings.AuroraTopBarIconButton
+import eu.kanade.presentation.more.settings.AuroraTopBarLayout
+import eu.kanade.presentation.more.settings.AuroraTopBarTitleText
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.R
@@ -177,55 +178,84 @@ data object DownloadsTab : Tab {
             Scaffold(
                 containerColor = if (isAurora) Color.Transparent else MaterialTheme.colorScheme.background,
                 topBar = {
-                    AppBar(
-                        titleContent = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = stringResource(MR.strings.label_download_queue),
-                                    maxLines = 1,
-                                    modifier = Modifier.weight(1f, false),
-                                    overflow = TextOverflow.Ellipsis,
-                                    color = if (isAurora) auroraColors.textPrimary else Color.Unspecified,
-                                )
-                                if (currentDownloadCount > 0) {
-                                    val pillAlpha = if (isSystemInDarkTheme()) 0.12f else 0.08f
-                                    Pill(
-                                        text = "$currentDownloadCount",
-                                        modifier = Modifier.padding(start = 4.dp),
-                                        color = if (isAurora) {
-                                            auroraColors.accent.copy(alpha = 0.24f)
-                                        } else {
-                                            MaterialTheme.colorScheme.onBackground.copy(alpha = pillAlpha)
-                                        },
-                                        contentColor = if (isAurora) {
-                                            auroraColors.textPrimary
-                                        } else {
-                                            MaterialTheme.colorScheme.onBackground
-                                        },
-                                        fontSize = 14.sp,
+                    if (isAurora) {
+                        AuroraTopBarLayout(
+                            title = stringResource(MR.strings.label_download_queue),
+                            titleContent = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    AuroraTopBarTitleText(
+                                        title = stringResource(MR.strings.label_download_queue),
+                                        modifier = Modifier.weight(1f, false),
                                     )
+                                    if (currentDownloadCount > 0) {
+                                        Pill(
+                                            text = "$currentDownloadCount",
+                                            modifier = Modifier.padding(start = 4.dp),
+                                            color = auroraColors.accent.copy(alpha = 0.24f),
+                                            contentColor = auroraColors.textPrimary,
+                                            fontSize = 14.sp,
+                                        )
+                                    }
                                 }
-                            }
-                        },
-                        navigateUp = navigator::pop,
-                        backgroundColor = if (isAurora) Color.Transparent else null,
-                        actions = {
-                            when (queueTabs[state.currentPage]) {
-                                DownloadQueueTab.ANIME -> AnimeActions(
-                                    animeScreenModel = animeScreenModel,
-                                    animeDownloadList = animeDownloadList,
-                                    isAurora = isAurora,
-                                )
-                                DownloadQueueTab.MANGA -> MangaActions(
-                                    mangaScreenModel = mangaScreenModel,
-                                    mangaDownloadList = mangaDownloadList,
-                                    isAurora = isAurora,
-                                )
-                                DownloadQueueTab.NOVEL -> Unit
-                            }
-                        },
-                        scrollBehavior = scrollBehavior,
-                    )
+                            },
+                            onNavigateUp = navigator::pop,
+                            actions = {
+                                when (queueTabs[state.currentPage]) {
+                                    DownloadQueueTab.ANIME -> AnimeActions(
+                                        animeScreenModel = animeScreenModel,
+                                        animeDownloadList = animeDownloadList,
+                                        isAurora = true,
+                                    )
+                                    DownloadQueueTab.MANGA -> MangaActions(
+                                        mangaScreenModel = mangaScreenModel,
+                                        mangaDownloadList = mangaDownloadList,
+                                        isAurora = true,
+                                    )
+                                    DownloadQueueTab.NOVEL -> Unit
+                                }
+                            },
+                        )
+                    } else {
+                        AppBar(
+                            titleContent = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = stringResource(MR.strings.label_download_queue),
+                                        maxLines = 1,
+                                        modifier = Modifier.weight(1f, false),
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    if (currentDownloadCount > 0) {
+                                        val pillAlpha = if (isSystemInDarkTheme()) 0.12f else 0.08f
+                                        Pill(
+                                            text = "$currentDownloadCount",
+                                            modifier = Modifier.padding(start = 4.dp),
+                                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = pillAlpha),
+                                            contentColor = MaterialTheme.colorScheme.onBackground,
+                                            fontSize = 14.sp,
+                                        )
+                                    }
+                                }
+                            },
+                            navigateUp = navigator::pop,
+                            actions = {
+                                when (queueTabs[state.currentPage]) {
+                                    DownloadQueueTab.ANIME -> AnimeActions(
+                                        animeScreenModel = animeScreenModel,
+                                        animeDownloadList = animeDownloadList,
+                                        isAurora = false,
+                                    )
+                                    DownloadQueueTab.MANGA -> MangaActions(
+                                        mangaScreenModel = mangaScreenModel,
+                                        mangaDownloadList = mangaDownloadList,
+                                        isAurora = false,
+                                    )
+                                    DownloadQueueTab.NOVEL -> Unit
+                                }
+                            },
+                            scrollBehavior = scrollBehavior,
+                        )
+                    }
                 },
                 floatingActionButton = {
                     AnimatedVisibility(
@@ -499,32 +529,18 @@ data object DownloadsTab : Tab {
 
             if (isAurora) {
                 Box {
-                    IconButton(
+                    AuroraTopBarIconButton(
                         onClick = { sortExpanded = true },
-                        modifier = Modifier
-                            .background(colors.glass, CircleShape)
-                            .size(44.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Outlined.Sort,
-                            contentDescription = stringResource(MR.strings.action_sort),
-                            tint = colors.textPrimary,
-                        )
-                    }
+                        icon = Icons.AutoMirrored.Outlined.Sort,
+                        contentDescription = stringResource(MR.strings.action_sort),
+                    )
                 }
                 Box {
-                    IconButton(
+                    AuroraTopBarIconButton(
                         onClick = { overflowExpanded = true },
-                        modifier = Modifier
-                            .background(colors.glass, CircleShape)
-                            .size(44.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.MoreVert,
-                            contentDescription = stringResource(MR.strings.action_menu_overflow_description),
-                            tint = colors.textPrimary,
-                        )
-                    }
+                        icon = Icons.Filled.MoreVert,
+                        contentDescription = stringResource(MR.strings.action_menu_overflow_description),
+                    )
                     DropdownMenu(
                         expanded = overflowExpanded,
                         onDismissRequest = { overflowExpanded = false },
@@ -629,32 +645,18 @@ data object DownloadsTab : Tab {
 
             if (isAurora) {
                 Box {
-                    IconButton(
+                    AuroraTopBarIconButton(
                         onClick = { sortExpanded = true },
-                        modifier = Modifier
-                            .background(colors.glass, CircleShape)
-                            .size(44.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Outlined.Sort,
-                            contentDescription = stringResource(MR.strings.action_sort),
-                            tint = colors.textPrimary,
-                        )
-                    }
+                        icon = Icons.AutoMirrored.Outlined.Sort,
+                        contentDescription = stringResource(MR.strings.action_sort),
+                    )
                 }
                 Box {
-                    IconButton(
+                    AuroraTopBarIconButton(
                         onClick = { overflowExpanded = true },
-                        modifier = Modifier
-                            .background(colors.glass, CircleShape)
-                            .size(44.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.MoreVert,
-                            contentDescription = stringResource(MR.strings.action_menu_overflow_description),
-                            tint = colors.textPrimary,
-                        )
-                    }
+                        icon = Icons.Filled.MoreVert,
+                        contentDescription = stringResource(MR.strings.action_menu_overflow_description),
+                    )
                     DropdownMenu(
                         expanded = overflowExpanded,
                         onDismissRequest = { overflowExpanded = false },

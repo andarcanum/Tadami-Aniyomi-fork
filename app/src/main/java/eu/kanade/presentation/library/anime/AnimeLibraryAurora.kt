@@ -22,12 +22,14 @@ import eu.kanade.presentation.library.components.GlobalSearchItem
 import eu.kanade.presentation.library.components.GlowContourLibraryGridItem
 import eu.kanade.presentation.library.components.LazyLibraryGrid
 import eu.kanade.presentation.library.components.globalSearchItem
+import eu.kanade.presentation.library.components.resolveGlowContourCornerIndicatorState
 import eu.kanade.presentation.library.components.resolveGlowContourLibraryTextSpec
 import eu.kanade.presentation.library.components.shouldShowContinueViewingAction
 import eu.kanade.presentation.library.resolveAnimeLibraryCardProgressPercent
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
+import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.ui.library.anime.AnimeLibraryItem
 import tachiyomi.domain.entries.anime.model.AnimeCover
 import tachiyomi.domain.library.anime.LibraryAnime
@@ -355,6 +357,13 @@ private fun AnimeLibraryAuroraCardGrid(
                 totalCount = libraryAnime.totalCount,
             )
             val textSpec = resolveGlowContourLibraryTextSpec(glowDisplayMode)
+            val cornerIndicatorState = resolveGlowContourCornerIndicatorState(
+                hasContinueAction = onClickContinueWatching != null,
+                remainingCount = libraryItem.libraryAnime.unseenCount,
+                isFinished = anime.status == SAnime.COMPLETED.toLong() ||
+                    anime.status == SAnime.PUBLISHING_FINISHED.toLong() ||
+                    anime.status == SAnime.CANCELLED.toLong(),
+            )
 
             if (useGlowContourCards) {
                 GlowContourLibraryGridItem(
@@ -370,6 +379,7 @@ private fun AnimeLibraryAuroraCardGrid(
                     ),
                     progressPercent = progressPercent,
                     cardAspectRatio = 0.76f,
+                    cornerIndicatorState = cornerIndicatorState,
                     textSpec = textSpec,
                     badge = if (hasBadge) {
                         {

@@ -1,8 +1,5 @@
 ﻿package eu.kanade.presentation.achievement.ui
 
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -17,21 +14,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,6 +41,7 @@ import eu.kanade.presentation.achievement.components.AchievementContent
 import eu.kanade.presentation.achievement.components.AchievementStatsComparison
 import eu.kanade.presentation.achievement.components.ActivityStreakIndicator
 import eu.kanade.presentation.achievement.screenmodel.AchievementScreenState
+import eu.kanade.presentation.more.settings.AuroraTopBarLayout
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.achievement.model.Achievement
 import tachiyomi.domain.achievement.model.AchievementCategory
@@ -73,11 +66,12 @@ fun AchievementScreen(
     val title = stringResource(AYMR.strings.label_achievements)
 
     Scaffold(
-        topBar = { scrollBehavior ->
-            AuroraAchievementTopBar(
+        topBar = {
+            AuroraTopBarLayout(
                 title = title,
-                onNavigateBack = onClickBack,
-                scrollBehavior = scrollBehavior,
+                titleContent = null,
+                onNavigateUp = onClickBack,
+                actions = {},
             )
         },
         containerColor = colors.background,
@@ -204,81 +198,6 @@ fun AchievementScreen(
                     }
                 }
             }
-        }
-    }
-}
-
-/**
- * Aurora-styled top bar - unified color, no borders, clean design
- */
-@Composable
-private fun AuroraAchievementTopBar(
-    title: String,
-    onNavigateBack: () -> Unit,
-    scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior? = null,
-    modifier: Modifier = Modifier,
-) {
-    val colors = AuroraTheme.colors
-    val backDescription = stringResource(AYMR.strings.achievement_back)
-
-    // Animate alpha based on scroll
-    val scrollProgress = scrollBehavior?.state?.collapsedFraction ?: 0f
-    val backgroundAlpha by animateFloatAsState(
-        targetValue = 0.95f + (scrollProgress * 0.05f),
-        animationSpec = spring(stiffness = Spring.StiffnessMedium),
-        label = "background_alpha",
-    )
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .height(56.dp)
-            .background(colors.background.copy(alpha = backgroundAlpha))
-            .drawBehind {
-                // Subtle bottom divider
-                drawLine(
-                    color = Color.White.copy(alpha = 0.05f * scrollProgress),
-                    start = Offset(0f, size.height - 1),
-                    end = Offset(size.width, size.height - 1),
-                    strokeWidth = 1f,
-                )
-            },
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Back button - no border, simple and clean
-            IconButton(
-                onClick = onNavigateBack,
-                modifier = Modifier.size(48.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = backDescription,
-                    tint = colors.textPrimary,
-                    modifier = Modifier.size(24.dp),
-                )
-            }
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            // Title - clean and neutral
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = colors.textPrimary,
-                letterSpacing = 0.5.sp,
-            )
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            // Spacer to balance the back button
-            Spacer(modifier = Modifier.size(48.dp))
         }
     }
 }

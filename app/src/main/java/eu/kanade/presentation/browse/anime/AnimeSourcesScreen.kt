@@ -113,7 +113,7 @@ fun AnimeSourcesScreen(
                                     Icon(
                                         imageVector = Icons.Filled.Search,
                                         contentDescription = null,
-                                        tint = colors.accent,
+                                        tint = colors.textPrimary,
                                     )
                                 }
                             } else {
@@ -128,7 +128,7 @@ fun AnimeSourcesScreen(
                                         Icon(
                                             Icons.Filled.Search,
                                             null,
-                                            tint = colors.accent,
+                                            tint = colors.textSecondary,
                                         )
                                     },
                                     trailingIcon = {

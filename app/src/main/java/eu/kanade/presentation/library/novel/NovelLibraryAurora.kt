@@ -68,12 +68,14 @@ import eu.kanade.presentation.library.components.GlowContourLibraryGridItem
 import eu.kanade.presentation.library.components.LanguageBadge
 import eu.kanade.presentation.library.components.LazyLibraryGrid
 import eu.kanade.presentation.library.components.UnviewedBadge
+import eu.kanade.presentation.library.components.resolveGlowContourCornerIndicatorState
 import eu.kanade.presentation.library.components.resolveGlowContourLibraryTextSpec
 import eu.kanade.presentation.library.resolveNovelLibraryCardProgressPercent
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
+import eu.kanade.tachiyomi.source.model.SManga
 import tachiyomi.domain.entries.novel.model.asNovelCover
 import tachiyomi.domain.library.model.AuroraLibraryCardStyle
 import tachiyomi.domain.library.model.LibraryDisplayMode
@@ -398,6 +400,13 @@ private fun NovelLibraryAuroraCard(
         totalCount = item.totalChapters,
     )
     val textSpec = resolveGlowContourLibraryTextSpec(glowDisplayMode)
+    val cornerIndicatorState = resolveGlowContourCornerIndicatorState(
+        hasContinueAction = onClickContinueReading != null,
+        remainingCount = item.unreadCount,
+        isFinished = item.novel.status == SManga.COMPLETED.toLong() ||
+            item.novel.status == SManga.PUBLISHING_FINISHED.toLong() ||
+            item.novel.status == SManga.CANCELLED.toLong(),
+    )
     val coverRequest = remember(item.novel.id, item.novel.thumbnailUrl, item.novel.coverLastModified) {
         ImageRequest.Builder(context)
             .data(resolveAuroraCoverModel(item.novel.thumbnailUrl))
@@ -413,6 +422,7 @@ private fun NovelLibraryAuroraCard(
             coverData = coverRequest,
             progressPercent = progressPercent,
             cardAspectRatio = 0.76f,
+            cornerIndicatorState = cornerIndicatorState,
             textSpec = textSpec,
             badge = if (badgeState.hasBadge()) {
                 {
@@ -682,7 +692,7 @@ private fun InlineNovelLibraryHeader(
                     leadingIcon = { Icon(Icons.Filled.Search, null, tint = colors.accent) },
                     trailingIcon = {
                         IconButton(onClick = onSearchClose) {
-                            Icon(Icons.Filled.Close, null, tint = colors.textSecondary)
+                            Icon(Icons.Filled.Close, null, tint = colors.accent)
                         }
                     },
                     singleLine = true,
@@ -714,12 +724,12 @@ private fun InlineNovelLibraryHeader(
                         Icon(
                             Icons.Filled.FilterList,
                             null,
-                            tint = if (hasActiveFilters) colors.accent else colors.textSecondary,
+                            tint = colors.accent,
                         )
                     }
                     Box {
                         IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Filled.MoreVert, null, tint = colors.textSecondary)
+                            Icon(Icons.Filled.MoreVert, null, tint = colors.accent)
                         }
                         AuroraEntryDropdownMenu(
                             expanded = showMenu,

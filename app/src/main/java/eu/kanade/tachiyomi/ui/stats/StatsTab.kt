@@ -8,7 +8,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import eu.kanade.domain.ui.UiPreferences
@@ -46,15 +49,26 @@ data object StatsTab : Tab {
     @Composable
     override fun Content() {
         val context = LocalContext.current
+        val navigator = LocalNavigator.currentOrThrow
         val uiPreferences = Injekt.get<UiPreferences>()
         val theme by uiPreferences.appTheme().collectAsState()
+        val navigateUp = remember(navigator.canPop) {
+            if (navigator.canPop) {
+                {
+                    navigator.pop()
+                    Unit
+                }
+            } else {
+                null
+            }
+        }
 
         val tabs = statsContentTabs()
             .map { tab ->
                 when (tab) {
-                    StatsContentTab.ANIME -> animeStatsTab()
-                    StatsContentTab.MANGA -> mangaStatsTab()
-                    StatsContentTab.NOVEL -> novelStatsTab()
+                    StatsContentTab.ANIME -> animeStatsTab().copy(navigateUp = navigateUp)
+                    StatsContentTab.MANGA -> mangaStatsTab().copy(navigateUp = navigateUp)
+                    StatsContentTab.NOVEL -> novelStatsTab().copy(navigateUp = navigateUp)
                 }
             }
             .toPersistentList()

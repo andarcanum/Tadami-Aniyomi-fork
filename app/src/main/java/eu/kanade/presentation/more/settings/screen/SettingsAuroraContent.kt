@@ -86,7 +86,7 @@ private fun SettingsAuroraHeader(onBackClick: () -> Unit) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = stringResource(AYMR.strings.aurora_back),
-                tint = AuroraTheme.colors.textPrimary,
+                tint = AuroraTheme.colors.accent,
             )
         }
 

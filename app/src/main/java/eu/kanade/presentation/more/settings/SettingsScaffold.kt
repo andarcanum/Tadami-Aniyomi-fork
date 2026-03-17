@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AuroraBackground
@@ -82,10 +83,10 @@ fun SettingsScaffold(
                     floatingActionButton = floatingActionButton,
                     topBar = {
                         if (showTopBar) {
-                            SettingsAuroraTopBar(
+                            AuroraTopBarLayout(
                                 title = title,
                                 titleContent = titleContent,
-                                onBackPressed = onBackPressed,
+                                onNavigateUp = onBackPressed,
                                 actions = actions,
                             )
                         }
@@ -127,10 +128,10 @@ internal fun SettingsAuroraBackground(
 }
 
 @Composable
-private fun SettingsAuroraTopBar(
+internal fun AuroraTopBarLayout(
     title: String,
     titleContent: (@Composable () -> Unit)?,
-    onBackPressed: (() -> Unit)?,
+    onNavigateUp: (() -> Unit)?,
     actions: @Composable RowScope.() -> Unit,
 ) {
     val colors = AuroraTheme.colors
@@ -141,40 +142,29 @@ private fun SettingsAuroraTopBar(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (onBackPressed != null) {
-            IconButton(
-                onClick = onBackPressed,
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(colors.glass, CircleShape),
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = stringResource(MR.strings.action_bar_up_description),
-                    tint = colors.textPrimary,
-                )
-            }
+        if (onNavigateUp != null) {
+            AuroraTopBarIconButton(
+                onClick = onNavigateUp,
+                icon = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = stringResource(MR.strings.action_bar_up_description),
+            )
         }
 
         if (titleContent != null) {
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(start = if (onBackPressed != null) 12.dp else 4.dp),
+                    .padding(start = if (onNavigateUp != null) 12.dp else 4.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
                 titleContent()
             }
         } else {
-            Text(
-                text = title,
+            AuroraTopBarTitleText(
+                title = title,
                 modifier = Modifier
                     .weight(1f)
-                    .padding(start = if (onBackPressed != null) 12.dp else 4.dp),
-                style = MaterialTheme.typography.headlineSmall,
-                color = colors.textPrimary,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
+                    .padding(start = if (onNavigateUp != null) 12.dp else 4.dp),
             )
         }
 
@@ -183,4 +173,48 @@ private fun SettingsAuroraTopBar(
             content = actions,
         )
     }
+}
+
+@Composable
+internal fun AuroraTopBarIconButton(
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+    tint: Color = AuroraTheme.colors.accent,
+) {
+    val colors = AuroraTheme.colors
+    IconButton(
+        onClick = onClick,
+        modifier = modifier
+            .size(40.dp)
+            .background(colors.glass, CircleShape),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = tint,
+        )
+    }
+}
+
+@Composable
+internal fun AuroraTopBarTitleText(
+    title: String,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AuroraTheme.colors
+    Text(
+        text = title,
+        modifier = modifier,
+        style = if (title.length > 15) {
+            MaterialTheme.typography.titleLarge
+        } else {
+            MaterialTheme.typography.headlineSmall
+        },
+        color = colors.textPrimary,
+        fontWeight = FontWeight.SemiBold,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }

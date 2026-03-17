@@ -24,7 +24,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MultiChoiceSegmentedButtonRow
 import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,13 +36,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.core.net.toUri
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import com.hippo.unifile.UniFile
+import eu.kanade.presentation.more.settings.AuroraTopBarIconButton
 import eu.kanade.presentation.more.settings.Preference
+import eu.kanade.presentation.more.settings.SettingsUiStyle
+import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.screen.data.CreateBackupScreen
 import eu.kanade.presentation.more.settings.screen.data.RestoreBackupScreen
 import eu.kanade.presentation.more.settings.screen.data.StorageInfo
@@ -96,11 +99,20 @@ object SettingsDataScreen : SearchableSettings {
     @Composable
     override fun RowScope.AppBarAction() {
         val uriHandler = LocalUriHandler.current
-        IconButton(onClick = { uriHandler.openUri(HELP_URL) }) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.HelpOutline,
+        val uiStyle = rememberResolvedSettingsUiStyle()
+        if (uiStyle == SettingsUiStyle.Aurora) {
+            AuroraTopBarIconButton(
+                onClick = { uriHandler.openUri(HELP_URL) },
+                icon = Icons.AutoMirrored.Outlined.HelpOutline,
                 contentDescription = stringResource(MR.strings.tracking_guide),
             )
+        } else {
+            IconButton(onClick = { uriHandler.openUri(HELP_URL) }) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.HelpOutline,
+                    contentDescription = stringResource(MR.strings.tracking_guide),
+                )
+            }
         }
     }
 
@@ -230,7 +242,7 @@ object SettingsDataScreen : SearchableSettings {
                                     modifier = Modifier.fillMaxHeight(),
                                     checked = false,
                                     onCheckedChange = { navigator.push(CreateBackupScreen()) },
-                                    shape = SegmentedButtonDefaults.itemShape(0, 2),
+                                    shape = RectangleShape,
                                 ) {
                                     Text(stringResource(MR.strings.pref_create_backup))
                                 }
@@ -249,7 +261,7 @@ object SettingsDataScreen : SearchableSettings {
                                             context.toast(MR.strings.restore_in_progress)
                                         }
                                     },
-                                    shape = SegmentedButtonDefaults.itemShape(1, 2),
+                                    shape = RectangleShape,
                                 ) {
                                     Text(stringResource(MR.strings.pref_restore_backup))
                                 }

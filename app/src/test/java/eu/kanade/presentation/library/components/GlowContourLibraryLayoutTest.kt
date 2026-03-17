@@ -1,9 +1,13 @@
 package eu.kanade.presentation.library.components
 
 import androidx.compose.ui.unit.dp
+import eu.kanade.tachiyomi.animesource.model.SAnime
+import eu.kanade.tachiyomi.source.model.SManga
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.library.model.LibraryDisplayMode
+import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 
 class GlowContourLibraryLayoutTest {
 
@@ -72,10 +76,64 @@ class GlowContourLibraryLayoutTest {
         resolveGlowContourTextBlockRenderSpec() shouldBe GlowContourTextBlockRenderSpec(
             topSpacing = 8.dp,
             titleSubtitleSpacing = 2.dp,
-            horizontalPadding = 0.dp,
+            horizontalPadding = 6.dp,
             verticalPadding = 0.dp,
             useSurfaceBlend = false,
+            titleMinLines = 1,
+            minTextBlockHeight = 34.dp,
         )
+    }
+
+    @Test
+    fun `anime indicator prefers continue action when handler is available and unseen remains`() {
+        resolveGlowContourCornerIndicatorState(
+            hasContinueAction = true,
+            remainingCount = 4L,
+            status = SAnime.COMPLETED.toLong(),
+            completedStatus = SAnime.COMPLETED.toLong(),
+        ) shouldBe GlowContourCornerIndicatorState.ContinueAction
+    }
+
+    @Test
+    fun `anime indicator uses check jewel when completed and caught up`() {
+        resolveGlowContourCornerIndicatorState(
+            hasContinueAction = false,
+            remainingCount = 0L,
+            status = SAnime.COMPLETED.toLong(),
+            completedStatus = SAnime.COMPLETED.toLong(),
+        ) shouldBe GlowContourCornerIndicatorState.CompletedJewel
+    }
+
+    @Test
+    fun `manga indicator uses update jewel when unread remains and continue is unavailable`() {
+        resolveGlowContourCornerIndicatorState(
+            hasContinueAction = false,
+            remainingCount = 7L,
+            status = SManga.ONGOING.toLong(),
+            completedStatus = SManga.COMPLETED.toLong(),
+        ) shouldBe GlowContourCornerIndicatorState.NewContentJewel
+    }
+
+    @Test
+    fun `indicator falls back to neutral jewel when entry is neither completed nor new`() {
+        resolveGlowContourCornerIndicatorState(
+            hasContinueAction = false,
+            remainingCount = 0L,
+            status = SManga.ONGOING.toLong(),
+            completedStatus = SManga.COMPLETED.toLong(),
+        ) shouldBe GlowContourCornerIndicatorState.NeutralJewel
+    }
+
+    @Test
+    fun `indicator content descriptions stay mapped for accessibility`() {
+        listOf(
+            GlowContourCornerIndicatorState.ContinueAction to MR.strings.action_resume,
+            GlowContourCornerIndicatorState.CompletedJewel to MR.strings.completed,
+            GlowContourCornerIndicatorState.NewContentJewel to AYMR.strings.aurora_new_badge,
+            GlowContourCornerIndicatorState.NeutralJewel to MR.strings.status,
+        ).forEach { (state, expectedRes) ->
+            resolveGlowContourCornerIndicatorContentDescriptionRes(state) shouldBe expectedRes
+        }
     }
 
     @Test

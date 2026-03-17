@@ -140,7 +140,7 @@ class SettingsSearchScreen(
                                                 contentDescription = stringResource(
                                                     MR.strings.action_bar_up_description,
                                                 ),
-                                                tint = auroraColors.textPrimary,
+                                                tint = auroraColors.accent,
                                             )
                                         } else {
                                             UpIcon()
@@ -207,7 +207,7 @@ class SettingsSearchScreen(
                                             imageVector = Icons.Outlined.Close,
                                             contentDescription = null,
                                             tint = if (isAurora) {
-                                                auroraColors.textSecondary
+                                                auroraColors.accent
                                             } else {
                                                 MaterialTheme.colorScheme.onSurfaceVariant
                                             },

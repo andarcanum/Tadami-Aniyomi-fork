@@ -22,12 +22,14 @@ import eu.kanade.presentation.library.components.GlobalSearchItem
 import eu.kanade.presentation.library.components.GlowContourLibraryGridItem
 import eu.kanade.presentation.library.components.LazyLibraryGrid
 import eu.kanade.presentation.library.components.globalSearchItem
+import eu.kanade.presentation.library.components.resolveGlowContourCornerIndicatorState
 import eu.kanade.presentation.library.components.resolveGlowContourLibraryTextSpec
 import eu.kanade.presentation.library.components.shouldShowContinueViewingAction
 import eu.kanade.presentation.library.resolveMangaLibraryCardProgressPercent
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
+import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.ui.library.manga.MangaLibraryItem
 import tachiyomi.domain.entries.manga.model.MangaCover
 import tachiyomi.domain.library.manga.LibraryManga
@@ -355,6 +357,13 @@ private fun MangaLibraryAuroraCardGrid(
                 totalCount = libraryManga.totalChapters,
             )
             val textSpec = resolveGlowContourLibraryTextSpec(glowDisplayMode)
+            val cornerIndicatorState = resolveGlowContourCornerIndicatorState(
+                hasContinueAction = onClickContinueReading != null,
+                remainingCount = libraryItem.libraryManga.unreadCount,
+                isFinished = manga.status == SManga.COMPLETED.toLong() ||
+                    manga.status == SManga.PUBLISHING_FINISHED.toLong() ||
+                    manga.status == SManga.CANCELLED.toLong(),
+            )
 
             if (useGlowContourCards) {
                 GlowContourLibraryGridItem(
@@ -370,6 +379,7 @@ private fun MangaLibraryAuroraCardGrid(
                     ),
                     progressPercent = progressPercent,
                     cardAspectRatio = 0.76f,
+                    cornerIndicatorState = cornerIndicatorState,
                     textSpec = textSpec,
                     badge = if (hasBadge) {
                         {

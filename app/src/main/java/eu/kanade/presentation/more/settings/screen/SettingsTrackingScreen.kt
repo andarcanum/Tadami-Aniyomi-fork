@@ -42,7 +42,10 @@ import androidx.compose.ui.unit.dp
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.track.model.AutoTrackState
 import eu.kanade.domain.track.service.TrackPreferences
+import eu.kanade.presentation.more.settings.AuroraTopBarIconButton
 import eu.kanade.presentation.more.settings.Preference
+import eu.kanade.presentation.more.settings.SettingsUiStyle
+import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.tachiyomi.data.track.EnhancedAnimeTracker
 import eu.kanade.tachiyomi.data.track.EnhancedMangaTracker
 import eu.kanade.tachiyomi.data.track.Tracker
@@ -78,11 +81,20 @@ object SettingsTrackingScreen : SearchableSettings {
     @Composable
     override fun RowScope.AppBarAction() {
         val uriHandler = LocalUriHandler.current
-        IconButton(onClick = { uriHandler.openUri("https://aniyomi.org/help/guides/tracking/") }) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.HelpOutline,
+        val uiStyle = rememberResolvedSettingsUiStyle()
+        if (uiStyle == SettingsUiStyle.Aurora) {
+            AuroraTopBarIconButton(
+                onClick = { uriHandler.openUri("https://aniyomi.org/help/guides/tracking/") },
+                icon = Icons.AutoMirrored.Outlined.HelpOutline,
                 contentDescription = stringResource(MR.strings.tracking_guide),
             )
+        } else {
+            IconButton(onClick = { uriHandler.openUri("https://aniyomi.org/help/guides/tracking/") }) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.HelpOutline,
+                    contentDescription = stringResource(MR.strings.tracking_guide),
+                )
+            }
         }
     }
 

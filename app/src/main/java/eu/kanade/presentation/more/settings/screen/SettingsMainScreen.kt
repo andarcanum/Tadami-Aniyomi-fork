@@ -24,6 +24,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_HORIZONTAL_INSET
+import eu.kanade.presentation.more.settings.AuroraTopBarIconButton
 import eu.kanade.presentation.more.settings.SettingsScaffold
 import eu.kanade.presentation.more.settings.SettingsUiStyle
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
@@ -65,15 +66,23 @@ object SettingsMainScreen : Screen() {
             uiStyle = uiStyle,
             onBackPressed = backPress::invoke,
             actions = {
-                AppBarActions(
-                    persistentListOf(
-                        AppBar.Action(
-                            title = stringResource(MR.strings.action_search),
-                            icon = Icons.Outlined.Search,
-                            onClick = { navigator.navigate(SettingsSearchScreen(), twoPane) },
+                if (uiStyle == SettingsUiStyle.Aurora) {
+                    AuroraTopBarIconButton(
+                        onClick = { navigator.navigate(SettingsSearchScreen(), twoPane) },
+                        icon = Icons.Outlined.Search,
+                        contentDescription = stringResource(MR.strings.action_search),
+                    )
+                } else {
+                    AppBarActions(
+                        persistentListOf(
+                            AppBar.Action(
+                                title = stringResource(MR.strings.action_search),
+                                icon = Icons.Outlined.Search,
+                                onClick = { navigator.navigate(SettingsSearchScreen(), twoPane) },
+                            ),
                         ),
-                    ),
-                )
+                    )
+                }
             },
         ) { contentPadding ->
             val state = rememberLazyListState()

@@ -69,6 +69,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.icerock.moko.resources.StringResource
+import eu.kanade.presentation.more.settings.AuroraTopBarIconButton
+import eu.kanade.presentation.more.settings.AuroraTopBarTitleText
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
@@ -213,7 +215,7 @@ fun TabbedScreenAurora(
                         onSearchQueryChange = { onChangeSearchQuery(it) },
                         tabs = tabs,
                         currentPage = currentPage,
-                        navigateUp = null, // Top-level tabs generally don't have up navigation in this context
+                        navigateUp = tabs.getOrNull(currentPage)?.navigateUp,
                         highlightSearchAction = highlightSearchAction,
                         highlightedActionTitle = highlightedActionTitle,
                     )
@@ -367,22 +369,15 @@ private fun AuroraTabHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (navigateUp != null) {
-            IconButton(
+            AuroraTopBarIconButton(
                 onClick = navigateUp,
-                modifier = Modifier
-                    .background(colors.glass, CircleShape)
-                    .size(44.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = stringResource(MR.strings.action_bar_up_description),
-                    tint = colors.textPrimary,
-                )
-            }
+                icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                contentDescription = stringResource(MR.strings.action_bar_up_description),
+            )
             Spacer(modifier = Modifier.width(12.dp))
         }
 
@@ -428,68 +423,44 @@ private fun AuroraTabHeader(
                 },
             )
         } else {
-            Column(
+            Box(
                 modifier = Modifier.weight(1f),
+                contentAlignment = Alignment.CenterStart,
             ) {
-                Text(
-                    text = title,
-                    fontSize = 22.sp,
-                    color = colors.textPrimary,
-                    fontWeight = FontWeight.SemiBold,
-                )
+                AuroraTopBarTitleText(title = title)
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (currentTab?.searchEnabled == true) {
-                    IconButton(
+                    AuroraTopBarIconButton(
                         onClick = onSearchClick,
-                        modifier = Modifier
-                            .background(colors.glass, CircleShape)
-                            .size(44.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Search,
-                            contentDescription = stringResource(MR.strings.action_search),
-                            tint = if (highlightSearchAction) colors.accent else colors.textPrimary,
-                        )
-                    }
+                        icon = Icons.Filled.Search,
+                        contentDescription = stringResource(MR.strings.action_search),
+                        tint = colors.accent,
+                    )
                 }
 
                 iconActions.forEach { appBarAction ->
-                    IconButton(
+                    AuroraTopBarIconButton(
                         onClick = appBarAction.onClick,
-                        modifier = Modifier
-                            .background(colors.glass, CircleShape)
-                            .size(44.dp),
-                    ) {
-                        Icon(
-                            imageVector = appBarAction.icon,
-                            contentDescription = appBarAction.title,
-                            tint = if (appBarAction.title == highlightedActionTitle) {
-                                colors.accent
-                            } else {
-                                colors.textPrimary
-                            },
-                        )
-                    }
+                        icon = appBarAction.icon,
+                        contentDescription = appBarAction.title,
+                        tint = if (appBarAction.title == highlightedActionTitle) {
+                            colors.accent
+                        } else {
+                            colors.accent
+                        },
+                    )
                 }
 
                 if (overflowActions.isNotEmpty()) {
                     Box {
-                        IconButton(
+                        AuroraTopBarIconButton(
                             onClick = { showOverflowMenu = true },
-                            modifier = Modifier
-                                .background(colors.glass, CircleShape)
-                                .size(44.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.MoreVert,
-                                contentDescription = stringResource(
-                                    MR.strings.action_menu_overflow_description,
-                                ),
-                                tint = colors.textPrimary,
-                            )
-                        }
+                            icon = Icons.Outlined.MoreVert,
+                            contentDescription = stringResource(MR.strings.action_menu_overflow_description),
+                            tint = colors.accent,
+                        )
 
                         DropdownMenu(
                             expanded = showOverflowMenu,

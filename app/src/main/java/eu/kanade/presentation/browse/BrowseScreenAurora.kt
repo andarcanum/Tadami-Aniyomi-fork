@@ -220,6 +220,7 @@ private fun QuickActionsSection(
         ) {
             QuickActionCard(
                 icon = Icons.Outlined.Explore,
+                iconTint = AuroraTheme.colors.textPrimary,
                 title = stringResource(AYMR.strings.aurora_global_search),
                 modifier = Modifier.fillMaxWidth(),
                 onClick = onGlobalSearchClick,
@@ -246,6 +247,7 @@ private fun QuickActionsSection(
         ) {
             QuickActionCard(
                 icon = Icons.Outlined.Explore,
+                iconTint = AuroraTheme.colors.textPrimary,
                 title = stringResource(AYMR.strings.aurora_global_search),
                 modifier = Modifier.weight(1f),
                 onClick = onGlobalSearchClick,
@@ -270,6 +272,7 @@ private fun QuickActionsSection(
 private fun QuickActionCard(
     icon: ImageVector,
     title: String,
+    iconTint: Color? = null,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
@@ -294,7 +297,7 @@ private fun QuickActionCard(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = colors.accent,
+                tint = iconTint ?: colors.accent,
                 modifier = Modifier.size(24.dp),
             )
             Spacer(modifier = Modifier.height(8.dp))

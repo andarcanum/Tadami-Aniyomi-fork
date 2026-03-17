@@ -114,7 +114,7 @@ fun MangaSourcesScreen(
                                     Icon(
                                         imageVector = Icons.Filled.Search,
                                         contentDescription = null,
-                                        tint = colors.accent,
+                                        tint = colors.textPrimary,
                                     )
                                 }
                             } else {
@@ -129,7 +129,7 @@ fun MangaSourcesScreen(
                                         Icon(
                                             Icons.Filled.Search,
                                             null,
-                                            tint = colors.accent,
+                                            tint = colors.textSecondary,
                                         )
                                     },
                                     trailingIcon = {

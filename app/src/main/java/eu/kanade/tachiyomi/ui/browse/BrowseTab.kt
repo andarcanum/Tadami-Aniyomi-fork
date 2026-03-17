@@ -191,7 +191,6 @@ data object BrowseTab : Tab {
                 isMangaTab = { isMangaSection },
                 scrollable = !useWideBrowseTabs,
                 applyStatusBarsPadding = true,
-                highlightedActionTitle = stringResource(MR.strings.action_global_search),
                 extraHeaderContent = {
                     if (sections.size > 1) {
                         Column {
