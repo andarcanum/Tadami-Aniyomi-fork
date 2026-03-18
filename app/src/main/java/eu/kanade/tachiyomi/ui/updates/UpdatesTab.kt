@@ -443,7 +443,7 @@ private fun AuroraUpdatesPinnedHeader(
                     Icon(
                         imageVector = Icons.Filled.Refresh,
                         contentDescription = stringResource(AYMR.strings.aurora_refresh_current_tab),
-                        tint = colors.accent,
+                        tint = colors.textPrimary,
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))

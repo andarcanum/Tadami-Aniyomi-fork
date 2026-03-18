@@ -430,13 +430,13 @@ private fun AuroraTabHeader(
                 AuroraTopBarTitleText(title = title)
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (currentTab?.searchEnabled == true) {
                     AuroraTopBarIconButton(
                         onClick = onSearchClick,
                         icon = Icons.Filled.Search,
                         contentDescription = stringResource(MR.strings.action_search),
-                        tint = colors.accent,
+                        tint = if (highlightSearchAction) colors.accent else colors.textPrimary,
                     )
                 }
 
@@ -448,7 +448,7 @@ private fun AuroraTabHeader(
                         tint = if (appBarAction.title == highlightedActionTitle) {
                             colors.accent
                         } else {
-                            colors.accent
+                            colors.textPrimary
                         },
                     )
                 }
@@ -459,7 +459,7 @@ private fun AuroraTabHeader(
                             onClick = { showOverflowMenu = true },
                             icon = Icons.Outlined.MoreVert,
                             contentDescription = stringResource(MR.strings.action_menu_overflow_description),
-                            tint = colors.accent,
+                            modifier = Modifier.padding(start = 4.dp),
                         )
 
                         DropdownMenu(

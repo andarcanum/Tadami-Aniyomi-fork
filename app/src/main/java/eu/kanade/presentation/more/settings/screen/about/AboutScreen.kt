@@ -3,17 +3,20 @@ package eu.kanade.presentation.more.settings.screen.about
 import android.content.Context
 import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,7 +37,9 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.more.LogoHeader
+import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_HORIZONTAL_INSET
 import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.SettingsUiStyle
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.widget.ListPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
@@ -119,6 +124,11 @@ object AboutScreen : Screen() {
             AboutEasterEggPhase.Idle,
             AboutEasterEggPhase.Primed,
         )
+        val itemModifier = if (uiStyle == SettingsUiStyle.Aurora) {
+            Modifier.padding(horizontal = AURORA_SETTINGS_CARD_HORIZONTAL_INSET)
+        } else {
+            Modifier
+        }
 
         fun syncEasterEggPhase(block: (AboutEasterEggStateMachine) -> Unit) {
             val machine = easterEggStateMachine ?: return
@@ -169,6 +179,7 @@ object AboutScreen : Screen() {
 
                     item {
                         TextPreferenceWidget(
+                            modifier = itemModifier,
                             title = stringResource(MR.strings.version),
                             subtitle = buildAboutVersionSubtitle(
                                 normalVersionName = getVersionName(withBuildDate = true),
@@ -191,6 +202,7 @@ object AboutScreen : Screen() {
                     if (updaterEnabled) {
                         item {
                             TextPreferenceWidget(
+                                modifier = itemModifier,
                                 title = stringResource(MR.strings.check_for_updates),
                                 widget = {
                                     AnimatedVisibility(visible = isCheckingUpdates) {
@@ -230,30 +242,33 @@ object AboutScreen : Screen() {
                             val appUpdatePreferences = remember { Injekt.get<AppUpdatePreferences>() }
                             val updateInterval by appUpdatePreferences.appUpdateInterval().collectAsState()
 
-                            ListPreferenceWidget(
-                                value = updateInterval,
-                                title = stringResource(MR.strings.pref_app_update_interval),
-                                subtitle = null,
-                                icon = null,
-                                entries = persistentMapOf(
-                                    -1 to stringResource(MR.strings.app_update_on_start),
-                                    0 to stringResource(MR.strings.update_never),
-                                    6 to stringResource(MR.strings.app_update_6h),
-                                    12 to stringResource(MR.strings.app_update_12h),
-                                    24 to stringResource(MR.strings.app_update_24h),
-                                    168 to stringResource(MR.strings.app_update_weekly),
-                                ),
-                                onValueChange = { newInterval ->
-                                    appUpdatePreferences.appUpdateInterval().set(newInterval)
-                                    AppUpdateJob.setupTask(context, newInterval)
-                                },
-                            )
+                            Box(modifier = itemModifier) {
+                                ListPreferenceWidget(
+                                    value = updateInterval,
+                                    title = stringResource(MR.strings.pref_app_update_interval),
+                                    subtitle = null,
+                                    icon = null,
+                                    entries = persistentMapOf(
+                                        -1 to stringResource(MR.strings.app_update_on_start),
+                                        0 to stringResource(MR.strings.update_never),
+                                        6 to stringResource(MR.strings.app_update_6h),
+                                        12 to stringResource(MR.strings.app_update_12h),
+                                        24 to stringResource(MR.strings.app_update_24h),
+                                        168 to stringResource(MR.strings.app_update_weekly),
+                                    ),
+                                    onValueChange = { newInterval ->
+                                        appUpdatePreferences.appUpdateInterval().set(newInterval)
+                                        AppUpdateJob.setupTask(context, newInterval)
+                                    },
+                                )
+                            }
                         }
                     }
 
                     if (!BuildConfig.DEBUG) {
                         item {
                             TextPreferenceWidget(
+                                modifier = itemModifier,
                                 title = stringResource(MR.strings.whats_new),
                                 onPreferenceClick = { uriHandler.openUri(RELEASE_URL) },
                             )
@@ -262,6 +277,7 @@ object AboutScreen : Screen() {
 
                     item {
                         TextPreferenceWidget(
+                            modifier = itemModifier,
                             title = stringResource(MR.strings.help_translate),
                             onPreferenceClick = {
                                 uriHandler.openUri(
@@ -273,6 +289,7 @@ object AboutScreen : Screen() {
 
                     item {
                         TextPreferenceWidget(
+                            modifier = itemModifier,
                             title = stringResource(MR.strings.licenses),
                             onPreferenceClick = { navigator.push(OpenSourceLicensesScreen()) },
                         )
@@ -280,6 +297,7 @@ object AboutScreen : Screen() {
 
                     item {
                         TextPreferenceWidget(
+                            modifier = itemModifier,
                             title = stringResource(MR.strings.privacy_policy),
                             onPreferenceClick = { uriHandler.openUri("https://aniyomi.org/privacy/") },
                         )
@@ -288,46 +306,50 @@ object AboutScreen : Screen() {
                     item {
                         Column(
                             modifier = Modifier
+                                .then(itemModifier)
                                 .fillMaxWidth()
                                 .padding(vertical = 8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            Text(
-                                text = "Aniyomi",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Row {
-                                LinkIcon(
-                                    label = stringResource(MR.strings.website),
-                                    icon = Icons.Outlined.Public,
-                                    url = "https://aniyomi.org",
-                                )
-                                LinkIcon(
-                                    label = "Discord",
-                                    icon = CustomIcons.Discord,
-                                    url = "https://discord.gg/F32UjdJZrR",
-                                )
-                                LinkIcon(
-                                    label = "GitHub",
-                                    icon = CustomIcons.Github,
-                                    url = "https://github.com/aniyomiorg/aniyomi",
-                                )
-                            }
-
-                            HorizontalDivider(
+                            Row(
                                 modifier = Modifier
-                                    .padding(vertical = 8.dp)
-                                    .fillMaxWidth(0.5f),
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
-                            )
-
-                            Text(
-                                text = "Tadami",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Row {
+                                    .horizontalScroll(rememberScrollState()),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "Aniyomi",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Row {
+                                    LinkIcon(
+                                        label = stringResource(MR.strings.website),
+                                        icon = Icons.Outlined.Public,
+                                        url = "https://aniyomi.org",
+                                    )
+                                    LinkIcon(
+                                        label = "Discord",
+                                        icon = CustomIcons.Discord,
+                                        url = "https://discord.gg/F32UjdJZrR",
+                                    )
+                                    LinkIcon(
+                                        label = "GitHub",
+                                        icon = CustomIcons.Github,
+                                        url = "https://github.com/aniyomiorg/aniyomi",
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "|",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Tadami",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
                                 LinkIcon(
                                     label = "Tadami",
                                     icon = CustomIcons.Github,

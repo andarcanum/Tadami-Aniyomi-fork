@@ -1,8 +1,6 @@
 package eu.kanade.presentation.library.components
 
 import androidx.compose.ui.unit.dp
-import eu.kanade.tachiyomi.animesource.model.SAnime
-import eu.kanade.tachiyomi.source.model.SManga
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.library.model.LibraryDisplayMode
@@ -89,8 +87,7 @@ class GlowContourLibraryLayoutTest {
         resolveGlowContourCornerIndicatorState(
             hasContinueAction = true,
             remainingCount = 4L,
-            status = SAnime.COMPLETED.toLong(),
-            completedStatus = SAnime.COMPLETED.toLong(),
+            isFinished = true,
         ) shouldBe GlowContourCornerIndicatorState.ContinueAction
     }
 
@@ -99,8 +96,7 @@ class GlowContourLibraryLayoutTest {
         resolveGlowContourCornerIndicatorState(
             hasContinueAction = false,
             remainingCount = 0L,
-            status = SAnime.COMPLETED.toLong(),
-            completedStatus = SAnime.COMPLETED.toLong(),
+            isFinished = true,
         ) shouldBe GlowContourCornerIndicatorState.CompletedJewel
     }
 
@@ -109,8 +105,7 @@ class GlowContourLibraryLayoutTest {
         resolveGlowContourCornerIndicatorState(
             hasContinueAction = false,
             remainingCount = 7L,
-            status = SManga.ONGOING.toLong(),
-            completedStatus = SManga.COMPLETED.toLong(),
+            isFinished = false,
         ) shouldBe GlowContourCornerIndicatorState.NewContentJewel
     }
 
@@ -119,8 +114,7 @@ class GlowContourLibraryLayoutTest {
         resolveGlowContourCornerIndicatorState(
             hasContinueAction = false,
             remainingCount = 0L,
-            status = SManga.ONGOING.toLong(),
-            completedStatus = SManga.COMPLETED.toLong(),
+            isFinished = false,
         ) shouldBe GlowContourCornerIndicatorState.NeutralJewel
     }
 

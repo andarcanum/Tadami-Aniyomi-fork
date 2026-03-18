@@ -371,6 +371,12 @@ private fun NovelLibraryCompactGridItem(
     )
 }
 
+internal fun resolveNovelLibraryCornerIndicatorIsFinished(status: Long): Boolean {
+    return status == SManga.COMPLETED.toLong() ||
+        status == SManga.PUBLISHING_FINISHED.toLong() ||
+        status == SManga.CANCELLED.toLong()
+}
+
 @Composable
 private fun NovelLibraryAuroraCard(
     item: LibraryNovel,
@@ -403,9 +409,7 @@ private fun NovelLibraryAuroraCard(
     val cornerIndicatorState = resolveGlowContourCornerIndicatorState(
         hasContinueAction = onClickContinueReading != null,
         remainingCount = item.unreadCount,
-        isFinished = item.novel.status == SManga.COMPLETED.toLong() ||
-            item.novel.status == SManga.PUBLISHING_FINISHED.toLong() ||
-            item.novel.status == SManga.CANCELLED.toLong(),
+        isFinished = resolveNovelLibraryCornerIndicatorIsFinished(item.novel.status),
     )
     val coverRequest = remember(item.novel.id, item.novel.thumbnailUrl, item.novel.coverLastModified) {
         ImageRequest.Builder(context)
@@ -689,10 +693,10 @@ private fun InlineNovelLibraryHeader(
                             color = colors.textSecondary,
                         )
                     },
-                    leadingIcon = { Icon(Icons.Filled.Search, null, tint = colors.accent) },
+                    leadingIcon = { Icon(Icons.Filled.Search, null, tint = colors.textPrimary) },
                     trailingIcon = {
                         IconButton(onClick = onSearchClose) {
-                            Icon(Icons.Filled.Close, null, tint = colors.accent)
+                            Icon(Icons.Filled.Close, null, tint = colors.textSecondary)
                         }
                     },
                     singleLine = true,
@@ -718,18 +722,18 @@ private fun InlineNovelLibraryHeader(
 
                 Row {
                     IconButton(onClick = onSearchClick) {
-                        Icon(Icons.Filled.Search, null, tint = colors.accent)
+                        Icon(Icons.Filled.Search, null, tint = colors.textPrimary)
                     }
                     IconButton(onClick = onFilterClicked) {
                         Icon(
                             Icons.Filled.FilterList,
                             null,
-                            tint = colors.accent,
+                            tint = if (hasActiveFilters) colors.accent else colors.textSecondary,
                         )
                     }
                     Box {
                         IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Filled.MoreVert, null, tint = colors.accent)
+                            Icon(Icons.Filled.MoreVert, null, tint = colors.textSecondary)
                         }
                         AuroraEntryDropdownMenu(
                             expanded = showMenu,

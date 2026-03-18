@@ -86,7 +86,7 @@ private fun SettingsAuroraHeader(onBackClick: () -> Unit) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = stringResource(AYMR.strings.aurora_back),
-                tint = AuroraTheme.colors.accent,
+                tint = AuroraTheme.colors.textPrimary,
             )
         }
 
@@ -135,7 +135,7 @@ private fun SettingsAuroraItem(
                 modifier = Modifier
                     .size(48.dp)
                     .background(
-                        AuroraTheme.colors.accent.copy(alpha = 0.15f),
+                        AuroraTheme.colors.textPrimary.copy(alpha = 0.10f),
                         RoundedCornerShape(12.dp),
                     ),
                 contentAlignment = Alignment.Center,
@@ -143,7 +143,7 @@ private fun SettingsAuroraItem(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = AuroraTheme.colors.accent,
+                    tint = AuroraTheme.colors.textPrimary,
                     modifier = Modifier.size(24.dp),
                 )
             }

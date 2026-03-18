@@ -181,7 +181,7 @@ internal fun AuroraTopBarIconButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     contentDescription: String,
     modifier: Modifier = Modifier,
-    tint: Color = AuroraTheme.colors.accent,
+    tint: Color = AuroraTheme.colors.textPrimary,
 ) {
     val colors = AuroraTheme.colors
     IconButton(

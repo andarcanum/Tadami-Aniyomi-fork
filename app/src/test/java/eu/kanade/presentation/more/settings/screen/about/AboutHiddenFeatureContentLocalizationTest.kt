@@ -15,7 +15,7 @@ class AboutHiddenFeatureContentLocalizationTest {
         assertEquals("[System Notification]", localized.systemLabel)
         assertEquals("Hidden Chapter: Confession of the Seeker.", localized.title)
         assertEquals(
-            "\"Every time we run from reality into worlds beyond the screen, \" +\n                \"we forget that one day the illusion may look back at us.\"",
+            "\"Every time we run from reality into worlds beyond the screen, \" +\n\"we forget that one day the illusion may look back at us.\"",
             localized.subtitle,
         )
         assertEquals("[ Exit to 3D ]", localized.exitLabel)
