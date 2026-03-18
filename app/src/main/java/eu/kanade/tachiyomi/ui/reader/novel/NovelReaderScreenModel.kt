@@ -265,10 +265,12 @@ class NovelReaderScreenModel(
         }
         val sourceSiteUrl = (source as? NovelSiteSource)?.siteUrl
         rawHtml = withContext(Dispatchers.Default) {
-            prependChapterHeadingIfMissing(
+            val normalizedChapterHtml = prependChapterHeadingIfMissing(
                 rawHtml = html.normalizeStructuredChapterPayload(),
                 chapterName = chapter.name,
             )
+            val sanitizedChapterHtml = sanitizeChapterHtmlForReader(normalizedChapterHtml)
+            if (sanitizedChapterHtml.isBlank()) normalizedChapterHtml else sanitizedChapterHtml
         }
         currentNovel = novel
         currentChapter = chapter
@@ -824,7 +826,9 @@ class NovelReaderScreenModel(
                     rawHtml = nextHtml.normalizeStructuredChapterPayload(),
                     chapterName = nextChapter.name,
                 )
-                val nextTextBlocks = extractTextBlocks(normalizedNextHtml)
+                val sanitizedNextHtml = sanitizeChapterHtmlForReader(normalizedNextHtml)
+                    .ifBlank { normalizedNextHtml }
+                val nextTextBlocks = extractTextBlocks(sanitizedNextHtml)
                 if (nextTextBlocks.isEmpty()) return@runCatching
 
                 val chunkSize = settings.geminiBatchSize.coerceIn(1, 80)
@@ -2733,6 +2737,57 @@ class NovelReaderScreenModel(
             "text",
         )
     }
+}
+
+internal fun sanitizeChapterHtmlForReader(rawHtml: String): String {
+    if (rawHtml.isBlank()) return rawHtml
+
+    val document = Jsoup.parseBodyFragment(rawHtml)
+    document.outputSettings().prettyPrint(false)
+    document.select(
+        "script, style, iframe, svg, canvas, object, embed, form, input, button, select, textarea, noscript, meta, link",
+    ).remove()
+
+    document.select("*").forEach { element ->
+        val attributesToRemove = element.attributes()
+            .asList()
+            .map { it.key }
+            .filter { attributeName -> attributeName.startsWith("on", ignoreCase = true) }
+        attributesToRemove.forEach { attributeName ->
+            element.removeAttr(attributeName)
+        }
+
+        sanitizeReaderInlineStyle(element.attr("style"))?.let { sanitizedStyle ->
+            element.attr("style", sanitizedStyle)
+        } ?: element.removeAttr("style")
+    }
+
+    return document.body().html()
+}
+
+internal fun sanitizeReaderInlineStyle(rawStyle: String): String? {
+    if (rawStyle.isBlank()) return null
+
+    val allowedProperties = setOf(
+        "text-align",
+        "text-indent",
+        "font-style",
+        "font-weight",
+        "text-decoration",
+        "color",
+        "background-color",
+    )
+    val sanitizedDeclarations = rawStyle.split(';')
+        .mapNotNull { declaration ->
+            val delimiterIndex = declaration.indexOf(':')
+            if (delimiterIndex <= 0) return@mapNotNull null
+            val propertyName = declaration.substring(0, delimiterIndex).trim().lowercase(Locale.US)
+            val propertyValue = declaration.substring(delimiterIndex + 1).trim()
+            if (propertyName !in allowedProperties || propertyValue.isBlank()) return@mapNotNull null
+            "$propertyName: $propertyValue"
+        }
+
+    return sanitizedDeclarations.joinToString("; ").ifBlank { null }
 }
 
 internal fun isGeminiSourceLanguageEnglish(sourceLang: String): Boolean {
