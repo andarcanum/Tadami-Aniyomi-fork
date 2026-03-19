@@ -60,6 +60,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
@@ -512,13 +513,19 @@ internal fun AuroraTabRow(
     val scrollState = rememberScrollState()
     val menuBorderBrush = remember { auroraMenuRimLightBrush() }
 
-    // Segmented pill container - adaptive glass background
+    // Tab container - match QuickSourceButton surface
+    val tabContainerColor = if (colors.background.luminance() < 0.5f) {
+        Color.White.copy(alpha = 0.05f)
+    } else {
+        Color.Black.copy(alpha = 0.03f)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .background(
-                colors.glass,
+                tabContainerColor,
                 RoundedCornerShape(28.dp),
             )
             .border(
