@@ -28,7 +28,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Snackbar
@@ -62,7 +61,6 @@ import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.AuroraEntryHoldToRefresh
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionFab
 import eu.kanade.presentation.entries.components.normalizeAuroraGlobalSearchQuery
-import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
 import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
 import eu.kanade.presentation.entries.novel.components.aurora.ChaptersHeader
 import eu.kanade.presentation.entries.novel.components.aurora.FullscreenPosterBackground
@@ -70,6 +68,7 @@ import eu.kanade.presentation.entries.novel.components.aurora.NovelActionCard
 import eu.kanade.presentation.entries.novel.components.aurora.NovelChapterCardCompact
 import eu.kanade.presentation.entries.novel.components.aurora.NovelHeroContent
 import eu.kanade.presentation.entries.novel.components.aurora.NovelInfoCard
+import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
 import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollFloatingActionButton
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollOverlayChrome
@@ -310,7 +309,11 @@ fun NovelScreenAuroraImpl(
                         VerticalFastScroller(
                             listState = chapterListState,
                             onThumbDragStarted = {
-                                if (shouldAutoExpandAuroraNovelChaptersListForFastScroll(chaptersExpanded, chapters.size)) {
+                                if (shouldAutoExpandAuroraNovelChaptersListForFastScroll(
+                                        chaptersExpanded,
+                                        chapters.size,
+                                    )
+                                ) {
                                     chaptersExpanded = true
                                 }
                             },

@@ -73,12 +73,12 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
 import eu.kanade.presentation.components.relativeDateTimeText
 import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
-import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
-import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.entries.components.EntryBottomActionMenu
 import eu.kanade.presentation.entries.components.EntryToolbar
 import eu.kanade.presentation.entries.components.ItemCover
 import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
+import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
+import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.formatChapterNumber
 import eu.kanade.tachiyomi.data.coil.staticBlur
@@ -88,9 +88,9 @@ import me.saket.swipe.SwipeableActionsBox
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.presentation.core.components.VerticalFastScroller
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.components.material.padding
-import tachiyomi.presentation.core.components.VerticalFastScroller
 import tachiyomi.presentation.core.i18n.pluralStringResource
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.theme.active
@@ -366,509 +366,17 @@ fun NovelScreen(
                 modifier = Modifier.padding(paddingValues),
                 state = chapterListState,
             ) {
-            item {
-                val context = LocalContext.current
-                val backdropGradientColors = listOf(
-                    Color.Transparent,
-                    MaterialTheme.colorScheme.background,
-                )
-                val blurRadiusPx = with(LocalDensity.current) { 4.dp.roundToPx() }
-                val fallbackPainter = rememberThemeAwareCoverErrorPainter(variant = AuroraCoverPlaceholderVariant.Wide)
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(
-                                horizontal = MaterialTheme.padding.medium,
-                                vertical = MaterialTheme.padding.small,
-                            ),
-                ) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(context)
-                            .data(state.novel.thumbnailUrl)
-                            .crossfade(true)
-                            .placeholderMemoryCacheKey(state.novel.thumbnailUrl)
-                            .staticBlur(blurRadiusPx, intensityFactor = 0.6f)
-                            .build(),
-                        error = fallbackPainter,
-                        fallback = fallbackPainter,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(220.dp)
-                            .drawWithContent {
-                                drawContent()
-                                drawRect(
-                                    brush = Brush.verticalGradient(colors = backdropGradientColors),
-                                )
-                            }
-                            .alpha(0.2f),
-                    )
-
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isAurora) {
-                                auroraColors.glass
-                            } else {
-                                MaterialTheme.colorScheme.surfaceContainer
-                            },
-                        ),
-                        border = if (isAurora) {
-                            BorderStroke(1.dp, auroraColors.divider.copy(alpha = 0.35f))
-                        } else {
-                            null
-                        },
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(MaterialTheme.padding.medium),
-                            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.medium),
-                        ) {
-                            ItemCover.Book(
-                                data = ImageRequest.Builder(context)
-                                    .data(state.novel.thumbnailUrl)
-                                    .crossfade(true)
-                                    .placeholderMemoryCacheKey(state.novel.thumbnailUrl)
-                                    .build(),
-                                modifier = Modifier.size(width = 112.dp, height = 158.dp),
-                            )
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                Text(
-                                    text = state.novel.title,
-                                    style = MaterialTheme.typography.titleLarge,
-                                    maxLines = 3,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                state.novel.author?.takeIf { it.isNotBlank() }?.let {
-                                    Text(
-                                        text = it,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                    )
-                                }
-                                Text(
-                                    text = state.source.name,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (isAurora) {
-                                        auroraColors.textSecondary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                )
-                                Text(
-                                    text = pluralStringResource(
-                                        MR.plurals.manga_num_chapters,
-                                        totalChapterCount,
-                                        totalChapterCount,
-                                    ),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (isAurora) {
-                                        auroraColors.textSecondary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                )
-                                novelStatusText(state.novel.status)?.let {
-                                    Text(
-                                        text = it,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = if (isAurora) {
-                                            auroraColors.accent
-                                        } else {
-                                            MaterialTheme.colorScheme.primary
-                                        },
-                                    )
-                                }
-                            }
-                        }
-
-                        state.novel.description?.takeIf { it.isNotBlank() }?.let {
-                            Text(
-                                text = it,
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 6,
-                                overflow = TextOverflow.Ellipsis,
-                                color = if (isAurora) {
-                                    auroraColors.textSecondary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(
-                                        start = MaterialTheme.padding.medium,
-                                        end = MaterialTheme.padding.medium,
-                                        bottom = MaterialTheme.padding.medium,
-                                    ),
-                            )
-                        }
-                    }
-                }
-            }
-
-            item {
-                FlowRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(
-                                horizontal = MaterialTheme.padding.medium,
-                                vertical = MaterialTheme.padding.small,
-                            ),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    if (onStartReading != null) {
-                        Button(onClick = onStartReading) {
-                            Text(
-                                text = stringResource(
-                                    if (isReading) MR.strings.action_resume else MR.strings.action_start,
-                                ),
-                            )
-                        }
-                    }
-                    Button(
-                        onClick = onToggleFavorite,
-                        colors = ButtonDefaults.buttonColors(),
-                    ) {
-                        Text(
-                            text = stringResource(
-                                if (state.novel.favorite) {
-                                    MR.strings.remove_from_library
-                                } else {
-                                    MR.strings.add_to_library
-                                },
-                            ),
-                        )
-                    }
-                    TextButton(onClick = onRefresh) {
-                        Icon(imageVector = Icons.Outlined.Refresh, contentDescription = null)
-                    }
-                    TextButton(onClick = onToggleAllChaptersRead) {
-                        Text(
-                            text = stringResource(
-                                if (state.chapters.any { !it.read }) {
-                                    MR.strings.action_mark_as_read
-                                } else {
-                                    MR.strings.action_mark_as_unread
-                                },
-                            ),
-                        )
-                    }
-                    if (onShare != null) {
-                        IconButton(onClick = onShare) {
-                            Icon(imageVector = Icons.Outlined.Share, contentDescription = null)
-                        }
-                    }
-                    TextButton(onClick = onTrackingClicked) {
-                        Icon(
-                            imageVector = if (trackingCount == 0) {
-                                Icons.Outlined.Sync
-                            } else {
-                                Icons.Outlined.Done
-                            },
-                            contentDescription = null,
-                        )
-                        Text(
-                            text = if (trackingCount == 0) {
-                                stringResource(MR.strings.manga_tracking_tab)
-                            } else {
-                                pluralStringResource(MR.plurals.num_trackers, trackingCount, trackingCount)
-                            },
-                            modifier = Modifier.padding(start = 4.dp),
-                        )
-                    }
-                    if (onOpenBatchDownloadDialog != null) {
-                        TextButton(onClick = onOpenBatchDownloadDialog) {
-                            Icon(imageVector = Icons.Outlined.Download, contentDescription = null)
-                            Text(
-                                text = stringResource(MR.strings.manga_download),
-                                modifier = Modifier.padding(start = 4.dp),
-                            )
-                        }
-                    }
-                    if (onOpenTranslatedDownloadDialog != null) {
-                        TextButton(onClick = onOpenTranslatedDownloadDialog) {
-                            Icon(imageVector = Icons.Outlined.Translate, contentDescription = null)
-                            Text(
-                                text = stringResource(AYMR.strings.novel_translated_download_short),
-                                modifier = Modifier.padding(start = 4.dp),
-                            )
-                        }
-                    }
-                    if (onOpenEpubExportDialog != null) {
-                        TextButton(onClick = onOpenEpubExportDialog) {
-                            Icon(imageVector = Icons.AutoMirrored.Outlined.MenuBook, contentDescription = null)
-                            Text(
-                                text = stringResource(AYMR.strings.novel_epub_short),
-                                modifier = Modifier.padding(start = 4.dp),
-                            )
-                        }
-                    }
-                }
-            }
-
-            item(
-                key = NOVEL_CLASSIC_CHAPTERS_HEADER_KEY,
-                contentType = NOVEL_CLASSIC_CHAPTERS_HEADER_KEY,
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(
-                                horizontal = MaterialTheme.padding.medium,
-                                vertical = MaterialTheme.padding.small,
-                            ),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = stringResource(MR.strings.chapters),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    if (state.filterActive) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.FilterList,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.active,
-                                modifier = Modifier.size(16.dp),
-                            )
-                            Text(
-                                text = stringResource(MR.strings.action_filter),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.active,
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (state.showScanlatorSelector) {
                 item {
-                    ScanlatorBranchSelector(
-                        scanlatorChapterCounts = scanlatorChapterCounts,
-                        selectedScanlator = selectedScanlator,
-                        onScanlatorSelected = onScanlatorSelected,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(
-                                horizontal = MaterialTheme.padding.medium,
-                                vertical = MaterialTheme.padding.small,
-                            ),
+                    val context = LocalContext.current
+                    val backdropGradientColors = listOf(
+                        Color.Transparent,
+                        MaterialTheme.colorScheme.background,
                     )
-                }
-            }
-
-            if (chapterPageEnabled) {
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(
-                                horizontal = MaterialTheme.padding.medium,
-                                vertical = MaterialTheme.padding.small,
-                            ),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        IconButton(
-                            onClick = { onChapterPageChange(chapterPageCurrent - 1) },
-                            enabled = !chapterPageLoading && chapterPageCurrent > 1,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.ChevronLeft,
-                                contentDescription = stringResource(MR.strings.spen_previous_page),
-                            )
-                        }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text(
-                                text = "$chapterPageCurrent / $chapterPageTotal",
-                                style = MaterialTheme.typography.labelLarge,
-                            )
-                            if (chapterPageLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp,
-                                )
-                            }
-                        }
-                        IconButton(
-                            onClick = { onChapterPageChange(chapterPageCurrent + 1) },
-                            enabled = !chapterPageLoading && chapterPageCurrent < chapterPageTotal,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.ChevronRight,
-                                contentDescription = stringResource(MR.strings.spen_next_page),
-                            )
-                        }
-                    }
-                }
-            }
-
-            items(
-                items = visibleChapters,
-                key = { it.id },
-            ) { chapter ->
-                val selected = chapter.id in selectedIds
-                val downloaded = chapter.id in state.downloadedChapterIds
-                val downloading = chapter.id in state.downloadingChapterIds
-                val chapterCard: @Composable () -> Unit = {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = MaterialTheme.padding.medium, vertical = 4.dp)
-                            .clip(MaterialTheme.shapes.medium)
-                            .combinedClickable(
-                                onClick = { onChapterClick(chapter.id) },
-                                onLongClick = { onChapterLongClick(chapter.id) },
-                            ),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (selected) {
-                                MaterialTheme.colorScheme.primaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceContainer
-                            },
-                        ),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = MaterialTheme.padding.medium, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                val chapterTitle = when (state.novel.displayMode) {
-                                    DomainNovel.CHAPTER_DISPLAY_NUMBER -> {
-                                        stringResource(
-                                            MR.strings.display_mode_chapter,
-                                            formatChapterNumber(chapter.chapterNumber),
-                                        )
-                                    }
-                                    else -> {
-                                        chapter.name.ifBlank {
-                                            stringResource(
-                                                MR.strings.display_mode_chapter,
-                                                formatChapterNumber(chapter.chapterNumber),
-                                            )
-                                        }
-                                    }
-                                }
-                                Text(
-                                    text = chapterTitle,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    color = if (chapter.read) {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface
-                                    },
-                                )
-                                if (chapter.dateUpload > 0) {
-                                    Text(
-                                        text = relativeDateTimeText(chapter.dateUpload),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                            if (!isAnySelected) {
-                                IconButton(
-                                    onClick = { onChapterDownloadToggle(chapter.id) },
-                                    modifier = Modifier.padding(start = 2.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = when {
-                                            downloading -> Icons.Outlined.FileDownloadOff
-                                            downloaded -> Icons.Outlined.Delete
-                                            else -> Icons.Outlined.Download
-                                        },
-                                        contentDescription = null,
-                                        tint = when {
-                                            downloading -> MaterialTheme.colorScheme.tertiary
-                                            downloaded -> MaterialTheme.colorScheme.error
-                                            else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
-                                    )
-                                }
-                                IconButton(
-                                    onClick = { onChapterBookmarkToggle(chapter.id) },
-                                    modifier = Modifier.padding(start = 2.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Bookmark,
-                                        contentDescription = null,
-                                        tint = if (chapter.bookmark) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
-                                    )
-                                }
-                                IconButton(
-                                    onClick = { onChapterReadToggle(chapter.id) },
-                                    modifier = Modifier.padding(start = 2.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.CheckCircle,
-                                        contentDescription = null,
-                                        tint = if (chapter.read) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (!isAnySelected) {
-                    val startSwipeAction = novelSwipeAction(
-                        action = chapterSwipeStartAction,
-                        read = chapter.read,
-                        bookmark = chapter.bookmark,
-                        downloaded = downloaded,
-                        downloading = downloading,
-                        background = MaterialTheme.colorScheme.primaryContainer,
-                        onSwipe = { onChapterSwipe(chapter.id, chapterSwipeStartAction) },
+                    val blurRadiusPx = with(LocalDensity.current) { 4.dp.roundToPx() }
+                    val fallbackPainter = rememberThemeAwareCoverErrorPainter(
+                        variant = AuroraCoverPlaceholderVariant.Wide,
                     )
-                    val endSwipeAction = novelSwipeAction(
-                        action = chapterSwipeEndAction,
-                        read = chapter.read,
-                        bookmark = chapter.bookmark,
-                        downloaded = downloaded,
-                        downloading = downloading,
-                        background = MaterialTheme.colorScheme.primaryContainer,
-                        onSwipe = { onChapterSwipe(chapter.id, chapterSwipeEndAction) },
-                    )
-                    SwipeableActionsBox(
-                        modifier = Modifier.clipToBounds(),
-                        startActions = listOfNotNull(startSwipeAction),
-                        endActions = listOfNotNull(endSwipeAction),
-                        swipeThreshold = novelSwipeActionThreshold,
-                        backgroundUntilSwipeThreshold = MaterialTheme.colorScheme.surfaceContainerLowest,
-                    ) {
-                        chapterCard()
-                    }
-                } else {
-                    chapterCard()
-                }
-            }
-            if (visibleChapterCount < chapters.size) {
-                item {
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -876,25 +384,519 @@ fun NovelScreen(
                                 horizontal = MaterialTheme.padding.medium,
                                 vertical = MaterialTheme.padding.small,
                             ),
-                        contentAlignment = Alignment.Center,
                     ) {
-                        Button(
-                            onClick = {
-                                visibleChapterCount = nextVisibleChapterCount(
-                                    currentCount = visibleChapterCount,
-                                    totalCount = chapters.size,
-                                    step = NOVEL_CHAPTERS_PAGE_SIZE,
-                                )
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(state.novel.thumbnailUrl)
+                                .crossfade(true)
+                                .placeholderMemoryCacheKey(state.novel.thumbnailUrl)
+                                .staticBlur(blurRadiusPx, intensityFactor = 0.6f)
+                                .build(),
+                            error = fallbackPainter,
+                            fallback = fallbackPainter,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp)
+                                .drawWithContent {
+                                    drawContent()
+                                    drawRect(
+                                        brush = Brush.verticalGradient(colors = backdropGradientColors),
+                                    )
+                                }
+                                .alpha(0.2f),
+                        )
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isAurora) {
+                                    auroraColors.glass
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainer
+                                },
+                            ),
+                            border = if (isAurora) {
+                                BorderStroke(1.dp, auroraColors.divider.copy(alpha = 0.35f))
+                            } else {
+                                null
                             },
                         ) {
-                            Text(
-                                text = "${stringResource(MR.strings.label_more)} " +
-                                    "(${chapters.size - visibleChapterCount})",
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(MaterialTheme.padding.medium),
+                                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.medium),
+                            ) {
+                                ItemCover.Book(
+                                    data = ImageRequest.Builder(context)
+                                        .data(state.novel.thumbnailUrl)
+                                        .crossfade(true)
+                                        .placeholderMemoryCacheKey(state.novel.thumbnailUrl)
+                                        .build(),
+                                    modifier = Modifier.size(width = 112.dp, height = 158.dp),
+                                )
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Text(
+                                        text = state.novel.title,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    state.novel.author?.takeIf { it.isNotBlank() }?.let {
+                                        Text(
+                                            text = it,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                    }
+                                    Text(
+                                        text = state.source.name,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (isAurora) {
+                                            auroraColors.textSecondary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                    )
+                                    Text(
+                                        text = pluralStringResource(
+                                            MR.plurals.manga_num_chapters,
+                                            totalChapterCount,
+                                            totalChapterCount,
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (isAurora) {
+                                            auroraColors.textSecondary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                    )
+                                    novelStatusText(state.novel.status)?.let {
+                                        Text(
+                                            text = it,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (isAurora) {
+                                                auroraColors.accent
+                                            } else {
+                                                MaterialTheme.colorScheme.primary
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+
+                            state.novel.description?.takeIf { it.isNotBlank() }?.let {
+                                Text(
+                                    text = it,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 6,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = if (isAurora) {
+                                        auroraColors.textSecondary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            start = MaterialTheme.padding.medium,
+                                            end = MaterialTheme.padding.medium,
+                                            bottom = MaterialTheme.padding.medium,
+                                        ),
+                                )
+                            }
                         }
                     }
                 }
-            }
+
+                item {
+                    FlowRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal = MaterialTheme.padding.medium,
+                                vertical = MaterialTheme.padding.small,
+                            ),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        if (onStartReading != null) {
+                            Button(onClick = onStartReading) {
+                                Text(
+                                    text = stringResource(
+                                        if (isReading) MR.strings.action_resume else MR.strings.action_start,
+                                    ),
+                                )
+                            }
+                        }
+                        Button(
+                            onClick = onToggleFavorite,
+                            colors = ButtonDefaults.buttonColors(),
+                        ) {
+                            Text(
+                                text = stringResource(
+                                    if (state.novel.favorite) {
+                                        MR.strings.remove_from_library
+                                    } else {
+                                        MR.strings.add_to_library
+                                    },
+                                ),
+                            )
+                        }
+                        TextButton(onClick = onRefresh) {
+                            Icon(imageVector = Icons.Outlined.Refresh, contentDescription = null)
+                        }
+                        TextButton(onClick = onToggleAllChaptersRead) {
+                            Text(
+                                text = stringResource(
+                                    if (state.chapters.any { !it.read }) {
+                                        MR.strings.action_mark_as_read
+                                    } else {
+                                        MR.strings.action_mark_as_unread
+                                    },
+                                ),
+                            )
+                        }
+                        if (onShare != null) {
+                            IconButton(onClick = onShare) {
+                                Icon(imageVector = Icons.Outlined.Share, contentDescription = null)
+                            }
+                        }
+                        TextButton(onClick = onTrackingClicked) {
+                            Icon(
+                                imageVector = if (trackingCount == 0) {
+                                    Icons.Outlined.Sync
+                                } else {
+                                    Icons.Outlined.Done
+                                },
+                                contentDescription = null,
+                            )
+                            Text(
+                                text = if (trackingCount == 0) {
+                                    stringResource(MR.strings.manga_tracking_tab)
+                                } else {
+                                    pluralStringResource(MR.plurals.num_trackers, trackingCount, trackingCount)
+                                },
+                                modifier = Modifier.padding(start = 4.dp),
+                            )
+                        }
+                        if (onOpenBatchDownloadDialog != null) {
+                            TextButton(onClick = onOpenBatchDownloadDialog) {
+                                Icon(imageVector = Icons.Outlined.Download, contentDescription = null)
+                                Text(
+                                    text = stringResource(MR.strings.manga_download),
+                                    modifier = Modifier.padding(start = 4.dp),
+                                )
+                            }
+                        }
+                        if (onOpenTranslatedDownloadDialog != null) {
+                            TextButton(onClick = onOpenTranslatedDownloadDialog) {
+                                Icon(imageVector = Icons.Outlined.Translate, contentDescription = null)
+                                Text(
+                                    text = stringResource(AYMR.strings.novel_translated_download_short),
+                                    modifier = Modifier.padding(start = 4.dp),
+                                )
+                            }
+                        }
+                        if (onOpenEpubExportDialog != null) {
+                            TextButton(onClick = onOpenEpubExportDialog) {
+                                Icon(imageVector = Icons.AutoMirrored.Outlined.MenuBook, contentDescription = null)
+                                Text(
+                                    text = stringResource(AYMR.strings.novel_epub_short),
+                                    modifier = Modifier.padding(start = 4.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item(
+                    key = NOVEL_CLASSIC_CHAPTERS_HEADER_KEY,
+                    contentType = NOVEL_CLASSIC_CHAPTERS_HEADER_KEY,
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal = MaterialTheme.padding.medium,
+                                vertical = MaterialTheme.padding.small,
+                            ),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(MR.strings.chapters),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        if (state.filterActive) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.FilterList,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.active,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                                Text(
+                                    text = stringResource(MR.strings.action_filter),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.active,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (state.showScanlatorSelector) {
+                    item {
+                        ScanlatorBranchSelector(
+                            scanlatorChapterCounts = scanlatorChapterCounts,
+                            selectedScanlator = selectedScanlator,
+                            onScanlatorSelected = onScanlatorSelected,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    horizontal = MaterialTheme.padding.medium,
+                                    vertical = MaterialTheme.padding.small,
+                                ),
+                        )
+                    }
+                }
+
+                if (chapterPageEnabled) {
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    horizontal = MaterialTheme.padding.medium,
+                                    vertical = MaterialTheme.padding.small,
+                                ),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            IconButton(
+                                onClick = { onChapterPageChange(chapterPageCurrent - 1) },
+                                enabled = !chapterPageLoading && chapterPageCurrent > 1,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.ChevronLeft,
+                                    contentDescription = stringResource(MR.strings.spen_previous_page),
+                                )
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Text(
+                                    text = "$chapterPageCurrent / $chapterPageTotal",
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                                if (chapterPageLoading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                    )
+                                }
+                            }
+                            IconButton(
+                                onClick = { onChapterPageChange(chapterPageCurrent + 1) },
+                                enabled = !chapterPageLoading && chapterPageCurrent < chapterPageTotal,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.ChevronRight,
+                                    contentDescription = stringResource(MR.strings.spen_next_page),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                items(
+                    items = visibleChapters,
+                    key = { it.id },
+                ) { chapter ->
+                    val selected = chapter.id in selectedIds
+                    val downloaded = chapter.id in state.downloadedChapterIds
+                    val downloading = chapter.id in state.downloadingChapterIds
+                    val chapterCard: @Composable () -> Unit = {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = MaterialTheme.padding.medium, vertical = 4.dp)
+                                .clip(MaterialTheme.shapes.medium)
+                                .combinedClickable(
+                                    onClick = { onChapterClick(chapter.id) },
+                                    onLongClick = { onChapterLongClick(chapter.id) },
+                                ),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (selected) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainer
+                                },
+                            ),
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = MaterialTheme.padding.medium, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    val chapterTitle = when (state.novel.displayMode) {
+                                        DomainNovel.CHAPTER_DISPLAY_NUMBER -> {
+                                            stringResource(
+                                                MR.strings.display_mode_chapter,
+                                                formatChapterNumber(chapter.chapterNumber),
+                                            )
+                                        }
+                                        else -> {
+                                            chapter.name.ifBlank {
+                                                stringResource(
+                                                    MR.strings.display_mode_chapter,
+                                                    formatChapterNumber(chapter.chapterNumber),
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Text(
+                                        text = chapterTitle,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = if (chapter.read) {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        },
+                                    )
+                                    if (chapter.dateUpload > 0) {
+                                        Text(
+                                            text = relativeDateTimeText(chapter.dateUpload),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                                if (!isAnySelected) {
+                                    IconButton(
+                                        onClick = { onChapterDownloadToggle(chapter.id) },
+                                        modifier = Modifier.padding(start = 2.dp),
+                                    ) {
+                                        Icon(
+                                            imageVector = when {
+                                                downloading -> Icons.Outlined.FileDownloadOff
+                                                downloaded -> Icons.Outlined.Delete
+                                                else -> Icons.Outlined.Download
+                                            },
+                                            contentDescription = null,
+                                            tint = when {
+                                                downloading -> MaterialTheme.colorScheme.tertiary
+                                                downloaded -> MaterialTheme.colorScheme.error
+                                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { onChapterBookmarkToggle(chapter.id) },
+                                        modifier = Modifier.padding(start = 2.dp),
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Bookmark,
+                                            contentDescription = null,
+                                            tint = if (chapter.bookmark) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { onChapterReadToggle(chapter.id) },
+                                        modifier = Modifier.padding(start = 2.dp),
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.CheckCircle,
+                                            contentDescription = null,
+                                            tint = if (chapter.read) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (!isAnySelected) {
+                        val startSwipeAction = novelSwipeAction(
+                            action = chapterSwipeStartAction,
+                            read = chapter.read,
+                            bookmark = chapter.bookmark,
+                            downloaded = downloaded,
+                            downloading = downloading,
+                            background = MaterialTheme.colorScheme.primaryContainer,
+                            onSwipe = { onChapterSwipe(chapter.id, chapterSwipeStartAction) },
+                        )
+                        val endSwipeAction = novelSwipeAction(
+                            action = chapterSwipeEndAction,
+                            read = chapter.read,
+                            bookmark = chapter.bookmark,
+                            downloaded = downloaded,
+                            downloading = downloading,
+                            background = MaterialTheme.colorScheme.primaryContainer,
+                            onSwipe = { onChapterSwipe(chapter.id, chapterSwipeEndAction) },
+                        )
+                        SwipeableActionsBox(
+                            modifier = Modifier.clipToBounds(),
+                            startActions = listOfNotNull(startSwipeAction),
+                            endActions = listOfNotNull(endSwipeAction),
+                            swipeThreshold = novelSwipeActionThreshold,
+                            backgroundUntilSwipeThreshold = MaterialTheme.colorScheme.surfaceContainerLowest,
+                        ) {
+                            chapterCard()
+                        }
+                    } else {
+                        chapterCard()
+                    }
+                }
+                if (visibleChapterCount < chapters.size) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    horizontal = MaterialTheme.padding.medium,
+                                    vertical = MaterialTheme.padding.small,
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Button(
+                                onClick = {
+                                    visibleChapterCount = nextVisibleChapterCount(
+                                        currentCount = visibleChapterCount,
+                                        totalCount = chapters.size,
+                                        step = NOVEL_CHAPTERS_PAGE_SIZE,
+                                    )
+                                },
+                            ) {
+                                Text(
+                                    text = "${stringResource(MR.strings.label_more)} " +
+                                        "(${chapters.size - visibleChapterCount})",
+                                )
+                            }
+                        }
+                    }
+                }
                 item { Spacer(modifier = Modifier.height(MaterialTheme.padding.small)) }
             }
         }

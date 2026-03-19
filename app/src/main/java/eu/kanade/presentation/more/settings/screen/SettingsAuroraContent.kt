@@ -80,11 +80,11 @@ private fun SettingsAuroraHeader(onBackClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val tabContainerColor = if (AuroraTheme.colors.background.luminance() < 0.5f) {
-        Color.White.copy(alpha = 0.05f)
-    } else {
-        Color.Black.copy(alpha = 0.03f)
-    }
-    IconButton(
+            Color.White.copy(alpha = 0.05f)
+        } else {
+            Color.Black.copy(alpha = 0.03f)
+        }
+        IconButton(
             onClick = onBackClick,
             modifier = Modifier
                 .background(tabContainerColor, CircleShape)

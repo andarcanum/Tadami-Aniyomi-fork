@@ -22,11 +22,11 @@ import kotlinx.coroutines.yield
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.io.IOException
-import tachiyomi.data.extension.novel.toInstalled
 import tachiyomi.core.common.preference.Preference
+import tachiyomi.data.extension.novel.toInstalled
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 import tachiyomi.domain.source.novel.model.StubNovelSource
+import java.io.IOException
 
 class NovelExtensionsScreenModelTest {
 

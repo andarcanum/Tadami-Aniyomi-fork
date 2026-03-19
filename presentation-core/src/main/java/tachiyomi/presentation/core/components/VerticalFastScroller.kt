@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyListItemInfo
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyGridState
@@ -45,7 +44,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.util.fastFirstOrNull
 import androidx.compose.ui.util.fastForEach
 import androidx.compose.ui.util.fastMaxBy
 import kotlinx.coroutines.FlowPreview
@@ -225,7 +223,8 @@ fun VerticalFastScroller(
                                 isThumbVisible = isThumbVisible,
                                 isThumbDragged = isThumbDragged,
                                 isScrollInProgress = listState.isScrollInProgress,
-                            )) {
+                            )
+                        ) {
                             Modifier.draggable(
                                 interactionSource = dragInteractionSource,
                                 orientation = Orientation.Vertical,
@@ -247,7 +246,8 @@ fun VerticalFastScroller(
                                 isThumbVisible = isThumbVisible,
                                 isThumbDragged = isThumbDragged,
                                 isScrollInProgress = listState.isScrollInProgress,
-                            )) {
+                            )
+                        ) {
                             Modifier.systemGestureExclusion()
                         } else {
                             Modifier
@@ -443,7 +443,8 @@ fun VerticalGridFastScroller(
                                 isThumbVisible = isThumbVisible,
                                 isThumbDragged = isThumbDragged,
                                 isScrollInProgress = state.isScrollInProgress,
-                            )) {
+                            )
+                        ) {
                             Modifier.draggable(
                                 interactionSource = dragInteractionSource,
                                 orientation = Orientation.Vertical,
@@ -465,7 +466,8 @@ fun VerticalGridFastScroller(
                                 isThumbVisible = isThumbVisible,
                                 isThumbDragged = isThumbDragged,
                                 isScrollInProgress = state.isScrollInProgress,
-                            )) {
+                            )
+                        ) {
                             Modifier.systemGestureExclusion()
                         } else {
                             Modifier

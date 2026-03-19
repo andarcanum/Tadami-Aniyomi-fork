@@ -44,4 +44,3 @@ class NovelReaderChapterHtmlSanitizerTest {
         sanitizeReaderInlineStyle("position: fixed; float: left; display: grid") shouldBe null
     }
 }
-

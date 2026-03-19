@@ -247,7 +247,11 @@ class ReaderViewModel @JvmOverloads constructor(
                     currentChapter.requestedPage = chapterPageIndex
                     currentChapter.requestedPageOffset = 0
                     currentChapter.requestedPageOffsetRatioPpm = null
-                } else if (shouldRestoreSavedProgress(currentChapter, readerPreferences.preserveReadingPosition().get())) {
+                } else if (shouldRestoreSavedProgress(
+                        currentChapter,
+                        readerPreferences.preserveReadingPosition().get(),
+                    )
+                ) {
                     applySavedProgress(currentChapter)
                 }
                 chapterId = currentChapter.chapter.id!!
