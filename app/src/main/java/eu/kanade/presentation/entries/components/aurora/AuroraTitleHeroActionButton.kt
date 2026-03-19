@@ -1,6 +1,8 @@
 package eu.kanade.presentation.entries.components.aurora
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -50,6 +52,7 @@ internal data class AuroraTitleHeroCtaSurfaceSpec(
     val usesGradient: Boolean,
     val innerGlowAlpha: Float,
     val highlightAlpha: Float,
+    val borderAlpha: Float,
 )
 
 internal fun resolveAuroraTitleHeroCtaVisualMode(
@@ -67,16 +70,18 @@ internal fun resolveAuroraTitleHeroCtaSurfaceSpec(
 ): AuroraTitleHeroCtaSurfaceSpec {
     return when (mode) {
         AuroraTitleHeroCtaMode.Aurora -> AuroraTitleHeroCtaSurfaceSpec(
-            containerAlpha = if (isDark) 0.82f else 0.78f,
+            containerAlpha = if (isDark) 0.50f else 0.45f,
             usesGradient = false,
-            innerGlowAlpha = if (isDark) 0.42f else 0.34f,
-            highlightAlpha = if (isDark) 0.18f else 0.14f,
+            innerGlowAlpha = if (isDark) 0.55f else 0.45f,
+            highlightAlpha = 0f,
+            borderAlpha = 0.12f,
         )
         AuroraTitleHeroCtaMode.Classic -> AuroraTitleHeroCtaSurfaceSpec(
             containerAlpha = 1f,
             usesGradient = false,
             innerGlowAlpha = 0f,
             highlightAlpha = 0f,
+            borderAlpha = 0f,
         )
     }
 }
@@ -145,6 +150,19 @@ private fun AuroraTitleHeroActionSurface(
                 brush = auroraHighlightBrush,
                 alpha = if (visualMode == AuroraTitleHeroCtaVisualMode.AuroraGlass) 1f else 0f,
             )
+            .let { base ->
+                if (surfaceSpec.borderAlpha > 0f) {
+                    base.border(
+                        BorderStroke(
+                            width = 1.dp,
+                            color = Color.White.copy(alpha = surfaceSpec.borderAlpha),
+                        ),
+                        shape,
+                    )
+                } else {
+                    base
+                }
+            }
             .clickable(onClick = onClick)
             .padding(contentPadding),
         contentAlignment = Alignment.Center,

@@ -304,11 +304,11 @@ internal fun resolveHomeHubHeroButtonSurfaceSpec(
 ): HomeHubHeroButtonSurfaceSpec {
     return when (mode) {
         HomeHeroCtaMode.Aurora -> HomeHubHeroButtonSurfaceSpec(
-            containerAlpha = if (isDark) 0.35f else 0.30f,
+            containerAlpha = if (isDark) 0.50f else 0.45f,
             usesGradient = false,
-            borderAlpha = 0.08f,
-            innerGlowAlpha = if (isDark) 0.42f else 0.34f,
-            highlightAlpha = if (isDark) 0.18f else 0.14f,
+            borderAlpha = 0.12f,
+            innerGlowAlpha = if (isDark) 0.55f else 0.45f,
+            highlightAlpha = 0f,
         )
         HomeHeroCtaMode.Classic -> HomeHubHeroButtonSurfaceSpec(
             containerAlpha = 1f,
@@ -2441,16 +2441,7 @@ private fun HeroSection(
     }
     val actionButtonBrush = remember(colors, buttonVisualMode, actionButtonSurfaceSpec) {
         when (buttonVisualMode) {
-            HomeHubHeroButtonVisualMode.ClassicSolid -> {
-                Brush.linearGradient(
-                    colors = listOf(
-                        lerp(colors.accent, Color.White, 0.16f),
-                        lerp(colors.accent, Color.Black, 0.08f),
-                    ),
-                    start = Offset(0f, 0f),
-                    end = Offset(0f, 420f),
-                )
-            }
+            HomeHubHeroButtonVisualMode.ClassicSolid -> SolidColor(colors.accent)
             HomeHubHeroButtonVisualMode.AuroraGlass -> SolidColor(
                 colors.accent.copy(alpha = actionButtonSurfaceSpec.containerAlpha),
             )
