@@ -475,13 +475,6 @@ fun NovelScreenAuroraImpl(
                             contentDescription = null,
                             iconTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f),
                         )
-                        if (!isFromSource) {
-                            AuroraActionButton(
-                                onClick = onRefresh,
-                                icon = Icons.Default.Refresh,
-                                contentDescription = null,
-                            )
-                        }
                         if (onWebView != null) {
                             AuroraActionButton(
                                 onClick = onWebView,
@@ -491,11 +484,7 @@ fun NovelScreenAuroraImpl(
                         }
 
                         var showMenu by remember { mutableStateOf(false) }
-                        val hasMenuActions = if (isFromSource) {
-                            true
-                        } else {
-                            onShare != null || onMigrateClicked != null || globalSearchQuery != null
-                        }
+                        val hasMenuActions = true
                         if (hasMenuActions) {
                             Box(contentAlignment = Alignment.TopEnd) {
                                 AuroraActionButton(
@@ -541,6 +530,13 @@ fun NovelScreenAuroraImpl(
                                             )
                                         }
                                     } else {
+                                        AuroraEntryDropdownMenuItem(
+                                            text = stringResource(MR.strings.action_webview_refresh),
+                                            onClick = {
+                                                onRefresh()
+                                                showMenu = false
+                                            },
+                                        )
                                         if (globalSearchQuery != null) {
                                             AuroraEntryDropdownMenuItem(
                                                 text = stringResource(MR.strings.action_global_search),
@@ -875,14 +871,6 @@ fun NovelScreenAuroraImpl(
                         iconTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f),
                     )
 
-                    if (!isFromSource) {
-                        AuroraActionButton(
-                            onClick = onRefresh,
-                            icon = Icons.Default.Refresh,
-                            contentDescription = null,
-                        )
-                    }
-
                     if (onWebView != null) {
                         AuroraActionButton(
                             onClick = onWebView,
@@ -892,11 +880,7 @@ fun NovelScreenAuroraImpl(
                     }
 
                     var showMenu by remember { mutableStateOf(false) }
-                    val hasMenuActions = if (isFromSource) {
-                        true
-                    } else {
-                        onShare != null || onMigrateClicked != null || globalSearchQuery != null
-                    }
+                    val hasMenuActions = true
                     if (hasMenuActions) {
                         Box(contentAlignment = Alignment.TopEnd) {
                             AuroraActionButton(
@@ -943,6 +927,13 @@ fun NovelScreenAuroraImpl(
                                         )
                                     }
                                 } else {
+                                    AuroraEntryDropdownMenuItem(
+                                        text = stringResource(MR.strings.action_webview_refresh),
+                                        onClick = {
+                                            onRefresh()
+                                            showMenu = false
+                                        },
+                                    )
                                     if (globalSearchQuery != null) {
                                         AuroraEntryDropdownMenuItem(
                                             text = stringResource(MR.strings.action_global_search),
