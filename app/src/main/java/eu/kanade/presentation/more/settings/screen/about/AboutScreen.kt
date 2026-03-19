@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -304,6 +305,7 @@ object AboutScreen : Screen() {
                     }
 
                     item {
+                        val footerSections = remember { buildAboutFooterSections() }
                         Column(
                             modifier = Modifier
                                 .then(itemModifier)
@@ -312,49 +314,26 @@ object AboutScreen : Screen() {
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             Row(
-                                modifier = Modifier
-                                    .horizontalScroll(rememberScrollState()),
+                                modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(
-                                    text = "Aniyomi",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                                Row {
-                                    LinkIcon(
-                                        label = stringResource(MR.strings.website),
-                                        icon = Icons.Outlined.Public,
-                                        url = "https://aniyomi.org",
-                                    )
-                                    LinkIcon(
-                                        label = "Discord",
-                                        icon = CustomIcons.Discord,
-                                        url = "https://discord.gg/F32UjdJZrR",
-                                    )
-                                    LinkIcon(
-                                        label = "GitHub",
-                                        icon = CustomIcons.Github,
-                                        url = "https://github.com/aniyomiorg/aniyomi",
-                                    )
+                                Box(
+                                    modifier = Modifier.weight(1f),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    AboutFooterLinkSectionContent(section = footerSections.first())
                                 }
-                                Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = "|",
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Tadami",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                                LinkIcon(
-                                    label = "Tadami",
-                                    icon = CustomIcons.Github,
-                                    url = "https://github.com/andarcanum/Tadami-Aniyomi-fork",
-                                )
+                                Box(
+                                    modifier = Modifier.weight(1f),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    AboutFooterLinkSectionContent(section = footerSections.last())
+                                }
                             }
                         }
                     }
@@ -485,6 +464,104 @@ object AboutScreen : Screen() {
             BuildConfig.BUILD_TIME
         }
     }
+}
+
+@Composable
+private fun AboutFooterLinkSectionContent(section: AboutFooterLinkSection) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = section.title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            section.links.forEach { link ->
+                LinkIcon(
+                    label = aboutFooterLinkLabel(link.label),
+                    icon = aboutFooterLinkIcon(link.icon),
+                    url = link.url,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun aboutFooterLinkLabel(label: AboutFooterLinkLabel): String = when (label) {
+    AboutFooterLinkLabel.Website -> stringResource(MR.strings.website)
+    AboutFooterLinkLabel.Discord -> "Discord"
+    AboutFooterLinkLabel.GitHub -> "GitHub"
+    AboutFooterLinkLabel.Tadami -> "Tadami"
+}
+
+private fun aboutFooterLinkIcon(icon: AboutFooterLinkIcon) = when (icon) {
+    AboutFooterLinkIcon.Website -> Icons.Outlined.Public
+    AboutFooterLinkIcon.Discord -> CustomIcons.Discord
+    AboutFooterLinkIcon.Github -> CustomIcons.Github
+}
+
+internal fun buildAboutFooterSections(): List<AboutFooterLinkSection> {
+    return listOf(
+        AboutFooterLinkSection(
+            title = "Aniyomi",
+            links = listOf(
+                AboutFooterLink(
+                    label = AboutFooterLinkLabel.Website,
+                    icon = AboutFooterLinkIcon.Website,
+                    url = "https://aniyomi.org",
+                ),
+                AboutFooterLink(
+                    label = AboutFooterLinkLabel.Discord,
+                    icon = AboutFooterLinkIcon.Discord,
+                    url = "https://discord.gg/F32UjdJZrR",
+                ),
+                AboutFooterLink(
+                    label = AboutFooterLinkLabel.GitHub,
+                    icon = AboutFooterLinkIcon.Github,
+                    url = "https://github.com/aniyomiorg/aniyomi",
+                ),
+            ),
+        ),
+        AboutFooterLinkSection(
+            title = "Tadami",
+            links = listOf(
+                AboutFooterLink(
+                    label = AboutFooterLinkLabel.Tadami,
+                    icon = AboutFooterLinkIcon.Github,
+                    url = "https://github.com/andarcanum/Tadami-Aniyomi-fork",
+                ),
+            ),
+        ),
+    )
+}
+
+internal data class AboutFooterLinkSection(
+    val title: String,
+    val links: List<AboutFooterLink>,
+)
+
+internal data class AboutFooterLink(
+    val label: AboutFooterLinkLabel,
+    val icon: AboutFooterLinkIcon,
+    val url: String,
+)
+
+internal enum class AboutFooterLinkLabel {
+    Website,
+    Discord,
+    GitHub,
+    Tadami,
+}
+
+internal enum class AboutFooterLinkIcon {
+    Website,
+    Discord,
+    Github,
 }
 
 internal fun buildAboutVersionSubtitle(normalVersionName: String, isPrimed: Boolean): String {
