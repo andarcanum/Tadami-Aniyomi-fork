@@ -265,6 +265,52 @@ class NovelLibraryScreenModelTest {
         screenModel.getNextUnreadChapter(novel)?.id shouldBe 102L
     }
 
+    @Test
+    fun `fully read series resumes the last touched chapter`() = runTest(testDispatcher) {
+        val novel = Novel.create().copy(
+            id = 10L,
+            title = "Novel",
+            source = 1L,
+            chapterFlags = Novel.CHAPTER_SORTING_NUMBER or Novel.CHAPTER_SORT_DESC,
+        )
+        coEvery {
+            chapterRepository.getChapterByNovelId(novelId = novel.id, applyScanlatorFilter = true)
+        } returns listOf(
+            novelChapter(
+                id = 101L,
+                novelId = novel.id,
+                sourceOrder = 0L,
+                chapterNumber = 100.0,
+                read = true,
+            ),
+            novelChapter(
+                id = 102L,
+                novelId = novel.id,
+                sourceOrder = 1L,
+                chapterNumber = 1.0,
+                read = true,
+            ),
+            novelChapter(
+                id = 103L,
+                novelId = novel.id,
+                sourceOrder = 2L,
+                chapterNumber = 2.0,
+                read = true,
+            ),
+        )
+
+        val screenModel = trackedNovelLibraryScreenModel(
+            getLibraryNovel = getLibraryNovel,
+            chapterRepository = chapterRepository,
+            basePreferences = basePreferences,
+            libraryPreferences = libraryPreferences,
+            hasDownloadedChapters = { false },
+            downloadedIdsDispatcher = testDispatcher,
+        )
+
+        screenModel.getNextUnreadChapter(novel)?.id shouldBe 103L
+    }
+
     private fun trackedNovelLibraryScreenModel(
         getLibraryNovel: GetLibraryNovel,
         chapterRepository: NovelChapterRepository,

@@ -689,7 +689,11 @@ class NovelReaderScreenModel(
         val reachedReadThreshold = totalItems > 1 &&
             ((currentIndex + 1).toFloat() / totalItems.toFloat()) >= readThreshold
         val shouldPersistRead = (lastSavedRead == true) || chapter.read || reachedReadThreshold
-        val newProgress = if (shouldPersistRead) 0L else resolvedPersistedProgress
+        val newProgress = if (shouldPersistRead) {
+            maxOf(lastSavedProgress ?: 0L, resolvedPersistedProgress)
+        } else {
+            resolvedPersistedProgress
+        }
 
         maybePrefetchNextChapterOnProgress(
             currentIndex = currentIndex,

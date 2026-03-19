@@ -118,9 +118,11 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.category.model.Category
@@ -437,8 +439,10 @@ data object AnimeLibraryTab : Tab {
                         }
                     },
                     onContinueReadingClicked = { item: LibraryNovel ->
-                        scope.launchIO {
-                            val chapter = novelScreenModel.getNextUnreadChapter(item.novel)
+                        scope.launch {
+                            val chapter = withContext(Dispatchers.IO) {
+                                novelScreenModel.getNextUnreadChapter(item.novel)
+                            }
                             if (chapter != null) {
                                 navigator.push(NovelReaderScreen(chapter.id))
                             } else {

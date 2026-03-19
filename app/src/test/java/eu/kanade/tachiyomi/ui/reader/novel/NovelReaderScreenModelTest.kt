@@ -1170,7 +1170,7 @@ class NovelReaderScreenModelTest {
             yield()
 
             chapterRepo.lastUpdate?.read shouldBe true
-            chapterRepo.lastUpdate?.lastPageRead shouldBe 0L
+            chapterRepo.lastUpdate?.lastPageRead shouldBe 9L
         }
     }
 
@@ -1210,7 +1210,7 @@ class NovelReaderScreenModelTest {
             screenModel.updateReadingProgress(currentIndex = 99, totalItems = 100, persistedProgress = 99L)
             yield()
             chapterRepo.lastUpdate?.read shouldBe true
-            chapterRepo.lastUpdate?.lastPageRead shouldBe 0L
+            chapterRepo.lastUpdate?.lastPageRead shouldBe 99L
         }
     }
 
@@ -1281,13 +1281,50 @@ class NovelReaderScreenModelTest {
             screenModel.updateReadingProgress(currentIndex = 99, totalItems = 100)
             yield()
             chapterRepo.lastUpdate?.read shouldBe true
-            chapterRepo.lastUpdate?.lastPageRead shouldBe 0L
+            chapterRepo.lastUpdate?.lastPageRead shouldBe 99L
 
             screenModel.updateReadingProgress(currentIndex = 0, totalItems = 100)
             yield()
 
             chapterRepo.lastUpdate?.read shouldBe true
-            chapterRepo.lastUpdate?.lastPageRead shouldBe 0L
+            chapterRepo.lastUpdate?.lastPageRead shouldBe 99L
+        }
+    }
+
+    @Test
+    fun `read chapter keeps saved progress when stale callback arrives`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+                read = true,
+                lastPageRead = 99L,
+            )
+            val chapterRepo = FakeNovelChapterRepository(chapter)
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = chapterRepo,
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            screenModel.updateReadingProgress(currentIndex = 0, totalItems = 100)
+            yield()
+
+            chapterRepo.lastUpdate shouldBe null
         }
     }
 
@@ -1406,7 +1443,7 @@ class NovelReaderScreenModelTest {
             screenModel.updateReadingProgress(currentIndex = 9, totalItems = 10)
             yield()
             chapterRepo.lastUpdate?.read shouldBe true
-            chapterRepo.lastUpdate?.lastPageRead shouldBe 0L
+            chapterRepo.lastUpdate?.lastPageRead shouldBe 9L
         }
     }
 

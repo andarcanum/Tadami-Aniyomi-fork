@@ -183,7 +183,7 @@ fun NovelScreenAuroraImpl(
                 TwoPanelBox(
                     modifier = Modifier
                         .fillMaxSize()
-                        .zIndex(1f),
+                        .zIndex(2f),
                     startContent = {
                         Column(
                             modifier = Modifier
@@ -759,12 +759,13 @@ fun NovelScreenAuroraImpl(
             val heroThreshold = (screenHeight.value * 0.7f).toInt()
             if (firstVisibleItemIndex == 0 && scrollOffset < heroThreshold) {
                 val heroAlpha = (1f - (scrollOffset / heroThreshold.toFloat())).coerceIn(0f, 1f)
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer { alpha = heroAlpha },
-                    contentAlignment = Alignment.BottomStart,
-                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .zIndex(2f)
+                            .graphicsLayer { alpha = heroAlpha },
+                        contentAlignment = Alignment.BottomStart,
+                    ) {
                     NovelHeroContent(
                         novel = novel,
                         chapterCount = totalChapterCount,
@@ -779,6 +780,7 @@ fun NovelScreenAuroraImpl(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .zIndex(2f)
                         .padding(end = 20.dp, bottom = 20.dp),
                     contentAlignment = Alignment.BottomEnd,
                 ) {
@@ -793,6 +795,7 @@ fun NovelScreenAuroraImpl(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .zIndex(2f)
                         .padding(WindowInsets.statusBars.asPaddingValues())
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically,

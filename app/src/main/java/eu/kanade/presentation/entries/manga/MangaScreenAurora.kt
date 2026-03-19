@@ -241,7 +241,7 @@ fun MangaScreenAuroraImpl(
                 TwoPanelBox(
                     modifier = Modifier
                         .fillMaxSize()
-                        .zIndex(1f),
+                        .zIndex(2f),
                     startContent = {
                         Column(
                             modifier = Modifier
@@ -692,14 +692,19 @@ fun MangaScreenAuroraImpl(
             if (!useTwoPaneLayout && firstVisibleItemIndex == 0 && scrollOffset < heroThreshold) {
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
+                        .align(Alignment.BottomStart)
+                        .zIndex(2f)
                         .padding(bottom = 0.dp),
                     contentAlignment = Alignment.BottomStart,
                 ) {
                     // Calculate fade out alpha based on scroll (0-70% range)
                     val heroAlpha = (1f - (scrollOffset / heroThreshold.toFloat())).coerceIn(0f, 1f)
 
-                    Box(modifier = Modifier.graphicsLayer { alpha = heroAlpha }) {
+                    Box(
+                        modifier = Modifier
+                            .zIndex(2f)
+                            .graphicsLayer { alpha = heroAlpha },
+                    ) {
                         MangaHeroContent(
                             manga = manga,
                             chapterCount = chapters.size,
@@ -716,6 +721,7 @@ fun MangaScreenAuroraImpl(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .zIndex(2f)
                         .padding(end = 20.dp, bottom = 20.dp),
                     contentAlignment = Alignment.BottomEnd,
                 ) {
@@ -731,6 +737,7 @@ fun MangaScreenAuroraImpl(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .zIndex(2f)
                         .padding(WindowInsets.statusBars.asPaddingValues())
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically,

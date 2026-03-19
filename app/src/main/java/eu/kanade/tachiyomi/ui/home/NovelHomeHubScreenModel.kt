@@ -138,19 +138,9 @@ class NovelHomeHubScreenModel(
         val novel = getNovel.await(novelId) ?: return
         val chapters = chapterRepository.getChapterByNovelId(novelId, applyScanlatorFilter = true)
             .sortedWith(getNovelChapterSort(novel, sortDescending = false))
-        if (chapters.isEmpty()) {
-            mutableState.update { it.copy(heroChapterId = null) }
-            return
+        mutableState.update {
+            it.copy(heroChapterId = resolveNovelHomeHeroChapterId(chapters, fromChapterId))
         }
-
-        val currentIndex = chapters.indexOfFirst { it.id == fromChapterId }
-        val candidates = chapters.subList(max(0, currentIndex), chapters.size)
-        val nextChapter = candidates.firstOrNull { !it.read }
-            ?: candidates.firstOrNull()
-            ?: chapters.firstOrNull { !it.read }
-            ?: chapters.first()
-
-        mutableState.update { it.copy(heroChapterId = nextChapter.id) }
     }
 
     fun getHeroChapterId(): Long? {
@@ -225,4 +215,26 @@ class NovelHomeHubScreenModel(
         totalCount = totalChapters,
         readCount = readCount,
     )
+}
+
+internal fun resolveNovelHomeHeroChapterId(
+    chapters: List<tachiyomi.domain.items.novelchapter.model.NovelChapter>,
+    fromChapterId: Long,
+): Long? {
+    if (chapters.isEmpty()) return null
+
+    val currentIndex = chapters.indexOfFirst { it.id == fromChapterId }
+    val candidates = chapters.subList(max(0, currentIndex), chapters.size)
+    candidates.firstOrNull { !it.read }?.let { return it.id }
+
+    if (currentIndex >= 0) {
+        return chapters[currentIndex].id
+    }
+
+    val lastReadIndex = chapters.indexOfLast { it.read || it.lastPageRead > 0L }
+    if (lastReadIndex >= 0) {
+        return chapters[lastReadIndex].id
+    }
+
+    return chapters.firstOrNull { !it.read }?.id ?: chapters.first().id
 }

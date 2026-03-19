@@ -6,6 +6,7 @@ import eu.kanade.tachiyomi.data.download.manga.MangaDownloadProvider
 import eu.kanade.tachiyomi.source.MangaSource
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.reader.decodeStoredChapterProgress
+import eu.kanade.tachiyomi.ui.reader.shouldRestoreSavedProgress
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import mihon.core.archive.archiveReader
@@ -57,7 +58,7 @@ class ChapterLoader(
 
                 // If the chapter is partially read, set the starting page to the last the user read
                 // otherwise use the requested page.
-                if (!chapter.chapter.read || readerPreferences.preserveReadingPosition().get()) {
+                if (shouldRestoreSavedProgress(chapter, readerPreferences.preserveReadingPosition().get())) {
                     // ReaderViewModel can precompute a more accurate resume target (including long-page cache).
                     // Don't override it once it's already set.
                     if (chapter.requestedPage == 0 &&

@@ -611,6 +611,7 @@ class NovelLibraryScreenModel(
         val lastReadIndex = chapters.indexOfLast { it.read || it.lastPageRead > 0L }
         if (lastReadIndex >= 0) {
             chapters.drop(lastReadIndex + 1).firstOrNull { !it.read }?.let { return it }
+            return chapters[lastReadIndex]
         }
 
         // Fallback for "nothing read yet".

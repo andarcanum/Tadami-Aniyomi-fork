@@ -247,7 +247,7 @@ class ReaderViewModel @JvmOverloads constructor(
                     currentChapter.requestedPage = chapterPageIndex
                     currentChapter.requestedPageOffset = 0
                     currentChapter.requestedPageOffsetRatioPpm = null
-                } else if (!currentChapter.chapter.read || readerPreferences.preserveReadingPosition().get()) {
+                } else if (shouldRestoreSavedProgress(currentChapter, readerPreferences.preserveReadingPosition().get())) {
                     applySavedProgress(currentChapter)
                 }
                 chapterId = currentChapter.chapter.id!!
@@ -459,6 +459,7 @@ class ReaderViewModel @JvmOverloads constructor(
 
         mutableState.update { it.copy(isLoadingAdjacentChapter = true) }
         try {
+            prepareAdjacentChapterSwitch(::flushReadTimer, ::restartReadTimer)
             withIOContext {
                 loadChapter(loader, chapter)
             }
@@ -1215,6 +1216,23 @@ class ReaderViewModel @JvmOverloads constructor(
         val chapterKey: String?,
         val encodedProgress: Long,
     )
+}
+
+internal fun shouldRestoreSavedProgress(
+    chapter: ReaderChapter,
+    preserveReadingPosition: Boolean,
+): Boolean {
+    return !chapter.chapter.read ||
+        preserveReadingPosition ||
+        chapter.chapter.last_page_read > 0L
+}
+
+internal fun prepareAdjacentChapterSwitch(
+    flushReadTimer: () -> Unit,
+    restartReadTimer: () -> Unit,
+) {
+    flushReadTimer()
+    restartReadTimer()
 }
 
 private const val WEBTOON_PROGRESS_SAVE_DEBOUNCE_MILLIS = 350L
