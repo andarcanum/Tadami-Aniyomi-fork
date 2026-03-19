@@ -1,5 +1,6 @@
 package eu.kanade.presentation.more.stats
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,18 +29,24 @@ import androidx.compose.material.icons.outlined.Tv
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.presentation.more.stats.components.StatsAuroraProgressData
+import eu.kanade.presentation.more.stats.components.StatsAuroraStatItem
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.toDurationString
 import tachiyomi.i18n.MR
@@ -97,17 +104,17 @@ fun MangaStatsAuroraContent(
                 StatsSectionCard(
                     title = stringResource(AYMR.strings.aurora_titles),
                     items = listOf(
-                        MangaStatItem(
+                        StatsAuroraStatItem(
                             Icons.Outlined.Sync,
                             stringResource(AYMR.strings.aurora_in_global_update),
                             state.titles.globalUpdateItemCount.toString(),
                         ),
-                        MangaStatItem(
+                        StatsAuroraStatItem(
                             Icons.Outlined.PlayCircle,
                             stringResource(AYMR.strings.aurora_started),
                             state.titles.startedMangaCount.toString(),
                         ),
-                        MangaStatItem(
+                        StatsAuroraStatItem(
                             Icons.Outlined.Tv,
                             stringResource(AYMR.strings.aurora_local),
                             state.titles.localMangaCount.toString(),
@@ -118,24 +125,47 @@ fun MangaStatsAuroraContent(
 
             item {
                 Spacer(modifier = Modifier.height(16.dp))
+                val accentColor = colors.accent
                 StatsSectionCard(
                     title = stringResource(AYMR.strings.aurora_chapters_header),
                     items = listOf(
-                        MangaStatItem(
+                        StatsAuroraStatItem(
                             Icons.Outlined.PlayCircle,
                             stringResource(AYMR.strings.aurora_total),
                             state.chapters.totalChapterCount.toString(),
                         ),
-                        MangaStatItem(
+                        StatsAuroraStatItem(
                             Icons.Outlined.Schedule,
                             stringResource(MR.strings.label_read_chapters),
                             state.chapters.readChapterCount.toString(),
                         ),
-                        MangaStatItem(
+                        StatsAuroraStatItem(
                             Icons.Outlined.Download,
                             stringResource(AYMR.strings.aurora_downloaded),
                             state.chapters.downloadCount.toString(),
                         ),
+                    ),
+                    progressBars = listOf(
+                        remember(state.chapters.readChapterCount, state.chapters.totalChapterCount, accentColor) {
+                            StatsAuroraProgressData(
+                                fraction = if (state.chapters.totalChapterCount > 0) {
+                                    state.chapters.readChapterCount.toFloat() / state.chapters.totalChapterCount
+                                } else {
+                                    0f
+                                },
+                                color = accentColor,
+                            )
+                        },
+                        remember(state.chapters.downloadCount, state.chapters.totalChapterCount) {
+                            StatsAuroraProgressData(
+                                fraction = if (state.chapters.totalChapterCount > 0) {
+                                    state.chapters.downloadCount.toFloat() / state.chapters.totalChapterCount
+                                } else {
+                                    0f
+                                },
+                                color = colors.textSecondary,
+                            )
+                        },
                     ),
                 )
             }
@@ -144,7 +174,7 @@ fun MangaStatsAuroraContent(
                 Spacer(modifier = Modifier.height(16.dp))
                 val meanScoreStr = remember(state.trackers.trackedTitleCount, state.trackers.meanScore) {
                     if (state.trackers.trackedTitleCount > 0 && !state.trackers.meanScore.isNaN()) {
-                        "%.2f ★".format(Locale.ENGLISH, state.trackers.meanScore)
+                        "%.2f \u2605".format(Locale.ENGLISH, state.trackers.meanScore)
                     } else {
                         none
                     }
@@ -152,17 +182,17 @@ fun MangaStatsAuroraContent(
                 StatsSectionCard(
                     title = stringResource(AYMR.strings.aurora_trackers),
                     items = listOf(
-                        MangaStatItem(
+                        StatsAuroraStatItem(
                             Icons.Outlined.CollectionsBookmark,
                             stringResource(AYMR.strings.aurora_tracked_titles),
                             state.trackers.trackedTitleCount.toString(),
                         ),
-                        MangaStatItem(
+                        StatsAuroraStatItem(
                             Icons.Outlined.Star,
                             stringResource(AYMR.strings.aurora_mean_score),
                             meanScoreStr,
                         ),
-                        MangaStatItem(
+                        StatsAuroraStatItem(
                             Icons.Outlined.Sync,
                             stringResource(AYMR.strings.aurora_trackers_used),
                             state.trackers.trackerCount.toString(),
@@ -215,12 +245,25 @@ private fun OverviewCard(
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
+    val tabContainerColor = if (colors.background.luminance() < 0.5f) {
+        Color.White.copy(alpha = 0.05f)
+    } else {
+        Color.Black.copy(alpha = 0.03f)
+    }
 
     Card(
         modifier = modifier.height(120.dp),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = colors.accent.copy(alpha = 0.15f),
+            containerColor = tabContainerColor,
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (colors.isDark) {
+                Color.White.copy(alpha = 0.06f)
+            } else {
+                Color.Black.copy(alpha = 0.06f)
+            },
         ),
     ) {
         Column(
@@ -232,15 +275,15 @@ private fun OverviewCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(36.dp)
-                    .background(colors.accent.copy(alpha = 0.2f), CircleShape),
+                    .size(40.dp)
+                    .background(colors.accent.copy(alpha = 0.15f), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
                     tint = colors.accent,
-                    modifier = Modifier.size(20.dp),
+                    modifier = Modifier.size(22.dp),
                 )
             }
             Spacer(modifier = Modifier.height(8.dp))
@@ -248,7 +291,7 @@ private fun OverviewCard(
                 text = value,
                 color = colors.textPrimary,
                 fontWeight = FontWeight.Bold,
-                fontSize = 16.sp,
+                fontSize = 20.sp,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
             )
@@ -263,46 +306,44 @@ private fun OverviewCard(
     }
 }
 
-private data class MangaStatItem(
-    val icon: ImageVector,
-    val label: String,
-    val value: String,
-)
-
 @Composable
 private fun StatsSectionCard(
     title: String,
-    items: List<MangaStatItem>,
+    items: List<StatsAuroraStatItem>,
+    progressBars: List<StatsAuroraProgressData> = emptyList(),
 ) {
     val colors = AuroraTheme.colors
+    val tabContainerColor = if (colors.background.luminance() < 0.5f) {
+        Color.White.copy(alpha = 0.05f)
+    } else {
+        Color.Black.copy(alpha = 0.03f)
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = colors.glass,
+            containerColor = tabContainerColor,
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (colors.isDark) {
+                Color.White.copy(alpha = 0.06f)
+            } else {
+                Color.Black.copy(alpha = 0.06f)
+            },
         ),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(4.dp)
-                        .height(20.dp)
-                        .background(colors.accent, RoundedCornerShape(2.dp)),
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = title,
-                    color = colors.textPrimary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                )
-            }
+            Text(
+                text = title,
+                color = colors.accent,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                letterSpacing = 0.5.sp,
+            )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -333,6 +374,36 @@ private fun StatsSectionCard(
                             color = colors.textSecondary,
                             fontSize = 11.sp,
                             textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+            }
+
+            if (progressBars.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(16.dp))
+
+                progressBars.forEach { progress ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        LinearProgressIndicator(
+                            progress = { progress.fraction },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(6.dp),
+                            color = progress.color,
+                            trackColor = progress.color.copy(alpha = 0.15f),
+                            strokeCap = StrokeCap.Round,
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "${(progress.fraction * 100).toInt()}%",
+                            color = colors.textSecondary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
                         )
                     }
                 }
