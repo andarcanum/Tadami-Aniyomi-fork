@@ -65,6 +65,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.Hyphens
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -110,6 +111,8 @@ fun TabbedScreenAurora(
     instantTabSwitching: Boolean = false,
     highlightSearchAction: Boolean = false,
     highlightedActionTitle: String? = null,
+    extraSearchToActionsGap: Dp = 0.dp,
+    extraActionGapAfterTitle: String? = null,
     extraHeaderContent: @Composable () -> Unit = {},
 ) {
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
@@ -218,6 +221,8 @@ fun TabbedScreenAurora(
                         navigateUp = tabs.getOrNull(currentPage)?.navigateUp,
                         highlightSearchAction = highlightSearchAction,
                         highlightedActionTitle = highlightedActionTitle,
+                        extraSearchToActionsGap = extraSearchToActionsGap,
+                        extraActionGapAfterTitle = extraActionGapAfterTitle,
                     )
                 }
             }
@@ -358,6 +363,8 @@ private fun AuroraTabHeader(
     navigateUp: (() -> Unit)?,
     highlightSearchAction: Boolean,
     highlightedActionTitle: String?,
+    extraSearchToActionsGap: Dp,
+    extraActionGapAfterTitle: String?,
 ) {
     val colors = AuroraTheme.colors
     val currentTab = tabs.getOrNull(currentPage)
@@ -438,9 +445,13 @@ private fun AuroraTabHeader(
                         contentDescription = stringResource(MR.strings.action_search),
                         tint = if (highlightSearchAction) colors.accent else colors.textPrimary,
                     )
+
+                    if (extraSearchToActionsGap > 0.dp && iconActions.isNotEmpty()) {
+                        Spacer(modifier = Modifier.width(extraSearchToActionsGap))
+                    }
                 }
 
-                iconActions.forEach { appBarAction ->
+                iconActions.forEachIndexed { index, appBarAction ->
                     AuroraTopBarIconButton(
                         onClick = appBarAction.onClick,
                         icon = appBarAction.icon,
@@ -451,6 +462,13 @@ private fun AuroraTabHeader(
                             colors.textPrimary
                         },
                     )
+
+                    if (
+                        appBarAction.title == extraActionGapAfterTitle &&
+                        index < iconActions.lastIndex
+                    ) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
                 }
 
                 if (overflowActions.isNotEmpty()) {

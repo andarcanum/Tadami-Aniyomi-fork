@@ -439,6 +439,12 @@
     <string name="novel_reader_advanced">Advanced</string>
     <string name="novel_reader_tab_general">General</string>
     <string name="novel_reader_tab_reading">Reading</string>
+    <string name="novel_reader_section_reading_behavior">Reading behavior</string>
+    <string name="novel_reader_section_translation">Translation</string>
+    <string name="novel_reader_section_advanced">Advanced</string>
+    <string name="novel_reader_section_typography">Typography</string>
+    <string name="novel_reader_section_appearance">Appearance</string>
+    <string name="novel_reader_section_backgrounds">Backgrounds</string>
 
     <!-- Text Align -->
     <string name="novel_reader_text_align">Text alignment</string>
@@ -613,6 +619,9 @@
     <string name="novel_reader_gemini_visibility_off">OFF</string>
     <string name="novel_reader_gemini_show_original">Show original</string>
     <string name="novel_reader_gemini_show_translation">Show translation</string>
+    <string name="novel_reader_gemini_advanced_show">Advanced settings</string>
+    <string name="novel_reader_gemini_advanced_hide">Hide advanced settings</string>
+    <string name="novel_reader_gemini_private_python_like_mode">Python-like mode (full chapter, answer to ***)</string>
     <string name="novel_reader_gemini_action_start">Start</string>
     <string name="novel_reader_gemini_action_clear">Clear</string>
     <string name="novel_reader_gemini_action_close">Close</string>

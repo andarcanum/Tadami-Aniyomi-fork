@@ -23,6 +23,12 @@ class AnimeScreenAuroraLayoutTest {
     }
 
     @Test
+    fun `fast scroller uses pane scoped placement only in two pane anime layout`() {
+        shouldUseAnimeAuroraPaneScopedFastScroller(useTwoPaneLayout = false) shouldBe false
+        shouldUseAnimeAuroraPaneScopedFastScroller(useTwoPaneLayout = true) shouldBe true
+    }
+
+    @Test
     fun `metadata loading keeps plugin cover as aurora background fallback`() {
         val state = AnimeScreenModel.State.Success(
             anime = testAnime(thumbnailUrl = "https://example.org/plugin-cover.jpg"),

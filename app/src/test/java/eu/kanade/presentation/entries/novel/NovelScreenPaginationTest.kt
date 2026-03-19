@@ -24,4 +24,20 @@ class NovelScreenPaginationTest {
     fun `nextVisibleChapterCount is capped by total chapters`() {
         nextVisibleChapterCount(currentCount = 200, totalCount = 230, step = 50) shouldBe 230
     }
+
+    @Test
+    fun `fast scroll expands visible chapters to all locally loaded chapters`() {
+        resolveNovelFastScrollVisibleChapterCount(
+            currentVisibleCount = 120,
+            loadedChapterCount = 360,
+        ) shouldBe 360
+    }
+
+    @Test
+    fun `fast scroll expansion keeps current visible count when all loaded chapters are already shown`() {
+        resolveNovelFastScrollVisibleChapterCount(
+            currentVisibleCount = 360,
+            loadedChapterCount = 360,
+        ) shouldBe 360
+    }
 }

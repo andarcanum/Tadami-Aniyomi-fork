@@ -62,13 +62,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import eu.kanade.domain.ui.model.AnimeMetadataSource
 import eu.kanade.presentation.components.EntryDownloadDropdownMenu
 import eu.kanade.presentation.entries.DownloadAction
+import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
+import eu.kanade.presentation.entries.shouldShowTitleFastScrollFloatingActionButton
+import eu.kanade.presentation.entries.shouldShowTitleFastScrollOverlayChrome
 import eu.kanade.presentation.entries.anime.components.EpisodeDownloadAction
 import eu.kanade.presentation.entries.anime.components.aurora.AnimeActionCard
 import eu.kanade.presentation.entries.anime.components.aurora.AnimeEpisodeCardCompact
@@ -94,6 +99,7 @@ import tachiyomi.domain.items.episode.model.Episode
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.TwoPanelBox
+import tachiyomi.presentation.core.components.VerticalFastScroller
 import tachiyomi.presentation.core.i18n.stringResource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -213,6 +219,7 @@ fun AnimeScreenAuroraImpl(
     // State for description and genres expansion
     var descriptionExpanded by remember { mutableStateOf(false) }
     var genresExpanded by remember { mutableStateOf(false) }
+    var isThumbFastScrolling by remember { mutableStateOf(false) }
 
     // Check if metadata auth hint was already shown (persistent)
     val metadataAuthHintShown = remember {
@@ -273,8 +280,28 @@ fun AnimeScreenAuroraImpl(
 
             if (useTwoPaneLayout) {
                 val topContentPadding = 96.dp
+                val paneDensity = LocalDensity.current
+                val paneTopPaddingPx = with(paneDensity) { topContentPadding.roundToPx() }
+                val paneFastScrollBlockStartIndex = resolveAnimeAuroraFastScrollBlockStartIndex(
+                    useTwoPaneLayout = true,
+                )
+                val paneFastScrollSpec by remember(paneTopPaddingPx, paneFastScrollBlockStartIndex) {
+                    derivedStateOf {
+                        resolveTitleListFastScrollSpec(
+                            baseTopPaddingPx = paneTopPaddingPx,
+                            firstVisibleItemIndex = lazyListState.firstVisibleItemIndex,
+                            blockStartIndex = paneFastScrollBlockStartIndex,
+                            blockStartOffsetPx = lazyListState.layoutInfo.visibleItemsInfo
+                                .firstOrNull { it.index == paneFastScrollBlockStartIndex }
+                                ?.offset
+                                ?.plus(with(paneDensity) { ANIME_AURORA_FAST_SCROLL_ITEM_TOP_INSET.roundToPx() }),
+                        )
+                    }
+                }
                 TwoPanelBox(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(1f),
                     startContent = {
                         Column(
                             modifier = Modifier
@@ -343,13 +370,26 @@ fun AnimeScreenAuroraImpl(
                         }
                     },
                     endContent = {
-                        LazyColumn(
-                            state = lazyListState,
-                            contentPadding = PaddingValues(top = topContentPadding, bottom = 100.dp),
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(start = 6.dp, end = 12.dp),
+                        VerticalFastScroller(
+                            listState = lazyListState,
+                            onThumbDragStarted = {
+                                if (shouldAutoExpandAuroraEpisodesListForFastScroll(episodesExpanded, episodes.size)) {
+                                    episodesExpanded = true
+                                }
+                            },
+                            onThumbDragStateChanged = { isThumbFastScrolling = it },
+                            thumbAllowed = { paneFastScrollSpec.thumbAllowed },
+                            topContentPadding = with(paneDensity) { paneFastScrollSpec.topPaddingPx.toDp() },
+                            endContentPadding = 12.dp,
+                            modifier = Modifier.zIndex(1f),
                         ) {
+                            LazyColumn(
+                                state = lazyListState,
+                                contentPadding = PaddingValues(top = topContentPadding, bottom = 100.dp),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(start = 6.dp, end = 12.dp),
+                            ) {
                             item {
                                 EpisodesHeader(episodeCount = episodes.size)
                             }
@@ -464,15 +504,48 @@ fun AnimeScreenAuroraImpl(
                                 }
                             }
                         }
+                        }
                     },
                 )
             } else {
                 // Scrollable content
-                LazyColumn(
-                    state = lazyListState,
-                    contentPadding = PaddingValues(bottom = 100.dp),
-                    modifier = Modifier.fillMaxSize(),
+                val density = LocalDensity.current
+                val fastScrollBaseTopPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp
+                val fastScrollBaseTopPaddingPx = with(density) { fastScrollBaseTopPadding.roundToPx() }
+                val fastScrollBlockStartIndex = resolveAnimeAuroraFastScrollBlockStartIndex(
+                    useTwoPaneLayout = false,
+                )
+                val fastScrollSpec by remember(fastScrollBaseTopPaddingPx, fastScrollBlockStartIndex) {
+                    derivedStateOf {
+                        resolveTitleListFastScrollSpec(
+                            baseTopPaddingPx = fastScrollBaseTopPaddingPx,
+                            firstVisibleItemIndex = lazyListState.firstVisibleItemIndex,
+                            blockStartIndex = fastScrollBlockStartIndex,
+                            blockStartOffsetPx = lazyListState.layoutInfo.visibleItemsInfo
+                                .firstOrNull { it.index == fastScrollBlockStartIndex }
+                                ?.offset
+                                ?.plus(with(density) { ANIME_AURORA_FAST_SCROLL_ITEM_TOP_INSET.roundToPx() }),
+                        )
+                    }
+                }
+                VerticalFastScroller(
+                    listState = lazyListState,
+                    onThumbDragStarted = {
+                        if (shouldAutoExpandAuroraEpisodesListForFastScroll(episodesExpanded, episodes.size)) {
+                            episodesExpanded = true
+                        }
+                    },
+                    onThumbDragStateChanged = { isThumbFastScrolling = it },
+                    thumbAllowed = { fastScrollSpec.thumbAllowed },
+                    topContentPadding = with(density) { fastScrollSpec.topPaddingPx.toDp() },
+                    bottomContentPadding = 100.dp,
+                    modifier = Modifier.zIndex(1f),
                 ) {
+                    LazyColumn(
+                        state = lazyListState,
+                        contentPadding = PaddingValues(bottom = 100.dp),
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
                     // Spacer for poster/hero area
                     item {
                         Spacer(modifier = Modifier.height(screenHeight))
@@ -537,7 +610,10 @@ fun AnimeScreenAuroraImpl(
                     }
 
                     // Episodes header
-                    item {
+                    item(
+                        key = ANIME_AURORA_EPISODES_HEADER_KEY,
+                        contentType = ANIME_AURORA_EPISODES_HEADER_KEY,
+                    ) {
                         Spacer(modifier = Modifier.height(20.dp))
                         EpisodesHeader(
                             episodeCount = episodes.size,
@@ -657,6 +733,7 @@ fun AnimeScreenAuroraImpl(
                         }
                     }
                 }
+                }
             }
 
             // Hero content (fixed at bottom of first screen) - fades out on scroll
@@ -686,7 +763,7 @@ fun AnimeScreenAuroraImpl(
 
             // Floating Play button (shows after Hero Content is hidden)
             val showFab = firstVisibleItemIndex > 0 || scrollOffset > heroThreshold
-            if (!useTwoPaneLayout && showFab && !isAnyEpisodeSelected) {
+            if (shouldShowTitleFastScrollFloatingActionButton(!useTwoPaneLayout && showFab && !isAnyEpisodeSelected, isThumbFastScrolling)) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -700,7 +777,7 @@ fun AnimeScreenAuroraImpl(
                 }
             }
 
-            if (!isAnyEpisodeSelected) {
+            if (!isAnyEpisodeSelected && shouldShowTitleFastScrollOverlayChrome(isThumbFastScrolling)) {
                 // Top header bar
                 Row(
                     modifier = Modifier
@@ -978,6 +1055,19 @@ internal fun shouldUseAnimeAuroraTwoPane(deviceClass: AuroraDeviceClass): Boolea
     return deviceClass == AuroraDeviceClass.TabletExpanded
 }
 
+internal fun shouldUseAnimeAuroraPaneScopedFastScroller(useTwoPaneLayout: Boolean): Boolean {
+    return useTwoPaneLayout
+}
+
+internal fun resolveAnimeAuroraFastScrollBlockStartIndex(
+    useTwoPaneLayout: Boolean,
+): Int {
+    return if (useTwoPaneLayout) 1 else 3
+}
+
+private const val ANIME_AURORA_EPISODES_HEADER_KEY = "anime-aurora-episodes-header"
+private val ANIME_AURORA_FAST_SCROLL_ITEM_TOP_INSET = 6.dp
+
 internal enum class AuroraEpisodeClickAction {
     OpenEpisode,
     SelectEpisode,
@@ -1012,6 +1102,16 @@ internal fun shouldAutoExpandAuroraEpisodesList(
     totalEpisodes: Int,
 ): Boolean {
     return !episodesExpanded && totalEpisodes > 5
+}
+
+internal fun shouldAutoExpandAuroraEpisodesListForFastScroll(
+    episodesExpanded: Boolean,
+    totalEpisodes: Int,
+): Boolean {
+    return shouldAutoExpandAuroraEpisodesList(
+        episodesExpanded = episodesExpanded,
+        totalEpisodes = totalEpisodes,
+    )
 }
 
 internal fun resolveCoverUrl(

@@ -242,9 +242,13 @@ private fun NovelExtensionItemRow(
         when (item.installStep) {
             InstallStep.Pending, InstallStep.Downloading, InstallStep.Installing -> Unit
             InstallStep.Error -> {
-                val availablePlugin = plugin as? NovelPlugin.Available
-                if (availablePlugin != null && onInstallExtension != null) {
-                    onInstallExtension(availablePlugin)
+                when {
+                    plugin is NovelPlugin.Available && onInstallExtension != null -> {
+                        onInstallExtension(plugin)
+                    }
+                    plugin is NovelPlugin.Installed && onUpdateExtension != null -> {
+                        onUpdateExtension(plugin)
+                    }
                 }
             }
             else -> when {
@@ -299,13 +303,22 @@ private fun NovelExtensionItemRow(
                     }
                 }
                 InstallStep.Error -> {
-                    val availablePlugin = plugin as? NovelPlugin.Available
-                    if (availablePlugin != null && onInstallExtension != null) {
-                        IconButton(onClick = { onInstallExtension(availablePlugin) }) {
-                            Icon(
-                                imageVector = Icons.Outlined.Refresh,
-                                contentDescription = stringResource(MR.strings.action_retry),
-                            )
+                    when {
+                        plugin is NovelPlugin.Available && onInstallExtension != null -> {
+                            IconButton(onClick = { onInstallExtension(plugin) }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Refresh,
+                                    contentDescription = stringResource(MR.strings.action_retry),
+                                )
+                            }
+                        }
+                        plugin is NovelPlugin.Installed && onUpdateExtension != null -> {
+                            IconButton(onClick = { onUpdateExtension(plugin) }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Refresh,
+                                    contentDescription = stringResource(MR.strings.action_retry),
+                                )
+                            }
                         }
                     }
                 }

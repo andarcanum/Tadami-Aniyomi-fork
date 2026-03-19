@@ -54,7 +54,7 @@ class NovelScreenModelScanlatorSelectionTest {
     }
 
     @Test
-    fun `resolveDefaultNovelExcludedScanlatorsByChapterCount selects largest branch by default`() {
+    fun `resolveDefaultNovelExcludedScanlatorsByChapterCount keeps all branches on initial load`() {
         resolveDefaultNovelExcludedScanlatorsByChapterCount(
             scanlatorChapterCounts = mapOf(
                 "Team A" to 3,
@@ -63,7 +63,7 @@ class NovelScreenModelScanlatorSelectionTest {
             ),
             availableScanlators = setOf("Team A", "Team B", "Team C"),
             excludedScanlators = emptySet(),
-        ) shouldBe setOf("Team A", "Team C")
+        ) shouldBe null
     }
 
     @Test
@@ -79,7 +79,7 @@ class NovelScreenModelScanlatorSelectionTest {
     }
 
     @Test
-    fun `resolveDeferredDefaultNovelExcludedScanlators selects largest branch after refresh`() {
+    fun `resolveDeferredDefaultNovelExcludedScanlators keeps all branches after refresh`() {
         resolveDeferredDefaultNovelExcludedScanlators(
             shouldAttemptAutoSelection = true,
             storedExcludedScanlators = emptySet(),
@@ -89,7 +89,7 @@ class NovelScreenModelScanlatorSelectionTest {
                 "Team B" to 9,
                 "Team C" to 4,
             ),
-        ) shouldBe setOf("Team A", "Team C")
+        ) shouldBe null
     }
 
     @Test

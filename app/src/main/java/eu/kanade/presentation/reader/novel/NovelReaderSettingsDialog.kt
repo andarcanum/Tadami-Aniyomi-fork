@@ -130,6 +130,26 @@ fun NovelReaderSettingsDialog(
 }
 
 @Composable
+private fun SettingsSectionHeader(
+    title: String,
+    subtitle: String? = null,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+        )
+        if (subtitle != null) {
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
 private fun GeneralTab(
     settings: eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings,
     sourceId: Long,
@@ -231,6 +251,8 @@ private fun GeneralTab(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+
+        SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_reading_behavior))
 
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_page_mode),
@@ -424,6 +446,9 @@ private fun GeneralTab(
                 update(it, { o, v -> o.copy(bionicReading = v) }, { preferences.bionicReading().set(it) })
             },
         )
+
+        SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_translation))
+
         Surface(
             shape = RoundedCornerShape(14.dp),
             color = MaterialTheme.colorScheme.surfaceVariant,
@@ -604,6 +629,8 @@ private fun GeneralTab(
                 )
             }
         }
+
+        SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_advanced))
 
         EditTextPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_custom_css),
@@ -795,6 +822,8 @@ private fun ReadingTab(
             .padding(MaterialTheme.padding.medium),
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.medium),
     ) {
+        SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_typography))
+
         LnReaderSliderRow(
             label = stringResource(AYMR.strings.novel_reader_font_size),
             valueText = "${settings.fontSize}sp",
@@ -942,6 +971,8 @@ private fun ReadingTab(
                 fontCatalogVersion += 1
             },
         )
+
+        SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_appearance))
 
         Text(
             text = stringResource(AYMR.strings.novel_reader_appearance_mode),
@@ -1163,6 +1194,8 @@ private fun ReadingTab(
         }
 
         if (appearanceControlState.backgroundControlsEnabled) {
+            SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_backgrounds))
+
             Text(
                 text = stringResource(AYMR.strings.novel_reader_background_presets),
                 style = MaterialTheme.typography.titleSmall,

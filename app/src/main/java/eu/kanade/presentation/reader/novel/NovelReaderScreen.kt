@@ -736,7 +736,7 @@ fun NovelReaderScreen(
 
     LaunchedEffect(state.chapter.id) {
         if (state.readerSettings.autoScroll) {
-            persistAutoScrollEnabledPreference(enabled = false)
+            persistAutoScrollEnabledPreference(enabled = true)
         }
     }
 
@@ -3509,7 +3509,7 @@ private fun GeminiTranslationDialog(
                             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                         ) {
                             Text(
-                                text = "Python-like режим (цельная глава, ответ до ***)",
+                                text = stringResource(AYMR.strings.novel_reader_gemini_private_python_like_mode),
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.weight(1f),
                             )
@@ -3524,7 +3524,13 @@ private fun GeminiTranslationDialog(
                         }
                     }
                     TextButton(onClick = { showAdvanced = !showAdvanced }) {
-                        Text(if (showAdvanced) "Скрыть доп. настройки" else "Доп. настройки")
+                        Text(
+                            text = if (showAdvanced) {
+                                stringResource(AYMR.strings.novel_reader_gemini_advanced_hide)
+                            } else {
+                                stringResource(AYMR.strings.novel_reader_gemini_advanced_show)
+                            },
+                        )
                     }
                     if (showAdvanced) {
                         if (isOpenRouterSelected || isDeepSeekSelected) {

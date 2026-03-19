@@ -12,4 +12,10 @@ class MangaScreenAuroraLayoutTest {
         shouldUseMangaAuroraTwoPane(AuroraDeviceClass.TabletCompact) shouldBe false
         shouldUseMangaAuroraTwoPane(AuroraDeviceClass.TabletExpanded) shouldBe true
     }
+
+    @Test
+    fun `fast scroller uses pane scoped placement only in two pane manga layout`() {
+        shouldUseMangaAuroraPaneScopedFastScroller(useTwoPaneLayout = false) shouldBe false
+        shouldUseMangaAuroraPaneScopedFastScroller(useTwoPaneLayout = true) shouldBe true
+    }
 }

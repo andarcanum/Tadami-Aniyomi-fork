@@ -12,4 +12,10 @@ class NovelScreenAuroraLayoutTest {
         shouldUseNovelAuroraTwoPane(AuroraDeviceClass.TabletCompact) shouldBe false
         shouldUseNovelAuroraTwoPane(AuroraDeviceClass.TabletExpanded) shouldBe true
     }
+
+    @Test
+    fun `fast scroller uses pane scoped placement only in two pane novel layout`() {
+        shouldUseNovelAuroraPaneScopedFastScroller(useTwoPaneLayout = false) shouldBe false
+        shouldUseNovelAuroraPaneScopedFastScroller(useTwoPaneLayout = true) shouldBe true
+    }
 }

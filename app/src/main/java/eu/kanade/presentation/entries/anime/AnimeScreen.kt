@@ -64,6 +64,7 @@ import eu.kanade.domain.entries.anime.model.seasonsFiltered
 import eu.kanade.presentation.components.relativeDateTimeText
 import eu.kanade.presentation.entries.DownloadAction
 import eu.kanade.presentation.entries.EntryScreenItem
+import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.entries.anime.components.AnimeActionRow
 import eu.kanade.presentation.entries.anime.components.AnimeEpisodeListItem
 import eu.kanade.presentation.entries.anime.components.AnimeInfoBox
@@ -569,15 +570,36 @@ private fun AnimeScreenSmallImpl(
                 indicatorPadding = PaddingValues(top = topPadding),
             ) {
                 val layoutDirection = LocalLayoutDirection.current
+                val baseTopPaddingPx = with(density) { topPadding.roundToPx() }
+                val fastScrollBlockStartIndex = resolveAnimeClassicFastScrollBlockStartIndex(
+                    fetchType = state.anime.fetchType,
+                    hasAiringTimeItem = state.airingTime > 0L,
+                )
+                val fastScrollSpec by remember(baseTopPaddingPx, fastScrollBlockStartIndex) {
+                    derivedStateOf {
+                        resolveTitleListFastScrollSpec(
+                            baseTopPaddingPx = baseTopPaddingPx,
+                            firstVisibleItemIndex = itemListState.firstVisibleItemIndex,
+                            blockStartIndex = fastScrollBlockStartIndex,
+                            blockStartOffsetPx = itemListState.layoutInfo.visibleItemsInfo
+                                .firstOrNull { it.index == fastScrollBlockStartIndex }
+                                ?.offset
+                                ?.y
+                                ?.plus(with(density) { ANIME_CLASSIC_FAST_SCROLL_ITEM_TOP_INSET.roundToPx() }),
+                        )
+                    }
+                }
                 FastScrollLazyVerticalGrid(
                     modifier = Modifier.fillMaxHeight(),
                     state = itemListState,
+                    thumbAllowed = { fastScrollSpec.thumbAllowed },
                     columns = if (gridSize == 0) GridCells.Adaptive(128.dp) else GridCells.Fixed(gridSize),
                     contentPadding = PaddingValues(
                         start = GRID_PADDING + contentPadding.calculateStartPadding(layoutDirection),
                         end = GRID_PADDING + contentPadding.calculateEndPadding(layoutDirection),
                         bottom = contentPadding.calculateBottomPadding(),
                     ),
+                    topContentPadding = with(density) { fastScrollSpec.topPaddingPx.toDp() },
                 ) {
                     item(
                         key = EntryScreenItem.INFO_BOX,
@@ -723,6 +745,16 @@ private fun AnimeScreenSmallImpl(
         }
     }
 }
+
+internal fun resolveAnimeClassicFastScrollBlockStartIndex(
+    fetchType: FetchType,
+    hasAiringTimeItem: Boolean,
+): Int {
+    val baseIndex = 4
+    return if (fetchType == FetchType.Episodes && hasAiringTimeItem) baseIndex + 1 else baseIndex
+}
+
+private val ANIME_CLASSIC_FAST_SCROLL_ITEM_TOP_INSET = 5.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -300,15 +300,7 @@ class NovelScreenModel(
             val availableScanlators = getAvailableNovelScanlators.await(novelId)
             val scanlatorChapterCounts = getNovelScanlatorChapterCounts.await(novelId)
             val storedExcludedScanlators = getNovelExcludedScanlators.await(novelId)
-            val initialExcludedScanlators = resolveDefaultNovelExcludedScanlatorsByChapterCount(
-                scanlatorChapterCounts = scanlatorChapterCounts,
-                availableScanlators = availableScanlators,
-                excludedScanlators = storedExcludedScanlators,
-            ) ?: storedExcludedScanlators
-
-            if (initialExcludedScanlators != storedExcludedScanlators) {
-                setNovelExcludedScanlators.await(novelId, initialExcludedScanlators)
-            }
+            val initialExcludedScanlators = storedExcludedScanlators
 
             val chapters = getNovelWithChapters.awaitChapters(novelId, applyScanlatorFilter = true)
             val source = sourceManager.getOrStub(novel.source)
@@ -377,16 +369,6 @@ class NovelScreenModel(
                     refreshNovel = shouldAutoRefreshNovel,
                     refreshChapters = shouldAutoRefreshChapters,
                 )
-
-                val deferredExcludedScanlators = resolveDeferredDefaultNovelExcludedScanlators(
-                    shouldAttemptAutoSelection = true,
-                    storedExcludedScanlators = storedExcludedScanlators,
-                    availableScanlators = getAvailableNovelScanlators.await(novelId),
-                    scanlatorChapterCounts = getNovelScanlatorChapterCounts.await(novelId),
-                )
-                if (deferredExcludedScanlators != null && deferredExcludedScanlators != initialExcludedScanlators) {
-                    setNovelExcludedScanlators.await(novelId, deferredExcludedScanlators)
-                }
             }
         }
     }
@@ -1576,51 +1558,23 @@ internal fun resolveNovelTrackingSummary(
     )
 }
 
+@Suppress("UNUSED_PARAMETER")
 internal fun resolveDefaultNovelExcludedScanlatorsByChapterCount(
     scanlatorChapterCounts: Map<String, Int>,
     availableScanlators: Set<String>,
     excludedScanlators: Set<String>,
 ): Set<String>? {
-    if (availableScanlators.size < 2) return null
-    if (excludedScanlators.intersect(availableScanlators).isNotEmpty()) return null
-
-    val availableByNormalized = availableScanlators
-        .asSequence()
-        .map { it.trim() to it.trim() }
-        .filter { (normalized, _) -> normalized.isNotEmpty() }
-        .associate { it }
-    if (availableByNormalized.size < 2) return null
-
-    val preferredScanlator = scanlatorChapterCounts
-        .asSequence()
-        .map { it.key.trim() to it.value }
-        .filter { (normalized, _) -> normalized in availableByNormalized.keys }
-        .sortedWith(
-            compareByDescending<Pair<String, Int>> { it.second }
-                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.first },
-        )
-        .map { it.first }
-        .firstOrNull() ?: return null
-
-    return availableByNormalized
-        .filterKeys { it != preferredScanlator }
-        .values
-        .toSet()
+    return null
 }
 
+@Suppress("UNUSED_PARAMETER")
 internal fun resolveDeferredDefaultNovelExcludedScanlators(
     shouldAttemptAutoSelection: Boolean,
     storedExcludedScanlators: Set<String>,
     availableScanlators: Set<String>,
     scanlatorChapterCounts: Map<String, Int>,
 ): Set<String>? {
-    if (!shouldAttemptAutoSelection) return null
-    if (storedExcludedScanlators.isNotEmpty()) return null
-    return resolveDefaultNovelExcludedScanlatorsByChapterCount(
-        scanlatorChapterCounts = scanlatorChapterCounts,
-        availableScanlators = availableScanlators,
-        excludedScanlators = emptySet(),
-    )
+    return null
 }
 
 internal fun resolveSelectedNovelScanlator(

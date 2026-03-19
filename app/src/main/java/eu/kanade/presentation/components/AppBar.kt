@@ -292,6 +292,7 @@ fun SearchToolbar(
     titleContent: @Composable () -> Unit = {},
     navigateUp: (() -> Unit)? = null,
     searchEnabled: Boolean = true,
+    searchActionIconTint: Color? = null,
     placeholderText: String? = null,
     onSearch: (String) -> Unit = {},
     onClickCloseSearch: () -> Unit = { onChangeSearchQuery(null) },
@@ -389,6 +390,7 @@ fun SearchToolbar(
                             Icon(
                                 Icons.Outlined.Search,
                                 contentDescription = stringResource(MR.strings.action_search),
+                                tint = searchActionIconTint ?: LocalContentColor.current,
                             )
                         }
                     }

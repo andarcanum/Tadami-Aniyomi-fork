@@ -193,8 +193,9 @@ data object BrowseTab : Tab {
                 // Keep browse sub-tabs content-sized to avoid the full-width stretched segmented bar.
                 scrollable = true,
                 applyStatusBarsPadding = true,
-                highlightSearchAction = true,
-                highlightedActionTitle = globalSearchTitle,
+                highlightSearchAction = false,
+                highlightedActionTitle = null,
+                extraActionGapAfterTitle = globalSearchTitle,
                 extraHeaderContent = {
                     if (sections.size > 1) {
                         Column {

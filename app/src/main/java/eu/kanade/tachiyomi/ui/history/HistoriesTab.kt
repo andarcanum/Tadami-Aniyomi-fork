@@ -3,11 +3,13 @@ package eu.kanade.tachiyomi.ui.history
 import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
@@ -86,6 +88,8 @@ data object HistoriesTab : Tab {
                 onChangeMangaSearchQuery = mangaHistoryScreenModel::search,
                 animeSearchQuery = animeSearchQuery,
                 onChangeAnimeSearchQuery = animeHistoryScreenModel::search,
+                highlightSearchAction = false,
+                extraSearchToActionsGap = 4.dp,
             )
         } else {
             TabbedScreen(
@@ -95,6 +99,8 @@ data object HistoriesTab : Tab {
                 onChangeMangaSearchQuery = mangaHistoryScreenModel::search,
                 animeSearchQuery = animeSearchQuery,
                 onChangeAnimeSearchQuery = animeHistoryScreenModel::search,
+                searchActionIconTint = MaterialTheme.colorScheme.onSurface,
+                extraSearchToActionsGap = 4.dp,
             )
         }
 

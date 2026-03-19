@@ -8,12 +8,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Bookmark
@@ -42,6 +44,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -66,6 +70,7 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
 import eu.kanade.presentation.components.relativeDateTimeText
 import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
+import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.entries.components.EntryBottomActionMenu
 import eu.kanade.presentation.entries.components.EntryToolbar
 import eu.kanade.presentation.entries.components.ItemCover
@@ -81,6 +86,7 @@ import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.components.material.padding
+import tachiyomi.presentation.core.components.VerticalFastScroller
 import tachiyomi.presentation.core.i18n.pluralStringResource
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.theme.active
@@ -211,6 +217,7 @@ fun NovelScreen(
     val visibleChapters = remember(chapters, visibleChapterCount) {
         chapters.take(visibleChapterCount)
     }
+    val chapterListState = rememberLazyListState()
 
     Scaffold(
         topBar = {
@@ -263,9 +270,43 @@ fun NovelScreen(
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
     ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier.padding(paddingValues),
+        val layoutDirection = LocalLayoutDirection.current
+        val density = LocalDensity.current
+        val baseTopPaddingPx = with(density) { paddingValues.calculateTopPadding().roundToPx() }
+        val fastScrollBlockStartIndex = resolveNovelClassicFastScrollBlockStartIndex(
+            showScanlatorSelector = state.showScanlatorSelector,
+            chapterPageEnabled = chapterPageEnabled,
+        )
+        val fastScrollSpec by remember(baseTopPaddingPx, fastScrollBlockStartIndex) {
+            derivedStateOf {
+                resolveTitleListFastScrollSpec(
+                    baseTopPaddingPx = baseTopPaddingPx,
+                    firstVisibleItemIndex = chapterListState.firstVisibleItemIndex,
+                    blockStartIndex = fastScrollBlockStartIndex,
+                    blockStartOffsetPx = chapterListState.layoutInfo.visibleItemsInfo
+                        .firstOrNull { it.index == fastScrollBlockStartIndex }
+                        ?.offset
+                        ?.plus(with(density) { NOVEL_CLASSIC_FAST_SCROLL_ITEM_TOP_INSET.roundToPx() }),
+                )
+            }
+        }
+        VerticalFastScroller(
+            listState = chapterListState,
+            onThumbDragStarted = {
+                visibleChapterCount = resolveNovelFastScrollVisibleChapterCount(
+                    currentVisibleCount = visibleChapterCount,
+                    loadedChapterCount = chapters.size,
+                )
+            },
+            thumbAllowed = { fastScrollSpec.thumbAllowed },
+            topContentPadding = with(density) { fastScrollSpec.topPaddingPx.toDp() },
+            bottomContentPadding = paddingValues.calculateBottomPadding(),
+            endContentPadding = paddingValues.calculateEndPadding(layoutDirection),
         ) {
+            LazyColumn(
+                modifier = Modifier.padding(paddingValues),
+                state = chapterListState,
+            ) {
             item {
                 val context = LocalContext.current
                 val backdropGradientColors = listOf(
@@ -502,7 +543,10 @@ fun NovelScreen(
                 }
             }
 
-            item {
+            item(
+                key = NOVEL_CLASSIC_CHAPTERS_HEADER_KEY,
+                contentType = NOVEL_CLASSIC_CHAPTERS_HEADER_KEY,
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -770,7 +814,8 @@ fun NovelScreen(
                     }
                 }
             }
-            item { Spacer(modifier = Modifier.height(MaterialTheme.padding.small)) }
+                item { Spacer(modifier = Modifier.height(MaterialTheme.padding.small)) }
+            }
         }
     }
 }
@@ -784,6 +829,24 @@ internal fun nextVisibleChapterCount(currentCount: Int, totalCount: Int, step: I
     if (totalCount <= 0 || step <= 0) return 0
     if (currentCount <= 0) return minOf(totalCount, step)
     return minOf(totalCount, currentCount + step)
+}
+
+internal fun resolveNovelFastScrollVisibleChapterCount(
+    currentVisibleCount: Int,
+    loadedChapterCount: Int,
+): Int {
+    if (loadedChapterCount <= 0) return 0
+    return maxOf(currentVisibleCount, loadedChapterCount)
+}
+
+private const val NOVEL_CLASSIC_CHAPTERS_HEADER_KEY = "novel-classic-chapters-header"
+private val NOVEL_CLASSIC_FAST_SCROLL_ITEM_TOP_INSET = 6.dp
+
+internal fun resolveNovelClassicFastScrollBlockStartIndex(
+    showScanlatorSelector: Boolean,
+    chapterPageEnabled: Boolean,
+): Int {
+    return 3 + listOf(showScanlatorSelector, chapterPageEnabled).count { it }
 }
 
 @Composable

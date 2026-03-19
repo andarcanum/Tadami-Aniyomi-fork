@@ -49,4 +49,25 @@ class MangaScreenAuroraSelectionModeTest {
             totalChapters = 5,
         ) shouldBe false
     }
+
+    @Test
+    fun `fast scroll expands collapsed chapters list when more than five items`() {
+        shouldAutoExpandAuroraChaptersListForFastScroll(
+            chaptersExpanded = false,
+            totalChapters = 10,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `fast scroll does not expand when chapters list is already expanded or short`() {
+        shouldAutoExpandAuroraChaptersListForFastScroll(
+            chaptersExpanded = true,
+            totalChapters = 10,
+        ) shouldBe false
+
+        shouldAutoExpandAuroraChaptersListForFastScroll(
+            chaptersExpanded = false,
+            totalChapters = 5,
+        ) shouldBe false
+    }
 }

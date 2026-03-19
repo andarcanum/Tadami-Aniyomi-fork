@@ -23,6 +23,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import dev.icerock.moko.resources.StringResource
@@ -44,6 +46,8 @@ fun TabbedScreen(
     scrollable: Boolean = false,
     animeSearchQuery: String? = null,
     onChangeAnimeSearchQuery: (String?) -> Unit = {},
+    searchActionIconTint: Color? = null,
+    extraSearchToActionsGap: Dp = 0.dp,
 
 ) {
     val scope = rememberCoroutineScope()
@@ -75,11 +79,12 @@ fun TabbedScreen(
                         )
                     },
                     searchEnabled = searchEnabled,
+                    searchActionIconTint = searchActionIconTint,
                     searchQuery = if (searchEnabled) actualQuery else null,
                     onChangeSearchQuery = actualOnChange,
                     actions = {
                         if (tab.actions.isNotEmpty()) {
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(4.dp + extraSearchToActionsGap))
                         }
                         AppBarActions(tab.actions)
                     },

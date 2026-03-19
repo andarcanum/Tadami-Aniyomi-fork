@@ -1274,7 +1274,7 @@ private fun AuroraLibraryPinnedHeader(
                         Icon(
                             imageVector = Icons.Filled.Search,
                             contentDescription = null,
-                            tint = colors.accent,
+                            tint = colors.textSecondary,
                         )
                     },
                     trailingIcon = {
@@ -1320,7 +1320,7 @@ private fun AuroraLibraryPinnedHeader(
                         Icon(
                             imageVector = Icons.Filled.Search,
                             contentDescription = stringResource(MR.strings.action_search),
-                            tint = colors.accent,
+                            tint = colors.textPrimary,
                         )
                     }
                     Spacer(modifier = Modifier.width(8.dp))

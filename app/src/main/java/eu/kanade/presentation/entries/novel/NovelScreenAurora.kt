@@ -51,9 +51,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
+import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
+import eu.kanade.presentation.entries.shouldShowTitleFastScrollFloatingActionButton
+import eu.kanade.presentation.entries.shouldShowTitleFastScrollOverlayChrome
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.AuroraEntryHoldToRefresh
@@ -74,6 +79,7 @@ import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.TwoPanelBox
+import tachiyomi.presentation.core.components.VerticalFastScroller
 import tachiyomi.presentation.core.i18n.stringResource
 import java.time.Instant
 
@@ -155,6 +161,7 @@ fun NovelScreenAuroraImpl(
 
     var descriptionExpanded by remember { mutableStateOf(false) }
     var genresExpanded by remember { mutableStateOf(false) }
+    var isThumbFastScrolling by remember { mutableStateOf(false) }
 
     if (useTwoPaneLayout) {
         val topContentPadding = 96.dp
@@ -174,7 +181,9 @@ fun NovelScreenAuroraImpl(
                 )
 
                 TwoPanelBox(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(1f),
                     startContent = {
                         Column(
                             modifier = Modifier
@@ -199,7 +208,7 @@ fun NovelScreenAuroraImpl(
                                     novel = novel,
                                     chapterCount = totalChapterCount,
                                     nextUpdate = nextUpdate,
-                                    onTagSearch = {},
+                                    onTagSearch = { tag -> onSearch(tag, true) },
                                     descriptionExpanded = descriptionExpanded,
                                     genresExpanded = genresExpanded,
                                     onToggleDescription = { descriptionExpanded = !descriptionExpanded },
@@ -224,16 +233,51 @@ fun NovelScreenAuroraImpl(
                     },
                     endContent = {
                         val chapterListState = rememberLazyListState()
-                        LazyColumn(
-                            state = chapterListState,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(start = 6.dp, end = 12.dp),
-                            contentPadding = PaddingValues(
-                                top = topContentPadding,
-                                bottom = 112.dp,
-                            ),
+                        val paneDensity = LocalDensity.current
+                        val paneTopPaddingPx = with(paneDensity) { topContentPadding.roundToPx() }
+                        val paneFastScrollBlockStartIndex = resolveNovelAuroraFastScrollBlockStartIndex(
+                            useTwoPaneLayout = true,
+                            isSelectionMode = isSelectionMode,
+                            chapterPageEnabled = chapterPageEnabled,
+                            showScanlatorSelector = state.showScanlatorSelector,
+                        )
+                        val paneFastScrollSpec by remember(paneTopPaddingPx, paneFastScrollBlockStartIndex) {
+                            derivedStateOf {
+                                resolveTitleListFastScrollSpec(
+                                    baseTopPaddingPx = paneTopPaddingPx,
+                                    firstVisibleItemIndex = chapterListState.firstVisibleItemIndex,
+                                    blockStartIndex = paneFastScrollBlockStartIndex,
+                                    blockStartOffsetPx = chapterListState.layoutInfo.visibleItemsInfo
+                                        .firstOrNull { it.index == paneFastScrollBlockStartIndex }
+                                        ?.offset
+                                        ?.plus(with(paneDensity) { NOVEL_AURORA_FAST_SCROLL_ITEM_TOP_INSET.roundToPx() }),
+                                )
+                            }
+                        }
+                        VerticalFastScroller(
+                            listState = chapterListState,
+                            onThumbDragStarted = {
+                                visibleChapterCount = resolveNovelFastScrollVisibleChapterCount(
+                                    currentVisibleCount = visibleChapterCount,
+                                    loadedChapterCount = chapters.size,
+                                )
+                            },
+                            onThumbDragStateChanged = { isThumbFastScrolling = it },
+                            thumbAllowed = { paneFastScrollSpec.thumbAllowed },
+                            topContentPadding = with(paneDensity) { paneFastScrollSpec.topPaddingPx.toDp() },
+                            endContentPadding = 12.dp,
+                            modifier = Modifier.zIndex(1f),
                         ) {
+                            LazyColumn(
+                                state = chapterListState,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(start = 6.dp, end = 12.dp),
+                                contentPadding = PaddingValues(
+                                    top = topContentPadding,
+                                    bottom = 112.dp,
+                                ),
+                            ) {
                             if (isSelectionMode) {
                                 item {
                                     SelectionBar(
@@ -354,114 +398,117 @@ fun NovelScreenAuroraImpl(
                                 }
                             }
                         }
+                        }
                     },
                 )
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(WindowInsets.statusBars.asPaddingValues())
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    AuroraActionButton(
-                        onClick = onBack,
-                        icon = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = null,
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
-                    AuroraActionButton(
-                        onClick = onFilterButtonClicked,
-                        icon = Icons.Default.FilterList,
-                        contentDescription = null,
-                        iconTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f),
-                    )
-                    if (!isFromSource) {
+                if (shouldShowTitleFastScrollOverlayChrome(isThumbFastScrolling)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(WindowInsets.statusBars.asPaddingValues())
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         AuroraActionButton(
-                            onClick = onRefresh,
-                            icon = Icons.Default.Refresh,
+                            onClick = onBack,
+                            icon = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = null,
                         )
-                    }
-                    if (onWebView != null) {
+                        Spacer(modifier = Modifier.weight(1f))
                         AuroraActionButton(
-                            onClick = onWebView,
-                            icon = Icons.Filled.Public,
+                            onClick = onFilterButtonClicked,
+                            icon = Icons.Default.FilterList,
                             contentDescription = null,
+                            iconTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f),
                         )
-                    }
-
-                    var showMenu by remember { mutableStateOf(false) }
-                    val hasMenuActions = if (isFromSource) {
-                        true
-                    } else {
-                        onShare != null || onMigrateClicked != null || globalSearchQuery != null
-                    }
-                    if (hasMenuActions) {
-                        Box(contentAlignment = Alignment.TopEnd) {
+                        if (!isFromSource) {
                             AuroraActionButton(
-                                onClick = { showMenu = !showMenu },
-                                icon = Icons.Default.MoreVert,
+                                onClick = onRefresh,
+                                icon = Icons.Default.Refresh,
                                 contentDescription = null,
                             )
-                            AuroraEntryDropdownMenu(
-                                expanded = showMenu,
-                                onDismissRequest = { showMenu = false },
-                            ) {
-                                if (isFromSource) {
-                                    AuroraEntryDropdownMenuItem(
-                                        text = stringResource(MR.strings.action_webview_refresh),
-                                        onClick = {
-                                            onRefresh()
-                                            showMenu = false
-                                        },
-                                    )
-                                    if (globalSearchQuery != null) {
+                        }
+                        if (onWebView != null) {
+                            AuroraActionButton(
+                                onClick = onWebView,
+                                icon = Icons.Filled.Public,
+                                contentDescription = null,
+                            )
+                        }
+
+                        var showMenu by remember { mutableStateOf(false) }
+                        val hasMenuActions = if (isFromSource) {
+                            true
+                        } else {
+                            onShare != null || onMigrateClicked != null || globalSearchQuery != null
+                        }
+                        if (hasMenuActions) {
+                            Box(contentAlignment = Alignment.TopEnd) {
+                                AuroraActionButton(
+                                    onClick = { showMenu = !showMenu },
+                                    icon = Icons.Default.MoreVert,
+                                    contentDescription = null,
+                                )
+                                AuroraEntryDropdownMenu(
+                                    expanded = showMenu,
+                                    onDismissRequest = { showMenu = false },
+                                ) {
+                                    if (isFromSource) {
                                         AuroraEntryDropdownMenuItem(
-                                            text = stringResource(MR.strings.action_global_search),
+                                            text = stringResource(MR.strings.action_webview_refresh),
                                             onClick = {
-                                                onSearch(globalSearchQuery, true)
+                                                onRefresh()
                                                 showMenu = false
                                             },
                                         )
-                                    }
-                                    if (onShare != null) {
-                                        AuroraEntryDropdownMenuItem(
-                                            text = stringResource(MR.strings.action_share),
-                                            onClick = {
-                                                onShare()
-                                                showMenu = false
-                                            },
-                                        )
-                                    }
-                                } else {
-                                    if (globalSearchQuery != null) {
-                                        AuroraEntryDropdownMenuItem(
-                                            text = stringResource(MR.strings.action_global_search),
-                                            onClick = {
-                                                onSearch(globalSearchQuery, true)
-                                                showMenu = false
-                                            },
-                                        )
-                                    }
-                                    if (onShare != null) {
-                                        AuroraEntryDropdownMenuItem(
-                                            text = stringResource(MR.strings.action_share),
-                                            onClick = {
-                                                onShare()
-                                                showMenu = false
-                                            },
-                                        )
-                                    }
-                                    if (onMigrateClicked != null) {
-                                        AuroraEntryDropdownMenuItem(
-                                            text = stringResource(MR.strings.action_migrate),
-                                            onClick = {
-                                                onMigrateClicked()
-                                                showMenu = false
-                                            },
-                                        )
+                                        if (globalSearchQuery != null) {
+                                            AuroraEntryDropdownMenuItem(
+                                                text = stringResource(MR.strings.action_global_search),
+                                                onClick = {
+                                                    onSearch(globalSearchQuery, true)
+                                                    showMenu = false
+                                                },
+                                            )
+                                        }
+                                        if (onShare != null) {
+                                            AuroraEntryDropdownMenuItem(
+                                                text = stringResource(MR.strings.action_share),
+                                                onClick = {
+                                                    onShare()
+                                                    showMenu = false
+                                                },
+                                            )
+                                        }
+                                    } else {
+                                        if (globalSearchQuery != null) {
+                                            AuroraEntryDropdownMenuItem(
+                                                text = stringResource(MR.strings.action_global_search),
+                                                onClick = {
+                                                    onSearch(globalSearchQuery, true)
+                                                    showMenu = false
+                                                },
+                                            )
+                                        }
+                                        if (onShare != null) {
+                                            AuroraEntryDropdownMenuItem(
+                                                text = stringResource(MR.strings.action_share),
+                                                onClick = {
+                                                    onShare()
+                                                    showMenu = false
+                                                },
+                                            )
+                                        }
+                                        if (onMigrateClicked != null) {
+                                            AuroraEntryDropdownMenuItem(
+                                                text = stringResource(MR.strings.action_migrate),
+                                                onClick = {
+                                                    onMigrateClicked()
+                                                    showMenu = false
+                                                },
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -504,11 +551,48 @@ fun NovelScreenAuroraImpl(
                 firstVisibleItemIndex = firstVisibleItemIndex,
             )
 
-            LazyColumn(
-                state = lazyListState,
-                contentPadding = PaddingValues(bottom = 112.dp),
-                modifier = Modifier.fillMaxSize(),
+            val density = LocalDensity.current
+            val fastScrollBaseTopPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp
+            val fastScrollBaseTopPaddingPx = with(density) { fastScrollBaseTopPadding.roundToPx() }
+            val fastScrollBlockStartIndex = resolveNovelAuroraFastScrollBlockStartIndex(
+                useTwoPaneLayout = false,
+                isSelectionMode = isSelectionMode,
+                chapterPageEnabled = chapterPageEnabled,
+                showScanlatorSelector = state.showScanlatorSelector,
+            )
+            val fastScrollSpec by remember(fastScrollBaseTopPaddingPx, fastScrollBlockStartIndex) {
+                derivedStateOf {
+                    resolveTitleListFastScrollSpec(
+                        baseTopPaddingPx = fastScrollBaseTopPaddingPx,
+                        firstVisibleItemIndex = lazyListState.firstVisibleItemIndex,
+                        blockStartIndex = fastScrollBlockStartIndex,
+                        blockStartOffsetPx = lazyListState.layoutInfo.visibleItemsInfo
+                            .firstOrNull { it.index == fastScrollBlockStartIndex }
+                            ?.offset
+                            ?.plus(with(density) { NOVEL_AURORA_FAST_SCROLL_ITEM_TOP_INSET.roundToPx() }),
+                    )
+                }
+            }
+
+            VerticalFastScroller(
+                listState = lazyListState,
+                onThumbDragStarted = {
+                    visibleChapterCount = resolveNovelFastScrollVisibleChapterCount(
+                        currentVisibleCount = visibleChapterCount,
+                        loadedChapterCount = chapters.size,
+                    )
+                },
+                onThumbDragStateChanged = { isThumbFastScrolling = it },
+                thumbAllowed = { fastScrollSpec.thumbAllowed },
+                topContentPadding = with(density) { fastScrollSpec.topPaddingPx.toDp() },
+                bottomContentPadding = 112.dp,
+                modifier = Modifier.zIndex(1f),
             ) {
+                LazyColumn(
+                    state = lazyListState,
+                    contentPadding = PaddingValues(bottom = 112.dp),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
                 item { Spacer(modifier = Modifier.height(screenHeight)) }
 
                 item {
@@ -522,7 +606,7 @@ fun NovelScreenAuroraImpl(
                             novel = novel,
                             chapterCount = totalChapterCount,
                             nextUpdate = nextUpdate,
-                            onTagSearch = {},
+                            onTagSearch = { tag -> onSearch(tag, true) },
                             descriptionExpanded = descriptionExpanded,
                             genresExpanded = genresExpanded,
                             onToggleDescription = { descriptionExpanded = !descriptionExpanded },
@@ -564,7 +648,10 @@ fun NovelScreenAuroraImpl(
                     }
                 }
 
-                item {
+                item(
+                    key = NOVEL_AURORA_CHAPTERS_HEADER_KEY,
+                    contentType = NOVEL_AURORA_CHAPTERS_HEADER_KEY,
+                ) {
                     Spacer(modifier = Modifier.height(16.dp))
                     ChaptersHeader(
                         chapterCount = totalChapterCount,
@@ -667,6 +754,7 @@ fun NovelScreenAuroraImpl(
                     }
                 }
             }
+            }
 
             val heroThreshold = (screenHeight.value * 0.7f).toInt()
             if (firstVisibleItemIndex == 0 && scrollOffset < heroThreshold) {
@@ -687,7 +775,7 @@ fun NovelScreenAuroraImpl(
             }
 
             val showFab = onStartReading != null && (firstVisibleItemIndex > 0 || scrollOffset > heroThreshold)
-            if (showFab) {
+            if (shouldShowTitleFastScrollFloatingActionButton(showFab, isThumbFastScrolling)) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -701,116 +789,118 @@ fun NovelScreenAuroraImpl(
                 }
             }
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(WindowInsets.statusBars.asPaddingValues())
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                AuroraActionButton(
-                    onClick = onBack,
-                    icon = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = null,
-                )
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                AuroraActionButton(
-                    onClick = onFilterButtonClicked,
-                    icon = Icons.Default.FilterList,
-                    contentDescription = null,
-                    iconTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f),
-                )
-
-                if (!isFromSource) {
+            if (shouldShowTitleFastScrollOverlayChrome(isThumbFastScrolling)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(WindowInsets.statusBars.asPaddingValues())
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     AuroraActionButton(
-                        onClick = onRefresh,
-                        icon = Icons.Default.Refresh,
+                        onClick = onBack,
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = null,
                     )
-                }
 
-                if (onWebView != null) {
+                    Spacer(modifier = Modifier.weight(1f))
+
                     AuroraActionButton(
-                        onClick = onWebView,
-                        icon = Icons.Filled.Public,
+                        onClick = onFilterButtonClicked,
+                        icon = Icons.Default.FilterList,
                         contentDescription = null,
+                        iconTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f),
                     )
-                }
 
-                var showMenu by remember { mutableStateOf(false) }
-                val hasMenuActions = if (isFromSource) {
-                    true
-                } else {
-                    onShare != null || onMigrateClicked != null || globalSearchQuery != null
-                }
-                if (hasMenuActions) {
-                    Box(contentAlignment = Alignment.TopEnd) {
+                    if (!isFromSource) {
                         AuroraActionButton(
-                            onClick = { showMenu = !showMenu },
-                            icon = Icons.Default.MoreVert,
+                            onClick = onRefresh,
+                            icon = Icons.Default.Refresh,
                             contentDescription = null,
                         )
+                    }
 
-                        AuroraEntryDropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false },
-                        ) {
-                            if (isFromSource) {
-                                AuroraEntryDropdownMenuItem(
-                                    text = stringResource(MR.strings.action_webview_refresh),
-                                    onClick = {
-                                        onRefresh()
-                                        showMenu = false
-                                    },
-                                )
-                                if (globalSearchQuery != null) {
+                    if (onWebView != null) {
+                        AuroraActionButton(
+                            onClick = onWebView,
+                            icon = Icons.Filled.Public,
+                            contentDescription = null,
+                        )
+                    }
+
+                    var showMenu by remember { mutableStateOf(false) }
+                    val hasMenuActions = if (isFromSource) {
+                        true
+                    } else {
+                        onShare != null || onMigrateClicked != null || globalSearchQuery != null
+                    }
+                    if (hasMenuActions) {
+                        Box(contentAlignment = Alignment.TopEnd) {
+                            AuroraActionButton(
+                                onClick = { showMenu = !showMenu },
+                                icon = Icons.Default.MoreVert,
+                                contentDescription = null,
+                            )
+
+                            AuroraEntryDropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false },
+                            ) {
+                                if (isFromSource) {
                                     AuroraEntryDropdownMenuItem(
-                                        text = stringResource(MR.strings.action_global_search),
+                                        text = stringResource(MR.strings.action_webview_refresh),
                                         onClick = {
-                                            onSearch(globalSearchQuery, true)
+                                            onRefresh()
                                             showMenu = false
                                         },
                                     )
-                                }
-                                if (onShare != null) {
-                                    AuroraEntryDropdownMenuItem(
-                                        text = stringResource(MR.strings.action_share),
-                                        onClick = {
-                                            onShare()
-                                            showMenu = false
-                                        },
-                                    )
-                                }
-                            } else {
-                                if (globalSearchQuery != null) {
-                                    AuroraEntryDropdownMenuItem(
-                                        text = stringResource(MR.strings.action_global_search),
-                                        onClick = {
-                                            onSearch(globalSearchQuery, true)
-                                            showMenu = false
-                                        },
-                                    )
-                                }
-                                if (onShare != null) {
-                                    AuroraEntryDropdownMenuItem(
-                                        text = stringResource(MR.strings.action_share),
-                                        onClick = {
-                                            onShare()
-                                            showMenu = false
-                                        },
-                                    )
-                                }
-                                if (onMigrateClicked != null) {
-                                    AuroraEntryDropdownMenuItem(
-                                        text = stringResource(MR.strings.action_migrate),
-                                        onClick = {
-                                            onMigrateClicked()
-                                            showMenu = false
-                                        },
-                                    )
+                                    if (globalSearchQuery != null) {
+                                        AuroraEntryDropdownMenuItem(
+                                            text = stringResource(MR.strings.action_global_search),
+                                            onClick = {
+                                                onSearch(globalSearchQuery, true)
+                                                showMenu = false
+                                            },
+                                        )
+                                    }
+                                    if (onShare != null) {
+                                        AuroraEntryDropdownMenuItem(
+                                            text = stringResource(MR.strings.action_share),
+                                            onClick = {
+                                                onShare()
+                                                showMenu = false
+                                            },
+                                        )
+                                    }
+                                } else {
+                                    if (globalSearchQuery != null) {
+                                        AuroraEntryDropdownMenuItem(
+                                            text = stringResource(MR.strings.action_global_search),
+                                            onClick = {
+                                                onSearch(globalSearchQuery, true)
+                                                showMenu = false
+                                            },
+                                        )
+                                    }
+                                    if (onShare != null) {
+                                        AuroraEntryDropdownMenuItem(
+                                            text = stringResource(MR.strings.action_share),
+                                            onClick = {
+                                                onShare()
+                                                showMenu = false
+                                            },
+                                        )
+                                    }
+                                    if (onMigrateClicked != null) {
+                                        AuroraEntryDropdownMenuItem(
+                                            text = stringResource(MR.strings.action_migrate),
+                                            onClick = {
+                                                onMigrateClicked()
+                                                showMenu = false
+                                            },
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -841,6 +931,28 @@ fun NovelScreenAuroraImpl(
 internal fun shouldUseNovelAuroraTwoPane(deviceClass: AuroraDeviceClass): Boolean {
     return deviceClass == AuroraDeviceClass.TabletExpanded
 }
+
+internal fun shouldUseNovelAuroraPaneScopedFastScroller(useTwoPaneLayout: Boolean): Boolean {
+    return useTwoPaneLayout
+}
+
+internal fun resolveNovelAuroraFastScrollBlockStartIndex(
+    useTwoPaneLayout: Boolean,
+    isSelectionMode: Boolean,
+    chapterPageEnabled: Boolean,
+    showScanlatorSelector: Boolean,
+): Int {
+    val baseIndex = when {
+        useTwoPaneLayout && isSelectionMode -> 2
+        useTwoPaneLayout -> 1
+        isSelectionMode -> 4
+        else -> 3
+    }
+    return baseIndex + listOf(chapterPageEnabled, showScanlatorSelector).count { it }
+}
+
+private const val NOVEL_AURORA_CHAPTERS_HEADER_KEY = "novel-aurora-chapters-header"
+private val NOVEL_AURORA_FAST_SCROLL_ITEM_TOP_INSET = 4.dp
 
 @Composable
 private fun AuroraChapterPageControls(

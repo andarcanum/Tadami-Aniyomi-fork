@@ -60,12 +60,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import eu.kanade.presentation.components.EntryDownloadDropdownMenu
 import eu.kanade.presentation.entries.DownloadAction
+import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
+import eu.kanade.presentation.entries.shouldShowTitleFastScrollFloatingActionButton
+import eu.kanade.presentation.entries.shouldShowTitleFastScrollOverlayChrome
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.AuroraEntryHoldToRefresh
@@ -92,6 +97,7 @@ import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.TwoPanelBox
+import tachiyomi.presentation.core.components.VerticalFastScroller
 import tachiyomi.presentation.core.i18n.stringResource
 import java.time.Instant
 
@@ -194,6 +200,7 @@ fun MangaScreenAuroraImpl(
     // State for description and genres expansion
     var descriptionExpanded by remember { mutableStateOf(false) }
     var genresExpanded by remember { mutableStateOf(false) }
+    var isThumbFastScrolling by remember { mutableStateOf(false) }
 
     AuroraEntryHoldToRefresh(
         refreshing = state.isRefreshingData,
@@ -212,8 +219,29 @@ fun MangaScreenAuroraImpl(
 
             if (useTwoPaneLayout) {
                 val topContentPadding = 96.dp
+                val paneDensity = LocalDensity.current
+                val paneTopPaddingPx = with(paneDensity) { topContentPadding.roundToPx() }
+                val paneFastScrollBlockStartIndex = resolveMangaAuroraFastScrollBlockStartIndex(
+                    useTwoPaneLayout = true,
+                    showScanlatorSelector = showScanlatorSelector,
+                )
+                val paneFastScrollSpec by remember(paneTopPaddingPx, paneFastScrollBlockStartIndex) {
+                    derivedStateOf {
+                        resolveTitleListFastScrollSpec(
+                            baseTopPaddingPx = paneTopPaddingPx,
+                            firstVisibleItemIndex = lazyListState.firstVisibleItemIndex,
+                            blockStartIndex = paneFastScrollBlockStartIndex,
+                            blockStartOffsetPx = lazyListState.layoutInfo.visibleItemsInfo
+                                .firstOrNull { it.index == paneFastScrollBlockStartIndex }
+                                ?.offset
+                                ?.plus(with(paneDensity) { MANGA_AURORA_FAST_SCROLL_ITEM_TOP_INSET.roundToPx() }),
+                        )
+                    }
+                }
                 TwoPanelBox(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(1f),
                     startContent = {
                         Column(
                             modifier = Modifier
@@ -274,13 +302,26 @@ fun MangaScreenAuroraImpl(
                         }
                     },
                     endContent = {
-                        LazyColumn(
-                            state = lazyListState,
-                            contentPadding = PaddingValues(top = topContentPadding, bottom = 100.dp),
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(start = 6.dp, end = 12.dp),
+                        VerticalFastScroller(
+                            listState = lazyListState,
+                            onThumbDragStarted = {
+                                if (shouldAutoExpandAuroraChaptersListForFastScroll(chaptersExpanded, chapters.size)) {
+                                    chaptersExpanded = true
+                                }
+                            },
+                            onThumbDragStateChanged = { isThumbFastScrolling = it },
+                            thumbAllowed = { paneFastScrollSpec.thumbAllowed },
+                            topContentPadding = with(paneDensity) { paneFastScrollSpec.topPaddingPx.toDp() },
+                            endContentPadding = 12.dp,
+                            modifier = Modifier.zIndex(1f),
                         ) {
+                            LazyColumn(
+                                state = lazyListState,
+                                contentPadding = PaddingValues(top = topContentPadding, bottom = 100.dp),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(start = 6.dp, end = 12.dp),
+                            ) {
                             item {
                                 ChaptersHeader(chapterCount = chapters.size)
                             }
@@ -408,15 +449,49 @@ fun MangaScreenAuroraImpl(
                                 }
                             }
                         }
+                        }
                     },
                 )
             } else {
                 // Scrollable content
-                LazyColumn(
-                    state = lazyListState,
-                    contentPadding = PaddingValues(bottom = 100.dp),
-                    modifier = Modifier.fillMaxSize(),
+                val density = LocalDensity.current
+                val fastScrollBaseTopPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp
+                val fastScrollBaseTopPaddingPx = with(density) { fastScrollBaseTopPadding.roundToPx() }
+                val fastScrollBlockStartIndex = resolveMangaAuroraFastScrollBlockStartIndex(
+                    useTwoPaneLayout = false,
+                    showScanlatorSelector = showScanlatorSelector,
+                )
+                val fastScrollSpec by remember(fastScrollBaseTopPaddingPx, fastScrollBlockStartIndex) {
+                    derivedStateOf {
+                        resolveTitleListFastScrollSpec(
+                            baseTopPaddingPx = fastScrollBaseTopPaddingPx,
+                            firstVisibleItemIndex = lazyListState.firstVisibleItemIndex,
+                            blockStartIndex = fastScrollBlockStartIndex,
+                            blockStartOffsetPx = lazyListState.layoutInfo.visibleItemsInfo
+                                .firstOrNull { it.index == fastScrollBlockStartIndex }
+                                ?.offset
+                                ?.plus(with(density) { MANGA_AURORA_FAST_SCROLL_ITEM_TOP_INSET.roundToPx() }),
+                        )
+                    }
+                }
+                VerticalFastScroller(
+                    listState = lazyListState,
+                    onThumbDragStarted = {
+                        if (shouldAutoExpandAuroraChaptersListForFastScroll(chaptersExpanded, chapters.size)) {
+                            chaptersExpanded = true
+                        }
+                    },
+                    onThumbDragStateChanged = { isThumbFastScrolling = it },
+                    thumbAllowed = { fastScrollSpec.thumbAllowed },
+                    topContentPadding = with(density) { fastScrollSpec.topPaddingPx.toDp() },
+                    bottomContentPadding = 100.dp,
+                    modifier = Modifier.zIndex(1f),
                 ) {
+                    LazyColumn(
+                        state = lazyListState,
+                        contentPadding = PaddingValues(bottom = 100.dp),
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
                     // Spacer for poster/hero area
                     item {
                         Spacer(modifier = Modifier.height(screenHeight))
@@ -471,7 +546,10 @@ fun MangaScreenAuroraImpl(
                     }
 
                     // Chapters header
-                    item {
+                    item(
+                        key = MANGA_AURORA_CHAPTERS_HEADER_KEY,
+                        contentType = MANGA_AURORA_CHAPTERS_HEADER_KEY,
+                    ) {
                         Spacer(modifier = Modifier.height(20.dp))
                         ChaptersHeader(
                             chapterCount = chapters.size,
@@ -605,6 +683,7 @@ fun MangaScreenAuroraImpl(
                         }
                     }
                 }
+                }
             }
 
             // Hero content (fixed at bottom of first screen) - fades out on scroll
@@ -633,7 +712,7 @@ fun MangaScreenAuroraImpl(
 
             // Floating Play button (shows after Hero Content is hidden)
             val showFab = firstVisibleItemIndex > 0 || scrollOffset > heroThreshold
-            if (!useTwoPaneLayout && showFab && !isAnyChapterSelected) {
+            if (shouldShowTitleFastScrollFloatingActionButton(!useTwoPaneLayout && showFab && !isAnyChapterSelected, isThumbFastScrolling)) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -647,7 +726,7 @@ fun MangaScreenAuroraImpl(
                 }
             }
 
-            if (!isAnyChapterSelected) {
+            if (!isAnyChapterSelected && shouldShowTitleFastScrollOverlayChrome(isThumbFastScrolling)) {
                 // Top header bar
                 Row(
                     modifier = Modifier
@@ -773,6 +852,21 @@ internal fun shouldUseMangaAuroraTwoPane(deviceClass: AuroraDeviceClass): Boolea
     return deviceClass == AuroraDeviceClass.TabletExpanded
 }
 
+internal fun shouldUseMangaAuroraPaneScopedFastScroller(useTwoPaneLayout: Boolean): Boolean {
+    return useTwoPaneLayout
+}
+
+internal fun resolveMangaAuroraFastScrollBlockStartIndex(
+    useTwoPaneLayout: Boolean,
+    showScanlatorSelector: Boolean,
+): Int {
+    val baseIndex = if (useTwoPaneLayout) 1 else 3
+    return baseIndex + if (showScanlatorSelector) 1 else 0
+}
+
+private const val MANGA_AURORA_CHAPTERS_HEADER_KEY = "manga-aurora-chapters-header"
+private val MANGA_AURORA_FAST_SCROLL_ITEM_TOP_INSET = 6.dp
+
 internal enum class AuroraChapterClickAction {
     OpenChapter,
     SelectChapter,
@@ -795,6 +889,16 @@ internal fun shouldAutoExpandAuroraChaptersList(
     totalChapters: Int,
 ): Boolean {
     return !chaptersExpanded && totalChapters > 5
+}
+
+internal fun shouldAutoExpandAuroraChaptersListForFastScroll(
+    chaptersExpanded: Boolean,
+    totalChapters: Int,
+): Boolean {
+    return shouldAutoExpandAuroraChaptersList(
+        chaptersExpanded = chaptersExpanded,
+        totalChapters = totalChapters,
+    )
 }
 
 @Composable

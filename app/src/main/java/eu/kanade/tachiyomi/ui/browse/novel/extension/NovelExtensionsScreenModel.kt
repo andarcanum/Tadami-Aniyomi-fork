@@ -164,8 +164,13 @@ class NovelExtensionsScreenModel(
             try {
                 extensionManager.installPlugin(plugin)
                 addDownloadState(plugin, InstallStep.Installed)
-            } finally {
                 removeDownloadState(plugin)
+            } catch (e: CancellationException) {
+                removeDownloadState(plugin)
+                throw e
+            } catch (e: Throwable) {
+                logcat(LogPriority.WARN, e) { "Failed to install novel plugin ${plugin.id}" }
+                addDownloadState(plugin, InstallStep.Error)
             }
         }
     }

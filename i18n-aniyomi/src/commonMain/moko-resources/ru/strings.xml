@@ -392,6 +392,9 @@
     <string name="novel_reader_gemini_visibility_off">ВЫКЛ</string>
     <string name="novel_reader_gemini_show_original">Показать оригинал</string>
     <string name="novel_reader_gemini_show_translation">Показать перевод</string>
+    <string name="novel_reader_gemini_advanced_show">Доп. настройки</string>
+    <string name="novel_reader_gemini_advanced_hide">Скрыть доп. настройки</string>
+    <string name="novel_reader_gemini_private_python_like_mode">Python-like режим (цельная глава, ответ до ***)</string>
     <string name="novel_reader_gemini_action_start">Старт</string>
     <string name="novel_reader_gemini_action_clear">Очистить</string>
     <string name="novel_reader_gemini_action_close">Закрыть</string>
@@ -399,6 +402,12 @@
     <string name="label_manga_sources">Доступные источники</string>
     <string name="label_anime_sources">Доступные источники</string>
     <string name="label_novel_sources">Источники ранобэ</string>
+    <string name="novel_reader_section_reading_behavior">Поведение чтения</string>
+    <string name="novel_reader_section_translation">Перевод</string>
+    <string name="novel_reader_section_advanced">Дополнительно</string>
+    <string name="novel_reader_section_typography">Типографика</string>
+    <string name="novel_reader_section_appearance">Оформление</string>
+    <string name="novel_reader_section_backgrounds">Фоны</string>
     <string name="label_watched_duration">Длительность просмотра</string>
     <string name="label_watched_episodes">Просмотрено</string>
     <string name="pref_start_screen">Начальный экран</string>

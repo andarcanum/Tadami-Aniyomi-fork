@@ -54,6 +54,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.relativeDateTimeText
 import eu.kanade.presentation.entries.DownloadAction
 import eu.kanade.presentation.entries.EntryScreenItem
+import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.entries.components.EntryBottomActionMenu
 import eu.kanade.presentation.entries.components.EntryToolbar
 import eu.kanade.presentation.entries.components.ItemHeader
@@ -444,9 +445,28 @@ private fun MangaScreenSmallImpl(
             indicatorPadding = PaddingValues(top = topPadding),
         ) {
             val layoutDirection = LocalLayoutDirection.current
+            val density = LocalDensity.current
+            val baseTopPaddingPx = with(density) { topPadding.roundToPx() }
+            val fastScrollBlockStartIndex = resolveMangaClassicFastScrollBlockStartIndex(
+                showScanlatorSelector = showScanlatorSelector,
+            )
+            val fastScrollSpec by remember(baseTopPaddingPx, fastScrollBlockStartIndex) {
+                derivedStateOf {
+                    resolveTitleListFastScrollSpec(
+                        baseTopPaddingPx = baseTopPaddingPx,
+                        firstVisibleItemIndex = chapterListState.firstVisibleItemIndex,
+                        blockStartIndex = fastScrollBlockStartIndex,
+                        blockStartOffsetPx = chapterListState.layoutInfo.visibleItemsInfo
+                            .firstOrNull { it.index == fastScrollBlockStartIndex }
+                            ?.offset
+                            ?.plus(with(density) { MANGA_CLASSIC_FAST_SCROLL_ITEM_TOP_INSET.roundToPx() }),
+                    )
+                }
+            }
             VerticalFastScroller(
                 listState = chapterListState,
-                topContentPadding = topPadding,
+                thumbAllowed = { fastScrollSpec.thumbAllowed },
+                topContentPadding = with(density) { fastScrollSpec.topPaddingPx.toDp() },
                 endContentPadding = contentPadding.calculateEndPadding(layoutDirection),
             ) {
                 LazyColumn(
@@ -550,6 +570,14 @@ private fun MangaScreenSmallImpl(
         }
     }
 }
+
+internal fun resolveMangaClassicFastScrollBlockStartIndex(
+    showScanlatorSelector: Boolean,
+): Int {
+    return 4 + if (showScanlatorSelector) 1 else 0
+}
+
+private val MANGA_CLASSIC_FAST_SCROLL_ITEM_TOP_INSET = 5.dp
 
 @Composable
 fun MangaScreenLargeImpl(

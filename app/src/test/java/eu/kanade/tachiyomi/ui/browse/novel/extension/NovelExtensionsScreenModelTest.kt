@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.browse.novel.extension
 
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
+import eu.kanade.tachiyomi.extension.InstallStep
 import eu.kanade.tachiyomi.extension.novel.NovelExtensionManager
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import io.kotest.matchers.shouldBe
@@ -21,6 +22,8 @@ import kotlinx.coroutines.yield
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.io.IOException
+import tachiyomi.data.extension.novel.toInstalled
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 import tachiyomi.domain.source.novel.model.StubNovelSource
@@ -161,6 +164,45 @@ class NovelExtensionsScreenModelTest {
         }
     }
 
+    @Test
+    fun `failed install marks plugin as error instead of crashing`() {
+        runBlocking {
+            val available = pluginAvailable("id-timeout", 1)
+
+            val screenModel = NovelExtensionsScreenModel(
+                extensionManager = FakeNovelExtensionManager(
+                    installed = emptyList(),
+                    available = listOf(available),
+                    updates = emptyList(),
+                    installFailure = IOException("timeout"),
+                ),
+                sourcePreferences = sourcePreferences,
+            ).also(activeScreenModels::add)
+
+            withTimeout(1_000) {
+                while (screenModel.state.value.isLoading) {
+                    yield()
+                }
+            }
+
+            screenModel.installExtension(available)
+
+            withTimeout(1_000) {
+                while (
+                    screenModel.state.value.items
+                        .first { it.plugin.id == "id-timeout" }
+                        .installStep != InstallStep.Error
+                ) {
+                    yield()
+                }
+            }
+
+            screenModel.state.value.items
+                .first { it.plugin.id == "id-timeout" }
+                .installStep shouldBe InstallStep.Error
+        }
+    }
+
     private fun pluginAvailable(id: String, version: Int) = NovelPlugin.Available(
         id = id,
         name = "Source $id",
@@ -195,6 +237,7 @@ class NovelExtensionsScreenModelTest {
         installed: List<NovelPlugin.Installed>,
         available: List<NovelPlugin.Available>,
         updates: List<NovelPlugin.Installed>,
+        private val installFailure: Throwable? = null,
     ) : NovelExtensionManager {
         override val installedSourcesFlow: Flow<List<NovelSource>> =
             MutableStateFlow(emptyList())
@@ -208,7 +251,8 @@ class NovelExtensionsScreenModelTest {
         override suspend fun refreshAvailablePlugins() = Unit
 
         override suspend fun installPlugin(plugin: NovelPlugin.Available): NovelPlugin.Installed {
-            throw NotImplementedError("Not needed for test")
+            installFailure?.let { throw it }
+            return plugin.toInstalled()
         }
 
         override suspend fun uninstallPlugin(plugin: NovelPlugin.Installed) = Unit

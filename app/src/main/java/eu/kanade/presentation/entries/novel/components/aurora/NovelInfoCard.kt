@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -134,15 +135,17 @@ fun NovelInfoCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Top,
                 ) {
-                    Text(
-                        text = normalizedDescription ?: stringResource(AYMR.strings.aurora_no_description),
-                        color = colors.textPrimary.copy(alpha = 0.9f),
-                        fontSize = 14.sp,
-                        lineHeight = 22.sp,
-                        maxLines = if (descriptionExpanded) Int.MAX_VALUE else 5,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
+                    SelectionContainer {
+                        Text(
+                            text = normalizedDescription ?: stringResource(AYMR.strings.aurora_no_description),
+                            color = colors.textPrimary.copy(alpha = 0.9f),
+                            fontSize = 14.sp,
+                            lineHeight = 22.sp,
+                            maxLines = if (descriptionExpanded) Int.MAX_VALUE else 5,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
 
                     if ((normalizedDescription?.length ?: 0) > 200) {
                         Icon(

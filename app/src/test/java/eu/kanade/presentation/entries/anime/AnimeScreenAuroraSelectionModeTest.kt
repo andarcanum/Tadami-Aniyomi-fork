@@ -58,6 +58,27 @@ class AnimeScreenAuroraSelectionModeTest {
     }
 
     @Test
+    fun `fast scroll expands collapsed episodes list when more than five items`() {
+        shouldAutoExpandAuroraEpisodesListForFastScroll(
+            episodesExpanded = false,
+            totalEpisodes = 10,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `fast scroll does not expand when episodes list is already expanded or short`() {
+        shouldAutoExpandAuroraEpisodesListForFastScroll(
+            episodesExpanded = true,
+            totalEpisodes = 10,
+        ) shouldBe false
+
+        shouldAutoExpandAuroraEpisodesListForFastScroll(
+            episodesExpanded = false,
+            totalEpisodes = 5,
+        ) shouldBe false
+    }
+
+    @Test
     fun `aurora selection summary uses compact icon actions`() {
         shouldUseCompactAuroraSelectionActions() shouldBe true
     }
