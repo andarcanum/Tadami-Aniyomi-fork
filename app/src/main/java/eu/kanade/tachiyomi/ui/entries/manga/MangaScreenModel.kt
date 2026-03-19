@@ -31,6 +31,7 @@ import eu.kanade.domain.track.model.AutoTrackState
 import eu.kanade.domain.track.service.TrackPreferences
 import eu.kanade.presentation.entries.DownloadAction
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadAction
+import eu.kanade.presentation.util.TargetChapterCalculator
 import eu.kanade.presentation.util.formattedMessage
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadCache
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
@@ -725,6 +726,10 @@ class MangaScreenModel(
         return successState.chapters.getNextUnread(successState.manga)
     }
 
+    fun saveScrollPosition(index: Int, offset: Int) {
+        updateSuccessState { it.copy(scrollIndex = index, scrollOffset = offset) }
+    }
+
     private fun getUnreadChapters(): List<Chapter> {
         val chapterItems = if (skipFiltered) filteredChapters.orEmpty() else allChapters.orEmpty()
         return chapterItems
@@ -1251,9 +1256,15 @@ class MangaScreenModel(
             val isRefreshingData: Boolean = false,
             val dialog: Dialog? = null,
             val hasPromptedToAddBefore: Boolean = false,
+            val scrollIndex: Int = 0,
+            val scrollOffset: Int = 0,
         ) : State {
             val processedChapters by lazy {
                 chapters.applyFilters(manga).toList()
+            }
+
+            val targetChapterIndex by lazy {
+                TargetChapterCalculator.calculate(processedChapters) { it.chapter.read }
             }
 
             val isAnySelected by lazy {

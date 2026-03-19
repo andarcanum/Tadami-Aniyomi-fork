@@ -28,6 +28,7 @@ import eu.kanade.domain.track.model.AutoTrackState
 import eu.kanade.domain.track.service.TrackPreferences
 import eu.kanade.presentation.entries.DownloadAction
 import eu.kanade.presentation.entries.anime.components.EpisodeDownloadAction
+import eu.kanade.presentation.util.TargetChapterCalculator
 import eu.kanade.presentation.util.formattedMessage
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.UnmeteredSource
@@ -899,6 +900,10 @@ class AnimeScreenModel(
     fun getNextUnseenEpisode(): Episode? {
         val successState = successState ?: return null
         return successState.episodes.getNextUnseen(successState.anime)
+    }
+
+    fun saveScrollPosition(index: Int, offset: Int) {
+        updateSuccessState { it.copy(scrollIndex = index, scrollOffset = offset) }
     }
 
     private fun getUnseenEpisodes(): List<Episode> {
@@ -1902,6 +1907,8 @@ class AnimeScreenModel(
             val animeMetadata: AnimeMetadataData? = null,
             val isMetadataLoading: Boolean = false,
             val metadataError: MetadataError? = null,
+            val scrollIndex: Int = 0,
+            val scrollOffset: Int = 0,
         ) : State {
 
             val processedSeasons by lazy {
@@ -1910,6 +1917,10 @@ class AnimeScreenModel(
 
             val processedEpisodes by lazy {
                 episodes.applyFilters(anime).toList()
+            }
+
+            val targetEpisodeIndex by lazy {
+                TargetChapterCalculator.calculate(processedEpisodes) { it.episode.seen }
             }
 
             val episodeListItems by lazy {

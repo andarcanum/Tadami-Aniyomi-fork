@@ -203,7 +203,7 @@ fun AuroraSettingItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp)
+            .padding(vertical = AURORA_MORE_CARD_VERTICAL_INSET)
             .clip(RoundedCornerShape(16.dp))
             .background(resolveAuroraMoreCardContainerColor(colors.glass, colors.isDark))
             .clickable(onClick = onClick)
@@ -250,7 +250,7 @@ fun AuroraToggleItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp)
+            .padding(vertical = AURORA_MORE_CARD_VERTICAL_INSET)
             .clip(RoundedCornerShape(16.dp))
             .background(resolveAuroraMoreCardContainerColor(colors.glass, colors.isDark))
             .clickable { onCheckedChange(!checked) }

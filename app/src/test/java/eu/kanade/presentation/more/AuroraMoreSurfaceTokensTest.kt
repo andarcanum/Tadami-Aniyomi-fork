@@ -1,6 +1,7 @@
 package eu.kanade.presentation.more
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 
@@ -38,5 +39,10 @@ class AuroraMoreSurfaceTokensTest {
             accent = Color(0xFF33AAFF),
             isDark = false,
         ) shouldBe Color(0xFF33AAFF).copy(alpha = 0.5f)
+    }
+
+    @Test
+    fun `aurora more card vertical inset matches aurora settings spacing`() {
+        AURORA_MORE_CARD_VERTICAL_INSET shouldBe 4.dp
     }
 }

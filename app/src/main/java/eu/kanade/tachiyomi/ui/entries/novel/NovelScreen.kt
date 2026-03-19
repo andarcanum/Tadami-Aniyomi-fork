@@ -333,6 +333,7 @@ class NovelScreen(
             onMultiMarkAsReadClicked = screenModel::markChaptersRead,
             onMultiDownloadClicked = screenModel::downloadSelectedChapters,
             onMultiDeleteClicked = screenModel::deleteDownloadedSelectedChapters,
+            onSaveScrollPosition = screenModel::saveScrollPosition,
         )
 
         if (showBatchDownloadDialog) {
