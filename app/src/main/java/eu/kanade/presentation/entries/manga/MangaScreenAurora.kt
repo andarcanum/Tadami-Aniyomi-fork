@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import eu.kanade.presentation.components.EntryDownloadDropdownMenu
 import eu.kanade.presentation.entries.DownloadAction
+import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
 import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollFloatingActionButton
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollOverlayChrome
@@ -96,6 +97,7 @@ import kotlinx.coroutines.launch
 import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.TwoPanelBox
 import tachiyomi.presentation.core.components.VerticalFastScroller
 import tachiyomi.presentation.core.i18n.stringResource
@@ -141,6 +143,9 @@ fun MangaScreenAuroraImpl(
     onAllChapterSelected: (Boolean) -> Unit,
     onInvertSelection: () -> Unit,
     onSettingsClicked: (() -> Unit)?,
+    isAutoJumpToNextEnabled: Boolean,
+    autoJumpToNextLabel: String,
+    onToggleAutoJumpToNext: () -> Unit,
 ) {
     val manga = state.manga
     val globalSearchQuery = remember(manga.title) { normalizeAuroraGlobalSearchQuery(manga.title) }
@@ -175,6 +180,22 @@ fun MangaScreenAuroraImpl(
         chapters.any { chapterItem ->
             val chapter = (chapterItem as? ChapterList.Item)?.chapter ?: return@any false
             chapter.read || chapter.lastPageRead > 0L
+        }
+    }
+
+    // Auto-scroll to target chapter on initial load
+    var hasScrolledToTarget: Boolean by remember { mutableStateOf(false) }
+    LaunchedEffect(state.targetChapterIndex, chaptersExpanded) {
+        if (!hasScrolledToTarget && chaptersExpanded) {
+            hasScrolledToTarget = true
+            val targetIndex = resolveEntryAutoJumpTargetIndex(
+                enabled = isAutoJumpToNextEnabled,
+                targetIndex = state.targetChapterIndex,
+                restoredScrollIndex = state.scrollIndex,
+            )
+            if (targetIndex != null) {
+                lazyListState.animateScrollToItem(targetIndex)
+            }
         }
     }
 
@@ -436,9 +457,9 @@ fun MangaScreenAuroraImpl(
                                         ) {
                                             Text(
                                                 text = if (chaptersExpanded) {
-                                                    "Показать меньше"
+                                                    stringResource(AYMR.strings.action_show_less)
                                                 } else {
-                                                    "Показать все ${chapters.size} глав"
+                                                    stringResource(AYMR.strings.action_show_all_chapters, chapters.size)
                                                 },
                                                 color = colors.accent,
                                                 fontSize = 14.sp,
@@ -670,9 +691,9 @@ fun MangaScreenAuroraImpl(
                                 ) {
                                     Text(
                                         text = if (chaptersExpanded) {
-                                            "Показать меньше"
+                                            stringResource(AYMR.strings.action_show_less)
                                         } else {
-                                            "Показать все ${chapters.size} глав"
+                                            stringResource(AYMR.strings.action_show_all_chapters, chapters.size)
                                         },
                                         color = colors.accent,
                                         fontSize = 14.sp,
@@ -717,7 +738,8 @@ fun MangaScreenAuroraImpl(
 
             // Floating Play button (shows after Hero Content is hidden)
             val showFab = firstVisibleItemIndex > 0 || scrollOffset > heroThreshold
-            if (shouldShowTitleFastScrollFloatingActionButton(!useTwoPaneLayout && showFab && !isAnyChapterSelected, isThumbFastScrolling)) {
+            val shouldShowFab = !useTwoPaneLayout && showFab && !isAnyChapterSelected
+            if (shouldShowTitleFastScrollFloatingActionButton(shouldShowFab, isThumbFastScrolling)) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -795,6 +817,13 @@ fun MangaScreenAuroraImpl(
                                 text = stringResource(MR.strings.action_webview_refresh),
                                 onClick = {
                                     onRefresh()
+                                    showMenu = false
+                                },
+                            )
+                            AuroraEntryDropdownMenuItem(
+                                text = autoJumpToNextLabel,
+                                onClick = {
+                                    onToggleAutoJumpToNext()
                                     showMenu = false
                                 },
                             )

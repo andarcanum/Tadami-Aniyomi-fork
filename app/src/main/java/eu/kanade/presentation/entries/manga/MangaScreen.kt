@@ -31,10 +31,12 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -54,7 +56,6 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.relativeDateTimeText
 import eu.kanade.presentation.entries.DownloadAction
 import eu.kanade.presentation.entries.EntryScreenItem
-import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.entries.components.EntryBottomActionMenu
 import eu.kanade.presentation.entries.components.EntryToolbar
 import eu.kanade.presentation.entries.components.ItemHeader
@@ -65,6 +66,8 @@ import eu.kanade.presentation.entries.manga.components.MangaActionRow
 import eu.kanade.presentation.entries.manga.components.MangaChapterListItem
 import eu.kanade.presentation.entries.manga.components.MangaInfoBox
 import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
+import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
+import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.util.formatChapterNumber
 import eu.kanade.tachiyomi.data.download.manga.model.MangaDownload
 import eu.kanade.tachiyomi.source.ConfigurableSource
@@ -79,6 +82,7 @@ import tachiyomi.domain.items.chapter.service.missingChaptersCount
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.manga.model.StubMangaSource
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.TwoPanelBox
 import tachiyomi.presentation.core.components.VerticalFastScroller
 import tachiyomi.presentation.core.components.material.ExtendedFloatingActionButton
@@ -151,6 +155,17 @@ fun MangaScreen(
 
     val uiPreferences = Injekt.get<eu.kanade.domain.ui.UiPreferences>()
     val theme by uiPreferences.appTheme().collectAsState()
+    val autoJumpToNextEnabled by uiPreferences.entryAutoJumpToNextManga().collectAsState()
+    val autoJumpToNextLabel = stringResource(
+        if (autoJumpToNextEnabled) {
+            AYMR.strings.action_disable_auto_jump_next_chapter
+        } else {
+            AYMR.strings.action_enable_auto_jump_next_chapter
+        },
+    )
+    val onToggleAutoJumpToNext = {
+        uiPreferences.entryAutoJumpToNextManga().set(!autoJumpToNextEnabled)
+    }
 
     if (theme.isAuroraStyle) {
         MangaScreenAuroraImpl(
@@ -191,6 +206,9 @@ fun MangaScreen(
             onAllChapterSelected = onAllChapterSelected,
             onInvertSelection = onInvertSelection,
             onSettingsClicked = onSettingsClicked,
+            isAutoJumpToNextEnabled = autoJumpToNextEnabled,
+            autoJumpToNextLabel = autoJumpToNextLabel,
+            onToggleAutoJumpToNext = onToggleAutoJumpToNext,
         )
         return
     }
@@ -241,6 +259,9 @@ fun MangaScreen(
             onAllChapterSelected = onAllChapterSelected,
             onInvertSelection = onInvertSelection,
             onSettingsClicked = onSettingsClicked,
+            isAutoJumpToNextEnabled = autoJumpToNextEnabled,
+            autoJumpToNextLabel = autoJumpToNextLabel,
+            onToggleAutoJumpToNext = onToggleAutoJumpToNext,
         )
     } else {
         MangaScreenLargeImpl(
@@ -281,6 +302,9 @@ fun MangaScreen(
             onAllChapterSelected = onAllChapterSelected,
             onInvertSelection = onInvertSelection,
             onSettingsClicked = onSettingsClicked,
+            isAutoJumpToNextEnabled = autoJumpToNextEnabled,
+            autoJumpToNextLabel = autoJumpToNextLabel,
+            onToggleAutoJumpToNext = onToggleAutoJumpToNext,
         )
     }
 }
@@ -323,6 +347,9 @@ private fun MangaScreenSmallImpl(
     onEditIntervalClicked: (() -> Unit)?,
     onMigrateClicked: (() -> Unit)?,
     onSettingsClicked: (() -> Unit)?,
+    isAutoJumpToNextEnabled: Boolean,
+    autoJumpToNextLabel: String,
+    onToggleAutoJumpToNext: () -> Unit,
 
     // For bottom action menu
     onMultiBookmarkClicked: (List<Chapter>, bookmarked: Boolean) -> Unit,
@@ -337,8 +364,33 @@ private fun MangaScreenSmallImpl(
     onChapterSelected: (ChapterList.Item, Boolean, Boolean, Boolean) -> Unit,
     onAllChapterSelected: (Boolean) -> Unit,
     onInvertSelection: () -> Unit,
+    onSaveScrollPosition: (Int, Int) -> Unit = { _, _ -> },
 ) {
     val chapterListState = rememberLazyListState()
+
+    // Save scroll position when it changes
+    LaunchedEffect(chapterListState.firstVisibleItemIndex, chapterListState.firstVisibleItemScrollOffset) {
+        onSaveScrollPosition(
+            chapterListState.firstVisibleItemIndex,
+            chapterListState.firstVisibleItemScrollOffset,
+        )
+    }
+
+    // Restore saved scroll position or auto-scroll to target chapter
+    var hasScrolledToTarget: Boolean by remember { mutableStateOf(false) }
+    LaunchedEffect(state.scrollIndex, state.targetChapterIndex) {
+        if (!hasScrolledToTarget) {
+            hasScrolledToTarget = true
+            val targetIndex = resolveEntryAutoJumpTargetIndex(
+                enabled = isAutoJumpToNextEnabled,
+                targetIndex = state.targetChapterIndex,
+                restoredScrollIndex = state.scrollIndex,
+            )
+            if (targetIndex != null) {
+                chapterListState.animateScrollToItem(targetIndex)
+            }
+        }
+    }
 
     val (chapters, listItem, isAnySelected) = remember(state) {
         Triple(
@@ -386,6 +438,8 @@ private fun MangaScreenSmallImpl(
                 onClickRefresh = onRefresh,
                 onClickMigrate = onMigrateClicked,
                 onClickSettings = onSettingsClicked,
+                onToggleAutoJumpToNext = onToggleAutoJumpToNext,
+                autoJumpToNextLabel = autoJumpToNextLabel,
                 changeAnimeSkipIntro = null,
                 actionModeCounter = selectedChapterCount,
                 onCancelActionMode = { onAllChapterSelected(false) },
@@ -617,6 +671,9 @@ fun MangaScreenLargeImpl(
     onEditIntervalClicked: (() -> Unit)?,
     onMigrateClicked: (() -> Unit)?,
     onSettingsClicked: (() -> Unit)?,
+    isAutoJumpToNextEnabled: Boolean,
+    autoJumpToNextLabel: String,
+    onToggleAutoJumpToNext: () -> Unit,
 
     // For bottom action menu
     onMultiBookmarkClicked: (List<Chapter>, bookmarked: Boolean) -> Unit,
@@ -648,6 +705,22 @@ fun MangaScreenLargeImpl(
 
     val chapterListState = rememberLazyListState()
 
+    // Auto-scroll to target chapter on initial load
+    var hasScrolledToTarget: Boolean by remember { mutableStateOf(false) }
+    LaunchedEffect(state.targetChapterIndex) {
+        if (!hasScrolledToTarget) {
+            hasScrolledToTarget = true
+            val targetIndex = resolveEntryAutoJumpTargetIndex(
+                enabled = isAutoJumpToNextEnabled,
+                targetIndex = state.targetChapterIndex,
+                restoredScrollIndex = state.scrollIndex,
+            )
+            if (targetIndex != null) {
+                chapterListState.animateScrollToItem(targetIndex)
+            }
+        }
+    }
+
     BackHandler(onBack = {
         if (isAnySelected) {
             onAllChapterSelected(false)
@@ -672,10 +745,12 @@ fun MangaScreenLargeImpl(
                 onClickEditCategory = onEditCategoryClicked,
                 onClickRefresh = onRefresh,
                 onClickMigrate = onMigrateClicked,
-                onCancelActionMode = { onAllChapterSelected(false) },
                 onClickSettings = onSettingsClicked,
+                onToggleAutoJumpToNext = onToggleAutoJumpToNext,
+                autoJumpToNextLabel = autoJumpToNextLabel,
                 changeAnimeSkipIntro = null,
                 actionModeCounter = selectedChapterCount,
+                onCancelActionMode = { onAllChapterSelected(false) },
                 onSelectAll = { onAllChapterSelected(true) },
                 onInvertSelection = { onInvertSelection() },
                 titleAlphaProvider = { 1f },

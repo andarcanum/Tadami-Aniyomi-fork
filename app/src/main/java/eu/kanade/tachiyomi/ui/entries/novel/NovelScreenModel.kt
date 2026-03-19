@@ -17,6 +17,7 @@ import eu.kanade.domain.entries.novel.model.toSNovel
 import eu.kanade.domain.items.novelchapter.interactor.GetAvailableNovelScanlators
 import eu.kanade.domain.items.novelchapter.interactor.GetNovelScanlatorChapterCounts
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
+import eu.kanade.presentation.util.TargetChapterCalculator
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager
 import eu.kanade.tachiyomi.data.download.novel.NovelQueuedDownloadStatus
@@ -1408,6 +1409,8 @@ class NovelScreenModel(
             val chapterPageEstimatedTotal: Int = 0,
             val chapterPageNominalSize: Int = 0,
             val chapterPageVisibleUrls: Set<String> = emptySet(),
+            val scrollIndex: Int = 0,
+            val scrollOffset: Int = 0,
         ) : State {
             val scanlatorFilterActive: Boolean
                 get() = excludedScanlators.intersect(availableScanlators).isNotEmpty()
@@ -1444,11 +1447,19 @@ class NovelScreenModel(
                     .sortedWith(chapterSort)
                     .toList()
             }
+
+            val targetChapterIndex by lazy {
+                TargetChapterCalculator.calculate(processedChapters) { it.read }
+            }
         }
     }
 
     fun showTrackDialog() {
         updateSuccessState { it.copy(dialog = Dialog.TrackSheet) }
+    }
+
+    fun saveScrollPosition(index: Int, offset: Int) {
+        updateSuccessState { it.copy(scrollIndex = index, scrollOffset = offset) }
     }
 
     companion object {
@@ -1478,6 +1489,8 @@ class NovelScreenModel(
                 selectedChapterIds = emptySet(),
                 downloadingChapterIds = emptySet(),
                 chapterPageLoading = false,
+                scrollIndex = 0,
+                scrollOffset = 0,
             )
         }
 

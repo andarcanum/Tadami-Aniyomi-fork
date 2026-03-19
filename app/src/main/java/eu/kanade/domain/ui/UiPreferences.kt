@@ -42,6 +42,12 @@ class UiPreferences(
 
     fun showMangaScanlatorBranches() = preferenceStore.getBoolean("show_manga_scanlator_branches", false)
 
+    fun entryAutoJumpToNextAnime() = preferenceStore.getBoolean("entry_auto_jump_to_next_anime", false)
+
+    fun entryAutoJumpToNextManga() = preferenceStore.getBoolean("entry_auto_jump_to_next_manga", false)
+
+    fun entryAutoJumpToNextNovel() = preferenceStore.getBoolean("entry_auto_jump_to_next_novel", false)
+
     fun navStyle() = preferenceStore.getEnum("bottom_rail_nav_style", NavStyle.MOVE_HISTORY_TO_MORE)
 
     fun navigationTransitionMode() = preferenceStore.getEnum(

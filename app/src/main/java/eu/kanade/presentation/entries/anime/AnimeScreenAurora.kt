@@ -71,6 +71,7 @@ import androidx.compose.ui.zIndex
 import eu.kanade.domain.ui.model.AnimeMetadataSource
 import eu.kanade.presentation.components.EntryDownloadDropdownMenu
 import eu.kanade.presentation.entries.DownloadAction
+import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
 import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollFloatingActionButton
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollOverlayChrome
@@ -98,6 +99,7 @@ import kotlinx.coroutines.launch
 import tachiyomi.domain.items.episode.model.Episode
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.TwoPanelBox
 import tachiyomi.presentation.core.components.VerticalFastScroller
 import tachiyomi.presentation.core.i18n.stringResource
@@ -151,6 +153,9 @@ fun AnimeScreenAuroraImpl(
     onDownloadLongClick: ((Episode) -> Unit)?,
     onRetryMetadata: () -> Unit,
     onSettingsClicked: (() -> Unit)?,
+    isAutoJumpToNextEnabled: Boolean,
+    autoJumpToNextLabel: String,
+    onToggleAutoJumpToNext: () -> Unit,
 ) {
     val anime = state.anime
     val globalSearchQuery = remember(anime.title) { normalizeAuroraGlobalSearchQuery(anime.title) }
@@ -196,6 +201,22 @@ fun AnimeScreenAuroraImpl(
     var episodesExpanded by remember { mutableStateOf(false) }
     val episodesToShow = if (episodesExpanded) episodes else episodes.take(5)
     val haptic = LocalHapticFeedback.current
+
+    // Auto-scroll to target episode on initial load
+    var hasScrolledToTarget: Boolean by remember { mutableStateOf(false) }
+    LaunchedEffect(state.targetEpisodeIndex, episodesExpanded) {
+        if (!hasScrolledToTarget && episodesExpanded) {
+            hasScrolledToTarget = true
+            val targetIndex = resolveEntryAutoJumpTargetIndex(
+                enabled = isAutoJumpToNextEnabled,
+                targetIndex = state.targetEpisodeIndex,
+                restoredScrollIndex = state.scrollIndex,
+            )
+            if (targetIndex != null) {
+                lazyListState.animateScrollToItem(targetIndex)
+            }
+        }
+    }
 
     BackHandler(onBack = {
         if (isAnyEpisodeSelected) {
@@ -491,9 +512,9 @@ fun AnimeScreenAuroraImpl(
                                         ) {
                                             Text(
                                                 text = if (episodesExpanded) {
-                                                    "Показать меньше"
+                                                    stringResource(AYMR.strings.action_show_less)
                                                 } else {
-                                                    "Показать все ${episodes.size} эпизодов"
+                                                    stringResource(AYMR.strings.action_show_all_episodes, episodes.size)
                                                 },
                                                 color = colors.accent,
                                                 fontSize = 14.sp,
@@ -720,9 +741,9 @@ fun AnimeScreenAuroraImpl(
                                 ) {
                                     Text(
                                         text = if (episodesExpanded) {
-                                            "Показать меньше"
+                                            stringResource(AYMR.strings.action_show_less)
                                         } else {
-                                            "Показать все ${episodes.size} эпизодов"
+                                            stringResource(AYMR.strings.action_show_all_episodes, episodes.size)
                                         },
                                         color = colors.accent,
                                         fontSize = 14.sp,
@@ -768,7 +789,8 @@ fun AnimeScreenAuroraImpl(
 
             // Floating Play button (shows after Hero Content is hidden)
             val showFab = firstVisibleItemIndex > 0 || scrollOffset > heroThreshold
-            if (shouldShowTitleFastScrollFloatingActionButton(!useTwoPaneLayout && showFab && !isAnyEpisodeSelected, isThumbFastScrolling)) {
+            val shouldShowFab = !useTwoPaneLayout && showFab && !isAnyEpisodeSelected
+            if (shouldShowTitleFastScrollFloatingActionButton(shouldShowFab, isThumbFastScrolling)) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -848,6 +870,13 @@ fun AnimeScreenAuroraImpl(
                                     showMenu = false
                                 },
                             )
+                            AuroraEntryDropdownMenuItem(
+                                text = autoJumpToNextLabel,
+                                onClick = {
+                                    onToggleAutoJumpToNext()
+                                    showMenu = false
+                                },
+                            )
                             if (globalSearchQuery != null) {
                                 AuroraEntryDropdownMenuItem(
                                     text = stringResource(MR.strings.action_global_search),
@@ -892,8 +921,9 @@ fun AnimeScreenAuroraImpl(
                 onMarkPreviousAsSeenClicked = onMarkPreviousAsSeenClicked,
                 onDownloadEpisode = onDownloadEpisode,
                 onMultiDeleteClicked = onMultiDeleteClicked,
-                fillFraction = if (auroraSelectionControlsPlacement() == AuroraSelectionControlsPlacement.BottomStack &&
-                    useTwoPaneLayout
+                fillFraction = if (
+                    auroraSelectionControlsPlacement() == AuroraSelectionControlsPlacement.BottomStack &&
+                        useTwoPaneLayout
                 ) {
                     0.5f
                 } else {

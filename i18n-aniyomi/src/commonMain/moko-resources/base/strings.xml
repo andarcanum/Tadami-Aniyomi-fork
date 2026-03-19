@@ -1406,4 +1406,11 @@
     <string name="home_header_layout_element_streak">Streak</string>
     <string name="home_header_layout_editor_preview_greeting">Hello, welcome</string>
     <string name="home_header_layout_editor_preview_nickname">Viewer</string>
+    <string name="action_show_less">Show less</string>
+    <string name="action_show_all_episodes">Show all %d episodes</string>
+    <string name="action_show_all_chapters">Show all %d chapters</string>
+    <string name="action_enable_auto_jump_next_episode">Enable auto-jump to next episode</string>
+    <string name="action_disable_auto_jump_next_episode">Disable auto-jump to next episode</string>
+    <string name="action_enable_auto_jump_next_chapter">Enable auto-jump to next chapter</string>
+    <string name="action_disable_auto_jump_next_chapter">Disable auto-jump to next chapter</string>
 </resources>

@@ -39,6 +39,8 @@ fun EntryToolbar(
     onClickRefresh: () -> Unit,
     onClickMigrate: (() -> Unit)?,
     onClickSettings: (() -> Unit)?,
+    onToggleAutoJumpToNext: (() -> Unit)?,
+    autoJumpToNextLabel: String?,
     // Anime only
     changeAnimeSkipIntro: (() -> Unit)?,
     // For action mode
@@ -119,6 +121,14 @@ fun EntryToolbar(
                             AppBar.OverflowAction(
                                 title = stringResource(AYMR.strings.action_change_intro_length),
                                 onClick = changeAnimeSkipIntro,
+                            ),
+                        )
+                    }
+                    if (onToggleAutoJumpToNext != null && autoJumpToNextLabel != null) {
+                        add(
+                            AppBar.OverflowAction(
+                                title = autoJumpToNextLabel,
+                                onClick = onToggleAutoJumpToNext,
                             ),
                         )
                     }

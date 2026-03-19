@@ -1444,4 +1444,11 @@
     <string name="home_header_layout_editor_reset_confirm_title">Сбросить раскладку?</string>
     <string name="home_header_layout_editor_reset_confirm_message">Это восстановит стандартные позиции элементов шапки.</string>
     <string name="home_header_layout_editor_reset_confirm_action">Сбросить раскладку</string>
+    <string name="action_show_less">Показать меньше</string>
+    <string name="action_show_all_episodes">Показать все %d эпизодов</string>
+    <string name="action_show_all_chapters">Показать все %d глав</string>
+    <string name="action_enable_auto_jump_next_episode">Включить автопрыжок к следующему эпизоду</string>
+    <string name="action_disable_auto_jump_next_episode">Выключить автопрыжок к следующему эпизоду</string>
+    <string name="action_enable_auto_jump_next_chapter">Включить автопрыжок к следующей главе</string>
+    <string name="action_disable_auto_jump_next_chapter">Выключить автопрыжок к следующей главе</string>
 </resources>

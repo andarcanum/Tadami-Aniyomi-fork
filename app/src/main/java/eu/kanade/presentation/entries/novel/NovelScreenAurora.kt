@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -35,9 +36,9 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -56,14 +57,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
-import eu.kanade.presentation.entries.shouldShowTitleFastScrollFloatingActionButton
-import eu.kanade.presentation.entries.shouldShowTitleFastScrollOverlayChrome
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.AuroraEntryHoldToRefresh
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionFab
 import eu.kanade.presentation.entries.components.normalizeAuroraGlobalSearchQuery
+import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
 import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
 import eu.kanade.presentation.entries.novel.components.aurora.ChaptersHeader
 import eu.kanade.presentation.entries.novel.components.aurora.FullscreenPosterBackground
@@ -71,6 +70,9 @@ import eu.kanade.presentation.entries.novel.components.aurora.NovelActionCard
 import eu.kanade.presentation.entries.novel.components.aurora.NovelChapterCardCompact
 import eu.kanade.presentation.entries.novel.components.aurora.NovelHeroContent
 import eu.kanade.presentation.entries.novel.components.aurora.NovelInfoCard
+import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
+import eu.kanade.presentation.entries.shouldShowTitleFastScrollFloatingActionButton
+import eu.kanade.presentation.entries.shouldShowTitleFastScrollOverlayChrome
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
@@ -78,6 +80,7 @@ import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.TwoPanelBox
 import tachiyomi.presentation.core.components.VerticalFastScroller
 import tachiyomi.presentation.core.i18n.stringResource
@@ -124,6 +127,9 @@ fun NovelScreenAuroraImpl(
     onInvertSelection: () -> Unit,
     onMultiBookmarkClicked: (Boolean) -> Unit,
     onMultiMarkAsReadClicked: (Boolean) -> Unit,
+    isAutoJumpToNextEnabled: Boolean,
+    autoJumpToNextLabel: String,
+    onToggleAutoJumpToNext: () -> Unit,
 ) {
     val novel = state.novel
     val globalSearchQuery = remember(novel.title) { normalizeAuroraGlobalSearchQuery(novel.title) }
@@ -144,24 +150,45 @@ fun NovelScreenAuroraImpl(
     val scrollOffset by remember { derivedStateOf { lazyListState.firstVisibleItemScrollOffset } }
     val firstVisibleItemIndex by remember { derivedStateOf { lazyListState.firstVisibleItemIndex } }
 
+    var chaptersExpanded by remember { mutableStateOf(false) }
+    val chaptersToShow = remember(chapters, chaptersExpanded) {
+        chapters.take(resolveNovelAuroraVisibleChapterCount(chaptersExpanded, chapters.size))
+    }
+
+    // Auto-scroll to target chapter on initial load
+    var hasScrolledToTarget: Boolean by remember { mutableStateOf(false) }
+    LaunchedEffect(state.targetChapterIndex, chaptersExpanded, chapters.size) {
+        if (shouldAutoJumpToNovelAuroraTarget(hasScrolledToTarget, chaptersExpanded, chapters.size)) {
+            hasScrolledToTarget = true
+            val targetIndex = resolveEntryAutoJumpTargetIndex(
+                enabled = isAutoJumpToNextEnabled,
+                targetIndex = state.targetChapterIndex,
+                restoredScrollIndex = state.scrollIndex,
+            )
+            if (targetIndex != null) {
+                lazyListState.animateScrollToItem(targetIndex)
+            }
+        }
+    }
+
     val selectedIds = state.selectedChapterIds
     val isSelectionMode = selectedIds.isNotEmpty()
     val selectedChapters = chapters.filter { it.id in selectedIds }
-    var visibleChapterCount by remember(chapters) {
-        mutableIntStateOf(
-            initialVisibleChapterCount(
-                totalCount = chapters.size,
-                pageSize = NOVEL_CHAPTERS_PAGE_SIZE,
-            ),
-        )
-    }
-    val visibleChapters = remember(chapters, visibleChapterCount) {
-        chapters.take(visibleChapterCount)
-    }
 
     var descriptionExpanded by remember { mutableStateOf(false) }
     var genresExpanded by remember { mutableStateOf(false) }
     var isThumbFastScrolling by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isSelectionMode, chaptersExpanded, chapters.size) {
+        if (isSelectionMode &&
+            shouldAutoExpandAuroraNovelChaptersList(
+                chaptersExpanded = chaptersExpanded,
+                totalChapters = chapters.size,
+            )
+        ) {
+            chaptersExpanded = true
+        }
+    }
 
     if (useTwoPaneLayout) {
         val topContentPadding = 96.dp
@@ -233,6 +260,28 @@ fun NovelScreenAuroraImpl(
                     },
                     endContent = {
                         val chapterListState = rememberLazyListState()
+
+                        // Auto-scroll to target chapter in two-pane layout
+                        var hasScrolledToTargetInPane: Boolean by remember { mutableStateOf(false) }
+                        LaunchedEffect(state.targetChapterIndex, chaptersExpanded, chapters.size) {
+                            if (shouldAutoJumpToNovelAuroraTarget(
+                                    hasScrolledToTarget = hasScrolledToTargetInPane,
+                                    chaptersExpanded = chaptersExpanded,
+                                    totalChapters = chapters.size,
+                                )
+                            ) {
+                                hasScrolledToTargetInPane = true
+                                val targetIndex = resolveEntryAutoJumpTargetIndex(
+                                    enabled = isAutoJumpToNextEnabled,
+                                    targetIndex = state.targetChapterIndex,
+                                    restoredScrollIndex = state.scrollIndex,
+                                )
+                                if (targetIndex != null) {
+                                    chapterListState.animateScrollToItem(targetIndex)
+                                }
+                            }
+                        }
+
                         val paneDensity = LocalDensity.current
                         val paneTopPaddingPx = with(paneDensity) { topContentPadding.roundToPx() }
                         val paneFastScrollBlockStartIndex = resolveNovelAuroraFastScrollBlockStartIndex(
@@ -250,17 +299,20 @@ fun NovelScreenAuroraImpl(
                                     blockStartOffsetPx = chapterListState.layoutInfo.visibleItemsInfo
                                         .firstOrNull { it.index == paneFastScrollBlockStartIndex }
                                         ?.offset
-                                        ?.plus(with(paneDensity) { NOVEL_AURORA_FAST_SCROLL_ITEM_TOP_INSET.roundToPx() }),
+                                        ?.plus(
+                                            with(paneDensity) {
+                                                NOVEL_AURORA_FAST_SCROLL_ITEM_TOP_INSET.roundToPx()
+                                            },
+                                        ),
                                 )
                             }
                         }
                         VerticalFastScroller(
                             listState = chapterListState,
                             onThumbDragStarted = {
-                                visibleChapterCount = resolveNovelFastScrollVisibleChapterCount(
-                                    currentVisibleCount = visibleChapterCount,
-                                    loadedChapterCount = chapters.size,
-                                )
+                                if (shouldAutoExpandAuroraNovelChaptersListForFastScroll(chaptersExpanded, chapters.size)) {
+                                    chaptersExpanded = true
+                                }
                             },
                             onThumbDragStateChanged = { isThumbFastScrolling = it },
                             thumbAllowed = { paneFastScrollSpec.thumbAllowed },
@@ -278,126 +330,126 @@ fun NovelScreenAuroraImpl(
                                     bottom = 112.dp,
                                 ),
                             ) {
-                            if (isSelectionMode) {
-                                item {
-                                    SelectionBar(
-                                        selectedCount = selectedIds.size,
-                                        canMarkRead = selectedChapters.any { !it.read },
-                                        canMarkUnread = selectedChapters.any {
-                                            it.read || it.lastPageRead > 0L
-                                        },
-                                        canBookmark = selectedChapters.any { !it.bookmark },
-                                        canUnbookmark = selectedChapters.any { it.bookmark },
-                                        onClear = { onToggleAllSelection(false) },
-                                        onSelectAll = { onToggleAllSelection(true) },
-                                        onInvert = onInvertSelection,
-                                        onMarkRead = { onMultiMarkAsReadClicked(true) },
-                                        onMarkUnread = { onMultiMarkAsReadClicked(false) },
-                                        onBookmark = { onMultiBookmarkClicked(true) },
-                                        onUnbookmark = { onMultiBookmarkClicked(false) },
-                                        modifier = Modifier.fillMaxWidth(),
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                if (isSelectionMode) {
+                                    item {
+                                        SelectionBar(
+                                            selectedCount = selectedIds.size,
+                                            canMarkRead = selectedChapters.any { !it.read },
+                                            canMarkUnread = selectedChapters.any {
+                                                it.read || it.lastPageRead > 0L
+                                            },
+                                            canBookmark = selectedChapters.any { !it.bookmark },
+                                            canUnbookmark = selectedChapters.any { it.bookmark },
+                                            onClear = { onToggleAllSelection(false) },
+                                            onSelectAll = { onToggleAllSelection(true) },
+                                            onInvert = onInvertSelection,
+                                            onMarkRead = { onMultiMarkAsReadClicked(true) },
+                                            onMarkUnread = { onMultiMarkAsReadClicked(false) },
+                                            onBookmark = { onMultiBookmarkClicked(true) },
+                                            onUnbookmark = { onMultiBookmarkClicked(false) },
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                    }
                                 }
-                            }
 
-                            item {
-                                ChaptersHeader(chapterCount = totalChapterCount)
-                            }
-
-                            if (chapterPageEnabled) {
                                 item {
-                                    AuroraChapterPageControls(
-                                        chapterPageCurrent = chapterPageCurrent,
-                                        chapterPageTotal = chapterPageTotal,
-                                        chapterPageLoading = chapterPageLoading,
-                                        onChapterPageChange = onChapterPageChange,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp),
-                                    )
+                                    ChaptersHeader(chapterCount = totalChapterCount)
                                 }
-                            }
 
-                            if (state.showScanlatorSelector) {
-                                item {
-                                    ScanlatorBranchSelector(
-                                        scanlatorChapterCounts = scanlatorChapterCounts,
-                                        selectedScanlator = selectedScanlator,
-                                        onScanlatorSelected = onScanlatorSelected,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                                    )
-                                }
-                            }
-
-                            if (chapters.isEmpty()) {
-                                item {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(32.dp),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Text(
-                                            text = stringResource(MR.strings.no_chapters_error),
-                                            color = Color.White.copy(alpha = 0.7f),
-                                            fontSize = 14.sp,
+                                if (chapterPageEnabled) {
+                                    item {
+                                        AuroraChapterPageControls(
+                                            chapterPageCurrent = chapterPageCurrent,
+                                            chapterPageTotal = chapterPageTotal,
+                                            chapterPageLoading = chapterPageLoading,
+                                            onChapterPageChange = onChapterPageChange,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp),
                                         )
                                     }
                                 }
-                            } else {
-                                items(
-                                    items = visibleChapters,
-                                    key = { it.id },
-                                    contentType = { "chapter" },
-                                ) { chapter ->
-                                    NovelChapterCardCompact(
-                                        novel = novel,
-                                        chapter = chapter,
-                                        selected = chapter.id in selectedIds,
-                                        selectionMode = isSelectionMode,
-                                        onClick = { onChapterClick(chapter.id) },
-                                        onLongClick = { onChapterLongClick(chapter.id) },
-                                        onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
-                                        onToggleRead = { onChapterReadToggle(chapter.id) },
-                                        onToggleDownload = { onChapterDownloadToggle(chapter.id) },
-                                        chapterSwipeStartAction = chapterSwipeStartAction,
-                                        chapterSwipeEndAction = chapterSwipeEndAction,
-                                        onChapterSwipe = { action -> onChapterSwipe(chapter.id, action) },
-                                        downloaded = chapter.id in state.downloadedChapterIds,
-                                        downloading = chapter.id in state.downloadingChapterIds,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 8.dp, vertical = 2.dp),
-                                    )
+
+                                if (state.showScanlatorSelector) {
+                                    item {
+                                        ScanlatorBranchSelector(
+                                            scanlatorChapterCounts = scanlatorChapterCounts,
+                                            selectedScanlator = selectedScanlator,
+                                            onScanlatorSelected = onScanlatorSelected,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                                        )
+                                    }
                                 }
 
-                                if (visibleChapterCount < chapters.size) {
+                                if (chapters.isEmpty()) {
                                     item {
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                                .padding(32.dp),
                                             contentAlignment = Alignment.Center,
                                         ) {
-                                            SelectionChip(
-                                                text = "${stringResource(MR.strings.label_more)} " +
-                                                    "(${chapters.size - visibleChapterCount})",
-                                                onClick = {
-                                                    visibleChapterCount = nextVisibleChapterCount(
-                                                        currentCount = visibleChapterCount,
-                                                        totalCount = chapters.size,
-                                                        step = NOVEL_CHAPTERS_PAGE_SIZE,
-                                                    )
-                                                },
+                                            Text(
+                                                text = stringResource(MR.strings.no_chapters_error),
+                                                color = Color.White.copy(alpha = 0.7f),
+                                                fontSize = 14.sp,
                                             )
+                                        }
+                                    }
+                                } else {
+                                    items(
+                                        items = chaptersToShow,
+                                        key = { it.id },
+                                        contentType = { "chapter" },
+                                    ) { chapter ->
+                                        NovelChapterCardCompact(
+                                            novel = novel,
+                                            chapter = chapter,
+                                            selected = chapter.id in selectedIds,
+                                            selectionMode = isSelectionMode,
+                                            onClick = { onChapterClick(chapter.id) },
+                                            onLongClick = { onChapterLongClick(chapter.id) },
+                                            onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
+                                            onToggleRead = { onChapterReadToggle(chapter.id) },
+                                            onToggleDownload = { onChapterDownloadToggle(chapter.id) },
+                                            chapterSwipeStartAction = chapterSwipeStartAction,
+                                            chapterSwipeEndAction = chapterSwipeEndAction,
+                                            onChapterSwipe = { action -> onChapterSwipe(chapter.id, action) },
+                                            downloaded = chapter.id in state.downloadedChapterIds,
+                                            downloading = chapter.id in state.downloadingChapterIds,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                                        )
+                                    }
+
+                                    if (chapters.size > NOVEL_AURORA_COLLAPSED_PREVIEW_COUNT) {
+                                        item {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                AuroraChapterListToggleButton(
+                                                    text = if (chaptersExpanded) {
+                                                        stringResource(AYMR.strings.action_show_less)
+                                                    } else {
+                                                        stringResource(
+                                                            AYMR.strings.action_show_all_chapters,
+                                                            chapters.size,
+                                                        )
+                                                    },
+                                                    onClick = { chaptersExpanded = !chaptersExpanded },
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
                         }
                     },
                 )
@@ -455,6 +507,13 @@ fun NovelScreenAuroraImpl(
                                     expanded = showMenu,
                                     onDismissRequest = { showMenu = false },
                                 ) {
+                                    AuroraEntryDropdownMenuItem(
+                                        text = autoJumpToNextLabel,
+                                        onClick = {
+                                            onToggleAutoJumpToNext()
+                                            showMenu = false
+                                        },
+                                    )
                                     if (isFromSource) {
                                         AuroraEntryDropdownMenuItem(
                                             text = stringResource(MR.strings.action_webview_refresh),
@@ -577,10 +636,9 @@ fun NovelScreenAuroraImpl(
             VerticalFastScroller(
                 listState = lazyListState,
                 onThumbDragStarted = {
-                    visibleChapterCount = resolveNovelFastScrollVisibleChapterCount(
-                        currentVisibleCount = visibleChapterCount,
-                        loadedChapterCount = chapters.size,
-                    )
+                    if (shouldAutoExpandAuroraNovelChaptersListForFastScroll(chaptersExpanded, chapters.size)) {
+                        chaptersExpanded = true
+                    }
                 },
                 onThumbDragStateChanged = { isThumbFastScrolling = it },
                 thumbAllowed = { fastScrollSpec.thumbAllowed },
@@ -593,179 +651,179 @@ fun NovelScreenAuroraImpl(
                     contentPadding = PaddingValues(bottom = 112.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                item { Spacer(modifier = Modifier.height(screenHeight)) }
+                    item { Spacer(modifier = Modifier.height(screenHeight)) }
 
-                item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .auroraCenteredMaxWidth(contentMaxWidthDp),
-                    ) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        NovelInfoCard(
-                            novel = novel,
-                            chapterCount = totalChapterCount,
-                            nextUpdate = nextUpdate,
-                            onTagSearch = { tag -> onSearch(tag, true) },
-                            descriptionExpanded = descriptionExpanded,
-                            genresExpanded = genresExpanded,
-                            onToggleDescription = { descriptionExpanded = !descriptionExpanded },
-                            onToggleGenres = { genresExpanded = !genresExpanded },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-                        NovelActionCard(
-                            novel = novel,
-                            trackingCount = trackingCount,
-                            onAddToLibraryClicked = onToggleFavorite,
-                            onTrackingClicked = onTrackingClicked,
-                            onBatchDownloadClicked = onOpenBatchDownloadDialog,
-                            onTranslatedDownloadClicked = onOpenTranslatedDownloadDialog,
-                            onExportEpubClicked = onOpenEpubExportDialog,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                }
-
-                if (isSelectionMode) {
                     item {
-                        SelectionBar(
-                            selectedCount = selectedIds.size,
-                            canMarkRead = selectedChapters.any { !it.read },
-                            canMarkUnread = selectedChapters.any { it.read || it.lastPageRead > 0L },
-                            canBookmark = selectedChapters.any { !it.bookmark },
-                            canUnbookmark = selectedChapters.any { it.bookmark },
-                            onClear = { onToggleAllSelection(false) },
-                            onSelectAll = { onToggleAllSelection(true) },
-                            onInvert = onInvertSelection,
-                            onMarkRead = { onMultiMarkAsReadClicked(true) },
-                            onMarkUnread = { onMultiMarkAsReadClicked(false) },
-                            onBookmark = { onMultiBookmarkClicked(true) },
-                            onUnbookmark = { onMultiBookmarkClicked(false) },
-                            modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
-                        )
-                    }
-                }
-
-                item(
-                    key = NOVEL_AURORA_CHAPTERS_HEADER_KEY,
-                    contentType = NOVEL_AURORA_CHAPTERS_HEADER_KEY,
-                ) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    ChaptersHeader(
-                        chapterCount = totalChapterCount,
-                        modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
-                    )
-                }
-
-                if (chapterPageEnabled) {
-                    item {
-                        AuroraChapterPageControls(
-                            chapterPageCurrent = chapterPageCurrent,
-                            chapterPageTotal = chapterPageTotal,
-                            chapterPageLoading = chapterPageLoading,
-                            onChapterPageChange = onChapterPageChange,
-                            modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
-                        )
-                    }
-                }
-
-                if (state.showScanlatorSelector) {
-                    item {
-                        ScanlatorBranchSelector(
-                            scanlatorChapterCounts = scanlatorChapterCounts,
-                            selectedScanlator = selectedScanlator,
-                            onScanlatorSelected = onScanlatorSelected,
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .auroraCenteredMaxWidth(contentMaxWidthDp)
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                        )
-                    }
-                }
-
-                if (chapters.isEmpty()) {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .auroraCenteredMaxWidth(contentMaxWidthDp)
-                                .padding(32.dp),
-                            contentAlignment = Alignment.Center,
+                                .auroraCenteredMaxWidth(contentMaxWidthDp),
                         ) {
-                            Text(
-                                text = stringResource(MR.strings.no_chapters_error),
-                                color = Color.White.copy(alpha = 0.7f),
-                                fontSize = 14.sp,
+                            Spacer(modifier = Modifier.height(16.dp))
+                            NovelInfoCard(
+                                novel = novel,
+                                chapterCount = totalChapterCount,
+                                nextUpdate = nextUpdate,
+                                onTagSearch = { tag -> onSearch(tag, true) },
+                                descriptionExpanded = descriptionExpanded,
+                                genresExpanded = genresExpanded,
+                                onToggleDescription = { descriptionExpanded = !descriptionExpanded },
+                                onToggleGenres = { genresExpanded = !genresExpanded },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+                            NovelActionCard(
+                                novel = novel,
+                                trackingCount = trackingCount,
+                                onAddToLibraryClicked = onToggleFavorite,
+                                onTrackingClicked = onTrackingClicked,
+                                onBatchDownloadClicked = onOpenBatchDownloadDialog,
+                                onTranslatedDownloadClicked = onOpenTranslatedDownloadDialog,
+                                onExportEpubClicked = onOpenEpubExportDialog,
+                                modifier = Modifier.fillMaxWidth(),
                             )
                         }
                     }
-                } else {
-                    items(
-                        items = visibleChapters,
-                        key = { it.id },
-                        contentType = { "chapter" },
-                    ) { chapter ->
-                        NovelChapterCardCompact(
-                            novel = novel,
-                            chapter = chapter,
-                            selected = chapter.id in selectedIds,
-                            selectionMode = isSelectionMode,
-                            onClick = { onChapterClick(chapter.id) },
-                            onLongClick = { onChapterLongClick(chapter.id) },
-                            onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
-                            onToggleRead = { onChapterReadToggle(chapter.id) },
-                            onToggleDownload = { onChapterDownloadToggle(chapter.id) },
-                            chapterSwipeStartAction = chapterSwipeStartAction,
-                            chapterSwipeEndAction = chapterSwipeEndAction,
-                            onChapterSwipe = { action -> onChapterSwipe(chapter.id, action) },
-                            downloaded = chapter.id in state.downloadedChapterIds,
-                            downloading = chapter.id in state.downloadingChapterIds,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .auroraCenteredMaxWidth(contentMaxWidthDp)
-                                .padding(horizontal = 8.dp, vertical = 2.dp),
+
+                    if (isSelectionMode) {
+                        item {
+                            SelectionBar(
+                                selectedCount = selectedIds.size,
+                                canMarkRead = selectedChapters.any { !it.read },
+                                canMarkUnread = selectedChapters.any { it.read || it.lastPageRead > 0L },
+                                canBookmark = selectedChapters.any { !it.bookmark },
+                                canUnbookmark = selectedChapters.any { it.bookmark },
+                                onClear = { onToggleAllSelection(false) },
+                                onSelectAll = { onToggleAllSelection(true) },
+                                onInvert = onInvertSelection,
+                                onMarkRead = { onMultiMarkAsReadClicked(true) },
+                                onMarkUnread = { onMultiMarkAsReadClicked(false) },
+                                onBookmark = { onMultiBookmarkClicked(true) },
+                                onUnbookmark = { onMultiBookmarkClicked(false) },
+                                modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
+                            )
+                        }
+                    }
+
+                    item(
+                        key = NOVEL_AURORA_CHAPTERS_HEADER_KEY,
+                        contentType = NOVEL_AURORA_CHAPTERS_HEADER_KEY,
+                    ) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        ChaptersHeader(
+                            chapterCount = totalChapterCount,
+                            modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
                         )
                     }
 
-                    if (visibleChapterCount < chapters.size) {
+                    if (chapterPageEnabled) {
+                        item {
+                            AuroraChapterPageControls(
+                                chapterPageCurrent = chapterPageCurrent,
+                                chapterPageTotal = chapterPageTotal,
+                                chapterPageLoading = chapterPageLoading,
+                                onChapterPageChange = onChapterPageChange,
+                                modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
+                            )
+                        }
+                    }
+
+                    if (state.showScanlatorSelector) {
+                        item {
+                            ScanlatorBranchSelector(
+                                scanlatorChapterCounts = scanlatorChapterCounts,
+                                selectedScanlator = selectedScanlator,
+                                onScanlatorSelected = onScanlatorSelected,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                            )
+                        }
+                    }
+
+                    if (chapters.isEmpty()) {
                         item {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .auroraCenteredMaxWidth(contentMaxWidthDp)
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    .padding(32.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                SelectionChip(
-                                    text = "${stringResource(MR.strings.label_more)} " +
-                                        "(${chapters.size - visibleChapterCount})",
-                                    onClick = {
-                                        visibleChapterCount = nextVisibleChapterCount(
-                                            currentCount = visibleChapterCount,
-                                            totalCount = chapters.size,
-                                            step = NOVEL_CHAPTERS_PAGE_SIZE,
-                                        )
-                                    },
+                                Text(
+                                    text = stringResource(MR.strings.no_chapters_error),
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    fontSize = 14.sp,
                                 )
+                            }
+                        }
+                    } else {
+                        items(
+                            items = chaptersToShow,
+                            key = { it.id },
+                            contentType = { "chapter" },
+                        ) { chapter ->
+                            NovelChapterCardCompact(
+                                novel = novel,
+                                chapter = chapter,
+                                selected = chapter.id in selectedIds,
+                                selectionMode = isSelectionMode,
+                                onClick = { onChapterClick(chapter.id) },
+                                onLongClick = { onChapterLongClick(chapter.id) },
+                                onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
+                                onToggleRead = { onChapterReadToggle(chapter.id) },
+                                onToggleDownload = { onChapterDownloadToggle(chapter.id) },
+                                chapterSwipeStartAction = chapterSwipeStartAction,
+                                chapterSwipeEndAction = chapterSwipeEndAction,
+                                onChapterSwipe = { action -> onChapterSwipe(chapter.id, action) },
+                                downloaded = chapter.id in state.downloadedChapterIds,
+                                downloading = chapter.id in state.downloadingChapterIds,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                            )
+                        }
+
+                        if (chapters.size > NOVEL_AURORA_COLLAPSED_PREVIEW_COUNT) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    AuroraChapterListToggleButton(
+                                        text = if (chaptersExpanded) {
+                                            stringResource(AYMR.strings.action_show_less)
+                                        } else {
+                                            stringResource(
+                                                AYMR.strings.action_show_all_chapters,
+                                                chapters.size,
+                                            )
+                                        },
+                                        onClick = { chaptersExpanded = !chaptersExpanded },
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
-            }
 
             val heroThreshold = (screenHeight.value * 0.7f).toInt()
             if (firstVisibleItemIndex == 0 && scrollOffset < heroThreshold) {
                 val heroAlpha = (1f - (scrollOffset / heroThreshold.toFloat())).coerceIn(0f, 1f)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .zIndex(2f)
-                            .graphicsLayer { alpha = heroAlpha },
-                        contentAlignment = Alignment.BottomStart,
-                    ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(2f)
+                        .graphicsLayer { alpha = heroAlpha },
+                    contentAlignment = Alignment.BottomStart,
+                ) {
                     NovelHeroContent(
                         novel = novel,
                         chapterCount = totalChapterCount,
@@ -776,7 +834,8 @@ fun NovelScreenAuroraImpl(
             }
 
             val showFab = onStartReading != null && (firstVisibleItemIndex > 0 || scrollOffset > heroThreshold)
-            if (shouldShowTitleFastScrollFloatingActionButton(showFab, isThumbFastScrolling)) {
+            val shouldShowFab = !useTwoPaneLayout && showFab && !isSelectionMode
+            if (shouldShowTitleFastScrollFloatingActionButton(shouldShowFab, isThumbFastScrolling)) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -850,6 +909,13 @@ fun NovelScreenAuroraImpl(
                                 expanded = showMenu,
                                 onDismissRequest = { showMenu = false },
                             ) {
+                                AuroraEntryDropdownMenuItem(
+                                    text = autoJumpToNextLabel,
+                                    onClick = {
+                                        onToggleAutoJumpToNext()
+                                        showMenu = false
+                                    },
+                                )
                                 if (isFromSource) {
                                     AuroraEntryDropdownMenuItem(
                                         text = stringResource(MR.strings.action_webview_refresh),
@@ -939,6 +1005,40 @@ internal fun shouldUseNovelAuroraPaneScopedFastScroller(useTwoPaneLayout: Boolea
     return useTwoPaneLayout
 }
 
+internal fun resolveNovelAuroraVisibleChapterCount(
+    chaptersExpanded: Boolean,
+    totalChapters: Int,
+): Int {
+    if (totalChapters <= 0) return 0
+    return if (chaptersExpanded) totalChapters else minOf(totalChapters, NOVEL_AURORA_COLLAPSED_PREVIEW_COUNT)
+}
+
+internal fun shouldAutoJumpToNovelAuroraTarget(
+    hasScrolledToTarget: Boolean,
+    chaptersExpanded: Boolean,
+    totalChapters: Int,
+): Boolean {
+    if (hasScrolledToTarget) return false
+    return chaptersExpanded || totalChapters <= NOVEL_AURORA_COLLAPSED_PREVIEW_COUNT
+}
+
+internal fun shouldAutoExpandAuroraNovelChaptersList(
+    chaptersExpanded: Boolean,
+    totalChapters: Int,
+): Boolean {
+    return !chaptersExpanded && totalChapters > NOVEL_AURORA_COLLAPSED_PREVIEW_COUNT
+}
+
+internal fun shouldAutoExpandAuroraNovelChaptersListForFastScroll(
+    chaptersExpanded: Boolean,
+    totalChapters: Int,
+): Boolean {
+    return shouldAutoExpandAuroraNovelChaptersList(
+        chaptersExpanded = chaptersExpanded,
+        totalChapters = totalChapters,
+    )
+}
+
 internal fun resolveNovelAuroraFastScrollBlockStartIndex(
     useTwoPaneLayout: Boolean,
     isSelectionMode: Boolean,
@@ -954,6 +1054,7 @@ internal fun resolveNovelAuroraFastScrollBlockStartIndex(
     return baseIndex + listOf(chapterPageEnabled, showScanlatorSelector).count { it }
 }
 
+private const val NOVEL_AURORA_COLLAPSED_PREVIEW_COUNT = 5
 private const val NOVEL_AURORA_CHAPTERS_HEADER_KEY = "novel-aurora-chapters-header"
 private val NOVEL_AURORA_FAST_SCROLL_ITEM_TOP_INSET = 4.dp
 
@@ -1110,6 +1211,36 @@ private fun SelectionChip(
             color = colors.textPrimary,
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
+@Composable
+private fun AuroraChapterListToggleButton(
+    text: String,
+    onClick: () -> Unit,
+) {
+    val colors = AuroraTheme.colors
+
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.12f),
+                        Color.White.copy(alpha = 0.08f),
+                    ),
+                ),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 24.dp, vertical = 12.dp),
+    ) {
+        Text(
+            text = text,
+            color = colors.accent,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
         )
     }
 }

@@ -1,5 +1,6 @@
 package eu.kanade.presentation.entries.novel
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -44,9 +45,11 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -70,6 +73,7 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
 import eu.kanade.presentation.components.relativeDateTimeText
 import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
+import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
 import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.entries.components.EntryBottomActionMenu
 import eu.kanade.presentation.entries.components.EntryToolbar
@@ -141,9 +145,21 @@ fun NovelScreen(
     onMultiMarkAsReadClicked: (Boolean) -> Unit,
     onMultiDownloadClicked: () -> Unit,
     onMultiDeleteClicked: () -> Unit,
+    onSaveScrollPosition: (Int, Int) -> Unit = { _, _ -> },
 ) {
     val uiPreferences = Injekt.get<UiPreferences>()
     val theme by uiPreferences.appTheme().collectAsState()
+    val autoJumpToNextEnabled by uiPreferences.entryAutoJumpToNextNovel().collectAsState()
+    val autoJumpToNextLabel = stringResource(
+        if (autoJumpToNextEnabled) {
+            AYMR.strings.action_disable_auto_jump_next_chapter
+        } else {
+            AYMR.strings.action_enable_auto_jump_next_chapter
+        },
+    )
+    val onToggleAutoJumpToNext = {
+        uiPreferences.entryAutoJumpToNextNovel().set(!autoJumpToNextEnabled)
+    }
 
     // Route to Aurora implementation if Aurora theme is active
     if (theme.isAuroraStyle) {
@@ -187,6 +203,9 @@ fun NovelScreen(
             onInvertSelection = onInvertSelection,
             onMultiBookmarkClicked = onMultiBookmarkClicked,
             onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
+            isAutoJumpToNextEnabled = autoJumpToNextEnabled,
+            autoJumpToNextLabel = autoJumpToNextLabel,
+            onToggleAutoJumpToNext = onToggleAutoJumpToNext,
         )
         return
     }
@@ -219,8 +238,46 @@ fun NovelScreen(
     }
     val chapterListState = rememberLazyListState()
 
+    // Save scroll position when it changes
+    LaunchedEffect(chapterListState.firstVisibleItemIndex, chapterListState.firstVisibleItemScrollOffset) {
+        onSaveScrollPosition(
+            chapterListState.firstVisibleItemIndex,
+            chapterListState.firstVisibleItemScrollOffset,
+        )
+    }
+
+    // Restore saved scroll position or auto-scroll to target chapter
+    var hasScrolledToTarget: Boolean by remember { mutableStateOf(false) }
+    LaunchedEffect(state.scrollIndex, state.targetChapterIndex) {
+        if (!hasScrolledToTarget) {
+            hasScrolledToTarget = true
+            val targetIndex = resolveEntryAutoJumpTargetIndex(
+                enabled = autoJumpToNextEnabled,
+                targetIndex = state.targetChapterIndex,
+                restoredScrollIndex = state.scrollIndex,
+            )
+            if (targetIndex != null) {
+                chapterListState.animateScrollToItem(targetIndex)
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
+            val isFirstItemVisible by remember {
+                derivedStateOf { chapterListState.firstVisibleItemIndex == 0 }
+            }
+            val isFirstItemScrolled by remember {
+                derivedStateOf { chapterListState.firstVisibleItemScrollOffset > 0 }
+            }
+            val titleAlpha by animateFloatAsState(
+                if (!isFirstItemVisible) 1f else 0f,
+                label = "Top Bar Title",
+            )
+            val backgroundAlpha by animateFloatAsState(
+                if (!isFirstItemVisible || isFirstItemScrolled) 1f else 0f,
+                label = "Top Bar Background",
+            )
             EntryToolbar(
                 title = state.novel.title,
                 hasFilters = state.filterActive,
@@ -234,13 +291,15 @@ fun NovelScreen(
                 onClickRefresh = onRefresh,
                 onClickMigrate = onMigrateClicked,
                 onClickSettings = onSourceSettings,
+                onToggleAutoJumpToNext = onToggleAutoJumpToNext,
+                autoJumpToNextLabel = autoJumpToNextLabel,
                 changeAnimeSkipIntro = null,
                 actionModeCounter = selectedCount,
                 onCancelActionMode = { onAllChapterSelected(false) },
                 onSelectAll = { onAllChapterSelected(true) },
                 onInvertSelection = onInvertSelection,
-                titleAlphaProvider = { 1f },
-                backgroundAlphaProvider = { 1f },
+                titleAlphaProvider = { titleAlpha },
+                backgroundAlphaProvider = { backgroundAlpha },
                 isManga = true,
             )
         },
@@ -319,7 +378,10 @@ fun NovelScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = MaterialTheme.padding.medium, vertical = MaterialTheme.padding.small),
+                        .padding(
+                                horizontal = MaterialTheme.padding.medium,
+                                vertical = MaterialTheme.padding.small,
+                            ),
                 ) {
                     AsyncImage(
                         model = ImageRequest.Builder(context)
@@ -453,7 +515,10 @@ fun NovelScreen(
                 FlowRow(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = MaterialTheme.padding.medium, vertical = MaterialTheme.padding.small),
+                        .padding(
+                                horizontal = MaterialTheme.padding.medium,
+                                vertical = MaterialTheme.padding.small,
+                            ),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -472,7 +537,11 @@ fun NovelScreen(
                     ) {
                         Text(
                             text = stringResource(
-                                if (state.novel.favorite) MR.strings.remove_from_library else MR.strings.add_to_library,
+                                if (state.novel.favorite) {
+                                    MR.strings.remove_from_library
+                                } else {
+                                    MR.strings.add_to_library
+                                },
                             ),
                         )
                     }
@@ -550,7 +619,10 @@ fun NovelScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = MaterialTheme.padding.medium, vertical = MaterialTheme.padding.small),
+                        .padding(
+                                horizontal = MaterialTheme.padding.medium,
+                                vertical = MaterialTheme.padding.small,
+                            ),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -587,7 +659,10 @@ fun NovelScreen(
                         onScanlatorSelected = onScanlatorSelected,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = MaterialTheme.padding.medium, vertical = MaterialTheme.padding.small),
+                            .padding(
+                                horizontal = MaterialTheme.padding.medium,
+                                vertical = MaterialTheme.padding.small,
+                            ),
                     )
                 }
             }
@@ -597,7 +672,10 @@ fun NovelScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = MaterialTheme.padding.medium, vertical = MaterialTheme.padding.small),
+                            .padding(
+                                horizontal = MaterialTheme.padding.medium,
+                                vertical = MaterialTheme.padding.small,
+                            ),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
@@ -794,7 +872,10 @@ fun NovelScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = MaterialTheme.padding.medium, vertical = MaterialTheme.padding.small),
+                            .padding(
+                                horizontal = MaterialTheme.padding.medium,
+                                vertical = MaterialTheme.padding.small,
+                            ),
                         contentAlignment = Alignment.Center,
                     ) {
                         Button(

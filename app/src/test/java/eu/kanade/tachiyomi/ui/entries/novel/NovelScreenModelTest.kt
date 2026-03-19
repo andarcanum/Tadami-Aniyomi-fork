@@ -340,6 +340,36 @@ class NovelScreenModelTest {
         }
     }
 
+    @Test
+    fun `cached novel state does not restore saved chapter list scroll position`() {
+        runBlocking {
+            val novel = novelForResumeTests(104L)
+            val chapters = listOf(
+                novelChapter(id = 1L, novelId = novel.id, chapterNumber = 1.0, read = false),
+                novelChapter(id = 2L, novelId = novel.id, chapterNumber = 2.0, read = false),
+            )
+            val firstModel = createResumeScreenModel(novel, chapters)
+
+            try {
+                awaitResumeScreenModel(firstModel)
+                firstModel.saveScrollPosition(index = 12, offset = 34)
+            } finally {
+                firstModel.onDispose()
+            }
+
+            val restoredModel = createResumeScreenModel(novel, chapters)
+
+            try {
+                awaitResumeScreenModel(restoredModel)
+                val restoredState = restoredModel.state.value as NovelScreenModel.State.Success
+                restoredState.scrollIndex shouldBe 0
+                restoredState.scrollOffset shouldBe 0
+            } finally {
+                restoredModel.onDispose()
+            }
+        }
+    }
+
     private class FakeLifecycleOwner : LifecycleOwner {
         private class NoopStartedLifecycle : Lifecycle() {
             override val currentState: State
