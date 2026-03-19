@@ -304,9 +304,9 @@ internal fun resolveHomeHubHeroButtonSurfaceSpec(
 ): HomeHubHeroButtonSurfaceSpec {
     return when (mode) {
         HomeHeroCtaMode.Aurora -> HomeHubHeroButtonSurfaceSpec(
-            containerAlpha = if (isDark) 0.82f else 0.78f,
+            containerAlpha = if (isDark) 0.35f else 0.30f,
             usesGradient = false,
-            borderAlpha = 0f,
+            borderAlpha = 0.08f,
             innerGlowAlpha = if (isDark) 0.42f else 0.34f,
             highlightAlpha = if (isDark) 0.18f else 0.14f,
         )
@@ -2423,7 +2423,7 @@ private fun HeroSection(
         )
     }
     val rimLightBrush = remember { homeHubRimLightBrush() }
-    val actionButtonShape = RoundedCornerShape(12.dp)
+    val actionButtonShape = RoundedCornerShape(16.dp)
     val actionButtonSurfaceSpec = remember(ctaMode, colors.isDark) {
         resolveHomeHubHeroButtonSurfaceSpec(
             mode = ctaMode,
