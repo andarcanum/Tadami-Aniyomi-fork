@@ -23,6 +23,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -184,11 +185,16 @@ internal fun AuroraTopBarIconButton(
     tint: Color = AuroraTheme.colors.textPrimary,
 ) {
     val colors = AuroraTheme.colors
+    val tabContainerColor = if (colors.background.luminance() < 0.5f) {
+        Color.White.copy(alpha = 0.05f)
+    } else {
+        Color.Black.copy(alpha = 0.03f)
+    }
     IconButton(
         onClick = onClick,
         modifier = modifier
             .size(40.dp)
-            .background(colors.glass, CircleShape),
+            .background(tabContainerColor, CircleShape),
     ) {
         Icon(
             imageVector = icon,

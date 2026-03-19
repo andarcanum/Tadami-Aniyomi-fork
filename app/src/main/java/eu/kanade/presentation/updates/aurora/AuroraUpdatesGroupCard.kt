@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -43,6 +44,11 @@ fun AuroraUpdatesGroupCard(
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
+    val tabContainerColor = if (colors.background.luminance() < 0.5f) {
+        Color.White.copy(alpha = 0.05f)
+    } else {
+        Color.Black.copy(alpha = 0.03f)
+    }
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
 
     Card(
@@ -51,7 +57,7 @@ fun AuroraUpdatesGroupCard(
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 6.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = colors.glass),
+        colors = CardDefaults.cardColors(containerColor = tabContainerColor),
         border = BorderStroke(
             width = 1.dp,
             color = if (colors.isDark) {

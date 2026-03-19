@@ -12,17 +12,15 @@ class AuroraMoreSurfaceTokensTest {
         resolveAuroraMoreCardContainerColor(
             glass = Color.White.copy(alpha = 0.22f),
             isDark = true,
-        ) shouldBe Color.White.copy(alpha = 0.08f)
+        ) shouldBe Color.White.copy(alpha = 0.05f)
     }
 
     @Test
-    fun `light aurora more card container keeps incoming glass color`() {
-        val lightGlass = Color.Black.copy(alpha = 0.05f)
-
+    fun `light aurora more card container returns subtler black alpha`() {
         resolveAuroraMoreCardContainerColor(
-            glass = lightGlass,
+            glass = Color.Black.copy(alpha = 0.05f),
             isDark = false,
-        ) shouldBe lightGlass
+        ) shouldBe Color.Black.copy(alpha = 0.03f)
     }
 
     @Test

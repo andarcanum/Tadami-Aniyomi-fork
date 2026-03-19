@@ -35,6 +35,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -434,10 +436,15 @@ private fun AuroraUpdatesPinnedHeader(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
+                val tabContainerColor = if (colors.background.luminance() < 0.5f) {
+                    Color.White.copy(alpha = 0.05f)
+                } else {
+                    Color.Black.copy(alpha = 0.03f)
+                }
                 IconButton(
                     onClick = onRefreshCurrent,
                     modifier = Modifier
-                        .background(colors.glass, CircleShape)
+                        .background(tabContainerColor, CircleShape)
                         .size(44.dp),
                 ) {
                     Icon(

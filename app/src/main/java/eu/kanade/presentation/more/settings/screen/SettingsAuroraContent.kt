@@ -30,6 +30,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -77,10 +79,15 @@ private fun SettingsAuroraHeader(onBackClick: () -> Unit) {
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(
+        val tabContainerColor = if (AuroraTheme.colors.background.luminance() < 0.5f) {
+        Color.White.copy(alpha = 0.05f)
+    } else {
+        Color.Black.copy(alpha = 0.03f)
+    }
+    IconButton(
             onClick = onBackClick,
             modifier = Modifier
-                .background(AuroraTheme.colors.glass, CircleShape)
+                .background(tabContainerColor, CircleShape)
                 .size(40.dp),
         ) {
             Icon(
@@ -115,6 +122,11 @@ private fun SettingsAuroraItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit,
 ) {
+    val tabContainerColor = if (AuroraTheme.colors.background.luminance() < 0.5f) {
+        Color.White.copy(alpha = 0.05f)
+    } else {
+        Color.Black.copy(alpha = 0.03f)
+    }
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -122,7 +134,7 @@ private fun SettingsAuroraItem(
             .clickable(onClick = onClick),
         shape = AURORA_SETTINGS_CARD_SHAPE,
         colors = CardDefaults.cardColors(
-            containerColor = AuroraTheme.colors.glass,
+            containerColor = tabContainerColor,
         ),
     ) {
         Row(

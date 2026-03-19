@@ -47,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -552,6 +553,11 @@ private fun NovelLibraryAuroraCoverOnlyCard(
     onLongClick: (() -> Unit)?,
 ) {
     val colors = AuroraTheme.colors
+    val tabContainerColor = if (colors.background.luminance() < 0.5f) {
+        Color.White.copy(alpha = 0.05f)
+    } else {
+        Color.Black.copy(alpha = 0.03f)
+    }
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
     Card(
         modifier = modifier.combinedClickable(
@@ -559,7 +565,7 @@ private fun NovelLibraryAuroraCoverOnlyCard(
             onLongClick = onLongClick,
         ),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = colors.glass),
+        colors = CardDefaults.cardColors(containerColor = tabContainerColor),
         border = BorderStroke(
             width = if (isSelected) 2.dp else 1.dp,
             color = if (isSelected) {

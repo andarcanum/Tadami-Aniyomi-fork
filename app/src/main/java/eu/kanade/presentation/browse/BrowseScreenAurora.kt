@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -192,6 +193,11 @@ private fun BrowseAuroraHeader(
     onSearchClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
+    val tabContainerColor = if (colors.background.luminance() < 0.5f) {
+        Color.White.copy(alpha = 0.05f)
+    } else {
+        Color.Black.copy(alpha = 0.03f)
+    }
 
     Row(
         modifier = Modifier
@@ -217,7 +223,7 @@ private fun BrowseAuroraHeader(
         IconButton(
             onClick = onSearchClick,
             modifier = Modifier
-                .background(colors.glass, CircleShape)
+                .background(tabContainerColor, CircleShape)
                 .size(48.dp),
         ) {
             Icon(
@@ -431,6 +437,11 @@ private fun SourceGridItem(
     val colors = AuroraTheme.colors
     val isPinned = Pin.Actual in source.pin
     val successColor = Color(0xFF22c55e)
+    val tabContainerColor = if (colors.background.luminance() < 0.5f) {
+        Color.White.copy(alpha = 0.05f)
+    } else {
+        Color.Black.copy(alpha = 0.03f)
+    }
 
     // Use padding for grid spacing simulation if needed, but LazyVerticalGrid handles it
     // We add padding here to ensure content isn't touching the edges if used outside grid,
@@ -449,7 +460,7 @@ private fun SourceGridItem(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = colors.glass,
+            containerColor = tabContainerColor,
         ),
         border = BorderStroke(1.dp, colors.divider),
     ) {

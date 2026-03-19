@@ -55,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -1315,10 +1316,15 @@ private fun AuroraLibraryPinnedHeader(
                 )
 
                 Row {
+                    val tabContainerColor = if (colors.background.luminance() < 0.5f) {
+                        Color.White.copy(alpha = 0.05f)
+                    } else {
+                        Color.Black.copy(alpha = 0.03f)
+                    }
                     IconButton(
                         onClick = { isSearchExpanded = true },
                         modifier = Modifier
-                            .background(colors.glass, CircleShape)
+                            .background(tabContainerColor, CircleShape)
                             .size(44.dp),
                     ) {
                         Icon(
@@ -1331,7 +1337,7 @@ private fun AuroraLibraryPinnedHeader(
                     IconButton(
                         onClick = onFilterClick,
                         modifier = Modifier
-                            .background(colors.glass, CircleShape)
+                            .background(tabContainerColor, CircleShape)
                             .size(44.dp),
                     ) {
                         Icon(
@@ -1345,7 +1351,7 @@ private fun AuroraLibraryPinnedHeader(
                         IconButton(
                             onClick = { showMenu = true },
                             modifier = Modifier
-                                .background(colors.glass, CircleShape)
+                                .background(tabContainerColor, CircleShape)
                                 .size(44.dp),
                         ) {
                             Icon(
