@@ -6,6 +6,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
@@ -16,6 +17,7 @@ fun LinkIcon(
     icon: ImageVector,
     url: String,
     modifier: Modifier = Modifier,
+    tint: Color = MaterialTheme.colorScheme.primary,
 ) {
     val uriHandler = LocalUriHandler.current
     IconButton(
@@ -24,7 +26,7 @@ fun LinkIcon(
     ) {
         Icon(
             imageVector = icon,
-            tint = MaterialTheme.colorScheme.primary,
+            tint = tint,
             contentDescription = label,
         )
     }

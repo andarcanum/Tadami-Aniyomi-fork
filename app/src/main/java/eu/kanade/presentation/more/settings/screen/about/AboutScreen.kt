@@ -3,8 +3,10 @@ package eu.kanade.presentation.more.settings.screen.about
 import android.content.Context
 import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,9 +14,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,9 +41,13 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.more.LogoHeader
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_HORIZONTAL_INSET
+import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
 import eu.kanade.presentation.more.settings.SettingsScaffold
 import eu.kanade.presentation.more.settings.SettingsUiStyle
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
+import eu.kanade.presentation.more.settings.settingsAccentColor
+import eu.kanade.presentation.more.settings.settingsCardContainerColor
+import eu.kanade.presentation.more.settings.settingsTitleColor
 import eu.kanade.presentation.more.settings.widget.ListPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
 import eu.kanade.presentation.util.LocalBackPress
@@ -86,6 +95,9 @@ private val GlitchMarks = charArrayOf(
     '\u0338',
     '\u0336',
 )
+
+private val ABOUT_FOOTER_ICON_SLOT_SIZE = 40.dp
+private val ABOUT_FOOTER_ICON_GAP = 8.dp
 
 object AboutScreen : Screen() {
 
@@ -303,15 +315,21 @@ object AboutScreen : Screen() {
 
                     item {
                         val footerSections = remember { buildAboutFooterSections() }
-                        Column(
+                        val containerColor = settingsCardContainerColor()
+                        val dividerColor = settingsAccentColor().copy(alpha = 0.3f)
+                        Card(
                             modifier = Modifier
                                 .then(itemModifier)
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
+                                .fillMaxWidth(),
+                            shape = AURORA_SETTINGS_CARD_SHAPE,
+                            colors = CardDefaults.cardColors(
+                                containerColor = containerColor,
+                            ),
                         ) {
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Box(
@@ -320,10 +338,11 @@ object AboutScreen : Screen() {
                                 ) {
                                     AboutFooterLinkSectionContent(section = footerSections.first())
                                 }
-                                Text(
-                                    text = "|",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                Box(
+                                    modifier = Modifier
+                                        .width(1.dp)
+                                        .height(40.dp)
+                                        .background(dividerColor),
                                 )
                                 Box(
                                     modifier = Modifier.weight(1f),
@@ -465,16 +484,23 @@ object AboutScreen : Screen() {
 
 @Composable
 private fun AboutFooterLinkSectionContent(section: AboutFooterLinkSection) {
+    val titleColor = settingsTitleColor()
+    val iconTint = settingsAccentColor()
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
             text = section.title,
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = titleColor,
         )
         Spacer(modifier = Modifier.height(4.dp))
         Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(
+                ABOUT_FOOTER_ICON_GAP,
+                Alignment.CenterHorizontally,
+            ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             section.links.forEach { link ->
@@ -482,6 +508,8 @@ private fun AboutFooterLinkSectionContent(section: AboutFooterLinkSection) {
                     label = aboutFooterLinkLabel(link.label),
                     icon = aboutFooterLinkIcon(link.icon),
                     url = link.url,
+                    modifier = Modifier.size(ABOUT_FOOTER_ICON_SLOT_SIZE),
+                    tint = iconTint,
                 )
             }
         }
