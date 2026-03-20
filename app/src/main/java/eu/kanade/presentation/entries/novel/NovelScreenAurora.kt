@@ -71,8 +71,8 @@ import eu.kanade.presentation.entries.novel.components.aurora.NovelChapterCardCo
 import eu.kanade.presentation.entries.novel.components.aurora.NovelHeroContent
 import eu.kanade.presentation.entries.novel.components.aurora.NovelInfoCard
 import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
-import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.entries.resolveTitleFastScrollOverlayRevealState
+import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollFloatingActionButton
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollOverlayChrome
 import eu.kanade.presentation.theme.AuroraTheme
@@ -516,112 +516,112 @@ fun NovelScreenAuroraImpl(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    AuroraActionButton(
+                        onClick = onBack,
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = null,
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    AuroraActionButton(
+                        onClick = onFilterButtonClicked,
+                        icon = Icons.Default.FilterList,
+                        contentDescription = null,
+                        iconTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f),
+                    )
+                    if (onWebView != null) {
                         AuroraActionButton(
-                            onClick = onBack,
-                            icon = Icons.AutoMirrored.Filled.ArrowBack,
+                            onClick = onWebView,
+                            icon = Icons.Filled.Public,
                             contentDescription = null,
                         )
-                        Spacer(modifier = Modifier.weight(1f))
-                        AuroraActionButton(
-                            onClick = onFilterButtonClicked,
-                            icon = Icons.Default.FilterList,
-                            contentDescription = null,
-                            iconTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f),
-                        )
-                        if (onWebView != null) {
+                    }
+
+                    var showMenu by remember { mutableStateOf(false) }
+                    val hasMenuActions = true
+                    if (hasMenuActions) {
+                        Box(contentAlignment = Alignment.TopEnd) {
                             AuroraActionButton(
-                                onClick = onWebView,
-                                icon = Icons.Filled.Public,
+                                onClick = { showMenu = !showMenu },
+                                icon = Icons.Default.MoreVert,
                                 contentDescription = null,
                             )
-                        }
-
-                        var showMenu by remember { mutableStateOf(false) }
-                        val hasMenuActions = true
-                        if (hasMenuActions) {
-                            Box(contentAlignment = Alignment.TopEnd) {
-                                AuroraActionButton(
-                                    onClick = { showMenu = !showMenu },
-                                    icon = Icons.Default.MoreVert,
-                                    contentDescription = null,
+                            AuroraEntryDropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false },
+                            ) {
+                                AuroraEntryDropdownMenuItem(
+                                    text = autoJumpToNextLabel,
+                                    onClick = {
+                                        onToggleAutoJumpToNext()
+                                        showMenu = false
+                                    },
                                 )
-                                AuroraEntryDropdownMenu(
-                                    expanded = showMenu,
-                                    onDismissRequest = { showMenu = false },
-                                ) {
+                                if (isFromSource) {
                                     AuroraEntryDropdownMenuItem(
-                                        text = autoJumpToNextLabel,
+                                        text = stringResource(MR.strings.action_webview_refresh),
                                         onClick = {
-                                            onToggleAutoJumpToNext()
+                                            onRefresh()
                                             showMenu = false
                                         },
                                     )
-                                    if (isFromSource) {
+                                    if (globalSearchQuery != null) {
                                         AuroraEntryDropdownMenuItem(
-                                            text = stringResource(MR.strings.action_webview_refresh),
+                                            text = stringResource(MR.strings.action_global_search),
                                             onClick = {
-                                                onRefresh()
+                                                onSearch(globalSearchQuery, true)
                                                 showMenu = false
                                             },
                                         )
-                                        if (globalSearchQuery != null) {
-                                            AuroraEntryDropdownMenuItem(
-                                                text = stringResource(MR.strings.action_global_search),
-                                                onClick = {
-                                                    onSearch(globalSearchQuery, true)
-                                                    showMenu = false
-                                                },
-                                            )
-                                        }
-                                        if (onShare != null) {
-                                            AuroraEntryDropdownMenuItem(
-                                                text = stringResource(MR.strings.action_share),
-                                                onClick = {
-                                                    onShare()
-                                                    showMenu = false
-                                                },
-                                            )
-                                        }
-                                    } else {
+                                    }
+                                    if (onShare != null) {
                                         AuroraEntryDropdownMenuItem(
-                                            text = stringResource(MR.strings.action_webview_refresh),
+                                            text = stringResource(MR.strings.action_share),
                                             onClick = {
-                                                onRefresh()
+                                                onShare()
                                                 showMenu = false
                                             },
                                         )
-                                        if (globalSearchQuery != null) {
-                                            AuroraEntryDropdownMenuItem(
-                                                text = stringResource(MR.strings.action_global_search),
-                                                onClick = {
-                                                    onSearch(globalSearchQuery, true)
-                                                    showMenu = false
-                                                },
-                                            )
-                                        }
-                                        if (onShare != null) {
-                                            AuroraEntryDropdownMenuItem(
-                                                text = stringResource(MR.strings.action_share),
-                                                onClick = {
-                                                    onShare()
-                                                    showMenu = false
-                                                },
-                                            )
-                                        }
-                                        if (onMigrateClicked != null) {
-                                            AuroraEntryDropdownMenuItem(
-                                                text = stringResource(MR.strings.action_migrate),
-                                                onClick = {
-                                                    onMigrateClicked()
-                                                    showMenu = false
-                                                },
-                                            )
-                                        }
+                                    }
+                                } else {
+                                    AuroraEntryDropdownMenuItem(
+                                        text = stringResource(MR.strings.action_webview_refresh),
+                                        onClick = {
+                                            onRefresh()
+                                            showMenu = false
+                                        },
+                                    )
+                                    if (globalSearchQuery != null) {
+                                        AuroraEntryDropdownMenuItem(
+                                            text = stringResource(MR.strings.action_global_search),
+                                            onClick = {
+                                                onSearch(globalSearchQuery, true)
+                                                showMenu = false
+                                            },
+                                        )
+                                    }
+                                    if (onShare != null) {
+                                        AuroraEntryDropdownMenuItem(
+                                            text = stringResource(MR.strings.action_share),
+                                            onClick = {
+                                                onShare()
+                                                showMenu = false
+                                            },
+                                        )
+                                    }
+                                    if (onMigrateClicked != null) {
+                                        AuroraEntryDropdownMenuItem(
+                                            text = stringResource(MR.strings.action_migrate),
+                                            onClick = {
+                                                onMigrateClicked()
+                                                showMenu = false
+                                            },
+                                        )
                                     }
                                 }
                             }
                         }
                     }
+                }
 
                 SnackbarHost(
                     hostState = snackbarHostState,
@@ -919,115 +919,115 @@ fun NovelScreenAuroraImpl(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                AuroraActionButton(
+                    onClick = onBack,
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = null,
+                )
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                AuroraActionButton(
+                    onClick = onFilterButtonClicked,
+                    icon = Icons.Default.FilterList,
+                    contentDescription = null,
+                    iconTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f),
+                )
+
+                if (onWebView != null) {
                     AuroraActionButton(
-                        onClick = onBack,
-                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onClick = onWebView,
+                        icon = Icons.Filled.Public,
                         contentDescription = null,
                     )
+                }
 
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    AuroraActionButton(
-                        onClick = onFilterButtonClicked,
-                        icon = Icons.Default.FilterList,
-                        contentDescription = null,
-                        iconTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f),
-                    )
-
-                    if (onWebView != null) {
+                var showMenu by remember { mutableStateOf(false) }
+                val hasMenuActions = true
+                if (hasMenuActions) {
+                    Box(contentAlignment = Alignment.TopEnd) {
                         AuroraActionButton(
-                            onClick = onWebView,
-                            icon = Icons.Filled.Public,
+                            onClick = { showMenu = !showMenu },
+                            icon = Icons.Default.MoreVert,
                             contentDescription = null,
                         )
-                    }
 
-                    var showMenu by remember { mutableStateOf(false) }
-                    val hasMenuActions = true
-                    if (hasMenuActions) {
-                        Box(contentAlignment = Alignment.TopEnd) {
-                            AuroraActionButton(
-                                onClick = { showMenu = !showMenu },
-                                icon = Icons.Default.MoreVert,
-                                contentDescription = null,
+                        AuroraEntryDropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false },
+                        ) {
+                            AuroraEntryDropdownMenuItem(
+                                text = autoJumpToNextLabel,
+                                onClick = {
+                                    onToggleAutoJumpToNext()
+                                    showMenu = false
+                                },
                             )
-
-                            AuroraEntryDropdownMenu(
-                                expanded = showMenu,
-                                onDismissRequest = { showMenu = false },
-                            ) {
+                            if (isFromSource) {
                                 AuroraEntryDropdownMenuItem(
-                                    text = autoJumpToNextLabel,
+                                    text = stringResource(MR.strings.action_webview_refresh),
                                     onClick = {
-                                        onToggleAutoJumpToNext()
+                                        onRefresh()
                                         showMenu = false
                                     },
                                 )
-                                if (isFromSource) {
+                                if (globalSearchQuery != null) {
                                     AuroraEntryDropdownMenuItem(
-                                        text = stringResource(MR.strings.action_webview_refresh),
+                                        text = stringResource(MR.strings.action_global_search),
                                         onClick = {
-                                            onRefresh()
+                                            onSearch(globalSearchQuery, true)
                                             showMenu = false
                                         },
                                     )
-                                    if (globalSearchQuery != null) {
-                                        AuroraEntryDropdownMenuItem(
-                                            text = stringResource(MR.strings.action_global_search),
-                                            onClick = {
-                                                onSearch(globalSearchQuery, true)
-                                                showMenu = false
-                                            },
-                                        )
-                                    }
-                                    if (onShare != null) {
-                                        AuroraEntryDropdownMenuItem(
-                                            text = stringResource(MR.strings.action_share),
-                                            onClick = {
-                                                onShare()
-                                                showMenu = false
-                                            },
-                                        )
-                                    }
-                                } else {
+                                }
+                                if (onShare != null) {
                                     AuroraEntryDropdownMenuItem(
-                                        text = stringResource(MR.strings.action_webview_refresh),
+                                        text = stringResource(MR.strings.action_share),
                                         onClick = {
-                                            onRefresh()
+                                            onShare()
                                             showMenu = false
                                         },
                                     )
-                                    if (globalSearchQuery != null) {
-                                        AuroraEntryDropdownMenuItem(
-                                            text = stringResource(MR.strings.action_global_search),
-                                            onClick = {
-                                                onSearch(globalSearchQuery, true)
-                                                showMenu = false
-                                            },
-                                        )
-                                    }
-                                    if (onShare != null) {
-                                        AuroraEntryDropdownMenuItem(
-                                            text = stringResource(MR.strings.action_share),
-                                            onClick = {
-                                                onShare()
-                                                showMenu = false
-                                            },
-                                        )
-                                    }
-                                    if (onMigrateClicked != null) {
-                                        AuroraEntryDropdownMenuItem(
-                                            text = stringResource(MR.strings.action_migrate),
-                                            onClick = {
-                                                onMigrateClicked()
-                                                showMenu = false
-                                            },
-                                        )
-                                    }
+                                }
+                            } else {
+                                AuroraEntryDropdownMenuItem(
+                                    text = stringResource(MR.strings.action_webview_refresh),
+                                    onClick = {
+                                        onRefresh()
+                                        showMenu = false
+                                    },
+                                )
+                                if (globalSearchQuery != null) {
+                                    AuroraEntryDropdownMenuItem(
+                                        text = stringResource(MR.strings.action_global_search),
+                                        onClick = {
+                                            onSearch(globalSearchQuery, true)
+                                            showMenu = false
+                                        },
+                                    )
+                                }
+                                if (onShare != null) {
+                                    AuroraEntryDropdownMenuItem(
+                                        text = stringResource(MR.strings.action_share),
+                                        onClick = {
+                                            onShare()
+                                            showMenu = false
+                                        },
+                                    )
+                                }
+                                if (onMigrateClicked != null) {
+                                    AuroraEntryDropdownMenuItem(
+                                        text = stringResource(MR.strings.action_migrate),
+                                        onClick = {
+                                            onMigrateClicked()
+                                            showMenu = false
+                                        },
+                                    )
                                 }
                             }
                         }
                     }
+                }
             }
 
             SnackbarHost(

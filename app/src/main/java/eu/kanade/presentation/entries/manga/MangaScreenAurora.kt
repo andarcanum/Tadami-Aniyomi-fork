@@ -85,8 +85,8 @@ import eu.kanade.presentation.entries.manga.components.aurora.MangaChapterCardCo
 import eu.kanade.presentation.entries.manga.components.aurora.MangaHeroContent
 import eu.kanade.presentation.entries.manga.components.aurora.MangaInfoCard
 import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
-import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.entries.resolveTitleFastScrollOverlayRevealState
+import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollFloatingActionButton
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollOverlayChrome
 import eu.kanade.presentation.theme.AuroraTheme
@@ -829,97 +829,97 @@ fun MangaScreenAuroraImpl(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                    // Back button - Aurora glassmorphism style
-                    AuroraActionButton(
-                        onClick = navigateUp,
-                        icon = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = null,
-                    )
+                // Back button - Aurora glassmorphism style
+                AuroraActionButton(
+                    onClick = navigateUp,
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = null,
+                )
 
-                    Spacer(modifier = Modifier.weight(1f))
+                Spacer(modifier = Modifier.weight(1f))
 
-                    // Filter button - Aurora glassmorphism style
-                    AuroraActionButton(
-                        onClick = onFilterButtonClicked,
-                        icon = Icons.Default.FilterList,
-                        contentDescription = null,
-                        iconTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f),
-                    )
+                // Filter button - Aurora glassmorphism style
+                AuroraActionButton(
+                    onClick = onFilterButtonClicked,
+                    icon = Icons.Default.FilterList,
+                    contentDescription = null,
+                    iconTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f),
+                )
 
-                    // Download menu - Aurora glassmorphism style
-                    if (onDownloadActionClicked != null) {
-                        var downloadExpanded by remember { mutableStateOf(false) }
-                        Box(contentAlignment = Alignment.TopEnd) {
-                            AuroraActionButton(
-                                onClick = { downloadExpanded = !downloadExpanded },
-                                icon = Icons.Filled.Download,
-                                contentDescription = null,
-                            )
-                            EntryDownloadDropdownMenu(
-                                expanded = downloadExpanded,
-                                onDismissRequest = { downloadExpanded = false },
-                                onDownloadClicked = { onDownloadActionClicked.invoke(it) },
-                                isManga = true,
-                                useAuroraStyle = true,
-                            )
-                        }
-                    }
-
-                    // More menu - Aurora glassmorphism style
-                    var showMenu by remember { mutableStateOf(false) }
+                // Download menu - Aurora glassmorphism style
+                if (onDownloadActionClicked != null) {
+                    var downloadExpanded by remember { mutableStateOf(false) }
                     Box(contentAlignment = Alignment.TopEnd) {
                         AuroraActionButton(
-                            onClick = { showMenu = !showMenu },
-                            icon = Icons.Default.MoreVert,
+                            onClick = { downloadExpanded = !downloadExpanded },
+                            icon = Icons.Filled.Download,
                             contentDescription = null,
                         )
-                        AuroraEntryDropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false },
-                        ) {
+                        EntryDownloadDropdownMenu(
+                            expanded = downloadExpanded,
+                            onDismissRequest = { downloadExpanded = false },
+                            onDownloadClicked = { onDownloadActionClicked.invoke(it) },
+                            isManga = true,
+                            useAuroraStyle = true,
+                        )
+                    }
+                }
+
+                // More menu - Aurora glassmorphism style
+                var showMenu by remember { mutableStateOf(false) }
+                Box(contentAlignment = Alignment.TopEnd) {
+                    AuroraActionButton(
+                        onClick = { showMenu = !showMenu },
+                        icon = Icons.Default.MoreVert,
+                        contentDescription = null,
+                    )
+                    AuroraEntryDropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                    ) {
+                        AuroraEntryDropdownMenuItem(
+                            text = stringResource(MR.strings.action_webview_refresh),
+                            onClick = {
+                                onRefresh()
+                                showMenu = false
+                            },
+                        )
+                        AuroraEntryDropdownMenuItem(
+                            text = autoJumpToNextLabel,
+                            onClick = {
+                                onToggleAutoJumpToNext()
+                                showMenu = false
+                            },
+                        )
+                        if (globalSearchQuery != null) {
                             AuroraEntryDropdownMenuItem(
-                                text = stringResource(MR.strings.action_webview_refresh),
+                                text = stringResource(MR.strings.action_global_search),
                                 onClick = {
-                                    onRefresh()
+                                    onSearch(globalSearchQuery, true)
                                     showMenu = false
                                 },
                             )
+                        }
+                        if (onShareClicked != null) {
                             AuroraEntryDropdownMenuItem(
-                                text = autoJumpToNextLabel,
+                                text = stringResource(MR.strings.action_share),
                                 onClick = {
-                                    onToggleAutoJumpToNext()
+                                    onShareClicked()
                                     showMenu = false
                                 },
                             )
-                            if (globalSearchQuery != null) {
-                                AuroraEntryDropdownMenuItem(
-                                    text = stringResource(MR.strings.action_global_search),
-                                    onClick = {
-                                        onSearch(globalSearchQuery, true)
-                                        showMenu = false
-                                    },
-                                )
-                            }
-                            if (onShareClicked != null) {
-                                AuroraEntryDropdownMenuItem(
-                                    text = stringResource(MR.strings.action_share),
-                                    onClick = {
-                                        onShareClicked()
-                                        showMenu = false
-                                    },
-                                )
-                            }
-                            if (onSettingsClicked != null) {
-                                AuroraEntryDropdownMenuItem(
-                                    text = stringResource(MR.strings.action_settings),
-                                    onClick = {
-                                        onSettingsClicked()
-                                        showMenu = false
-                                    },
-                                )
-                            }
+                        }
+                        if (onSettingsClicked != null) {
+                            AuroraEntryDropdownMenuItem(
+                                text = stringResource(MR.strings.action_settings),
+                                onClick = {
+                                    onSettingsClicked()
+                                    showMenu = false
+                                },
+                            )
                         }
                     }
+                }
             }
 
             AuroraChapterSelectionBottomStack(
