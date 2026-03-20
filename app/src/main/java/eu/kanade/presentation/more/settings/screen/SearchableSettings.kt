@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import cafe.adriel.voyager.core.screen.Screen
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.PreferenceScaffold
@@ -26,11 +28,15 @@ interface SearchableSettings : Screen {
     @Composable
     override fun Content() {
         val handleBack = LocalBackPress.current
+        val navigator = LocalNavigator.currentOrThrow
         val uiStyle = rememberResolvedSettingsUiStyle()
         PreferenceScaffold(
             titleRes = getTitleRes(),
             uiStyle = uiStyle,
-            onBackPressed = if (handleBack != null) handleBack::invoke else null,
+            onBackPressed = resolveSearchableSettingsBackPress(
+                handleBack = handleBack,
+                navigatorPop = navigator::pop,
+            ),
             actions = { AppBarAction() },
             itemsProvider = { getPreferences() },
         )
@@ -43,4 +49,11 @@ interface SearchableSettings : Screen {
         // See BasePreferenceWidget.highlightBackground
         var highlightKey: String? = null
     }
+}
+
+internal fun resolveSearchableSettingsBackPress(
+    handleBack: (() -> Unit)?,
+    navigatorPop: () -> Unit,
+): () -> Unit {
+    return handleBack ?: navigatorPop
 }
