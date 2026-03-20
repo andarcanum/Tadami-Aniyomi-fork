@@ -40,14 +40,14 @@ class TitleListFastScrollStartIndexTest {
             isSelectionMode = true,
             chapterPageEnabled = true,
             showScanlatorSelector = true,
-        ) shouldBe 6
+        ) shouldBe 5
 
         resolveNovelAuroraFastScrollBlockStartIndex(
             useTwoPaneLayout = true,
             isSelectionMode = true,
             chapterPageEnabled = true,
             showScanlatorSelector = false,
-        ) shouldBe 3
+        ) shouldBe 2
     }
 
     @Test

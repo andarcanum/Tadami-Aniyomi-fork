@@ -813,7 +813,15 @@ fun AnimeScreenAuroraImpl(
 
             // Hero content (fixed at bottom of first screen) - fades out on scroll
             val heroThreshold = (screenHeight.value * 0.7f).toInt()
-            if (!useTwoPaneLayout && firstVisibleItemIndex == 0 && scrollOffset < heroThreshold) {
+            if (
+                shouldShowAnimeAuroraHeroContent(
+                    useTwoPaneLayout = useTwoPaneLayout,
+                    firstVisibleItemIndex = firstVisibleItemIndex,
+                    scrollOffset = scrollOffset,
+                    heroThreshold = heroThreshold,
+                    isSelectionMode = isAnyEpisodeSelected,
+                )
+            ) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
@@ -995,6 +1003,7 @@ fun AnimeScreenAuroraImpl(
                 alwaysUseExternalPlayer = alwaysUseExternalPlayer,
                 modifier = Modifier
                     .align(if (useTwoPaneLayout) Alignment.BottomEnd else Alignment.BottomCenter)
+                    .zIndex(AURORA_SELECTION_STACK_Z_INDEX)
                     .padding(WindowInsets.systemBars.asPaddingValues()),
             )
             SnackbarHost(
@@ -1159,6 +1168,17 @@ internal fun shouldUseAnimeAuroraPaneScopedFastScroller(useTwoPaneLayout: Boolea
     return useTwoPaneLayout
 }
 
+internal fun shouldShowAnimeAuroraHeroContent(
+    useTwoPaneLayout: Boolean,
+    firstVisibleItemIndex: Int,
+    scrollOffset: Int,
+    heroThreshold: Int,
+    isSelectionMode: Boolean,
+): Boolean {
+    if (useTwoPaneLayout || isSelectionMode) return false
+    return firstVisibleItemIndex == 0 && scrollOffset < heroThreshold
+}
+
 internal fun resolveAnimeAuroraFastScrollBlockStartIndex(
     useTwoPaneLayout: Boolean,
 ): Int {
@@ -1167,6 +1187,7 @@ internal fun resolveAnimeAuroraFastScrollBlockStartIndex(
 
 private const val ANIME_AURORA_EPISODES_HEADER_KEY = "anime-aurora-episodes-header"
 private val ANIME_AURORA_FAST_SCROLL_ITEM_TOP_INSET = 6.dp
+private const val AURORA_SELECTION_STACK_Z_INDEX = 3f
 
 internal enum class AuroraEpisodeClickAction {
     OpenEpisode,

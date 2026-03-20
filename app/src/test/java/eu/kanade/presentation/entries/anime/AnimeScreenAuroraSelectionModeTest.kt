@@ -8,6 +8,17 @@ import org.junit.jupiter.api.Test
 class AnimeScreenAuroraSelectionModeTest {
 
     @Test
+    fun `hero content hides while episode selection mode is active`() {
+        shouldShowAnimeAuroraHeroContent(
+            useTwoPaneLayout = false,
+            firstVisibleItemIndex = 0,
+            scrollOffset = 0,
+            heroThreshold = 100,
+            isSelectionMode = true,
+        ) shouldBe false
+    }
+
+    @Test
     fun `aurora selection controls are rendered in bottom stack`() {
         auroraSelectionControlsPlacement() shouldBe AuroraSelectionControlsPlacement.BottomStack
     }

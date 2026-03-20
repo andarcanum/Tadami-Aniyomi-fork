@@ -6,6 +6,17 @@ import org.junit.jupiter.api.Test
 class NovelScreenAuroraSelectionModeTest {
 
     @Test
+    fun `hero content hides while novel selection mode is active`() {
+        shouldShowNovelAuroraHeroContent(
+            useTwoPaneLayout = false,
+            firstVisibleItemIndex = 0,
+            scrollOffset = 0,
+            heroThreshold = 100,
+            isSelectionMode = true,
+        ) shouldBe false
+    }
+
+    @Test
     fun `selection start auto expands collapsed novel chapters list when preview is truncated`() {
         shouldAutoExpandAuroraNovelChaptersList(
             chaptersExpanded = false,

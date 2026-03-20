@@ -6,6 +6,17 @@ import org.junit.jupiter.api.Test
 class MangaScreenAuroraSelectionModeTest {
 
     @Test
+    fun `hero content hides while chapter selection mode is active`() {
+        shouldShowMangaAuroraHeroContent(
+            useTwoPaneLayout = false,
+            firstVisibleItemIndex = 0,
+            scrollOffset = 0,
+            heroThreshold = 100,
+            isSelectionMode = true,
+        ) shouldBe false
+    }
+
+    @Test
     fun `chapter click opens chapter when nothing is selected`() {
         resolveAuroraChapterClickAction(
             isChapterSelected = false,

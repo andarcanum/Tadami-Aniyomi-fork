@@ -764,7 +764,15 @@ fun MangaScreenAuroraImpl(
             // Hero content (fixed at bottom of first screen) - fades out on scroll
             // Show when we haven't scrolled much (index 0 with scroll less than 70% of screen height)
             val heroThreshold = (screenHeight.value * 0.7f).toInt()
-            if (!useTwoPaneLayout && firstVisibleItemIndex == 0 && scrollOffset < heroThreshold) {
+            if (
+                shouldShowMangaAuroraHeroContent(
+                    useTwoPaneLayout = useTwoPaneLayout,
+                    firstVisibleItemIndex = firstVisibleItemIndex,
+                    scrollOffset = scrollOffset,
+                    heroThreshold = heroThreshold,
+                    isSelectionMode = isAnyChapterSelected,
+                )
+            ) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
@@ -935,6 +943,7 @@ fun MangaScreenAuroraImpl(
                 fillFraction = if (useTwoPaneLayout) 0.5f else 1f,
                 modifier = Modifier
                     .align(if (useTwoPaneLayout) Alignment.BottomEnd else Alignment.BottomCenter)
+                    .zIndex(AURORA_SELECTION_STACK_Z_INDEX)
                     .padding(WindowInsets.systemBars.asPaddingValues()),
             )
             SnackbarHost(
@@ -955,6 +964,17 @@ internal fun shouldUseMangaAuroraPaneScopedFastScroller(useTwoPaneLayout: Boolea
     return useTwoPaneLayout
 }
 
+internal fun shouldShowMangaAuroraHeroContent(
+    useTwoPaneLayout: Boolean,
+    firstVisibleItemIndex: Int,
+    scrollOffset: Int,
+    heroThreshold: Int,
+    isSelectionMode: Boolean,
+): Boolean {
+    if (useTwoPaneLayout || isSelectionMode) return false
+    return firstVisibleItemIndex == 0 && scrollOffset < heroThreshold
+}
+
 internal fun resolveMangaAuroraFastScrollBlockStartIndex(
     useTwoPaneLayout: Boolean,
     showScanlatorSelector: Boolean,
@@ -965,6 +985,7 @@ internal fun resolveMangaAuroraFastScrollBlockStartIndex(
 
 private const val MANGA_AURORA_CHAPTERS_HEADER_KEY = "manga-aurora-chapters-header"
 private val MANGA_AURORA_FAST_SCROLL_ITEM_TOP_INSET = 6.dp
+private const val AURORA_SELECTION_STACK_Z_INDEX = 3f
 
 internal enum class AuroraChapterClickAction {
     OpenChapter,

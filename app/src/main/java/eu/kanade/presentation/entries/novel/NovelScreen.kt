@@ -208,6 +208,8 @@ fun NovelScreen(
             onInvertSelection = onInvertSelection,
             onMultiBookmarkClicked = onMultiBookmarkClicked,
             onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
+            onMultiDownloadClicked = onMultiDownloadClicked,
+            onMultiDeleteClicked = onMultiDeleteClicked,
             isAutoJumpToNextEnabled = autoJumpToNextEnabled,
             autoJumpToNextLabel = autoJumpToNextLabel,
             onToggleAutoJumpToNext = onToggleAutoJumpToNext,

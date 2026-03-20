@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -31,8 +32,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -65,6 +69,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import eu.kanade.presentation.entries.components.EntryBottomActionMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.AuroraEntryHoldToRefresh
@@ -143,6 +148,8 @@ fun NovelScreenAuroraImpl(
     onInvertSelection: () -> Unit,
     onMultiBookmarkClicked: (Boolean) -> Unit,
     onMultiMarkAsReadClicked: (Boolean) -> Unit,
+    onMultiDownloadClicked: () -> Unit,
+    onMultiDeleteClicked: () -> Unit,
     isAutoJumpToNextEnabled: Boolean,
     autoJumpToNextLabel: String,
     onToggleAutoJumpToNext: () -> Unit,
@@ -251,6 +258,7 @@ fun NovelScreenAuroraImpl(
     val selectedIds = state.selectedChapterIds
     val isSelectionMode = selectedIds.isNotEmpty()
     val selectedChapters = chapters.filter { it.id in selectedIds }
+    val downloadedChapterIds = state.downloadedChapterIds
 
     var descriptionExpanded by remember { mutableStateOf(false) }
     var genresExpanded by remember { mutableStateOf(false) }
@@ -414,29 +422,6 @@ fun NovelScreenAuroraImpl(
                                     bottom = 112.dp,
                                 ),
                             ) {
-                                if (isSelectionMode) {
-                                    item {
-                                        SelectionBar(
-                                            selectedCount = selectedIds.size,
-                                            canMarkRead = selectedChapters.any { !it.read },
-                                            canMarkUnread = selectedChapters.any {
-                                                it.read || it.lastPageRead > 0L
-                                            },
-                                            canBookmark = selectedChapters.any { !it.bookmark },
-                                            canUnbookmark = selectedChapters.any { it.bookmark },
-                                            onClear = { onToggleAllSelection(false) },
-                                            onSelectAll = { onToggleAllSelection(true) },
-                                            onInvert = onInvertSelection,
-                                            onMarkRead = { onMultiMarkAsReadClicked(true) },
-                                            onMarkUnread = { onMultiMarkAsReadClicked(false) },
-                                            onBookmark = { onMultiBookmarkClicked(true) },
-                                            onUnbookmark = { onMultiBookmarkClicked(false) },
-                                            modifier = Modifier.fillMaxWidth(),
-                                        )
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                    }
-                                }
-
                                 item {
                                     ChaptersHeader(chapterCount = listChapterCount)
                                 }
@@ -625,11 +610,11 @@ fun NovelScreenAuroraImpl(
                 )
 
                 val overlayChromeAlphaTwoPane by animateFloatAsState(
-                    targetValue = if (showNovelOverlayChrome) 1f else 0f,
+                    targetValue = if (!isSelectionMode && showNovelOverlayChrome) 1f else 0f,
                     label = "overlayChromeAlpha",
                 )
                 val overlayChromeOffsetYTwoPane by animateFloatAsState(
-                    targetValue = if (showNovelOverlayChrome) 0f else -1f,
+                    targetValue = if (!isSelectionMode && showNovelOverlayChrome) 0f else -1f,
                     label = "overlayChromeOffsetY",
                 )
                 Row(
@@ -751,6 +736,23 @@ fun NovelScreenAuroraImpl(
                     }
                 }
 
+                AuroraNovelSelectionBottomStack(
+                    selected = selectedChapters,
+                    downloadedChapterIds = downloadedChapterIds,
+                    onSelectAll = { onToggleAllSelection(true) },
+                    onInvertSelection = onInvertSelection,
+                    onCancel = { onToggleAllSelection(false) },
+                    onMultiBookmarkClicked = onMultiBookmarkClicked,
+                    onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
+                    onMultiDownloadClicked = onMultiDownloadClicked,
+                    onMultiDeleteClicked = onMultiDeleteClicked,
+                    fillFraction = 0.5f,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .zIndex(NOVEL_AURORA_SELECTION_STACK_Z_INDEX)
+                        .padding(WindowInsets.systemBars.asPaddingValues()),
+                )
+
                 SnackbarHost(
                     hostState = snackbarHostState,
                     snackbar = { data ->
@@ -861,26 +863,6 @@ fun NovelScreenAuroraImpl(
                                 onTranslatedDownloadClicked = onOpenTranslatedDownloadDialog,
                                 onExportEpubClicked = onOpenEpubExportDialog,
                                 modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
-                    }
-
-                    if (isSelectionMode) {
-                        item {
-                            SelectionBar(
-                                selectedCount = selectedIds.size,
-                                canMarkRead = selectedChapters.any { !it.read },
-                                canMarkUnread = selectedChapters.any { it.read || it.lastPageRead > 0L },
-                                canBookmark = selectedChapters.any { !it.bookmark },
-                                canUnbookmark = selectedChapters.any { it.bookmark },
-                                onClear = { onToggleAllSelection(false) },
-                                onSelectAll = { onToggleAllSelection(true) },
-                                onInvert = onInvertSelection,
-                                onMarkRead = { onMultiMarkAsReadClicked(true) },
-                                onMarkUnread = { onMultiMarkAsReadClicked(false) },
-                                onBookmark = { onMultiBookmarkClicked(true) },
-                                onUnbookmark = { onMultiBookmarkClicked(false) },
-                                modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
                             )
                         }
                     }
@@ -1082,7 +1064,15 @@ fun NovelScreenAuroraImpl(
             }
 
             val heroThreshold = (screenHeight.value * 0.7f).toInt()
-            if (firstVisibleItemIndex == 0 && scrollOffset < heroThreshold) {
+            if (
+                shouldShowNovelAuroraHeroContent(
+                    useTwoPaneLayout = useTwoPaneLayout,
+                    firstVisibleItemIndex = firstVisibleItemIndex,
+                    scrollOffset = scrollOffset,
+                    heroThreshold = heroThreshold,
+                    isSelectionMode = isSelectionMode,
+                )
+            ) {
                 val heroAlpha = (1f - (scrollOffset / heroThreshold.toFloat())).coerceIn(0f, 1f)
                 Box(
                     modifier = Modifier
@@ -1118,11 +1108,11 @@ fun NovelScreenAuroraImpl(
             }
 
             val overlayChromeAlpha by animateFloatAsState(
-                targetValue = if (showNovelOverlayChrome) 1f else 0f,
+                targetValue = if (!isSelectionMode && showNovelOverlayChrome) 1f else 0f,
                 label = "overlayChromeAlpha",
             )
             val overlayChromeOffsetY by animateFloatAsState(
-                targetValue = if (showNovelOverlayChrome) 0f else -1f,
+                targetValue = if (!isSelectionMode && showNovelOverlayChrome) 0f else -1f,
                 label = "overlayChromeOffsetY",
             )
             Row(
@@ -1249,6 +1239,23 @@ fun NovelScreenAuroraImpl(
                 }
             }
 
+            AuroraNovelSelectionBottomStack(
+                selected = selectedChapters,
+                downloadedChapterIds = downloadedChapterIds,
+                onSelectAll = { onToggleAllSelection(true) },
+                onInvertSelection = onInvertSelection,
+                onCancel = { onToggleAllSelection(false) },
+                onMultiBookmarkClicked = onMultiBookmarkClicked,
+                onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
+                onMultiDownloadClicked = onMultiDownloadClicked,
+                onMultiDeleteClicked = onMultiDeleteClicked,
+                fillFraction = 1f,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .zIndex(NOVEL_AURORA_SELECTION_STACK_Z_INDEX)
+                    .padding(WindowInsets.systemBars.asPaddingValues()),
+            )
+
             SnackbarHost(
                 hostState = snackbarHostState,
                 snackbar = { data ->
@@ -1341,18 +1348,25 @@ internal fun resolveNovelAuroraFastScrollBlockStartIndex(
     chapterPageEnabled: Boolean,
     showScanlatorSelector: Boolean,
 ): Int {
-    val baseIndex = when {
-        useTwoPaneLayout && isSelectionMode -> 2
-        useTwoPaneLayout -> 1
-        isSelectionMode -> 4
-        else -> 3
-    }
+    val baseIndex = if (useTwoPaneLayout) 1 else 3
     return baseIndex + listOf(chapterPageEnabled, showScanlatorSelector).count { it }
+}
+
+internal fun shouldShowNovelAuroraHeroContent(
+    useTwoPaneLayout: Boolean,
+    firstVisibleItemIndex: Int,
+    scrollOffset: Int,
+    heroThreshold: Int,
+    isSelectionMode: Boolean,
+): Boolean {
+    if (useTwoPaneLayout || isSelectionMode) return false
+    return firstVisibleItemIndex == 0 && scrollOffset < heroThreshold
 }
 
 private const val NOVEL_AURORA_COLLAPSED_PREVIEW_COUNT = 5
 private const val NOVEL_AURORA_CHAPTERS_HEADER_KEY = "novel-aurora-chapters-header"
 private val NOVEL_AURORA_FAST_SCROLL_ITEM_TOP_INSET = 4.dp
+private const val NOVEL_AURORA_SELECTION_STACK_Z_INDEX = 3f
 
 @Composable
 private fun NovelAuroraTargetAutoScrollEffect(
@@ -1451,78 +1465,6 @@ private fun AuroraChapterPageControls(
 }
 
 @Composable
-private fun SelectionBar(
-    selectedCount: Int,
-    canMarkRead: Boolean,
-    canMarkUnread: Boolean,
-    canBookmark: Boolean,
-    canUnbookmark: Boolean,
-    onClear: () -> Unit,
-    onSelectAll: () -> Unit,
-    onInvert: () -> Unit,
-    onMarkRead: () -> Unit,
-    onMarkUnread: () -> Unit,
-    onBookmark: () -> Unit,
-    onUnbookmark: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val colors = AuroraTheme.colors
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
-            .background(colors.surface.copy(alpha = 0.88f))
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(
-            text = selectedCount.toString(),
-            color = colors.accent,
-            fontWeight = FontWeight.Bold,
-            fontSize = 14.sp,
-        )
-        Text(
-            text = stringResource(MR.strings.selected),
-            color = colors.textPrimary,
-            fontSize = 13.sp,
-        )
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        SelectionChip(text = stringResource(MR.strings.action_select_all), onClick = onSelectAll)
-        SelectionChip(text = stringResource(MR.strings.action_select_inverse), onClick = onInvert)
-        if (canBookmark) {
-            SelectionChip(
-                text = stringResource(MR.strings.action_bookmark),
-                onClick = onBookmark,
-            )
-        }
-        if (canUnbookmark) {
-            SelectionChip(
-                text = stringResource(MR.strings.action_remove_bookmark),
-                onClick = onUnbookmark,
-            )
-        }
-        if (canMarkRead) {
-            SelectionChip(
-                text = stringResource(MR.strings.action_mark_as_read),
-                onClick = onMarkRead,
-            )
-        }
-        if (canMarkUnread) {
-            SelectionChip(
-                text = stringResource(MR.strings.action_mark_as_unread),
-                onClick = onMarkUnread,
-            )
-        }
-        SelectionChip(text = stringResource(MR.strings.action_cancel), onClick = onClear)
-    }
-}
-
-@Composable
 private fun SelectionChip(
     text: String,
     onClick: () -> Unit,
@@ -1530,7 +1472,7 @@ private fun SelectionChip(
     val colors = AuroraTheme.colors
     Box(
         modifier = Modifier
-            .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(10.dp))
             .background(
                 Brush.horizontalGradient(
                     listOf(
@@ -1547,6 +1489,123 @@ private fun SelectionChip(
             color = colors.textPrimary,
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
+@Composable
+private fun AuroraSelectionIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AuroraTheme.colors
+    Box(
+        modifier = modifier
+            .size(32.dp)
+            .clip(CircleShape)
+            .background(
+                Brush.radialGradient(
+                    listOf(
+                        colors.accent.copy(alpha = 0.2f),
+                        colors.accent.copy(alpha = 0.1f),
+                    ),
+                ),
+            )
+            .clickable(onClick = onClick)
+            .padding(7.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = colors.textPrimary,
+            modifier = Modifier.size(18.dp),
+        )
+    }
+}
+
+@Composable
+private fun AuroraNovelSelectionBottomStack(
+    selected: List<NovelChapter>,
+    downloadedChapterIds: Set<Long>,
+    onSelectAll: () -> Unit,
+    onInvertSelection: () -> Unit,
+    onCancel: () -> Unit,
+    onMultiBookmarkClicked: (Boolean) -> Unit,
+    onMultiMarkAsReadClicked: (Boolean) -> Unit,
+    onMultiDownloadClicked: () -> Unit,
+    onMultiDeleteClicked: () -> Unit,
+    fillFraction: Float,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxWidth(fillFraction)) {
+        if (selected.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(AuroraTheme.colors.surface.copy(alpha = 0.9f))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(AuroraTheme.colors.accent.copy(alpha = 0.16f))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        text = selected.size.toString(),
+                        color = AuroraTheme.colors.accent,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                AuroraSelectionIconButton(
+                    icon = Icons.Outlined.SelectAll,
+                    contentDescription = stringResource(MR.strings.action_select_all),
+                    onClick = onSelectAll,
+                )
+                AuroraSelectionIconButton(
+                    icon = Icons.Filled.SwapHoriz,
+                    contentDescription = stringResource(MR.strings.action_select_inverse),
+                    onClick = onInvertSelection,
+                )
+                AuroraSelectionIconButton(
+                    icon = Icons.Outlined.Close,
+                    contentDescription = stringResource(MR.strings.action_cancel),
+                    onClick = onCancel,
+                )
+            }
+        }
+
+        EntryBottomActionMenu(
+            visible = selected.isNotEmpty(),
+            isManga = true,
+            modifier = Modifier.fillMaxWidth(),
+            onBookmarkClicked = {
+                onMultiBookmarkClicked(true)
+            }.takeIf { selected.any { !it.bookmark } },
+            onRemoveBookmarkClicked = {
+                onMultiBookmarkClicked(false)
+            }.takeIf { selected.isNotEmpty() && selected.all { it.bookmark } },
+            onMarkAsViewedClicked = {
+                onMultiMarkAsReadClicked(true)
+            }.takeIf { selected.any { !it.read } },
+            onMarkAsUnviewedClicked = {
+                onMultiMarkAsReadClicked(false)
+            }.takeIf { selected.any { it.read || it.lastPageRead > 0L } },
+            onDownloadClicked = onMultiDownloadClicked.takeIf {
+                selected.any { it.id !in downloadedChapterIds }
+            },
+            onDeleteClicked = onMultiDeleteClicked.takeIf {
+                selected.any { it.id in downloadedChapterIds }
+            },
         )
     }
 }
