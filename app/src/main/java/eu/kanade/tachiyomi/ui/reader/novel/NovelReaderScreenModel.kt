@@ -206,6 +206,9 @@ class NovelReaderScreenModel(
     private var deepSeekModelIds: List<String> = emptyList()
     private var isDeepSeekModelsLoading: Boolean = false
     private var isTestingDeepSeekConnection: Boolean = false
+    private val progressPersistenceMutex = Mutex()
+    private var pendingProgressPersistence: PendingProgressPersistence? = null
+    private var progressPersistenceJob: Job? = null
     private val structuredJson = Json {
         ignoreUnknownKeys = true
         isLenient = true
@@ -718,27 +721,64 @@ class NovelReaderScreenModel(
         )
         val shouldEmitNovelCompleted = becameRead && chapterOrderList.all { it.read }
 
+        enqueueProgressPersistence(
+            PendingProgressPersistence(
+                chapterId = chapter.id,
+                novelId = chapter.novelId,
+                chapterNumber = chapter.chapterNumber.toInt(),
+                read = shouldPersistRead,
+                lastPageRead = newProgress,
+                emitReadEvent = becameRead,
+                emitNovelCompleted = shouldEmitNovelCompleted,
+                sessionReadDurationMs = System.currentTimeMillis() - chapterReadStartTimeMs,
+            ),
+        )
+    }
+
+    private fun enqueueProgressPersistence(update: PendingProgressPersistence) {
         screenModelScope.launch(NonCancellable) {
-            novelChapterRepository.updateChapter(
-                NovelChapterUpdate(
-                    id = chapter.id,
-                    read = shouldPersistRead,
-                    lastPageRead = newProgress,
-                ),
-            )
-            if (becameRead) {
-                eventBus?.tryEmit(
-                    AchievementEvent.NovelChapterRead(
-                        novelId = chapter.novelId,
-                        chapterNumber = chapter.chapterNumber.toInt(),
-                    ),
-                )
-                if (shouldEmitNovelCompleted) {
-                    eventBus?.tryEmit(AchievementEvent.NovelCompleted(chapter.novelId))
+            progressPersistenceMutex.withLock {
+                pendingProgressPersistence = pendingProgressPersistence?.merge(update) ?: update
+                if (progressPersistenceJob?.isActive == true) {
+                    return@launch
+                }
+                progressPersistenceJob = screenModelScope.launch(NonCancellable) {
+                    flushPendingProgressPersistence()
                 }
             }
+        }
+    }
+
+    private suspend fun flushPendingProgressPersistence() {
+        while (true) {
+            val nextUpdate = progressPersistenceMutex.withLock {
+                val next = pendingProgressPersistence ?: return
+                pendingProgressPersistence = null
+                next
+            }
+
+            novelChapterRepository.updateChapter(
+                NovelChapterUpdate(
+                    id = nextUpdate.chapterId,
+                    read = nextUpdate.read,
+                    lastPageRead = nextUpdate.lastPageRead,
+                ),
+            )
+
+            if (nextUpdate.emitReadEvent) {
+                eventBus?.tryEmit(
+                    AchievementEvent.NovelChapterRead(
+                        novelId = nextUpdate.novelId,
+                        chapterNumber = nextUpdate.chapterNumber,
+                    ),
+                )
+                if (nextUpdate.emitNovelCompleted) {
+                    eventBus?.tryEmit(AchievementEvent.NovelCompleted(nextUpdate.novelId))
+                }
+            }
+
             val now = System.currentTimeMillis()
-            saveHistorySnapshot(chapter.id, now - chapterReadStartTimeMs)
+            saveHistorySnapshot(nextUpdate.chapterId, nextUpdate.sessionReadDurationMs)
             chapterReadStartTimeMs = now
         }
     }
@@ -2713,6 +2753,30 @@ class NovelReaderScreenModel(
     sealed interface ContentBlock {
         data class Text(val text: String) : ContentBlock
         data class Image(val url: String, val alt: String?) : ContentBlock
+    }
+
+    private data class PendingProgressPersistence(
+        val chapterId: Long,
+        val novelId: Long,
+        val chapterNumber: Int,
+        val read: Boolean,
+        val lastPageRead: Long,
+        val emitReadEvent: Boolean,
+        val emitNovelCompleted: Boolean,
+        val sessionReadDurationMs: Long,
+    ) {
+        fun merge(other: PendingProgressPersistence): PendingProgressPersistence {
+            require(chapterId == other.chapterId) {
+                "Pending progress persistence can only merge updates for the same chapter"
+            }
+            return copy(
+                read = other.read,
+                lastPageRead = other.lastPageRead,
+                emitReadEvent = emitReadEvent || other.emitReadEvent,
+                emitNovelCompleted = emitNovelCompleted || other.emitNovelCompleted,
+                sessionReadDurationMs = maxOf(sessionReadDurationMs, other.sessionReadDurationMs),
+            )
+        }
     }
 
     companion object {

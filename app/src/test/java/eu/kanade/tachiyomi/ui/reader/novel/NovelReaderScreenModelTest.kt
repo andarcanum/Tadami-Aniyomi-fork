@@ -21,6 +21,7 @@ import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -1647,6 +1648,67 @@ class NovelReaderScreenModelTest {
         }
     }
 
+    @Test
+    fun `rapid progress updates coalesce while repository write is in flight`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+            val chapterRepo = BlockingNovelChapterRepository(chapter)
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = chapterRepo,
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            screenModel.updateReadingProgress(currentIndex = 1, totalItems = 10)
+            withTimeout(1_000) {
+                while (chapterRepo.startedUpdates.isEmpty()) {
+                    yield()
+                }
+            }
+
+            screenModel.updateReadingProgress(currentIndex = 2, totalItems = 10)
+            screenModel.updateReadingProgress(currentIndex = 3, totalItems = 10)
+            yield()
+
+            chapterRepo.startedUpdates.size shouldBe 1
+
+            chapterRepo.allowNextUpdate()
+            withTimeout(1_000) {
+                while (chapterRepo.startedUpdates.size < 2) {
+                    yield()
+                }
+            }
+
+            chapterRepo.allowNextUpdate()
+            withTimeout(1_000) {
+                while (chapterRepo.completedUpdates.size < 2) {
+                    yield()
+                }
+            }
+
+            chapterRepo.completedUpdates.size shouldBe 2
+            chapterRepo.completedUpdates[0].lastPageRead shouldBe 1L
+            chapterRepo.completedUpdates[1].lastPageRead shouldBe 3L
+        }
+    }
+
     private class FakeNovelChapterRepository(
         private val chapter: NovelChapter?,
         private val chaptersByNovel: List<NovelChapter> = emptyList(),
@@ -1671,6 +1733,47 @@ class NovelReaderScreenModelTest {
             novelId: Long,
             applyScanlatorFilter: Boolean,
         ): Flow<List<NovelChapter>> = MutableStateFlow(emptyList())
+        override suspend fun getChapterByUrlAndNovelId(url: String, novelId: Long): NovelChapter? = null
+    }
+
+    private class BlockingNovelChapterRepository(
+        private val chapter: NovelChapter?,
+    ) : NovelChapterRepository {
+        val startedUpdates = mutableListOf<NovelChapterUpdate>()
+        val completedUpdates = mutableListOf<NovelChapterUpdate>()
+        private val updatePermits = Channel<Unit>(capacity = Channel.UNLIMITED)
+
+        fun allowNextUpdate() {
+            updatePermits.trySend(Unit)
+        }
+
+        override suspend fun addAllChapters(chapters: List<NovelChapter>): List<NovelChapter> = chapters
+
+        override suspend fun updateChapter(chapterUpdate: NovelChapterUpdate) {
+            startedUpdates += chapterUpdate
+            updatePermits.receive()
+            completedUpdates += chapterUpdate
+        }
+
+        override suspend fun updateAllChapters(chapterUpdates: List<NovelChapterUpdate>) = Unit
+
+        override suspend fun removeChaptersWithIds(chapterIds: List<Long>) = Unit
+
+        override suspend fun getChapterByNovelId(novelId: Long, applyScanlatorFilter: Boolean): List<NovelChapter> = emptyList()
+
+        override suspend fun getScanlatorsByNovelId(novelId: Long): List<String> = emptyList()
+
+        override fun getScanlatorsByNovelIdAsFlow(novelId: Long): Flow<List<String>> = MutableStateFlow(emptyList())
+
+        override suspend fun getBookmarkedChaptersByNovelId(novelId: Long): List<NovelChapter> = emptyList()
+
+        override suspend fun getChapterById(id: Long): NovelChapter? = chapter?.takeIf { it.id == id }
+
+        override suspend fun getChapterByNovelIdAsFlow(
+            novelId: Long,
+            applyScanlatorFilter: Boolean,
+        ): Flow<List<NovelChapter>> = MutableStateFlow(emptyList())
+
         override suspend fun getChapterByUrlAndNovelId(url: String, novelId: Long): NovelChapter? = null
     }
 
