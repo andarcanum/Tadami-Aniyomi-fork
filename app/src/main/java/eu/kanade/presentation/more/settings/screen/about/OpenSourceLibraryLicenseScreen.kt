@@ -18,6 +18,7 @@ import com.google.android.material.textview.MaterialTextView
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.util.Screen
 import kotlinx.collections.immutable.persistentListOf
@@ -35,11 +36,13 @@ class OpenSourceLibraryLicenseScreen(
         val navigator = LocalNavigator.currentOrThrow
         val uriHandler = LocalUriHandler.current
         val uiStyle = rememberResolvedSettingsUiStyle()
+        val scrollState = rememberScrollState()
 
         SettingsScaffold(
             title = name,
             uiStyle = uiStyle,
             onBackPressed = navigator::pop,
+            topBarCanScroll = { scrollState.canScroll() },
             actions = {
                 if (!website.isNullOrEmpty()) {
                     AppBarActions(
@@ -56,7 +59,7 @@ class OpenSourceLibraryLicenseScreen(
         ) { contentPadding ->
             Column(
                 modifier = Modifier
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scrollState)
                     .padding(contentPadding)
                     .padding(16.dp),
             ) {

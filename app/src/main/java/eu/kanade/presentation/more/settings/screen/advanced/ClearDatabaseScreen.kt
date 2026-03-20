@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FlipToBack
 import androidx.compose.material.icons.outlined.SelectAll
@@ -33,6 +34,7 @@ import eu.kanade.presentation.browse.manga.components.MangaSourceIcon
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.util.system.toast
@@ -67,6 +69,7 @@ class ClearDatabaseScreen : Screen() {
         val state by model.state.collectAsState()
         val scope = rememberCoroutineScope()
         val uiStyle = rememberResolvedSettingsUiStyle()
+        val listState = rememberLazyListState()
 
         when (val s = state) {
             is ClearDatabaseScreenModel.State.Loading -> LoadingScreen()
@@ -103,6 +106,7 @@ class ClearDatabaseScreen : Screen() {
                     title = stringResource(AYMR.strings.pref_clear_manga_database),
                     uiStyle = uiStyle,
                     onBackPressed = navigator::pop,
+                    topBarCanScroll = { listState.canScroll() },
                     actions = {
                         if (s.items.isNotEmpty()) {
                             AppBarActions(
@@ -130,6 +134,7 @@ class ClearDatabaseScreen : Screen() {
                     } else {
                         LazyColumnWithAction(
                             contentPadding = contentPadding,
+                            state = listState,
                             actionLabel = stringResource(MR.strings.action_delete),
                             actionEnabled = s.selection.isNotEmpty(),
                             onClickAction = model::showConfirmation,

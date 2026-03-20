@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import eu.kanade.presentation.components.DropdownMenu
 import eu.kanade.presentation.components.FloatingActionAddButton
 import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.screen.player.editor.EditorListItem
 import eu.kanade.presentation.more.settings.screen.player.editor.EditorListType
@@ -53,6 +54,7 @@ fun EditorScreen(
         title = "",
         uiStyle = uiStyle,
         onBackPressed = navigateUp,
+        topBarCanScroll = { lazyListState.canScroll() },
         titleContent = {
             EditorTypeDropDown(
                 type = selectedType,

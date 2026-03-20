@@ -20,6 +20,7 @@ import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Modifier
 import eu.kanade.presentation.components.FloatingActionAddButton
 import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.screen.player.custombutton.CustomButtonScreenState
 import sh.calvin.reorderable.ReorderableItem
@@ -49,6 +50,7 @@ fun CustomButtonScreen(
         title = stringResource(AYMR.strings.pref_player_custom_button_header),
         uiStyle = uiStyle,
         onBackPressed = navigateUp,
+        topBarCanScroll = { lazyListState.canScroll() },
         actions = {
             IconButton(onClick = onClickFAQ) {
                 Icon(

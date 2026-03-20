@@ -1,5 +1,6 @@
 package eu.kanade.presentation.more.settings
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.background
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
@@ -52,6 +54,7 @@ fun SettingsScaffold(
     showTopBar: Boolean = true,
     actions: @Composable RowScope.() -> Unit = {},
     floatingActionButton: @Composable () -> Unit = {},
+    topBarCanScroll: () -> Boolean = { true },
     content: @Composable (PaddingValues) -> Unit,
 ) {
     CompositionLocalProvider(LocalSettingsUiStyle provides uiStyle) {
@@ -87,7 +90,10 @@ fun SettingsScaffold(
                 val layoutDirection = LocalLayoutDirection.current
                 val topBarState = rememberTopAppBarState()
                 val topBarScrollBehavior = if (showTopBar) {
-                    TopAppBarDefaults.enterAlwaysScrollBehavior(topBarState)
+                    TopAppBarDefaults.enterAlwaysScrollBehavior(
+                        state = topBarState,
+                        canScroll = topBarCanScroll,
+                    )
                 } else {
                     TopAppBarDefaults.pinnedScrollBehavior(topBarState)
                 }
@@ -156,6 +162,10 @@ internal fun resolveAuroraSettingsTopBarHeightOffsetLimit(heightPx: Int): Float 
         -heightPx.toFloat()
     }
 }
+
+internal fun LazyListState.canScroll() = canScrollBackward || canScrollForward
+
+internal fun ScrollState.canScroll() = canScrollBackward || canScrollForward
 
 @Composable
 internal fun SettingsAuroraBackground(

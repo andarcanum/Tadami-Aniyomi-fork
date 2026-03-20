@@ -13,6 +13,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import eu.kanade.presentation.category.components.CategoryFloatingActionButton
 import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.screen.browse.RepoScreenState
 import mihon.domain.extensionrepo.model.ExtensionRepo
@@ -39,6 +40,7 @@ fun ExtensionReposScreen(
         title = stringResource(MR.strings.label_extension_repos),
         uiStyle = uiStyle,
         onBackPressed = navigateUp,
+        topBarCanScroll = { lazyListState.canScroll() },
         actions = {
             IconButton(onClick = onClickRefresh) {
                 Icon(

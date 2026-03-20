@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material3.CircularProgressIndicator
@@ -43,6 +44,7 @@ import eu.kanade.presentation.more.LogoHeader
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_HORIZONTAL_INSET
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
 import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.SettingsUiStyle
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.settingsAccentColor
@@ -139,6 +141,7 @@ object AboutScreen : Screen() {
         } else {
             Modifier
         }
+        val state = rememberLazyListState()
 
         fun syncEasterEggPhase(block: (AboutEasterEggStateMachine) -> Unit) {
             val machine = easterEggStateMachine ?: return
@@ -164,8 +167,10 @@ object AboutScreen : Screen() {
                 uiStyle = uiStyle,
                 onBackPressed = if (handleBack != null) handleBack::invoke else null,
                 showTopBar = !isEasterEggVisible,
+                topBarCanScroll = { state.canScroll() },
             ) { contentPadding ->
                 ScrollbarLazyColumn(
+                    state = state,
                     contentPadding = contentPadding,
                 ) {
                     item {

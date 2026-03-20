@@ -65,6 +65,7 @@ import eu.kanade.presentation.more.settings.LocalSettingsUiStyle
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.SettingsAuroraBackground
 import eu.kanade.presentation.more.settings.SettingsUiStyle
+import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsAdvancedScreen
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsAudioScreen
@@ -100,7 +101,10 @@ class SettingsSearchScreen(
         val listState = rememberLazyListState()
         val topBarState = rememberTopAppBarState()
         val topBarScrollBehavior = if (isAurora) {
-            TopAppBarDefaults.enterAlwaysScrollBehavior(topBarState)
+            TopAppBarDefaults.enterAlwaysScrollBehavior(
+                state = topBarState,
+                canScroll = { listState.canScroll() },
+            )
         } else {
             TopAppBarDefaults.pinnedScrollBehavior(topBarState)
         }

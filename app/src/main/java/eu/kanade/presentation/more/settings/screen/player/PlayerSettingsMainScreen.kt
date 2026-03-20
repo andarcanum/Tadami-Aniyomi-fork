@@ -27,6 +27,7 @@ import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_HORIZONTAL_INSE
 import eu.kanade.presentation.more.settings.AuroraTopBarIconButton
 import eu.kanade.presentation.more.settings.SettingsScaffold
 import eu.kanade.presentation.more.settings.SettingsUiStyle
+import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.screen.SettingsSearchScreen
 import eu.kanade.presentation.more.settings.screen.playerSettingsNavigationItems
@@ -54,6 +55,7 @@ class PlayerSettingsMainScreen(private val mainSettings: Boolean) : Screen() {
         val backPress = LocalBackPress.currentOrThrow
         val uiStyle = rememberResolvedSettingsUiStyle()
         val items = remember { playerSettingsNavigationItems() }
+        val state = rememberLazyListState()
 
         SettingsScaffold(
             title = stringResource(
@@ -65,6 +67,7 @@ class PlayerSettingsMainScreen(private val mainSettings: Boolean) : Screen() {
             ),
             uiStyle = uiStyle,
             onBackPressed = backPress::invoke,
+            topBarCanScroll = { state.canScroll() },
             actions = {
                 if (uiStyle == SettingsUiStyle.Aurora) {
                     AuroraTopBarIconButton(
@@ -85,7 +88,6 @@ class PlayerSettingsMainScreen(private val mainSettings: Boolean) : Screen() {
                 }
             },
         ) { contentPadding ->
-            val state = rememberLazyListState()
             val indexSelected = if (twoPane) {
                 items.indexOfFirst { it.screen::class == navigator.items.first()::class }
                     .also {

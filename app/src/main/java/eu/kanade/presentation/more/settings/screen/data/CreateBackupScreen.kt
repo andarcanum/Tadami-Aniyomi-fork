@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.platform.LocalContext
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.rememberScreenModel
@@ -17,6 +18,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.WarningBanner
 import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.data.backup.create.BackupCreateJob
@@ -43,6 +45,7 @@ class CreateBackupScreen : Screen() {
         val model = rememberScreenModel { CreateBackupScreenModel() }
         val state by model.state.collectAsState()
         val uiStyle = rememberResolvedSettingsUiStyle()
+        val listState = rememberLazyListState()
 
         val chooseBackupDir = rememberLauncherForActivityResult(
             contract = ActivityResultContracts.CreateDocument("application/*"),
@@ -62,9 +65,11 @@ class CreateBackupScreen : Screen() {
             title = stringResource(MR.strings.pref_create_backup),
             uiStyle = uiStyle,
             onBackPressed = navigator::pop,
+            topBarCanScroll = { listState.canScroll() },
         ) { contentPadding ->
             LazyColumnWithAction(
                 contentPadding = contentPadding,
+                state = listState,
                 actionLabel = stringResource(MR.strings.action_create),
                 actionEnabled = state.options.canCreate(),
                 onClickAction = {

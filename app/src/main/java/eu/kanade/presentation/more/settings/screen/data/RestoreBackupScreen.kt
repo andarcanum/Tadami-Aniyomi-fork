@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -26,6 +27,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.WarningBanner
 import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.data.backup.BackupFileValidator
@@ -51,14 +53,17 @@ class RestoreBackupScreen(
         val model = rememberScreenModel { RestoreBackupScreenModel(context, uri) }
         val state by model.state.collectAsState()
         val uiStyle = rememberResolvedSettingsUiStyle()
+        val listState = rememberLazyListState()
 
         SettingsScaffold(
             title = stringResource(MR.strings.pref_restore_backup),
             uiStyle = uiStyle,
             onBackPressed = navigator::pop,
+            topBarCanScroll = { listState.canScroll() },
         ) { contentPadding ->
             LazyColumnWithAction(
                 contentPadding = contentPadding,
+                state = listState,
                 actionLabel = stringResource(MR.strings.action_restore),
                 actionEnabled = state.canRestore && state.options.canRestore(),
                 onClickAction = {

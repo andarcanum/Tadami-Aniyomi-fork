@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FlipToBack
 import androidx.compose.material.icons.outlined.SelectAll
@@ -38,6 +39,7 @@ import eu.kanade.presentation.browse.anime.components.AnimeSourceIcon
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.animesource.model.FetchType
@@ -74,6 +76,7 @@ class ClearAnimeDatabaseScreen : Screen() {
         val state by model.state.collectAsState()
         val scope = rememberCoroutineScope()
         val uiStyle = rememberResolvedSettingsUiStyle()
+        val listState = rememberLazyListState()
 
         when (val s = state) {
             is ClearAnimeDatabaseScreenModel.State.Loading -> LoadingScreen()
@@ -110,6 +113,7 @@ class ClearAnimeDatabaseScreen : Screen() {
                     title = stringResource(AYMR.strings.pref_clear_anime_database),
                     uiStyle = uiStyle,
                     onBackPressed = navigator::pop,
+                    topBarCanScroll = { listState.canScroll() },
                     actions = {
                         if (s.items.isNotEmpty()) {
                             AppBarActions(
@@ -142,6 +146,7 @@ class ClearAnimeDatabaseScreen : Screen() {
                         ) {
                             LazyColumn(
                                 modifier = Modifier.weight(1f),
+                                state = listState,
                             ) {
                                 items(s.items) { sourceWithCount ->
                                     ClearDatabaseItem(

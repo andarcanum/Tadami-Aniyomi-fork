@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
@@ -24,6 +25,7 @@ import androidx.core.os.LocaleListCompat
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.R
@@ -42,6 +44,7 @@ class AppLanguageScreen : Screen() {
         val context = LocalContext.current
         val navigator = LocalNavigator.currentOrThrow
         val uiStyle = rememberResolvedSettingsUiStyle()
+        val state = rememberLazyListState()
 
         val langs = remember { getLangs(context) }
         var currentLanguage by remember {
@@ -61,8 +64,10 @@ class AppLanguageScreen : Screen() {
             title = stringResource(MR.strings.pref_app_language),
             uiStyle = uiStyle,
             onBackPressed = navigator::pop,
+            topBarCanScroll = { state.canScroll() },
         ) { contentPadding ->
             LazyColumn(
+                state = state,
                 modifier = Modifier.padding(contentPadding),
             ) {
                 items(langs) {

@@ -17,6 +17,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.data.backup.models.Backup
@@ -37,6 +38,7 @@ class BackupSchemaScreen : Screen() {
         val context = LocalContext.current
         val navigator = LocalNavigator.currentOrThrow
         val uiStyle = rememberResolvedSettingsUiStyle()
+        val scrollState = rememberScrollState()
 
         val schema = remember {
             ProtoBufSchemaGenerator.generateSchemaText(
@@ -48,6 +50,7 @@ class BackupSchemaScreen : Screen() {
             title = TITLE,
             uiStyle = uiStyle,
             onBackPressed = navigator::pop,
+            topBarCanScroll = { scrollState.canScroll() },
             actions = {
                 AppBarActions(
                     persistentListOf(
@@ -65,7 +68,7 @@ class BackupSchemaScreen : Screen() {
             Text(
                 text = schema,
                 modifier = Modifier
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scrollState)
                     .padding(contentPadding)
                     .padding(16.dp),
                 fontFamily = FontFamily.Monospace,

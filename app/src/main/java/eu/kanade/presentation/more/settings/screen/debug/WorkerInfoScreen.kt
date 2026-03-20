@@ -5,6 +5,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
@@ -28,6 +29,7 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.util.Screen
 import eu.kanade.presentation.util.ioCoroutineScope
@@ -58,6 +60,7 @@ class WorkerInfoScreen : Screen() {
         val context = LocalContext.current
         val navigator = LocalNavigator.currentOrThrow
         val uiStyle = rememberResolvedSettingsUiStyle()
+        val lazyListState = rememberLazyListState()
 
         val screenModel = rememberScreenModel { Model(context) }
         val enqueued by screenModel.enqueued.collectAsState()
@@ -68,6 +71,7 @@ class WorkerInfoScreen : Screen() {
             title = TITLE,
             uiStyle = uiStyle,
             onBackPressed = navigator::pop,
+            topBarCanScroll = { lazyListState.canScroll() },
             actions = {
                 AppBarActions(
                     persistentListOf(
@@ -86,6 +90,7 @@ class WorkerInfoScreen : Screen() {
             },
         ) { contentPadding ->
             LazyColumn(
+                state = lazyListState,
                 contentPadding = contentPadding + PaddingValues(horizontal = 16.dp),
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
             ) {

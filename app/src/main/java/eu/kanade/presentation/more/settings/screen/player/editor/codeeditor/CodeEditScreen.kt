@@ -42,6 +42,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.screen.player.editor.components.UnsavedChangesDialog
 import eu.kanade.presentation.util.Screen
@@ -64,6 +65,8 @@ class CodeEditScreen(private val filePath: String) : Screen() {
         val dialogShown by screenModel.dialogShown.collectAsState()
         val hasModified by screenModel.hasModified.collectAsState()
         val uiStyle = rememberResolvedSettingsUiStyle()
+        val verticalScrollState = rememberScrollState()
+        val horizontalScrollState = rememberScrollState()
 
         BackHandler(enabled = hasModified) {
             screenModel.showDialog(CodeEditDialogs.GoBack)
@@ -89,6 +92,7 @@ class CodeEditScreen(private val filePath: String) : Screen() {
                     navigator.pop()
                 }
             },
+            topBarCanScroll = { verticalScrollState.canScroll() },
             titleContent = {
                 Text(text = filePath.substringAfter("/"))
             },
@@ -118,6 +122,8 @@ class CodeEditScreen(private val filePath: String) : Screen() {
                     CodeEditorContent(
                         state = state as CodeEditScreenState.Success,
                         contentPadding = contentPadding,
+                        verticalScrollState = verticalScrollState,
+                        horizontalScrollState = horizontalScrollState,
                         onEdit = screenModel::onEdit,
                     )
                 }
@@ -130,6 +136,8 @@ class CodeEditScreen(private val filePath: String) : Screen() {
 private fun CodeEditorContent(
     state: CodeEditScreenState.Success,
     contentPadding: PaddingValues,
+    verticalScrollState: androidx.compose.foundation.ScrollState,
+    horizontalScrollState: androidx.compose.foundation.ScrollState,
     onEdit: (TextFieldValue) -> Unit,
 ) {
     val layoutDirection = LocalLayoutDirection.current
@@ -146,7 +154,7 @@ private fun CodeEditorContent(
 
     Row(
         modifier = Modifier
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(verticalScrollState)
             .imePadding(),
         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
     ) {
@@ -172,7 +180,7 @@ private fun CodeEditorContent(
             modifier = Modifier
                 .focusRequester(focusRequester)
                 .fillMaxSize()
-                .horizontalScroll(rememberScrollState())
+                .horizontalScroll(horizontalScrollState)
                 .padding(
                     top = contentPadding.calculateTopPadding(),
                     bottom = contentPadding.calculateBottomPadding(),

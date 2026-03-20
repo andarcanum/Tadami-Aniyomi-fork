@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
@@ -28,9 +29,9 @@ import kotlin.time.Duration.Companion.seconds
 fun PreferenceScreen(
     items: List<Preference>,
     modifier: Modifier = Modifier,
+    state: LazyListState = rememberLazyListState(),
     contentPadding: PaddingValues = PaddingValues(0.dp),
 ) {
-    val state = rememberLazyListState()
     val isAurora = LocalSettingsUiStyle.current == SettingsUiStyle.Aurora
     val itemHorizontalPadding = if (isAurora) AURORA_SETTINGS_CARD_HORIZONTAL_INSET else 0.dp
     val groupGap = if (isAurora) 14.dp else 12.dp
