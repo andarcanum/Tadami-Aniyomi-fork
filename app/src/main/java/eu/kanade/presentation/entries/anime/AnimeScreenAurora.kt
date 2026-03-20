@@ -3,6 +3,7 @@ package eu.kanade.presentation.entries.anime
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -52,6 +53,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -86,6 +88,7 @@ import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionFab
 import eu.kanade.presentation.entries.components.normalizeAuroraGlobalSearchQuery
 import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
 import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
+import eu.kanade.presentation.entries.resolveTitleFastScrollOverlayRevealState
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollFloatingActionButton
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollOverlayChrome
 import eu.kanade.presentation.theme.AuroraTheme
@@ -199,8 +202,45 @@ fun AnimeScreenAuroraImpl(
 
     // State for episodes expansion
     var episodesExpanded by remember { mutableStateOf(false) }
+    var isReverseScrollingOverlay by remember { mutableStateOf(false) }
+    LaunchedEffect(episodesExpanded) {
+        if (episodesExpanded) {
+            isReverseScrollingOverlay = false
+        }
+    }
+    var isThumbFastScrolling by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        var prevIndex = lazyListState.firstVisibleItemIndex
+        var prevOffset = lazyListState.firstVisibleItemScrollOffset
+        snapshotFlow {
+            Triple(
+                lazyListState.isScrollInProgress,
+                lazyListState.firstVisibleItemIndex,
+                lazyListState.firstVisibleItemScrollOffset,
+            )
+        }.collect { (isScrolling, index, offset) ->
+            val movedForward = index > prevIndex || (index == prevIndex && offset > prevOffset)
+            isReverseScrollingOverlay = resolveTitleFastScrollOverlayRevealState(
+                currentRevealState = isReverseScrollingOverlay,
+                isExpandedList = episodesExpanded,
+                isScrolling = isScrolling,
+                movedForward = movedForward,
+            )
+            prevIndex = index
+            prevOffset = offset
+        }
+    }
     val episodesToShow = if (episodesExpanded) episodes else episodes.take(5)
     val haptic = LocalHapticFeedback.current
+    val showAnimeOverlayChrome by remember {
+        derivedStateOf {
+            shouldShowTitleFastScrollOverlayChrome(
+                isThumbDragged = isThumbFastScrolling,
+                isExpandedList = episodesExpanded,
+                isReverseScrolling = isReverseScrollingOverlay,
+            )
+        }
+    }
 
     // Auto-scroll to target episode on initial load
     var hasScrolledToTarget: Boolean by remember { mutableStateOf(false) }
@@ -240,7 +280,6 @@ fun AnimeScreenAuroraImpl(
     // State for description and genres expansion
     var descriptionExpanded by remember { mutableStateOf(false) }
     var genresExpanded by remember { mutableStateOf(false) }
-    var isThumbFastScrolling by remember { mutableStateOf(false) }
 
     // Check if metadata auth hint was already shown (persistent)
     val metadataAuthHintShown = remember {
@@ -820,17 +859,27 @@ fun AnimeScreenAuroraImpl(
                 }
             }
 
-            if (!isAnyEpisodeSelected && shouldShowTitleFastScrollOverlayChrome(isThumbFastScrolling)) {
-                // Top header bar
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .zIndex(2f)
-                        .padding(WindowInsets.statusBars.asPaddingValues())
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
+            val overlayChromeAlpha by animateFloatAsState(
+                targetValue = if (!isAnyEpisodeSelected && showAnimeOverlayChrome) 1f else 0f,
+                label = "overlayChromeAlpha",
+            )
+            val overlayChromeOffsetY by animateFloatAsState(
+                targetValue = if (!isAnyEpisodeSelected && showAnimeOverlayChrome) 0f else -1f,
+                label = "overlayChromeOffsetY",
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .zIndex(2f)
+                    .graphicsLayer {
+                        alpha = overlayChromeAlpha
+                        translationY = overlayChromeOffsetY * size.height
+                    }
+                    .padding(WindowInsets.statusBars.asPaddingValues())
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                     // Back button - Aurora glassmorphism style
                     AuroraActionButton(
                         onClick = navigateUp,
@@ -921,7 +970,6 @@ fun AnimeScreenAuroraImpl(
                             }
                         }
                     }
-                }
             }
 
             AuroraEpisodeSelectionBottomStack(

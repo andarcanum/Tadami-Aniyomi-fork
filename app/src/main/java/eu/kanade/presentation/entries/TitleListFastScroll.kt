@@ -29,8 +29,23 @@ internal fun resolveTitleListFastScrollSpec(
 
 internal fun shouldShowTitleFastScrollOverlayChrome(
     isThumbDragged: Boolean,
+    isExpandedList: Boolean,
+    isReverseScrolling: Boolean,
 ): Boolean {
-    return !isThumbDragged
+    if (isThumbDragged) return false
+    if (!isExpandedList) return true
+    return isReverseScrolling
+}
+
+internal fun resolveTitleFastScrollOverlayRevealState(
+    currentRevealState: Boolean,
+    isExpandedList: Boolean,
+    isScrolling: Boolean,
+    movedForward: Boolean,
+): Boolean {
+    if (!isExpandedList) return false
+    if (movedForward) return false
+    return currentRevealState || isScrolling
 }
 
 internal fun shouldShowTitleFastScrollFloatingActionButton(

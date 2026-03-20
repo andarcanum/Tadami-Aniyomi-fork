@@ -3,6 +3,7 @@ package eu.kanade.presentation.entries.manga
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -50,6 +51,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -84,6 +86,7 @@ import eu.kanade.presentation.entries.manga.components.aurora.MangaHeroContent
 import eu.kanade.presentation.entries.manga.components.aurora.MangaInfoCard
 import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
 import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
+import eu.kanade.presentation.entries.resolveTitleFastScrollOverlayRevealState
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollFloatingActionButton
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollOverlayChrome
 import eu.kanade.presentation.theme.AuroraTheme
@@ -175,6 +178,33 @@ fun MangaScreenAuroraImpl(
 
     // State for chapters expansion
     var chaptersExpanded by remember { mutableStateOf(false) }
+    var isReverseScrollingOverlay by remember { mutableStateOf(false) }
+    LaunchedEffect(chaptersExpanded) {
+        if (chaptersExpanded) {
+            isReverseScrollingOverlay = false
+        }
+    }
+    LaunchedEffect(Unit) {
+        var prevIndex = lazyListState.firstVisibleItemIndex
+        var prevOffset = lazyListState.firstVisibleItemScrollOffset
+        snapshotFlow {
+            Triple(
+                lazyListState.isScrollInProgress,
+                lazyListState.firstVisibleItemIndex,
+                lazyListState.firstVisibleItemScrollOffset,
+            )
+        }.collect { (isScrolling, index, offset) ->
+            val movedForward = index > prevIndex || (index == prevIndex && offset > prevOffset)
+            isReverseScrollingOverlay = resolveTitleFastScrollOverlayRevealState(
+                currentRevealState = isReverseScrollingOverlay,
+                isExpandedList = chaptersExpanded,
+                isScrolling = isScrolling,
+                movedForward = movedForward,
+            )
+            prevIndex = index
+            prevOffset = offset
+        }
+    }
     val chaptersToShow = if (chaptersExpanded) chapters else chapters.take(5)
     val hasReadingProgress = remember(chapters) {
         chapters.any { chapterItem ->
@@ -222,6 +252,15 @@ fun MangaScreenAuroraImpl(
     var descriptionExpanded by remember { mutableStateOf(false) }
     var genresExpanded by remember { mutableStateOf(false) }
     var isThumbFastScrolling by remember { mutableStateOf(false) }
+    val showMangaOverlayChrome by remember {
+        derivedStateOf {
+            shouldShowTitleFastScrollOverlayChrome(
+                isThumbDragged = isThumbFastScrolling,
+                isExpandedList = chaptersExpanded,
+                isReverseScrolling = isReverseScrollingOverlay,
+            )
+        }
+    }
 
     AuroraEntryHoldToRefresh(
         refreshing = state.isRefreshingData,
@@ -769,17 +808,27 @@ fun MangaScreenAuroraImpl(
                 }
             }
 
-            if (!isAnyChapterSelected && shouldShowTitleFastScrollOverlayChrome(isThumbFastScrolling)) {
-                // Top header bar
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .zIndex(2f)
-                        .padding(WindowInsets.statusBars.asPaddingValues())
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
+            val overlayChromeAlpha by animateFloatAsState(
+                targetValue = if (!isAnyChapterSelected && showMangaOverlayChrome) 1f else 0f,
+                label = "overlayChromeAlpha",
+            )
+            val overlayChromeOffsetY by animateFloatAsState(
+                targetValue = if (!isAnyChapterSelected && showMangaOverlayChrome) 0f else -1f,
+                label = "overlayChromeOffsetY",
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .zIndex(2f)
+                    .graphicsLayer {
+                        alpha = overlayChromeAlpha
+                        translationY = overlayChromeOffsetY * size.height
+                    }
+                    .padding(WindowInsets.statusBars.asPaddingValues())
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                     // Back button - Aurora glassmorphism style
                     AuroraActionButton(
                         onClick = navigateUp,
@@ -871,7 +920,6 @@ fun MangaScreenAuroraImpl(
                             }
                         }
                     }
-                }
             }
 
             AuroraChapterSelectionBottomStack(

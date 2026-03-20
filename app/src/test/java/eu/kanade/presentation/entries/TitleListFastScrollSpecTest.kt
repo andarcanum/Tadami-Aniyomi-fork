@@ -58,9 +58,96 @@ class TitleListFastScrollSpecTest {
     }
 
     @Test
+    fun `overlay chrome shows normally when the list is not expanded`() {
+        shouldShowTitleFastScrollOverlayChrome(
+            isThumbDragged = false,
+            isExpandedList = false,
+            isReverseScrolling = false,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `overlay chrome stays hidden while the expanded list is idle at the top`() {
+        shouldShowTitleFastScrollOverlayChrome(
+            isThumbDragged = false,
+            isExpandedList = true,
+            isReverseScrolling = false,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `overlay chrome stays hidden while the expanded list scrolls forward`() {
+        shouldShowTitleFastScrollOverlayChrome(
+            isThumbDragged = false,
+            isExpandedList = true,
+            isReverseScrolling = false,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `overlay chrome stays visible after reverse scroll while away from the top`() {
+        shouldShowTitleFastScrollOverlayChrome(
+            isThumbDragged = false,
+            isExpandedList = true,
+            isReverseScrolling = true,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `overlay chrome hides again once reverse scrolling stops`() {
+        shouldShowTitleFastScrollOverlayChrome(
+            isThumbDragged = false,
+            isExpandedList = true,
+            isReverseScrolling = false,
+        ) shouldBe false
+    }
+
+    @Test
     fun `overlay chrome hides while fast scroll thumb is dragged`() {
-        shouldShowTitleFastScrollOverlayChrome(isThumbDragged = true) shouldBe false
-        shouldShowTitleFastScrollOverlayChrome(isThumbDragged = false) shouldBe true
+        shouldShowTitleFastScrollOverlayChrome(
+            isThumbDragged = true,
+            isExpandedList = true,
+            isReverseScrolling = true,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `overlay chrome reveal state latches on reverse scroll until the next forward scroll`() {
+        var revealed = false
+
+        revealed = resolveTitleFastScrollOverlayRevealState(
+            currentRevealState = revealed,
+            isExpandedList = true,
+            isScrolling = true,
+            movedForward = false,
+        )
+        revealed shouldBe true
+
+        revealed = resolveTitleFastScrollOverlayRevealState(
+            currentRevealState = revealed,
+            isExpandedList = true,
+            isScrolling = false,
+            movedForward = false,
+        )
+        revealed shouldBe true
+
+        revealed = resolveTitleFastScrollOverlayRevealState(
+            currentRevealState = revealed,
+            isExpandedList = true,
+            isScrolling = true,
+            movedForward = true,
+        )
+        revealed shouldBe false
+    }
+
+    @Test
+    fun `overlay chrome reveal state resets when the list collapses`() {
+        resolveTitleFastScrollOverlayRevealState(
+            currentRevealState = true,
+            isExpandedList = false,
+            isScrolling = false,
+            movedForward = false,
+        ) shouldBe false
     }
 
     @Test

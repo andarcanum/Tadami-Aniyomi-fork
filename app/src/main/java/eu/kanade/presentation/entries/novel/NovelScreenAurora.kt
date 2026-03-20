@@ -1,5 +1,6 @@
 package eu.kanade.presentation.entries.novel
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -41,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,6 +72,7 @@ import eu.kanade.presentation.entries.novel.components.aurora.NovelHeroContent
 import eu.kanade.presentation.entries.novel.components.aurora.NovelInfoCard
 import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
 import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
+import eu.kanade.presentation.entries.resolveTitleFastScrollOverlayRevealState
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollFloatingActionButton
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollOverlayChrome
 import eu.kanade.presentation.theme.AuroraTheme
@@ -150,6 +153,33 @@ fun NovelScreenAuroraImpl(
     val firstVisibleItemIndex by remember { derivedStateOf { lazyListState.firstVisibleItemIndex } }
 
     var chaptersExpanded by remember { mutableStateOf(false) }
+    var isReverseScrollingOverlay by remember { mutableStateOf(false) }
+    LaunchedEffect(chaptersExpanded) {
+        if (chaptersExpanded) {
+            isReverseScrollingOverlay = false
+        }
+    }
+    LaunchedEffect(Unit) {
+        var prevIndex = lazyListState.firstVisibleItemIndex
+        var prevOffset = lazyListState.firstVisibleItemScrollOffset
+        snapshotFlow {
+            Triple(
+                lazyListState.isScrollInProgress,
+                lazyListState.firstVisibleItemIndex,
+                lazyListState.firstVisibleItemScrollOffset,
+            )
+        }.collect { (isScrolling, index, offset) ->
+            val movedForward = index > prevIndex || (index == prevIndex && offset > prevOffset)
+            isReverseScrollingOverlay = resolveTitleFastScrollOverlayRevealState(
+                currentRevealState = isReverseScrollingOverlay,
+                isExpandedList = chaptersExpanded,
+                isScrolling = isScrolling,
+                movedForward = movedForward,
+            )
+            prevIndex = index
+            prevOffset = offset
+        }
+    }
     val chaptersToShow = remember(chapters, chaptersExpanded) {
         chapters.take(resolveNovelAuroraVisibleChapterCount(chaptersExpanded, chapters.size))
     }
@@ -177,6 +207,15 @@ fun NovelScreenAuroraImpl(
     var descriptionExpanded by remember { mutableStateOf(false) }
     var genresExpanded by remember { mutableStateOf(false) }
     var isThumbFastScrolling by remember { mutableStateOf(false) }
+    val showNovelOverlayChrome by remember {
+        derivedStateOf {
+            shouldShowTitleFastScrollOverlayChrome(
+                isThumbDragged = isThumbFastScrolling,
+                isExpandedList = chaptersExpanded,
+                isReverseScrolling = isReverseScrollingOverlay,
+            )
+        }
+    }
 
     LaunchedEffect(isSelectionMode, chaptersExpanded, chapters.size) {
         if (isSelectionMode &&
@@ -457,15 +496,26 @@ fun NovelScreenAuroraImpl(
                     },
                 )
 
-                if (shouldShowTitleFastScrollOverlayChrome(isThumbFastScrolling)) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(WindowInsets.statusBars.asPaddingValues())
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
+                val overlayChromeAlphaTwoPane by animateFloatAsState(
+                    targetValue = if (showNovelOverlayChrome) 1f else 0f,
+                    label = "overlayChromeAlpha",
+                )
+                val overlayChromeOffsetYTwoPane by animateFloatAsState(
+                    targetValue = if (showNovelOverlayChrome) 0f else -1f,
+                    label = "overlayChromeOffsetY",
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            alpha = overlayChromeAlphaTwoPane
+                            translationY = overlayChromeOffsetYTwoPane * size.height
+                        }
+                        .padding(WindowInsets.statusBars.asPaddingValues())
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                         AuroraActionButton(
                             onClick = onBack,
                             icon = Icons.AutoMirrored.Filled.ArrowBack,
@@ -572,7 +622,6 @@ fun NovelScreenAuroraImpl(
                             }
                         }
                     }
-                }
 
                 SnackbarHost(
                     hostState = snackbarHostState,
@@ -849,16 +898,27 @@ fun NovelScreenAuroraImpl(
                 }
             }
 
-            if (shouldShowTitleFastScrollOverlayChrome(isThumbFastScrolling)) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .zIndex(2f)
-                        .padding(WindowInsets.statusBars.asPaddingValues())
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
+            val overlayChromeAlpha by animateFloatAsState(
+                targetValue = if (showNovelOverlayChrome) 1f else 0f,
+                label = "overlayChromeAlpha",
+            )
+            val overlayChromeOffsetY by animateFloatAsState(
+                targetValue = if (showNovelOverlayChrome) 0f else -1f,
+                label = "overlayChromeOffsetY",
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .zIndex(2f)
+                    .graphicsLayer {
+                        alpha = overlayChromeAlpha
+                        translationY = overlayChromeOffsetY * size.height
+                    }
+                    .padding(WindowInsets.statusBars.asPaddingValues())
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                     AuroraActionButton(
                         onClick = onBack,
                         icon = Icons.AutoMirrored.Filled.ArrowBack,
@@ -968,7 +1028,6 @@ fun NovelScreenAuroraImpl(
                             }
                         }
                     }
-                }
             }
 
             SnackbarHost(
