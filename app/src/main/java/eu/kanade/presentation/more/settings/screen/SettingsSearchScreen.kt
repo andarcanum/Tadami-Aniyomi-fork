@@ -59,6 +59,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.UpIcon
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_HORIZONTAL_INSET
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
+import eu.kanade.presentation.more.settings.AuroraSettingsTopBarBackdrop
 import eu.kanade.presentation.more.settings.LocalSettingsUiStyle
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.SettingsAuroraBackground
@@ -121,108 +122,140 @@ class SettingsSearchScreen(
             Scaffold(
                 containerColor = if (isAurora) Color.Transparent else MaterialTheme.colorScheme.background,
                 topBar = {
-                    Column {
-                        TopAppBar(
-                            colors = if (isAurora) {
-                                TopAppBarDefaults.topAppBarColors(
-                                    containerColor = Color.Transparent,
+                    if (isAurora) {
+                        AuroraSettingsTopBarBackdrop {
+                            Column {
+                                TopAppBar(
+                                    colors = TopAppBarDefaults.topAppBarColors(
+                                        containerColor = Color.Transparent,
+                                    ),
+                                    navigationIcon = {
+                                        val canPop = remember { navigator.canPop }
+                                        if (canPop) {
+                                            IconButton(onClick = navigator::pop) {
+                                                Icon(
+                                                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                                                    contentDescription = stringResource(
+                                                        MR.strings.action_bar_up_description,
+                                                    ),
+                                                    tint = auroraColors.accent,
+                                                )
+                                            }
+                                        }
+                                    },
+                                    title = {
+                                        BasicTextField(
+                                            state = textFieldState,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(AURORA_SETTINGS_CARD_SHAPE)
+                                                .background(settingsCardContainerColor())
+                                                .padding(horizontal = 16.dp, vertical = 10.dp)
+                                                .focusRequester(focusRequester)
+                                                .runOnEnterKeyPressed(action = focusManager::clearFocus),
+                                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                                color = auroraColors.textPrimary,
+                                            ),
+                                            lineLimits = TextFieldLineLimits.SingleLine,
+                                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                            onKeyboardAction = { focusManager.clearFocus() },
+                                            cursorBrush = SolidColor(auroraColors.accent),
+                                            decorator = {
+                                                if (textFieldState.text.isEmpty()) {
+                                                    Text(
+                                                        text = stringResource(
+                                                            resource = if (isPlayer) {
+                                                                AYMR.strings.action_search_player_settings
+                                                            } else {
+                                                                MR.strings.action_search_settings
+                                                            },
+                                                        ),
+                                                        color = auroraColors.textSecondary,
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                    )
+                                                }
+                                                it()
+                                            },
+                                        )
+                                    },
+                                    actions = {
+                                        if (textFieldState.text.isNotEmpty()) {
+                                            IconButton(onClick = { textFieldState.clearText() }) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.Close,
+                                                    contentDescription = null,
+                                                    tint = auroraColors.accent,
+                                                )
+                                            }
+                                        }
+                                    },
                                 )
-                            } else {
-                                TopAppBarDefaults.topAppBarColors()
-                            },
-                            navigationIcon = {
-                                val canPop = remember { navigator.canPop }
-                                if (canPop) {
-                                    IconButton(onClick = navigator::pop) {
-                                        if (isAurora) {
-                                            Icon(
-                                                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                                                contentDescription = stringResource(
-                                                    MR.strings.action_bar_up_description,
-                                                ),
-                                                tint = auroraColors.accent,
-                                            )
-                                        } else {
+                                HorizontalDivider(
+                                    color = auroraColors.textSecondary.copy(alpha = 0.18f),
+                                )
+                            }
+                        }
+                    } else {
+                        Column {
+                            TopAppBar(
+                                colors = TopAppBarDefaults.topAppBarColors(),
+                                navigationIcon = {
+                                    val canPop = remember { navigator.canPop }
+                                    if (canPop) {
+                                        IconButton(onClick = navigator::pop) {
                                             UpIcon()
                                         }
                                     }
-                                }
-                            },
-                            title = {
-                                BasicTextField(
-                                    state = textFieldState,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(if (isAurora) AURORA_SETTINGS_CARD_SHAPE else RoundedCornerShape(0.dp))
-                                        .then(
-                                            if (isAurora) {
-                                                Modifier
-                                                    .background(settingsCardContainerColor())
-                                                    .padding(horizontal = 16.dp, vertical = 10.dp)
-                                            } else {
-                                                Modifier
-                                            },
-                                        )
-                                        .focusRequester(focusRequester)
-                                        .runOnEnterKeyPressed(action = focusManager::clearFocus),
-                                    textStyle = MaterialTheme.typography.bodyLarge.copy(
-                                        color = if (isAurora) {
-                                            auroraColors.textPrimary
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurface
+                                },
+                                title = {
+                                    BasicTextField(
+                                        state = textFieldState,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(0.dp))
+                                            .focusRequester(focusRequester)
+                                            .runOnEnterKeyPressed(action = focusManager::clearFocus),
+                                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        ),
+                                        lineLimits = TextFieldLineLimits.SingleLine,
+                                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                        onKeyboardAction = { focusManager.clearFocus() },
+                                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                        decorator = {
+                                            if (textFieldState.text.isEmpty()) {
+                                                Text(
+                                                    text = stringResource(
+                                                        resource = if (isPlayer) {
+                                                            AYMR.strings.action_search_player_settings
+                                                        } else {
+                                                            MR.strings.action_search_settings
+                                                        },
+                                                    ),
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                )
+                                            }
+                                            it()
                                         },
-                                    ),
-                                    lineLimits = TextFieldLineLimits.SingleLine,
-                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                                    onKeyboardAction = { focusManager.clearFocus() },
-                                    cursorBrush = SolidColor(
-                                        if (isAurora) auroraColors.accent else MaterialTheme.colorScheme.primary,
-                                    ),
-                                    decorator = {
-                                        if (textFieldState.text.isEmpty()) {
-                                            Text(
-                                                text = stringResource(
-                                                    resource = if (isPlayer) {
-                                                        AYMR.strings.action_search_player_settings
-                                                    } else {
-                                                        MR.strings.action_search_settings
-                                                    },
-                                                ),
-                                                color = if (isAurora) {
-                                                    auroraColors.textSecondary
-                                                } else {
-                                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                                },
-                                                style = MaterialTheme.typography.bodyLarge,
+                                    )
+                                },
+                                actions = {
+                                    if (textFieldState.text.isNotEmpty()) {
+                                        IconButton(onClick = { textFieldState.clearText() }) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Close,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
                                         }
-                                        it()
-                                    },
-                                )
-                            },
-                            actions = {
-                                if (textFieldState.text.isNotEmpty()) {
-                                    IconButton(onClick = { textFieldState.clearText() }) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.Close,
-                                            contentDescription = null,
-                                            tint = if (isAurora) {
-                                                auroraColors.accent
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                            },
-                                        )
                                     }
-                                }
-                            },
-                        )
-                        HorizontalDivider(
-                            color = if (isAurora) {
-                                auroraColors.textSecondary.copy(alpha = 0.18f)
-                            } else {
-                                MaterialTheme.colorScheme.outlineVariant
-                            },
-                        )
+                                },
+                            )
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                            )
+                        }
                     }
                 },
             ) { contentPadding ->

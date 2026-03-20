@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -84,12 +85,14 @@ fun SettingsScaffold(
                     floatingActionButton = floatingActionButton,
                     topBar = {
                         if (showTopBar) {
-                            AuroraTopBarLayout(
-                                title = title,
-                                titleContent = titleContent,
-                                onNavigateUp = onBackPressed,
-                                actions = actions,
-                            )
+                            AuroraSettingsTopBarBackdrop {
+                                AuroraTopBarLayout(
+                                    title = title,
+                                    titleContent = titleContent,
+                                    onNavigateUp = onBackPressed,
+                                    actions = actions,
+                                )
+                            }
                         }
                     },
                 ) { contentPadding ->
@@ -108,6 +111,48 @@ fun SettingsScaffold(
                 }
             }
         }
+    }
+}
+
+internal data class AuroraSettingsTopBarBackdropSpec(
+    val topAlpha: Float,
+    val bottomAlpha: Float,
+)
+
+internal fun resolveAuroraSettingsTopBarBackdropSpec(isDark: Boolean): AuroraSettingsTopBarBackdropSpec {
+    return if (isDark) {
+        AuroraSettingsTopBarBackdropSpec(
+            topAlpha = 0.96f,
+            bottomAlpha = 0.88f,
+        )
+    } else {
+        AuroraSettingsTopBarBackdropSpec(
+            topAlpha = 0.98f,
+            bottomAlpha = 0.92f,
+        )
+    }
+}
+
+@Composable
+internal fun AuroraSettingsTopBarBackdrop(
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    val colors = AuroraTheme.colors
+    val spec = resolveAuroraSettingsTopBarBackdropSpec(colors.isDark)
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        colors.surface.copy(alpha = spec.topAlpha),
+                        colors.surface.copy(alpha = spec.bottomAlpha),
+                    ),
+                ),
+            ),
+    ) {
+        content()
     }
 }
 
