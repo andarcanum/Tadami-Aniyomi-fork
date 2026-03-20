@@ -3,23 +3,15 @@ package eu.kanade.presentation.more.settings
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 
-class AuroraSettingsTopBarBackdropTest {
+class AuroraSettingsTopBarChromeTest {
 
     @Test
-    fun `dark aurora settings header backdrop uses stronger opaque scrim`() {
-        resolveAuroraSettingsTopBarBackdropSpec(isDark = true) shouldBe
-            AuroraSettingsTopBarBackdropSpec(
-                topAlpha = 0.96f,
-                bottomAlpha = 0.88f,
-            )
+    fun `aurora settings top bar offset limit matches measured height`() {
+        resolveAuroraSettingsTopBarHeightOffsetLimit(heightPx = 240) shouldBe -240f
     }
 
     @Test
-    fun `light aurora settings header backdrop uses slightly denser scrim`() {
-        resolveAuroraSettingsTopBarBackdropSpec(isDark = false) shouldBe
-            AuroraSettingsTopBarBackdropSpec(
-                topAlpha = 0.98f,
-                bottomAlpha = 0.92f,
-            )
+    fun `aurora settings top bar offset limit stays zero for empty height`() {
+        resolveAuroraSettingsTopBarHeightOffsetLimit(heightPx = 0) shouldBe 0f
     }
 }

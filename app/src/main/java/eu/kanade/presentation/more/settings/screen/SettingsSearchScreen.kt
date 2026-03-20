@@ -29,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -59,7 +60,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.UpIcon
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_HORIZONTAL_INSET
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
-import eu.kanade.presentation.more.settings.AuroraSettingsTopBarBackdrop
+import eu.kanade.presentation.more.settings.AuroraSettingsTopBarChrome
 import eu.kanade.presentation.more.settings.LocalSettingsUiStyle
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.SettingsAuroraBackground
@@ -97,6 +98,12 @@ class SettingsSearchScreen(
         val focusManager = LocalFocusManager.current
         val focusRequester = remember { FocusRequester() }
         val listState = rememberLazyListState()
+        val topBarState = rememberTopAppBarState()
+        val topBarScrollBehavior = if (isAurora) {
+            TopAppBarDefaults.enterAlwaysScrollBehavior(topBarState)
+        } else {
+            TopAppBarDefaults.pinnedScrollBehavior(topBarState)
+        }
 
         // Hide keyboard on change screen
         DisposableEffect(Unit) {
@@ -121,9 +128,10 @@ class SettingsSearchScreen(
         CompositionLocalProvider(LocalSettingsUiStyle provides uiStyle) {
             Scaffold(
                 containerColor = if (isAurora) Color.Transparent else MaterialTheme.colorScheme.background,
+                topBarScrollBehavior = topBarScrollBehavior,
                 topBar = {
                     if (isAurora) {
-                        AuroraSettingsTopBarBackdrop {
+                        AuroraSettingsTopBarChrome(topBarScrollBehavior) {
                             Column {
                                 TopAppBar(
                                     colors = TopAppBarDefaults.topAppBarColors(
