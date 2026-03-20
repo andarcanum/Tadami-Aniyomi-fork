@@ -3,6 +3,7 @@ package eu.kanade.presentation.entries.novel
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.items.novelchapter.model.NovelChapter
 
 class NovelScreenAuroraLayoutTest {
 
@@ -65,5 +66,53 @@ class NovelScreenAuroraLayoutTest {
             chaptersExpanded = false,
             totalChapters = 3,
         ) shouldBe true
+    }
+
+    @Test
+    fun `novel aurora target scroll index uses grouped row index instead of raw chapter position`() {
+        resolveNovelAuroraTargetScrollIndex(
+            chapters = listOf(
+                chapter(id = 10L, chapterNumber = 1.0, sourceOrder = 10, scanlator = "Team A"),
+                chapter(id = 11L, chapterNumber = 1.0, sourceOrder = 20, scanlator = "Team B"),
+                chapter(id = 12L, chapterNumber = 2.0, sourceOrder = 30, scanlator = "Team C"),
+            ),
+            targetChapterIndex = 2,
+            expandedGroupKeys = emptySet(),
+            groupedByChapter = true,
+            isAutoJumpToNextEnabled = true,
+            restoredScrollIndex = 0,
+        ) shouldBe 1
+    }
+
+    @Test
+    fun `novel aurora target scroll index returns null when auto jump is disabled`() {
+        resolveNovelAuroraTargetScrollIndex(
+            chapters = listOf(
+                chapter(id = 10L, chapterNumber = 1.0, sourceOrder = 10),
+                chapter(id = 11L, chapterNumber = 3.0, sourceOrder = 20),
+            ),
+            targetChapterIndex = 1,
+            expandedGroupKeys = emptySet(),
+            groupedByChapter = false,
+            isAutoJumpToNextEnabled = false,
+            restoredScrollIndex = 0,
+        ) shouldBe null
+    }
+
+    private fun chapter(
+        id: Long,
+        chapterNumber: Double,
+        sourceOrder: Long,
+        scanlator: String? = null,
+    ): NovelChapter {
+        return NovelChapter.create().copy(
+            id = id,
+            novelId = 1L,
+            chapterNumber = chapterNumber,
+            sourceOrder = sourceOrder,
+            scanlator = scanlator,
+            url = "/chapter-$id",
+            name = "Chapter $id",
+        )
     }
 }

@@ -46,184 +46,190 @@ import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
-@Composable
-fun NovelChapterCardCompact(
-    novel: Novel,
-    chapter: NovelChapter,
-    selected: Boolean,
-    selectionMode: Boolean,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-    onToggleBookmark: () -> Unit,
-    onToggleRead: () -> Unit,
-    onToggleDownload: () -> Unit,
-    chapterSwipeStartAction: LibraryPreferences.NovelSwipeAction,
-    chapterSwipeEndAction: LibraryPreferences.NovelSwipeAction,
-    onChapterSwipe: (LibraryPreferences.NovelSwipeAction) -> Unit,
-    downloaded: Boolean,
-    downloading: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    val colors = AuroraTheme.colors
-    val title = when (novel.displayMode) {
-        Novel.CHAPTER_DISPLAY_NUMBER -> stringResource(
-            MR.strings.display_mode_chapter,
-            formatChapterNumber(chapter.chapterNumber),
-        )
-        else -> chapter.name.ifBlank {
-            stringResource(MR.strings.display_mode_chapter, formatChapterNumber(chapter.chapterNumber))
+object NovelChapterCardCompactUi {
+
+    @Composable
+    fun Render(
+        novel: Novel,
+        chapter: NovelChapter,
+        displayNumber: Int? = null,
+        titleOverride: String? = null,
+        selected: Boolean,
+        selectionMode: Boolean,
+        onClick: () -> Unit,
+        onLongClick: () -> Unit,
+        onToggleBookmark: () -> Unit,
+        onToggleRead: () -> Unit,
+        onToggleDownload: () -> Unit,
+        chapterSwipeStartAction: LibraryPreferences.NovelSwipeAction,
+        chapterSwipeEndAction: LibraryPreferences.NovelSwipeAction,
+        onChapterSwipe: (LibraryPreferences.NovelSwipeAction) -> Unit,
+        downloaded: Boolean,
+        downloading: Boolean,
+        modifier: Modifier = Modifier,
+    ) {
+        val colors = AuroraTheme.colors
+        val chapterDisplayNumber = displayNumber?.toDouble() ?: chapter.chapterNumber
+        val title = titleOverride ?: when (novel.displayMode) {
+            Novel.CHAPTER_DISPLAY_NUMBER -> stringResource(
+                MR.strings.display_mode_chapter,
+                formatChapterNumber(chapterDisplayNumber),
+            )
+            else -> chapter.name.ifBlank {
+                stringResource(MR.strings.display_mode_chapter, formatChapterNumber(chapterDisplayNumber))
+            }
         }
-    }
 
-    val chapterCard: @Composable () -> Unit = {
-        GlassmorphismCard(
-            modifier = modifier,
-            cornerRadius = 16.dp,
-            verticalPadding = 2.dp,
-            innerPadding = 8.dp,
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(
-                        if (selected) colors.accent.copy(alpha = 0.16f) else Color.Transparent,
-                    )
-                    .combinedClickable(
-                        onClick = onClick,
-                        onLongClick = onLongClick,
-                    )
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+        val chapterCard: @Composable () -> Unit = {
+            GlassmorphismCard(
+                modifier = modifier,
+                cornerRadius = 16.dp,
+                verticalPadding = 2.dp,
+                innerPadding = 8.dp,
             ) {
-                Box(
+                Row(
                     modifier = Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(colors.accent.copy(alpha = if (chapter.read) 0.26f else 0.14f)),
-                    contentAlignment = Alignment.Center,
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(
+                            if (selected) colors.accent.copy(alpha = 0.16f) else Color.Transparent,
+                        )
+                        .combinedClickable(
+                            onClick = onClick,
+                            onLongClick = onLongClick,
+                        )
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(
-                        text = formatChapterNumber(chapter.chapterNumber),
-                        color = colors.textPrimary,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                    )
-                }
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = title,
-                        color = if (chapter.read) colors.textSecondary else colors.textPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = if (chapter.dateUpload > 0) {
-                            relativeDateTimeText(chapter.dateUpload)
-                        } else {
-                            stringResource(MR.strings.unknown)
-                        },
-                        color = colors.textSecondary,
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                    )
-                }
-
-                if (!selectionMode) {
                     Box(
                         modifier = Modifier
-                            .size(28.dp)
+                            .size(34.dp)
                             .clip(CircleShape)
-                            .background(colors.surface.copy(alpha = 0.24f))
-                            .clickable(onClick = onToggleDownload),
+                            .background(colors.accent.copy(alpha = if (chapter.read) 0.26f else 0.14f)),
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (downloading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(14.dp),
-                                strokeWidth = 1.5.dp,
-                                color = colors.accent,
-                            )
-                        } else {
+                        Text(
+                            text = formatChapterNumber(chapterDisplayNumber),
+                            color = colors.textPrimary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                        )
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = title,
+                            color = if (chapter.read) colors.textSecondary else colors.textPrimary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = if (chapter.dateUpload > 0) {
+                                relativeDateTimeText(chapter.dateUpload)
+                            } else {
+                                stringResource(MR.strings.unknown)
+                            },
+                            color = colors.textSecondary,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                        )
+                    }
+
+                    if (!selectionMode) {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(colors.surface.copy(alpha = 0.24f))
+                                .clickable(onClick = onToggleDownload),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (downloading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 1.5.dp,
+                                    color = colors.accent,
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = if (downloaded) Icons.Outlined.Delete else Icons.Outlined.Download,
+                                    contentDescription = null,
+                                    tint = if (downloaded) colors.error else colors.textSecondary,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(colors.surface.copy(alpha = 0.24f))
+                                .clickable(onClick = onToggleBookmark),
+                            contentAlignment = Alignment.Center,
+                        ) {
                             Icon(
-                                imageVector = if (downloaded) Icons.Outlined.Delete else Icons.Outlined.Download,
+                                imageVector = Icons.Outlined.Bookmark,
                                 contentDescription = null,
-                                tint = if (downloaded) colors.error else colors.textSecondary,
+                                tint = if (chapter.bookmark) colors.accent else colors.textSecondary,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(colors.surface.copy(alpha = 0.24f))
+                                .clickable(onClick = onToggleRead),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.CheckCircle,
+                                contentDescription = null,
+                                tint = if (chapter.read) colors.accent else colors.textSecondary,
                                 modifier = Modifier.size(16.dp),
                             )
                         }
                     }
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                            .background(colors.surface.copy(alpha = 0.24f))
-                            .clickable(onClick = onToggleBookmark),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Bookmark,
-                            contentDescription = null,
-                            tint = if (chapter.bookmark) colors.accent else colors.textSecondary,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                            .background(colors.surface.copy(alpha = 0.24f))
-                            .clickable(onClick = onToggleRead),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.CheckCircle,
-                            contentDescription = null,
-                            tint = if (chapter.read) colors.accent else colors.textSecondary,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    }
                 }
             }
         }
-    }
 
-    if (!selectionMode) {
-        val startSwipeAction = novelSwipeAction(
-            action = chapterSwipeStartAction,
-            read = chapter.read,
-            bookmark = chapter.bookmark,
-            downloaded = downloaded,
-            downloading = downloading,
-            background = MaterialTheme.colorScheme.primaryContainer,
-            onSwipe = { onChapterSwipe(chapterSwipeStartAction) },
-        )
-        val endSwipeAction = novelSwipeAction(
-            action = chapterSwipeEndAction,
-            read = chapter.read,
-            bookmark = chapter.bookmark,
-            downloaded = downloaded,
-            downloading = downloading,
-            background = MaterialTheme.colorScheme.primaryContainer,
-            onSwipe = { onChapterSwipe(chapterSwipeEndAction) },
-        )
+        if (!selectionMode) {
+            val startSwipeAction = novelSwipeAction(
+                action = chapterSwipeStartAction,
+                read = chapter.read,
+                bookmark = chapter.bookmark,
+                downloaded = downloaded,
+                downloading = downloading,
+                background = MaterialTheme.colorScheme.primaryContainer,
+                onSwipe = { onChapterSwipe(chapterSwipeStartAction) },
+            )
+            val endSwipeAction = novelSwipeAction(
+                action = chapterSwipeEndAction,
+                read = chapter.read,
+                bookmark = chapter.bookmark,
+                downloaded = downloaded,
+                downloading = downloading,
+                background = MaterialTheme.colorScheme.primaryContainer,
+                onSwipe = { onChapterSwipe(chapterSwipeEndAction) },
+            )
 
-        SwipeableActionsBox(
-            modifier = Modifier.clipToBounds(),
-            startActions = listOfNotNull(startSwipeAction),
-            endActions = listOfNotNull(endSwipeAction),
-            swipeThreshold = novelSwipeActionThreshold,
-            backgroundUntilSwipeThreshold = MaterialTheme.colorScheme.surfaceContainerLowest,
-        ) {
+            SwipeableActionsBox(
+                modifier = Modifier.clipToBounds(),
+                startActions = listOfNotNull(startSwipeAction),
+                endActions = listOfNotNull(endSwipeAction),
+                swipeThreshold = novelSwipeActionThreshold,
+                backgroundUntilSwipeThreshold = MaterialTheme.colorScheme.surfaceContainerLowest,
+            ) {
+                chapterCard()
+            }
+        } else {
             chapterCard()
         }
-    } else {
-        chapterCard()
     }
 }

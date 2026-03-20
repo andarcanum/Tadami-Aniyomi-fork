@@ -81,6 +81,11 @@ import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
 import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.formatChapterNumber
+import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterDisplayRow
+import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelBranchChapterRows
+import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterRowIndex
+import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelGroupedChapterRows
+import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelVisibleChapterRows
 import eu.kanade.tachiyomi.data.coil.staticBlur
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
@@ -215,8 +220,39 @@ fun NovelScreen(
     val auroraColors = AuroraTheme.colors
 
     val chapters = state.processedChapters
+    val groupedByChapter = selectedScanlator == null
+    val chapterGroups = remember(chapters) {
+        resolveNovelGroupedChapterRows(chapters, emptySet())
+            .filterIsInstance<NovelChapterDisplayRow.ChapterGroup>()
+    }
+    val allGroupKeys = remember(chapterGroups) {
+        chapterGroups.mapTo(mutableSetOf()) { it.groupKey }
+    }
+    val initialExpandedGroupKeys = remember(chapters, selectedScanlator, state.targetChapterIndex) {
+        if (!groupedByChapter) {
+            emptySet()
+        } else {
+            chapters.getOrNull(state.targetChapterIndex)
+                ?.chapterNumber
+                ?.toBits()
+                ?.let(::setOf)
+                .orEmpty()
+        }
+    }
+    var expandedGroupKeys by remember(chapters, selectedScanlator) {
+        mutableStateOf(initialExpandedGroupKeys)
+    }
+    val displayRows = remember(chapters, selectedScanlator, expandedGroupKeys) {
+        if (groupedByChapter) {
+            resolveNovelGroupedChapterRows(chapters, expandedGroupKeys)
+        } else {
+            resolveNovelBranchChapterRows(chapters)
+        }
+    }
     val totalChapterCount = if (state.chapterPageEnabled) {
         maxOf(state.chapters.size, state.chapterPageEstimatedTotal)
+    } else if (groupedByChapter) {
+        chapterGroups.size
     } else {
         chapters.size
     }
@@ -225,16 +261,21 @@ fun NovelScreen(
     val isAnySelected = selectedCount > 0
     val selectedChapters = chapters.filter { it.id in selectedIds }
     val downloadedChapterIds = state.downloadedChapterIds
-    var visibleChapterCount by remember(chapters) {
+    val visibleTopLevelCount = if (groupedByChapter) chapterGroups.size else chapters.size
+    var visibleChapterCount by remember(chapters, selectedScanlator) {
         mutableIntStateOf(
             initialVisibleChapterCount(
-                totalCount = chapters.size,
+                totalCount = visibleTopLevelCount,
                 pageSize = NOVEL_CHAPTERS_PAGE_SIZE,
             ),
         )
     }
-    val visibleChapters = remember(chapters, visibleChapterCount) {
-        chapters.take(visibleChapterCount)
+    val visibleRows = remember(displayRows, visibleChapterCount, groupedByChapter) {
+        resolveNovelVisibleChapterRows(
+            rows = displayRows,
+            visibleTopLevelCount = visibleChapterCount,
+            groupedByChapter = groupedByChapter,
+        )
     }
     val chapterListState = rememberLazyListState()
 
@@ -248,14 +289,25 @@ fun NovelScreen(
 
     // Restore saved scroll position or auto-scroll to target chapter
     var hasScrolledToTarget: Boolean by remember { mutableStateOf(false) }
-    LaunchedEffect(state.scrollIndex, state.targetChapterIndex) {
+    LaunchedEffect(state.scrollIndex, state.targetChapterIndex, expandedGroupKeys, groupedByChapter) {
         if (!hasScrolledToTarget) {
             hasScrolledToTarget = true
-            val targetIndex = resolveEntryAutoJumpTargetIndex(
-                enabled = autoJumpToNextEnabled,
-                targetIndex = state.targetChapterIndex,
-                restoredScrollIndex = state.scrollIndex,
-            )
+            val targetChapterId = chapters.getOrNull(state.targetChapterIndex)?.id
+            val targetIndex = targetChapterId?.let {
+                resolveNovelChapterRowIndex(
+                    chapters = chapters,
+                    expandedGroupKeys = expandedGroupKeys,
+                    groupedByChapter = groupedByChapter,
+                    targetChapterId = it,
+                )
+            }?.takeIf { it >= 0 }
+                ?.let { rowIndex ->
+                    resolveEntryAutoJumpTargetIndex(
+                        enabled = autoJumpToNextEnabled,
+                        targetIndex = rowIndex,
+                        restoredScrollIndex = state.scrollIndex,
+                    )
+                }
             if (targetIndex != null) {
                 chapterListState.animateScrollToItem(targetIndex)
             }
@@ -352,9 +404,12 @@ fun NovelScreen(
         VerticalFastScroller(
             listState = chapterListState,
             onThumbDragStarted = {
+                if (groupedByChapter) {
+                    expandedGroupKeys = allGroupKeys
+                }
                 visibleChapterCount = resolveNovelFastScrollVisibleChapterCount(
                     currentVisibleCount = visibleChapterCount,
-                    loadedChapterCount = chapters.size,
+                    loadedChapterCount = visibleTopLevelCount,
                 )
             },
             thumbAllowed = { fastScrollSpec.thumbAllowed },
@@ -719,22 +774,368 @@ fun NovelScreen(
                 }
 
                 items(
-                    items = visibleChapters,
-                    key = { it.id },
-                ) { chapter ->
-                    val selected = chapter.id in selectedIds
-                    val downloaded = chapter.id in state.downloadedChapterIds
-                    val downloading = chapter.id in state.downloadingChapterIds
-                    val chapterCard: @Composable () -> Unit = {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = MaterialTheme.padding.medium, vertical = 4.dp)
-                                .clip(MaterialTheme.shapes.medium)
-                                .combinedClickable(
-                                    onClick = { onChapterClick(chapter.id) },
-                                    onLongClick = { onChapterLongClick(chapter.id) },
+                    items = visibleRows,
+                    key = { row ->
+                        when (row) {
+                            is NovelChapterDisplayRow.BranchChapter -> "branch-${row.chapter.id}"
+                            is NovelChapterDisplayRow.ChapterGroup -> "group-${row.groupKey}"
+                            is NovelChapterDisplayRow.ChapterVariant -> "variant-${row.chapter.id}"
+                        }
+                    },
+                ) { row ->
+                    when (row) {
+                        is NovelChapterDisplayRow.BranchChapter -> {
+                            val chapter = row.chapter
+                            NovelClassicChapterRow(
+                                chapter = chapter,
+                                displayNumber = row.displayNumber,
+                                selected = chapter.id in selectedIds,
+                                downloaded = chapter.id in state.downloadedChapterIds,
+                                downloading = chapter.id in state.downloadingChapterIds,
+                                selectionMode = isAnySelected,
+                                displayMode = state.novel.displayMode,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = MaterialTheme.padding.medium, vertical = 4.dp),
+                                onClick = { onChapterClick(chapter.id) },
+                                onLongClick = { onChapterLongClick(chapter.id) },
+                                onToggleDownload = { onChapterDownloadToggle(chapter.id) },
+                                onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
+                                onToggleRead = { onChapterReadToggle(chapter.id) },
+                                chapterSwipeStartAction = chapterSwipeStartAction,
+                                chapterSwipeEndAction = chapterSwipeEndAction,
+                                onChapterSwipe = { action -> onChapterSwipe(chapter.id, action) },
+                            )
+                        }
+                        is NovelChapterDisplayRow.ChapterGroup -> {
+                            val primaryChapter = row.chapters.first()
+                            val isExpanded = row.groupKey in expandedGroupKeys
+                            NovelClassicChapterGroup(
+                                title = stringResource(
+                                    MR.strings.display_mode_chapter,
+                                    formatChapterNumber(row.displayNumber.toDouble()),
                                 ),
+                                count = row.chapters.size,
+                                expanded = isExpanded,
+                                singleItemGroup = row.chapters.size == 1,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = MaterialTheme.padding.medium, vertical = 4.dp),
+                                onClick = {
+                                    if (row.chapters.size == 1) {
+                                        onChapterClick(primaryChapter.id)
+                                    } else {
+                                        expandedGroupKeys = if (isExpanded) {
+                                            expandedGroupKeys - row.groupKey
+                                        } else {
+                                            expandedGroupKeys + row.groupKey
+                                        }
+                                    }
+                                },
+                                onLongClick = {
+                                    if (row.chapters.size == 1) {
+                                        onChapterLongClick(primaryChapter.id)
+                                    }
+                                },
+                            )
+                        }
+                        is NovelChapterDisplayRow.ChapterVariant -> {
+                            val chapter = row.chapter
+                            val chapterTitle = chapter.scanlator
+                                ?.takeIf { it.isNotBlank() }
+                                ?.let { scanlator ->
+                                    val baseName = chapter.name.ifBlank {
+                                        stringResource(
+                                            MR.strings.display_mode_chapter,
+                                            formatChapterNumber(row.displayNumber.toDouble()),
+                                        )
+                                    }
+                                    "$scanlator · $baseName"
+                                }
+                            NovelClassicChapterRow(
+                                chapter = chapter,
+                                displayNumber = row.displayNumber,
+                                selected = chapter.id in selectedIds,
+                                downloaded = chapter.id in state.downloadedChapterIds,
+                                downloading = chapter.id in state.downloadingChapterIds,
+                                selectionMode = isAnySelected,
+                                displayMode = state.novel.displayMode,
+                                titleOverride = chapterTitle,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        start = MaterialTheme.padding.large,
+                                        end = MaterialTheme.padding.medium,
+                                        top = 2.dp,
+                                        bottom = 4.dp,
+                                    ),
+                                onClick = { onChapterClick(chapter.id) },
+                                onLongClick = { onChapterLongClick(chapter.id) },
+                                onToggleDownload = { onChapterDownloadToggle(chapter.id) },
+                                onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
+                                onToggleRead = { onChapterReadToggle(chapter.id) },
+                                chapterSwipeStartAction = chapterSwipeStartAction,
+                                chapterSwipeEndAction = chapterSwipeEndAction,
+                                onChapterSwipe = { action -> onChapterSwipe(chapter.id, action) },
+                            )
+                        }
+                    }
+                }
+                /*
+                items(
+                    items = visibleRows,
+                    key = { row ->
+                        when (row) {
+                            is NovelChapterDisplayRow.BranchChapter -> "branch-${row.chapter.id}"
+                            is NovelChapterDisplayRow.ChapterGroup -> "group-${row.groupKey}"
+                            is NovelChapterDisplayRow.ChapterVariant -> "variant-${row.chapter.id}"
+                        }
+                    },
+                ) { row ->
+                    when (row) {
+                        is NovelChapterDisplayRow.BranchChapter -> {
+                            val chapter = row.chapter
+                            val selected = chapter.id in selectedIds
+                            val downloaded = chapter.id in state.downloadedChapterIds
+                            val downloading = chapter.id in state.downloadingChapterIds
+                            val chapterCard: @Composable () -> Unit = {
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = MaterialTheme.padding.medium, vertical = 4.dp)
+                                        .clip(MaterialTheme.shapes.medium)
+                                        .combinedClickable(
+                                            onClick = { onChapterClick(chapter.id) },
+                                            onLongClick = { onChapterLongClick(chapter.id) },
+                                        ),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (selected) {
+                                            MaterialTheme.colorScheme.primaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.surfaceContainer
+                                        },
+                                    ),
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = MaterialTheme.padding.medium, vertical = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            val chapterTitle = when (state.novel.displayMode) {
+                                                DomainNovel.CHAPTER_DISPLAY_NUMBER -> {
+                                                    stringResource(
+                                                        MR.strings.display_mode_chapter,
+                                                        formatChapterNumber(row.displayNumber.toDouble()),
+                                                    )
+                                                }
+                                                else -> {
+                                                    chapter.name.ifBlank {
+                                                        stringResource(
+                                                            MR.strings.display_mode_chapter,
+                                                            formatChapterNumber(row.displayNumber.toDouble()),
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            Text(
+                                                text = chapterTitle,
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                                color = if (chapter.read) {
+                                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurface
+                                                },
+                                            )
+                                            if (chapter.dateUpload > 0) {
+                                                Text(
+                                                    text = relativeDateTimeText(chapter.dateUpload),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
+                                        }
+                                        if (!isAnySelected) {
+                                            IconButton(
+                                                onClick = { onChapterDownloadToggle(chapter.id) },
+                                                modifier = Modifier.padding(start = 2.dp),
+                                            ) {
+                                                Icon(
+                                                    imageVector = when {
+                                                        downloading -> Icons.Outlined.FileDownloadOff
+                                                        downloaded -> Icons.Outlined.Delete
+                                                        else -> Icons.Outlined.Download
+                                                    },
+                                                    contentDescription = null,
+                                                    tint = when {
+                                                        downloading -> MaterialTheme.colorScheme.tertiary
+                                                        downloaded -> MaterialTheme.colorScheme.error
+                                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                                    },
+                                                )
+                                            }
+                                            IconButton(
+                                                onClick = { onChapterBookmarkToggle(chapter.id) },
+                                                modifier = Modifier.padding(start = 2.dp),
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.Bookmark,
+                                                    contentDescription = null,
+                                                    tint = if (chapter.bookmark) {
+                                                        MaterialTheme.colorScheme.primary
+                                                    } else {
+                                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                                    },
+                                                )
+                                            }
+                                            IconButton(
+                                                onClick = { onChapterReadToggle(chapter.id) },
+                                                modifier = Modifier.padding(start = 2.dp),
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.CheckCircle,
+                                                    contentDescription = null,
+                                                    tint = if (chapter.read) {
+                                                        MaterialTheme.colorScheme.primary
+                                                    } else {
+                                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                                    },
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (!isAnySelected) {
+                                val startSwipeAction = novelSwipeAction(
+                                    action = chapterSwipeStartAction,
+                                    read = chapter.read,
+                                    bookmark = chapter.bookmark,
+                                    downloaded = downloaded,
+                                    downloading = downloading,
+                                    background = MaterialTheme.colorScheme.primaryContainer,
+                                    onSwipe = { onChapterSwipe(chapter.id, chapterSwipeStartAction) },
+                                )
+                                val endSwipeAction = novelSwipeAction(
+                                    action = chapterSwipeEndAction,
+                                    read = chapter.read,
+                                    bookmark = chapter.bookmark,
+                                    downloaded = downloaded,
+                                    downloading = downloading,
+                                    background = MaterialTheme.colorScheme.primaryContainer,
+                                    onSwipe = { onChapterSwipe(chapter.id, chapterSwipeEndAction) },
+                                )
+                                SwipeableActionsBox(
+                                    modifier = Modifier.clipToBounds(),
+                                    startActions = listOfNotNull(startSwipeAction),
+                                    endActions = listOfNotNull(endSwipeAction),
+                                    swipeThreshold = novelSwipeActionThreshold,
+                                    backgroundUntilSwipeThreshold = MaterialTheme.colorScheme.surfaceContainerLowest,
+                                ) {
+                                    chapterCard()
+                                }
+                            } else {
+                                chapterCard()
+                            }
+                        }
+                        is NovelChapterDisplayRow.ChapterGroup -> {
+                            val primaryChapter = row.chapters.first()
+                            val isExpanded = row.groupKey in expandedGroupKeys
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = MaterialTheme.padding.medium, vertical = 4.dp)
+                                    .clip(MaterialTheme.shapes.medium)
+                                    .combinedClickable(
+                                        onClick = {
+                                            if (row.chapters.size == 1) {
+                                                onChapterClick(primaryChapter.id)
+                                            } else {
+                                                expandedGroupKeys = if (isExpanded) {
+                                                    expandedGroupKeys - row.groupKey
+                                                } else {
+                                                    expandedGroupKeys + row.groupKey
+                                                }
+                                            }
+                                        },
+                                        onLongClick = {
+                                            if (row.chapters.size == 1) {
+                                                onChapterLongClick(primaryChapter.id)
+                                            }
+                                        },
+                                    ),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                ),
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = MaterialTheme.padding.medium, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        val groupTitle = stringResource(
+                                            MR.strings.display_mode_chapter,
+                                            formatChapterNumber(row.displayNumber.toDouble()),
+                                        )
+                                        Text(
+                                            text = if (row.chapters.size > 1) {
+                                                "$groupTitle (${row.chapters.size})"
+                                            } else {
+                                                groupTitle
+                                            },
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                    }
+                                    Icon(
+                                        imageVector = if (isExpanded) {
+                                            Icons.Outlined.ArrowForward
+                                        } else {
+                                            Icons.AutoMirrored.Outlined.ArrowForward
+                                        },
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                        is NovelChapterDisplayRow.ChapterVariant -> {
+                            val chapter = row.chapter
+                            val selected = chapter.id in selectedIds
+                            val downloaded = chapter.id in state.downloadedChapterIds
+                            val downloading = chapter.id in state.downloadingChapterIds
+                            val variantChapter = chapter.copy(
+                                name = chapter.scanlator
+                                    ?.takeIf { it.isNotBlank() }
+                                    ?.let { scanlator ->
+                                        val baseName = chapter.name.ifBlank {
+                                            stringResource(
+                                                MR.strings.display_mode_chapter,
+                                                formatChapterNumber(chapter.chapterNumber),
+                                            )
+                                        }
+                                        "$scanlator · $baseName"
+                                    }
+                                    ?: chapter.name,
+                            )
+                            val chapterCard: @Composable () -> Unit = {
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = MaterialTheme.padding.large, end = MaterialTheme.padding.medium, top = 2.dp, bottom = 4.dp)
+                                        .clip(MaterialTheme.shapes.medium)
+                                        .combinedClickable(
+                                            onClick = { onChapterClick(chapter.id) },
+                                            onLongClick = { onChapterLongClick(chapter.id) },
+                                        ),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (selected) {
                                     MaterialTheme.colorScheme.primaryContainer
@@ -767,10 +1168,25 @@ fun NovelScreen(
                                         }
                                     }
                                     Text(
-                                        text = chapterTitle,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
+                                                text = when (state.novel.displayMode) {
+                                                    DomainNovel.CHAPTER_DISPLAY_NUMBER -> {
+                                                        stringResource(
+                                                            MR.strings.display_mode_chapter,
+                                                            formatChapterNumber(chapter.chapterNumber),
+                                                        )
+                                                    }
+                                                    else -> {
+                                                        variantChapter.name.ifBlank {
+                                                            stringResource(
+                                                                MR.strings.display_mode_chapter,
+                                                                formatChapterNumber(chapter.chapterNumber),
+                                                            )
+                                                        }
+                                                    }
+                                                },
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
                                         color = if (chapter.read) {
                                             MaterialTheme.colorScheme.onSurfaceVariant
                                         } else {
@@ -833,43 +1249,45 @@ fun NovelScreen(
                                         )
                                     }
                                 }
+                                }
+                            }
+
+                            if (!isAnySelected) {
+                                val startSwipeAction = novelSwipeAction(
+                                    action = chapterSwipeStartAction,
+                                    read = chapter.read,
+                                    bookmark = chapter.bookmark,
+                                    downloaded = downloaded,
+                                    downloading = downloading,
+                                    background = MaterialTheme.colorScheme.primaryContainer,
+                                    onSwipe = { onChapterSwipe(chapter.id, chapterSwipeStartAction) },
+                                )
+                                val endSwipeAction = novelSwipeAction(
+                                    action = chapterSwipeEndAction,
+                                    read = chapter.read,
+                                    bookmark = chapter.bookmark,
+                                    downloaded = downloaded,
+                                    downloading = downloading,
+                                    background = MaterialTheme.colorScheme.primaryContainer,
+                                    onSwipe = { onChapterSwipe(chapter.id, chapterSwipeEndAction) },
+                                )
+                                SwipeableActionsBox(
+                                    modifier = Modifier.clipToBounds(),
+                                    startActions = listOfNotNull(startSwipeAction),
+                                    endActions = listOfNotNull(endSwipeAction),
+                                    swipeThreshold = novelSwipeActionThreshold,
+                                    backgroundUntilSwipeThreshold = MaterialTheme.colorScheme.surfaceContainerLowest,
+                                ) {
+                                    chapterCard()
+                                }
+                            } else {
+                                chapterCard()
                             }
                         }
                     }
-
-                    if (!isAnySelected) {
-                        val startSwipeAction = novelSwipeAction(
-                            action = chapterSwipeStartAction,
-                            read = chapter.read,
-                            bookmark = chapter.bookmark,
-                            downloaded = downloaded,
-                            downloading = downloading,
-                            background = MaterialTheme.colorScheme.primaryContainer,
-                            onSwipe = { onChapterSwipe(chapter.id, chapterSwipeStartAction) },
-                        )
-                        val endSwipeAction = novelSwipeAction(
-                            action = chapterSwipeEndAction,
-                            read = chapter.read,
-                            bookmark = chapter.bookmark,
-                            downloaded = downloaded,
-                            downloading = downloading,
-                            background = MaterialTheme.colorScheme.primaryContainer,
-                            onSwipe = { onChapterSwipe(chapter.id, chapterSwipeEndAction) },
-                        )
-                        SwipeableActionsBox(
-                            modifier = Modifier.clipToBounds(),
-                            startActions = listOfNotNull(startSwipeAction),
-                            endActions = listOfNotNull(endSwipeAction),
-                            swipeThreshold = novelSwipeActionThreshold,
-                            backgroundUntilSwipeThreshold = MaterialTheme.colorScheme.surfaceContainerLowest,
-                        ) {
-                            chapterCard()
-                        }
-                    } else {
-                        chapterCard()
-                    }
                 }
-                if (visibleChapterCount < chapters.size) {
+                */
+                if (visibleChapterCount < visibleTopLevelCount) {
                     item {
                         Box(
                             modifier = Modifier
@@ -884,14 +1302,14 @@ fun NovelScreen(
                                 onClick = {
                                     visibleChapterCount = nextVisibleChapterCount(
                                         currentCount = visibleChapterCount,
-                                        totalCount = chapters.size,
+                                        totalCount = visibleTopLevelCount,
                                         step = NOVEL_CHAPTERS_PAGE_SIZE,
                                     )
                                 },
                             ) {
                                 Text(
                                     text = "${stringResource(MR.strings.label_more)} " +
-                                        "(${chapters.size - visibleChapterCount})",
+                                        "(${visibleTopLevelCount - visibleChapterCount})",
                                 )
                             }
                         }
@@ -906,6 +1324,222 @@ fun NovelScreen(
 internal fun initialVisibleChapterCount(totalCount: Int, pageSize: Int): Int {
     if (totalCount <= 0 || pageSize <= 0) return 0
     return minOf(totalCount, pageSize)
+}
+
+@Composable
+private fun NovelClassicChapterRow(
+    chapter: tachiyomi.domain.items.novelchapter.model.NovelChapter,
+    displayNumber: Int,
+    selected: Boolean,
+    downloaded: Boolean,
+    downloading: Boolean,
+    selectionMode: Boolean,
+    displayMode: Long,
+    titleOverride: String? = null,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onToggleDownload: () -> Unit,
+    onToggleBookmark: () -> Unit,
+    onToggleRead: () -> Unit,
+    chapterSwipeStartAction: LibraryPreferences.NovelSwipeAction,
+    chapterSwipeEndAction: LibraryPreferences.NovelSwipeAction,
+    onChapterSwipe: (LibraryPreferences.NovelSwipeAction) -> Unit,
+) {
+    val chapterCard: @Composable () -> Unit = {
+        Card(
+            modifier = modifier
+                .clip(MaterialTheme.shapes.medium)
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongClick,
+                ),
+            colors = CardDefaults.cardColors(
+                containerColor = if (selected) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainer
+                },
+            ),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = MaterialTheme.padding.medium, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    val chapterTitle = titleOverride ?: when (displayMode) {
+                        DomainNovel.CHAPTER_DISPLAY_NUMBER -> {
+                            stringResource(
+                                MR.strings.display_mode_chapter,
+                                formatChapterNumber(displayNumber.toDouble()),
+                            )
+                        }
+                        else -> {
+                            chapter.name.ifBlank {
+                                stringResource(
+                                    MR.strings.display_mode_chapter,
+                                    formatChapterNumber(displayNumber.toDouble()),
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        text = chapterTitle,
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        color = if (chapter.read) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                    )
+                    if (chapter.dateUpload > 0) {
+                        Text(
+                            text = relativeDateTimeText(chapter.dateUpload),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                if (!selectionMode) {
+                    IconButton(
+                        onClick = onToggleDownload,
+                        modifier = Modifier.padding(start = 2.dp),
+                    ) {
+                        Icon(
+                            imageVector = when {
+                                downloading -> Icons.Outlined.FileDownloadOff
+                                downloaded -> Icons.Outlined.Delete
+                                else -> Icons.Outlined.Download
+                            },
+                            contentDescription = null,
+                            tint = when {
+                                downloading -> MaterialTheme.colorScheme.tertiary
+                                downloaded -> MaterialTheme.colorScheme.error
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                    IconButton(
+                        onClick = onToggleBookmark,
+                        modifier = Modifier.padding(start = 2.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Bookmark,
+                            contentDescription = null,
+                            tint = if (chapter.bookmark) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                    IconButton(
+                        onClick = onToggleRead,
+                        modifier = Modifier.padding(start = 2.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.CheckCircle,
+                            contentDescription = null,
+                            tint = if (chapter.read) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (!selectionMode) {
+        val startSwipeAction = novelSwipeAction(
+            action = chapterSwipeStartAction,
+            read = chapter.read,
+            bookmark = chapter.bookmark,
+            downloaded = downloaded,
+            downloading = downloading,
+            background = MaterialTheme.colorScheme.primaryContainer,
+            onSwipe = { onChapterSwipe(chapterSwipeStartAction) },
+        )
+        val endSwipeAction = novelSwipeAction(
+            action = chapterSwipeEndAction,
+            read = chapter.read,
+            bookmark = chapter.bookmark,
+            downloaded = downloaded,
+            downloading = downloading,
+            background = MaterialTheme.colorScheme.primaryContainer,
+            onSwipe = { onChapterSwipe(chapterSwipeEndAction) },
+        )
+        SwipeableActionsBox(
+            modifier = Modifier.clipToBounds(),
+            startActions = listOfNotNull(startSwipeAction),
+            endActions = listOfNotNull(endSwipeAction),
+            swipeThreshold = novelSwipeActionThreshold,
+            backgroundUntilSwipeThreshold = MaterialTheme.colorScheme.surfaceContainerLowest,
+        ) {
+            chapterCard()
+        }
+    } else {
+        chapterCard()
+    }
+}
+
+@Composable
+private fun NovelClassicChapterGroup(
+    title: String,
+    count: Int,
+    expanded: Boolean,
+    singleItemGroup: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    Card(
+        modifier = modifier
+            .clip(MaterialTheme.shapes.medium)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            ),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+        ),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = MaterialTheme.padding.medium, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (count > 1) {
+                        "$title ($count)"
+                    } else {
+                        title
+                    },
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            Icon(
+                imageVector = if (expanded) {
+                    Icons.Outlined.ChevronLeft
+                } else {
+                    Icons.Outlined.ChevronRight
+                },
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }
 
 internal fun nextVisibleChapterCount(currentCount: Int, totalCount: Int, step: Int): Int {
