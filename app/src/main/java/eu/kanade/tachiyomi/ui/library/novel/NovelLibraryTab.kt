@@ -46,6 +46,7 @@ import eu.kanade.presentation.library.components.LibraryToolbar
 import eu.kanade.presentation.library.components.LibraryToolbarTitle
 import eu.kanade.presentation.library.novel.NovelLibrarySettingsDialog
 import eu.kanade.presentation.library.novel.resolveNovelLibraryBadgeState
+import eu.kanade.presentation.novel.sourceAwareNovelCoverModel
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
@@ -326,7 +327,7 @@ private fun NovelLibraryGridItem(
                     .height(170.dp),
             ) {
                 ItemCover.Book(
-                    data = item.novel.thumbnailUrl,
+                    data = sourceAwareNovelCoverModel(item.novel),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(170.dp),
@@ -394,7 +395,7 @@ private fun NovelLibraryListItem(
                     .aspectRatio(0.68f),
             ) {
                 ItemCover.Book(
-                    data = item.novel.thumbnailUrl,
+                    data = sourceAwareNovelCoverModel(item.novel),
                     modifier = Modifier
                         .height(112.dp)
                         .aspectRatio(0.68f),

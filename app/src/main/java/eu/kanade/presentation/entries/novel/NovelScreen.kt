@@ -79,6 +79,7 @@ import eu.kanade.presentation.entries.components.ItemCover
 import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
 import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
 import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
+import eu.kanade.presentation.novel.sourceAwareNovelCoverModel
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.formatChapterNumber
 import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterDisplayRow
@@ -446,7 +447,7 @@ fun NovelScreen(
                     ) {
                         AsyncImage(
                             model = ImageRequest.Builder(context)
-                                .data(state.novel.thumbnailUrl)
+                                .data(sourceAwareNovelCoverModel(state.novel))
                                 .crossfade(true)
                                 .placeholderMemoryCacheKey(state.novel.thumbnailUrl)
                                 .staticBlur(blurRadiusPx, intensityFactor = 0.6f)
@@ -490,7 +491,7 @@ fun NovelScreen(
                             ) {
                                 ItemCover.Book(
                                     data = ImageRequest.Builder(context)
-                                        .data(state.novel.thumbnailUrl)
+                                        .data(sourceAwareNovelCoverModel(state.novel))
                                         .crossfade(true)
                                         .placeholderMemoryCacheKey(state.novel.thumbnailUrl)
                                         .build(),

@@ -6,3 +6,7 @@ package eu.kanade.tachiyomi.source.novel
 interface NovelSiteSource {
     val siteUrl: String?
 }
+
+interface NovelImageRequestSource {
+    suspend fun getImageRequestHeaders(): Map<String, String>
+}

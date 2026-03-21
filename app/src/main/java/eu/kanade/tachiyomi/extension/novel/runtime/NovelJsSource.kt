@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.novelsource.model.NovelFilterList
 import eu.kanade.tachiyomi.novelsource.model.NovelsPage
 import eu.kanade.tachiyomi.novelsource.model.SNovel
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
+import eu.kanade.tachiyomi.source.novel.NovelImageRequestSource
 import eu.kanade.tachiyomi.source.novel.NovelPluginImagePayload
 import eu.kanade.tachiyomi.source.novel.NovelPluginImageSource
 import eu.kanade.tachiyomi.source.novel.NovelSiteSource
@@ -50,7 +51,7 @@ class NovelJsSource internal constructor(
     private val filterMapper: NovelPluginFilterMapper,
     private val resultNormalizer: NovelPluginResultNormalizer,
     private val runtimeOverride: NovelPluginRuntimeOverride,
-) : NovelCatalogueSource, NovelSiteSource, NovelWebUrlSource, NovelPluginImageSource {
+) : NovelCatalogueSource, NovelSiteSource, NovelWebUrlSource, NovelPluginImageSource, NovelImageRequestSource {
     override val id: Long = NovelPluginId.toSourceId(plugin.id)
     override val name: String = plugin.name
     override val lang: String = plugin.lang
@@ -63,6 +64,7 @@ class NovelJsSource internal constructor(
     private var hasResolveUrl: Boolean? = null
     private var hasFetchImage: Boolean? = null
     private var cachedFiltersPayload: String? = null
+    private var cachedImageRequestHeaders: Map<String, String>? = null
 
     override fun getFilterList(): NovelFilterList {
         NovelPluginFilters.decodeFilterList(
@@ -410,8 +412,50 @@ class NovelJsSource internal constructor(
         }
     }
 
+    override suspend fun getImageRequestHeaders(): Map<String, String> {
+        cachedImageRequestHeaders?.let { return it }
+
+        return runPluginSafe(
+            operation = "imageRequestInit(id=${plugin.id})",
+            defaultValue = emptyMap(),
+        ) {
+            mutex.withLock {
+                cachedImageRequestHeaders?.let { return@withLock it }
+
+                val runtime = ensureRuntimeLocked()
+                val script = """
+                    (function() {
+                      var init = __plugin && __plugin.imageRequestInit;
+                      if (!init || typeof init !== "object") {
+                        return JSON.stringify({ headers: {} });
+                      }
+                      var headers = init.headers;
+                      if (!headers || typeof headers !== "object") {
+                        return JSON.stringify({ headers: {} });
+                      }
+                      var normalized = {};
+                      Object.keys(headers).forEach(function(key) {
+                        var value = headers[key];
+                        if (typeof value !== "string") return;
+                        var normalizedKey = String(key || "").trim();
+                        var normalizedValue = value.trim();
+                        if (!normalizedKey || !normalizedValue) return;
+                        normalized[normalizedKey] = normalizedValue;
+                      });
+                      return JSON.stringify({ headers: normalized });
+                    })();
+                """.trimIndent()
+                val payload = runtime.evaluate(script, "novel-plugin-image-request-init.js") as? String
+                val headers = decodePluginImageRequestHeaders(payload)
+                cachedImageRequestHeaders = headers
+                headers
+            }
+        }
+    }
+
     internal fun clearInMemoryCaches() {
         cachedFiltersPayload = null
+        cachedImageRequestHeaders = null
     }
 
     private fun loadFiltersLocked(): NovelFilterList {
@@ -1583,5 +1627,24 @@ internal object NovelJsPayloadParser {
             if (asDouble != null) return asDouble
         }
         return null
+    }
+}
+
+internal fun decodePluginImageRequestHeaders(payload: String?): Map<String, String> {
+    if (payload.isNullOrBlank() || payload == "null") return emptyMap()
+
+    val root = runCatching { Json.parseToJsonElement(payload) as? JsonObject }
+        .getOrNull()
+        ?: return emptyMap()
+    val headers = root["headers"] as? JsonObject ?: return emptyMap()
+
+    return buildMap {
+        headers.forEach { (key, value) ->
+            val normalizedKey = key.trim()
+            val normalizedValue = (value as? JsonPrimitive)?.contentOrNull?.trim().orEmpty()
+            if (normalizedKey.isNotEmpty() && normalizedValue.isNotEmpty()) {
+                put(normalizedKey, normalizedValue)
+            }
+        }
     }
 }

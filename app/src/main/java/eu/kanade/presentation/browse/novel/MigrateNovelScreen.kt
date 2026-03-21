@@ -15,6 +15,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.entries.components.ItemCover
+import eu.kanade.presentation.novel.sourceAwareNovelCoverModel
 import eu.kanade.tachiyomi.ui.browse.novel.migration.novel.MigrateNovelScreenModel
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.i18n.MR
@@ -90,7 +91,7 @@ private fun MigrateNovelItem(
         onLongClickItem = { onClickItem(novel) },
         icon = {
             ItemCover.Book(
-                data = novel.thumbnailUrl,
+                data = sourceAwareNovelCoverModel(novel),
                 modifier = Modifier
                     .size(width = 52.dp, height = 74.dp),
                 onClick = { onClickCover(novel) },

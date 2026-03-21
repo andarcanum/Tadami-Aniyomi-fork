@@ -21,7 +21,7 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
-import eu.kanade.presentation.components.resolveAuroraCoverModel
+import eu.kanade.presentation.novel.sourceAwareNovelCoverModel
 import eu.kanade.tachiyomi.data.coil.staticBlur
 import tachiyomi.domain.entries.novel.model.Novel
 
@@ -41,7 +41,7 @@ fun FullscreenPosterBackground(
 ) {
     val context = LocalContext.current
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter(AuroraCoverPlaceholderVariant.Wide)
-    val posterModel = resolveAuroraCoverModel(novel.thumbnailUrl) as? String
+    val posterModel = sourceAwareNovelCoverModel(novel).takeIf { !it.url.isNullOrBlank() }
 
     val hasScrolledAway = firstVisibleItemIndex > 0 || scrollOffset > 100
 

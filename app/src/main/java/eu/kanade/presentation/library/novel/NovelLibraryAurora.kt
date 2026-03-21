@@ -71,6 +71,7 @@ import eu.kanade.presentation.library.components.LazyLibraryGrid
 import eu.kanade.presentation.library.components.UnviewedBadge
 import eu.kanade.presentation.library.components.resolveGlowContourCornerIndicatorState
 import eu.kanade.presentation.library.components.resolveGlowContourLibraryTextSpec
+import eu.kanade.presentation.novel.sourceAwareNovelCoverModel
 import eu.kanade.presentation.library.resolveNovelLibraryCardProgressPercent
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
@@ -414,7 +415,7 @@ private fun NovelLibraryAuroraCard(
     )
     val coverRequest = remember(item.novel.id, item.novel.thumbnailUrl, item.novel.coverLastModified) {
         ImageRequest.Builder(context)
-            .data(resolveAuroraCoverModel(item.novel.thumbnailUrl))
+            .data(sourceAwareNovelCoverModel(item.novel))
             .placeholderMemoryCacheKey(item.novel.thumbnailUrl)
             .build()
     }

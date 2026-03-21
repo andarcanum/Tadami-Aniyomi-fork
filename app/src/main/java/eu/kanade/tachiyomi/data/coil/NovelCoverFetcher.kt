@@ -9,6 +9,7 @@ import coil3.fetch.SourceFetchResult
 import coil3.request.Options
 import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.network.await
+import eu.kanade.tachiyomi.source.novel.NovelImageRequestSource
 import eu.kanade.tachiyomi.source.novel.NovelSiteSource
 import okhttp3.CacheControl
 import okhttp3.Call
@@ -28,6 +29,7 @@ class NovelCoverFetcher(
     private val data: NovelCover,
     private val options: Options,
     private val sourceSiteUrlLazy: Lazy<String?>,
+    private val pluginHeadersProvider: suspend () -> Map<String, String>,
     private val callFactoryLazy: Lazy<Call.Factory>,
 ) : Fetcher {
 
@@ -76,11 +78,13 @@ class NovelCoverFetcher(
     }
 
     private suspend fun executeNetworkRequest(url: String): Response {
+        val pluginHeaders = pluginHeadersProvider()
         val response = callFactoryLazy.value
             .newCall(
                 buildNovelCoverRequest(
                     url = url,
                     siteUrl = sourceSiteUrlLazy.value,
+                    pluginHeaders = pluginHeaders,
                     readFromNetwork = options.networkCachePolicy.readEnabled,
                 ),
             )
@@ -119,6 +123,11 @@ class NovelCoverFetcher(
                 data = data,
                 options = options,
                 sourceSiteUrlLazy = lazy { (sourceManager.get(data.sourceId) as? NovelSiteSource)?.siteUrl },
+                pluginHeadersProvider = {
+                    (sourceManager.get(data.sourceId) as? NovelImageRequestSource)
+                        ?.getImageRequestHeaders()
+                        .orEmpty()
+                },
                 callFactoryLazy = callFactoryLazy,
             )
         }
@@ -132,19 +141,38 @@ class NovelCoverFetcher(
 internal fun buildNovelCoverRequest(
     url: String,
     siteUrl: String?,
+    pluginHeaders: Map<String, String> = emptyMap(),
     readFromNetwork: Boolean,
 ): Request {
     val normalizedSiteUrl = siteUrl
         ?.trim()
         ?.takeIf { it.isNotBlank() }
         ?.trimEnd('/')
+    val normalizedPluginHeaders = pluginHeaders
+        .mapNotNull { (key, value) ->
+            val normalizedKey = key.trim()
+            val normalizedValue = value.trim()
+            if (normalizedKey.isEmpty() || normalizedValue.isEmpty()) {
+                null
+            } else {
+                normalizedKey to normalizedValue
+            }
+        }
+        .toMap()
 
     return Request.Builder()
         .url(url)
         .apply {
+            normalizedPluginHeaders.forEach { (key, value) ->
+                addHeader(key, value)
+            }
             if (normalizedSiteUrl != null) {
-                addHeader("Referer", "$normalizedSiteUrl/")
-                addHeader("Origin", normalizedSiteUrl)
+                if (normalizedPluginHeaders.keys.none { it.equals("Referer", ignoreCase = true) }) {
+                    addHeader("Referer", "$normalizedSiteUrl/")
+                }
+                if (normalizedPluginHeaders.keys.none { it.equals("Origin", ignoreCase = true) }) {
+                    addHeader("Origin", normalizedSiteUrl)
+                }
             }
             if (readFromNetwork) {
                 cacheControl(CACHE_CONTROL_NO_STORE)
