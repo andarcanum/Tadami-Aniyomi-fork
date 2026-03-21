@@ -1144,7 +1144,7 @@ private fun NovelHomeHubScreenModel.State.toUiState(): HomeHubUiState {
                 entryId = it.novelId,
                 title = it.title,
                 progressNumber = it.chapterNumber,
-                coverData = it.coverData.url ?: it.coverData,
+                coverData = mapNovelHomeHubCoverData(it.coverData),
             )
         },
         history = history.map {
@@ -1152,14 +1152,14 @@ private fun NovelHomeHubScreenModel.State.toUiState(): HomeHubUiState {
                 entryId = it.novelId,
                 title = it.title,
                 progressNumber = it.chapterNumber,
-                coverData = it.coverData.url ?: it.coverData,
+                coverData = mapNovelHomeHubCoverData(it.coverData),
             )
         },
         recommendations = recommendations.map {
             HomeHubRecommendation(
                 entryId = it.novelId,
                 title = it.title,
-                coverData = it.coverData.url ?: it.coverData,
+                coverData = mapNovelHomeHubCoverData(it.coverData),
                 subtitle = "${it.readCount}/${it.totalCount} \u0433\u043b.",
             )
         },
@@ -1170,6 +1170,10 @@ private fun NovelHomeHubScreenModel.State.toUiState(): HomeHubUiState {
         isLoading = isLoading,
         showWelcome = showWelcome,
     )
+}
+
+internal fun mapNovelHomeHubCoverData(coverData: tachiyomi.domain.entries.novel.model.NovelCover): Any? {
+    return coverData
 }
 
 @Composable

@@ -12,6 +12,7 @@ import eu.kanade.presentation.components.resolveAuroraHomeIconShadowSpec
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.entries.novel.model.NovelCover
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 
@@ -170,6 +171,19 @@ class HomeHubTabLayoutTest {
             HomeHubHeroButtonVisualMode.AuroraGlass
         resolveHomeHubHeroButtonVisualMode(HomeHeroCtaMode.Classic) shouldBe
             HomeHubHeroButtonVisualMode.ClassicSolid
+    }
+
+    @Test
+    fun `novel homehub keeps source-aware cover model for ui`() {
+        val cover = NovelCover(
+            novelId = 7L,
+            sourceId = 13L,
+            isNovelFavorite = true,
+            url = "https://example.com/cover.jpg",
+            lastModified = 0L,
+        )
+
+        mapNovelHomeHubCoverData(cover) shouldBe cover
     }
 
     @Test
