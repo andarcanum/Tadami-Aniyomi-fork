@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -24,7 +25,8 @@ import coil3.request.ImageRequest
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.components.resolveAuroraCoverModel
-import eu.kanade.tachiyomi.data.coil.staticBlur
+import eu.kanade.presentation.entries.components.aurora.applyAuroraBlurBackground
+import eu.kanade.presentation.entries.components.aurora.auroraPosterBackgroundSpec
 import tachiyomi.domain.entries.anime.model.Anime
 
 /**
@@ -45,6 +47,8 @@ fun FullscreenPosterBackground(
     resolvedCoverUrlFallback: String? = null,
 ) {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter(AuroraCoverPlaceholderVariant.Wide)
     val initialModel = resolveAuroraCoverModel(resolvedCoverUrl) as? String
     val fallbackModel = resolveAuroraCoverModel(resolvedCoverUrlFallback) as? String
@@ -67,7 +71,9 @@ fun FullscreenPosterBackground(
         ),
         label = "blurOverlayAlpha",
     )
-    val blurRadiusPx = with(LocalDensity.current) { 20.dp.roundToPx() }
+    val blurRadiusPx = with(density) { 20.dp.roundToPx() }
+    val containerWidthPx = with(density) { configuration.screenWidthDp.dp.roundToPx() }
+    val containerHeightPx = with(density) { configuration.screenHeightDp.dp.roundToPx() }
 
     Box(modifier = modifier.fillMaxSize()) {
         if (initialModel != null) {
@@ -75,10 +81,26 @@ fun FullscreenPosterBackground(
             val resolvedModel = resolveAuroraCoverModel(model) as? String
 
             if (resolvedModel != null) {
+                val backgroundSpec = remember(
+                    anime.id,
+                    anime.coverLastModified,
+                    resolvedModel,
+                    containerWidthPx,
+                    containerHeightPx,
+                    blurRadiusPx,
+                ) {
+                    auroraPosterBackgroundSpec(
+                        baseCacheKey = "anime-bg;${anime.id};${anime.coverLastModified};${resolvedModel.hashCode()}",
+                        containerWidthPx = containerWidthPx,
+                        containerHeightPx = containerHeightPx,
+                        blurRadiusPx = blurRadiusPx,
+                    )
+                }
                 AsyncImage(
-                    model = remember(resolvedModel, anime.id, anime.coverLastModified) {
+                    model = remember(resolvedModel, backgroundSpec.sharpMemoryCacheKey) {
                         ImageRequest.Builder(context)
                             .data(resolvedModel)
+                            .memoryCacheKey(backgroundSpec.sharpMemoryCacheKey)
                             .build()
                     },
                     onError = {
@@ -94,10 +116,13 @@ fun FullscreenPosterBackground(
                 )
 
                 AsyncImage(
-                    model = remember(resolvedModel, anime.id, anime.coverLastModified, blurRadiusPx) {
+                    model = remember(resolvedModel, backgroundSpec, blurRadiusPx) {
                         ImageRequest.Builder(context)
                             .data(resolvedModel)
-                            .staticBlur(blurRadiusPx, intensityFactor = 0.6f)
+                            .applyAuroraBlurBackground(
+                                spec = backgroundSpec,
+                                blurRadiusPx = blurRadiusPx,
+                            )
                             .build()
                     },
                     onError = {
