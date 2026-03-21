@@ -73,6 +73,7 @@ import androidx.compose.ui.zIndex
 import eu.kanade.domain.ui.model.AnimeMetadataSource
 import eu.kanade.presentation.components.EntryDownloadDropdownMenu
 import eu.kanade.presentation.entries.DownloadAction
+import eu.kanade.presentation.entries.TitleFastScrollOverlayAccumulator
 import eu.kanade.presentation.entries.anime.components.EpisodeDownloadAction
 import eu.kanade.presentation.entries.anime.components.aurora.AnimeActionCard
 import eu.kanade.presentation.entries.anime.components.aurora.AnimeEpisodeCardCompact
@@ -86,8 +87,8 @@ import eu.kanade.presentation.entries.components.AuroraEntryHoldToRefresh
 import eu.kanade.presentation.entries.components.EntryBottomActionMenu
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionFab
 import eu.kanade.presentation.entries.components.normalizeAuroraGlobalSearchQuery
+import eu.kanade.presentation.entries.reduceTitleFastScrollOverlayAccumulator
 import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
-import eu.kanade.presentation.entries.resolveTitleFastScrollOverlayRevealState
 import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollFloatingActionButton
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollOverlayChrome
@@ -98,6 +99,10 @@ import eu.kanade.presentation.theme.aurora.adaptive.resolveAuroraAdaptiveSpec
 import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreenModel
 import eu.kanade.tachiyomi.ui.entries.anime.EpisodeList
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.launch
 import tachiyomi.domain.items.episode.model.Episode
 import tachiyomi.domain.library.service.LibraryPreferences
@@ -210,25 +215,32 @@ fun AnimeScreenAuroraImpl(
     }
     var isThumbFastScrolling by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        var prevIndex = lazyListState.firstVisibleItemIndex
-        var prevOffset = lazyListState.firstVisibleItemScrollOffset
         snapshotFlow {
             Triple(
                 lazyListState.isScrollInProgress,
                 lazyListState.firstVisibleItemIndex,
                 lazyListState.firstVisibleItemScrollOffset,
             )
-        }.collect { (isScrolling, index, offset) ->
-            val movedForward = index > prevIndex || (index == prevIndex && offset > prevOffset)
-            isReverseScrollingOverlay = resolveTitleFastScrollOverlayRevealState(
-                currentRevealState = isReverseScrollingOverlay,
-                isExpandedList = episodesExpanded,
-                isScrolling = isScrolling,
-                movedForward = movedForward,
-            )
-            prevIndex = index
-            prevOffset = offset
         }
+            .conflate()
+            .runningFold(
+                TitleFastScrollOverlayAccumulator(
+                    prevIndex = lazyListState.firstVisibleItemIndex,
+                    prevOffset = lazyListState.firstVisibleItemScrollOffset,
+                    revealed = false,
+                ),
+            ) { current, (isScrolling, index, offset) ->
+                reduceTitleFastScrollOverlayAccumulator(
+                    current = current,
+                    isExpandedList = episodesExpanded,
+                    isScrolling = isScrolling,
+                    index = index,
+                    offset = offset,
+                )
+            }
+            .map { it.revealed }
+            .distinctUntilChanged()
+            .collect { isReverseScrollingOverlay = it }
     }
     val episodesToShow = if (episodesExpanded) episodes else episodes.take(5)
     val haptic = LocalHapticFeedback.current

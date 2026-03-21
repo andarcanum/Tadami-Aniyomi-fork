@@ -55,6 +55,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastAny
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import eu.kanade.presentation.components.AuroraCard
@@ -72,8 +73,8 @@ import eu.kanade.presentation.library.components.LazyLibraryGrid
 import eu.kanade.presentation.library.components.UnviewedBadge
 import eu.kanade.presentation.library.components.resolveGlowContourCornerIndicatorState
 import eu.kanade.presentation.library.components.resolveGlowContourLibraryTextSpec
-import eu.kanade.presentation.novel.sourceAwareNovelCoverModel
 import eu.kanade.presentation.library.resolveNovelLibraryCardProgressPercent
+import eu.kanade.presentation.novel.sourceAwareNovelCoverModel
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
@@ -154,7 +155,7 @@ fun NovelLibraryAuroraContent(
     val showDownloadBadge by libraryPreferences.downloadBadge().collectAsState()
     val showUnreadBadge by libraryPreferences.unreadBadge().collectAsState()
     val showLanguageBadge by libraryPreferences.languageBadge().collectAsState()
-    val downloadCacheSignal by downloadCache.changes.collectAsState(initial = Unit)
+    val downloadCacheSignal by downloadCache.changes.collectAsStateWithLifecycle(initialValue = Unit)
     val downloadedNovelIds = remember(items, showDownloadBadge, downloadCacheSignal) {
         if (!showDownloadBadge) return@remember emptySet()
 

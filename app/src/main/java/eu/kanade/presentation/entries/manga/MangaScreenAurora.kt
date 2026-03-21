@@ -70,6 +70,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import eu.kanade.presentation.components.EntryDownloadDropdownMenu
 import eu.kanade.presentation.entries.DownloadAction
+import eu.kanade.presentation.entries.TitleFastScrollOverlayAccumulator
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.AuroraEntryHoldToRefresh
@@ -84,8 +85,8 @@ import eu.kanade.presentation.entries.manga.components.aurora.MangaActionCard
 import eu.kanade.presentation.entries.manga.components.aurora.MangaChapterCardCompact
 import eu.kanade.presentation.entries.manga.components.aurora.MangaHeroContent
 import eu.kanade.presentation.entries.manga.components.aurora.MangaInfoCard
+import eu.kanade.presentation.entries.reduceTitleFastScrollOverlayAccumulator
 import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
-import eu.kanade.presentation.entries.resolveTitleFastScrollOverlayRevealState
 import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollFloatingActionButton
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollOverlayChrome
@@ -96,6 +97,10 @@ import eu.kanade.presentation.theme.aurora.adaptive.resolveAuroraAdaptiveSpec
 import eu.kanade.tachiyomi.data.download.manga.model.MangaDownload
 import eu.kanade.tachiyomi.ui.entries.manga.ChapterList
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreenModel
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.launch
 import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.library.service.LibraryPreferences
@@ -185,25 +190,32 @@ fun MangaScreenAuroraImpl(
         }
     }
     LaunchedEffect(Unit) {
-        var prevIndex = lazyListState.firstVisibleItemIndex
-        var prevOffset = lazyListState.firstVisibleItemScrollOffset
         snapshotFlow {
             Triple(
                 lazyListState.isScrollInProgress,
                 lazyListState.firstVisibleItemIndex,
                 lazyListState.firstVisibleItemScrollOffset,
             )
-        }.collect { (isScrolling, index, offset) ->
-            val movedForward = index > prevIndex || (index == prevIndex && offset > prevOffset)
-            isReverseScrollingOverlay = resolveTitleFastScrollOverlayRevealState(
-                currentRevealState = isReverseScrollingOverlay,
-                isExpandedList = chaptersExpanded,
-                isScrolling = isScrolling,
-                movedForward = movedForward,
-            )
-            prevIndex = index
-            prevOffset = offset
         }
+            .conflate()
+            .runningFold(
+                TitleFastScrollOverlayAccumulator(
+                    prevIndex = lazyListState.firstVisibleItemIndex,
+                    prevOffset = lazyListState.firstVisibleItemScrollOffset,
+                    revealed = false,
+                ),
+            ) { current, (isScrolling, index, offset) ->
+                reduceTitleFastScrollOverlayAccumulator(
+                    current = current,
+                    isExpandedList = chaptersExpanded,
+                    isScrolling = isScrolling,
+                    index = index,
+                    offset = offset,
+                )
+            }
+            .map { it.revealed }
+            .distinctUntilChanged()
+            .collect { isReverseScrollingOverlay = it }
     }
     val chaptersToShow = if (chaptersExpanded) chapters else chapters.take(5)
     val hasReadingProgress = remember(chapters) {

@@ -5,6 +5,12 @@ data class TitleListFastScrollSpec(
     val topPaddingPx: Int,
 )
 
+internal data class TitleFastScrollOverlayAccumulator(
+    val prevIndex: Int,
+    val prevOffset: Int,
+    val revealed: Boolean,
+)
+
 internal fun resolveTitleListFastScrollSpec(
     baseTopPaddingPx: Int,
     firstVisibleItemIndex: Int,
@@ -46,6 +52,26 @@ internal fun resolveTitleFastScrollOverlayRevealState(
     if (!isExpandedList) return false
     if (movedForward) return false
     return currentRevealState || isScrolling
+}
+
+internal fun reduceTitleFastScrollOverlayAccumulator(
+    current: TitleFastScrollOverlayAccumulator,
+    isExpandedList: Boolean,
+    isScrolling: Boolean,
+    index: Int,
+    offset: Int,
+): TitleFastScrollOverlayAccumulator {
+    val movedForward = index > current.prevIndex || (index == current.prevIndex && offset > current.prevOffset)
+    return TitleFastScrollOverlayAccumulator(
+        prevIndex = index,
+        prevOffset = offset,
+        revealed = resolveTitleFastScrollOverlayRevealState(
+            currentRevealState = current.revealed,
+            isExpandedList = isExpandedList,
+            isScrolling = isScrolling,
+            movedForward = movedForward,
+        ),
+    )
 }
 
 internal fun shouldShowTitleFastScrollFloatingActionButton(

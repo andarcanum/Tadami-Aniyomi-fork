@@ -64,15 +64,16 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import eu.kanade.presentation.entries.components.EntryBottomActionMenu
+import eu.kanade.presentation.entries.TitleFastScrollOverlayAccumulator
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.AuroraEntryHoldToRefresh
+import eu.kanade.presentation.entries.components.EntryBottomActionMenu
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionFab
 import eu.kanade.presentation.entries.components.normalizeAuroraGlobalSearchQuery
 import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
@@ -82,8 +83,8 @@ import eu.kanade.presentation.entries.novel.components.aurora.NovelActionCard
 import eu.kanade.presentation.entries.novel.components.aurora.NovelChapterCardCompactUi
 import eu.kanade.presentation.entries.novel.components.aurora.NovelHeroContent
 import eu.kanade.presentation.entries.novel.components.aurora.NovelInfoCard
+import eu.kanade.presentation.entries.reduceTitleFastScrollOverlayAccumulator
 import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
-import eu.kanade.presentation.entries.resolveTitleFastScrollOverlayRevealState
 import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollFloatingActionButton
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollOverlayChrome
@@ -93,10 +94,14 @@ import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.presentation.util.formatChapterNumber
 import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterDisplayRow
-import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterRowIndex
-import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterDisplayData
-import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelVisibleChapterRows
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
+import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterDisplayData
+import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterRowIndex
+import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelVisibleChapterRows
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.runningFold
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
@@ -218,25 +223,32 @@ fun NovelScreenAuroraImpl(
         }
     }
     LaunchedEffect(Unit) {
-        var prevIndex = lazyListState.firstVisibleItemIndex
-        var prevOffset = lazyListState.firstVisibleItemScrollOffset
         snapshotFlow {
             Triple(
                 lazyListState.isScrollInProgress,
                 lazyListState.firstVisibleItemIndex,
                 lazyListState.firstVisibleItemScrollOffset,
             )
-        }.collect { (isScrolling, index, offset) ->
-            val movedForward = index > prevIndex || (index == prevIndex && offset > prevOffset)
-            isReverseScrollingOverlay = resolveTitleFastScrollOverlayRevealState(
-                currentRevealState = isReverseScrollingOverlay,
-                isExpandedList = chaptersExpanded,
-                isScrolling = isScrolling,
-                movedForward = movedForward,
-            )
-            prevIndex = index
-            prevOffset = offset
         }
+            .conflate()
+            .runningFold(
+                TitleFastScrollOverlayAccumulator(
+                    prevIndex = lazyListState.firstVisibleItemIndex,
+                    prevOffset = lazyListState.firstVisibleItemScrollOffset,
+                    revealed = false,
+                ),
+            ) { current, (isScrolling, index, offset) ->
+                reduceTitleFastScrollOverlayAccumulator(
+                    current = current,
+                    isExpandedList = chaptersExpanded,
+                    isScrolling = isScrolling,
+                    index = index,
+                    offset = offset,
+                )
+            }
+            .map { it.revealed }
+            .distinctUntilChanged()
+            .collect { isReverseScrollingOverlay = it }
     }
     val visibleRows = remember(displayRows, chaptersExpanded, listChapterCount, groupedByChapter) {
         if (chaptersExpanded) {
@@ -591,26 +603,26 @@ fun NovelScreenAuroraImpl(
                                                     .fillMaxWidth()
                                                     .padding(horizontal = 16.dp, vertical = 12.dp),
                                                 contentAlignment = Alignment.Center,
-                                                    ) {
-                                                        AuroraChapterListToggleButton(
-                                                            text = if (chaptersExpanded) {
-                                                                stringResource(AYMR.strings.action_show_less)
-                                                            } else {
-                                                                stringResource(
-                                                                    AYMR.strings.action_show_all_chapters,
-                                                                    listChapterCount,
-                                                                )
-                                                            },
-                                                            onClick = { chaptersExpanded = !chaptersExpanded },
+                                            ) {
+                                                AuroraChapterListToggleButton(
+                                                    text = if (chaptersExpanded) {
+                                                        stringResource(AYMR.strings.action_show_less)
+                                                    } else {
+                                                        stringResource(
+                                                            AYMR.strings.action_show_all_chapters,
+                                                            listChapterCount,
                                                         )
-                                                    }
+                                                    },
+                                                    onClick = { chaptersExpanded = !chaptersExpanded },
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
                             /*
                             if (chapters.isEmpty()) {
-                            */
+                             */
                         }
                     },
                 )
@@ -1066,7 +1078,7 @@ fun NovelScreenAuroraImpl(
                     }
                     /*
                     if (chapters.isEmpty()) {
-                    */
+                     */
                 }
             }
 

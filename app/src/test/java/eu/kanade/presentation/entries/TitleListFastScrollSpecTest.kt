@@ -151,6 +151,101 @@ class TitleListFastScrollSpecTest {
     }
 
     @Test
+    fun `overlay accumulator enables reveal on reverse scroll`() {
+        reduceTitleFastScrollOverlayAccumulator(
+            current = TitleFastScrollOverlayAccumulator(
+                prevIndex = 4,
+                prevOffset = 200,
+                revealed = false,
+            ),
+            isExpandedList = true,
+            isScrolling = true,
+            index = 4,
+            offset = 180,
+        ) shouldBe TitleFastScrollOverlayAccumulator(
+            prevIndex = 4,
+            prevOffset = 180,
+            revealed = true,
+        )
+    }
+
+    @Test
+    fun `overlay accumulator keeps reveal latched while idle`() {
+        reduceTitleFastScrollOverlayAccumulator(
+            current = TitleFastScrollOverlayAccumulator(
+                prevIndex = 4,
+                prevOffset = 180,
+                revealed = true,
+            ),
+            isExpandedList = true,
+            isScrolling = false,
+            index = 4,
+            offset = 180,
+        ) shouldBe TitleFastScrollOverlayAccumulator(
+            prevIndex = 4,
+            prevOffset = 180,
+            revealed = true,
+        )
+    }
+
+    @Test
+    fun `overlay accumulator resets reveal on forward scroll`() {
+        reduceTitleFastScrollOverlayAccumulator(
+            current = TitleFastScrollOverlayAccumulator(
+                prevIndex = 4,
+                prevOffset = 180,
+                revealed = true,
+            ),
+            isExpandedList = true,
+            isScrolling = true,
+            index = 4,
+            offset = 220,
+        ) shouldBe TitleFastScrollOverlayAccumulator(
+            prevIndex = 4,
+            prevOffset = 220,
+            revealed = false,
+        )
+    }
+
+    @Test
+    fun `overlay accumulator resets reveal when list collapses`() {
+        reduceTitleFastScrollOverlayAccumulator(
+            current = TitleFastScrollOverlayAccumulator(
+                prevIndex = 4,
+                prevOffset = 180,
+                revealed = true,
+            ),
+            isExpandedList = false,
+            isScrolling = false,
+            index = 0,
+            offset = 0,
+        ) shouldBe TitleFastScrollOverlayAccumulator(
+            prevIndex = 0,
+            prevOffset = 0,
+            revealed = false,
+        )
+    }
+
+    @Test
+    fun `overlay accumulator treats larger index as forward movement`() {
+        reduceTitleFastScrollOverlayAccumulator(
+            current = TitleFastScrollOverlayAccumulator(
+                prevIndex = 4,
+                prevOffset = 900,
+                revealed = true,
+            ),
+            isExpandedList = true,
+            isScrolling = true,
+            index = 5,
+            offset = 0,
+        ) shouldBe TitleFastScrollOverlayAccumulator(
+            prevIndex = 5,
+            prevOffset = 0,
+            revealed = false,
+        )
+    }
+
+    @Test
     fun `floating action button hides while fast scroll thumb is dragged`() {
         shouldShowTitleFastScrollFloatingActionButton(
             isEligibleToShow = true,
