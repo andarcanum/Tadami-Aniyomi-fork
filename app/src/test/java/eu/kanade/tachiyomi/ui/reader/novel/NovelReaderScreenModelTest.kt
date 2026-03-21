@@ -1330,7 +1330,7 @@ class NovelReaderScreenModelTest {
     }
 
     @Test
-    fun `records history when chapter is opened and progressed`() {
+    fun `defers history writes for progress updates until reader is disposed`() {
         runBlocking {
             val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
             val chapter = NovelChapter.create().copy(
@@ -1360,11 +1360,19 @@ class NovelReaderScreenModelTest {
             }
 
             historyRepository.lastUpdate?.chapterId shouldBe chapter.id
+            historyRepository.updates.size shouldBe 1
 
             screenModel.updateReadingProgress(currentIndex = 1, totalItems = 10)
             yield()
 
             historyRepository.lastUpdate?.chapterId shouldBe chapter.id
+            historyRepository.updates.size shouldBe 1
+
+            screenModel.onDispose()
+            yield()
+
+            historyRepository.lastUpdate?.chapterId shouldBe chapter.id
+            historyRepository.updates.size shouldBe 2
             (historyRepository.lastUpdate?.readAt != null) shouldBe true
         }
     }
@@ -1787,7 +1795,9 @@ class NovelReaderScreenModelTest {
     }
 
     private class FakeNovelHistoryRepository : NovelHistoryRepository {
-        var lastUpdate: NovelHistoryUpdate? = null
+        val updates = mutableListOf<NovelHistoryUpdate>()
+        val lastUpdate: NovelHistoryUpdate?
+            get() = updates.lastOrNull()
 
         override fun getNovelHistory(query: String): Flow<List<NovelHistoryWithRelations>> =
             MutableStateFlow(emptyList())
@@ -1805,7 +1815,7 @@ class NovelReaderScreenModelTest {
         override suspend fun deleteAllNovelHistory(): Boolean = true
 
         override suspend fun upsertNovelHistory(historyUpdate: NovelHistoryUpdate) {
-            lastUpdate = historyUpdate
+            updates += historyUpdate
         }
     }
 

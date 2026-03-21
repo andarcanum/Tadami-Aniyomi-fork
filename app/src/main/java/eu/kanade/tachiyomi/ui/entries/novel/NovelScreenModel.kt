@@ -1654,6 +1654,12 @@ internal sealed interface NovelChapterDisplayRow {
     ) : NovelChapterDisplayRow
 }
 
+@Immutable
+internal data class NovelChapterDisplayData(
+    val chapterGroups: List<NovelChapterDisplayRow.ChapterGroup>,
+    val displayRows: List<NovelChapterDisplayRow>,
+)
+
 internal fun resolveNovelBranchChapterRows(
     chapters: List<NovelChapter>,
 ): List<NovelChapterDisplayRow.BranchChapter> {
@@ -1665,11 +1671,10 @@ internal fun resolveNovelBranchChapterRows(
     }
 }
 
-internal fun resolveNovelGroupedChapterRows(
+private fun resolveNovelChapterGroups(
     chapters: List<NovelChapter>,
-    expandedGroupKeys: Set<Long>,
-): List<NovelChapterDisplayRow> {
-    val groups = chapters
+): List<NovelChapterDisplayRow.ChapterGroup> {
+    return chapters
         .groupBy { it.chapterNumber }
         .values
         .mapIndexed { index, groupedChapters ->
@@ -1684,12 +1689,27 @@ internal fun resolveNovelGroupedChapterRows(
                 chapters = sortedVariants,
             )
         }
+}
 
-    return buildList {
-        groups.forEach { group ->
+internal fun resolveNovelChapterDisplayData(
+    chapters: List<NovelChapter>,
+    groupedByChapter: Boolean,
+    expandedGroupKeys: Set<Long>,
+): NovelChapterDisplayData {
+    if (!groupedByChapter) {
+        val displayRows = resolveNovelBranchChapterRows(chapters)
+        return NovelChapterDisplayData(
+            chapterGroups = emptyList(),
+            displayRows = displayRows,
+        )
+    }
+
+    val chapterGroups = resolveNovelChapterGroups(chapters)
+    val displayRows = buildList {
+        chapterGroups.forEach { group ->
             add(group)
             if (group.groupKey in expandedGroupKeys) {
-                group.chapters.forEach { chapter -> 
+                group.chapters.forEach { chapter ->
                     add(
                         NovelChapterDisplayRow.ChapterVariant(
                             chapter = chapter,
@@ -1700,6 +1720,22 @@ internal fun resolveNovelGroupedChapterRows(
             }
         }
     }
+
+    return NovelChapterDisplayData(
+        chapterGroups = chapterGroups,
+        displayRows = displayRows,
+    )
+}
+
+internal fun resolveNovelGroupedChapterRows(
+    chapters: List<NovelChapter>,
+    expandedGroupKeys: Set<Long>,
+): List<NovelChapterDisplayRow> {
+    return resolveNovelChapterDisplayData(
+        chapters = chapters,
+        groupedByChapter = true,
+        expandedGroupKeys = expandedGroupKeys,
+    ).displayRows
 }
 
 internal fun resolveNovelVisibleChapterRows(
@@ -1745,17 +1781,9 @@ internal fun resolveNovelChapterRowCount(
 }
 
 internal fun resolveNovelChapterRowIndex(
-    chapters: List<NovelChapter>,
-    expandedGroupKeys: Set<Long>,
-    groupedByChapter: Boolean,
+    rows: List<NovelChapterDisplayRow>,
     targetChapterId: Long,
 ): Int {
-    val rows = if (groupedByChapter) {
-        resolveNovelGroupedChapterRows(chapters, expandedGroupKeys)
-    } else {
-        resolveNovelBranchChapterRows(chapters)
-    }
-
     return rows.indexOfFirst { row ->
         when (row) {
             is NovelChapterDisplayRow.BranchChapter -> row.chapter.id == targetChapterId
@@ -1763,6 +1791,23 @@ internal fun resolveNovelChapterRowIndex(
             is NovelChapterDisplayRow.ChapterVariant -> row.chapter.id == targetChapterId
         }
     }
+}
+
+internal fun resolveNovelChapterRowIndex(
+    chapters: List<NovelChapter>,
+    expandedGroupKeys: Set<Long>,
+    groupedByChapter: Boolean,
+    targetChapterId: Long,
+): Int {
+    val rows = resolveNovelChapterDisplayData(
+        chapters = chapters,
+        groupedByChapter = groupedByChapter,
+        expandedGroupKeys = expandedGroupKeys,
+    ).displayRows
+    return resolveNovelChapterRowIndex(
+        rows = rows,
+        targetChapterId = targetChapterId,
+    )
 }
 
 internal fun resolveNovelChapterGroupKey(chapterNumber: Double): Long {

@@ -82,9 +82,8 @@ import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.formatChapterNumber
 import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterDisplayRow
-import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelBranchChapterRows
 import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterRowIndex
-import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelGroupedChapterRows
+import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterDisplayData
 import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelVisibleChapterRows
 import eu.kanade.tachiyomi.data.coil.staticBlur
 import eu.kanade.tachiyomi.source.model.SManga
@@ -223,9 +222,16 @@ fun NovelScreen(
 
     val chapters = state.processedChapters
     val groupedByChapter = selectedScanlator == null
-    val chapterGroups = remember(chapters) {
-        resolveNovelGroupedChapterRows(chapters, emptySet())
-            .filterIsInstance<NovelChapterDisplayRow.ChapterGroup>()
+    val chapterGroups = remember(chapters, groupedByChapter) {
+        if (groupedByChapter) {
+            resolveNovelChapterDisplayData(
+                chapters = chapters,
+                groupedByChapter = true,
+                expandedGroupKeys = emptySet(),
+            ).chapterGroups
+        } else {
+            emptyList()
+        }
     }
     val allGroupKeys = remember(chapterGroups) {
         chapterGroups.mapTo(mutableSetOf()) { it.groupKey }
@@ -244,13 +250,14 @@ fun NovelScreen(
     var expandedGroupKeys by remember(chapters, selectedScanlator) {
         mutableStateOf(initialExpandedGroupKeys)
     }
-    val displayRows = remember(chapters, selectedScanlator, expandedGroupKeys) {
-        if (groupedByChapter) {
-            resolveNovelGroupedChapterRows(chapters, expandedGroupKeys)
-        } else {
-            resolveNovelBranchChapterRows(chapters)
-        }
+    val chapterDisplayData = remember(chapters, selectedScanlator, expandedGroupKeys, groupedByChapter) {
+        resolveNovelChapterDisplayData(
+            chapters = chapters,
+            groupedByChapter = groupedByChapter,
+            expandedGroupKeys = expandedGroupKeys,
+        )
     }
+    val displayRows = chapterDisplayData.displayRows
     val totalChapterCount = if (state.chapterPageEnabled) {
         maxOf(state.chapters.size, state.chapterPageEstimatedTotal)
     } else if (groupedByChapter) {
@@ -296,12 +303,7 @@ fun NovelScreen(
             hasScrolledToTarget = true
             val targetChapterId = chapters.getOrNull(state.targetChapterIndex)?.id
             val targetIndex = targetChapterId?.let {
-                resolveNovelChapterRowIndex(
-                    chapters = chapters,
-                    expandedGroupKeys = expandedGroupKeys,
-                    groupedByChapter = groupedByChapter,
-                    targetChapterId = it,
-                )
+                resolveNovelChapterRowIndex(displayRows, it)
             }?.takeIf { it >= 0 }
                 ?.let { rowIndex ->
                     resolveEntryAutoJumpTargetIndex(

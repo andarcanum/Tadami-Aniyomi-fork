@@ -72,6 +72,31 @@ class NovelChapterDisplayRowTest {
         ) shouldBe 0
     }
 
+    @Test
+    fun `display data exposes grouped rows and target row lookup`() {
+        val targetGroupKey = resolveNovelChapterGroupKey(1.0)
+        val displayData = resolveNovelChapterDisplayData(
+            chapters = listOf(
+                chapter(id = 1L, chapterNumber = 1.0, sourceOrder = 10, scanlator = "Team A"),
+                chapter(id = 2L, chapterNumber = 1.0, sourceOrder = 20, scanlator = "Team B"),
+                chapter(id = 3L, chapterNumber = 2.0, sourceOrder = 30, scanlator = "Team C"),
+            ),
+            groupedByChapter = true,
+            expandedGroupKeys = setOf(targetGroupKey),
+        )
+
+        displayData.chapterGroups.map { it.groupKey } shouldBe listOf(
+            targetGroupKey,
+            resolveNovelChapterGroupKey(2.0),
+        )
+        displayData.displayRows.filterIsInstance<NovelChapterDisplayRow.ChapterVariant>().map { it.chapter.id } shouldBe
+            listOf(1L, 2L)
+        resolveNovelChapterRowIndex(
+            rows = displayData.displayRows,
+            targetChapterId = 2L,
+        ) shouldBe 0
+    }
+
     private fun chapter(
         id: Long,
         chapterNumber: Double,

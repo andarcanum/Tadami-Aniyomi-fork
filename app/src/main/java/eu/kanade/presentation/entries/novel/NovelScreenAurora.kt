@@ -93,9 +93,8 @@ import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.presentation.util.formatChapterNumber
 import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterDisplayRow
-import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelBranchChapterRows
 import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterRowIndex
-import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelGroupedChapterRows
+import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterDisplayData
 import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelVisibleChapterRows
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
@@ -158,9 +157,16 @@ fun NovelScreenAuroraImpl(
     val globalSearchQuery = remember(novel.title) { normalizeAuroraGlobalSearchQuery(novel.title) }
     val chapters = state.processedChapters
     val groupedByChapter = selectedScanlator == null
-    val chapterGroups = remember(chapters) {
-        resolveNovelGroupedChapterRows(chapters, emptySet())
-            .filterIsInstance<NovelChapterDisplayRow.ChapterGroup>()
+    val chapterGroups = remember(chapters, groupedByChapter) {
+        if (groupedByChapter) {
+            resolveNovelChapterDisplayData(
+                chapters = chapters,
+                groupedByChapter = true,
+                expandedGroupKeys = emptySet(),
+            ).chapterGroups
+        } else {
+            emptyList()
+        }
     }
     val allGroupKeys = remember(chapterGroups) {
         chapterGroups.mapTo(mutableSetOf()) { it.groupKey }
@@ -179,13 +185,14 @@ fun NovelScreenAuroraImpl(
     var expandedGroupKeys by remember(chapters, selectedScanlator) {
         mutableStateOf(initialExpandedGroupKeys)
     }
-    val displayRows = remember(chapters, selectedScanlator, expandedGroupKeys, groupedByChapter) {
-        if (groupedByChapter) {
-            resolveNovelGroupedChapterRows(chapters, expandedGroupKeys)
-        } else {
-            resolveNovelBranchChapterRows(chapters)
-        }
+    val chapterDisplayData = remember(chapters, selectedScanlator, expandedGroupKeys, groupedByChapter) {
+        resolveNovelChapterDisplayData(
+            chapters = chapters,
+            groupedByChapter = groupedByChapter,
+            expandedGroupKeys = expandedGroupKeys,
+        )
     }
+    val displayRows = chapterDisplayData.displayRows
     val listChapterCount = if (groupedByChapter) chapterGroups.size else chapters.size
     val totalChapterCount = if (state.chapterPageEnabled) {
         maxOf(state.chapters.size, state.chapterPageEstimatedTotal)
@@ -247,9 +254,8 @@ fun NovelScreenAuroraImpl(
         targetChapterIndex = state.targetChapterIndex,
         chaptersExpanded = chaptersExpanded,
         listChapterCount = listChapterCount,
+        displayRows = displayRows,
         chapters = chapters,
-        expandedGroupKeys = expandedGroupKeys,
-        groupedByChapter = groupedByChapter,
         isAutoJumpToNextEnabled = isAutoJumpToNextEnabled,
         restoredScrollIndex = state.scrollIndex,
         listState = lazyListState,
@@ -359,9 +365,8 @@ fun NovelScreenAuroraImpl(
                             targetChapterIndex = state.targetChapterIndex,
                             chaptersExpanded = chaptersExpanded,
                             listChapterCount = listChapterCount,
+                            displayRows = displayRows,
                             chapters = chapters,
-                            expandedGroupKeys = expandedGroupKeys,
-                            groupedByChapter = groupedByChapter,
                             isAutoJumpToNextEnabled = isAutoJumpToNextEnabled,
                             restoredScrollIndex = state.scrollIndex,
                             listState = chapterListState,
@@ -1319,6 +1324,24 @@ internal fun shouldAutoExpandAuroraNovelChaptersListForFastScroll(
 }
 
 internal fun resolveNovelAuroraTargetScrollIndex(
+    displayRows: List<NovelChapterDisplayRow>,
+    chapters: List<NovelChapter>,
+    targetChapterIndex: Int,
+    isAutoJumpToNextEnabled: Boolean,
+    restoredScrollIndex: Int,
+): Int? {
+    val targetChapterId = chapters.getOrNull(targetChapterIndex)?.id ?: return null
+    val rowIndex = resolveNovelChapterRowIndex(displayRows, targetChapterId)
+    if (rowIndex < 0) return null
+
+    return resolveEntryAutoJumpTargetIndex(
+        enabled = isAutoJumpToNextEnabled,
+        targetIndex = rowIndex,
+        restoredScrollIndex = restoredScrollIndex,
+    )
+}
+
+internal fun resolveNovelAuroraTargetScrollIndex(
     chapters: List<NovelChapter>,
     targetChapterIndex: Int,
     expandedGroupKeys: Set<Long>,
@@ -1326,18 +1349,16 @@ internal fun resolveNovelAuroraTargetScrollIndex(
     isAutoJumpToNextEnabled: Boolean,
     restoredScrollIndex: Int,
 ): Int? {
-    val targetChapterId = chapters.getOrNull(targetChapterIndex)?.id ?: return null
-    val rowIndex = resolveNovelChapterRowIndex(
+    val displayRows = resolveNovelChapterDisplayData(
         chapters = chapters,
-        expandedGroupKeys = expandedGroupKeys,
         groupedByChapter = groupedByChapter,
-        targetChapterId = targetChapterId,
-    )
-    if (rowIndex < 0) return null
-
-    return resolveEntryAutoJumpTargetIndex(
-        enabled = isAutoJumpToNextEnabled,
-        targetIndex = rowIndex,
+        expandedGroupKeys = expandedGroupKeys,
+    ).displayRows
+    return resolveNovelAuroraTargetScrollIndex(
+        displayRows = displayRows,
+        chapters = chapters,
+        targetChapterIndex = targetChapterIndex,
+        isAutoJumpToNextEnabled = isAutoJumpToNextEnabled,
         restoredScrollIndex = restoredScrollIndex,
     )
 }
@@ -1373,9 +1394,8 @@ private fun NovelAuroraTargetAutoScrollEffect(
     targetChapterIndex: Int,
     chaptersExpanded: Boolean,
     listChapterCount: Int,
+    displayRows: List<NovelChapterDisplayRow>,
     chapters: List<NovelChapter>,
-    expandedGroupKeys: Set<Long>,
-    groupedByChapter: Boolean,
     isAutoJumpToNextEnabled: Boolean,
     restoredScrollIndex: Int,
     listState: LazyListState,
@@ -1385,8 +1405,7 @@ private fun NovelAuroraTargetAutoScrollEffect(
     LaunchedEffect(
         targetChapterIndex,
         chaptersExpanded,
-        groupedByChapter,
-        expandedGroupKeys,
+        displayRows,
         listChapterCount,
     ) {
         if (!shouldAutoJumpToNovelAuroraTarget(hasScrolledToTarget, chaptersExpanded, listChapterCount)) {
@@ -1395,10 +1414,9 @@ private fun NovelAuroraTargetAutoScrollEffect(
 
         hasScrolledToTarget = true
         val targetIndex = resolveNovelAuroraTargetScrollIndex(
+            displayRows = displayRows,
             chapters = chapters,
             targetChapterIndex = targetChapterIndex,
-            expandedGroupKeys = expandedGroupKeys,
-            groupedByChapter = groupedByChapter,
             isAutoJumpToNextEnabled = isAutoJumpToNextEnabled,
             restoredScrollIndex = restoredScrollIndex,
         )

@@ -183,6 +183,7 @@ class NovelReaderScreenModel(
     private var initialProgressIndex: Int = 0
     private var hasProgressChanged: Boolean = false
     private var chapterReadStartTimeMs: Long = System.currentTimeMillis()
+    private var pendingHistoryReadDurationMs: Long = 0L
     private var nextChapterPrefetchJob: Job? = null
     private var hasTriggeredNextChapterPrefetch: Boolean = false
     private var nextChapterGeminiPrefetchJob: Job? = null
@@ -778,7 +779,10 @@ class NovelReaderScreenModel(
             }
 
             val now = System.currentTimeMillis()
-            saveHistorySnapshot(nextUpdate.chapterId, nextUpdate.sessionReadDurationMs)
+            pendingHistoryReadDurationMs += nextUpdate.sessionReadDurationMs.coerceAtLeast(0L)
+            if (nextUpdate.emitReadEvent) {
+                flushPendingHistorySnapshot(nextUpdate.chapterId)
+            }
             chapterReadStartTimeMs = now
         }
     }
@@ -1010,6 +1014,16 @@ class NovelReaderScreenModel(
     }
 
     override fun onDispose() {
+        val chapterId = currentChapter?.id
+        if (chapterId != null) {
+            val finalReadDurationMs = (System.currentTimeMillis() - chapterReadStartTimeMs).coerceAtLeast(0L)
+            screenModelScope.launch(NonCancellable) {
+                flushPendingHistorySnapshot(
+                    chapterId = chapterId,
+                    additionalReadDurationMs = finalReadDurationMs,
+                )
+            }
+        }
         settingsJob?.cancel()
         nextChapterPrefetchJob?.cancel()
         nextChapterGeminiPrefetchJob?.cancel()
@@ -2712,6 +2726,17 @@ class NovelReaderScreenModel(
         }.onFailure { error ->
             logcat(LogPriority.ERROR, error) { "Failed to save novel history snapshot" }
         }
+    }
+
+    private suspend fun flushPendingHistorySnapshot(
+        chapterId: Long,
+        additionalReadDurationMs: Long = 0L,
+    ) {
+        val readDurationMs = (pendingHistoryReadDurationMs + additionalReadDurationMs).coerceAtLeast(0L)
+        if (readDurationMs <= 0L) return
+
+        pendingHistoryReadDurationMs = 0L
+        saveHistorySnapshot(chapterId, readDurationMs)
     }
 
     sealed interface State {
