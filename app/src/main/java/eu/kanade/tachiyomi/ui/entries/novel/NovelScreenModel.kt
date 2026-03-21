@@ -38,12 +38,12 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -118,8 +118,11 @@ class NovelScreenModel(
     private val application: Application? = runCatching { Injekt.get<Application>() }.getOrNull(),
     private val novelDownloadManager: NovelDownloadManager = NovelDownloadManager(),
     private val novelTranslatedDownloadManager: NovelTranslatedDownloadManager = NovelTranslatedDownloadManager(),
-    private val downloadCacheChanges: Flow<Unit> = runCatching { Injekt.get<NovelDownloadCache>().changes }.getOrElse { emptyFlow() },
-    private val downloadQueueState: Flow<eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState> = NovelDownloadQueueManager.state,
+    private val downloadCacheChanges: Flow<Unit> = runCatching {
+        Injekt.get<NovelDownloadCache>().changes
+    }.getOrElse { emptyFlow() },
+    private val downloadQueueState:
+    Flow<eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState> = NovelDownloadQueueManager.state,
     private val resolveDownloadedChapterIds: (Novel, List<NovelChapter>) -> Set<Long> = { novel, chapters ->
         novelDownloadManager.getDownloadedChapterIds(novel, chapters)
     },

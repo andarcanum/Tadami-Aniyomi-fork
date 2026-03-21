@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.reader.novel.setting
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
@@ -787,7 +788,7 @@ class NovelReaderPreferences(
                 values[15] as Boolean,
                 values[16] as Float,
             )
-        }
+        }.distinctUntilChanged()
 
         val themeFlow = combine(
             theme().changes(),
@@ -817,7 +818,7 @@ class NovelReaderPreferences(
                 values[10] as Boolean,
                 values[11] as List<NovelReaderColorTheme>,
             )
-        }
+        }.distinctUntilChanged()
 
         val navigationFlow = combine(
             useVolumeButtons().changes(),
@@ -849,7 +850,7 @@ class NovelReaderPreferences(
                 values[11] as Int,
                 values[12] as Boolean,
             )
-        }
+        }.distinctUntilChanged()
 
         val accessibilityFlow = combine(
             fullScreenMode().changes(),
@@ -871,14 +872,14 @@ class NovelReaderPreferences(
                 showWordCount = values[6] as Boolean,
                 bionicReading = values[7] as Boolean,
             )
-        }
+        }.distinctUntilChanged()
 
         val advancedFlow = combine(
             customCSS().changes(),
             customJS().changes(),
         ) { customCSS, customJS ->
             AdvancedSettings(customCSS, customJS)
-        }
+        }.distinctUntilChanged()
 
         val geminiFlow = combine(
             geminiEnabled().changes(),
@@ -950,7 +951,7 @@ class NovelReaderPreferences(
                 deepSeekApiKey = values[31] as String,
                 deepSeekModel = values[32] as String,
             )
-        }
+        }.distinctUntilChanged()
 
         return combine(
             displayFlow,
@@ -1063,7 +1064,7 @@ class NovelReaderPreferences(
                 deepSeekApiKey = override?.deepSeekApiKey ?: gemini.deepSeekApiKey,
                 deepSeekModel = override?.deepSeekModel ?: gemini.deepSeekModel,
             )
-        }
+        }.distinctUntilChanged()
     }
 
     // Вспомогательные data classes для группировки в Flow

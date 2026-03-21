@@ -1818,7 +1818,10 @@ class NovelReaderScreenModelTest {
 
         override suspend fun removeChaptersWithIds(chapterIds: List<Long>) = Unit
 
-        override suspend fun getChapterByNovelId(novelId: Long, applyScanlatorFilter: Boolean): List<NovelChapter> = emptyList()
+        override suspend fun getChapterByNovelId(
+            novelId: Long,
+            applyScanlatorFilter: Boolean,
+        ): List<NovelChapter> = emptyList()
 
         override suspend fun getScanlatorsByNovelId(novelId: Long): List<String> = emptyList()
 

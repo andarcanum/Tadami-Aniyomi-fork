@@ -79,6 +79,7 @@ import tachiyomi.presentation.core.i18n.stringResource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import android.graphics.Color as AndroidColor
 
@@ -348,13 +349,13 @@ private fun GeneralTab(
         )
         LnReaderSliderRow(
             label = stringResource(AYMR.strings.novel_reader_auto_scroll_speed),
-            valueText = intervalToAutoScrollSpeed(settings.autoScrollInterval).toString(),
-            value = intervalToAutoScrollSpeed(settings.autoScrollInterval).toFloat(),
+            valueText = { it.roundToInt().toString() },
+            committedValue = intervalToAutoScrollSpeed(settings.autoScrollInterval).toFloat(),
             range = 1f..100f,
             steps = 98,
             enabled = true,
-            onChange = {
-                val speed = it.toInt().coerceIn(1, 100)
+            onCommit = {
+                val speed = it.roundToInt().coerceIn(1, 100)
                 update(
                     autoScrollSpeedToInterval(speed),
                     { o, v -> o.copy(autoScrollInterval = v) },
@@ -364,13 +365,15 @@ private fun GeneralTab(
         )
         LnReaderSliderRow(
             label = stringResource(AYMR.strings.novel_reader_auto_scroll_offset),
-            valueText = settings.autoScrollOffset.toString(),
-            value = settings.autoScrollOffset.toFloat(),
+            valueText = { it.roundToInt().toString() },
+            committedValue = settings.autoScrollOffset.toFloat(),
             range = 0f..2000f,
             steps = 1999,
             enabled = true,
-            onChange = {
-                update(it.toInt(), { o, v -> o.copy(autoScrollOffset = v) }, { preferences.autoScrollOffset().set(it) })
+            onCommit = {
+                update(it.roundToInt(), { o, v ->
+                    o.copy(autoScrollOffset = v)
+                }, { preferences.autoScrollOffset().set(it) })
             },
         )
         SwitchPreferenceWidget(
@@ -826,29 +829,31 @@ private fun ReadingTab(
 
         LnReaderSliderRow(
             label = stringResource(AYMR.strings.novel_reader_font_size),
-            valueText = "${settings.fontSize}sp",
-            value = settings.fontSize.toFloat(),
+            valueText = { "${it.roundToInt()}sp" },
+            committedValue = settings.fontSize.toFloat(),
             range = 12f..28f,
             steps = 15,
-            onChange = { update(it.toInt(), { o, v -> o.copy(fontSize = v) }, { preferences.fontSize().set(it) }) },
+            onCommit = {
+                update(it.roundToInt(), { o, v -> o.copy(fontSize = v) }, { preferences.fontSize().set(it) })
+            },
         )
         LnReaderSliderRow(
             label = stringResource(AYMR.strings.novel_reader_line_height),
-            valueText = String.format("%.1f", settings.lineHeight),
-            value = settings.lineHeight,
+            valueText = { String.format("%.1f", it) },
+            committedValue = settings.lineHeight,
             range = 1.2f..2f,
             steps = 7,
-            onChange = { update(it, { o, v -> o.copy(lineHeight = v) }, { preferences.lineHeight().set(it) }) },
+            onCommit = { update(it, { o, v -> o.copy(lineHeight = v) }, { preferences.lineHeight().set(it) }) },
         )
         LnReaderSliderRow(
             label = stringResource(AYMR.strings.novel_reader_paragraph_spacing),
-            valueText = "${settings.paragraphSpacing}dp",
-            value = settings.paragraphSpacing.toFloat(),
+            valueText = { "${it.roundToInt()}dp" },
+            committedValue = settings.paragraphSpacing.toFloat(),
             range = 0f..32f,
             steps = 31,
-            onChange = {
+            onCommit = {
                 update(
-                    it.toInt(),
+                    it.roundToInt(),
                     { o, v -> o.copy(paragraphSpacingDp = v) },
                     { preferences.paragraphSpacing().set(it) },
                 )
@@ -856,11 +861,11 @@ private fun ReadingTab(
         )
         LnReaderSliderRow(
             label = stringResource(AYMR.strings.novel_reader_margins),
-            valueText = "${settings.margin}dp",
-            value = settings.margin.toFloat(),
+            valueText = { "${it.roundToInt()}dp" },
+            committedValue = settings.margin.toFloat(),
             range = 0f..50f,
             steps = 49,
-            onChange = { update(it.toInt(), { o, v -> o.copy(margin = v) }, { preferences.margin().set(it) }) },
+            onCommit = { update(it.roundToInt(), { o, v -> o.copy(margin = v) }, { preferences.margin().set(it) }) },
         )
 
         AlignButtonsRow(
@@ -923,31 +928,31 @@ private fun ReadingTab(
                 )
                 LnReaderSliderRow(
                     label = stringResource(AYMR.strings.novel_reader_text_shadow_blur),
-                    valueText = String.format("%.1f", settings.textShadowBlur),
-                    value = settings.textShadowBlur,
+                    valueText = { String.format("%.1f", it) },
+                    committedValue = settings.textShadowBlur,
                     range = 0f..20f,
                     steps = 39,
-                    onChange = {
+                    onCommit = {
                         update(it, { o, v -> o.copy(textShadowBlur = v) }, { preferences.textShadowBlur().set(it) })
                     },
                 )
                 LnReaderSliderRow(
                     label = stringResource(AYMR.strings.novel_reader_text_shadow_x),
-                    valueText = String.format("%.1f", settings.textShadowX),
-                    value = settings.textShadowX,
+                    valueText = { String.format("%.1f", it) },
+                    committedValue = settings.textShadowX,
                     range = -20f..20f,
                     steps = 79,
-                    onChange = {
+                    onCommit = {
                         update(it, { o, v -> o.copy(textShadowX = v) }, { preferences.textShadowX().set(it) })
                     },
                 )
                 LnReaderSliderRow(
                     label = stringResource(AYMR.strings.novel_reader_text_shadow_y),
-                    valueText = String.format("%.1f", settings.textShadowY),
-                    value = settings.textShadowY,
+                    valueText = { String.format("%.1f", it) },
+                    committedValue = settings.textShadowY,
                     range = -20f..20f,
                     steps = 79,
-                    onChange = {
+                    onCommit = {
                         update(it, { o, v -> o.copy(textShadowY = v) }, { preferences.textShadowY().set(it) })
                     },
                 )
@@ -1069,11 +1074,11 @@ private fun ReadingTab(
             }
             LnReaderSliderRow(
                 label = stringResource(AYMR.strings.novel_reader_native_texture_strength),
-                valueText = "${settings.nativeTextureStrengthPercent}%",
-                value = settings.nativeTextureStrengthPercent.toFloat(),
+                valueText = { "${it.roundToInt()}%" },
+                committedValue = settings.nativeTextureStrengthPercent.toFloat(),
                 range = 0f..200f,
                 steps = 199,
-                onChange = { value ->
+                onCommit = { value ->
                     val rounded = value.roundToInt()
                     update(
                         rounded,
@@ -1467,11 +1472,11 @@ private fun ReadingTab(
         if (settings.pageEdgeShadow) {
             LnReaderSliderRow(
                 label = stringResource(AYMR.strings.novel_reader_page_edge_shadow_alpha),
-                valueText = "${(settings.pageEdgeShadowAlpha * 100).toInt()}%",
-                value = settings.pageEdgeShadowAlpha,
+                valueText = { "${(it * 100).roundToInt()}%" },
+                committedValue = settings.pageEdgeShadowAlpha,
                 range = 0.05f..1f,
                 steps = 18,
-                onChange = {
+                onCommit = {
                     update(it, { o, v ->
                         o.copy(pageEdgeShadowAlpha = v)
                     }, { preferences.pageEdgeShadowAlpha().set(it) })
@@ -1484,13 +1489,26 @@ private fun ReadingTab(
 @Composable
 private fun LnReaderSliderRow(
     label: String,
-    valueText: String,
-    value: Float,
+    valueText: (Float) -> String,
+    committedValue: Float,
     range: ClosedFloatingPointRange<Float>,
     steps: Int,
     enabled: Boolean = true,
-    onChange: (Float) -> Unit,
+    onCommit: (Float) -> Unit,
 ) {
+    var draftValue by rememberSaveable { mutableStateOf(committedValue) }
+    var previousCommittedValue by rememberSaveable { mutableStateOf(committedValue) }
+
+    LaunchedEffect(committedValue) {
+        val synced = syncLnReaderSliderDraft(
+            committedValue = committedValue,
+            previousCommittedValue = previousCommittedValue,
+            currentDraftValue = draftValue,
+        )
+        draftValue = synced.draftValue
+        previousCommittedValue = synced.committedValue
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1499,14 +1517,20 @@ private fun LnReaderSliderRow(
         ) {
             Text(text = label, style = MaterialTheme.typography.bodyMedium)
             Text(
-                text = valueText,
+                text = valueText(draftValue),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Slider(
-            value = value,
-            onValueChange = onChange,
+            value = draftValue,
+            onValueChange = { draftValue = it },
+            onValueChangeFinished = {
+                resolveLnReaderSliderCommitValue(
+                    committedValue = committedValue,
+                    draftValue = draftValue,
+                )?.let(onCommit)
+            },
             enabled = enabled,
             valueRange = range,
             steps = steps,
@@ -1517,6 +1541,36 @@ private fun LnReaderSliderRow(
             ),
         )
     }
+}
+
+internal data class LnReaderSliderDraftState(
+    val committedValue: Float,
+    val draftValue: Float,
+)
+
+internal fun syncLnReaderSliderDraft(
+    committedValue: Float,
+    previousCommittedValue: Float,
+    currentDraftValue: Float,
+): LnReaderSliderDraftState {
+    return if (abs(committedValue - previousCommittedValue) > 0.0001f) {
+        LnReaderSliderDraftState(
+            committedValue = committedValue,
+            draftValue = committedValue,
+        )
+    } else {
+        LnReaderSliderDraftState(
+            committedValue = previousCommittedValue,
+            draftValue = currentDraftValue,
+        )
+    }
+}
+
+internal fun resolveLnReaderSliderCommitValue(
+    committedValue: Float,
+    draftValue: Float,
+): Float? {
+    return draftValue.takeIf { abs(it - committedValue) > 0.0001f }
 }
 
 @Composable

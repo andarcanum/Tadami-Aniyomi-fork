@@ -2,8 +2,14 @@ package eu.kanade.tachiyomi.ui.reader.novel.setting
 
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
 import tachiyomi.core.common.preference.Preference
@@ -408,6 +414,47 @@ class NovelReaderPreferencesTest {
         prefs.migrateLegacyBackgroundSelectionIfNeeded()
 
         prefs.customBackgroundId().get() shouldBe legacyPath
+    }
+
+    @Test
+    fun `settings flow skips duplicate emissions when source override masks global changes`() = runTest {
+        val prefs = createPrefs()
+        val sourceId = 123L
+        prefs.enableSourceOverride(sourceId)
+
+        val initialSettings = prefs.settingsFlow(sourceId).first()
+        val collectedDeferred = async {
+            withTimeoutOrNull(100) {
+                prefs.settingsFlow(sourceId)
+                    .drop(1)
+                    .first()
+            }
+        }
+        runCurrent()
+
+        prefs.fontSize().set(initialSettings.fontSize + 3)
+
+        collectedDeferred.await() shouldBe null
+    }
+
+    @Test
+    fun `settings flow skips duplicate emissions for unrelated source override rewrites`() = runTest {
+        val prefs = createPrefs()
+        val trackedSourceId = 123L
+        val otherSourceId = 456L
+        val initialSettings = prefs.settingsFlow(trackedSourceId).first()
+        val collectedDeferred = async {
+            withTimeoutOrNull(100) {
+                prefs.settingsFlow(trackedSourceId)
+                    .drop(1)
+                    .first()
+            }
+        }
+        runCurrent()
+
+        prefs.enableSourceOverride(otherSourceId)
+
+        collectedDeferred.await() shouldBe null
     }
 
     private class FakePreferenceStore : PreferenceStore {
