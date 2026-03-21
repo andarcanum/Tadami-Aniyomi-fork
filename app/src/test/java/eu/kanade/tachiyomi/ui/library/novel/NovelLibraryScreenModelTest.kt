@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.library.novel
 import android.content.Context
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
+import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
 import eu.kanade.tachiyomi.source.model.SManga
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
@@ -16,8 +17,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -37,7 +38,6 @@ import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.library.novel.model.NovelLibrarySort
 import tachiyomi.domain.library.service.LibraryPreferences
-import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
 
 class NovelLibraryScreenModelTest {
 
@@ -262,7 +262,9 @@ class NovelLibraryScreenModelTest {
     }
 
     @Test
-    fun `library updates do not wait on download dispatcher when downloaded filter is disabled`() = runTest(testDispatcher) {
+    fun `library updates do not wait on download dispatcher when downloaded filter is disabled`() = runTest(
+        testDispatcher,
+    ) {
         val first = libraryNovel(id = 1L, title = "First Novel")
         val second = libraryNovel(id = 2L, title = "Second Story")
         libraryFlow.value = listOf(first, second)

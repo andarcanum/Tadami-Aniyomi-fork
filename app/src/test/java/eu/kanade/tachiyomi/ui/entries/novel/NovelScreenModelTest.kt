@@ -8,6 +8,7 @@ import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.items.novelchapter.interactor.GetAvailableNovelScanlators
 import eu.kanade.domain.items.novelchapter.interactor.GetNovelScanlatorChapterCounts
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import io.kotest.matchers.shouldBe
@@ -43,7 +44,6 @@ import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.track.novel.interactor.GetNovelTracks
 import tachiyomi.domain.track.novel.model.NovelTrack
-import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState
 
 class NovelScreenModelTest {
 
@@ -404,7 +404,9 @@ class NovelScreenModelTest {
                 awaitResumeScreenModel(screenModel)
                 downloadCacheChanges.emit(Unit)
                 withTimeout(1_000) {
-                    while ((screenModel.state.value as? NovelScreenModel.State.Success)?.downloadedChapterIds != setOf(1L)) {
+                    while ((screenModel.state.value as? NovelScreenModel.State.Success)?.downloadedChapterIds !=
+                        setOf(1L)
+                    ) {
                         yield()
                     }
                 }
@@ -422,9 +424,9 @@ class NovelScreenModelTest {
 
                 withTimeout(1_000) {
                     while ((screenModel.state.value as? NovelScreenModel.State.Success)
-                        ?.chapters
-                        ?.firstOrNull { it.id == 2L }
-                        ?.read != true
+                            ?.chapters
+                            ?.firstOrNull { it.id == 2L }
+                            ?.read != true
                     ) {
                         yield()
                     }

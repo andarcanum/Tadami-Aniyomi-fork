@@ -1,7 +1,7 @@
 package eu.kanade.presentation.more.settings
 
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import dev.icerock.moko.resources.StringResource
 import tachiyomi.presentation.core.i18n.stringResource

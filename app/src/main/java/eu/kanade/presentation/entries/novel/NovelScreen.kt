@@ -82,13 +82,13 @@ import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.novel.sourceAwareNovelCoverModel
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.formatChapterNumber
-import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterDisplayRow
-import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterRowIndex
-import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterDisplayData
-import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelVisibleChapterRows
 import eu.kanade.tachiyomi.data.coil.staticBlur
 import eu.kanade.tachiyomi.source.model.SManga
+import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterDisplayRow
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
+import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterDisplayData
+import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterRowIndex
+import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelVisibleChapterRows
 import me.saket.swipe.SwipeableActionsBox
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
@@ -1292,7 +1292,7 @@ fun NovelScreen(
                         }
                     }
                 }
-                */
+                 */
                 if (visibleChapterCount < visibleTopLevelCount) {
                     item {
                         Box(

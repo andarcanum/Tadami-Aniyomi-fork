@@ -7,9 +7,9 @@ import androidx.compose.runtime.setValue
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.base.BasePreferences
+import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
-import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
@@ -23,15 +23,15 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tachiyomi.core.common.preference.CheckboxState
 import tachiyomi.core.common.preference.TriState
@@ -98,7 +98,13 @@ class NovelLibraryScreenModel(
                 flow3 = getFilterPreferencesFlow(),
                 flow4 = getSortPreferencesFlow(),
                 flow5 = downloadCacheChanges.onStart { emit(Unit) },
-                transform = { query: String?, novels: List<LibraryNovel>, filterPrefs: FilterPreferences, sortPrefs: SortPreferences, _: Unit ->
+                transform = {
+                        query: String?,
+                        novels: List<LibraryNovel>,
+                        filterPrefs: FilterPreferences,
+                        sortPrefs: SortPreferences,
+                        _: Unit,
+                    ->
                     RecomputeInput(
                         query = query,
                         novels = novels,

@@ -1,6 +1,7 @@
 package eu.kanade.presentation.more.settings
 
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -11,9 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
@@ -142,7 +142,7 @@ internal fun AuroraSettingsTopBarChrome(
         modifier = modifier
             .fillMaxWidth()
             .clipToBounds()
-            .onSizeChanged { size -> 
+            .onSizeChanged { size ->
                 scrollBehavior.state.heightOffsetLimit = resolveAuroraSettingsTopBarHeightOffsetLimit(
                     size.height,
                 )

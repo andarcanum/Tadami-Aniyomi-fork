@@ -130,8 +130,8 @@ import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.category.novel.interactor.GetVisibleNovelCategories
 import tachiyomi.domain.category.novel.model.NovelCategory
 import tachiyomi.domain.entries.anime.model.Anime
-import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
 import tachiyomi.domain.entries.manga.model.Manga
+import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
 import tachiyomi.domain.items.episode.model.Episode
 import tachiyomi.domain.library.anime.LibraryAnime
 import tachiyomi.domain.library.manga.LibraryManga
