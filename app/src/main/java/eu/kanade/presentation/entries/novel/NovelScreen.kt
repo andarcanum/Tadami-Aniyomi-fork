@@ -222,7 +222,7 @@ fun NovelScreen(
     val auroraColors = AuroraTheme.colors
 
     val chapters = state.processedChapters
-    val groupedByChapter = selectedScanlator == null
+    val groupedByChapter = false
     val chapterGroups = remember(chapters, groupedByChapter) {
         if (groupedByChapter) {
             resolveNovelChapterDisplayData(
@@ -719,6 +719,7 @@ fun NovelScreen(
                             scanlatorChapterCounts = scanlatorChapterCounts,
                             selectedScanlator = selectedScanlator,
                             onScanlatorSelected = onScanlatorSelected,
+                            showAllOption = false,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(

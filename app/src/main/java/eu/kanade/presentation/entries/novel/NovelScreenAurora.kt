@@ -156,7 +156,7 @@ fun NovelScreenAuroraImpl(
     val novel = state.novel
     val globalSearchQuery = remember(novel.title) { normalizeAuroraGlobalSearchQuery(novel.title) }
     val chapters = state.processedChapters
-    val groupedByChapter = selectedScanlator == null
+    val groupedByChapter = false
     val chapterGroups = remember(chapters, groupedByChapter) {
         if (groupedByChapter) {
             resolveNovelChapterDisplayData(
@@ -451,6 +451,7 @@ fun NovelScreenAuroraImpl(
                                             scanlatorChapterCounts = scanlatorChapterCounts,
                                             selectedScanlator = selectedScanlator,
                                             onScanlatorSelected = onScanlatorSelected,
+                                            showAllOption = false,
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -901,6 +902,7 @@ fun NovelScreenAuroraImpl(
                                 scanlatorChapterCounts = scanlatorChapterCounts,
                                 selectedScanlator = selectedScanlator,
                                 onScanlatorSelected = onScanlatorSelected,
+                                showAllOption = false,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .auroraCenteredMaxWidth(contentMaxWidthDp)

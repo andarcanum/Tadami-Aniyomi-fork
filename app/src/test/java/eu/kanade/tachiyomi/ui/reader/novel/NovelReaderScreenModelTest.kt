@@ -1550,6 +1550,57 @@ class NovelReaderScreenModelTest {
     }
 
     @Test
+    fun `computes previous and next chapter ids from the active branch subset`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 992001L, source = 992010L, title = "Novel")
+            val selectedBranchChapter1 = NovelChapter.create().copy(
+                id = 992101L,
+                novelId = novel.id,
+                name = "Chapter 1 - SeRa",
+                url = "https://example.org/ch1-sera",
+                sourceOrder = 10L,
+                chapterNumber = 1.0,
+                scanlator = "SeRa",
+            )
+            val selectedBranchChapter2 = NovelChapter.create().copy(
+                id = 992102L,
+                novelId = novel.id,
+                name = "Chapter 2 - SeRa",
+                url = "https://example.org/ch2-sera",
+                sourceOrder = 20L,
+                chapterNumber = 2.0,
+                scanlator = "SeRa",
+            )
+            val chapterRepo = FakeNovelChapterRepository(
+                chapter = selectedBranchChapter1,
+                chaptersByNovel = listOf(selectedBranchChapter1, selectedBranchChapter2),
+            )
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = selectedBranchChapter1.id,
+                novelChapterRepository = chapterRepo,
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            val state = screenModel.state.value
+            state.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            state.previousChapterId shouldBe null
+            state.nextChapterId shouldBe selectedBranchChapter2.id
+            chapterRepo.lastApplyScanlatorFilter shouldBe true
+        }
+    }
+
+    @Test
     fun `prefetches next chapter after reaching 50 percent progress when enabled`() {
         runBlocking {
             val novel = Novel.create().copy(id = 991001L, source = 991010L, title = "Novel")
