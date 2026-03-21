@@ -1,0 +1,19 @@
+DROP TRIGGER IF EXISTS update_last_modified_at_novel_chapters;
+CREATE TRIGGER update_last_modified_at_novel_chapters
+AFTER UPDATE OF novel_id, url, name, scanlator, read, bookmark, last_page_read, chapter_number, source_order, date_fetch, date_upload ON novel_chapters
+FOR EACH ROW
+BEGIN
+  UPDATE novel_chapters
+  SET last_modified_at = strftime('%s', 'now')
+  WHERE _id = new._id;
+END;
+
+DROP TRIGGER IF EXISTS update_last_modified_at_novels;
+CREATE TRIGGER update_last_modified_at_novels
+AFTER UPDATE OF source, url, author, description, genre, title, status, thumbnail_url, favorite, last_update, next_update, initialized, viewer, chapter_flags, cover_last_modified, date_added, update_strategy, calculate_interval ON novels
+FOR EACH ROW
+BEGIN
+  UPDATE novels
+  SET last_modified_at = strftime('%s', 'now')
+  WHERE _id = new._id;
+END;

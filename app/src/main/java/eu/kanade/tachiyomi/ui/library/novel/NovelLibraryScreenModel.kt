@@ -7,6 +7,8 @@ import androidx.compose.runtime.setValue
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.base.BasePreferences
+import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager
@@ -23,8 +25,13 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import tachiyomi.core.common.preference.CheckboxState
 import tachiyomi.core.common.preference.TriState
@@ -57,10 +64,12 @@ class NovelLibraryScreenModel(
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
     private val novelDownloadManager: NovelDownloadManager = NovelDownloadManager(),
     private val novelTranslatedDownloadManager: NovelTranslatedDownloadManager = NovelTranslatedDownloadManager(),
+    private val downloadCacheChanges: Flow<Unit> = Injekt.get<NovelDownloadCache>().changes,
     private val hasDownloadedChapters: (tachiyomi.domain.entries.novel.model.Novel) -> Boolean = {
-        NovelDownloadManager().hasAnyDownloadedChapter(it)
+        Injekt.get<NovelDownloadCache>().hasAnyDownloadedChapter(it)
     },
     private val downloadedIdsDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val searchDebounceMillis: Long = SEARCH_DEBOUNCE_MILLIS,
 ) : StateScreenModel<NovelLibraryScreenModel.State>(
     State(
         downloadedOnly = basePreferences.downloadedOnly().get(),
@@ -78,122 +87,68 @@ class NovelLibraryScreenModel(
 
     init {
         screenModelScope.launch {
-            getLibraryNovel.subscribe()
-                .collectLatest { novels ->
-                    val downloadedNovelIds = resolveDownloadedNovelIdsForFilter(
+            combine(
+                flow = state
+                    .map { screenState -> screenState.searchQuery }
+                    .debounce { query: String? ->
+                        if (query.isNullOrBlank()) 0L else searchDebounceMillis
+                    }
+                    .distinctUntilChanged(),
+                flow2 = getLibraryNovel.subscribe(),
+                flow3 = getFilterPreferencesFlow(),
+                flow4 = getSortPreferencesFlow(),
+                flow5 = downloadCacheChanges.onStart { emit(Unit) },
+                transform = { query: String?, novels: List<LibraryNovel>, filterPrefs: FilterPreferences, sortPrefs: SortPreferences, _: Unit ->
+                    RecomputeInput(
+                        query = query,
                         novels = novels,
-                        shouldResolve = state.value.effectiveDownloadedFilter != TriState.DISABLED,
+                        filterPreferences = filterPrefs,
+                        sortPreferences = sortPrefs,
+                    )
+                },
+            )
+                .collectLatest { input ->
+                    val effectiveDownloadedFilter = if (input.filterPreferences.downloadedOnly) {
+                        TriState.ENABLED_IS
+                    } else {
+                        input.filterPreferences.downloadedFilter
+                    }
+                    val downloadedNovelIds = resolveDownloadedNovelIdsForFilter(
+                        novels = input.novels,
+                        shouldResolve = effectiveDownloadedFilter != TriState.DISABLED,
+                    )
+                    val recomputed = RecomputedState(
+                        items = filterItems(
+                            novels = input.novels,
+                            query = input.query,
+                            downloadedFilter = effectiveDownloadedFilter,
+                            downloadedNovelIds = downloadedNovelIds,
+                            unreadFilter = input.filterPreferences.unreadFilter,
+                            startedFilter = input.filterPreferences.startedFilter,
+                            bookmarkedFilter = input.filterPreferences.bookmarkedFilter,
+                            completedFilter = input.filterPreferences.completedFilter,
+                            filterIntervalCustom = input.filterPreferences.filterIntervalCustom,
+                            sort = input.sortPreferences.sort,
+                            randomSortSeed = input.sortPreferences.randomSortSeed,
+                        ),
+                        downloadedNovelIds = downloadedNovelIds,
                     )
                     mutableState.update { current ->
                         current.copy(
                             isLoading = false,
-                            rawItems = novels,
-                            downloadedNovelIds = downloadedNovelIds,
-                            items = filterItems(
-                                novels = novels,
-                                query = current.searchQuery,
-                                downloadedFilter = current.effectiveDownloadedFilter,
-                                downloadedNovelIds = downloadedNovelIds,
-                                unreadFilter = current.unreadFilter,
-                                startedFilter = current.startedFilter,
-                                bookmarkedFilter = current.bookmarkedFilter,
-                                completedFilter = current.completedFilter,
-                                filterIntervalCustom = current.filterIntervalCustom,
-                                sort = current.sort,
-                                randomSortSeed = current.randomSortSeed,
-                            ),
-                        )
-                    }
-                }
-        }
-
-        screenModelScope.launch {
-            combine(
-                basePreferences.downloadedOnly().changes(),
-                libraryPreferences.filterDownloadedNovel().changes(),
-                libraryPreferences.filterUnreadNovel().changes(),
-                libraryPreferences.filterStartedNovel().changes(),
-                libraryPreferences.filterBookmarkedNovel().changes(),
-            ) { downloadedOnly, downloadedFilter, unreadFilter, startedFilter, bookmarkedFilter ->
-                FilterPreferences(
-                    downloadedOnly = downloadedOnly,
-                    downloadedFilter = downloadedFilter,
-                    unreadFilter = unreadFilter,
-                    startedFilter = startedFilter,
-                    bookmarkedFilter = bookmarkedFilter,
-                    completedFilter = TriState.DISABLED,
-                    filterIntervalCustom = TriState.DISABLED,
-                )
-            }
-                .combine(libraryPreferences.filterIntervalCustom().changes()) { prefs, filterIntervalCustom ->
-                    prefs.copy(filterIntervalCustom = filterIntervalCustom)
-                }
-                .combine(libraryPreferences.filterCompletedNovel().changes()) { prefs, completedFilter ->
-                    prefs.copy(completedFilter = completedFilter)
-                }
-                .collectLatest { prefs ->
-                    val effectiveDownloadedFilter = if (prefs.downloadedOnly) {
-                        TriState.ENABLED_IS
-                    } else {
-                        prefs.downloadedFilter
-                    }
-                    val downloadedNovelIds = resolveDownloadedNovelIdsForFilter(
-                        novels = state.value.rawItems,
-                        shouldResolve = effectiveDownloadedFilter != TriState.DISABLED,
-                    )
-                    mutableState.update { current ->
-                        current.copy(
-                            downloadedOnly = prefs.downloadedOnly,
-                            downloadedFilter = prefs.downloadedFilter,
-                            unreadFilter = prefs.unreadFilter,
-                            startedFilter = prefs.startedFilter,
-                            bookmarkedFilter = prefs.bookmarkedFilter,
-                            completedFilter = prefs.completedFilter,
-                            filterIntervalCustom = prefs.filterIntervalCustom,
-                            downloadedNovelIds = downloadedNovelIds,
-                            items = filterItems(
-                                novels = current.rawItems,
-                                query = current.searchQuery,
-                                downloadedFilter = effectiveDownloadedFilter,
-                                downloadedNovelIds = downloadedNovelIds,
-                                unreadFilter = prefs.unreadFilter,
-                                startedFilter = prefs.startedFilter,
-                                bookmarkedFilter = prefs.bookmarkedFilter,
-                                completedFilter = prefs.completedFilter,
-                                filterIntervalCustom = prefs.filterIntervalCustom,
-                                sort = current.sort,
-                                randomSortSeed = current.randomSortSeed,
-                            ),
-                        )
-                    }
-                }
-        }
-
-        screenModelScope.launch {
-            combine(
-                libraryPreferences.novelSortingMode().changes(),
-                libraryPreferences.randomNovelSortSeed().changes(),
-            ) { sort, randomSortSeed ->
-                sort to randomSortSeed
-            }
-                .collectLatest { (sort, randomSortSeed) ->
-                    mutableState.update { current ->
-                        current.copy(
-                            sort = sort,
-                            randomSortSeed = randomSortSeed,
-                            items = filterItems(
-                                novels = current.rawItems,
-                                query = current.searchQuery,
-                                downloadedFilter = current.effectiveDownloadedFilter,
-                                downloadedNovelIds = current.downloadedNovelIds,
-                                unreadFilter = current.unreadFilter,
-                                startedFilter = current.startedFilter,
-                                bookmarkedFilter = current.bookmarkedFilter,
-                                completedFilter = current.completedFilter,
-                                filterIntervalCustom = current.filterIntervalCustom,
-                                sort = sort,
-                                randomSortSeed = randomSortSeed,
-                            ),
+                            rawItems = input.novels,
+                            items = recomputed.items,
+                            searchQuery = input.query,
+                            downloadedOnly = input.filterPreferences.downloadedOnly,
+                            downloadedFilter = input.filterPreferences.downloadedFilter,
+                            unreadFilter = input.filterPreferences.unreadFilter,
+                            startedFilter = input.filterPreferences.startedFilter,
+                            bookmarkedFilter = input.filterPreferences.bookmarkedFilter,
+                            completedFilter = input.filterPreferences.completedFilter,
+                            filterIntervalCustom = input.filterPreferences.filterIntervalCustom,
+                            downloadedNovelIds = recomputed.downloadedNovelIds,
+                            sort = input.sortPreferences.sort,
+                            randomSortSeed = input.sortPreferences.randomSortSeed,
                         )
                     }
                 }
@@ -202,23 +157,7 @@ class NovelLibraryScreenModel(
 
     fun search(query: String?) {
         mutableState.update { current ->
-            val trimmed = query?.trim().orEmpty().ifBlank { null }
-            current.copy(
-                searchQuery = trimmed,
-                items = filterItems(
-                    novels = current.rawItems,
-                    query = trimmed,
-                    downloadedFilter = current.effectiveDownloadedFilter,
-                    downloadedNovelIds = current.downloadedNovelIds,
-                    unreadFilter = current.unreadFilter,
-                    startedFilter = current.startedFilter,
-                    bookmarkedFilter = current.bookmarkedFilter,
-                    completedFilter = current.completedFilter,
-                    filterIntervalCustom = current.filterIntervalCustom,
-                    sort = current.sort,
-                    randomSortSeed = current.randomSortSeed,
-                ),
-            )
+            current.copy(searchQuery = query?.trim().orEmpty().ifBlank { null })
         }
     }
 
@@ -828,6 +767,62 @@ class NovelLibraryScreenModel(
         val completedFilter: TriState,
         val filterIntervalCustom: TriState,
     )
+
+    private data class SortPreferences(
+        val sort: NovelLibrarySort,
+        val randomSortSeed: Int,
+    )
+
+    private data class RecomputeInput(
+        val query: String?,
+        val novels: List<LibraryNovel>,
+        val filterPreferences: FilterPreferences,
+        val sortPreferences: SortPreferences,
+    )
+
+    private data class RecomputedState(
+        val items: List<LibraryNovel>,
+        val downloadedNovelIds: Set<Long>,
+    )
+
+    private fun getFilterPreferencesFlow(): Flow<FilterPreferences> {
+        return combine(
+            basePreferences.downloadedOnly().changes(),
+            libraryPreferences.filterDownloadedNovel().changes(),
+            libraryPreferences.filterUnreadNovel().changes(),
+            libraryPreferences.filterStartedNovel().changes(),
+            libraryPreferences.filterBookmarkedNovel().changes(),
+        ) { downloadedOnly, downloadedFilter, unreadFilter, startedFilter, bookmarkedFilter ->
+            FilterPreferences(
+                downloadedOnly = downloadedOnly,
+                downloadedFilter = downloadedFilter,
+                unreadFilter = unreadFilter,
+                startedFilter = startedFilter,
+                bookmarkedFilter = bookmarkedFilter,
+                completedFilter = TriState.DISABLED,
+                filterIntervalCustom = TriState.DISABLED,
+            )
+        }
+            .combine(libraryPreferences.filterIntervalCustom().changes()) { prefs, filterIntervalCustom ->
+                prefs.copy(filterIntervalCustom = filterIntervalCustom)
+            }
+            .combine(libraryPreferences.filterCompletedNovel().changes()) { prefs, completedFilter ->
+                prefs.copy(completedFilter = completedFilter)
+            }
+            .distinctUntilChanged()
+    }
+
+    private fun getSortPreferencesFlow(): Flow<SortPreferences> {
+        return combine(
+            libraryPreferences.novelSortingMode().changes(),
+            libraryPreferences.randomNovelSortSeed().changes(),
+        ) { sort, randomSortSeed ->
+            SortPreferences(
+                sort = sort,
+                randomSortSeed = randomSortSeed,
+            )
+        }.distinctUntilChanged()
+    }
 
     sealed interface Dialog {
         data object Settings : Dialog

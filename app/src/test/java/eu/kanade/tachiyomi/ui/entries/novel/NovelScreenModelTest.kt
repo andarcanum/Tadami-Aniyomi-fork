@@ -16,6 +16,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.setMain
@@ -42,6 +43,7 @@ import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.track.novel.interactor.GetNovelTracks
 import tachiyomi.domain.track.novel.model.NovelTrack
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState
 
 class NovelScreenModelTest {
 
@@ -370,6 +372,71 @@ class NovelScreenModelTest {
         }
     }
 
+    @Test
+    fun `chapter status updates do not rescan downloaded ids when chapter ids are unchanged`() {
+        runBlocking {
+            val novel = novelForResumeTests(105L)
+            val initialChapters = listOf(
+                novelChapter(id = 1L, novelId = novel.id, chapterNumber = 1.0, read = false),
+                novelChapter(id = 2L, novelId = novel.id, chapterNumber = 2.0, read = false),
+            )
+            val chapterRepository = FakeNovelChapterRepository(initialChapters)
+            val downloadCacheChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+            var resolveDownloadedIdsCalls = 0
+
+            val screenModel = createResumeScreenModel(
+                novel = novel,
+                chapters = initialChapters,
+                chapterRepository = chapterRepository,
+                downloadCacheChanges = downloadCacheChanges,
+                downloadQueueState = MutableStateFlow(NovelDownloadQueueState()),
+                resolveDownloadedChapterIds = { _, chapters ->
+                    resolveDownloadedIdsCalls++
+                    chapters
+                        .asSequence()
+                        .map { it.id }
+                        .filter { it == 1L }
+                        .toSet()
+                },
+            )
+
+            try {
+                awaitResumeScreenModel(screenModel)
+                downloadCacheChanges.emit(Unit)
+                withTimeout(1_000) {
+                    while ((screenModel.state.value as? NovelScreenModel.State.Success)?.downloadedChapterIds != setOf(1L)) {
+                        yield()
+                    }
+                }
+
+                val callsAfterInit = resolveDownloadedIdsCalls
+                chapterRepository.updateChapters(
+                    initialChapters.map { chapter ->
+                        if (chapter.id == 2L) {
+                            chapter.copy(read = true)
+                        } else {
+                            chapter
+                        }
+                    },
+                )
+
+                withTimeout(1_000) {
+                    while ((screenModel.state.value as? NovelScreenModel.State.Success)
+                        ?.chapters
+                        ?.firstOrNull { it.id == 2L }
+                        ?.read != true
+                    ) {
+                        yield()
+                    }
+                }
+
+                resolveDownloadedIdsCalls shouldBe callsAfterInit
+            } finally {
+                screenModel.onDispose()
+            }
+        }
+    }
+
     private class FakeLifecycleOwner : LifecycleOwner {
         private class NoopStartedLifecycle : Lifecycle() {
             override val currentState: State
@@ -386,9 +453,12 @@ class NovelScreenModelTest {
     private fun createResumeScreenModel(
         novel: Novel,
         chapters: List<NovelChapter>,
+        chapterRepository: FakeNovelChapterRepository = FakeNovelChapterRepository(chapters),
+        downloadCacheChanges: Flow<Unit> = MutableSharedFlow(extraBufferCapacity = 1),
+        downloadQueueState: Flow<NovelDownloadQueueState> = MutableStateFlow(NovelDownloadQueueState()),
+        resolveDownloadedChapterIds: (Novel, List<NovelChapter>) -> Set<Long> = { _, _ -> emptySet() },
     ): NovelScreenModel {
         val novelRepository = FakeNovelRepository(novel)
-        val chapterRepository = FakeNovelChapterRepository(chapters)
         val preferenceStore = FakePreferenceStore()
         val libraryPreferences = LibraryPreferences(preferenceStore)
         val sourceManager = FakeNovelSourceManager()
@@ -461,6 +531,9 @@ class NovelScreenModelTest {
             sourceManager = sourceManager,
             trackerManager = trackerManager,
             getTracks = getNovelTracks,
+            downloadCacheChanges = downloadCacheChanges,
+            downloadQueueState = downloadQueueState,
+            resolveDownloadedChapterIds = resolveDownloadedChapterIds,
             novelReaderPreferences = eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences(
                 preferenceStore = preferenceStore,
                 json = Json { encodeDefaults = true },
@@ -508,6 +581,10 @@ class NovelScreenModelTest {
         chapters: List<NovelChapter>,
     ) : NovelChapterRepository {
         private val chapterFlow = MutableStateFlow(chapters)
+
+        fun updateChapters(chapters: List<NovelChapter>) {
+            chapterFlow.value = chapters
+        }
 
         override suspend fun addAllChapters(chapters: List<NovelChapter>): List<NovelChapter> = chapters
         override suspend fun updateChapter(

@@ -39,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -76,7 +77,7 @@ import eu.kanade.presentation.library.resolveNovelLibraryCardProgressPercent
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
-import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
 import eu.kanade.tachiyomi.source.model.SManga
 import tachiyomi.domain.entries.novel.model.asNovelCover
 import tachiyomi.domain.library.model.AuroraLibraryCardStyle
@@ -120,6 +121,7 @@ fun NovelLibraryAuroraContent(
     val configuration = LocalConfiguration.current
     val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
     val sourceManager = remember { Injekt.get<NovelSourceManager>() }
+    val downloadCache = remember { Injekt.get<NovelDownloadCache>() }
     val useSeparateDisplayModePerMedia by libraryPreferences
         .separateDisplayModePerMedia()
         .collectAsState()
@@ -152,13 +154,13 @@ fun NovelLibraryAuroraContent(
     val showDownloadBadge by libraryPreferences.downloadBadge().collectAsState()
     val showUnreadBadge by libraryPreferences.unreadBadge().collectAsState()
     val showLanguageBadge by libraryPreferences.languageBadge().collectAsState()
-    val downloadedNovelIds = remember(items, showDownloadBadge) {
+    val downloadCacheSignal by downloadCache.changes.collectAsState(initial = Unit)
+    val downloadedNovelIds = remember(items, showDownloadBadge, downloadCacheSignal) {
         if (!showDownloadBadge) return@remember emptySet()
 
-        val downloadManager = NovelDownloadManager()
         items.asSequence()
             .mapNotNull { item ->
-                item.novel.id.takeIf { downloadManager.hasAnyDownloadedChapter(item.novel) }
+                item.novel.id.takeIf { downloadCache.hasAnyDownloadedChapter(item.novel) }
             }
             .toSet()
     }

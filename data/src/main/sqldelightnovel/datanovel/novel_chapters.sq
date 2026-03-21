@@ -24,7 +24,7 @@ CREATE INDEX novel_chapters_novel_id_index ON novel_chapters(novel_id);
 CREATE INDEX novel_chapters_unread_by_novel_index ON novel_chapters(novel_id, read) WHERE read = 0;
 
 CREATE TRIGGER update_last_modified_at_novel_chapters
-AFTER UPDATE ON novel_chapters
+AFTER UPDATE OF novel_id, url, name, scanlator, read, bookmark, last_page_read, chapter_number, source_order, date_fetch, date_upload ON novel_chapters
 FOR EACH ROW
 BEGIN
   UPDATE novel_chapters

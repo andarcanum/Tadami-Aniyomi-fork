@@ -49,7 +49,7 @@ import eu.kanade.presentation.library.novel.resolveNovelLibraryBadgeState
 import eu.kanade.presentation.novel.sourceAwareNovelCoverModel
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.R
-import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
 import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
 import eu.kanade.tachiyomi.ui.category.CategoriesTab
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
@@ -101,6 +101,7 @@ data object NovelLibraryTab : Tab {
         val state by screenModel.state.collectAsState()
         val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
         val sourceManager = remember { Injekt.get<NovelSourceManager>() }
+        val downloadCache = remember { Injekt.get<NovelDownloadCache>() }
         val useSeparateDisplayModePerMedia by libraryPreferences
             .separateDisplayModePerMedia()
             .collectAsState()
@@ -124,13 +125,13 @@ data object NovelLibraryTab : Tab {
             }
         }
         val columns by columnPreference.collectAsState()
-        val downloadedNovelIds = remember(state.items, showDownloadBadge) {
+        val downloadCacheSignal by downloadCache.changes.collectAsState(initial = Unit)
+        val downloadedNovelIds = remember(state.items, showDownloadBadge, downloadCacheSignal) {
             if (!showDownloadBadge) return@remember emptySet()
 
-            val downloadManager = NovelDownloadManager()
             state.items.asSequence()
                 .mapNotNull { item ->
-                    item.novel.id.takeIf { downloadManager.hasAnyDownloadedChapter(item.novel) }
+                    item.novel.id.takeIf { downloadCache.hasAnyDownloadedChapter(item.novel) }
                 }
                 .toSet()
         }

@@ -18,6 +18,7 @@ import eu.kanade.domain.items.novelchapter.interactor.GetAvailableNovelScanlator
 import eu.kanade.domain.items.novelchapter.interactor.GetNovelScanlatorChapterCounts
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.presentation.util.TargetChapterCalculator
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager
 import eu.kanade.tachiyomi.data.download.novel.NovelQueuedDownloadStatus
@@ -41,6 +42,9 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.supervisorScope
@@ -114,6 +118,11 @@ class NovelScreenModel(
     private val application: Application? = runCatching { Injekt.get<Application>() }.getOrNull(),
     private val novelDownloadManager: NovelDownloadManager = NovelDownloadManager(),
     private val novelTranslatedDownloadManager: NovelTranslatedDownloadManager = NovelTranslatedDownloadManager(),
+    private val downloadCacheChanges: Flow<Unit> = runCatching { Injekt.get<NovelDownloadCache>().changes }.getOrElse { emptyFlow() },
+    private val downloadQueueState: Flow<eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState> = NovelDownloadQueueManager.state,
+    private val resolveDownloadedChapterIds: (Novel, List<NovelChapter>) -> Set<Long> = { novel, chapters ->
+        novelDownloadManager.getDownloadedChapterIds(novel, chapters)
+    },
     private val novelEpubExporter: NovelEpubExporter = NovelEpubExporter(),
     private val novelReaderPreferences: NovelReaderPreferences = Injekt.get(),
     private val eventBus: AchievementEventBus? = runCatching { Injekt.get<AchievementEventBus>() }.getOrNull(),
@@ -191,6 +200,11 @@ class NovelScreenModel(
                 .collectLatest { (novel, chapters) ->
                     val chapterIds = chapters.mapTo(mutableSetOf()) { c -> c.id }
                     val chapterUrls = chapters.mapTo(mutableSetOf()) { c -> c.url }
+                    val previousChapterIds = successState
+                        ?.chapters
+                        ?.let { existingChapters -> existingChapters.mapTo(mutableSetOf()) { it.id } }
+                        ?: emptySet()
+                    val chapterIdsChanged = previousChapterIds != chapterIds
                     updateSuccessState {
                         it.copy(
                             novel = novel,
@@ -207,13 +221,8 @@ class NovelScreenModel(
                             },
                         )
                     }
-                    val downloadedChapterIds = novelDownloadManager.getDownloadedChapterIds(novel, chapters)
-                    updateSuccessState {
-                        if (it.novel.id != novel.id || it.downloadedChapterIds == downloadedChapterIds) {
-                            it
-                        } else {
-                            it.copy(downloadedChapterIds = downloadedChapterIds)
-                        }
+                    if (chapterIdsChanged) {
+                        syncDownloadedState()
                     }
                 }
         }
@@ -255,7 +264,16 @@ class NovelScreenModel(
         }
 
         screenModelScope.launchIO {
-            NovelDownloadQueueManager.state.collectLatest { queueState ->
+            downloadCacheChanges
+                .onStart { emit(Unit) }
+                .flowWithLifecycle(lifecycle)
+                .collectLatest {
+                    syncDownloadedState()
+                }
+        }
+
+        screenModelScope.launchIO {
+            downloadQueueState.collectLatest { queueState ->
                 updateSuccessState { current ->
                     val allNovelTasks = queueState.tasks.filter { task -> task.novel.id == current.novel.id }
                     val activeChapterIds = queueState.tasks
@@ -278,18 +296,11 @@ class NovelScreenModel(
                     )
                     maybeNotifyQueueState(queueSummary)
 
-                    val downloadedChapterIds = novelDownloadManager.getDownloadedChapterIds(
-                        current.novel,
-                        current.chapters,
-                    )
-                    if (activeChapterIds == current.downloadingChapterIds &&
-                        downloadedChapterIds == current.downloadedChapterIds
-                    ) {
+                    if (activeChapterIds == current.downloadingChapterIds) {
                         current
                     } else {
                         current.copy(
                             downloadingChapterIds = activeChapterIds,
-                            downloadedChapterIds = downloadedChapterIds,
                         )
                     }
                 }
@@ -366,15 +377,7 @@ class NovelScreenModel(
             }
             cacheState(state.value as? State.Success)
             observeTrackers()
-
-            val downloadedChapterIds = novelDownloadManager.getDownloadedChapterIds(novel, chapters)
-            updateSuccessState {
-                if (it.novel.id != novel.id || it.downloadedChapterIds == downloadedChapterIds) {
-                    it
-                } else {
-                    it.copy(downloadedChapterIds = downloadedChapterIds)
-                }
-            }
+            syncDownloadedState()
 
             if ((shouldAutoRefreshNovel || shouldAutoRefreshChapters) && screenModelScope.isActive) {
                 refreshChapters(
@@ -444,7 +447,7 @@ class NovelScreenModel(
     private fun syncDownloadedState() {
         val state = successState ?: return
         screenModelScope.launchIO {
-            val downloadedIds = novelDownloadManager.getDownloadedChapterIds(state.novel, state.chapters)
+            val downloadedIds = resolveDownloadedChapterIds(state.novel, state.chapters)
             updateSuccessState {
                 if (downloadedIds == it.downloadedChapterIds) {
                     it

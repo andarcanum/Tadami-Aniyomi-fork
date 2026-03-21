@@ -16,6 +16,7 @@ class NovelDownloadManager(
     private val application: Application? = runCatching { Injekt.get<Application>() }.getOrNull(),
     private val sourceManager: NovelSourceManager? = runCatching { Injekt.get<NovelSourceManager>() }.getOrNull(),
     private val storageManager: StorageManager? = runCatching { Injekt.get<StorageManager>() }.getOrNull(),
+    private val downloadCache: NovelDownloadCache? = runCatching { Injekt.get<NovelDownloadCache>() }.getOrNull(),
 ) {
 
     private val legacyRootDir: File?
@@ -106,6 +107,7 @@ class NovelDownloadManager(
         file.openOutputStream()?.bufferedWriter(Charsets.UTF_8)?.use { writer ->
             writer.write(text)
         } ?: return false
+        downloadCache?.onNovelDownloadsChanged(novel)
         return true
     }
 
@@ -124,6 +126,7 @@ class NovelDownloadManager(
         chapterFile(novel, chapterId)?.delete()
         legacyChapterFile(novel, chapterId)?.delete()
         cleanupDirectories(novel)
+        downloadCache?.onNovelDownloadsChanged(novel)
     }
 
     fun deleteChapters(novel: Novel, chapterIds: Collection<Long>) {
@@ -132,6 +135,7 @@ class NovelDownloadManager(
             legacyChapterFile(novel, chapterId)?.delete()
         }
         cleanupDirectories(novel)
+        downloadCache?.onNovelDownloadsChanged(novel)
     }
 
     fun deleteNovel(novel: Novel) {
@@ -146,6 +150,7 @@ class NovelDownloadManager(
         }
 
         cleanupDirectories(novel)
+        downloadCache?.onNovelDownloadsChanged(novel)
     }
 
     fun getDownloadedChapterText(novel: Novel, chapterId: Long): String? {

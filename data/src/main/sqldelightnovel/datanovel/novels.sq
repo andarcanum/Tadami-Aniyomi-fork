@@ -41,7 +41,7 @@ BEGIN
 END;
 
 CREATE TRIGGER update_last_modified_at_novels
-AFTER UPDATE ON novels
+AFTER UPDATE OF source, url, author, description, genre, title, status, thumbnail_url, favorite, last_update, next_update, initialized, viewer, chapter_flags, cover_last_modified, date_added, update_strategy, calculate_interval ON novels
 FOR EACH ROW
 BEGIN
   UPDATE novels
