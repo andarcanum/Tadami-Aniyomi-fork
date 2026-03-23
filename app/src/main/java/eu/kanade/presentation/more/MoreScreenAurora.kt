@@ -1,6 +1,7 @@
 package eu.kanade.presentation.more
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -44,6 +45,8 @@ import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.presentation.components.AuroraBackground
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalIsDefaultAppUiFont
+import eu.kanade.presentation.more.resolveAuroraMoreCardBorderColor
+import eu.kanade.presentation.theme.resolveAuroraBorderColor
 import eu.kanade.tachiyomi.ui.more.DownloadQueueState
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -205,7 +208,8 @@ fun AuroraSettingItem(
             .fillMaxWidth()
             .padding(vertical = AURORA_MORE_CARD_VERTICAL_INSET)
             .clip(RoundedCornerShape(16.dp))
-            .background(resolveAuroraMoreCardContainerColor(colors.glass, colors.isDark))
+            .background(resolveAuroraMoreCardContainerColor(colors))
+            .border(1.dp, resolveAuroraMoreCardBorderColor(colors), RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -252,7 +256,8 @@ fun AuroraToggleItem(
             .fillMaxWidth()
             .padding(vertical = AURORA_MORE_CARD_VERTICAL_INSET)
             .clip(RoundedCornerShape(16.dp))
-            .background(resolveAuroraMoreCardContainerColor(colors.glass, colors.isDark))
+            .background(resolveAuroraMoreCardContainerColor(colors))
+            .border(1.dp, resolveAuroraMoreCardBorderColor(colors), RoundedCornerShape(16.dp))
             .clickable { onCheckedChange(!checked) }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -282,10 +287,7 @@ fun AuroraToggleItem(
                 onCheckedChange = onCheckedChange,
                 colors = androidx.compose.material3.SwitchDefaults.colors(
                     checkedThumbColor = colors.accent,
-                    checkedTrackColor = resolveAuroraMoreCheckedTrackColor(
-                        accent = colors.accent,
-                        isDark = colors.isDark,
-                    ),
+                    checkedTrackColor = resolveAuroraMoreCheckedTrackColor(colors),
                 ),
             )
         }

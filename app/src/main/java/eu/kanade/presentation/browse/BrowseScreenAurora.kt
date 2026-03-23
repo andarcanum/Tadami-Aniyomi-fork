@@ -52,10 +52,15 @@ import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.browse.anime.AnimeSourceUiModel
 import eu.kanade.presentation.components.AuroraBackground
 import eu.kanade.presentation.more.resolveAuroraMoreCardContainerColor
+import eu.kanade.presentation.more.resolveAuroraMoreCardBorderColor
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_HORIZONTAL_INSET
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalIsDefaultAppUiFont
+import eu.kanade.presentation.theme.resolveAuroraBorderColor
+import eu.kanade.presentation.theme.resolveAuroraControlContainerColor
+import eu.kanade.presentation.theme.resolveAuroraIconSurfaceColor
+import eu.kanade.presentation.theme.resolveAuroraSelectionContainerColor
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.resolveAuroraAdaptiveSpec
@@ -193,11 +198,7 @@ private fun BrowseAuroraHeader(
     onSearchClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
-    val tabContainerColor = if (colors.background.luminance() < 0.5f) {
-        Color.White.copy(alpha = 0.05f)
-    } else {
-        Color.Black.copy(alpha = 0.03f)
-    }
+    val tabContainerColor = resolveAuroraControlContainerColor(colors)
 
     Row(
         modifier = Modifier
@@ -294,8 +295,9 @@ private fun QuickActionCard(
             .clickable(onClick = onClick),
         shape = AURORA_SETTINGS_CARD_SHAPE,
         colors = CardDefaults.cardColors(
-            containerColor = resolveAuroraMoreCardContainerColor(colors.glass, colors.isDark),
+            containerColor = resolveAuroraMoreCardContainerColor(colors),
         ),
+        border = BorderStroke(1.dp, resolveAuroraMoreCardBorderColor(colors)),
     ) {
         Row(
             modifier = Modifier
@@ -307,7 +309,7 @@ private fun QuickActionCard(
                 modifier = Modifier
                     .size(leadingIconContainerSize)
                     .background(
-                        colors.textPrimary.copy(alpha = 0.10f),
+                        resolveAuroraIconSurfaceColor(colors),
                         RoundedCornerShape(12.dp),
                     ),
                 contentAlignment = Alignment.Center,
@@ -401,8 +403,9 @@ private fun PinnedSourceCard(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = colors.accent.copy(alpha = 0.15f),
+            containerColor = resolveAuroraSelectionContainerColor(colors),
         ),
+        border = BorderStroke(1.dp, resolveAuroraBorderColor(colors, emphasized = false)),
     ) {
         Column(
             modifier = Modifier
@@ -437,11 +440,7 @@ private fun SourceGridItem(
     val colors = AuroraTheme.colors
     val isPinned = Pin.Actual in source.pin
     val successColor = Color(0xFF22c55e)
-    val tabContainerColor = if (colors.background.luminance() < 0.5f) {
-        Color.White.copy(alpha = 0.05f)
-    } else {
-        Color.Black.copy(alpha = 0.03f)
-    }
+    val tabContainerColor = resolveAuroraControlContainerColor(colors)
 
     // Use padding for grid spacing simulation if needed, but LazyVerticalGrid handles it
     // We add padding here to ensure content isn't touching the edges if used outside grid,
@@ -462,7 +461,7 @@ private fun SourceGridItem(
         colors = CardDefaults.cardColors(
             containerColor = tabContainerColor,
         ),
-        border = BorderStroke(1.dp, colors.divider),
+        border = BorderStroke(1.dp, resolveAuroraBorderColor(colors, emphasized = false)),
     ) {
         Column(
             modifier = Modifier
@@ -479,8 +478,8 @@ private fun SourceGridItem(
                     .background(
                         Brush.linearGradient(
                             colors = listOf(
-                                colors.accent.copy(alpha = 0.3f),
-                                colors.gradientStart.copy(alpha = 0.5f),
+                                colors.accent.copy(alpha = if (colors.isDark) 0.3f else 0.16f),
+                                colors.gradientStart.copy(alpha = if (colors.isDark) 0.5f else 0.35f),
                             ),
                         ),
                     ),

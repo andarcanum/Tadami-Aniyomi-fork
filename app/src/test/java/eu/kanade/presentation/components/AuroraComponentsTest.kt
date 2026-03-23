@@ -10,6 +10,7 @@ class AuroraComponentsTest {
         shouldAnimateAuroraBackground(
             userEnabled = true,
             isLifecycleResumed = true,
+            systemAnimationsEnabled = true,
         ) shouldBe true
     }
 
@@ -18,11 +19,22 @@ class AuroraComponentsTest {
         shouldAnimateAuroraBackground(
             userEnabled = false,
             isLifecycleResumed = true,
+            systemAnimationsEnabled = true,
         ) shouldBe false
 
         shouldAnimateAuroraBackground(
             userEnabled = true,
             isLifecycleResumed = false,
+            systemAnimationsEnabled = true,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `aurora animation pauses when system animations are disabled`() {
+        shouldAnimateAuroraBackground(
+            userEnabled = true,
+            isLifecycleResumed = true,
+            systemAnimationsEnabled = false,
         ) shouldBe false
     }
 }

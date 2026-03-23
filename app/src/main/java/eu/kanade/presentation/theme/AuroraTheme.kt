@@ -42,6 +42,7 @@ data class AuroraColors(
     val cardBackground: Color,
     val divider: Color,
     val isDark: Boolean,
+    val isEInk: Boolean,
     // Aniview Premium specific colors
     val progressCyan: Color,
     val glowEffect: Color,
@@ -84,7 +85,34 @@ data class AuroraColors(
             colorScheme: ColorScheme,
             isDark: Boolean,
             isAmoled: Boolean = false,
+            isEInk: Boolean = false,
         ): AuroraColors {
+            if (isEInk) {
+                return AuroraColors(
+                    accent = Color(0xFF000000),
+                    accentVariant = Color(0xFF1E1E1E),
+                    background = Color(0xFFFFFFFF),
+                    surface = Color(0xFFF8F8F8),
+                    gradientStart = Color(0xFFFFFFFF),
+                    gradientEnd = Color(0xFFFFFFFF),
+                    glass = Color(0xFFF5F5F5),
+                    textPrimary = Color(0xFF000000),
+                    textSecondary = Color(0xFF404040),
+                    textOnAccent = Color(0xFFFFFFFF),
+                    cardBackground = Color(0xFFF1F1F1),
+                    divider = Color(0xFFB7B7B7),
+                    isDark = false,
+                    isEInk = true,
+                    progressCyan = Color(0xFF1E1E1E),
+                    glowEffect = Color(0xFF1E1E1E),
+                    gradientPurple = Color(0xFF4A4A4A),
+                    success = Color(0xFF2E2E2E),
+                    warning = Color(0xFF666666),
+                    error = Color(0xFF000000),
+                    achievementGold = Color(0xFF4A4A4A),
+                )
+            }
+
             // For AMOLED mode in dark theme, use pure black
             val effectiveBackground = if (isDark && isAmoled) {
                 Color.Black
@@ -124,7 +152,7 @@ data class AuroraColors(
                 glass = if (isDark) {
                     Color.White.copy(alpha = 0.22f)
                 } else {
-                    Color.Black.copy(alpha = 0.05f)
+                    Color(0xD1FFFFFF)
                 },
                 textPrimary = colorScheme.onBackground,
                 textSecondary = colorScheme.onSurfaceVariant,
@@ -132,10 +160,11 @@ data class AuroraColors(
                 cardBackground = if (isDark) {
                     Color.White.copy(alpha = 0.12f)
                 } else {
-                    Color.Black.copy(alpha = 0.03f)
+                    Color(0xFFF2F7FD)
                 },
-                divider = colorScheme.outlineVariant,
+                divider = if (isDark) colorScheme.outlineVariant else Color(0xFFD7E3F1),
                 isDark = isDark,
+                isEInk = false,
                 // Aniview specific colors
                 progressCyan = colorScheme.secondary,
                 glowEffect = colorScheme.primary,
@@ -163,6 +192,7 @@ data class AuroraColors(
             cardBackground = Color.White.copy(alpha = 0.12f),
             divider = Color.White.copy(alpha = 0.1f),
             isDark = true,
+            isEInk = false,
             progressCyan = AuroraColorScheme.aniviewCyan,
             glowEffect = AuroraColorScheme.aniviewGlow,
             gradientPurple = AuroraColorScheme.aniviewPurple,
@@ -180,13 +210,14 @@ data class AuroraColors(
             surface = AuroraColorScheme.auroraLightSurface,
             gradientStart = AuroraColorScheme.auroraLightGradientStart,
             gradientEnd = AuroraColorScheme.auroraLightGradientEnd,
-            glass = AuroraColorScheme.auroraGlassLight,
+            glass = Color(0xD1FFFFFF),
             textPrimary = Color(0xFF0f172a),
             textSecondary = Color(0xFF475569),
             textOnAccent = Color.White,
-            cardBackground = Color.Black.copy(alpha = 0.03f),
-            divider = Color.Black.copy(alpha = 0.1f),
+            cardBackground = Color(0xFFF2F7FD),
+            divider = Color(0xFFD7E3F1),
             isDark = false,
+            isEInk = false,
             progressCyan = AuroraColorScheme.aniviewCyan,
             glowEffect = AuroraColorScheme.aniviewElectricBlue,
             gradientPurple = Color(0xFF6366f1),
@@ -195,6 +226,30 @@ data class AuroraColors(
             warning = Color(0xFFF59E0B),
             error = Color(0xFFEF4444),
             achievementGold = Color(0xFFFFB800),
+        )
+
+        val EInk = AuroraColors(
+            accent = Color(0xFF000000),
+            accentVariant = Color(0xFF1E1E1E),
+            background = Color(0xFFFFFFFF),
+            surface = Color(0xFFF8F8F8),
+            gradientStart = Color(0xFFFFFFFF),
+            gradientEnd = Color(0xFFFFFFFF),
+            glass = Color(0xFFF5F5F5),
+            textPrimary = Color(0xFF000000),
+            textSecondary = Color(0xFF404040),
+            textOnAccent = Color(0xFFFFFFFF),
+            cardBackground = Color(0xFFF1F1F1),
+            divider = Color(0xFFB7B7B7),
+            isDark = false,
+            isEInk = true,
+            progressCyan = Color(0xFF1E1E1E),
+            glowEffect = Color(0xFF1E1E1E),
+            gradientPurple = Color(0xFF4A4A4A),
+            success = Color(0xFF2E2E2E),
+            warning = Color(0xFF666666),
+            error = Color(0xFF000000),
+            achievementGold = Color(0xFF4A4A4A),
         )
     }
 }
@@ -208,7 +263,11 @@ object AuroraTheme {
 
     @Composable
     fun colorsForCurrentTheme(): AuroraColors {
-        return if (isSystemInDarkTheme()) AuroraColors.Dark else AuroraColors.Light
+        return when {
+            LocalIsEInkMode.current -> AuroraColors.EInk
+            isSystemInDarkTheme() -> AuroraColors.Dark
+            else -> AuroraColors.Light
+        }
     }
 }
 

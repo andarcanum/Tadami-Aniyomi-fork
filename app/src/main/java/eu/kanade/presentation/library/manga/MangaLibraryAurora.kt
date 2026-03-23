@@ -28,6 +28,7 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.components.resolveAuroraCoverModel
+import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.entries.manga.model.asMangaCover
 import tachiyomi.domain.library.manga.LibraryManga
@@ -73,6 +74,7 @@ fun AniviewMangaCard(
                 fallback = placeholderPainter,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                colorFilter = rememberAuroraPosterColorFilter(),
                 modifier = Modifier.fillMaxSize(),
             )
 

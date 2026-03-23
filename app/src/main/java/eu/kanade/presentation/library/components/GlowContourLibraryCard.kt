@@ -59,6 +59,7 @@ import dev.icerock.moko.resources.StringResource
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.components.resolveAuroraCardOverlaySpec
 import eu.kanade.presentation.components.resolveAuroraCoverModel
+import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
 import tachiyomi.i18n.MR
@@ -361,15 +362,26 @@ internal data class GlowContourActionButtonRenderSpec(
     val glowElevation: androidx.compose.ui.unit.Dp,
 )
 
-internal fun resolveGlowContourActionButtonRenderSpec(): GlowContourActionButtonRenderSpec {
-    return GlowContourActionButtonRenderSpec(
-        containerTopAlpha = 0.22f,
-        containerBottomAlpha = 0.08f,
-        borderTopAlpha = 0.42f,
-        borderBottomAlpha = 0.14f,
-        glowAlpha = 0.58f,
-        glowElevation = 18.dp,
-    )
+internal fun resolveGlowContourActionButtonRenderSpec(isDark: Boolean): GlowContourActionButtonRenderSpec {
+    return if (isDark) {
+        GlowContourActionButtonRenderSpec(
+            containerTopAlpha = 0.22f,
+            containerBottomAlpha = 0.08f,
+            borderTopAlpha = 0.42f,
+            borderBottomAlpha = 0.14f,
+            glowAlpha = 0.58f,
+            glowElevation = 18.dp,
+        )
+    } else {
+        GlowContourActionButtonRenderSpec(
+            containerTopAlpha = 0.15f,
+            containerBottomAlpha = 0.06f,
+            borderTopAlpha = 0.35f,
+            borderBottomAlpha = 0.12f,
+            glowAlpha = 0.4f,
+            glowElevation = 14.dp,
+        )
+    }
 }
 
 internal data class GlowContourProgressLineRenderSpec(
@@ -673,6 +685,7 @@ private fun GlowContourLibraryCard(
             model = resolveAuroraCoverModel(coverData),
             contentDescription = null,
             contentScale = ContentScale.Crop,
+            colorFilter = rememberAuroraPosterColorFilter(),
             modifier = Modifier
                 .matchParentSize()
                 .drawWithCache {
@@ -822,7 +835,13 @@ private fun GlowContourLibraryCard(
                     modifier = Modifier
                         .matchParentSize()
                         .clip(progressShape)
-                        .background(Color.White.copy(alpha = progressSpec.trackAlpha)),
+                        .background(
+                            if (colors.isDark) {
+                                Color.White.copy(alpha = progressSpec.trackAlpha)
+                            } else {
+                                Color.Black.copy(alpha = 0.12f)
+                            },
+                        ),
                 )
                 progressState.fillFraction?.let { fillFraction ->
                     Box(
@@ -856,7 +875,7 @@ private fun GlowContourLibraryCard(
             }
         }
 
-        val buttonSpec = resolveGlowContourActionButtonRenderSpec()
+        val buttonSpec = resolveGlowContourActionButtonRenderSpec(colors.isDark)
         if (footerContent == GlowContourFooterContent.ContinueAction) {
             Box(
                 modifier = Modifier
@@ -871,7 +890,11 @@ private fun GlowContourLibraryCard(
                     onClick = { onClickContinueViewing?.invoke() },
                     colors = IconButtonDefaults.iconButtonColors(
                         containerColor = Color.Transparent,
-                        contentColor = Color.White.copy(alpha = 0.98f),
+                        contentColor = if (colors.isDark) {
+                            Color.White.copy(alpha = 0.98f)
+                        } else {
+                            colors.accent.copy(alpha = 0.98f)
+                        },
                     ),
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
@@ -886,19 +909,33 @@ private fun GlowContourLibraryCard(
                         .clip(CircleShape)
                         .background(
                             Brush.linearGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = buttonSpec.containerTopAlpha),
-                                    Color.White.copy(alpha = buttonSpec.containerBottomAlpha),
-                                ),
+                                colors = if (colors.isDark) {
+                                    listOf(
+                                        Color.White.copy(alpha = buttonSpec.containerTopAlpha),
+                                        Color.White.copy(alpha = buttonSpec.containerBottomAlpha),
+                                    )
+                                } else {
+                                    listOf(
+                                        colors.accent.copy(alpha = buttonSpec.containerTopAlpha),
+                                        colors.accent.copy(alpha = buttonSpec.containerBottomAlpha),
+                                    )
+                                },
                             ),
                         )
                         .border(
                             width = 1.dp,
                             brush = Brush.linearGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = buttonSpec.borderTopAlpha),
-                                    Color.White.copy(alpha = buttonSpec.borderBottomAlpha),
-                                ),
+                                colors = if (colors.isDark) {
+                                    listOf(
+                                        Color.White.copy(alpha = buttonSpec.borderTopAlpha),
+                                        Color.White.copy(alpha = buttonSpec.borderBottomAlpha),
+                                    )
+                                } else {
+                                    listOf(
+                                        colors.accent.copy(alpha = buttonSpec.borderTopAlpha),
+                                        colors.accent.copy(alpha = buttonSpec.borderBottomAlpha),
+                                    )
+                                },
                             ),
                             shape = CircleShape,
                         ),
@@ -966,6 +1003,34 @@ private fun GlowContourStatusJewel(
             )
     }
 
+    val jewelBgColors = if (colors.isDark) {
+        listOf(
+            Color.White.copy(alpha = buttonSpec.containerTopAlpha * alphaMultiplier),
+            Color.White.copy(alpha = buttonSpec.containerBottomAlpha * alphaMultiplier),
+        )
+    } else {
+        listOf(
+            colors.accent.copy(alpha = buttonSpec.containerTopAlpha * alphaMultiplier),
+            colors.accent.copy(alpha = buttonSpec.containerBottomAlpha * alphaMultiplier),
+        )
+    }
+    val jewelBorderColors = if (colors.isDark) {
+        listOf(
+            Color.White.copy(alpha = buttonSpec.borderTopAlpha * alphaMultiplier),
+            Color.White.copy(alpha = buttonSpec.borderBottomAlpha * alphaMultiplier),
+        )
+    } else {
+        listOf(
+            colors.accent.copy(alpha = buttonSpec.borderTopAlpha * alphaMultiplier),
+            colors.accent.copy(alpha = buttonSpec.borderBottomAlpha * alphaMultiplier),
+        )
+    }
+    val jewelIconTint = if (colors.isDark) {
+        Color.White.copy(alpha = iconAlpha)
+    } else {
+        colors.accent.copy(alpha = iconAlpha)
+    }
+
     Box(
         modifier = modifier
             .fillMaxWidth(0.4f)
@@ -986,22 +1051,10 @@ private fun GlowContourStatusJewel(
                     spotColor = colors.accent.copy(alpha = buttonSpec.glowAlpha * alphaMultiplier),
                 )
                 .clip(CircleShape)
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = buttonSpec.containerTopAlpha * alphaMultiplier),
-                            Color.White.copy(alpha = buttonSpec.containerBottomAlpha * alphaMultiplier),
-                        ),
-                    ),
-                )
+                .background(Brush.linearGradient(colors = jewelBgColors))
                 .border(
                     width = 1.dp,
-                    brush = Brush.linearGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = buttonSpec.borderTopAlpha * alphaMultiplier),
-                            Color.White.copy(alpha = buttonSpec.borderBottomAlpha * alphaMultiplier),
-                        ),
-                    ),
+                    brush = Brush.linearGradient(colors = jewelBorderColors),
                     shape = CircleShape,
                 ),
             contentAlignment = Alignment.Center,
@@ -1009,7 +1062,7 @@ private fun GlowContourStatusJewel(
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                tint = Color.White.copy(alpha = iconAlpha),
+                tint = jewelIconTint,
                 modifier = Modifier.requiredSize(iconSize),
             )
         }

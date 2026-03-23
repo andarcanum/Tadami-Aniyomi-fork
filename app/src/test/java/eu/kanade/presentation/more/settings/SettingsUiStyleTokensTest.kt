@@ -2,6 +2,7 @@ package eu.kanade.presentation.more.settings
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.theme.AuroraColors
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 
@@ -29,8 +30,13 @@ class SettingsUiStyleTokensTest {
     }
 
     @Test
-    fun `aurora card border is hidden to match more screen cards`() {
-        resolveAuroraCardBorderColor(Color(0xFF33AAFF)) shouldBe Color.Transparent
+    fun `aurora card border stays visible in light mode`() {
+        resolveAuroraCardBorderColor(AuroraColors.Light) shouldBe Color(0xFFD7E3F1)
+    }
+
+    @Test
+    fun `aurora card border stays monochrome in e ink mode`() {
+        resolveAuroraCardBorderColor(AuroraColors.EInk) shouldBe Color(0xFFBDBDBD)
     }
 
     @Test

@@ -31,6 +31,20 @@ class AuroraTitleHeroActionButtonTest {
     }
 
     @Test
+    fun `light aurora title hero cta uses stronger emphasis for readability`() {
+        resolveAuroraTitleHeroCtaSurfaceSpec(
+            mode = AuroraTitleHeroCtaMode.Aurora,
+            isDark = false,
+        ) shouldBe AuroraTitleHeroCtaSurfaceSpec(
+            containerAlpha = 0.88f,
+            usesGradient = false,
+            innerGlowAlpha = 0.08f,
+            highlightAlpha = 0.12f,
+            borderAlpha = 0.10f,
+        )
+    }
+
+    @Test
     fun `classic title hero cta surface stays opaque and non translucent`() {
         resolveAuroraTitleHeroCtaSurfaceSpec(
             mode = AuroraTitleHeroCtaMode.Classic,

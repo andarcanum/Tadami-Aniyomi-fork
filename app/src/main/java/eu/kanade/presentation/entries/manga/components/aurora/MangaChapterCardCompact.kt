@@ -95,7 +95,7 @@ fun MangaChapterCardCompact(
     )
 
     // Adjust opacity for read chapters
-    val contentAlpha = if (chapter.read) 0.6f else 1f
+    val contentAlpha = if (chapter.read) 0.45f else 1f
 
     val chapterCard: @Composable () -> Unit = {
         GlassmorphismCard(

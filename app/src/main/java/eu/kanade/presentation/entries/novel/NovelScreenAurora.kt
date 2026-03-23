@@ -481,7 +481,7 @@ fun NovelScreenAuroraImpl(
                                         ) {
                                             Text(
                                                 text = stringResource(MR.strings.no_chapters_error),
-                                                color = Color.White.copy(alpha = 0.7f),
+                                                color = colors.textPrimary.copy(alpha = 0.7f),
                                                 fontSize = 14.sp,
                                             )
                                         }
@@ -934,7 +934,7 @@ fun NovelScreenAuroraImpl(
                             ) {
                                 Text(
                                     text = stringResource(MR.strings.no_chapters_error),
-                                    color = Color.White.copy(alpha = 0.7f),
+                                    color = colors.textPrimary.copy(alpha = 0.7f),
                                     fontSize = 14.sp,
                                 )
                             }

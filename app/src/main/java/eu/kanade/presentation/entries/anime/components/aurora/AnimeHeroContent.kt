@@ -1,6 +1,7 @@
-package eu.kanade.presentation.entries.anime.components.aurora
+﻿package eu.kanade.presentation.entries.anime.components.aurora
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,7 +28,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -41,6 +41,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionButton
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroChipBorderColor
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroChipContainerColor
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroChipTextColor
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroOverlayBrush
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroPanelBorderColor
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroPanelContainerColor
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroPrimaryMetaColor
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroSecondaryButtonPalette
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroSecondaryMetaColor
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroTitleColor
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreenModel
@@ -51,33 +61,17 @@ import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
-/**
- * Parses the original title from the description field.
- * Looks for patterns like "Original: Title" or "Оригинал: Title".
- */
 private fun parseOriginalTitle(description: String?): String? {
     if (description.isNullOrBlank()) return null
 
-    // Look for "Original: title" or "Оригинал: title" patterns
-    val patterns = listOf(
-        Regex("""Original:\s*([^\n]+)""", RegexOption.IGNORE_CASE),
-        Regex("""Оригинал:\s*([^\n]+)""", RegexOption.IGNORE_CASE),
-    )
+    val match = Regex(
+        pattern = """(?:Original|Оригинал):\s*([^\n]+)""",
+        options = setOf(RegexOption.IGNORE_CASE),
+    ).find(description)
 
-    for (pattern in patterns) {
-        val match = pattern.find(description)
-        if (match != null) {
-            return match.groupValues[1].trim()
-        }
-    }
-
-    return null
+    return match?.groupValues?.get(1)?.trim()
 }
 
-/**
- * Hero content displayed at the bottom of the first screen.
- * Shows anime title, basic info, Continue/Start button, and Dubbing selector.
- */
 internal data class AnimeHeroPrimaryActionLayoutSpec(
     val heightDp: Int,
     val horizontalPaddingDp: Int,
@@ -109,189 +103,205 @@ fun AnimeHeroContent(
     val primaryActionLayoutSpec = remember {
         resolveAnimeHeroPrimaryActionLayoutSpec()
     }
-
     val originalTitle = remember(anime.description) {
         parseOriginalTitle(anime.description)
     }
+    val heroPanelShape = RoundedCornerShape(24.dp)
+    val titleColor = resolveAuroraHeroTitleColor(colors)
+    val primaryMetaColor = resolveAuroraHeroPrimaryMetaColor(colors)
+    val secondaryMetaColor = resolveAuroraHeroSecondaryMetaColor(colors)
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color.Transparent,
-                        Color.Black.copy(alpha = 0.7f),
-                    ),
-                ),
-            )
-            .padding(horizontal = 20.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .background(resolveAuroraHeroOverlayBrush(colors)),
     ) {
-        // Anime Title with optional original title
-        val displayTitle = buildAnnotatedString {
-            // Main title
-            append(anime.title)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 24.dp)
+                .then(
+                    if (colors.isDark) {
+                        Modifier
+                    } else {
+                        Modifier
+                            .clip(heroPanelShape)
+                            .background(resolveAuroraHeroPanelContainerColor(colors))
+                            .border(
+                                width = 1.dp,
+                                color = resolveAuroraHeroPanelBorderColor(colors),
+                                shape = heroPanelShape,
+                            )
+                            .padding(18.dp)
+                    }
+                ),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            val displayTitle = buildAnnotatedString {
+                append(anime.title)
 
-            // Original title in smaller, semi-transparent style
-            if (showOriginalTitle && originalTitle != null) {
-                withStyle(
-                    SpanStyle(
-                        color = Color.White.copy(alpha = 0.5f),
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Normal,
-                    ),
-                ) {
-                    append(" ($originalTitle)")
-                }
-            }
-        }
-        Text(
-            text = displayTitle,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            lineHeight = 30.sp,
-            maxLines = Int.MAX_VALUE,
-            overflow = TextOverflow.Clip,
-            style = TextStyle(
-                fontFamily = coverTitleFontFamily,
-                lineBreak = LineBreak.Heading,
-                hyphens = Hyphens.None,
-            ),
-        )
-
-        // Genres preview (first 3)
-        if (!anime.genre.isNullOrEmpty()) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                anime.genre!!.take(3).forEach { genre ->
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(colors.accent.copy(alpha = 0.2f))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                if (showOriginalTitle && originalTitle != null) {
+                    withStyle(
+                        SpanStyle(
+                            color = secondaryMetaColor,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Normal,
+                        ),
                     ) {
-                        Text(
-                            text = genre,
-                            fontSize = 11.sp,
-                            color = Color.White.copy(alpha = 0.9f),
-                            fontWeight = FontWeight.Medium,
-                        )
+                        append(" ($originalTitle)")
                     }
                 }
             }
-        }
 
-        // Rating, status and episode count
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Metadata rating (Anilist/Shikimori)
-            if (animeMetadata?.score != null) {
-                Icon(
-                    Icons.Filled.Star,
-                    contentDescription = null,
-                    tint = Color(0xFFFACC15),
-                    modifier = Modifier.size(14.dp),
+            Text(
+                text = displayTitle,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                lineHeight = 30.sp,
+                maxLines = Int.MAX_VALUE,
+                overflow = TextOverflow.Clip,
+                color = titleColor,
+                style = TextStyle(
+                    fontFamily = coverTitleFontFamily,
+                    lineBreak = LineBreak.Heading,
+                    hyphens = Hyphens.None,
+                ),
+            )
+
+            if (!anime.genre.isNullOrEmpty()) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    anime.genre!!.take(3).forEach { genre ->
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(resolveAuroraHeroChipContainerColor(colors))
+                                .then(
+                                    if (colors.isDark) {
+                                        Modifier
+                                    } else {
+                                        Modifier.border(
+                                            width = 1.dp,
+                                            color = resolveAuroraHeroChipBorderColor(colors),
+                                            shape = RoundedCornerShape(6.dp),
+                                        )
+                                    }
+                                )
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                        ) {
+                            Text(
+                                text = genre,
+                                fontSize = 11.sp,
+                                color = resolveAuroraHeroChipTextColor(colors),
+                                fontWeight = FontWeight.Medium,
+                            )
+                        }
+                    }
+                }
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (animeMetadata?.score != null) {
+                    Icon(
+                        Icons.Filled.Star,
+                        contentDescription = null,
+                        tint = Color(0xFFFACC15),
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Text(
+                        text = String.format("%.1f", animeMetadata.score),
+                        fontSize = 13.sp,
+                        color = primaryMetaColor,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        text = "|",
+                        fontSize = 13.sp,
+                        color = secondaryMetaColor,
+                    )
+                }
+
+                Text(
+                    text = AnimeStatusFormatter.formatStatus(anime.status),
+                    fontSize = 13.sp,
+                    color = secondaryMetaColor,
                 )
                 Text(
-                    text = String.format("%.1f", animeMetadata.score),
+                    text = "|",
                     fontSize = 13.sp,
-                    color = Color.White.copy(alpha = 0.85f),
-                    fontWeight = FontWeight.Medium,
+                    color = secondaryMetaColor,
                 )
                 Text(
-                    text = "•",
+                    text = "$episodeCount эп.",
                     fontSize = 13.sp,
-                    color = Color.White.copy(alpha = 0.5f),
+                    color = secondaryMetaColor,
                 )
             }
 
-            Text(
-                text = AnimeStatusFormatter.formatStatus(anime.status),
-                fontSize = 13.sp,
-                color = Color.White.copy(alpha = 0.7f),
-            )
-            Text(
-                text = "•",
-                fontSize = 13.sp,
-                color = Color.White.copy(alpha = 0.5f),
-            )
-            Text(
-                text = "$episodeCount эп.",
-                fontSize = 13.sp,
-                color = Color.White.copy(alpha = 0.7f),
-            )
-        }
+            Spacer(modifier = Modifier.height(4.dp))
 
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Action buttons row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            AuroraTitleHeroActionButton(
-                hasProgress = hasWatchingProgress,
-                onClick = onContinueWatching,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(primaryActionLayoutSpec.heightDp.dp),
-                cornerRadius = 12.dp,
-                iconSize = 20.dp,
-                contentPadding = PaddingValues(horizontal = primaryActionLayoutSpec.horizontalPaddingDp.dp),
-                textSize = 15.sp,
-                textWeight = FontWeight.SemiBold,
-            )
-
-            // Dubbing selector button (if available)
-            if (onDubbingClicked != null) {
-                Box(
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                AuroraTitleHeroActionButton(
+                    hasProgress = hasWatchingProgress,
+                    onClick = onContinueWatching,
                     modifier = Modifier
-                        .width(100.dp)
-                        .height(primaryActionLayoutSpec.heightDp.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            if (selectedDubbing?.isNotBlank() == true) {
-                                colors.accent.copy(alpha = 0.3f)
-                            } else {
-                                Color.White.copy(alpha = 0.15f)
-                            },
-                        )
-                        .clickable { onDubbingClicked() }
-                        .padding(horizontal = primaryActionLayoutSpec.horizontalPaddingDp.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                        .weight(1f)
+                        .height(primaryActionLayoutSpec.heightDp.dp),
+                    cornerRadius = 12.dp,
+                    iconSize = 20.dp,
+                    contentPadding = PaddingValues(horizontal = primaryActionLayoutSpec.horizontalPaddingDp.dp),
+                    textSize = 15.sp,
+                    textWeight = FontWeight.SemiBold,
+                )
+
+                if (onDubbingClicked != null) {
+                    val dubbingPalette = resolveAuroraHeroSecondaryButtonPalette(
+                        colors = colors,
+                        isActive = selectedDubbing?.isNotBlank() == true,
+                    )
+                    Box(
+                        modifier = Modifier
+                            .width(100.dp)
+                            .height(primaryActionLayoutSpec.heightDp.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(dubbingPalette.containerColor)
+                            .border(
+                                width = 1.dp,
+                                color = dubbingPalette.borderColor,
+                                shape = RoundedCornerShape(12.dp),
+                            )
+                            .clickable(onClick = onDubbingClicked)
+                            .padding(horizontal = primaryActionLayoutSpec.horizontalPaddingDp.dp),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Icon(
-                            Icons.Outlined.RecordVoiceOver,
-                            contentDescription = null,
-                            tint = if (selectedDubbing?.isNotBlank() == true) {
-                                colors.accent
-                            } else {
-                                Color.White.copy(alpha = 0.8f)
-                            },
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Text(
-                            text =
-                            selectedDubbing?.takeIf { it.isNotBlank() } ?: stringResource(MR.strings.label_dubbing),
-                            color = if (selectedDubbing?.isNotBlank() == true) {
-                                Color.White
-                            } else {
-                                Color.White.copy(alpha = 0.8f)
-                            },
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Outlined.RecordVoiceOver,
+                                contentDescription = null,
+                                tint = dubbingPalette.contentColor,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Text(
+                                text = selectedDubbing?.takeIf { it.isNotBlank() }
+                                    ?: stringResource(MR.strings.label_dubbing),
+                                color = dubbingPalette.contentColor,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
             }

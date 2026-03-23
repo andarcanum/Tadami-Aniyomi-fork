@@ -70,11 +70,11 @@ internal fun resolveAuroraTitleHeroCtaSurfaceSpec(
 ): AuroraTitleHeroCtaSurfaceSpec {
     return when (mode) {
         AuroraTitleHeroCtaMode.Aurora -> AuroraTitleHeroCtaSurfaceSpec(
-            containerAlpha = if (isDark) 0.50f else 0.45f,
+            containerAlpha = if (isDark) 0.50f else 0.88f,
             usesGradient = false,
-            innerGlowAlpha = if (isDark) 0.55f else 0.45f,
-            highlightAlpha = 0f,
-            borderAlpha = 0.12f,
+            innerGlowAlpha = if (isDark) 0.55f else 0.08f,
+            highlightAlpha = if (isDark) 0f else 0.12f,
+            borderAlpha = if (isDark) 0.12f else 0.10f,
         )
         AuroraTitleHeroCtaMode.Classic -> AuroraTitleHeroCtaSurfaceSpec(
             containerAlpha = 1f,

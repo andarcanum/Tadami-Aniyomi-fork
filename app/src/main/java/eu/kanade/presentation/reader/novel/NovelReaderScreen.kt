@@ -155,6 +155,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.TabbedDialog
+import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelPluginImageResolver
@@ -415,28 +416,36 @@ fun NovelReaderScreen(
     val backgroundModeIdentity = remember(backgroundSelection) {
         resolveReaderBackgroundIdentity(backgroundSelection)
     }
+    val isEInkMode = AuroraTheme.colors.isEInk
     val isBackgroundMode = state.readerSettings.appearanceMode == NovelReaderAppearanceMode.BACKGROUND
-    val activeBackgroundTexture = if (isBackgroundMode) {
+    val activeBackgroundTexture = if (isBackgroundMode || isEInkMode) {
         NovelReaderBackgroundTexture.NONE
     } else {
         state.readerSettings.backgroundTexture
     }
-    val activeOledEdgeGradient = if (isBackgroundMode) {
+    val activeOledEdgeGradient = if (isBackgroundMode || isEInkMode) {
         false
     } else {
         state.readerSettings.oledEdgeGradient
     }
-    val isDarkTheme = when (state.readerSettings.theme) {
-        NovelReaderTheme.SYSTEM -> MaterialTheme.colorScheme.background.luminance() < 0.5f
-        NovelReaderTheme.DARK -> true
-        NovelReaderTheme.LIGHT -> false
+    val isDarkTheme = when {
+        isEInkMode -> false
+        else -> when (state.readerSettings.theme) {
+            NovelReaderTheme.SYSTEM -> MaterialTheme.colorScheme.background.luminance() < 0.5f
+            NovelReaderTheme.DARK -> true
+            NovelReaderTheme.LIGHT -> false
+        }
     }
-    val fallbackTextColor = if (isDarkTheme) {
+    val fallbackTextColor = if (isEInkMode) {
+        Color(0xFF000000)
+    } else if (isDarkTheme) {
         androidx.compose.ui.graphics.Color(0xFFEDEDED)
     } else {
         androidx.compose.ui.graphics.Color(0xFF1A1A1A)
     }
-    val fallbackBackground = if (isDarkTheme) {
+    val fallbackBackground = if (isEInkMode) {
+        Color.White
+    } else if (isDarkTheme) {
         androidx.compose.ui.graphics.Color(0xFF121212)
     } else {
         androidx.compose.ui.graphics.Color.White
@@ -447,16 +456,26 @@ fun NovelReaderScreen(
     val themeModeBackground = parseReaderColor(state.readerSettings.backgroundColor)
         .takeIf { state.readerSettings.backgroundColor?.isNotBlank() == true }
         ?: fallbackBackground
-    val textColor = if (isBackgroundMode) backgroundModeTextColor else themeModeTextColor
-    val textBackground = if (isBackgroundMode) backgroundModeBaseColor else themeModeBackground
+    val textColor = when {
+        isEInkMode -> Color(0xFF000000)
+        isBackgroundMode -> backgroundModeTextColor
+        else -> themeModeTextColor
+    }
+    val textBackground = when {
+        isEInkMode -> Color.White
+        isBackgroundMode -> backgroundModeBaseColor
+        else -> themeModeBackground
+    }
 
     LaunchedEffect(
         isBackgroundMode,
+        isEInkMode,
         state.readerSettings.backgroundSource,
         customBackgroundPath,
         customBackgroundExists,
     ) {
         if (isBackgroundMode &&
+            !isEInkMode &&
             state.readerSettings.backgroundSource == NovelReaderBackgroundSource.CUSTOM &&
             customBackgroundPath.isNotBlank() &&
             !customBackgroundExists

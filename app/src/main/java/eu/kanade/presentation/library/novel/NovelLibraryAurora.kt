@@ -64,6 +64,7 @@ import eu.kanade.presentation.components.LocalTabState
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.components.resolveAuroraCardOverlaySpec
 import eu.kanade.presentation.components.resolveAuroraCoverModel
+import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.library.components.EntryCompactGridItem
@@ -596,6 +597,7 @@ private fun NovelLibraryAuroraCoverOnlyCard(
                 model = resolveAuroraCoverModel(coverData),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                colorFilter = rememberAuroraPosterColorFilter(),
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(RoundedCornerShape(12.dp)),

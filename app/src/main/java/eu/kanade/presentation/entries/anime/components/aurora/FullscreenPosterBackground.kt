@@ -27,6 +27,9 @@ import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.entries.components.aurora.applyAuroraBlurBackground
 import eu.kanade.presentation.entries.components.aurora.auroraPosterBackgroundSpec
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraPosterScrimBrush
+import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
+import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.entries.anime.model.Anime
 
 /**
@@ -76,6 +79,8 @@ fun FullscreenPosterBackground(
     val containerHeightPx = with(density) { configuration.screenHeightDp.dp.roundToPx() }
 
     Box(modifier = modifier.fillMaxSize()) {
+        val colors = AuroraTheme.colors
+
         if (initialModel != null) {
             var model by remember(initialModel) { mutableStateOf(initialModel) }
             val resolvedModel = resolveAuroraCoverModel(model) as? String
@@ -112,6 +117,7 @@ fun FullscreenPosterBackground(
                     fallback = placeholderPainter,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
+                    colorFilter = rememberAuroraPosterColorFilter(),
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -134,6 +140,7 @@ fun FullscreenPosterBackground(
                     fallback = placeholderPainter,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
+                    colorFilter = rememberAuroraPosterColorFilter(),
                     alpha = blurOverlayAlpha,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -157,21 +164,19 @@ fun FullscreenPosterBackground(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        0.0f to Color.Transparent,
-                        0.3f to Color.Black.copy(alpha = 0.1f),
-                        0.5f to Color.Black.copy(alpha = 0.4f),
-                        0.7f to Color.Black.copy(alpha = 0.7f),
-                        1.0f to Color.Black.copy(alpha = 0.9f),
-                    ),
-                ),
+                .background(resolveAuroraPosterScrimBrush(colors)),
         )
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = dimAlpha)),
+                .background(
+                    if (colors.isDark) {
+                        Color.Black.copy(alpha = dimAlpha)
+                    } else {
+                        colors.background.copy(alpha = dimAlpha * 0.18f)
+                    },
+                ),
         )
     }
 }

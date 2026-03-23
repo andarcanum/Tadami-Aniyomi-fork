@@ -38,6 +38,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AuroraBackground
+import eu.kanade.presentation.theme.resolveAuroraControlContainerColor
+import eu.kanade.presentation.theme.resolveAuroraTopBarScrimColor
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
@@ -172,12 +174,15 @@ internal fun SettingsAuroraBackground(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    val colors = AuroraTheme.colors
     AuroraBackground(modifier = modifier) {
         Box(modifier = Modifier.fillMaxSize()) {
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .background(Color.Black.copy(alpha = 0.15f)),
+                    .background(
+                        resolveAuroraTopBarScrimColor(colors),
+                    ),
             )
             content()
         }
@@ -240,16 +245,11 @@ internal fun AuroraTopBarIconButton(
     tint: Color = AuroraTheme.colors.textPrimary,
 ) {
     val colors = AuroraTheme.colors
-    val tabContainerColor = if (colors.background.luminance() < 0.5f) {
-        Color.White.copy(alpha = 0.05f)
-    } else {
-        Color.Black.copy(alpha = 0.03f)
-    }
     IconButton(
         onClick = onClick,
         modifier = modifier
             .size(40.dp)
-            .background(tabContainerColor, CircleShape),
+            .background(resolveAuroraControlContainerColor(colors), CircleShape),
     ) {
         Icon(
             imageVector = icon,

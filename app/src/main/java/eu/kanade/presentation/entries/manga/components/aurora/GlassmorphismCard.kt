@@ -9,16 +9,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraDetailCardBackgroundColors
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraDetailCardBorderColors
+import eu.kanade.presentation.theme.AuroraTheme
 
-/**
- * Reusable glassmorphism card component for Aurora theme.
- *
- * Provides semi-transparent background with gradient border effect
- * to create depth against poster backgrounds.
- */
 @Composable
 fun GlassmorphismCard(
     modifier: Modifier = Modifier,
@@ -28,26 +24,18 @@ fun GlassmorphismCard(
     innerPadding: Dp = 16.dp,
     content: @Composable () -> Unit,
 ) {
+    val colors = AuroraTheme.colors
+    val bgColors = resolveAuroraDetailCardBackgroundColors(colors)
+    val borderColors = resolveAuroraDetailCardBorderColors(colors)
+
     Box(
         modifier = modifier
             .padding(horizontal = horizontalPadding, vertical = verticalPadding)
             .clip(RoundedCornerShape(cornerRadius))
-            .background(
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = 0.12f),
-                        Color.White.copy(alpha = 0.08f),
-                    ),
-                ),
-            )
+            .background(brush = Brush.linearGradient(colors = bgColors))
             .border(
                 width = 1.dp,
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = 0.25f),
-                        Color.White.copy(alpha = 0.1f),
-                    ),
-                ),
+                brush = Brush.linearGradient(colors = borderColors),
                 shape = RoundedCornerShape(cornerRadius),
             )
             .padding(innerPadding),

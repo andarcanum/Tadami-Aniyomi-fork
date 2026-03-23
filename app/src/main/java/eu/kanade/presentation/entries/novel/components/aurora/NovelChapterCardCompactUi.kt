@@ -106,7 +106,7 @@ object NovelChapterCardCompactUi {
                         modifier = Modifier
                             .size(34.dp)
                             .clip(CircleShape)
-                            .background(colors.accent.copy(alpha = if (chapter.read) 0.26f else 0.14f)),
+                            .background(colors.accent.copy(alpha = if (chapter.read) 0.12f else 0.24f)),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(

@@ -73,7 +73,10 @@ import androidx.compose.ui.unit.sp
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.presentation.more.settings.AuroraTopBarIconButton
 import eu.kanade.presentation.more.settings.AuroraTopBarTitleText
+import eu.kanade.presentation.theme.AuroraColors
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.resolveAuroraBorderColor
+import eu.kanade.presentation.theme.resolveAuroraSelectionContainerColor
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import kotlinx.collections.immutable.ImmutableList
@@ -511,14 +514,8 @@ internal fun AuroraTabRow(
 ) {
     val colors = AuroraTheme.colors
     val scrollState = rememberScrollState()
-    val menuBorderBrush = remember { auroraMenuRimLightBrush() }
-
-    // Tab container - match QuickSourceButton surface
-    val tabContainerColor = if (colors.background.luminance() < 0.5f) {
-        Color.White.copy(alpha = 0.05f)
-    } else {
-        Color.Black.copy(alpha = 0.03f)
-    }
+    val menuBorderBrush = remember(colors) { auroraMenuRimLightBrush(colors) }
+    val tabContainerColor = resolveAuroraTabContainerColor(colors)
 
     Box(
         modifier = Modifier
@@ -568,8 +565,16 @@ internal fun AuroraTab(
     val selectedTabBrush = remember(colors.accent) {
         Brush.linearGradient(
             colors = listOf(
-                lerp(colors.accent, Color.White, 0.18f).copy(alpha = 0.32f),
-                colors.accent.copy(alpha = 0.18f),
+                if (colors.isDark) {
+                    lerp(colors.accent, Color.White, 0.18f).copy(alpha = 0.32f)
+                } else {
+                    resolveAuroraSelectionContainerColor(colors)
+                },
+                if (colors.isDark) {
+                    colors.accent.copy(alpha = 0.18f)
+                } else {
+                    Color.White.copy(alpha = 0.92f)
+                },
             ),
             start = androidx.compose.ui.geometry.Offset.Zero,
             end = androidx.compose.ui.geometry.Offset(0f, 240f),
@@ -580,21 +585,21 @@ internal fun AuroraTab(
     Box(
         modifier = modifier
             .clip(tabShape)
-            .background(
-                brush = if (isSelected) {
-                    selectedTabBrush
-                } else {
-                    Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
-                },
+                .background(
+                    brush = if (isSelected) {
+                        selectedTabBrush
+                    } else {
+                        Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
+                    },
                 shape = tabShape,
             )
-            .then(
-                if (isSelected) {
-                    Modifier.border(1.dp, Color.White.copy(alpha = 0.12f), tabShape)
-                } else {
-                    Modifier
-                },
-            )
+                .then(
+                    if (isSelected) {
+                        Modifier.border(1.dp, resolveAuroraTabSelectionBorderColor(colors), tabShape)
+                    } else {
+                        Modifier
+                    },
+                )
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,
@@ -646,16 +651,54 @@ internal fun resolveAuroraTabTextStyle(
 
 internal fun auroraMenuRimLightAlphaStops(): List<Pair<Float, Float>> {
     return listOf(
-        0.00f to 0.10f,
-        0.28f to 0.03f,
+        0.00f to 0.24f,
+        0.28f to 0.12f,
         0.62f to 0.00f,
         1.00f to 0.00f,
     )
 }
 
-internal fun auroraMenuRimLightBrush(): Brush {
+internal fun auroraMenuRimLightBrush(colors: AuroraColors): Brush {
+    if (colors.isEInk) {
+        return Brush.verticalGradient(
+            colorStops = arrayOf(
+                0.00f to Color(0xFFE8E8E8),
+                0.28f to Color(0xFFD4D4D4),
+                0.62f to Color(0xFFC0C0C0),
+                1.00f to Color(0xFFB4B4B4),
+            ),
+        )
+    }
     val stops = auroraMenuRimLightAlphaStops()
-        .map { (stop, alpha) -> stop to Color.White.copy(alpha = alpha) }
+        .map { (stop, alpha) ->
+            stop to if (colors.isDark) {
+                Color.White.copy(alpha = alpha)
+            } else {
+                resolveAuroraBorderColor(colors, emphasized = false).copy(alpha = alpha)
+            }
+        }
         .toTypedArray()
     return Brush.verticalGradient(colorStops = stops)
+}
+
+internal fun resolveAuroraTabContainerColor(colors: AuroraColors): Color {
+    if (colors.isEInk) {
+        return Color(0xFFF6F6F6)
+    }
+    return if (colors.isDark) {
+        Color.White.copy(alpha = 0.05f)
+    } else {
+        Color(0xD1FFFFFF)
+    }
+}
+
+internal fun resolveAuroraTabSelectionBorderColor(colors: AuroraColors): Color {
+    if (colors.isEInk) {
+        return Color(0xFF9A9A9A)
+    }
+    return if (colors.isDark) {
+        Color.White.copy(alpha = 0.12f)
+    } else {
+        colors.accent.copy(alpha = 0.28f)
+    }
 }

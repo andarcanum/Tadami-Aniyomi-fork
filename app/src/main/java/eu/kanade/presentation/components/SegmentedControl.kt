@@ -23,6 +23,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.resolveAuroraControlContainerColor
+import eu.kanade.presentation.theme.resolveAuroraControlSelectedContainerColor
+import eu.kanade.presentation.theme.resolveAuroraControlSelectedContentColor
 
 /**
  * Aniview Premium Segmented Control
@@ -43,7 +46,7 @@ fun AniviewSegmentedControl(
             .fillMaxWidth()
             .height(48.dp)
             .background(
-                color = Color.White.copy(alpha = 0.05f),
+                color = resolveAuroraControlContainerColor(colors),
                 shape = RoundedCornerShape(24.dp),
             )
             .padding(4.dp),
@@ -54,7 +57,7 @@ fun AniviewSegmentedControl(
 
             val backgroundColor by animateColorAsState(
                 targetValue = if (isSelected) {
-                    Color(0xFF1E3A5F) // Dark blue background for selected
+                    resolveAuroraControlSelectedContainerColor(colors)
                 } else {
                     Color.Transparent
                 },
@@ -64,7 +67,7 @@ fun AniviewSegmentedControl(
 
             val textColor by animateColorAsState(
                 targetValue = if (isSelected) {
-                    colors.accent // Electric blue for selected text
+                    resolveAuroraControlSelectedContentColor(colors)
                 } else {
                     colors.textSecondary
                 },
@@ -108,7 +111,7 @@ fun AniviewSegmentedControlCompact(
         modifier = modifier
             .height(36.dp)
             .background(
-                color = Color.White.copy(alpha = 0.05f),
+                color = resolveAuroraControlContainerColor(colors),
                 shape = RoundedCornerShape(18.dp),
             )
             .padding(3.dp),
@@ -123,14 +126,22 @@ fun AniviewSegmentedControlCompact(
                     .fillMaxHeight()
                     .clip(RoundedCornerShape(15.dp))
                     .background(
-                        if (isSelected) Color(0xFF1E3A5F) else Color.Transparent,
+                        if (isSelected) {
+                            resolveAuroraControlSelectedContainerColor(colors)
+                        } else {
+                            Color.Transparent
+                        },
                     )
                     .clickable { onItemSelected(index) },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = item,
-                    color = if (isSelected) colors.accent else colors.textSecondary,
+                    color = if (isSelected) {
+                        resolveAuroraControlSelectedContentColor(colors)
+                    } else {
+                        colors.textSecondary
+                    },
                     fontSize = 13.sp,
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                 )

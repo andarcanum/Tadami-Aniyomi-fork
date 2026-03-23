@@ -73,6 +73,7 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
 import eu.kanade.presentation.components.relativeDateTimeText
 import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
+import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.entries.components.EntryBottomActionMenu
 import eu.kanade.presentation.entries.components.EntryToolbar
 import eu.kanade.presentation.entries.components.ItemCover
@@ -456,6 +457,7 @@ fun NovelScreen(
                             fallback = fallbackPainter,
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
+                            colorFilter = rememberAuroraPosterColorFilter(),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(220.dp)

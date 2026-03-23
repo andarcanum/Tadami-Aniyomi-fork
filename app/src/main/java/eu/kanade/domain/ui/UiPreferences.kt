@@ -82,6 +82,8 @@ class UiPreferences(
 
     fun animatedAuroraBackground() = preferenceStore.getBoolean("animated_aurora_background", true)
 
+    fun eInkMode() = preferenceStore.getBoolean("e_ink_mode", false)
+
     fun appUiFontId() = preferenceStore.getString("app_ui_font_id", DEFAULT_APP_UI_FONT_ID)
 
     fun coverTitleFontId() = preferenceStore.getString("cover_title_font_id", DEFAULT_COVER_TITLE_FONT_ID)

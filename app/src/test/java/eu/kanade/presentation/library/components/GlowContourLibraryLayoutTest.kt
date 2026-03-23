@@ -178,7 +178,7 @@ class GlowContourLibraryLayoutTest {
 
     @Test
     fun `action button render spec uses glass accent instead of solid fill`() {
-        resolveGlowContourActionButtonRenderSpec() shouldBe GlowContourActionButtonRenderSpec(
+        resolveGlowContourActionButtonRenderSpec(isDark = true) shouldBe GlowContourActionButtonRenderSpec(
             containerTopAlpha = 0.22f,
             containerBottomAlpha = 0.08f,
             borderTopAlpha = 0.42f,

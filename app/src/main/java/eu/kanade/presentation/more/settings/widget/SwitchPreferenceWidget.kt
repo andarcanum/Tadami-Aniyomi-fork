@@ -30,8 +30,8 @@ fun SwitchPreferenceWidget(
     onCheckedChanged: (Boolean) -> Unit,
 ) {
     val isAurora = LocalSettingsUiStyle.current == SettingsUiStyle.Aurora
+    val colors = AuroraTheme.colors
     val accent = settingsAccentColor()
-    val auroraIsDark = AuroraTheme.colors.isDark
     TextPreferenceWidget(
         modifier = modifier.alpha(if (enabled) 1f else 0.6f),
         title = title,
@@ -45,10 +45,7 @@ fun SwitchPreferenceWidget(
                 colors = if (isAurora) {
                     SwitchDefaults.colors(
                         checkedThumbColor = accent,
-                        checkedTrackColor = resolveAuroraMoreCheckedTrackColor(
-                            accent = accent,
-                            isDark = auroraIsDark,
-                        ),
+                        checkedTrackColor = resolveAuroraMoreCheckedTrackColor(colors),
                     )
                 } else {
                     SwitchDefaults.colors()

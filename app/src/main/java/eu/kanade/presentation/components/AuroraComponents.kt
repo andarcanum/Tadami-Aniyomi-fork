@@ -21,6 +21,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.withTransform
+import android.animation.ValueAnimator
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -36,10 +37,11 @@ fun AuroraBackground(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val uiPreferences = remember { Injekt.get<UiPreferences>() }
+    val colors = AuroraTheme.colors
     val animatedAuroraBackground by uiPreferences.animatedAuroraBackground().collectAsState()
 
     AuroraAmbientBackground(
-        enabled = animatedAuroraBackground,
+        enabled = animatedAuroraBackground && !colors.isEInk,
         modifier = modifier,
         content = content,
     )
@@ -68,8 +70,9 @@ fun AuroraAmbientBackground(
     }
 
     val shouldAnimate = shouldAnimateAuroraBackground(
-        userEnabled = enabled,
+        userEnabled = enabled && !colors.isEInk,
         isLifecycleResumed = isLifecycleResumed,
+        systemAnimationsEnabled = ValueAnimator.areAnimatorsEnabled(),
     )
 
     Box(
@@ -77,7 +80,7 @@ fun AuroraAmbientBackground(
             .fillMaxSize()
             .background(colors.backgroundGradient),
     ) {
-        if (enabled) {
+        if (enabled && !colors.isEInk) {
             if (shouldAnimate) {
                 val transition = rememberInfiniteTransition(label = "auroraAmbient")
                 val blobOneDriftX by transition.animateFloat(
@@ -247,7 +250,7 @@ private fun AuroraAmbientCanvas(
             }
         }
 
-        val blobBaseAlpha = if (colors.isDark) 1f else 0.78f
+        val blobBaseAlpha = if (colors.isDark) 1f else 0.34f
         drawAmbientBlob(
             centerFractionX = 0.22f,
             centerFractionY = 0.14f,
@@ -299,8 +302,9 @@ private fun AuroraAmbientCanvas(
 internal fun shouldAnimateAuroraBackground(
     userEnabled: Boolean,
     isLifecycleResumed: Boolean,
+    systemAnimationsEnabled: Boolean,
 ): Boolean {
-    return userEnabled && isLifecycleResumed
+    return userEnabled && isLifecycleResumed && systemAnimationsEnabled
 }
 
 @Composable

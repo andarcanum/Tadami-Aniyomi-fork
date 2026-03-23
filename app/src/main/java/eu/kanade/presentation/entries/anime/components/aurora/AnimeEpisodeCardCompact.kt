@@ -103,7 +103,7 @@ fun AnimeEpisodeCardCompact(
     )
 
     // Adjust opacity for seen episodes
-    val contentAlpha = if (episode.seen) 0.6f else 1f
+    val contentAlpha = if (episode.seen) 0.45f else 1f
 
     val episodeCard: @Composable () -> Unit = {
         GlassmorphismCard(

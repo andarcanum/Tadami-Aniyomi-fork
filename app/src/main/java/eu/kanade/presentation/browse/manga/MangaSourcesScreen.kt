@@ -78,7 +78,7 @@ fun MangaSourcesScreen(
     val searchBackground = if (colors.isDark) {
         colors.glass.copy(alpha = 0.12f)
     } else {
-        colors.glass.copy(alpha = 0.03f)
+        colors.cardBackground
     }
     when {
         state.isLoading -> LoadingScreen(Modifier.padding(contentPadding))

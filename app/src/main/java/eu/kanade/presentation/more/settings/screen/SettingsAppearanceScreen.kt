@@ -420,6 +420,13 @@ object SettingsAppearanceScreen : SearchableSettings {
                     ),
                 )
                 add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.eInkMode(),
+                        title = stringResource(AYMR.strings.pref_e_ink_mode),
+                        subtitle = stringResource(AYMR.strings.pref_e_ink_mode_summary),
+                    ),
+                )
+                add(
                     Preference.PreferenceItem.TextPreference(
                         title = stringResource(AYMR.strings.pref_customize_home_header_layout),
                         subtitle = stringResource(AYMR.strings.pref_customize_home_header_layout_summary),

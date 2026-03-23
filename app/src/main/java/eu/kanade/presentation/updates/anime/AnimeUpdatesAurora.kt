@@ -51,6 +51,7 @@ import coil3.compose.AsyncImage
 import eu.kanade.presentation.components.relativeDateText
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.components.resolveAuroraCoverModel
+import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
@@ -321,6 +322,7 @@ fun AuroraUpdateCard(
                 model = resolveAuroraCoverModel(item.update.coverData),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                colorFilter = rememberAuroraPosterColorFilter(),
                 modifier = Modifier.fillMaxSize(),
                 error = placeholderPainter,
                 fallback = placeholderPainter,

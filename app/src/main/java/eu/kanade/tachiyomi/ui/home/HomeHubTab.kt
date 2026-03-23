@@ -74,12 +74,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -97,6 +99,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -125,11 +128,16 @@ import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.components.resolveAuroraCtaLabelShadowSpec
 import eu.kanade.presentation.components.resolveAuroraHomeIconShadowSpec
 import eu.kanade.presentation.components.toComposeShadow
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroOverlayBrush
+import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.more.settings.screen.browse.AnimeExtensionReposScreen
 import eu.kanade.presentation.more.settings.screen.browse.MangaExtensionReposScreen
 import eu.kanade.presentation.more.settings.screen.browse.NovelExtensionReposScreen
 import eu.kanade.presentation.theme.AuroraColors
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.AuroraSurfaceLevel
+import eu.kanade.presentation.theme.resolveAuroraBorderColor
+import eu.kanade.presentation.theme.resolveAuroraSurfaceColor
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
@@ -303,11 +311,11 @@ internal fun resolveHomeHubHeroButtonSurfaceSpec(
 ): HomeHubHeroButtonSurfaceSpec {
     return when (mode) {
         HomeHeroCtaMode.Aurora -> HomeHubHeroButtonSurfaceSpec(
-            containerAlpha = if (isDark) 0.50f else 0.45f,
+            containerAlpha = if (isDark) 0.50f else 0.78f,
             usesGradient = false,
-            borderAlpha = 0.12f,
-            innerGlowAlpha = if (isDark) 0.55f else 0.45f,
-            highlightAlpha = 0f,
+            borderAlpha = if (isDark) 0.12f else 0.18f,
+            innerGlowAlpha = if (isDark) 0.55f else 0.10f,
+            highlightAlpha = if (isDark) 0f else 0.12f,
         )
         HomeHeroCtaMode.Classic -> HomeHubHeroButtonSurfaceSpec(
             containerAlpha = 1f,
@@ -382,8 +390,8 @@ internal fun resolveHomeHubRecentPosterSurfaceSpec(isDark: Boolean): HomeHubRece
         )
     } else {
         HomeHubRecentPosterSurfaceSpec(
-            containerAlpha = 0.02f,
-            posterAlpha = 0.05f,
+            containerAlpha = 0.12f,
+            posterAlpha = 0.18f,
         )
     }
 }
@@ -1205,7 +1213,11 @@ private fun HomeHubPinnedHeader(
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val contentMaxWidthDp = auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp
     val isDarkTheme = colors.background.luminance() < 0.5f
-    val headerTintAlpha = resolveHomeHubHeaderTintAlpha(isDarkTheme = isDarkTheme)
+    val headerTintAlpha = if (colors.isEInk) {
+        0.03f
+    } else {
+        resolveHomeHubHeaderTintAlpha(isDarkTheme = isDarkTheme)
+    }
     val headerTintSecondaryAlpha = resolveHomeHubHeaderTintSecondaryAlpha(primaryAlpha = headerTintAlpha)
     val headerBackgroundBrush = remember(colors.accent, headerTintAlpha, headerTintSecondaryAlpha) {
         Brush.verticalGradient(
@@ -2278,8 +2290,13 @@ private fun WelcomeSection(onBrowseClick: () -> Unit, onExtensionClick: () -> Un
     val contentMaxWidthDp = auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp
 
     Box(
-        modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp).padding(16.dp).clip(RoundedCornerShape(24.dp))
-            .background(colors.cardBackground).padding(32.dp),
+        modifier = Modifier
+            .auroraCenteredMaxWidth(contentMaxWidthDp)
+            .padding(16.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(resolveAuroraSurfaceColor(colors, AuroraSurfaceLevel.Subtle))
+            .border(1.dp, colors.divider, RoundedCornerShape(24.dp))
+            .padding(32.dp),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -2321,7 +2338,9 @@ private fun WelcomeSection(onBrowseClick: () -> Unit, onExtensionClick: () -> Un
 
             Button(
                 onClick = onExtensionClick,
-                colors = ButtonDefaults.buttonColors(containerColor = colors.glass),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = resolveAuroraSurfaceColor(colors, AuroraSurfaceLevel.Glass),
+                ),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth().height(52.dp),
             ) {
@@ -2352,7 +2371,7 @@ internal fun shouldReserveHomeHubHeroSlot(
 }
 
 internal fun resolveHomeHubHeaderTintAlpha(isDarkTheme: Boolean): Float {
-    return if (isDarkTheme) 0.12f else 0.09f
+    return if (isDarkTheme) 0.12f else 0.06f
 }
 
 internal fun resolveHomeHubHeaderTintSecondaryAlpha(primaryAlpha: Float): Float {
@@ -2368,9 +2387,15 @@ internal fun homeHubRimLightAlphaStops(): List<Pair<Float, Float>> {
     )
 }
 
-internal fun homeHubRimLightBrush(): Brush {
+internal fun homeHubRimLightBrush(colors: AuroraColors): Brush {
     val stops = homeHubRimLightAlphaStops()
-        .map { (stop, alpha) -> stop to Color.White.copy(alpha = alpha) }
+        .map { (stop, alpha) ->
+            stop to if (colors.isDark) {
+                Color.White.copy(alpha = alpha)
+            } else {
+                resolveAuroraBorderColor(colors, emphasized = false).copy(alpha = alpha)
+            }
+        }
         .toTypedArray()
     return Brush.verticalGradient(colorStops = stops)
 }
@@ -2384,6 +2409,7 @@ private fun HeroSection(
     onEntryClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
+    val isEInkMode = colors.isEInk
     val actionSpec = remember(section, hero.progressNumber, ctaMode) {
         resolveHomeHubHeroActionSpec(
             section = section,
@@ -2397,35 +2423,78 @@ private fun HeroSection(
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val contentMaxWidthDp = auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp
     val heroCardShape = RoundedCornerShape(24.dp)
-    val overlayGradient = remember(colors) {
-        Brush.verticalGradient(
-            colorStops = arrayOf(
-                0.00f to Color.Transparent,
-                0.40f to Color.Transparent,
-                0.66f to colors.background.copy(alpha = 0.42f),
-                0.86f to colors.background.copy(alpha = 0.84f),
-                1.00f to colors.background.copy(alpha = 0.96f),
-            ),
-        )
+    val overlayGradient = remember(colors, isEInkMode) {
+        if (isEInkMode) {
+            Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0.00f to Color.Transparent,
+                    0.72f to Color.White.copy(alpha = 0.02f),
+                    1.00f to Color.White.copy(alpha = 0.08f),
+                ),
+            )
+        } else {
+            Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0.00f to Color.Transparent,
+                    0.40f to Color.Transparent,
+                    0.66f to colors.background.copy(alpha = 0.42f),
+                    0.86f to colors.background.copy(alpha = 0.84f),
+                    1.00f to colors.background.copy(alpha = 0.96f),
+                ),
+            )
+        }
     }
-    val readabilityScrim = remember {
-        Brush.verticalGradient(
-            colorStops = arrayOf(
-                0.00f to Color.Transparent,
-                0.58f to Color.Transparent,
-                0.78f to Color.Black.copy(alpha = 0.46f),
-                1.00f to Color.Black.copy(alpha = 0.88f),
-            ),
-        )
+    val eInkTextBackdropBrush = remember(colors, isEInkMode) {
+        if (isEInkMode) {
+            Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0.00f to Color.Transparent,
+                    0.30f to Color.Transparent,
+                    0.56f to Color.White.copy(alpha = 0.14f),
+                    0.82f to Color.White.copy(alpha = 0.74f),
+                    1.00f to Color.White.copy(alpha = 0.96f),
+                ),
+            )
+        } else {
+            resolveAuroraHeroOverlayBrush(colors)
+        }
     }
-    val heroTextShadow = remember {
-        Shadow(
-            color = Color.Black.copy(alpha = 0.86f),
-            offset = Offset(0f, 2.5f),
-            blurRadius = 10f,
-        )
+    val readabilityScrim = remember(isEInkMode) {
+        if (isEInkMode) {
+            Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0.00f to Color.Transparent,
+                    0.68f to Color.Transparent,
+                    1.00f to Color.White.copy(alpha = 0.16f),
+                ),
+            )
+        } else {
+            Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0.00f to Color.Transparent,
+                    0.58f to Color.Transparent,
+                    0.78f to Color.Black.copy(alpha = 0.46f),
+                    1.00f to Color.Black.copy(alpha = 0.88f),
+                ),
+            )
+        }
     }
-    val rimLightBrush = remember { homeHubRimLightBrush() }
+    val heroTextShadow = remember(isEInkMode) {
+        if (isEInkMode) {
+            Shadow(
+                color = Color.Transparent,
+                offset = Offset.Zero,
+                blurRadius = 0f,
+            )
+        } else {
+            Shadow(
+                color = Color.Black.copy(alpha = 0.86f),
+                offset = Offset(0f, 2.5f),
+                blurRadius = 10f,
+            )
+        }
+    }
+    val rimLightBrush = remember(colors) { homeHubRimLightBrush(colors) }
     val actionButtonShape = RoundedCornerShape(16.dp)
     val actionButtonSurfaceSpec = remember(ctaMode, colors.isDark) {
         resolveHomeHubHeroButtonSurfaceSpec(
@@ -2433,7 +2502,7 @@ private fun HeroSection(
             isDark = colors.isDark,
         )
     }
-    val actionButtonHasReadabilityEffects = buttonVisualMode == HomeHubHeroButtonVisualMode.AuroraGlass
+    val actionButtonHasReadabilityEffects = buttonVisualMode == HomeHubHeroButtonVisualMode.AuroraGlass && !isEInkMode
     val actionButtonLabelShadow = remember(actionButtonHasReadabilityEffects) {
         resolveAuroraCtaLabelShadowSpec(
             enabled = actionButtonHasReadabilityEffects,
@@ -2442,42 +2511,66 @@ private fun HeroSection(
     val actionButtonIconShadowSpec = remember(actionButtonHasReadabilityEffects) {
         resolveAuroraHomeIconShadowSpec(enabled = actionButtonHasReadabilityEffects)
     }
-    val actionButtonBrush = remember(colors, buttonVisualMode, actionButtonSurfaceSpec) {
+    val actionButtonBrush = remember(colors, buttonVisualMode, actionButtonSurfaceSpec, isEInkMode) {
         when (buttonVisualMode) {
             HomeHubHeroButtonVisualMode.ClassicSolid -> SolidColor(colors.accent)
-            HomeHubHeroButtonVisualMode.AuroraGlass -> SolidColor(
-                colors.accent.copy(alpha = actionButtonSurfaceSpec.containerAlpha),
+            HomeHubHeroButtonVisualMode.AuroraGlass -> if (isEInkMode) {
+                SolidColor(colors.accent)
+            } else {
+                SolidColor(colors.accent.copy(alpha = actionButtonSurfaceSpec.containerAlpha))
+            }
+        }
+    }
+    val actionButtonInnerGlowBrush = remember(colors.accent, actionButtonSurfaceSpec, isEInkMode) {
+        if (isEInkMode) {
+            Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0.00f to Color.Transparent,
+                    1.00f to Color.Transparent,
+                ),
+            )
+        } else {
+            Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0.00f to Color.Transparent,
+                    0.46f to colors.accent.copy(alpha = actionButtonSurfaceSpec.innerGlowAlpha * 0.18f),
+                    0.78f to colors.accent.copy(alpha = actionButtonSurfaceSpec.innerGlowAlpha * 0.58f),
+                    1.00f to colors.accent.copy(alpha = actionButtonSurfaceSpec.innerGlowAlpha),
+                ),
             )
         }
     }
-    val actionButtonInnerGlowBrush = remember(colors.accent, actionButtonSurfaceSpec) {
-        Brush.verticalGradient(
-            colorStops = arrayOf(
-                0.00f to Color.Transparent,
-                0.46f to colors.accent.copy(alpha = actionButtonSurfaceSpec.innerGlowAlpha * 0.18f),
-                0.78f to colors.accent.copy(alpha = actionButtonSurfaceSpec.innerGlowAlpha * 0.58f),
-                1.00f to colors.accent.copy(alpha = actionButtonSurfaceSpec.innerGlowAlpha),
-            ),
-        )
-    }
-    val actionButtonHighlightBrush = remember(actionButtonSurfaceSpec) {
-        Brush.verticalGradient(
-            colorStops = arrayOf(
-                0.00f to Color.White.copy(alpha = actionButtonSurfaceSpec.highlightAlpha),
-                0.34f to Color.White.copy(alpha = actionButtonSurfaceSpec.highlightAlpha * 0.48f),
-                0.68f to Color.Transparent,
-                1.00f to Color.Transparent,
-            ),
-        )
-    }
-    val actionButtonBorderBrush = remember(colors, buttonVisualMode, actionButtonSurfaceSpec) {
-        when (buttonVisualMode) {
-            HomeHubHeroButtonVisualMode.ClassicSolid -> Brush.linearGradient(
-                colors = listOf(
-                    Color.White.copy(alpha = actionButtonSurfaceSpec.borderAlpha),
-                    Color.White.copy(alpha = actionButtonSurfaceSpec.borderAlpha),
+    val actionButtonHighlightBrush = remember(actionButtonSurfaceSpec, isEInkMode) {
+        if (isEInkMode) {
+            Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0.00f to Color.Transparent,
+                    1.00f to Color.Transparent,
                 ),
             )
+        } else {
+            Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0.00f to Color.White.copy(alpha = actionButtonSurfaceSpec.highlightAlpha),
+                    0.34f to Color.White.copy(alpha = actionButtonSurfaceSpec.highlightAlpha * 0.48f),
+                    0.68f to Color.Transparent,
+                    1.00f to Color.Transparent,
+                ),
+            )
+        }
+    }
+    val actionButtonBorderBrush = remember(colors, buttonVisualMode, actionButtonSurfaceSpec, isEInkMode) {
+        when (buttonVisualMode) {
+            HomeHubHeroButtonVisualMode.ClassicSolid -> if (isEInkMode) {
+                SolidColor(Color.White.copy(alpha = actionButtonSurfaceSpec.borderAlpha))
+            } else {
+                Brush.linearGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = actionButtonSurfaceSpec.borderAlpha),
+                        Color.White.copy(alpha = actionButtonSurfaceSpec.borderAlpha),
+                    ),
+                )
+            }
             HomeHubHeroButtonVisualMode.AuroraGlass -> SolidColor(
                 Color.White.copy(alpha = actionButtonSurfaceSpec.borderAlpha),
             )
@@ -2525,7 +2618,7 @@ private fun HeroSection(
     }
     val actionButtonContentColor = when (buttonVisualMode) {
         HomeHubHeroButtonVisualMode.ClassicSolid -> colors.textOnAccent
-        HomeHubHeroButtonVisualMode.AuroraGlass -> Color.White
+        HomeHubHeroButtonVisualMode.AuroraGlass -> if (isEInkMode) colors.textOnAccent else Color.White
     }
     val actionButtonPadding = when (buttonVisualMode) {
         HomeHubHeroButtonVisualMode.ClassicSolid -> {
@@ -2549,6 +2642,7 @@ private fun HeroSection(
             model = hero.coverData,
             contentDescription = null,
             contentScale = ContentScale.Crop,
+            colorFilter = rememberAuroraPosterColorFilter(),
             modifier = Modifier.fillMaxSize(),
             error = fallbackPainter,
             fallback = fallbackPainter,
@@ -2557,33 +2651,79 @@ private fun HeroSection(
         Box(Modifier.fillMaxSize().background(readabilityScrim))
 
         Column(
-            modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .then(
+                    if (isEInkMode) {
+                        Modifier
+                            .fillMaxWidth()
+                            .background(eInkTextBackdropBrush)
+                            .padding(horizontal = 18.dp, vertical = 16.dp)
+                    } else {
+                        Modifier.padding(24.dp)
+                    },
+                ),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             // Badge hidden as per design update
-            Text(
-                hero.title,
-                color = Color.White,
-                fontSize = 28.sp,
-                fontFamily = FontFamily(Font(eu.kanade.tachiyomi.R.font.montserrat_bold)),
-                lineHeight = 34.sp,
-                style = TextStyle(lineBreak = LineBreak.Heading, shadow = heroTextShadow),
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (isEInkMode) {
+                OutlinedHeroText(
+                    text = hero.title,
+                    modifier = Modifier.fillMaxWidth(),
+                    baseStyle = TextStyle(
+                        fontSize = 28.sp,
+                        fontFamily = FontFamily(Font(eu.kanade.tachiyomi.R.font.montserrat_bold)),
+                        lineHeight = 34.sp,
+                        lineBreak = LineBreak.Heading,
+                        shadow = heroTextShadow,
+                    ),
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    outlineWidth = 4.dp,
+                    fillColor = Color.White,
+                    outlineColor = Color.Black,
+                )
+            } else {
+                Text(
+                    hero.title,
+                    color = Color.White,
+                    fontSize = 28.sp,
+                    fontFamily = FontFamily(Font(eu.kanade.tachiyomi.R.font.montserrat_bold)),
+                    lineHeight = 34.sp,
+                    style = TextStyle(lineBreak = LineBreak.Heading, shadow = heroTextShadow),
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Spacer(Modifier.height(14.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                Box(Modifier.size(6.dp).background(colors.accent, CircleShape))
+                Box(Modifier.size(6.dp).background(if (isEInkMode) Color.Black else colors.accent, CircleShape))
                 Spacer(Modifier.width(8.dp))
-                Text(
-                    stringResource(actionSpec.progressLabelRes, (hero.progressNumber % 1000).toInt()),
-                    color = Color.White.copy(alpha = 0.92f),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    style = TextStyle(shadow = heroTextShadow),
-                )
+                if (isEInkMode) {
+                    OutlinedHeroText(
+                        text = stringResource(actionSpec.progressLabelRes, (hero.progressNumber % 1000).toInt()),
+                        baseStyle = TextStyle(
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            shadow = heroTextShadow,
+                        ),
+                        textAlign = TextAlign.Start,
+                        maxLines = 1,
+                        outlineWidth = 2.dp,
+                        fillColor = Color.White,
+                        outlineColor = Color.Black,
+                    )
+                } else {
+                    Text(
+                        stringResource(actionSpec.progressLabelRes, (hero.progressNumber % 1000).toInt()),
+                        color = Color.White.copy(alpha = 0.92f),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        style = TextStyle(shadow = heroTextShadow),
+                    )
+                }
             }
 
             Spacer(Modifier.height(24.dp))
@@ -2646,14 +2786,21 @@ private fun HeroSectionPlaceholder() {
     val colors = AuroraTheme.colors
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val contentMaxWidthDp = auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp
+    val placeholderShape = RoundedCornerShape(24.dp)
+    val placeholderSurface = if (colors.isEInk) {
+        resolveAuroraSurfaceColor(colors, AuroraSurfaceLevel.Strong)
+    } else {
+        colors.cardBackground
+    }
 
     Box(
         modifier = Modifier
             .auroraCenteredMaxWidth(contentMaxWidthDp)
             .height(440.dp)
             .padding(16.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(colors.cardBackground.copy(alpha = 0.55f)),
+            .clip(placeholderShape)
+            .background(placeholderSurface)
+            .border(1.dp, resolveAuroraBorderColor(colors, emphasized = colors.isEInk), placeholderShape),
     )
 }
 
@@ -2663,12 +2810,17 @@ private fun QuickSourceButton(sourceName: String?, onClick: () -> Unit) {
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val contentMaxWidthDp = auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp
     val sourceButtonShape = RoundedCornerShape(16.dp)
-    val sourceSurface = if (colors.background.luminance() < 0.5f) {
-        Color.White.copy(alpha = 0.05f)
-    } else {
-        Color.Black.copy(alpha = 0.03f)
+    val sourceSurface = when {
+        colors.isEInk -> resolveAuroraSurfaceColor(colors, AuroraSurfaceLevel.Strong)
+        colors.background.luminance() < 0.5f -> {
+            Color.White.copy(alpha = 0.05f)
+        }
+        else -> resolveAuroraSurfaceColor(colors, AuroraSurfaceLevel.Strong)
     }
-    val sourceBorderBrush = remember { auroraMenuRimLightBrush() }
+    val sourceBorderBrush = remember(colors) { auroraMenuRimLightBrush(colors) }
+    val sourceShadowElevation = if (colors.isEInk) 10.dp else 8.dp
+    val sourceAmbientShadow = if (colors.isEInk) Color.Black.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.08f)
+    val sourceSpotShadow = if (colors.isEInk) Color.Black.copy(alpha = 0.14f) else Color.Black.copy(alpha = 0.12f)
 
     Box(
         modifier = Modifier
@@ -2682,6 +2834,12 @@ private fun QuickSourceButton(sourceName: String?, onClick: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
+                .shadow(
+                    elevation = sourceShadowElevation,
+                    shape = sourceButtonShape,
+                    ambientColor = sourceAmbientShadow,
+                    spotColor = sourceSpotShadow,
+                )
                 .clip(sourceButtonShape)
                 .background(sourceSurface)
                 .border(0.75.dp, sourceBorderBrush, sourceButtonShape),
@@ -2943,6 +3101,46 @@ private fun HomeHubRecentCard(
 }
 
 @Composable
+private fun OutlinedHeroText(
+    text: String,
+    baseStyle: TextStyle,
+    modifier: Modifier = Modifier,
+    textAlign: TextAlign = TextAlign.Start,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Ellipsis,
+    outlineWidth: Dp,
+    fillColor: Color,
+    outlineColor: Color,
+) {
+    val strokeWidthPx = with(LocalDensity.current) { outlineWidth.toPx() }
+    val strokeStyle = baseStyle.copy(
+        color = outlineColor,
+        drawStyle = Stroke(width = strokeWidthPx),
+    )
+    val fillStyle = baseStyle.copy(color = fillColor)
+
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            style = strokeStyle,
+            textAlign = textAlign,
+            maxLines = maxLines,
+            overflow = overflow,
+        )
+        Text(
+            text = text,
+            style = fillStyle,
+            textAlign = textAlign,
+            maxLines = maxLines,
+            overflow = overflow,
+        )
+    }
+}
+
+@Composable
 private fun HomeHubRecentPosterCard(
     title: String,
     coverData: Any?,
@@ -2963,12 +3161,22 @@ private fun HomeHubRecentPosterCard(
     val fallbackPainter = rememberThemeAwareCoverErrorPainter(
         variant = AuroraCoverPlaceholderVariant.Portrait,
     )
+    val outerSurface = if (colors.isDark) {
+        colors.glass.copy(alpha = surfaceSpec.containerAlpha)
+    } else {
+        resolveAuroraSurfaceColor(colors, AuroraSurfaceLevel.Glass)
+    }
+    val posterSurface = if (colors.isDark) {
+        colors.cardBackground.copy(alpha = surfaceSpec.posterAlpha)
+    } else {
+        resolveAuroraSurfaceColor(colors, AuroraSurfaceLevel.Subtle)
+    }
 
     Column(
         modifier = modifier
             .clip(cardShape)
             .clickable(onClick = onClick)
-            .background(colors.glass.copy(alpha = surfaceSpec.containerAlpha))
+            .background(outerSurface)
             .padding(6.dp),
     ) {
         Box(
@@ -2976,7 +3184,7 @@ private fun HomeHubRecentPosterCard(
                 .fillMaxWidth()
                 .aspectRatio(posterSpec.posterAspectRatio)
                 .clip(posterShape)
-                .background(colors.cardBackground.copy(alpha = surfaceSpec.posterAlpha))
+                .background(posterSurface)
                 .border(
                     width = 1.dp,
                     color = if (colors.isDark) {
@@ -2991,6 +3199,7 @@ private fun HomeHubRecentPosterCard(
                 model = resolveAuroraCoverModel(coverData),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                colorFilter = rememberAuroraPosterColorFilter(),
                 modifier = Modifier.fillMaxSize(),
                 error = fallbackPainter,
                 fallback = fallbackPainter,

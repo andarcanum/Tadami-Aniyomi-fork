@@ -9,6 +9,7 @@ import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
+import tachiyomi.presentation.core.util.collectAsState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
@@ -48,9 +49,11 @@ fun TachiyomiTheme(
     val uiPreferences = Injekt.get<UiPreferences>()
     val appUiFontId = uiPreferences.appUiFontId().get()
     val coverTitleFontId = uiPreferences.coverTitleFontId().get()
+    val isEInkMode = uiPreferences.eInkMode().collectAsState().value
     BaseTachiyomiTheme(
         appTheme = appTheme ?: uiPreferences.appTheme().get(),
         isAmoled = amoled ?: uiPreferences.themeDarkAmoled().get(),
+        isEInkMode = isEInkMode,
         appUiFontId = appUiFontId,
         coverTitleFontId = coverTitleFontId,
         content = content,
@@ -65,6 +68,7 @@ fun TachiyomiPreviewTheme(
 ) = BaseTachiyomiTheme(
     appTheme = appTheme,
     isAmoled = isAmoled,
+    isEInkMode = false,
     appUiFontId = UiPreferences.DEFAULT_APP_UI_FONT_ID,
     coverTitleFontId = UiPreferences.DEFAULT_COVER_TITLE_FONT_ID,
     content = content,
@@ -74,12 +78,17 @@ fun TachiyomiPreviewTheme(
 private fun BaseTachiyomiTheme(
     appTheme: AppTheme,
     isAmoled: Boolean,
+    isEInkMode: Boolean,
     appUiFontId: String,
     coverTitleFontId: String,
     content: @Composable () -> Unit,
 ) {
-    val isDark = isSystemInDarkTheme()
-    val colorScheme = getThemeColorScheme(appTheme, isAmoled)
+    val isDark = if (isEInkMode) false else isSystemInDarkTheme()
+    val colorScheme = getThemeColorScheme(
+        appTheme = appTheme,
+        isAmoled = isAmoled,
+        isEInkMode = isEInkMode,
+    )
     val appFontFamily = rememberAppFontFamily(appUiFontId)
     val coverTitleFontFamily = rememberAppFontFamily(coverTitleFontId)
     val typography = remember(appFontFamily) {
@@ -90,9 +99,11 @@ private fun BaseTachiyomiTheme(
         colorScheme = colorScheme,
         isDark = isDark,
         isAmoled = isAmoled,
+        isEInk = isEInkMode,
     )
 
     CompositionLocalProvider(
+        LocalIsEInkMode provides isEInkMode,
         LocalAuroraColors provides auroraColors,
         LocalIsAuroraTheme provides appTheme.isAuroraStyle,
         LocalIsDefaultAppUiFont provides (appUiFontId == UiPreferences.DEFAULT_APP_UI_FONT_ID),
@@ -111,8 +122,14 @@ private fun BaseTachiyomiTheme(
 private fun getThemeColorScheme(
     appTheme: AppTheme,
     isAmoled: Boolean,
+    isEInkMode: Boolean,
 ): ColorScheme {
-    val uiPreferences = Injekt.get<UiPreferences>()
+    if (isEInkMode) {
+        return MonochromeColorScheme.getColorScheme(
+            isDark = false,
+            isAmoled = false,
+        )
+    }
     val colorScheme = if (appTheme == AppTheme.MONET) {
         MonetColorScheme(LocalContext.current)
     } else {
@@ -141,6 +158,7 @@ val playerRippleConfiguration
     )
 
 val LocalIsAuroraTheme = staticCompositionLocalOf { false }
+val LocalIsEInkMode = staticCompositionLocalOf { false }
 val LocalIsDefaultAppUiFont = staticCompositionLocalOf { true }
 
 private val colorSchemes: Map<AppTheme, BaseColorScheme> = mapOf(
@@ -164,3 +182,7 @@ private val colorSchemes: Map<AppTheme, BaseColorScheme> = mapOf(
     AppTheme.YOTSUBA to YotsubaColorScheme,
     AppTheme.AURORA to AuroraColorScheme,
 )
+
+
+
+

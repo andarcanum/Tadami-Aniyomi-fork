@@ -34,6 +34,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.AuroraSurfaceLevel
+import eu.kanade.presentation.theme.resolveAuroraBorderColor
+import eu.kanade.presentation.theme.resolveAuroraSelectionBorderColor
+import eu.kanade.presentation.theme.resolveAuroraSurfaceColor
 
 @Composable
 fun AuroraCard(
@@ -65,16 +69,14 @@ fun AuroraCard(
             ),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = colors.glass,
+            containerColor = resolveAuroraSurfaceColor(colors, AuroraSurfaceLevel.Glass),
         ),
         border = BorderStroke(
             width = if (isSelected) 2.dp else 1.dp,
             color = if (isSelected) {
-                colors.accent
-            } else if (colors.isDark) {
-                Color.White.copy(alpha = 0.04f)
+                if (colors.isDark) colors.accent else resolveAuroraSelectionBorderColor(colors)
             } else {
-                Color.LightGray.copy(alpha = 0.4f)
+                resolveAuroraBorderColor(colors, emphasized = false)
             },
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),

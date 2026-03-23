@@ -32,7 +32,11 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.components.resolveAuroraCoverModel
+import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.AuroraSurfaceLevel
+import eu.kanade.presentation.theme.resolveAuroraBorderColor
+import eu.kanade.presentation.theme.resolveAuroraSurfaceColor
 
 @Composable
 fun AuroraUpdatesGroupCard(
@@ -44,11 +48,7 @@ fun AuroraUpdatesGroupCard(
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
-    val tabContainerColor = if (colors.background.luminance() < 0.5f) {
-        Color.White.copy(alpha = 0.05f)
-    } else {
-        Color.Black.copy(alpha = 0.03f)
-    }
+    val tabContainerColor = resolveAuroraSurfaceColor(colors, AuroraSurfaceLevel.Glass)
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
 
     Card(
@@ -60,11 +60,7 @@ fun AuroraUpdatesGroupCard(
         colors = CardDefaults.cardColors(containerColor = tabContainerColor),
         border = BorderStroke(
             width = 1.dp,
-            color = if (colors.isDark) {
-                Color.White.copy(alpha = 0.08f)
-            } else {
-                colors.accent.copy(alpha = 0.14f)
-            },
+            color = resolveAuroraBorderColor(colors, emphasized = colors.isEInk),
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
@@ -76,6 +72,7 @@ fun AuroraUpdatesGroupCard(
                 model = resolveAuroraCoverModel(coverData),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                colorFilter = rememberAuroraPosterColorFilter(),
                 modifier = Modifier
                     .width(48.dp)
                     .height(72.dp)

@@ -39,7 +39,7 @@ fun ChaptersHeader(
     ) {
         Text(
             text = stringResource(AYMR.strings.aurora_chapters_header),
-            color = Color.White,
+            color = colors.textPrimary,
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
         )

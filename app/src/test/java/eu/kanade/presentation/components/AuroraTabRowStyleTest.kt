@@ -6,6 +6,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.Hyphens
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
+import eu.kanade.presentation.theme.AuroraColors
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 
@@ -14,11 +15,23 @@ class AuroraTabRowStyleTest {
     @Test
     fun `menu tab row rim light stops match hero style`() {
         auroraMenuRimLightAlphaStops() shouldBe listOf(
-            0.00f to 0.10f,
-            0.28f to 0.03f,
+            0.00f to 0.24f,
+            0.28f to 0.12f,
             0.62f to 0.00f,
             1.00f to 0.00f,
         )
+    }
+
+    @Test
+    fun `light aurora tab container and selection tokens use light surfaces`() {
+        resolveAuroraTabContainerColor(AuroraColors.Light) shouldBe androidx.compose.ui.graphics.Color(0xD1FFFFFF)
+        resolveAuroraTabSelectionBorderColor(AuroraColors.Light) shouldBe AuroraColors.Light.accent.copy(alpha = 0.28f)
+    }
+
+    @Test
+    fun `e ink aurora tab container and selection tokens use monochrome surfaces`() {
+        resolveAuroraTabContainerColor(AuroraColors.EInk) shouldBe androidx.compose.ui.graphics.Color(0xFFF6F6F6)
+        resolveAuroraTabSelectionBorderColor(AuroraColors.EInk) shouldBe androidx.compose.ui.graphics.Color(0xFF9A9A9A)
     }
 
     @Test

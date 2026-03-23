@@ -1,6 +1,7 @@
-package eu.kanade.presentation.entries.manga.components.aurora
+﻿package eu.kanade.presentation.entries.manga.components.aurora
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,17 +33,21 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionButton
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroChipBorderColor
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroChipContainerColor
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroChipTextColor
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroOverlayBrush
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroPanelBorderColor
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroPanelContainerColor
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroPrimaryMetaColor
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroSecondaryMetaColor
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroTitleColor
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.pluralStringResource
 
-/**
- * Hero content displayed at bottom of first screen over poster gradient.
- *
- * Contains: genre chips, manga title, compact stats, and Continue Reading button.
- */
 @Composable
 fun MangaHeroContent(
     manga: Manga,
@@ -54,132 +59,152 @@ fun MangaHeroContent(
     val colors = AuroraTheme.colors
     val haptic = LocalHapticFeedback.current
     val coverTitleFontFamily = LocalCoverTitleFontFamily.current
+    val heroPanelShape = RoundedCornerShape(24.dp)
+    val titleColor = resolveAuroraHeroTitleColor(colors)
+    val primaryMetaColor = resolveAuroraHeroPrimaryMetaColor(colors)
+    val secondaryMetaColor = resolveAuroraHeroSecondaryMetaColor(colors)
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 40.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .background(resolveAuroraHeroOverlayBrush(colors)),
     ) {
-        // Genre chips (top 3)
-        if (!manga.genre.isNullOrEmpty() && manga.genre!!.isNotEmpty()) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                manga.genre!!.take(3).forEach { genre ->
-                    if (genre.isNotBlank()) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(colors.accent.copy(alpha = 0.25f))
-                                .padding(horizontal = 6.dp, vertical = 3.dp),
-                        ) {
-                            Text(
-                                text = genre,
-                                color = colors.accent,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                            )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 40.dp)
+                .then(
+                    if (colors.isDark) {
+                        Modifier
+                    } else {
+                        Modifier
+                            .clip(heroPanelShape)
+                            .background(resolveAuroraHeroPanelContainerColor(colors))
+                            .border(1.dp, resolveAuroraHeroPanelBorderColor(colors), heroPanelShape)
+                            .padding(18.dp)
+                    }
+                ),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (!manga.genre.isNullOrEmpty() && manga.genre!!.isNotEmpty()) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    manga.genre!!.take(3).forEach { genre ->
+                        if (genre.isNotBlank()) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(resolveAuroraHeroChipContainerColor(colors))
+                                    .then(
+                                        if (colors.isDark) {
+                                            Modifier
+                                        } else {
+                                            Modifier.border(
+                                                1.dp,
+                                                resolveAuroraHeroChipBorderColor(colors),
+                                                RoundedCornerShape(12.dp),
+                                            )
+                                        }
+                                    )
+                                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                            ) {
+                                Text(
+                                    text = genre,
+                                    color = resolveAuroraHeroChipTextColor(colors),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
 
-        // Manga title
-        Text(
-            text = manga.title,
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Black,
-            color = Color.White,
-            lineHeight = 36.sp,
-            maxLines = Int.MAX_VALUE,
-            overflow = TextOverflow.Clip,
-            style = TextStyle(
-                fontFamily = coverTitleFontFamily,
-                lineBreak = LineBreak.Heading,
-                hyphens = Hyphens.None,
-            ),
-        )
+            Text(
+                text = manga.title,
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Black,
+                color = titleColor,
+                lineHeight = 36.sp,
+                maxLines = Int.MAX_VALUE,
+                overflow = TextOverflow.Clip,
+                style = TextStyle(
+                    fontFamily = coverTitleFontFamily,
+                    lineBreak = LineBreak.Heading,
+                    hyphens = Hyphens.None,
+                ),
+            )
 
-        // Compact statistics row
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            // Parse rating from description
-            val parsedRating = remember(manga.description) {
-                RatingParser.parseRating(manga.description)
-            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                val parsedRating = remember(manga.description) {
+                    RatingParser.parseRating(manga.description)
+                }
 
-            // Show rating if available
-            if (parsedRating != null) {
-                // Star icon
-                Icon(
-                    Icons.Filled.Star,
-                    contentDescription = null,
-                    tint = Color(0xFFFACC15),
-                    modifier = Modifier.size(14.dp),
-                )
-                // Rating value
+                if (parsedRating != null) {
+                    Icon(
+                        Icons.Filled.Star,
+                        contentDescription = null,
+                        tint = Color(0xFFFACC15),
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Text(
+                        text = RatingParser.formatRating(parsedRating.rating),
+                        color = primaryMetaColor,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        text = "|",
+                        color = secondaryMetaColor,
+                        fontSize = 13.sp,
+                    )
+                }
+
                 Text(
-                    text = RatingParser.formatRating(parsedRating.rating),
-                    color = Color.White.copy(alpha = 0.85f),
+                    text = MangaStatusFormatter.formatStatus(manga.status),
+                    color = secondaryMetaColor,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                 )
-
                 Text(
-                    text = "•",
-                    color = Color.White.copy(alpha = 0.85f),
+                    text = "|",
+                    color = secondaryMetaColor,
                     fontSize = 13.sp,
+                )
+                Text(
+                    text = pluralStringResource(
+                        MR.plurals.manga_num_chapters,
+                        count = chapterCount,
+                        chapterCount,
+                    ),
+                    color = secondaryMetaColor,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
                 )
             }
 
-            // Status
-            Text(
-                text = MangaStatusFormatter.formatStatus(manga.status),
-                color = Color.White.copy(alpha = 0.85f),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-            )
+            Spacer(modifier = Modifier.height(4.dp))
 
-            Text(
-                text = "•",
-                color = Color.White.copy(alpha = 0.85f),
-                fontSize = 13.sp,
-            )
-
-            // Chapter count
-            Text(
-                text = pluralStringResource(
-                    MR.plurals.manga_num_chapters,
-                    count = chapterCount,
-                    chapterCount,
-                ),
-                color = Color.White.copy(alpha = 0.85f),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
+            AuroraTitleHeroActionButton(
+                hasProgress = hasReadingProgress,
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onContinueReading()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(60.dp),
+                cornerRadius = 16.dp,
+                iconSize = 28.dp,
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                textSize = 18.sp,
+                textWeight = FontWeight.Bold,
             )
         }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        AuroraTitleHeroActionButton(
-            hasProgress = hasReadingProgress,
-            onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                onContinueReading()
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(60.dp),
-            cornerRadius = 16.dp,
-            iconSize = 28.dp,
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            textSize = 18.sp,
-            textWeight = FontWeight.Bold,
-        )
     }
 }
