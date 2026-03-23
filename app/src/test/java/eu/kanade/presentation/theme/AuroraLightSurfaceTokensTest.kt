@@ -32,7 +32,7 @@ class AuroraLightSurfaceTokensTest {
                 foreground = AuroraColors.Light.accent,
                 background = Color(0xFFF8FAFC),
             ) >= 4.5
-        ) shouldBe true
+            ) shouldBe true
     }
 
     @Test

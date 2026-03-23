@@ -22,6 +22,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -1368,6 +1369,7 @@ class NovelReaderScreenModelTest {
             historyRepository.lastUpdate?.chapterId shouldBe chapter.id
             historyRepository.updates.size shouldBe 1
 
+            delay(5)
             screenModel.onDispose()
             yield()
 

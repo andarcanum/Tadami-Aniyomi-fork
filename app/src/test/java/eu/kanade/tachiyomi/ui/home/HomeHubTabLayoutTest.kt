@@ -187,16 +187,16 @@ class HomeHubTabLayoutTest {
     }
 
     @Test
-    fun `aurora hero cta surface uses bright accent glass without gradient`() {
+    fun `aurora hero cta surface uses soft accent glass without gradient`() {
         resolveHomeHubHeroButtonSurfaceSpec(
             mode = HomeHeroCtaMode.Aurora,
             isDark = true,
         ) shouldBe HomeHubHeroButtonSurfaceSpec(
-            containerAlpha = 0.82f,
+            containerAlpha = 0.50f,
             usesGradient = false,
-            borderAlpha = 0f,
-            innerGlowAlpha = 0.42f,
-            highlightAlpha = 0.18f,
+            borderAlpha = 0.12f,
+            innerGlowAlpha = 0.55f,
+            highlightAlpha = 0f,
         )
     }
 
