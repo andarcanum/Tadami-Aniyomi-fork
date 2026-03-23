@@ -16,7 +16,7 @@ internal object AuroraColorScheme : BaseColorScheme() {
 
     // Legacy Aurora colors (for backwards compatibility)
     val auroraAccent = aniviewElectricBlue
-    val auroraAccentLight = Color(0xFF0077CC)
+    val auroraAccentLight = Color(0xFF0076CB)
 
     val auroraDarkBackground = aniviewDarkBg
     val auroraDarkSurface = aniviewSurface
