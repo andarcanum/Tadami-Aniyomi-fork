@@ -1,9 +1,9 @@
 package eu.kanade.presentation.more
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,15 +39,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.presentation.components.AuroraBackground
+import eu.kanade.presentation.more.settings.AuroraTopBarTitleText
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalIsDefaultAppUiFont
-import eu.kanade.presentation.more.resolveAuroraMoreCardBorderColor
-import eu.kanade.presentation.theme.resolveAuroraBorderColor
 import eu.kanade.tachiyomi.ui.more.DownloadQueueState
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -80,14 +79,22 @@ fun MoreScreenAurora(
                 .padding(horizontal = 16.dp),
         ) {
             item {
-                Spacer(modifier = Modifier.height(80.dp))
-                Text(
-                    text = stringResource(AYMR.strings.aurora_more),
-                    fontSize = 22.sp,
-                    color = colors.textPrimary,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(bottom = 24.dp),
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier.height(40.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    )
+                    {
+                        AuroraTopBarTitleText(title = stringResource(AYMR.strings.aurora_more))
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
             }
 
             item {
@@ -209,7 +216,6 @@ fun AuroraSettingItem(
             .padding(vertical = AURORA_MORE_CARD_VERTICAL_INSET)
             .clip(RoundedCornerShape(16.dp))
             .background(resolveAuroraMoreCardContainerColor(colors))
-            .border(1.dp, resolveAuroraMoreCardBorderColor(colors), RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -257,7 +263,6 @@ fun AuroraToggleItem(
             .padding(vertical = AURORA_MORE_CARD_VERTICAL_INSET)
             .clip(RoundedCornerShape(16.dp))
             .background(resolveAuroraMoreCardContainerColor(colors))
-            .border(1.dp, resolveAuroraMoreCardBorderColor(colors), RoundedCornerShape(16.dp))
             .clickable { onCheckedChange(!checked) }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,

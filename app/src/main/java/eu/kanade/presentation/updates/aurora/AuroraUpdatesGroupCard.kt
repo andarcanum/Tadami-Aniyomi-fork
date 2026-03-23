@@ -34,9 +34,8 @@ import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.theme.AuroraTheme
-import eu.kanade.presentation.theme.AuroraSurfaceLevel
 import eu.kanade.presentation.theme.resolveAuroraBorderColor
-import eu.kanade.presentation.theme.resolveAuroraSurfaceColor
+import eu.kanade.presentation.theme.resolveAuroraControlContainerColor
 
 @Composable
 fun AuroraUpdatesGroupCard(
@@ -48,7 +47,7 @@ fun AuroraUpdatesGroupCard(
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
-    val tabContainerColor = resolveAuroraSurfaceColor(colors, AuroraSurfaceLevel.Glass)
+    val tabContainerColor = resolveAuroraControlContainerColor(colors)
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
 
     Card(
