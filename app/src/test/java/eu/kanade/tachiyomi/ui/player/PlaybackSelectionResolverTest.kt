@@ -120,7 +120,7 @@ class PlaybackSelectionResolverTest {
     }
 
     @Test
-    fun `resolve selects alloha player using alloha preferences`() {
+    fun `resolve selects parlorate player using parlorate preferences`() {
         val hosters = listOf(
             hoster(
                 playerId = "cdn",
@@ -130,8 +130,8 @@ class PlaybackSelectionResolverTest {
                 qualities = listOf("1080p"),
             ),
             hoster(
-                playerId = "alloha",
-                playerLabel = "Alloha",
+                playerId = "parlorate",
+                playerLabel = "Parlorate",
                 dubbingId = "ani-lot",
                 dubbingLabel = "AniLot",
                 qualities = listOf("720p", "480p"),
@@ -141,9 +141,9 @@ class PlaybackSelectionResolverTest {
         val selected = PlaybackSelectionResolver.resolve(
             hosters = hosters,
             preferences = PlaybackSelectionPreferences(
-                preferredPlayer = PlaybackPlayerPreference.ALLOHA,
-                preferredDubbingAlloha = "AniLot",
-                preferredQualityAlloha = "480p",
+                preferredPlayer = PlaybackPlayerPreference.PARLORATE,
+                preferredDubbingParlorate = "AniLot",
+                preferredQualityParlorate = "480p",
             ),
         )
 
