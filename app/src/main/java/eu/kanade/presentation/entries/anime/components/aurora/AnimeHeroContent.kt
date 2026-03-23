@@ -133,7 +133,7 @@ fun AnimeHeroContent(
                                 shape = heroPanelShape,
                             )
                             .padding(18.dp)
-                    }
+                    },
                 ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -187,7 +187,7 @@ fun AnimeHeroContent(
                                             color = resolveAuroraHeroChipBorderColor(colors),
                                             shape = RoundedCornerShape(6.dp),
                                         )
-                                    }
+                                    },
                                 )
                                 .padding(horizontal = 8.dp, vertical = 4.dp),
                         ) {

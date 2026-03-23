@@ -6,13 +6,13 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RenderEffect
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asComposeRenderEffect
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -88,7 +88,7 @@ fun Modifier.purpleGlow(
  * Gradient border glow effect for hero cards
  * Creates a glowing border effect around the composable
  */
-internal const val GradientBorderGlowLayerCount = 3
+internal const val GRADIENT_BORDER_GLOW_LAYER_COUNT = 3
 
 internal data class GradientBorderGlowPass(
     val alpha: Float,
@@ -99,7 +99,7 @@ internal data class GradientBorderGlowPass(
 internal fun gradientBorderGlowPasses(
     alpha: Float,
     glowRadiusPx: Float,
-): List<GradientBorderGlowPass> = (1..GradientBorderGlowLayerCount).map { layer ->
+): List<GradientBorderGlowPass> = (1..GRADIENT_BORDER_GLOW_LAYER_COUNT).map { layer ->
     GradientBorderGlowPass(
         alpha = alpha / (layer * 1.5f),
         expansionPx = glowRadiusPx * layer / 3f,

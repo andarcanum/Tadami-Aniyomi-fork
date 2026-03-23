@@ -82,7 +82,7 @@ fun MangaHeroContent(
                             .background(resolveAuroraHeroPanelContainerColor(colors))
                             .border(1.dp, resolveAuroraHeroPanelBorderColor(colors), heroPanelShape)
                             .padding(18.dp)
-                    }
+                    },
                 ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -106,7 +106,7 @@ fun MangaHeroContent(
                                                 resolveAuroraHeroChipBorderColor(colors),
                                                 RoundedCornerShape(12.dp),
                                             )
-                                        }
+                                        },
                                     )
                                     .padding(horizontal = 6.dp, vertical = 3.dp),
                             ) {

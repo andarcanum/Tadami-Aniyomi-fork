@@ -60,7 +60,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
@@ -75,10 +74,10 @@ import eu.kanade.presentation.more.settings.AuroraTopBarIconButton
 import eu.kanade.presentation.more.settings.AuroraTopBarTitleText
 import eu.kanade.presentation.theme.AuroraColors
 import eu.kanade.presentation.theme.AuroraTheme
-import eu.kanade.presentation.theme.resolveAuroraBorderColor
-import eu.kanade.presentation.theme.resolveAuroraSelectionContainerColor
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
+import eu.kanade.presentation.theme.resolveAuroraBorderColor
+import eu.kanade.presentation.theme.resolveAuroraSelectionContainerColor
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -585,21 +584,21 @@ internal fun AuroraTab(
     Box(
         modifier = modifier
             .clip(tabShape)
-                .background(
-                    brush = if (isSelected) {
-                        selectedTabBrush
-                    } else {
-                        Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
-                    },
+            .background(
+                brush = if (isSelected) {
+                    selectedTabBrush
+                } else {
+                    Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
+                },
                 shape = tabShape,
             )
-                .then(
-                    if (isSelected) {
-                        Modifier.border(1.dp, resolveAuroraTabSelectionBorderColor(colors), tabShape)
-                    } else {
-                        Modifier
-                    },
-                )
+            .then(
+                if (isSelected) {
+                    Modifier.border(1.dp, resolveAuroraTabSelectionBorderColor(colors), tabShape)
+                } else {
+                    Modifier
+                },
+            )
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,

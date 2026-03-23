@@ -89,8 +89,7 @@ fun MoreScreenAurora(
                     Box(
                         modifier = Modifier.height(40.dp),
                         contentAlignment = Alignment.CenterStart,
-                    )
-                    {
+                    ) {
                         AuroraTopBarTitleText(title = stringResource(AYMR.strings.aurora_more))
                     }
                 }

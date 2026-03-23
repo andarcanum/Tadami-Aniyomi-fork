@@ -1311,7 +1311,10 @@ class PlayerViewModel @JvmOverloads constructor(
             preferredDubbingParlorate = preferenceStore.getString("anime_dubbing_pref_parlorate_${anime.id}", "").get(),
             preferredQualityCdn = preferenceStore.getString("anime_quality_pref_cdn_${anime.id}", "best").get(),
             preferredQualityKodik = preferenceStore.getString("anime_quality_pref_kodik_${anime.id}", "best").get(),
-            preferredQualityParlorate = preferenceStore.getString("anime_quality_pref_parlorate_${anime.id}", "best").get(),
+            preferredQualityParlorate = preferenceStore.getString(
+                "anime_quality_pref_parlorate_${anime.id}",
+                "best",
+            ).get(),
         )
     }
 
@@ -1614,8 +1617,13 @@ class PlayerViewModel @JvmOverloads constructor(
 
         if (resolvedVideo == null || resolvedVideo.videoUrl.isEmpty()) {
             logcat(LogPriority.DEBUG) {
-                "loadVideo: resolve failed hosterIndex=$hosterIndex videoIndex=$videoIndex hoster=${selectedHosterState.name} " +
-                    "title=${video.videoTitle} url=${video.videoUrl.take(180)} initialized=${video.initialized} " +
+                "loadVideo: resolve failed " +
+                    "hosterIndex=$hosterIndex " +
+                    "videoIndex=$videoIndex " +
+                    "hoster=${selectedHosterState.name} " +
+                    "title=${video.videoTitle} " +
+                    "url=${video.videoUrl.take(180)} " +
+                    "initialized=${video.initialized} " +
                     "currentVideoSet=${currentVideo.value != null}"
             }
             if (currentVideo.value == null) {
@@ -1627,7 +1635,8 @@ class PlayerViewModel @JvmOverloads constructor(
                 val (newHosterIdx, newVideoIdx) = HosterLoader.selectBestVideo(hosterState.value)
                 if (newHosterIdx == -1) {
                     logcat(LogPriority.DEBUG) {
-                        "loadVideo: no fallback videos after resolve failure; loadingHosters=${_hosterState.value.count { it is HosterState.Loading }}"
+                        "loadVideo: no fallback videos after resolve failure; " +
+                            "loadingHosters=${_hosterState.value.count { it is HosterState.Loading }}"
                     }
                     if (_hosterState.value.any { it is HosterState.Loading }) {
                         _selectedHosterVideoIndex.update { _ -> Pair(-1, -1) }

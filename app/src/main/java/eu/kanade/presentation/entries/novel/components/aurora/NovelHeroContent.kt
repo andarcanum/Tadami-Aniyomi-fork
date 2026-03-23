@@ -93,7 +93,7 @@ fun NovelHeroContent(
                             .background(resolveAuroraHeroPanelContainerColor(colors))
                             .border(1.dp, resolveAuroraHeroPanelBorderColor(colors), heroPanelShape)
                             .padding(18.dp)
-                    }
+                    },
                 ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -117,7 +117,7 @@ fun NovelHeroContent(
                                             resolveAuroraHeroChipBorderColor(colors),
                                             RoundedCornerShape(12.dp),
                                         )
-                                    }
+                                    },
                                 )
                                 .padding(horizontal = 6.dp, vertical = 3.dp),
                         ) {

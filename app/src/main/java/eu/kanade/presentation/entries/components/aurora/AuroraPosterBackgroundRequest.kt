@@ -5,7 +5,7 @@ import coil3.size.Precision
 import eu.kanade.tachiyomi.data.coil.staticBlur
 import kotlin.math.max
 
-private const val AuroraBackgroundBlurDownsampleDivisor = 3
+private const val AURORA_BACKGROUND_BLUR_DOWNSAMPLE_DIVISOR = 3
 
 internal data class AuroraPosterBackgroundSpec(
     val sharpMemoryCacheKey: String,
@@ -20,12 +20,12 @@ internal fun auroraPosterBackgroundSpec(
     containerHeightPx: Int,
     blurRadiusPx: Int,
 ): AuroraPosterBackgroundSpec {
-    val blurWidthPx = max(1, containerWidthPx / AuroraBackgroundBlurDownsampleDivisor)
-    val blurHeightPx = max(1, containerHeightPx / AuroraBackgroundBlurDownsampleDivisor)
+    val blurWidthPx = max(1, containerWidthPx / AURORA_BACKGROUND_BLUR_DOWNSAMPLE_DIVISOR)
+    val blurHeightPx = max(1, containerHeightPx / AURORA_BACKGROUND_BLUR_DOWNSAMPLE_DIVISOR)
 
     return AuroraPosterBackgroundSpec(
         sharpMemoryCacheKey = "$baseCacheKey;sharp",
-        blurMemoryCacheKey = "$baseCacheKey;blur;${blurWidthPx}x${blurHeightPx};r$blurRadiusPx",
+        blurMemoryCacheKey = "$baseCacheKey;blur;${blurWidthPx}x$blurHeightPx;r$blurRadiusPx",
         blurWidthPx = blurWidthPx,
         blurHeightPx = blurHeightPx,
     )

@@ -58,14 +58,14 @@ import eu.kanade.tachiyomi.ui.player.PlaybackPlayerPreference
 import eu.kanade.tachiyomi.ui.player.PlaybackSelection
 import eu.kanade.tachiyomi.ui.player.PlaybackSelectionPreferences
 import eu.kanade.tachiyomi.ui.player.PlaybackSelectionResolver
-import eu.kanade.tachiyomi.ui.player.hasVisiblePlaybackPreferences
-import eu.kanade.tachiyomi.ui.player.sanitizeVisiblePlaybackPreferences
 import eu.kanade.tachiyomi.ui.player.controls.components.sheets.HosterState
 import eu.kanade.tachiyomi.ui.player.controls.components.sheets.QualitySheetHosterContent
 import eu.kanade.tachiyomi.ui.player.controls.components.sheets.QualitySheetVideoContent
 import eu.kanade.tachiyomi.ui.player.controls.components.sheets.getChangedAt
+import eu.kanade.tachiyomi.ui.player.hasVisiblePlaybackPreferences
 import eu.kanade.tachiyomi.ui.player.loader.EpisodeLoader
 import eu.kanade.tachiyomi.ui.player.loader.HosterLoader
+import eu.kanade.tachiyomi.ui.player.sanitizeVisiblePlaybackPreferences
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -181,10 +181,16 @@ class EpisodeOptionsDialogScreenModel(
                 ),
                 preferredDubbingCdn = preferenceStore.getString("anime_dubbing_pref_cdn_$animeId", "").get(),
                 preferredDubbingKodik = preferenceStore.getString("anime_dubbing_pref_kodik_$animeId", "").get(),
-                preferredDubbingParlorate = preferenceStore.getString("anime_dubbing_pref_parlorate_$animeId", "").get(),
+                preferredDubbingParlorate = preferenceStore.getString(
+                    "anime_dubbing_pref_parlorate_$animeId",
+                    "",
+                ).get(),
                 preferredQualityCdn = preferenceStore.getString("anime_quality_pref_cdn_$animeId", "best").get(),
                 preferredQualityKodik = preferenceStore.getString("anime_quality_pref_kodik_$animeId", "best").get(),
-                preferredQualityParlorate = preferenceStore.getString("anime_quality_pref_parlorate_$animeId", "best").get(),
+                preferredQualityParlorate = preferenceStore.getString(
+                    "anime_quality_pref_parlorate_$animeId",
+                    "best",
+                ).get(),
             ),
         )
     }

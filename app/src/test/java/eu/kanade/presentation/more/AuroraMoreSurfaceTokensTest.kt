@@ -20,12 +20,14 @@ class AuroraMoreSurfaceTokensTest {
 
     @Test
     fun `dark aurora more switch track uses softer checked alpha`() {
-        resolveAuroraMoreCheckedTrackColor(AuroraColors.Dark.copy(accent = Color(0xFF33AAFF))) shouldBe Color(0xFF33AAFF).copy(alpha = 0.4f)
+        resolveAuroraMoreCheckedTrackColor(AuroraColors.Dark.copy(accent = Color(0xFF33AAFF))) shouldBe
+            Color(0xFF33AAFF).copy(alpha = 0.4f)
     }
 
     @Test
     fun `light aurora more switch track keeps current checked alpha`() {
-        resolveAuroraMoreCheckedTrackColor(AuroraColors.Light.copy(accent = Color(0xFF33AAFF))) shouldBe Color(0xFF33AAFF).copy(alpha = 0.24f)
+        resolveAuroraMoreCheckedTrackColor(AuroraColors.Light.copy(accent = Color(0xFF33AAFF))) shouldBe
+            Color(0xFF33AAFF).copy(alpha = 0.24f)
     }
 
     @Test
