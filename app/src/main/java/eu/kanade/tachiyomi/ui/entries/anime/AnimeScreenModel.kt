@@ -190,7 +190,7 @@ class AnimeScreenModel(
     fun getPreferredDubbing(): String {
         return when (getPreferredPlayer()) {
             PlaybackPlayerPreference.KODIK -> getPreferredDubbingKodik()
-            PlaybackPlayerPreference.ALLOHA -> getPreferredDubbingAlloha()
+            PlaybackPlayerPreference.PARLORATE -> getPreferredDubbingParlorate()
             PlaybackPlayerPreference.CDN, PlaybackPlayerPreference.AUTO -> getPreferredDubbingCdn()
         }
     }
@@ -198,7 +198,7 @@ class AnimeScreenModel(
     fun setPreferredDubbing(dubbing: String) {
         when (getPreferredPlayer()) {
             PlaybackPlayerPreference.KODIK -> setPreferredDubbingKodik(dubbing)
-            PlaybackPlayerPreference.ALLOHA -> setPreferredDubbingAlloha(dubbing)
+            PlaybackPlayerPreference.PARLORATE -> setPreferredDubbingParlorate(dubbing)
             PlaybackPlayerPreference.CDN, PlaybackPlayerPreference.AUTO -> setPreferredDubbingCdn(dubbing)
         }
     }
@@ -206,7 +206,7 @@ class AnimeScreenModel(
     fun getPreferredQuality(): String {
         return when (getPreferredPlayer()) {
             PlaybackPlayerPreference.KODIK -> getPreferredQualityKodik()
-            PlaybackPlayerPreference.ALLOHA -> getPreferredQualityAlloha()
+            PlaybackPlayerPreference.PARLORATE -> getPreferredQualityParlorate()
             PlaybackPlayerPreference.CDN, PlaybackPlayerPreference.AUTO -> getPreferredQualityCdn()
         }
     }
@@ -214,7 +214,7 @@ class AnimeScreenModel(
     fun setPreferredQuality(quality: String) {
         when (getPreferredPlayer()) {
             PlaybackPlayerPreference.KODIK -> setPreferredQualityKodik(quality)
-            PlaybackPlayerPreference.ALLOHA -> setPreferredQualityAlloha(quality)
+            PlaybackPlayerPreference.PARLORATE -> setPreferredQualityParlorate(quality)
             PlaybackPlayerPreference.CDN, PlaybackPlayerPreference.AUTO -> setPreferredQualityCdn(quality)
         }
     }
@@ -245,12 +245,12 @@ class AnimeScreenModel(
         preferenceStore.getString("anime_dubbing_pref_kodik_$animeId", "").set(dubbing)
     }
 
-    fun getPreferredDubbingAlloha(): String {
-        return preferenceStore.getString("anime_dubbing_pref_alloha_$animeId", "").get()
+    fun getPreferredDubbingParlorate(): String {
+        return preferenceStore.getString("anime_dubbing_pref_parlorate_$animeId", "").get()
     }
 
-    fun setPreferredDubbingAlloha(dubbing: String) {
-        preferenceStore.getString("anime_dubbing_pref_alloha_$animeId", "").set(dubbing)
+    fun setPreferredDubbingParlorate(dubbing: String) {
+        preferenceStore.getString("anime_dubbing_pref_parlorate_$animeId", "").set(dubbing)
     }
 
     fun getPreferredQualityCdn(): String {
@@ -269,12 +269,12 @@ class AnimeScreenModel(
         preferenceStore.getString("anime_quality_pref_kodik_$animeId", "best").set(quality)
     }
 
-    fun getPreferredQualityAlloha(): String {
-        return preferenceStore.getString("anime_quality_pref_alloha_$animeId", "best").get()
+    fun getPreferredQualityParlorate(): String {
+        return preferenceStore.getString("anime_quality_pref_parlorate_$animeId", "best").get()
     }
 
-    fun setPreferredQualityAlloha(quality: String) {
-        preferenceStore.getString("anime_quality_pref_alloha_$animeId", "best").set(quality)
+    fun setPreferredQualityParlorate(quality: String) {
+        preferenceStore.getString("anime_quality_pref_parlorate_$animeId", "best").set(quality)
     }
 
     fun getPlaybackSelectionPreferences(): PlaybackSelectionPreferences {
@@ -282,10 +282,10 @@ class AnimeScreenModel(
             preferredPlayer = getPreferredPlayer(),
             preferredDubbingCdn = getPreferredDubbingCdn(),
             preferredDubbingKodik = getPreferredDubbingKodik(),
-            preferredDubbingAlloha = getPreferredDubbingAlloha(),
+            preferredDubbingParlorate = getPreferredDubbingParlorate(),
             preferredQualityCdn = getPreferredQualityCdn(),
             preferredQualityKodik = getPreferredQualityKodik(),
-            preferredQualityAlloha = getPreferredQualityAlloha(),
+            preferredQualityParlorate = getPreferredQualityParlorate(),
         )
     }
 
@@ -293,10 +293,10 @@ class AnimeScreenModel(
         setPreferredPlayer(preferences.preferredPlayer)
         setPreferredDubbingCdn(preferences.preferredDubbingCdn)
         setPreferredDubbingKodik(preferences.preferredDubbingKodik)
-        setPreferredDubbingAlloha(preferences.preferredDubbingAlloha)
+        setPreferredDubbingParlorate(preferences.preferredDubbingParlorate)
         setPreferredQualityCdn(preferences.preferredQualityCdn)
         setPreferredQualityKodik(preferences.preferredQualityKodik)
-        setPreferredQualityAlloha(preferences.preferredQualityAlloha)
+        setPreferredQualityParlorate(preferences.preferredQualityParlorate)
     }
 
     internal val autoOpenTrack: Boolean
@@ -1978,11 +1978,11 @@ class AnimeScreenModel(
                         AvailablePlaybackDubbings(
                             cdn = (acc.cdn + entry.cdn).distinct().sorted(),
                             kodik = (acc.kodik + entry.kodik).distinct().sorted(),
-                            alloha = (acc.alloha + entry.alloha).distinct().sorted(),
+                            parlorate = (acc.parlorate + entry.parlorate).distinct().sorted(),
                         )
                     }
                     .let { parsed ->
-                        if (parsed.cdn.isNotEmpty() || parsed.kodik.isNotEmpty() || parsed.alloha.isNotEmpty()) {
+                        if (parsed.cdn.isNotEmpty() || parsed.kodik.isNotEmpty() || parsed.parlorate.isNotEmpty()) {
                             parsed
                         } else {
                             val fallback = episodes
@@ -1991,7 +1991,7 @@ class AnimeScreenModel(
                                 .filter(String::isNotBlank)
                                 .distinct()
                                 .sorted()
-                            AvailablePlaybackDubbings(cdn = fallback, kodik = fallback, alloha = fallback)
+                            AvailablePlaybackDubbings(cdn = fallback, kodik = fallback, parlorate = fallback)
                         }
                     }
             }
@@ -2063,10 +2063,10 @@ class AnimeScreenModel(
 data class AvailablePlaybackDubbings(
     val cdn: List<String> = emptyList(),
     val kodik: List<String> = emptyList(),
-    val alloha: List<String> = emptyList(),
+    val parlorate: List<String> = emptyList(),
 ) {
     val all: List<String>
-        get() = (cdn + kodik + alloha).distinct().sorted()
+        get() = (cdn + kodik + parlorate).distinct().sorted()
 }
 
 private fun parseAvailablePlaybackDubbings(scanlator: String): AvailablePlaybackDubbings {
@@ -2075,7 +2075,7 @@ private fun parseAvailablePlaybackDubbings(scanlator: String): AvailablePlayback
 
     if (!normalized.contains(':')) {
         val fallback = normalized.split(",").map(String::trim).filter(String::isNotBlank)
-        return AvailablePlaybackDubbings(cdn = fallback, kodik = fallback, alloha = fallback)
+        return AvailablePlaybackDubbings(cdn = fallback, kodik = fallback, parlorate = fallback)
     }
 
     val sections = normalized.split("|")
@@ -2084,7 +2084,7 @@ private fun parseAvailablePlaybackDubbings(scanlator: String): AvailablePlayback
 
     var cdn = emptyList<String>()
     var kodik = emptyList<String>()
-    var alloha = emptyList<String>()
+    var parlorate = emptyList<String>()
 
     sections.forEach { section ->
         val label = section.substringBefore(':').trim().lowercase()
@@ -2095,16 +2095,16 @@ private fun parseAvailablePlaybackDubbings(scanlator: String): AvailablePlayback
         when (label) {
             "cdn" -> cdn = values
             "kodik" -> kodik = values
-            "alloha", "aloha" -> alloha = values
+            "parlorate", "aloha" -> parlorate = values
         }
     }
 
-    if (cdn.isEmpty() && kodik.isEmpty() && alloha.isEmpty()) {
+    if (cdn.isEmpty() && kodik.isEmpty() && parlorate.isEmpty()) {
         val fallback = normalized.split(",").map(String::trim).filter(String::isNotBlank)
-        return AvailablePlaybackDubbings(cdn = fallback, kodik = fallback, alloha = fallback)
+        return AvailablePlaybackDubbings(cdn = fallback, kodik = fallback, parlorate = fallback)
     }
 
-    return AvailablePlaybackDubbings(cdn = cdn, kodik = kodik, alloha = alloha)
+    return AvailablePlaybackDubbings(cdn = cdn, kodik = kodik, parlorate = parlorate)
 }
 
 @Immutable

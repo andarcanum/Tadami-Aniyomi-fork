@@ -6,7 +6,7 @@ enum class PlaybackPlayerPreference(val playerId: String?) {
     AUTO(null),
     CDN("cdn"),
     KODIK("kodik"),
-    ALLOHA("alloha"),
+    PARLORATE("parlorate"),
     ;
 
     companion object {
@@ -20,10 +20,10 @@ data class PlaybackSelectionPreferences(
     val preferredPlayer: PlaybackPlayerPreference = PlaybackPlayerPreference.AUTO,
     val preferredDubbingCdn: String = "",
     val preferredDubbingKodik: String = "",
-    val preferredDubbingAlloha: String = "",
+    val preferredDubbingParlorate: String = "",
     val preferredQualityCdn: String = "best",
     val preferredQualityKodik: String = "best",
-    val preferredQualityAlloha: String = "best",
+    val preferredQualityParlorate: String = "best",
 )
 
 sealed interface PlaybackSelection {
@@ -73,13 +73,13 @@ object PlaybackSelectionResolver {
         val preferredDubbing = when (playerId.lowercase()) {
             "cdn" -> preferences.preferredDubbingCdn
             "kodik" -> preferences.preferredDubbingKodik
-            "alloha" -> preferences.preferredDubbingAlloha
+            "parlorate" -> preferences.preferredDubbingParlorate
             else -> ""
         }
         val preferredQuality = when (playerId.lowercase()) {
             "cdn" -> preferences.preferredQualityCdn
             "kodik" -> preferences.preferredQualityKodik
-            "alloha" -> preferences.preferredQualityAlloha
+            "parlorate" -> preferences.preferredQualityParlorate
             else -> "best"
         }
 

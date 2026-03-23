@@ -47,17 +47,17 @@ fun DubbingSelectionDialog(
 ) {
     val availableCdnDubbings = availableDubbings.cdn
     val availableKodikDubbings = availableDubbings.kodik
-    val availableAllohaDubbings = availableDubbings.alloha
+    val availableParlorateDubbings = availableDubbings.parlorate
     val playerOptions = buildList {
         add(PlaybackPlayerPreference.AUTO)
         if (availableCdnDubbings.isNotEmpty()) add(PlaybackPlayerPreference.CDN)
         if (availableKodikDubbings.isNotEmpty()) add(PlaybackPlayerPreference.KODIK)
-        if (availableAllohaDubbings.isNotEmpty()) add(PlaybackPlayerPreference.ALLOHA)
+        if (availableParlorateDubbings.isNotEmpty()) add(PlaybackPlayerPreference.PARLORATE)
     }
     val autoEffectivePlayer = when {
         availableCdnDubbings.isNotEmpty() -> PlaybackPlayerPreference.CDN
         availableKodikDubbings.isNotEmpty() -> PlaybackPlayerPreference.KODIK
-        availableAllohaDubbings.isNotEmpty() -> PlaybackPlayerPreference.ALLOHA
+        availableParlorateDubbings.isNotEmpty() -> PlaybackPlayerPreference.PARLORATE
         else -> PlaybackPlayerPreference.CDN
     }
     var selectedPlayer by remember(playerOptions, currentPreferences.preferredPlayer) {
@@ -71,17 +71,17 @@ fun DubbingSelectionDialog(
     var selectedDubbingKodik by remember {
         mutableStateOf(currentPreferences.preferredDubbingKodik.ifBlank { availableKodikDubbings.firstOrNull() ?: "" })
     }
-    var selectedDubbingAlloha by remember {
+    var selectedDubbingParlorate by remember {
         mutableStateOf(
-            currentPreferences.preferredDubbingAlloha.ifBlank {
-                availableAllohaDubbings.firstOrNull() ?: ""
+            currentPreferences.preferredDubbingParlorate.ifBlank {
+                availableParlorateDubbings.firstOrNull() ?: ""
             },
         )
     }
     var selectedQualityCdn by remember { mutableStateOf(currentPreferences.preferredQualityCdn.ifBlank { "best" }) }
     var selectedQualityKodik by remember { mutableStateOf(currentPreferences.preferredQualityKodik.ifBlank { "best" }) }
-    var selectedQualityAlloha by remember {
-        mutableStateOf(currentPreferences.preferredQualityAlloha.ifBlank { "best" })
+    var selectedQualityParlorate by remember {
+        mutableStateOf(currentPreferences.preferredQualityParlorate.ifBlank { "best" })
     }
 
     val qualityOptions = listOf("best", "1080p", "720p", "480p", "360p")
@@ -91,17 +91,17 @@ fun DubbingSelectionDialog(
     val selectedDubbing = when (effectivePlayer) {
         PlaybackPlayerPreference.CDN, PlaybackPlayerPreference.AUTO -> selectedDubbingCdn
         PlaybackPlayerPreference.KODIK -> selectedDubbingKodik
-        PlaybackPlayerPreference.ALLOHA -> selectedDubbingAlloha
+        PlaybackPlayerPreference.PARLORATE -> selectedDubbingParlorate
     }
     val activeDubbings = when (effectivePlayer) {
         PlaybackPlayerPreference.CDN, PlaybackPlayerPreference.AUTO -> availableCdnDubbings
         PlaybackPlayerPreference.KODIK -> availableKodikDubbings
-        PlaybackPlayerPreference.ALLOHA -> availableAllohaDubbings
+        PlaybackPlayerPreference.PARLORATE -> availableParlorateDubbings
     }
     val selectedQuality = when (effectivePlayer) {
         PlaybackPlayerPreference.CDN, PlaybackPlayerPreference.AUTO -> selectedQualityCdn
         PlaybackPlayerPreference.KODIK -> selectedQualityKodik
-        PlaybackPlayerPreference.ALLOHA -> selectedQualityAlloha
+        PlaybackPlayerPreference.PARLORATE -> selectedQualityParlorate
     }
 
     AdaptiveSheet(
@@ -134,7 +134,7 @@ fun DubbingSelectionDialog(
                         PlaybackPlayerPreference.AUTO -> "Auto"
                         PlaybackPlayerPreference.CDN -> "CDN"
                         PlaybackPlayerPreference.KODIK -> "Kodik"
-                        PlaybackPlayerPreference.ALLOHA -> "Alloha"
+                        PlaybackPlayerPreference.PARLORATE -> "Parlorate"
                     },
                     selected = selectedPlayer == player,
                     onClick = { selectedPlayer = player },
@@ -171,8 +171,8 @@ fun DubbingSelectionDialog(
                                             PlaybackPlayerPreference.KODIK -> {
                                                 selectedDubbingKodik = dubbing
                                             }
-                                            PlaybackPlayerPreference.ALLOHA -> {
-                                                selectedDubbingAlloha = dubbing
+                                            PlaybackPlayerPreference.PARLORATE -> {
+                                                selectedDubbingParlorate = dubbing
                                             }
                                         }
                                     },
@@ -204,8 +204,8 @@ fun DubbingSelectionDialog(
                                             PlaybackPlayerPreference.KODIK -> {
                                                 selectedQualityKodik = quality
                                             }
-                                            PlaybackPlayerPreference.ALLOHA -> {
-                                                selectedQualityAlloha = quality
+                                            PlaybackPlayerPreference.PARLORATE -> {
+                                                selectedQualityParlorate = quality
                                             }
                                         }
                                     },
@@ -238,8 +238,8 @@ fun DubbingSelectionDialog(
                                     PlaybackPlayerPreference.KODIK -> {
                                         selectedDubbingKodik = dubbing
                                     }
-                                    PlaybackPlayerPreference.ALLOHA -> {
-                                        selectedDubbingAlloha = dubbing
+                                    PlaybackPlayerPreference.PARLORATE -> {
+                                        selectedDubbingParlorate = dubbing
                                     }
                                 }
                             },
@@ -266,8 +266,8 @@ fun DubbingSelectionDialog(
                                     PlaybackPlayerPreference.KODIK -> {
                                         selectedQualityKodik = quality
                                     }
-                                    PlaybackPlayerPreference.ALLOHA -> {
-                                        selectedQualityAlloha = quality
+                                    PlaybackPlayerPreference.PARLORATE -> {
+                                        selectedQualityParlorate = quality
                                     }
                                 }
                             },
@@ -295,10 +295,10 @@ fun DubbingSelectionDialog(
                                 preferredPlayer = selectedPlayer,
                                 preferredDubbingCdn = selectedDubbingCdn,
                                 preferredDubbingKodik = selectedDubbingKodik,
-                                preferredDubbingAlloha = selectedDubbingAlloha,
+                                preferredDubbingParlorate = selectedDubbingParlorate,
                                 preferredQualityCdn = selectedQualityCdn,
                                 preferredQualityKodik = selectedQualityKodik,
-                                preferredQualityAlloha = selectedQualityAlloha,
+                                preferredQualityParlorate = selectedQualityParlorate,
                             ),
                         )
                     },

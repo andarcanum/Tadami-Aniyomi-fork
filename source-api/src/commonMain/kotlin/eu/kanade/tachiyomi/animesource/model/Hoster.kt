@@ -215,6 +215,7 @@ open class Hoster(
                         "cdn" -> "cdn"
                         "kodik" -> "kodik"
                         "alloha", "aloha" -> "alloha"
+                        "parlorate" -> "parlorate"
                         else -> return null
                     }
 
@@ -227,6 +228,7 @@ open class Hoster(
                         sortOrder = when (playerId) {
                             "cdn" -> 0
                             "kodik" -> 10
+                            "parlorate" -> 15
                             "alloha" -> 20
                             else -> Int.MAX_VALUE
                         },

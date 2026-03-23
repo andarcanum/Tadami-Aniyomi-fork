@@ -11,6 +11,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.withContext
+import logcat.LogPriority
+import tachiyomi.core.common.util.system.logcat
 import kotlin.coroutines.cancellation.CancellationException
 
 class HosterLoader {
@@ -158,6 +160,9 @@ class HosterLoader {
                         throw e
                     }
 
+                    logcat(LogPriority.DEBUG, e) {
+                        "getResolvedVideo: resolve failed title=${video.videoTitle} url=${video.videoUrl.take(180)}"
+                    }
                     null
                 }
             } else {

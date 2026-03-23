@@ -2,13 +2,17 @@ package eu.kanade.presentation.components
 
 import android.os.Build
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.RenderEffect
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -84,42 +88,64 @@ fun Modifier.purpleGlow(
  * Gradient border glow effect for hero cards
  * Creates a glowing border effect around the composable
  */
+internal const val GradientBorderGlowLayerCount = 3
+
+internal data class GradientBorderGlowPass(
+    val alpha: Float,
+    val expansionPx: Float,
+    val offsetPx: Float,
+)
+
+internal fun gradientBorderGlowPasses(
+    alpha: Float,
+    glowRadiusPx: Float,
+): List<GradientBorderGlowPass> = (1..GradientBorderGlowLayerCount).map { layer ->
+    GradientBorderGlowPass(
+        alpha = alpha / (layer * 1.5f),
+        expansionPx = glowRadiusPx * layer / 3f,
+        offsetPx = glowRadiusPx * layer / 6f,
+    )
+}
+
 fun Modifier.gradientBorderGlow(
     colors: List<Color>,
     borderWidth: Dp = 2.dp,
     glowRadius: Dp = 12.dp,
     alpha: Float = 0.7f,
     cornerRadius: Dp = 24.dp,
-): Modifier = this.drawBehind {
-    val stroke = androidx.compose.ui.graphics.drawscope.Stroke(
-        width = borderWidth.toPx(),
+): Modifier = this.drawWithCache {
+    val stroke = Stroke(width = borderWidth.toPx())
+    val cornerRadiusPx = cornerRadius.toPx()
+    val glowRadiusPx = glowRadius.toPx()
+    val glowPasses = gradientBorderGlowPasses(
+        alpha = alpha,
+        glowRadiusPx = glowRadiusPx,
     )
+    val brush = Brush.horizontalGradient(colors)
 
-    // Draw outer glow layers
-    for (i in 1..3) {
-        val glowAlpha = alpha / (i * 1.5f)
-        colors.forEach { color ->
-            drawRoundRect(
-                color = color.copy(alpha = glowAlpha),
-                style = stroke,
-                size = size.copy(
-                    width = size.width + (glowRadius.toPx() * i / 3),
-                    height = size.height + (glowRadius.toPx() * i / 3),
-                ),
-                topLeft = androidx.compose.ui.geometry.Offset(
-                    x = -(glowRadius.toPx() * i / 6),
-                    y = -(glowRadius.toPx() * i / 6),
-                ),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(cornerRadius.toPx()),
-            )
+    onDrawBehind {
+        glowPasses.forEach { pass ->
+            colors.forEach { color ->
+                drawRoundRect(
+                    color = color.copy(alpha = pass.alpha),
+                    style = stroke,
+                    size = size.copy(
+                        width = size.width + pass.expansionPx,
+                        height = size.height + pass.expansionPx,
+                    ),
+                    topLeft = Offset(
+                        x = -pass.offsetPx,
+                        y = -pass.offsetPx,
+                    ),
+                    cornerRadius = CornerRadius(cornerRadiusPx),
+                )
+            }
         }
-    }
 
-    // Draw main gradient border
-    val brush = androidx.compose.ui.graphics.Brush.horizontalGradient(colors)
-    drawRoundRect(
-        brush = brush,
-        style = stroke,
-        cornerRadius = androidx.compose.ui.geometry.CornerRadius(cornerRadius.toPx()),
-    )
+        drawRoundRect(
+            brush = brush,
+            style = stroke,
+            cornerRadius = CornerRadius(cornerRadiusPx),
+        )
+    }
 }
