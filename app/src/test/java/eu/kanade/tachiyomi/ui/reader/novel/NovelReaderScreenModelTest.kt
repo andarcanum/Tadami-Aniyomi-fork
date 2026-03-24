@@ -29,12 +29,10 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import kotlinx.serialization.json.Json
-import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
@@ -80,12 +78,6 @@ class NovelReaderScreenModelTest {
         @BeforeAll
         fun setupMainDispatcher() {
             Dispatchers.setMain(Dispatchers.Unconfined)
-        }
-
-        @JvmStatic
-        @AfterAll
-        fun resetMainDispatcher() {
-            Dispatchers.resetMain()
         }
     }
 

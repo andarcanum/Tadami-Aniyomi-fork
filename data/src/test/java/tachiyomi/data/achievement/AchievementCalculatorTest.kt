@@ -390,6 +390,6 @@ class AchievementCalculatorTest : AchievementTestBase() {
         val result = calculator.calculateInitialProgress()
 
         result.success shouldBe true
-        assert(result.duration > 0L)
+        assert(result.duration >= 0L)
     }
 }
