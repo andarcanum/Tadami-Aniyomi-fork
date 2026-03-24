@@ -24,7 +24,7 @@ import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import kotlinx.serialization.json.Json
-import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
@@ -47,9 +47,12 @@ import tachiyomi.domain.track.novel.model.NovelTrack
 
 class NovelScreenModelTest {
 
-    @BeforeEach
-    fun setup() {
-        Dispatchers.setMain(Dispatchers.Unconfined)
+    companion object {
+        @JvmStatic
+        @BeforeAll
+        fun setupMainDispatcher() {
+            Dispatchers.setMain(Dispatchers.Unconfined)
+        }
     }
 
     @Test
