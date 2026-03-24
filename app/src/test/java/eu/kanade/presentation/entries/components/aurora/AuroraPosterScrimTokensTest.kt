@@ -10,9 +10,9 @@ class AuroraPosterScrimTokensTest {
         resolveAuroraPosterScrimAlphaStops(isDark = false) shouldBe listOf(
             0.0f to 0.00f,
             0.3f to 0.00f,
-            0.5f to 0.06f,
-            0.7f to 0.12f,
-            1.0f to 0.18f,
+            0.5f to 0.08f,
+            0.7f to 0.18f,
+            1.0f to 0.30f,
         )
     }
 }

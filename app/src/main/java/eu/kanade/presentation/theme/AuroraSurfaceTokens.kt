@@ -27,9 +27,9 @@ fun resolveAuroraSurfaceColor(
         }
     } else {
         when (level) {
-            AuroraSurfaceLevel.Subtle -> Color.White.copy(alpha = 0.72f)
-            AuroraSurfaceLevel.Glass -> Color(0xD1FFFFFF)
-            AuroraSurfaceLevel.Strong -> Color(0xFFF2F7FD)
+            AuroraSurfaceLevel.Subtle -> Color.White.copy(alpha = 0.88f)
+            AuroraSurfaceLevel.Glass -> Color(0xE6FFFFFF)
+            AuroraSurfaceLevel.Strong -> Color(0xFFF0F4F8)
         }
     }
 }
@@ -53,9 +53,9 @@ fun resolveAuroraBorderColor(
         }
     } else {
         if (emphasized) {
-            Color(0xFFBCD0E5)
+            Color(0xFF9DB4CC)
         } else {
-            Color(0xFFD7E3F1)
+            Color(0xFFB8CCE0)
         }
     }
 }

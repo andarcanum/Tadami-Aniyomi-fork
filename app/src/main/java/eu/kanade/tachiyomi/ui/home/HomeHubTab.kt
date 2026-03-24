@@ -2393,7 +2393,7 @@ internal fun homeHubRimLightBrush(colors: AuroraColors): Brush {
             stop to if (colors.isDark) {
                 Color.White.copy(alpha = alpha)
             } else {
-                resolveAuroraBorderColor(colors, emphasized = false).copy(alpha = alpha)
+                colors.accent.copy(alpha = alpha * 0.5f)
             }
         }
         .toTypedArray()
@@ -2437,9 +2437,9 @@ private fun HeroSection(
                 colorStops = arrayOf(
                     0.00f to Color.Transparent,
                     0.40f to Color.Transparent,
-                    0.66f to colors.background.copy(alpha = 0.42f),
-                    0.86f to colors.background.copy(alpha = 0.84f),
-                    1.00f to colors.background.copy(alpha = 0.96f),
+                    0.72f to Color.Black.copy(alpha = 0.12f),
+                    0.88f to Color.Black.copy(alpha = 0.38f),
+                    1.00f to Color.Black.copy(alpha = 0.58f),
                 ),
             )
         }
@@ -2818,9 +2818,22 @@ private fun QuickSourceButton(sourceName: String?, onClick: () -> Unit) {
         else -> resolveAuroraSurfaceColor(colors, AuroraSurfaceLevel.Strong)
     }
     val sourceBorderBrush = remember(colors) { auroraMenuRimLightBrush(colors) }
-    val sourceShadowElevation = if (colors.isEInk) 10.dp else 8.dp
-    val sourceAmbientShadow = if (colors.isEInk) Color.Black.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.08f)
-    val sourceSpotShadow = if (colors.isEInk) Color.Black.copy(alpha = 0.14f) else Color.Black.copy(alpha = 0.12f)
+    val sourceShadowElevation = when {
+        colors.isEInk -> 4.dp
+        colors.isDark -> 8.dp
+        else -> 2.dp
+    }
+    val sourceAmbientShadow = when {
+        colors.isEInk -> Color.Black.copy(alpha = 0.06f)
+        colors.isDark -> Color.Black.copy(alpha = 0.08f)
+        else -> Color.Black.copy(alpha = 0.03f)
+    }
+    val sourceSpotShadow = when {
+        colors.isEInk -> Color.Black.copy(alpha = 0.08f)
+        colors.isDark -> Color.Black.copy(alpha = 0.12f)
+        else -> Color.Black.copy(alpha = 0.05f)
+    }
+    val sourceBorderWidth = if (colors.isDark) 0.75.dp else 1.dp
 
     Box(
         modifier = Modifier
@@ -2842,7 +2855,7 @@ private fun QuickSourceButton(sourceName: String?, onClick: () -> Unit) {
                 )
                 .clip(sourceButtonShape)
                 .background(sourceSurface)
-                .border(0.75.dp, sourceBorderBrush, sourceButtonShape),
+                .border(sourceBorderWidth, sourceBorderBrush, sourceButtonShape),
         ) {
             Icon(Icons.Filled.Search, null, tint = colors.accent, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(10.dp))

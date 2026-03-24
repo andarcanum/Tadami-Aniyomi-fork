@@ -152,7 +152,7 @@ data class AuroraColors(
                 glass = if (isDark) {
                     Color.White.copy(alpha = 0.22f)
                 } else {
-                    Color(0xD1FFFFFF)
+                    Color(0xE6FFFFFF)
                 },
                 textPrimary = colorScheme.onBackground,
                 textSecondary = colorScheme.onSurfaceVariant,
@@ -160,9 +160,9 @@ data class AuroraColors(
                 cardBackground = if (isDark) {
                     Color.White.copy(alpha = 0.12f)
                 } else {
-                    Color(0xFFF2F7FD)
+                    Color(0xFFF0F4F8)
                 },
-                divider = if (isDark) colorScheme.outlineVariant else Color(0xFFD7E3F1),
+                divider = if (isDark) colorScheme.outlineVariant else Color(0xFFB8CCE0),
                 isDark = isDark,
                 isEInk = false,
                 // Aniview specific colors
@@ -210,12 +210,12 @@ data class AuroraColors(
             surface = AuroraColorScheme.auroraLightSurface,
             gradientStart = AuroraColorScheme.auroraLightGradientStart,
             gradientEnd = AuroraColorScheme.auroraLightGradientEnd,
-            glass = Color(0xD1FFFFFF),
+            glass = Color(0xE6FFFFFF),
             textPrimary = Color(0xFF0f172a),
             textSecondary = Color(0xFF475569),
             textOnAccent = Color.White,
-            cardBackground = Color(0xFFF2F7FD),
-            divider = Color(0xFFD7E3F1),
+            cardBackground = Color(0xFFF0F4F8),
+            divider = Color(0xFFB8CCE0),
             isDark = false,
             isEInk = false,
             progressCyan = AuroraColorScheme.aniviewCyan,

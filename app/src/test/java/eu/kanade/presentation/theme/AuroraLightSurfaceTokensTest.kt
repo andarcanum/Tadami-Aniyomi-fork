@@ -8,13 +8,13 @@ class AuroraLightSurfaceTokensTest {
 
     @Test
     fun `light aurora theme exposes bright layered surfaces`() {
-        resolveAuroraSurfaceColor(AuroraColors.Light, AuroraSurfaceLevel.Glass) shouldBe Color(0xD1FFFFFF)
-        resolveAuroraSurfaceColor(AuroraColors.Light, AuroraSurfaceLevel.Strong) shouldBe Color(0xFFF2F7FD)
+        resolveAuroraSurfaceColor(AuroraColors.Light, AuroraSurfaceLevel.Glass) shouldBe Color(0xE6FFFFFF)
+        resolveAuroraSurfaceColor(AuroraColors.Light, AuroraSurfaceLevel.Strong) shouldBe Color(0xFFF0F4F8)
     }
 
     @Test
     fun `light aurora theme exposes readable borders and selection fills`() {
-        resolveAuroraBorderColor(AuroraColors.Light, emphasized = false) shouldBe Color(0xFFD7E3F1)
+        resolveAuroraBorderColor(AuroraColors.Light, emphasized = false) shouldBe Color(0xFFB8CCE0)
         resolveAuroraSelectionContainerColor(AuroraColors.Light) shouldBe AuroraColors.Light.accent.copy(alpha = 0.14f)
         resolveAuroraSelectionBorderColor(AuroraColors.Light) shouldBe AuroraColors.Light.accent.copy(alpha = 0.28f)
     }

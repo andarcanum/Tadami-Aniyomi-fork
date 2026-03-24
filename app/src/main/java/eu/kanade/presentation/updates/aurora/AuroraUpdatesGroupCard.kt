@@ -57,7 +57,11 @@ fun AuroraUpdatesGroupCard(
         colors = CardDefaults.cardColors(containerColor = tabContainerColor),
         border = BorderStroke(
             width = 1.dp,
-            color = resolveAuroraBorderColor(colors, emphasized = colors.isEInk),
+            color = if (colors.isEInk) {
+                resolveAuroraBorderColor(colors, emphasized = true)
+            } else {
+                colors.accent.copy(alpha = 0.18f)
+            },
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {

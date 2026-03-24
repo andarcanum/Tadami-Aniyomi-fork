@@ -250,7 +250,7 @@ private fun AuroraAmbientCanvas(
             }
         }
 
-        val blobBaseAlpha = if (colors.isDark) 1f else 0.34f
+        val blobBaseAlpha = if (colors.isDark) 1f else 0.45f
         drawAmbientBlob(
             centerFractionX = 0.22f,
             centerFractionY = 0.14f,

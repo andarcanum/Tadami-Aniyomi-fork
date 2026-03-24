@@ -15,6 +15,8 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
@@ -36,12 +38,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -142,18 +147,33 @@ object HomeScreen : Screen() {
                                 exit = shrinkVertically(),
                             ) {
                                 val auroraColors = if (isAurora) AuroraTheme.colors else null
-                                NavigationBar(
-                                    containerColor = if (isAurora) {
-                                        // Aniview: Frosted glass effect with blur
-                                        auroraColors!!.surface.copy(alpha = 0.2f)
+                                val navContainerColor = if (isAurora) {
+                                    if (auroraColors!!.isDark) {
+                                        auroraColors.surface.copy(alpha = 0.2f)
                                     } else {
-                                        MaterialTheme.colorScheme.surfaceContainer
-                                    },
+                                        auroraColors.accent.copy(alpha = 0.04f)
+                                            .compositeOver(Color(0xFFF0F4F8))
+                                    }
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainer
+                                }
+                                NavigationBar(
+                                    containerColor = navContainerColor,
                                     modifier = if (isAurora) {
-                                        Modifier.graphicsLayer {
-                                            // Add subtle blur for frosted glass effect
-                                            alpha = 0.95f
-                                        }
+                                        Modifier
+                                            .graphicsLayer { alpha = 0.95f }
+                                            .then(
+                                                if (!auroraColors!!.isDark) {
+                                                    Modifier.border(
+                                                        BorderStroke(
+                                                            width = 0.75.dp,
+                                                            color = auroraColors.divider.copy(alpha = 0.5f),
+                                                        ),
+                                                    )
+                                                } else {
+                                                    Modifier
+                                                },
+                                            )
                                     } else {
                                         Modifier
                                     },
