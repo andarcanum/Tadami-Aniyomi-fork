@@ -80,6 +80,7 @@ import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColo
 import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
 import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
 import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
+import eu.kanade.presentation.novel.buildNovelCoverImageRequest
 import eu.kanade.presentation.novel.sourceAwareNovelCoverModel
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.formatChapterNumber
@@ -447,12 +448,10 @@ fun NovelScreen(
                             ),
                     ) {
                         AsyncImage(
-                            model = ImageRequest.Builder(context)
-                                .data(sourceAwareNovelCoverModel(state.novel))
-                                .crossfade(true)
-                                .placeholderMemoryCacheKey(state.novel.thumbnailUrl)
-                                .staticBlur(blurRadiusPx, intensityFactor = 0.6f)
-                                .build(),
+                            model = buildNovelCoverImageRequest(context, state.novel) {
+                                crossfade(true)
+                                staticBlur(blurRadiusPx, intensityFactor = 0.6f)
+                            },
                             error = fallbackPainter,
                             fallback = fallbackPainter,
                             contentDescription = null,
@@ -492,11 +491,9 @@ fun NovelScreen(
                                 horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.medium),
                             ) {
                                 ItemCover.Book(
-                                    data = ImageRequest.Builder(context)
-                                        .data(sourceAwareNovelCoverModel(state.novel))
-                                        .crossfade(true)
-                                        .placeholderMemoryCacheKey(state.novel.thumbnailUrl)
-                                        .build(),
+                                    data = buildNovelCoverImageRequest(context, state.novel) {
+                                        crossfade(true)
+                                    },
                                     modifier = Modifier.size(width = 112.dp, height = 158.dp),
                                 )
                                 Column(

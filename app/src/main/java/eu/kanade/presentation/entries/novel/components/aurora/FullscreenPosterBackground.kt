@@ -25,6 +25,7 @@ import eu.kanade.presentation.entries.components.aurora.applyAuroraBlurBackgroun
 import eu.kanade.presentation.entries.components.aurora.auroraPosterBackgroundSpec
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraPosterScrimBrush
+import eu.kanade.presentation.novel.buildNovelCoverImageRequest
 import eu.kanade.presentation.novel.sourceAwareNovelCoverModel
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.entries.novel.model.Novel
@@ -91,10 +92,9 @@ fun FullscreenPosterBackground(
         if (posterModel != null) {
             AsyncImage(
                 model = remember(posterModel, backgroundSpec.sharpMemoryCacheKey) {
-                    ImageRequest.Builder(context)
-                        .data(posterModel)
-                        .memoryCacheKey(backgroundSpec.sharpMemoryCacheKey)
-                        .build()
+                    buildNovelCoverImageRequest(context, novel) {
+                        memoryCacheKey(backgroundSpec.sharpMemoryCacheKey)
+                    }
                 },
                 error = placeholderPainter,
                 fallback = placeholderPainter,
@@ -106,13 +106,12 @@ fun FullscreenPosterBackground(
 
             AsyncImage(
                 model = remember(posterModel, backgroundSpec, blurRadiusPx) {
-                    ImageRequest.Builder(context)
-                        .data(posterModel)
-                        .applyAuroraBlurBackground(
+                    buildNovelCoverImageRequest(context, novel) {
+                        applyAuroraBlurBackground(
                             spec = backgroundSpec,
                             blurRadiusPx = blurRadiusPx,
                         )
-                        .build()
+                    }
                 },
                 error = placeholderPainter,
                 fallback = placeholderPainter,
