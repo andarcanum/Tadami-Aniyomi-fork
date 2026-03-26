@@ -49,7 +49,7 @@ import tachiyomi.domain.source.novel.model.NovelSourceWithCount
 import tachiyomi.domain.source.novel.model.Source
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
-import tachiyomi.novel.data.NovelDatabase
+import tachiyomi.novel.`data`.NovelDatabase
 import tachiyomi.presentation.core.components.LazyColumnWithAction
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
@@ -267,3 +267,4 @@ private class ClearNovelDatabaseScreenModel : StateScreenModel<ClearNovelDatabas
         ) : State
     }
 }
+

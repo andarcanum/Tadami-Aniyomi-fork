@@ -31,8 +31,8 @@ class AnimeBackupCreator(
 
         if (options.chapters) {
             // Backup all the episodes
-            handler.awaitList {
-                episodesQueries.getEpisodesByAnimeId(
+            handler.awaitList { db ->
+                db.episodesQueries.getEpisodesByAnimeId(
                     animeId = anime.id,
                     mapper = backupEpisodeMapper,
                 )
@@ -50,7 +50,7 @@ class AnimeBackupCreator(
         }
 
         if (options.tracking) {
-            val tracks = handler.awaitList { anime_syncQueries.getTracksByAnimeId(anime.id, backupAnimeTrackMapper) }
+            val tracks = handler.awaitList { db -> db.anime_syncQueries.getTracksByAnimeId(anime.id, backupAnimeTrackMapper) }
             if (tracks.isNotEmpty()) {
                 animeObject.tracking = tracks
             }
@@ -60,7 +60,7 @@ class AnimeBackupCreator(
             val historyByAnimeId = getHistory.await(anime.id)
             if (historyByAnimeId.isNotEmpty()) {
                 val history = historyByAnimeId.map { history ->
-                    val episode = handler.awaitOne { episodesQueries.getEpisodeById(history.episodeId) }
+                    val episode = handler.awaitOne { db -> db.episodesQueries.getEpisodeById(history.episodeId) }
                     BackupAnimeHistory(episode.url, history.seenAt?.time ?: 0L)
                 }
                 if (history.isNotEmpty()) {

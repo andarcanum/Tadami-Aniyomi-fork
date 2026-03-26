@@ -97,9 +97,9 @@ class AchievementHandler(
     }
 
     private suspend fun sanitizeCrossCategoryFirstAchievements() {
-        val mangaRead = (mangaHandler.awaitOneOrNull { historyQueries.getTotalChaptersRead() } ?: 0L) > 0L
-        val animeWatched = (animeHandler.awaitOneOrNull { animehistoryQueries.getTotalEpisodesWatched() } ?: 0L) > 0L
-        val novelRead = (novelHandler.awaitOneOrNull { novel_historyQueries.getTotalChaptersRead() } ?: 0L) > 0L
+        val mangaRead = (mangaHandler.awaitOneOrNull { db -> db.historyQueries.getTotalChaptersRead() } ?: 0L) > 0L
+        val animeWatched = (animeHandler.awaitOneOrNull { db -> db.animehistoryQueries.getTotalEpisodesWatched() } ?: 0L) > 0L
+        val novelRead = (novelHandler.awaitOneOrNull { db -> db.novel_historyQueries.getTotalChaptersRead() } ?: 0L) > 0L
 
         var corrected = false
         corrected = sanitizeFirstAchievement("first_chapter", mangaRead) || corrected
@@ -223,7 +223,7 @@ class AchievementHandler(
             .filter { it.type == AchievementType.EVENT }
 
         achievements.forEach { achievement ->
-            // Специальная обработка для read_long_manga
+            // РЎРїРµС†РёР°Р»СЊРЅР°СЏ РѕР±СЂР°Р±РѕС‚РєР° РґР»СЏ read_long_manga
             if (achievement.id == "read_long_manga") {
                 if (checkLongMangaAchievement(event)) {
                     val currentProgress = repository.getProgress(achievement.id).first()
@@ -270,7 +270,7 @@ class AchievementHandler(
     private suspend fun handleAppStart(event: AchievementEvent.AppStart) {
         checkTimeAchievements()
         return
-        // Handle time-based achievements (Ночной чтец, Жаворонок, etc.)
+        // Handle time-based achievements (РќРѕС‡РЅРѕР№ С‡С‚РµС†, Р–Р°РІРѕСЂРѕРЅРѕРє, etc.)
         val achievements = repository.getAll().first()
             .filter {
                 it.type == AchievementType.EVENT &&
@@ -293,10 +293,10 @@ class AchievementHandler(
         featureCollector.onFeatureUsed(event.feature, event.count)
         checkFeatureAchievements()
         return
-        // Сохраняем статистику использования функций
+        // РЎРѕС…СЂР°РЅСЏРµРј СЃС‚Р°С‚РёСЃС‚РёРєСѓ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёСЏ С„СѓРЅРєС†РёР№
         featureCollector.onFeatureUsed(event.feature, event.count)
 
-        // Handle feature usage achievements (Коллекционер, Исследователь, etc.)
+        // Handle feature usage achievements (РљРѕР»Р»РµРєС†РёРѕРЅРµСЂ, РСЃСЃР»РµРґРѕРІР°С‚РµР»СЊ, etc.)
         val achievements = repository.getAll().first()
             .filter {
                 it.type == AchievementType.EVENT &&
@@ -317,8 +317,8 @@ class AchievementHandler(
     }
 
     /**
-     * Публичный метод для отправки событий о использовании функций
-     * Вызывайте этот метод из UI при выполнении определенных действий
+     * РџСѓР±Р»РёС‡РЅС‹Р№ РјРµС‚РѕРґ РґР»СЏ РѕС‚РїСЂР°РІРєРё СЃРѕР±С‹С‚РёР№ Рѕ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёРё С„СѓРЅРєС†РёР№
+     * Р’С‹Р·С‹РІР°Р№С‚Рµ СЌС‚РѕС‚ РјРµС‚РѕРґ РёР· UI РїСЂРё РІС‹РїРѕР»РЅРµРЅРёРё РѕРїСЂРµРґРµР»РµРЅРЅС‹С… РґРµР№СЃС‚РІРёР№
      */
     fun trackFeatureUsed(feature: AchievementEvent.Feature) {
         scope.launch {
@@ -345,10 +345,10 @@ class AchievementHandler(
         newProgress: Int,
     ) {
         if (achievement.isTiered) {
-            // Обработка многоуровневого достижения
+            // РћР±СЂР°Р±РѕС‚РєР° РјРЅРѕРіРѕСѓСЂРѕРІРЅРµРІРѕРіРѕ РґРѕСЃС‚РёР¶РµРЅРёСЏ
             applyTieredProgressUpdate(achievement, currentProgress, newProgress)
         } else {
-            // Обработка обычного достижения
+            // РћР±СЂР°Р±РѕС‚РєР° РѕР±С‹С‡РЅРѕРіРѕ РґРѕСЃС‚РёР¶РµРЅРёСЏ
             applyStandardProgressUpdate(achievement, currentProgress, newProgress)
         }
     }
@@ -410,18 +410,18 @@ class AchievementHandler(
         val tiers = achievement.tiers ?: return
         logcat(LogPriority.INFO) { "[ACHIEVEMENTS] Checking tiered ${achievement.id}: newProgress=$newProgress" }
 
-        // Вычисляем текущий уровень
+        // Р’С‹С‡РёСЃР»СЏРµРј С‚РµРєСѓС‰РёР№ СѓСЂРѕРІРµРЅСЊ
         val newTierIndex = tiers.indexOfLast { newProgress >= it.threshold }
         val newCurrentTier = newTierIndex + 1 // 0-based index to 1-based tier
         val previousTier = currentProgress?.currentTier ?: 0
 
-        // Вычисляем прогресс до следующего уровня
+        // Р’С‹С‡РёСЃР»СЏРµРј РїСЂРѕРіСЂРµСЃСЃ РґРѕ СЃР»РµРґСѓСЋС‰РµРіРѕ СѓСЂРѕРІРЅСЏ
         val nextTier = tiers.getOrNull(newCurrentTier)
         val tierProgress = if (nextTier != null) {
             val previousThreshold = tiers.getOrNull(newCurrentTier - 1)?.threshold ?: 0
             newProgress - previousThreshold
         } else {
-            // Уже на максимальном уровне
+            // РЈР¶Рµ РЅР° РјР°РєСЃРёРјР°Р»СЊРЅРѕРј СѓСЂРѕРІРЅРµ
             0
         }
 
@@ -439,7 +439,7 @@ class AchievementHandler(
                 "previousTier=$previousTier"
         }
 
-        // Создаем или обновляем прогресс
+        // РЎРѕР·РґР°РµРј РёР»Рё РѕР±РЅРѕРІР»СЏРµРј РїСЂРѕРіСЂРµСЃСЃ
         val progressToSave = AchievementProgress.createTiered(
             achievementId = achievement.id,
             progress = newProgress,
@@ -457,7 +457,7 @@ class AchievementHandler(
 
         repository.insertOrUpdateProgress(progressToSave)
 
-        // Если уровень повысился, отправляем уведомление
+        // Р•СЃР»Рё СѓСЂРѕРІРµРЅСЊ РїРѕРІС‹СЃРёР»СЃСЏ, РѕС‚РїСЂР°РІР»СЏРµРј СѓРІРµРґРѕРјР»РµРЅРёРµ
         if (newCurrentTier > previousTier && newCurrentTier > 0) {
             val unlockedTier = tiers[newTierIndex]
             logcat(LogPriority.INFO) {
@@ -496,7 +496,7 @@ class AchievementHandler(
                 }
             }
 
-            // Выдаем XP за достижение уровня
+            // Р’С‹РґР°РµРј XP Р·Р° РґРѕСЃС‚РёР¶РµРЅРёРµ СѓСЂРѕРІРЅСЏ
             try {
                 val xpReward = tier.points * 10 // XP = points * 10
                 userProfileManager.addXP(xpReward)
@@ -507,7 +507,7 @@ class AchievementHandler(
             }
         }
 
-        // Отправляем callback
+        // РћС‚РїСЂР°РІР»СЏРµРј callback
         unlockCallback?.onAchievementUnlocked(achievement)
     }
 
@@ -527,7 +527,7 @@ class AchievementHandler(
                 }
             }
             AchievementType.QUANTITY -> {
-                // Специальная обработка для достижений завершения
+                // РЎРїРµС†РёР°Р»СЊРЅР°СЏ РѕР±СЂР°Р±РѕС‚РєР° РґР»СЏ РґРѕСЃС‚РёР¶РµРЅРёР№ Р·Р°РІРµСЂС€РµРЅРёСЏ
                 when {
                     achievement.id.startsWith("complete_") && achievement.id.endsWith("_manga") -> {
                         getCompletedMangaCount()
@@ -590,8 +590,8 @@ class AchievementHandler(
                 getUnlockedCountExcludingMeta()
             }
             AchievementType.BALANCED -> {
-                val mangaCount = mangaHandler.awaitOneOrNull { historyQueries.getTotalChaptersRead() } ?: 0L
-                val animeCount = animeHandler.awaitOneOrNull { animehistoryQueries.getTotalEpisodesWatched() } ?: 0L
+                val mangaCount = mangaHandler.awaitOneOrNull { db -> db.historyQueries.getTotalChaptersRead() } ?: 0L
+                val animeCount = animeHandler.awaitOneOrNull { db -> db.animehistoryQueries.getTotalEpisodesWatched() } ?: 0L
                 minOf(mangaCount, animeCount).toInt().coerceAtLeast(0)
             }
             AchievementType.SECRET -> {
@@ -600,13 +600,13 @@ class AchievementHandler(
                 currentProgress?.progress ?: 0
             }
             AchievementType.TIME_BASED -> {
-                // Используем TimeBasedAchievementChecker для асинхронной проверки
-                // Возвращаем текущий прогресс, обновление произойдет асинхронно
+                // РСЃРїРѕР»СЊР·СѓРµРј TimeBasedAchievementChecker РґР»СЏ Р°СЃРёРЅС…СЂРѕРЅРЅРѕР№ РїСЂРѕРІРµСЂРєРё
+                // Р’РѕР·РІСЂР°С‰Р°РµРј С‚РµРєСѓС‰РёР№ РїСЂРѕРіСЂРµСЃСЃ, РѕР±РЅРѕРІР»РµРЅРёРµ РїСЂРѕРёР·РѕР№РґРµС‚ Р°СЃРёРЅС…СЂРѕРЅРЅРѕ
                 currentProgress?.progress ?: 0
             }
             AchievementType.FEATURE_BASED -> {
-                // Используем FeatureBasedAchievementChecker для асинхронной проверки
-                // Возвращаем текущий прогресс, обновление произойдет асинхронно
+                // РСЃРїРѕР»СЊР·СѓРµРј FeatureBasedAchievementChecker РґР»СЏ Р°СЃРёРЅС…СЂРѕРЅРЅРѕР№ РїСЂРѕРІРµСЂРєРё
+                // Р’РѕР·РІСЂР°С‰Р°РµРј С‚РµРєСѓС‰РёР№ РїСЂРѕРіСЂРµСЃСЃ, РѕР±РЅРѕРІР»РµРЅРёРµ РїСЂРѕРёР·РѕР№РґРµС‚ Р°СЃРёРЅС…СЂРѕРЅРЅРѕ
                 currentProgress?.progress ?: 0
             }
         }
@@ -667,7 +667,7 @@ class AchievementHandler(
             is AchievementEvent.SessionEnd ->
                 id.contains("session") || id.contains("time")
             is AchievementEvent.AppStart -> {
-                // Проверка достижений, основанных на времени суток
+                // РџСЂРѕРІРµСЂРєР° РґРѕСЃС‚РёР¶РµРЅРёР№, РѕСЃРЅРѕРІР°РЅРЅС‹С… РЅР° РІСЂРµРјРµРЅРё СЃСѓС‚РѕРє
                 when (event.hourOfDay) {
                     in 2..5 -> id.contains("night") || id.contains("owl") || id.contains("late")
                     in 6..9 -> id.contains("morning") || id.contains("lark") || id.contains("early_bird")
@@ -678,7 +678,7 @@ class AchievementHandler(
                 }
             }
             is AchievementEvent.FeatureUsed -> {
-                // Проверка достижений, основанных на использовании функций
+                // РџСЂРѕРІРµСЂРєР° РґРѕСЃС‚РёР¶РµРЅРёР№, РѕСЃРЅРѕРІР°РЅРЅС‹С… РЅР° РёСЃРїРѕР»СЊР·РѕРІР°РЅРёРё С„СѓРЅРєС†РёР№
                 when (event.feature) {
                     AchievementEvent.Feature.DOWNLOAD -> id.contains("download") || id.contains("collector")
                     AchievementEvent.Feature.SEARCH, AchievementEvent.Feature.ADVANCED_SEARCH ->
@@ -694,44 +694,39 @@ class AchievementHandler(
     }
 
     /**
-     * Специальная проверка для достижения "Долгостройщик"
-     * Требует: манга завершена И 200+ глав прочитано
+     * РЎРїРµС†РёР°Р»СЊРЅР°СЏ РїСЂРѕРІРµСЂРєР° РґР»СЏ РґРѕСЃС‚РёР¶РµРЅРёСЏ "Р”РѕР»РіРѕСЃС‚СЂРѕР№С‰РёРє"
+     * РўСЂРµР±СѓРµС‚: РјР°РЅРіР° Р·Р°РІРµСЂС€РµРЅР° Р 200+ РіР»Р°РІ РїСЂРѕС‡РёС‚Р°РЅРѕ
      */
     private suspend fun checkLongMangaAchievement(event: AchievementEvent.MangaCompleted): Boolean {
-        val chaptersRead = mangaHandler.awaitOneOrNull {
-            chaptersQueries.getReadChapterCountByMangaId(event.mangaId)
+        val chaptersRead = mangaHandler.awaitOneOrNull { db -> db.chaptersQueries.getReadChapterCountByMangaId(event.mangaId)
         } ?: 0L
         return chaptersRead >= 200
     }
 
     private suspend fun checkLongNovelAchievement(event: AchievementEvent.NovelCompleted): Boolean {
-        val chaptersRead = novelHandler.awaitOneOrNull {
-            novel_chaptersQueries.getReadChapterCountByNovelId(event.novelId)
+        val chaptersRead = novelHandler.awaitOneOrNull { db -> db.novel_chaptersQueries.getReadChapterCountByNovelId(event.novelId)
         } ?: 0L
         return chaptersRead >= 200
     }
 
     /**
-     * Получить количество завершенных манг в библиотеке
+     * РџРѕР»СѓС‡РёС‚СЊ РєРѕР»РёС‡РµСЃС‚РІРѕ Р·Р°РІРµСЂС€РµРЅРЅС‹С… РјР°РЅРі РІ Р±РёР±Р»РёРѕС‚РµРєРµ
      */
     private suspend fun getCompletedMangaCount(): Int {
-        return mangaHandler.awaitOneOrNull {
-            mangasQueries.getCompletedMangaCount()
+        return mangaHandler.awaitOneOrNull { db -> db.mangasQueries.getCompletedMangaCount()
         }?.toInt() ?: 0
     }
 
     /**
-     * Получить количество завершенных аниме в библиотеке
+     * РџРѕР»СѓС‡РёС‚СЊ РєРѕР»РёС‡РµСЃС‚РІРѕ Р·Р°РІРµСЂС€РµРЅРЅС‹С… Р°РЅРёРјРµ РІ Р±РёР±Р»РёРѕС‚РµРєРµ
      */
     private suspend fun getCompletedAnimeCount(): Int {
-        return animeHandler.awaitOneOrNull {
-            animesQueries.getCompletedAnimeCount()
+        return animeHandler.awaitOneOrNull { db -> db.animesQueries.getCompletedAnimeCount()
         }?.toInt() ?: 0
     }
 
     private suspend fun getCompletedNovelCount(): Int {
-        return novelHandler.awaitOneOrNull {
-            novelsQueries.getCompletedNovelCount()
+        return novelHandler.awaitOneOrNull { db -> db.novelsQueries.getCompletedNovelCount()
         }?.toInt() ?: 0
     }
 
@@ -745,27 +740,27 @@ class AchievementHandler(
     private suspend fun getTotalReadForCategory(category: AchievementCategory): Int {
         return when (category) {
             AchievementCategory.MANGA -> {
-                mangaHandler.awaitOneOrNull { historyQueries.getTotalChaptersRead() }?.toInt() ?: 0
+                mangaHandler.awaitOneOrNull { db -> db.historyQueries.getTotalChaptersRead() }?.toInt() ?: 0
             }
             AchievementCategory.ANIME -> {
-                animeHandler.awaitOneOrNull { animehistoryQueries.getTotalEpisodesWatched() }?.toInt() ?: 0
+                animeHandler.awaitOneOrNull { db -> db.animehistoryQueries.getTotalEpisodesWatched() }?.toInt() ?: 0
             }
             AchievementCategory.NOVEL -> {
-                novelHandler.awaitOneOrNull { novel_historyQueries.getTotalChaptersRead() }?.toInt() ?: 0
+                novelHandler.awaitOneOrNull { db -> db.novel_historyQueries.getTotalChaptersRead() }?.toInt() ?: 0
             }
             AchievementCategory.BOTH, AchievementCategory.SECRET -> {
-                val mangaCount = mangaHandler.awaitOneOrNull { historyQueries.getTotalChaptersRead() } ?: 0L
-                val animeCount = animeHandler.awaitOneOrNull { animehistoryQueries.getTotalEpisodesWatched() } ?: 0L
-                val novelCount = novelHandler.awaitOneOrNull { novel_historyQueries.getTotalChaptersRead() } ?: 0L
+                val mangaCount = mangaHandler.awaitOneOrNull { db -> db.historyQueries.getTotalChaptersRead() } ?: 0L
+                val animeCount = animeHandler.awaitOneOrNull { db -> db.animehistoryQueries.getTotalEpisodesWatched() } ?: 0L
+                val novelCount = novelHandler.awaitOneOrNull { db -> db.novel_historyQueries.getTotalChaptersRead() } ?: 0L
                 (mangaCount + animeCount + novelCount).toInt()
             }
         }
     }
 
     private suspend fun getLibraryCountForCategory(category: AchievementCategory): Int {
-        val mangaCount = mangaHandler.awaitOneOrNull { mangasQueries.getLibraryCount() } ?: 0L
-        val animeCount = animeHandler.awaitOneOrNull { animesQueries.getLibraryCount() } ?: 0L
-        val novelCount = novelHandler.awaitOneOrNull { novelsQueries.getLibraryCount() } ?: 0L
+        val mangaCount = mangaHandler.awaitOneOrNull { db -> db.mangasQueries.getLibraryCount() } ?: 0L
+        val animeCount = animeHandler.awaitOneOrNull { db -> db.animesQueries.getLibraryCount() } ?: 0L
+        val novelCount = novelHandler.awaitOneOrNull { db -> db.novelsQueries.getLibraryCount() } ?: 0L
         return when (category) {
             AchievementCategory.MANGA -> mangaCount.toInt()
             AchievementCategory.ANIME -> animeCount.toInt()
@@ -929,7 +924,7 @@ class AchievementHandler(
                 }
             }
 
-            // Выдаем награды за достижение
+            // Р’С‹РґР°РµРј РЅР°РіСЂР°РґС‹ Р·Р° РґРѕСЃС‚РёР¶РµРЅРёРµ
             if (achievement.hasRewards) {
                 try {
                     userProfileManager.grantRewards(achievement.getAllRewards())
@@ -945,11 +940,11 @@ class AchievementHandler(
     // ==================== TIME & FEATURE BASED ACHIEVEMENT CHECKERS ====================
 
     /**
-     * Проверка TIME_BASED и FEATURE_BASED достижений
-     * Вызывается для всех событий
+     * РџСЂРѕРІРµСЂРєР° TIME_BASED Рё FEATURE_BASED РґРѕСЃС‚РёР¶РµРЅРёР№
+     * Р’С‹Р·С‹РІР°РµС‚СЃСЏ РґР»СЏ РІСЃРµС… СЃРѕР±С‹С‚РёР№
      */
     private suspend fun checkTimeAndFeatureAchievements(event: AchievementEvent) {
-        // Получаем все достижения категории BOTH
+        // РџРѕР»СѓС‡Р°РµРј РІСЃРµ РґРѕСЃС‚РёР¶РµРЅРёСЏ РєР°С‚РµРіРѕСЂРёРё BOTH
         val achievements = repository.getByCategory(AchievementCategory.BOTH).first()
 
         val timeAndFeatureAchievements = achievements.filter {
@@ -1060,11 +1055,9 @@ class AchievementHandler(
      * secret_harem_king: Library has 20+ titles with "Harem" genre
      */
     private suspend fun checkHaremKing(): Boolean {
-        val mangaHaremCount = mangaHandler.awaitOneOrNull {
-            mangasQueries.getLibraryGenreCount("Harem")
+        val mangaHaremCount = mangaHandler.awaitOneOrNull { db -> db.mangasQueries.getLibraryGenreCount("Harem")
         } ?: 0L
-        val animeHaremCount = animeHandler.awaitOneOrNull {
-            animesQueries.getLibraryGenreCount("Harem")
+        val animeHaremCount = animeHandler.awaitOneOrNull { db -> db.animesQueries.getLibraryGenreCount("Harem")
         } ?: 0L
         return (mangaHaremCount + animeHaremCount) >= 20
     }
@@ -1073,11 +1066,9 @@ class AchievementHandler(
      * secret_isekai_truck: Library has 20+ titles with "Isekai" genre
      */
     private suspend fun checkIsekaiTruck(): Boolean {
-        val mangaIsekaiCount = mangaHandler.awaitOneOrNull {
-            mangasQueries.getLibraryGenreCount("Isekai")
+        val mangaIsekaiCount = mangaHandler.awaitOneOrNull { db -> db.mangasQueries.getLibraryGenreCount("Isekai")
         } ?: 0L
-        val animeIsekaiCount = animeHandler.awaitOneOrNull {
-            animesQueries.getLibraryGenreCount("Isekai")
+        val animeIsekaiCount = animeHandler.awaitOneOrNull { db -> db.animesQueries.getLibraryGenreCount("Isekai")
         } ?: 0L
         return (mangaIsekaiCount + animeIsekaiCount) >= 20
     }
@@ -1087,8 +1078,7 @@ class AchievementHandler(
      */
     private suspend fun checkChad(): Boolean {
         val completedCount = getCompletedMangaCount()
-        val ongoingCount = mangaHandler.awaitOneOrNull {
-            mangasQueries.getLibraryCountByStatus(SManga.ONGOING.toLong())
+        val ongoingCount = mangaHandler.awaitOneOrNull { db -> db.mangasQueries.getLibraryCountByStatus(SManga.ONGOING.toLong())
         }?.toInt() ?: 0
         return completedCount >= 10 && ongoingCount == 0
     }
@@ -1097,15 +1087,13 @@ class AchievementHandler(
      * secret_shonen: 10+ completed titles with "Shounen" or "Shonen" genre
      */
     private suspend fun checkShonen(): Boolean {
-        val completedMangaShonen = mangaHandler.awaitOneOrNull {
-            mangasQueries.getCompletedLibraryCountByAnyGenre(
+        val completedMangaShonen = mangaHandler.awaitOneOrNull { db -> db.mangasQueries.getCompletedLibraryCountByAnyGenre(
                 SManga.COMPLETED.toLong(),
                 "Shounen",
                 "Shonen",
             )
         } ?: 0L
-        val completedAnimeShonen = animeHandler.awaitOneOrNull {
-            animesQueries.getCompletedLibraryCountByAnyGenre(
+        val completedAnimeShonen = animeHandler.awaitOneOrNull { db -> db.animesQueries.getCompletedLibraryCountByAnyGenre(
                 SManga.COMPLETED.toLong(),
                 "Shounen",
                 "Shonen",
@@ -1169,11 +1157,9 @@ class AchievementHandler(
      * secret_saitama: Library has exactly 1 anime AND 1 manga (total 2 items)
      */
     private suspend fun checkSaitama(): Boolean {
-        val mangaCount = mangaHandler.awaitOneOrNull {
-            mangasQueries.getLibraryCount()
+        val mangaCount = mangaHandler.awaitOneOrNull { db -> db.mangasQueries.getLibraryCount()
         } ?: 0L
-        val animeCount = animeHandler.awaitOneOrNull {
-            animesQueries.getLibraryCount()
+        val animeCount = animeHandler.awaitOneOrNull { db -> db.animesQueries.getLibraryCount()
         } ?: 0L
 
         return mangaCount == 1L && animeCount == 1L
@@ -1183,11 +1169,9 @@ class AchievementHandler(
      * secret_jojo: Library contains "Jojo" or "JoJo" or "Jojo's Bizarre Adventure" in title
      */
     private suspend fun checkJojo(): Boolean {
-        val hasJojoManga = mangaHandler.awaitOneOrNull {
-            mangasQueries.hasLibraryTitleLike("jojo")
+        val hasJojoManga = mangaHandler.awaitOneOrNull { db -> db.mangasQueries.hasLibraryTitleLike("jojo")
         } ?: false
-        val hasJojoAnime = animeHandler.awaitOneOrNull {
-            animesQueries.hasLibraryTitleLike("jojo")
+        val hasJojoAnime = animeHandler.awaitOneOrNull { db -> db.animesQueries.hasLibraryTitleLike("jojo")
         } ?: false
 
         return hasJojoManga || hasJojoAnime
@@ -1197,8 +1181,7 @@ class AchievementHandler(
      * secret_onepiece: Total chapters read >= 1000
      */
     private suspend fun checkOnePiece(): Boolean {
-        val totalChapters = mangaHandler.awaitOneOrNull {
-            historyQueries.getTotalChaptersRead()
+        val totalChapters = mangaHandler.awaitOneOrNull { db -> db.historyQueries.getTotalChaptersRead()
         } ?: 0L
         return totalChapters >= 1000
     }

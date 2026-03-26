@@ -14,26 +14,26 @@ class AnimeHistoryRepositoryImpl(
 ) : AnimeHistoryRepository {
 
     override fun getAnimeHistory(query: String): Flow<List<AnimeHistoryWithRelations>> {
-        return handler.subscribeToList {
-            animehistoryViewQueries.animehistory(query, AnimeHistoryMapper::mapAnimeHistoryWithRelations)
+        return handler.subscribeToList { db ->
+            db.animehistoryViewQueries.animehistory(query, AnimeHistoryMapper::mapAnimeHistoryWithRelations)
         }
     }
 
     override fun getRecentAnimeHistory(limit: Long): Flow<List<AnimeHistoryWithRelations>> {
-        return handler.subscribeToList {
-            animehistoryViewQueries.getRecentAnimeHistory(limit, AnimeHistoryMapper::mapAnimeHistoryWithRelations)
+        return handler.subscribeToList { db ->
+            db.animehistoryViewQueries.getRecentAnimeHistory(limit, AnimeHistoryMapper::mapAnimeHistoryWithRelations)
         }
     }
 
     override suspend fun getLastAnimeHistory(): AnimeHistoryWithRelations? {
-        return handler.awaitOneOrNull {
-            animehistoryViewQueries.getLatestAnimeHistory(AnimeHistoryMapper::mapAnimeHistoryWithRelations)
+        return handler.awaitOneOrNull { db ->
+            db.animehistoryViewQueries.getLatestAnimeHistory(AnimeHistoryMapper::mapAnimeHistoryWithRelations)
         }
     }
 
     override suspend fun getHistoryByAnimeId(animeId: Long): List<AnimeHistory> {
-        return handler.awaitList {
-            animehistoryQueries.getHistoryByAnimeId(
+        return handler.awaitList { db ->
+            db.animehistoryQueries.getHistoryByAnimeId(
                 animeId,
                 AnimeHistoryMapper::mapAnimeHistory,
             )
@@ -42,7 +42,7 @@ class AnimeHistoryRepositoryImpl(
 
     override suspend fun resetAnimeHistory(historyId: Long) {
         try {
-            handler.await { animehistoryQueries.resetAnimeHistoryById(historyId) }
+            handler.await { db -> db.animehistoryQueries.resetAnimeHistoryById(historyId) }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, throwable = e)
         }
@@ -50,7 +50,7 @@ class AnimeHistoryRepositoryImpl(
 
     override suspend fun resetHistoryByAnimeId(animeId: Long) {
         try {
-            handler.await { animehistoryQueries.resetHistoryByAnimeId(animeId) }
+            handler.await { db -> db.animehistoryQueries.resetHistoryByAnimeId(animeId) }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, throwable = e)
         }
@@ -58,7 +58,7 @@ class AnimeHistoryRepositoryImpl(
 
     override suspend fun deleteAllAnimeHistory(): Boolean {
         return try {
-            handler.await { animehistoryQueries.removeAllHistory() }
+            handler.await { db -> db.animehistoryQueries.removeAllHistory() }
             true
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, throwable = e)
@@ -68,8 +68,8 @@ class AnimeHistoryRepositoryImpl(
 
     override suspend fun upsertAnimeHistory(historyUpdate: AnimeHistoryUpdate) {
         try {
-            handler.await {
-                animehistoryQueries.upsert(
+            handler.await { db ->
+                db.animehistoryQueries.upsert(
                     historyUpdate.episodeId,
                     historyUpdate.seenAt,
                 )

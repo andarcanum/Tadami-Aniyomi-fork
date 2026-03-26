@@ -3,13 +3,13 @@ package tachiyomi.data.handlers.novel
 import androidx.paging.PagingSource
 import androidx.paging.PagingState
 import app.cash.sqldelight.Query
-import tachiyomi.novel.data.NovelDatabase
+import tachiyomi.novel.data.NovelDatabase as NovelDb
 import kotlin.properties.Delegates
 
 class QueryPagingNovelSource<RowType : Any>(
     val handler: NovelDatabaseHandler,
-    val countQuery: NovelDatabase.() -> Query<Long>,
-    val queryProvider: NovelDatabase.(Long, Long) -> Query<RowType>,
+    val countQuery: (NovelDb) -> Query<Long>,
+    val queryProvider: (NovelDb, Long, Long) -> Query<RowType>,
 ) : PagingSource<Long, RowType>(), Query.Listener {
 
     override val jumpingSupported: Boolean = true
@@ -30,15 +30,15 @@ class QueryPagingNovelSource<RowType : Any>(
         try {
             val key = params.key ?: 0L
             val loadSize = params.loadSize
-            val count = handler.awaitOne { countQuery() }
+            val count = handler.awaitOne { db -> countQuery(db) }
 
             val (offset, limit) = when (params) {
                 is LoadParams.Prepend -> key - loadSize to loadSize.toLong()
                 else -> key to loadSize.toLong()
             }
 
-            val data = handler.awaitList {
-                queryProvider(limit, offset)
+            val data = handler.awaitList { db ->
+                queryProvider(db, limit, offset)
                     .also { currentQuery = it }
             }
 
@@ -74,3 +74,4 @@ class QueryPagingNovelSource<RowType : Any>(
         invalidate()
     }
 }
+

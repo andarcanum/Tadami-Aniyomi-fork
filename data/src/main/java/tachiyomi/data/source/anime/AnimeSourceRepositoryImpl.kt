@@ -39,7 +39,7 @@ class AnimeSourceRepositoryImpl(
 
     override fun getAnimeSourcesWithFavoriteCount(): Flow<List<Pair<DomainSource, Long>>> {
         return combine(
-            handler.subscribeToList { animesQueries.getAnimeSourceIdWithFavoriteCount() },
+            handler.subscribeToList { db -> db.animesQueries.getAnimeSourceIdWithFavoriteCount() },
             sourceManager.catalogueSources,
         ) { sourceIdWithFavoriteCount, _ -> sourceIdWithFavoriteCount }
             .map {

@@ -24,7 +24,7 @@ class NovelRestorer(
 ) {
 
     suspend fun sortByNew(backupNovels: List<BackupNovel>): List<BackupNovel> {
-        val urlsBySource = handler.awaitList { novelsQueries.getAllNovelSourceAndUrl() }
+        val urlsBySource = handler.awaitList { db -> db.novelsQueries.getAllNovelSourceAndUrl() }
             .groupBy({ it.source }, { it.url })
 
         return backupNovels
@@ -38,7 +38,7 @@ class NovelRestorer(
         backupNovel: BackupNovel,
         backupCategories: List<BackupCategory>,
     ) {
-        handler.await(inTransaction = true) {
+        handler.await(inTransaction = true) { db ->
             val dbNovel = findExistingNovel(backupNovel)
             val novel = backupNovel.getNovelImpl()
             val restoredNovel = if (dbNovel == null) {
@@ -84,8 +84,8 @@ class NovelRestorer(
     }
 
     private suspend fun updateNovel(novel: Novel): Novel {
-        handler.await(true) {
-            novelsQueries.update(
+        handler.await(true) { db ->
+            db.novelsQueries.update(
                 source = novel.source,
                 url = novel.url,
                 author = novel.author,
@@ -166,9 +166,9 @@ class NovelRestorer(
         this.copy(id = 0L, novelId = 0L, dateFetch = 0L, dateUpload = 0L, lastModifiedAt = 0L, version = 0L)
 
     private suspend fun insertNewChapters(chapters: List<NovelChapter>) {
-        handler.await(true) {
+        handler.await(true) { db ->
             chapters.forEach { chapter ->
-                novel_chaptersQueries.insert(
+                db.novel_chaptersQueries.insert(
                     chapter.novelId,
                     chapter.url,
                     chapter.name,
@@ -187,9 +187,9 @@ class NovelRestorer(
     }
 
     private suspend fun updateExistingChapters(chapters: List<NovelChapter>) {
-        handler.await(true) {
+        handler.await(true) { db ->
             chapters.forEach { chapter ->
-                novel_chaptersQueries.update(
+                db.novel_chaptersQueries.update(
                     novelId = null,
                     url = null,
                     name = null,
@@ -210,8 +210,8 @@ class NovelRestorer(
     }
 
     private suspend fun insertNovel(novel: Novel): Long {
-        return handler.awaitOneExecutable(true) {
-            novelsQueries.insert(
+        return handler.awaitOneExecutable(true) { db ->
+            db.novelsQueries.insert(
                 source = novel.source,
                 url = novel.url,
                 author = novel.author,
@@ -232,7 +232,7 @@ class NovelRestorer(
                 updateStrategy = novel.updateStrategy,
                 version = novel.version,
             )
-            novelsQueries.selectLastInsertedRowId()
+            db.novelsQueries.selectLastInsertedRowId()
         }
     }
 
@@ -267,10 +267,10 @@ class NovelRestorer(
         }
 
         if (novelCategoriesToUpdate.isNotEmpty()) {
-            handler.await(true) {
-                novels_categoriesQueries.deleteNovelCategoryByNovelId(novel.id)
+            handler.await(true) { db ->
+                db.novels_categoriesQueries.deleteNovelCategoryByNovelId(novel.id)
                 novelCategoriesToUpdate.forEach { categoryId ->
-                    novels_categoriesQueries.insert(novel.id, categoryId)
+                    db.novels_categoriesQueries.insert(novel.id, categoryId)
                 }
             }
         }
@@ -278,11 +278,11 @@ class NovelRestorer(
 
     private suspend fun restoreHistory(backupHistory: List<BackupHistory>) {
         val toUpdate = backupHistory.mapNotNull { history ->
-            val dbHistory = handler.awaitOneOrNull { novel_historyQueries.getHistoryByChapterUrl(history.url) }
+            val dbHistory = handler.awaitOneOrNull { db -> db.novel_historyQueries.getHistoryByChapterUrl(history.url) }
             val item = history.getNovelHistoryImpl()
 
             if (dbHistory == null) {
-                val chapter = handler.awaitOneOrNull { novel_chaptersQueries.getChapterByUrl(history.url) }
+                val chapter = handler.awaitOneOrNull { db -> db.novel_chaptersQueries.getChapterByUrl(history.url) }
                 return@mapNotNull if (chapter == null) {
                     // Chapter doesn't exist; skip
                     null
@@ -304,9 +304,9 @@ class NovelRestorer(
         }
 
         if (toUpdate.isNotEmpty()) {
-            handler.await(true) {
+            handler.await(true) { db ->
                 toUpdate.forEach {
-                    novel_historyQueries.upsert(
+                    db.novel_historyQueries.upsert(
                         it.chapterId,
                         it.readAt,
                         it.readDuration,
@@ -318,14 +318,14 @@ class NovelRestorer(
 
     private suspend fun restoreExcludedScanlators(novel: Novel, excludedScanlators: List<String>) {
         if (excludedScanlators.isEmpty()) return
-        val existingExcludedScanlators = handler.awaitList {
-            novel_excluded_scanlatorsQueries.getExcludedScanlatorsByNovelId(novel.id)
+        val existingExcludedScanlators = handler.awaitList { db ->
+            db.novel_excluded_scanlatorsQueries.getExcludedScanlatorsByNovelId(novel.id)
         }
         val toInsert = excludedScanlators.filter { it !in existingExcludedScanlators }
         if (toInsert.isNotEmpty()) {
-            handler.await {
+            handler.await { db ->
                 toInsert.forEach { scanlator ->
-                    novel_excluded_scanlatorsQueries.insert(novel.id, scanlator)
+                    db.novel_excluded_scanlatorsQueries.insert(novel.id, scanlator)
                 }
             }
         }

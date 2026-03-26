@@ -24,7 +24,7 @@ class AuroraTabRowStyleTest {
 
     @Test
     fun `light aurora tab container and selection tokens use light surfaces`() {
-        resolveAuroraTabContainerColor(AuroraColors.Light) shouldBe androidx.compose.ui.graphics.Color(0xD1FFFFFF)
+        resolveAuroraTabContainerColor(AuroraColors.Light) shouldBe androidx.compose.ui.graphics.Color(0xFFE4EEF6)
         resolveAuroraTabSelectionBorderColor(AuroraColors.Light) shouldBe AuroraColors.Light.accent.copy(alpha = 0.28f)
     }
 

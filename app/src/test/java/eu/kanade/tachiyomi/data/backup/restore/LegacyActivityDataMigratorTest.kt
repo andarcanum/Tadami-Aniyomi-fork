@@ -12,6 +12,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import tachiyomi.data.achievement.ActivityDataRepositoryImpl
 import tachiyomi.data.achievement.database.AchievementsDatabase
+import tachiyomi.db.achievement.AchievementsDatabase as SqlDelightAchievementsDatabase
 import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -36,7 +37,7 @@ class LegacyActivityDataMigratorTest {
 
         // Setup database
         driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
-        tachiyomi.data.achievement.AchievementsDatabase.Schema.create(driver)
+        SqlDelightAchievementsDatabase.Schema.create(driver)
         database = AchievementsDatabase(driver)
         repository = ActivityDataRepositoryImpl(database)
 

@@ -2,6 +2,8 @@ import mihon.buildlogic.Config
 import mihon.buildlogic.getBuildTime
 import mihon.buildlogic.getCommitCount
 import mihon.buildlogic.getGitSha
+import mihon.buildlogic.generatedBuildDir
+import mihon.buildlogic.tasks.getLocalesConfigTask
 
 plugins {
     id("mihon.android.application")
@@ -85,8 +87,10 @@ android {
     }
 
     sourceSets {
-        getByName("preview").res.srcDirs("src/debug/res")
-        getByName("benchmark").res.srcDirs("src/debug/res")
+        getByName("debug").res.directories += generatedBuildDir.resolve("android/res").path
+        getByName("release").res.directories += generatedBuildDir.resolve("android/res").path
+        getByName("preview").res.directories += "src/debug/res"
+        getByName("benchmark").res.directories += "src/debug/res"
     }
 
     splits {
@@ -145,20 +149,33 @@ android {
         includeInBundle = Config.includeDependencyInfo
     }
 
-    buildFeatures {
-        viewBinding = true
-        buildConfig = true
+        buildFeatures {
+            viewBinding = true
+            buildConfig = true
 
-        // Disable some unused things
-        aidl = false
-        renderScript = false
-        shaders = false
-    }
+            // Disable some unused things
+            aidl = false
+            shaders = false
+        }
 
     lint {
         abortOnError = false
         checkReleaseBuilds = false
     }
+}
+
+val localesConfigTask = getLocalesConfigTask(
+    generatedBuildDir.resolve("android/res"),
+    listOf(
+        rootDir.resolve("i18n/src/commonMain/moko-resources"),
+        rootDir.resolve("i18n-aniyomi/src/commonMain/moko-resources"),
+    ),
+)
+
+tasks.matching {
+    it.name == "preBuild" || it.name == "preDebugBuild" || it.name == "preReleaseBuild"
+}.configureEach {
+    dependsOn(localesConfigTask)
 }
 
 kotlin {
@@ -311,6 +328,12 @@ dependencies {
     testImplementation(libs.sqldelight.sqlite.driver)
     testImplementation("androidx.test:core:1.6.1")
     testImplementation("androidx.test.ext:junit:1.2.1")
+
+    androidTestImplementation(platform(compose.bom))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    androidTestImplementation("androidx.compose.ui:ui-test-manifest")
+    androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 
     // mpv-android
     implementation(aniyomilibs.aniyomi.mpv)

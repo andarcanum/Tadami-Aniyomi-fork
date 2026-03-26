@@ -11,8 +11,8 @@ class AnimeUpdatesRepositoryImpl(
 ) : AnimeUpdatesRepository {
 
     override suspend fun awaitWithSeen(seen: Boolean, after: Long, limit: Long): List<AnimeUpdatesWithRelations> {
-        return databaseHandler.awaitList {
-            animeupdatesViewQueries.getUpdatesBySeenStatus(
+        return databaseHandler.awaitList { db ->
+            db.animeupdatesViewQueries.getUpdatesBySeenStatus(
                 seen = seen,
                 after = after,
                 limit = limit,
@@ -22,8 +22,8 @@ class AnimeUpdatesRepositoryImpl(
     }
 
     override fun subscribeAllAnimeUpdates(after: Long, limit: Long): Flow<List<AnimeUpdatesWithRelations>> {
-        return databaseHandler.subscribeToList {
-            animeupdatesViewQueries.getRecentAnimeUpdates(
+        return databaseHandler.subscribeToList { db ->
+            db.animeupdatesViewQueries.getRecentAnimeUpdates(
                 after,
                 limit,
                 ::mapUpdatesWithRelations,
@@ -32,8 +32,8 @@ class AnimeUpdatesRepositoryImpl(
     }
 
     override fun subscribeWithSeen(seen: Boolean, after: Long, limit: Long): Flow<List<AnimeUpdatesWithRelations>> {
-        return databaseHandler.subscribeToList {
-            animeupdatesViewQueries.getUpdatesBySeenStatus(
+        return databaseHandler.subscribeToList { db ->
+            db.animeupdatesViewQueries.getUpdatesBySeenStatus(
                 seen = seen,
                 after = after,
                 limit = limit,

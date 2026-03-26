@@ -25,9 +25,8 @@ class MangaCategoriesRestorer(
                     val dbCategory = dbCategoriesByName[it.name]
                     if (dbCategory != null) return@map dbCategory
                     val order = nextOrder++
-                    mangaHandler.awaitOneExecutable {
-                        categoriesQueries.insert(it.name, order, it.flags)
-                        categoriesQueries.selectLastInsertedRowId()
+                    mangaHandler.awaitOneExecutable { db -> db.categoriesQueries.insert(it.name, order, it.flags)
+                        db.categoriesQueries.selectLastInsertedRowId()
                     }
                         .let { id -> it.toCategory(id).copy(order = order) }
                 }

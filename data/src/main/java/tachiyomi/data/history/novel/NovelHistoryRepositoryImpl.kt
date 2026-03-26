@@ -14,30 +14,30 @@ class NovelHistoryRepositoryImpl(
 ) : NovelHistoryRepository {
 
     override fun getNovelHistory(query: String): Flow<List<NovelHistoryWithRelations>> {
-        return handler.subscribeToList {
-            novelhistoryViewQueries.history(query, NovelHistoryMapper::mapNovelHistoryWithRelations)
+        return handler.subscribeToList { db ->
+            db.novelhistoryViewQueries.history(query, NovelHistoryMapper::mapNovelHistoryWithRelations)
         }
     }
 
     override suspend fun getLastNovelHistory(): NovelHistoryWithRelations? {
-        return handler.awaitOneOrNull {
-            novelhistoryViewQueries.getLatestHistory(NovelHistoryMapper::mapNovelHistoryWithRelations)
+        return handler.awaitOneOrNull { db ->
+            db.novelhistoryViewQueries.getLatestHistory(NovelHistoryMapper::mapNovelHistoryWithRelations)
         }
     }
 
     override suspend fun getTotalReadDuration(): Long {
-        return handler.awaitOne { novel_historyQueries.getReadDuration() }
+        return handler.awaitOne { db -> db.novel_historyQueries.getReadDuration() }
     }
 
     override suspend fun getHistoryByNovelId(novelId: Long): List<NovelHistory> {
-        return handler.awaitList {
-            novel_historyQueries.getHistoryByNovelId(novelId, NovelHistoryMapper::mapNovelHistory)
+        return handler.awaitList { db ->
+            db.novel_historyQueries.getHistoryByNovelId(novelId, NovelHistoryMapper::mapNovelHistory)
         }
     }
 
     override suspend fun resetNovelHistory(historyId: Long) {
         try {
-            handler.await { novel_historyQueries.resetHistoryById(historyId) }
+            handler.await { db -> db.novel_historyQueries.resetHistoryById(historyId) }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, throwable = e)
         }
@@ -45,7 +45,7 @@ class NovelHistoryRepositoryImpl(
 
     override suspend fun resetHistoryByNovelId(novelId: Long) {
         try {
-            handler.await { novel_historyQueries.resetHistoryByNovelId(novelId) }
+            handler.await { db -> db.novel_historyQueries.resetHistoryByNovelId(novelId) }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, throwable = e)
         }
@@ -53,7 +53,7 @@ class NovelHistoryRepositoryImpl(
 
     override suspend fun deleteAllNovelHistory(): Boolean {
         return try {
-            handler.await { novel_historyQueries.removeAllHistory() }
+            handler.await { db -> db.novel_historyQueries.removeAllHistory() }
             true
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, throwable = e)
@@ -63,8 +63,8 @@ class NovelHistoryRepositoryImpl(
 
     override suspend fun upsertNovelHistory(historyUpdate: NovelHistoryUpdate) {
         try {
-            handler.await {
-                novel_historyQueries.upsert(
+            handler.await { db ->
+                db.novel_historyQueries.upsert(
                     historyUpdate.chapterId,
                     historyUpdate.readAt,
                     historyUpdate.sessionReadDuration,

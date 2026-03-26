@@ -8,12 +8,13 @@ import org.junit.jupiter.api.Test
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 import tachiyomi.domain.extension.novel.repository.NovelPluginRepository
 import java.io.File
+import java.nio.file.Files
 
 class NovelPluginInstallerTest {
 
     @Test
     fun `install skips checksum when sha256 missing`() {
-        val storageDir = createTempDir()
+        val storageDir = Files.createTempDirectory("novel-plugin-installer-test").toFile()
         val storage = NovelPluginStorage(storageDir)
         val repository = InMemoryNovelPluginRepository()
         val downloader = object : NovelPluginDownloader {

@@ -102,7 +102,6 @@ private val ABOUT_FOOTER_ICON_SLOT_SIZE = 40.dp
 private val ABOUT_FOOTER_ICON_GAP = 8.dp
 
 object AboutScreen : Screen() {
-
     @Composable
     override fun Content() {
         val scope = rememberCoroutineScope()

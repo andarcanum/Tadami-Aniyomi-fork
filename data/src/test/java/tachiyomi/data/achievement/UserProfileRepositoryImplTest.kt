@@ -22,7 +22,7 @@ class UserProfileRepositoryImplTest {
     @BeforeEach
     fun setup() {
         driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
-        tachiyomi.data.achievement.AchievementsDatabase.Schema.create(driver)
+        tachiyomi.db.achievement.AchievementsDatabase.Schema.create(driver)
         database = AchievementsDatabase(driver)
         repository = UserProfileRepositoryImpl(database)
     }

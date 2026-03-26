@@ -2116,6 +2116,7 @@ private fun NovelHomeHub(
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(screenModel) {
+        NovelHomeHubScreenModel.setInstance(screenModel)
         screenModel.startLiveUpdates()
     }
 
@@ -2219,6 +2220,11 @@ private fun HomeHubScreen(
     val history = state.history.filter { matchesQuery(it.title) }
     val recommendations = state.recommendations.filter { matchesQuery(it.title) }
     val showWelcome = state.showWelcome && !isFiltering
+    val enableScroll = shouldEnableHomeHubScroll(
+        showWelcome = showWelcome,
+        historyCount = history.size,
+        recommendationCount = recommendations.size,
+    )
     val reserveHeroSlot = shouldReserveHomeHubHeroSlot(
         hasHero = state.hero != null,
         isLoading = state.isLoading,
@@ -2230,8 +2236,9 @@ private fun HomeHubScreen(
         state = listState,
         modifier = Modifier
             .fillMaxSize()
-            .nestedScroll(nestedScrollConnection),
+            .then(if (enableScroll) Modifier.nestedScroll(nestedScrollConnection) else Modifier),
         contentPadding = contentPadding,
+        userScrollEnabled = enableScroll,
     ) {
         if (showWelcome) {
             item(key = "welcome") {
@@ -2368,6 +2375,15 @@ internal fun shouldReserveHomeHubHeroSlot(
     if (showWelcome) return false
     if (isFiltering) return false
     return true
+}
+
+internal fun shouldEnableHomeHubScroll(
+    showWelcome: Boolean,
+    historyCount: Int,
+    recommendationCount: Int,
+): Boolean {
+    if (showWelcome) return false
+    return historyCount > 0 || recommendationCount > 0
 }
 
 internal fun resolveHomeHubHeaderTintAlpha(isDarkTheme: Boolean): Float {

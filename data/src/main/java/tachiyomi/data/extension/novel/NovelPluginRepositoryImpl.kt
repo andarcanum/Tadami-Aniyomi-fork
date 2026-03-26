@@ -9,20 +9,20 @@ class NovelPluginRepositoryImpl(
     private val handler: NovelDatabaseHandler,
 ) : NovelPluginRepository {
     override fun subscribeAll(): Flow<List<NovelPlugin.Installed>> {
-        return handler.subscribeToList { novel_pluginsQueries.findAll(::mapPlugin) }
+        return handler.subscribeToList { db -> db.novel_pluginsQueries.findAll(::mapPlugin) }
     }
 
     override suspend fun getAll(): List<NovelPlugin.Installed> {
-        return handler.awaitList { novel_pluginsQueries.findAll(::mapPlugin) }
+        return handler.awaitList { db -> db.novel_pluginsQueries.findAll(::mapPlugin) }
     }
 
     override suspend fun getById(id: String): NovelPlugin.Installed? {
-        return handler.awaitOneOrNull { novel_pluginsQueries.findOne(id, ::mapPlugin) }
+        return handler.awaitOneOrNull { db -> db.novel_pluginsQueries.findOne(id, ::mapPlugin) }
     }
 
     override suspend fun upsert(plugin: NovelPlugin.Installed) {
-        handler.await {
-            novel_pluginsQueries.upsert(
+        handler.await { db ->
+            db.novel_pluginsQueries.upsert(
                 id = plugin.id,
                 name = plugin.name,
                 site = plugin.site,
@@ -40,7 +40,7 @@ class NovelPluginRepositoryImpl(
     }
 
     override suspend fun delete(id: String) {
-        handler.await { novel_pluginsQueries.delete(id) }
+        handler.await { db -> db.novel_pluginsQueries.delete(id) }
     }
 
     private fun mapPlugin(

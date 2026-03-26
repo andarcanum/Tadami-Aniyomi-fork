@@ -105,7 +105,7 @@ fun NovelReaderSettingsDialog(
     TabbedDialog(
         onDismissRequest = onDismissRequest,
         tabTitles = tabTitles,
-        modifier = Modifier.fillMaxHeight(0.4f),
+        modifier = Modifier.fillMaxHeight(0.7f),
     ) { page ->
         when (page) {
             0 -> {

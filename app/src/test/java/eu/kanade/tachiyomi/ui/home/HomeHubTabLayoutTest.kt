@@ -81,6 +81,30 @@ class HomeHubTabLayoutTest {
     }
 
     @Test
+    fun `home hub stays static when there are no recent sections`() {
+        shouldEnableHomeHubScroll(
+            showWelcome = false,
+            historyCount = 0,
+            recommendationCount = 0,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `home hub scroll is enabled when there is content below hero`() {
+        shouldEnableHomeHubScroll(
+            showWelcome = false,
+            historyCount = 1,
+            recommendationCount = 0,
+        ) shouldBe true
+
+        shouldEnableHomeHubScroll(
+            showWelcome = false,
+            historyCount = 0,
+            recommendationCount = 1,
+        ) shouldBe true
+    }
+
+    @Test
     fun `aurora anime hero cta uses resume with play icon when progress exists`() {
         resolveHomeHubHeroActionSpec(
             section = HomeHubSection.Anime,

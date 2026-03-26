@@ -251,7 +251,7 @@ data object AnimeLibraryTab : Tab {
         } else {
             emptyList()
         }
-        val novelScreenModel = if (shouldActivateNovelLibrary) {
+        val novelScreenModel = if (showNovelSection) {
             rememberScreenModel { NovelLibraryScreenModel() }
         } else {
             null

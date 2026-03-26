@@ -188,47 +188,42 @@ class AchievementCalculator(
     }
 
     private suspend fun getTotalConsumed(): Triple<Long, Long, Long> {
-        val mangaCount = mangaHandler.awaitOneOrNull {
-            historyQueries.getTotalChaptersRead()
+        val mangaCount = mangaHandler.awaitOneOrNull { db -> db.historyQueries.getTotalChaptersRead()
         } ?: 0L
 
-        val animeCount = animeHandler.awaitOneOrNull {
-            animehistoryQueries.getTotalEpisodesWatched()
+        val animeCount = animeHandler.awaitOneOrNull { db -> db.animehistoryQueries.getTotalEpisodesWatched()
         } ?: 0L
 
-        val novelCount = novelHandler.awaitOneOrNull {
-            novel_historyQueries.getTotalChaptersRead()
+        val novelCount = novelHandler.awaitOneOrNull { db -> db.novel_historyQueries.getTotalChaptersRead()
         } ?: 0L
 
         return Triple(mangaCount, animeCount, novelCount)
     }
 
     private suspend fun getLibraryCounts(): Triple<Long, Long, Long> {
-        val mangaCount = mangaHandler.awaitOneOrNull { mangasQueries.getLibraryCount() } ?: 0L
-        val animeCount = animeHandler.awaitOneOrNull { animesQueries.getLibraryCount() } ?: 0L
-        val novelCount = novelHandler.awaitOneOrNull { novelsQueries.getLibraryCount() } ?: 0L
+        val mangaCount = mangaHandler.awaitOneOrNull { db -> db.mangasQueries.getLibraryCount() } ?: 0L
+        val animeCount = animeHandler.awaitOneOrNull { db -> db.animesQueries.getLibraryCount() } ?: 0L
+        val novelCount = novelHandler.awaitOneOrNull { db -> db.novelsQueries.getLibraryCount() } ?: 0L
         return Triple(mangaCount, animeCount, novelCount)
     }
 
     private suspend fun getCompletedCounts(): Triple<Long, Long, Long> {
-        val mangaCount = mangaHandler.awaitOneOrNull { mangasQueries.getCompletedMangaCount() } ?: 0L
-        val animeCount = animeHandler.awaitOneOrNull { animesQueries.getCompletedAnimeCount() } ?: 0L
-        val novelCount = novelHandler.awaitOneOrNull { novelsQueries.getCompletedNovelCount() } ?: 0L
+        val mangaCount = mangaHandler.awaitOneOrNull { db -> db.mangasQueries.getCompletedMangaCount() } ?: 0L
+        val animeCount = animeHandler.awaitOneOrNull { db -> db.animesQueries.getCompletedAnimeCount() } ?: 0L
+        val novelCount = novelHandler.awaitOneOrNull { db -> db.novelsQueries.getCompletedNovelCount() } ?: 0L
         return Triple(mangaCount, animeCount, novelCount)
     }
 
     private suspend fun hasCompletedMangaWithMinReadChapters(chapterCount: Long): Boolean {
         return (
-            mangaHandler.awaitOneOrNull {
-                mangasQueries.hasCompletedLibraryMangaWithMinReadChapters(chapterCount)
+            mangaHandler.awaitOneOrNull { db -> db.mangasQueries.hasCompletedLibraryMangaWithMinReadChapters(chapterCount)
             }
             ) ?: false
     }
 
     private suspend fun hasCompletedNovelWithMinReadChapters(chapterCount: Long): Boolean {
         return (
-            novelHandler.awaitOneOrNull {
-                novelsQueries.hasCompletedLibraryNovelWithMinReadChapters(chapterCount)
+            novelHandler.awaitOneOrNull { db -> db.novelsQueries.hasCompletedLibraryNovelWithMinReadChapters(chapterCount)
             }
             ) ?: false
     }
@@ -275,56 +270,44 @@ class AchievementCalculator(
         val threshold = achievement.threshold ?: 1
         val unlocked = when (achievement.id) {
             "secret_harem_king" -> {
-                val mangaCount = mangaHandler.awaitOneOrNull {
-                    mangasQueries.getLibraryGenreCount("Harem")
+                val mangaCount = mangaHandler.awaitOneOrNull { db -> db.mangasQueries.getLibraryGenreCount("Harem")
                 } ?: 0L
-                val animeCount = animeHandler.awaitOneOrNull {
-                    animesQueries.getLibraryGenreCount("Harem")
+                val animeCount = animeHandler.awaitOneOrNull { db -> db.animesQueries.getLibraryGenreCount("Harem")
                 } ?: 0L
                 mangaCount + animeCount >= threshold
             }
             "secret_isekai_truck" -> {
-                val mangaCount = mangaHandler.awaitOneOrNull {
-                    mangasQueries.getLibraryGenreCount("Isekai")
+                val mangaCount = mangaHandler.awaitOneOrNull { db -> db.mangasQueries.getLibraryGenreCount("Isekai")
                 } ?: 0L
-                val animeCount = animeHandler.awaitOneOrNull {
-                    animesQueries.getLibraryGenreCount("Isekai")
+                val animeCount = animeHandler.awaitOneOrNull { db -> db.animesQueries.getLibraryGenreCount("Isekai")
                 } ?: 0L
                 mangaCount + animeCount >= threshold
             }
             "secret_chad" -> {
-                val completedCount = mangaHandler.awaitOneOrNull {
-                    mangasQueries.getCompletedMangaCount()
+                val completedCount = mangaHandler.awaitOneOrNull { db -> db.mangasQueries.getCompletedMangaCount()
                 } ?: 0L
-                val ongoingCount = mangaHandler.awaitOneOrNull {
-                    mangasQueries.getLibraryCountByStatus(1L)
+                val ongoingCount = mangaHandler.awaitOneOrNull { db -> db.mangasQueries.getLibraryCountByStatus(1L)
                 } ?: 0L
                 completedCount >= 10 && ongoingCount == 0L
             }
             "secret_shonen" -> {
-                val mangaCount = mangaHandler.awaitOneOrNull {
-                    mangasQueries.getCompletedLibraryCountByAnyGenre(2L, "Shounen", "Shonen")
+                val mangaCount = mangaHandler.awaitOneOrNull { db -> db.mangasQueries.getCompletedLibraryCountByAnyGenre(2L, "Shounen", "Shonen")
                 } ?: 0L
-                val animeCount = animeHandler.awaitOneOrNull {
-                    animesQueries.getCompletedLibraryCountByAnyGenre(2L, "Shounen", "Shonen")
+                val animeCount = animeHandler.awaitOneOrNull { db -> db.animesQueries.getCompletedLibraryCountByAnyGenre(2L, "Shounen", "Shonen")
                 } ?: 0L
                 mangaCount + animeCount >= threshold
             }
             "secret_saitama" -> {
-                val mangaCount = mangaHandler.awaitOneOrNull {
-                    mangasQueries.getLibraryCount()
+                val mangaCount = mangaHandler.awaitOneOrNull { db -> db.mangasQueries.getLibraryCount()
                 } ?: 0L
-                val animeCount = animeHandler.awaitOneOrNull {
-                    animesQueries.getLibraryCount()
+                val animeCount = animeHandler.awaitOneOrNull { db -> db.animesQueries.getLibraryCount()
                 } ?: 0L
                 mangaCount == 1L && animeCount == 1L
             }
             "secret_jojo" -> {
-                val hasManga = mangaHandler.awaitOneOrNull {
-                    mangasQueries.hasLibraryTitleLike("jojo")
+                val hasManga = mangaHandler.awaitOneOrNull { db -> db.mangasQueries.hasLibraryTitleLike("jojo")
                 } ?: false
-                val hasAnime = animeHandler.awaitOneOrNull {
-                    animesQueries.hasLibraryTitleLike("jojo")
+                val hasAnime = animeHandler.awaitOneOrNull { db -> db.animesQueries.hasLibraryTitleLike("jojo")
                 } ?: false
                 hasManga || hasAnime
             }

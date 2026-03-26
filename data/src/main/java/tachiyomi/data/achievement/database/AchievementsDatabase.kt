@@ -1,7 +1,7 @@
 package tachiyomi.data.achievement.database
 
 import app.cash.sqldelight.db.SqlDriver
-import tachiyomi.data.achievement.AchievementsDatabase as SqlDelightAchievementsDatabase
+import tachiyomi.db.achievement.AchievementsDatabase as SqlDelightAchievementsDatabase
 
 class AchievementsDatabase(
     private val driver: SqlDriver,

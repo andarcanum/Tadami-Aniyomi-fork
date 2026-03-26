@@ -2,14 +2,14 @@
 aboutlib_plugin_version = "13.2.1"
 aboutlib_runtime_version = "11.6.3"
 leakcanary = "2.14"
-moko = "0.24.5"
+moko = "0.26.1"
 okhttp_version = "5.0.0-alpha.14"
 paging = "3.3.0"
 richtext = "0.20.0"
 shizuku_version = "13.1.0"
-sqldelight = "2.0.2"
+sqldelight = "2.3.2"
 sqlite = "2.4.0"
-voyager = "1.0.1"
+voyager = "1.1.0-beta03"
 spotless = "7.0.2"
 ktlint-core = "1.5.0"
 lottie = "6.4.0"
@@ -46,7 +46,7 @@ preferencektx = "androidx.preference:preference-ktx:1.2.1"
 
 injekt = "com.github.mihonapp:injekt:91edab2317"
 
-coil-bom = { module = "io.coil-kt.coil3:coil-bom", version = "3.1.0" }
+coil-bom = { module = "io.coil-kt.coil3:coil-bom", version = "3.4.0" }
 coil-core = { module = "io.coil-kt.coil3:coil" }
 coil-gif = { module = "io.coil-kt.coil3:coil-gif" }
 coil-compose = { module = "io.coil-kt.coil3:coil-compose" }
@@ -93,9 +93,10 @@ sqldelight-coroutines = { module = "app.cash.sqldelight:coroutines-extensions-jv
 sqldelight-dialects-sql = { module = "app.cash.sqldelight:sqlite-3-38-dialect", version.ref = "sqldelight" }
 
 junit = "org.junit.jupiter:junit-jupiter:5.11.4"
+junitPlatformLauncher = "org.junit.platform:junit-platform-launcher:1.11.4"
 kotest-assertions = "io.kotest:kotest-assertions-core:5.9.1"
 mockk = "io.mockk:mockk:1.13.17"
-kotlin-test = "org.jetbrains.kotlin:kotlin-test:2.1.0"
+kotlin-test = "org.jetbrains.kotlin:kotlin-test:2.3.20"
 robolectric = "org.robolectric:robolectric:4.13"
 
 voyager-navigator = { module = "cafe.adriel.voyager:voyager-navigator", version.ref = "voyager" }

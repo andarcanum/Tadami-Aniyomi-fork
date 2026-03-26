@@ -12,10 +12,10 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
-import tachiyomi.novel.data.NovelDatabase
+import tachiyomi.novel.data.NovelDatabase as NovelDb
 
 class AndroidNovelDatabaseHandler(
-    val db: NovelDatabase,
+    val db: NovelDb,
     private val driver: SqlDriver,
     val queryDispatcher: CoroutineDispatcher = Dispatchers.IO,
     val transactionDispatcher: CoroutineDispatcher = queryDispatcher,
@@ -23,71 +23,69 @@ class AndroidNovelDatabaseHandler(
 
     val suspendingTransactionId = ThreadLocal<Int>()
 
-    override suspend fun <T> await(inTransaction: Boolean, block: suspend NovelDatabase.() -> T): T {
+    override suspend fun <T> await(inTransaction: Boolean, block: suspend (NovelDb) -> T): T {
         return dispatch(inTransaction, block)
     }
 
     override suspend fun <T : Any> awaitList(
         inTransaction: Boolean,
-        block: suspend NovelDatabase.() -> Query<T>,
+        block: suspend (NovelDb) -> Query<T>,
     ): List<T> {
         return dispatch(inTransaction) { block(db).executeAsList() }
     }
 
     override suspend fun <T : Any> awaitOne(
         inTransaction: Boolean,
-        block: suspend NovelDatabase.() -> Query<T>,
+        block: suspend (NovelDb) -> Query<T>,
     ): T {
         return dispatch(inTransaction) { block(db).executeAsOne() }
     }
 
     override suspend fun <T : Any> awaitOneExecutable(
         inTransaction: Boolean,
-        block: suspend NovelDatabase.() -> ExecutableQuery<T>,
+        block: suspend (NovelDb) -> ExecutableQuery<T>,
     ): T {
         return dispatch(inTransaction) { block(db).executeAsOne() }
     }
 
     override suspend fun <T : Any> awaitOneOrNull(
         inTransaction: Boolean,
-        block: suspend NovelDatabase.() -> Query<T>,
+        block: suspend (NovelDb) -> Query<T>,
     ): T? {
         return dispatch(inTransaction) { block(db).executeAsOneOrNull() }
     }
 
     override suspend fun <T : Any> awaitOneOrNullExecutable(
         inTransaction: Boolean,
-        block: suspend NovelDatabase.() -> ExecutableQuery<T>,
+        block: suspend (NovelDb) -> ExecutableQuery<T>,
     ): T? {
         return dispatch(inTransaction) { block(db).executeAsOneOrNull() }
     }
 
-    override fun <T : Any> subscribeToList(block: NovelDatabase.() -> Query<T>): Flow<List<T>> {
+    override fun <T : Any> subscribeToList(block: (NovelDb) -> Query<T>): Flow<List<T>> {
         return block(db).asFlow().mapToList(queryDispatcher)
     }
 
-    override fun <T : Any> subscribeToOne(block: NovelDatabase.() -> Query<T>): Flow<T> {
+    override fun <T : Any> subscribeToOne(block: (NovelDb) -> Query<T>): Flow<T> {
         return block(db).asFlow().mapToOne(queryDispatcher)
     }
 
-    override fun <T : Any> subscribeToOneOrNull(block: NovelDatabase.() -> Query<T>): Flow<T?> {
+    override fun <T : Any> subscribeToOneOrNull(block: (NovelDb) -> Query<T>): Flow<T?> {
         return block(db).asFlow().mapToOneOrNull(queryDispatcher)
     }
 
     override fun <T : Any> subscribeToPagingSource(
-        countQuery: NovelDatabase.() -> Query<Long>,
-        queryProvider: NovelDatabase.(Long, Long) -> Query<T>,
+        countQuery: (NovelDb) -> Query<Long>,
+        queryProvider: (NovelDb, Long, Long) -> Query<T>,
     ): PagingSource<Long, T> {
         return QueryPagingNovelSource(
             handler = this,
             countQuery = countQuery,
-            queryProvider = { limit, offset ->
-                queryProvider.invoke(db, limit, offset)
-            },
+            queryProvider = queryProvider,
         )
     }
 
-    private suspend fun <T> dispatch(inTransaction: Boolean, block: suspend NovelDatabase.() -> T): T {
+    private suspend fun <T> dispatch(inTransaction: Boolean, block: suspend (NovelDb) -> T): T {
         if (inTransaction) {
             return withNovelTransaction { block(db) }
         }
@@ -100,3 +98,4 @@ class AndroidNovelDatabaseHandler(
         return withContext(context) { block(db) }
     }
 }
+

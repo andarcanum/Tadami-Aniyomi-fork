@@ -9,15 +9,15 @@ class GetNovelExcludedScanlators(
 ) {
 
     suspend fun await(novelId: Long): Set<String> {
-        return handler.awaitList {
-            novel_excluded_scanlatorsQueries.getExcludedScanlatorsByNovelId(novelId)
+        return handler.awaitList { db ->
+            db.novel_excluded_scanlatorsQueries.getExcludedScanlatorsByNovelId(novelId)
         }
             .toSet()
     }
 
     fun subscribe(novelId: Long): Flow<Set<String>> {
-        return handler.subscribeToList {
-            novel_excluded_scanlatorsQueries.getExcludedScanlatorsByNovelId(novelId)
+        return handler.subscribeToList { db ->
+            db.novel_excluded_scanlatorsQueries.getExcludedScanlatorsByNovelId(novelId)
         }
             .map { it.toSet() }
     }

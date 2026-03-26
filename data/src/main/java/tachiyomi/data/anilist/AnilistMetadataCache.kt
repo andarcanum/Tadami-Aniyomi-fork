@@ -12,8 +12,8 @@ class AnilistMetadataCache(
 
     suspend fun get(animeId: Long): AnilistMetadata? {
         return try {
-            handler.awaitOneOrNull {
-                anilist_metadata_cacheQueries.getByAnimeId(animeId)
+            handler.awaitOneOrNull { db ->
+                db.anilist_metadata_cacheQueries.getByAnimeId(animeId)
             }?.toAnilistMetadata()
         } catch (e: Exception) {
             logcat(LogPriority.ERROR) { "Failed to get Anilist cache for anime $animeId: ${e.message}" }
@@ -23,8 +23,8 @@ class AnilistMetadataCache(
 
     suspend fun upsert(metadata: AnilistMetadata) {
         try {
-            handler.await {
-                anilist_metadata_cacheQueries.upsert(
+            handler.await { db ->
+                db.anilist_metadata_cacheQueries.upsert(
                     anime_id = metadata.animeId,
                     anilist_id = metadata.anilistId,
                     score = metadata.score,
@@ -43,8 +43,8 @@ class AnilistMetadataCache(
 
     suspend fun delete(animeId: Long) {
         try {
-            handler.await {
-                anilist_metadata_cacheQueries.deleteByAnimeId(animeId)
+            handler.await { db ->
+                db.anilist_metadata_cacheQueries.deleteByAnimeId(animeId)
             }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR) { "Failed to delete Anilist cache: ${e.message}" }
@@ -53,8 +53,8 @@ class AnilistMetadataCache(
 
     suspend fun clearAll() {
         try {
-            handler.await {
-                anilist_metadata_cacheQueries.clearAll()
+            handler.await { db ->
+                db.anilist_metadata_cacheQueries.clearAll()
             }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR) { "Failed to clear Anilist cache: ${e.message}" }
@@ -64,8 +64,8 @@ class AnilistMetadataCache(
     suspend fun deleteStaleEntries() {
         try {
             val thirtyDaysAgo = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000)
-            handler.await {
-                anilist_metadata_cacheQueries.deleteStaleEntries(thirtyDaysAgo)
+            handler.await { db ->
+                db.anilist_metadata_cacheQueries.deleteStaleEntries(thirtyDaysAgo)
             }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR) { "Failed to delete stale entries: ${e.message}" }

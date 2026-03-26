@@ -24,8 +24,7 @@ class NovelExtensionRepoRestorer(
         } else if (shaExists != null) {
             error("${shaExists.name} has the same signing key fingerprint")
         } else {
-            novelHandler.await {
-                novel_extension_reposQueries.insert(
+            novelHandler.await { db -> db.novel_extension_reposQueries.insert(
                     backupRepo.baseUrl,
                     backupRepo.name,
                     backupRepo.shortName,

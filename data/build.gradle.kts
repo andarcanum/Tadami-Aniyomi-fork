@@ -1,6 +1,5 @@
 plugins {
     id("mihon.library")
-    kotlin("android")
     kotlin("plugin.serialization")
     alias(libs.plugins.sqldelight)
 }
@@ -10,6 +9,25 @@ android {
 
     defaultConfig {
         consumerProguardFiles("consumer-rules.pro")
+    }
+
+    sourceSets {
+        named("debug") {
+            java.directories += listOf(
+                "build/generated/sqldelight/code/Database/debug",
+                "build/generated/sqldelight/code/AnimeDatabase/debug",
+                "build/generated/sqldelight/code/NovelDatabase/debug",
+                "build/generated/sqldelight/code/AchievementsDatabase/debug",
+            )
+        }
+        named("release") {
+            java.directories += listOf(
+                "build/generated/sqldelight/code/Database/release",
+                "build/generated/sqldelight/code/AnimeDatabase/release",
+                "build/generated/sqldelight/code/NovelDatabase/release",
+                "build/generated/sqldelight/code/AchievementsDatabase/release",
+            )
+        }
     }
 
     sqldelight {
@@ -33,13 +51,25 @@ android {
                 srcDirs.from(project.file("./src/main/sqldelightnovel"))
             }
             create("AchievementsDatabase") {
-                packageName.set("tachiyomi.data.achievement")
+                packageName.set("tachiyomi.db.achievement")
                 dialect(libs.sqldelight.dialects.sql)
                 schemaOutputDirectory.set(project.file("./src/main/sqldelightachievements"))
                 srcDirs.from(project.file("./src/main/sqldelightachievements"))
             }
         }
     }
+}
+
+tasks.matching {
+    it.name == "extractDebugAnnotations" || it.name == "extractReleaseAnnotations"
+}.configureEach {
+    val variant = name.removePrefix("extract").removeSuffix("Annotations")
+    dependsOn(
+        "generate${variant}DatabaseInterface",
+        "generate${variant}AnimeDatabaseInterface",
+        "generate${variant}NovelDatabaseInterface",
+        "generate${variant}AchievementsDatabaseInterface",
+    )
 }
 
 kotlin {

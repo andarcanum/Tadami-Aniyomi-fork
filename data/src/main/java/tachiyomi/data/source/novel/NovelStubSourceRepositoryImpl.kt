@@ -10,12 +10,12 @@ class NovelStubSourceRepositoryImpl(
 ) : NovelStubSourceRepository {
 
     override fun subscribeAllNovel(): Flow<List<StubNovelSource>> {
-        return handler.subscribeToList { novelsourcesQueries.findAll(::mapStubSource) }
+        return handler.subscribeToList { db -> db.novelsourcesQueries.findAll(::mapStubSource) }
     }
 
     override suspend fun getStubNovelSource(id: Long): StubNovelSource? {
-        return handler.awaitOneOrNull {
-            novelsourcesQueries.findOne(
+        return handler.awaitOneOrNull { db ->
+            db.novelsourcesQueries.findOne(
                 id,
                 ::mapStubSource,
             )
@@ -23,7 +23,7 @@ class NovelStubSourceRepositoryImpl(
     }
 
     override suspend fun upsertStubNovelSource(id: Long, lang: String, name: String) {
-        handler.await { novelsourcesQueries.upsert(id, lang, name) }
+        handler.await { db -> db.novelsourcesQueries.upsert(id, lang, name) }
     }
 
     private fun mapStubSource(

@@ -12,10 +12,10 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
-import tachiyomi.mi.data.AnimeDatabase
+import tachiyomi.mi.data.AnimeDatabase as AnimeDb
 
 class AndroidAnimeDatabaseHandler(
-    val db: AnimeDatabase,
+    val db: AnimeDb,
     private val driver: SqlDriver,
     val queryDispatcher: CoroutineDispatcher = Dispatchers.IO,
     val transactionDispatcher: CoroutineDispatcher = queryDispatcher,
@@ -23,71 +23,69 @@ class AndroidAnimeDatabaseHandler(
 
     val suspendingTransactionId = ThreadLocal<Int>()
 
-    override suspend fun <T> await(inTransaction: Boolean, block: suspend AnimeDatabase.() -> T): T {
+    override suspend fun <T> await(inTransaction: Boolean, block: suspend (AnimeDb) -> T): T {
         return dispatch(inTransaction, block)
     }
 
     override suspend fun <T : Any> awaitList(
         inTransaction: Boolean,
-        block: suspend AnimeDatabase.() -> Query<T>,
+        block: suspend (AnimeDb) -> Query<T>,
     ): List<T> {
         return dispatch(inTransaction) { block(db).executeAsList() }
     }
 
     override suspend fun <T : Any> awaitOne(
         inTransaction: Boolean,
-        block: suspend AnimeDatabase.() -> Query<T>,
+        block: suspend (AnimeDb) -> Query<T>,
     ): T {
         return dispatch(inTransaction) { block(db).executeAsOne() }
     }
 
     override suspend fun <T : Any> awaitOneExecutable(
         inTransaction: Boolean,
-        block: suspend AnimeDatabase.() -> ExecutableQuery<T>,
+        block: suspend (AnimeDb) -> ExecutableQuery<T>,
     ): T {
         return dispatch(inTransaction) { block(db).executeAsOne() }
     }
 
     override suspend fun <T : Any> awaitOneOrNull(
         inTransaction: Boolean,
-        block: suspend AnimeDatabase.() -> Query<T>,
+        block: suspend (AnimeDb) -> Query<T>,
     ): T? {
         return dispatch(inTransaction) { block(db).executeAsOneOrNull() }
     }
 
     override suspend fun <T : Any> awaitOneOrNullExecutable(
         inTransaction: Boolean,
-        block: suspend AnimeDatabase.() -> ExecutableQuery<T>,
+        block: suspend (AnimeDb) -> ExecutableQuery<T>,
     ): T? {
         return dispatch(inTransaction) { block(db).executeAsOneOrNull() }
     }
 
-    override fun <T : Any> subscribeToList(block: AnimeDatabase.() -> Query<T>): Flow<List<T>> {
+    override fun <T : Any> subscribeToList(block: (AnimeDb) -> Query<T>): Flow<List<T>> {
         return block(db).asFlow().mapToList(queryDispatcher)
     }
 
-    override fun <T : Any> subscribeToOne(block: AnimeDatabase.() -> Query<T>): Flow<T> {
+    override fun <T : Any> subscribeToOne(block: (AnimeDb) -> Query<T>): Flow<T> {
         return block(db).asFlow().mapToOne(queryDispatcher)
     }
 
-    override fun <T : Any> subscribeToOneOrNull(block: AnimeDatabase.() -> Query<T>): Flow<T?> {
+    override fun <T : Any> subscribeToOneOrNull(block: (AnimeDb) -> Query<T>): Flow<T?> {
         return block(db).asFlow().mapToOneOrNull(queryDispatcher)
     }
 
     override fun <T : Any> subscribeToPagingSource(
-        countQuery: AnimeDatabase.() -> Query<Long>,
-        queryProvider: AnimeDatabase.(Long, Long) -> Query<T>,
+        countQuery: (AnimeDb) -> Query<Long>,
+        queryProvider: (AnimeDb, Long, Long) -> Query<T>,
     ): PagingSource<Long, T> {
         return QueryPagingAnimeSource(
             handler = this,
             countQuery = countQuery,
-            queryProvider = { limit, offset ->
-                queryProvider.invoke(db, limit, offset)
-            },
+            queryProvider = queryProvider,
         )
     }
 
-    private suspend fun <T> dispatch(inTransaction: Boolean, block: suspend AnimeDatabase.() -> T): T {
+    private suspend fun <T> dispatch(inTransaction: Boolean, block: suspend (AnimeDb) -> T): T {
         // Create a transaction if needed and run the calling block inside it.
         if (inTransaction) {
             return withAnimeTransaction { block(db) }
@@ -103,3 +101,4 @@ class AndroidAnimeDatabaseHandler(
         return withContext(context) { block(db) }
     }
 }
+

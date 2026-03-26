@@ -67,7 +67,7 @@ class NovelDatabaseHandlerTest {
             version = 0,
         )
 
-        val rows = handler.awaitList { novelsQueries.getAllNovel() }
+        val rows = handler.awaitList { db -> db.novelsQueries.getAllNovel() }
 
         rows.size shouldBe 1
         rows.first().title shouldBe "Title"

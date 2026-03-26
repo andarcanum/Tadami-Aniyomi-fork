@@ -44,7 +44,7 @@ class AnimeRestorer(
     }
 
     suspend fun sortByNew(backupAnimes: List<BackupAnime>): List<BackupAnime> {
-        val urlsBySource = handler.awaitList { animesQueries.getAllAnimeSourceAndUrl() }
+        val urlsBySource = handler.awaitList { db -> db.animesQueries.getAllAnimeSourceAndUrl() }
             .groupBy({ it.source }, { it.url })
 
         return backupAnimes
@@ -59,7 +59,7 @@ class AnimeRestorer(
         backupCategories: List<BackupCategory>,
         backupSeasons: List<BackupAnime>,
     ) {
-        handler.await(inTransaction = true) {
+        handler.await(inTransaction = true) { db ->
             val dbAnime = findExistingAnime(backupAnime)
             val anime = backupAnime.getAnimeImpl()
             val restoredAnime = if (dbAnime == null) {
@@ -120,8 +120,8 @@ class AnimeRestorer(
     }
 
     private suspend fun updateAnime(anime: Anime): Anime {
-        handler.await(true) {
-            animesQueries.update(
+        handler.await(true) { db ->
+            db.animesQueries.update(
                 source = anime.source,
                 url = anime.url,
                 artist = anime.artist,
@@ -213,9 +213,9 @@ class AnimeRestorer(
         this.copy(id = 0L, animeId = 0L, dateFetch = 0L, dateUpload = 0L, lastModifiedAt = 0L, version = 0L)
 
     private suspend fun insertNewEpisodes(episodes: List<Episode>) {
-        handler.await(true) {
+        handler.await(true) { db ->
             episodes.forEach { episode ->
-                episodesQueries.insert(
+                db.episodesQueries.insert(
                     episode.animeId,
                     episode.url,
                     episode.name,
@@ -238,9 +238,9 @@ class AnimeRestorer(
     }
 
     private suspend fun updateExistingEpisodes(episodes: List<Episode>) {
-        handler.await(true) {
+        handler.await(true) { db ->
             episodes.forEach { episode ->
-                episodesQueries.update(
+                db.episodesQueries.update(
                     animeId = null,
                     url = null,
                     name = null,
@@ -270,8 +270,8 @@ class AnimeRestorer(
      * @return id of [Anime], null if not found
      */
     private suspend fun insertAnime(anime: Anime): Long {
-        return handler.awaitOneExecutable(true) {
-            animesQueries.insert(
+        return handler.awaitOneExecutable(true) { db ->
+            db.animesQueries.insert(
                 source = anime.source,
                 url = anime.url,
                 artist = anime.artist,
@@ -300,7 +300,7 @@ class AnimeRestorer(
                 backgroundUrl = anime.backgroundUrl,
                 backgroundLastModified = anime.backgroundLastModified,
             )
-            animesQueries.selectLastInsertedRowId()
+            db.animesQueries.selectLastInsertedRowId()
         }
     }
 
@@ -345,10 +345,10 @@ class AnimeRestorer(
         }
 
         if (animeCategoriesToUpdate.isNotEmpty()) {
-            handler.await(true) {
-                animes_categoriesQueries.deleteAnimeCategoryByAnimeId(anime.id)
+            handler.await(true) { db ->
+                db.animes_categoriesQueries.deleteAnimeCategoryByAnimeId(anime.id)
                 animeCategoriesToUpdate.forEach { (animeId, categoryId) ->
-                    animes_categoriesQueries.insert(animeId, categoryId)
+                    db.animes_categoriesQueries.insert(animeId, categoryId)
                 }
             }
         }
@@ -356,11 +356,11 @@ class AnimeRestorer(
 
     private suspend fun restoreHistory(backupHistory: List<BackupAnimeHistory>) {
         val toUpdate = backupHistory.mapNotNull { history ->
-            val dbHistory = handler.awaitOneOrNull { animehistoryQueries.getHistoryByEpisodeUrl(history.url) }
+            val dbHistory = handler.awaitOneOrNull { db -> db.animehistoryQueries.getHistoryByEpisodeUrl(history.url) }
             val item = history.getHistoryImpl()
 
             if (dbHistory == null) {
-                val episode = handler.awaitOneOrNull { episodesQueries.getEpisodeByUrl(history.url) }
+                val episode = handler.awaitOneOrNull { db -> db.episodesQueries.getEpisodeByUrl(history.url) }
                 return@mapNotNull if (episode == null) {
                     // Episode doesn't exist; skip
                     null
@@ -381,9 +381,9 @@ class AnimeRestorer(
         }
 
         if (toUpdate.isNotEmpty()) {
-            handler.await(true) {
+            handler.await(true) { db ->
                 toUpdate.forEach {
-                    animehistoryQueries.upsert(
+                    db.animehistoryQueries.upsert(
                         it.episodeId,
                         it.seenAt,
                     )
@@ -423,9 +423,9 @@ class AnimeRestorer(
             insertTrack.awaitAll(newTracks)
         }
         if (existingTracks.isNotEmpty()) {
-            handler.await(true) {
+            handler.await(true) { db ->
                 existingTracks.forEach { track ->
-                    anime_syncQueries.update(
+                    db.anime_syncQueries.update(
                         track.animeId,
                         track.trackerId,
                         track.remoteId,

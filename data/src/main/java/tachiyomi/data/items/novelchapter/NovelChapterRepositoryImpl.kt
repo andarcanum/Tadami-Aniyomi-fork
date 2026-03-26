@@ -15,9 +15,9 @@ class NovelChapterRepositoryImpl(
 
     override suspend fun addAllChapters(chapters: List<NovelChapter>): List<NovelChapter> {
         return try {
-            handler.await(inTransaction = true) {
+            handler.await(inTransaction = true) { db ->
                 chapters.map { chapter ->
-                    novel_chaptersQueries.insert(
+                    db.novel_chaptersQueries.insert(
                         chapter.novelId,
                         chapter.url,
                         chapter.name,
@@ -31,7 +31,7 @@ class NovelChapterRepositoryImpl(
                         chapter.dateUpload,
                         chapter.version,
                     )
-                    val lastInsertId = novel_chaptersQueries.selectLastInsertedRowId().executeAsOne()
+                    val lastInsertId = db.novel_chaptersQueries.selectLastInsertedRowId().executeAsOne()
                     chapter.copy(id = lastInsertId)
                 }
             }
@@ -50,9 +50,9 @@ class NovelChapterRepositoryImpl(
     }
 
     private suspend fun partialUpdate(vararg chapterUpdates: NovelChapterUpdate) {
-        handler.await(inTransaction = true) {
+        handler.await(inTransaction = true) { db ->
             chapterUpdates.forEach { chapterUpdate ->
-                novel_chaptersQueries.update(
+                db.novel_chaptersQueries.update(
                     novelId = chapterUpdate.novelId,
                     url = chapterUpdate.url,
                     name = chapterUpdate.name,
@@ -74,52 +74,52 @@ class NovelChapterRepositoryImpl(
 
     override suspend fun removeChaptersWithIds(chapterIds: List<Long>) {
         try {
-            handler.await { novel_chaptersQueries.removeChaptersWithIds(chapterIds) }
+            handler.await { db -> db.novel_chaptersQueries.removeChaptersWithIds(chapterIds) }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e)
         }
     }
 
     override suspend fun getChapterByNovelId(novelId: Long, applyScanlatorFilter: Boolean): List<NovelChapter> {
-        return handler.awaitList {
-            novel_chaptersQueries.getChaptersByNovelId(novelId, applyScanlatorFilter.toLong(), ::mapChapter)
+        return handler.awaitList { db ->
+            db.novel_chaptersQueries.getChaptersByNovelId(novelId, applyScanlatorFilter.toLong(), ::mapChapter)
         }
     }
 
     override suspend fun getScanlatorsByNovelId(novelId: Long): List<String> {
-        return handler.awaitList {
-            novel_chaptersQueries.getScanlatorsByNovelId(novelId) { it.orEmpty() }
+        return handler.awaitList { db ->
+            db.novel_chaptersQueries.getScanlatorsByNovelId(novelId) { it.orEmpty() }
         }
     }
 
     override fun getScanlatorsByNovelIdAsFlow(novelId: Long): Flow<List<String>> {
-        return handler.subscribeToList {
-            novel_chaptersQueries.getScanlatorsByNovelId(novelId) { it.orEmpty() }
+        return handler.subscribeToList { db ->
+            db.novel_chaptersQueries.getScanlatorsByNovelId(novelId) { it.orEmpty() }
         }
     }
 
     override suspend fun getBookmarkedChaptersByNovelId(novelId: Long): List<NovelChapter> {
-        return handler.awaitList {
-            novel_chaptersQueries.getBookmarkedChaptersByNovelId(novelId, ::mapChapter)
+        return handler.awaitList { db ->
+            db.novel_chaptersQueries.getBookmarkedChaptersByNovelId(novelId, ::mapChapter)
         }
     }
 
     override suspend fun getChapterById(id: Long): NovelChapter? {
-        return handler.awaitOneOrNull { novel_chaptersQueries.getChapterById(id, ::mapChapter) }
+        return handler.awaitOneOrNull { db -> db.novel_chaptersQueries.getChapterById(id, ::mapChapter) }
     }
 
     override suspend fun getChapterByNovelIdAsFlow(
         novelId: Long,
         applyScanlatorFilter: Boolean,
     ): Flow<List<NovelChapter>> {
-        return handler.subscribeToList {
-            novel_chaptersQueries.getChaptersByNovelId(novelId, applyScanlatorFilter.toLong(), ::mapChapter)
+        return handler.subscribeToList { db ->
+            db.novel_chaptersQueries.getChaptersByNovelId(novelId, applyScanlatorFilter.toLong(), ::mapChapter)
         }
     }
 
     override suspend fun getChapterByUrlAndNovelId(url: String, novelId: Long): NovelChapter? {
-        return handler.awaitOneOrNull {
-            novel_chaptersQueries.getChapterByUrlAndNovelId(
+        return handler.awaitOneOrNull { db ->
+            db.novel_chaptersQueries.getChapterByUrlAndNovelId(
                 url,
                 novelId,
                 ::mapChapter,
@@ -161,3 +161,4 @@ class NovelChapterRepositoryImpl(
         version = version,
     )
 }
+

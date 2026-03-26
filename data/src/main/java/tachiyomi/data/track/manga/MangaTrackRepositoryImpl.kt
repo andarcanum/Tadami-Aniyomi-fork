@@ -10,30 +10,30 @@ class MangaTrackRepositoryImpl(
 ) : MangaTrackRepository {
 
     override suspend fun getTrackByMangaId(id: Long): MangaTrack? {
-        return handler.awaitOneOrNull { manga_syncQueries.getTrackById(id, MangaTrackMapper::mapTrack) }
+        return handler.awaitOneOrNull { db -> db.manga_syncQueries.getTrackById(id, MangaTrackMapper::mapTrack) }
     }
 
     override suspend fun getTracksByMangaId(mangaId: Long): List<MangaTrack> {
-        return handler.awaitList {
-            manga_syncQueries.getTracksByMangaId(mangaId, MangaTrackMapper::mapTrack)
+        return handler.awaitList { db ->
+            db.manga_syncQueries.getTracksByMangaId(mangaId, MangaTrackMapper::mapTrack)
         }
     }
 
     override fun getMangaTracksAsFlow(): Flow<List<MangaTrack>> {
-        return handler.subscribeToList {
-            manga_syncQueries.getTracks(MangaTrackMapper::mapTrack)
+        return handler.subscribeToList { db ->
+            db.manga_syncQueries.getTracks(MangaTrackMapper::mapTrack)
         }
     }
 
     override fun getTracksByMangaIdAsFlow(mangaId: Long): Flow<List<MangaTrack>> {
-        return handler.subscribeToList {
-            manga_syncQueries.getTracksByMangaId(mangaId, MangaTrackMapper::mapTrack)
+        return handler.subscribeToList { db ->
+            db.manga_syncQueries.getTracksByMangaId(mangaId, MangaTrackMapper::mapTrack)
         }
     }
 
     override suspend fun delete(mangaId: Long, trackerId: Long) {
-        handler.await {
-            manga_syncQueries.delete(
+        handler.await { db ->
+            db.manga_syncQueries.delete(
                 mangaId = mangaId,
                 syncId = trackerId,
             )
@@ -49,9 +49,9 @@ class MangaTrackRepositoryImpl(
     }
 
     private suspend fun insertValues(vararg tracks: MangaTrack) {
-        handler.await(inTransaction = true) {
+        handler.await(inTransaction = true) { db ->
             tracks.forEach { mangaTrack ->
-                manga_syncQueries.insert(
+                db.manga_syncQueries.insert(
                     mangaId = mangaTrack.mangaId,
                     syncId = mangaTrack.trackerId,
                     remoteId = mangaTrack.remoteId,
@@ -70,3 +70,5 @@ class MangaTrackRepositoryImpl(
         }
     }
 }
+
+

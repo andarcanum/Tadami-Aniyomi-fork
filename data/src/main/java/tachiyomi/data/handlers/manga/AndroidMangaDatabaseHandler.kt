@@ -12,10 +12,10 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
-import tachiyomi.data.Database
+import tachiyomi.data.Database as MangaDb
 
 class AndroidMangaDatabaseHandler(
-    val db: Database,
+    val db: MangaDb,
     private val driver: SqlDriver,
     val queryDispatcher: CoroutineDispatcher = Dispatchers.IO,
     val transactionDispatcher: CoroutineDispatcher = queryDispatcher,
@@ -23,71 +23,69 @@ class AndroidMangaDatabaseHandler(
 
     val suspendingTransactionId = ThreadLocal<Int>()
 
-    override suspend fun <T> await(inTransaction: Boolean, block: suspend Database.() -> T): T {
+    override suspend fun <T> await(inTransaction: Boolean, block: suspend (MangaDb) -> T): T {
         return dispatch(inTransaction, block)
     }
 
     override suspend fun <T : Any> awaitList(
         inTransaction: Boolean,
-        block: suspend Database.() -> Query<T>,
+        block: suspend (MangaDb) -> Query<T>,
     ): List<T> {
         return dispatch(inTransaction) { block(db).executeAsList() }
     }
 
     override suspend fun <T : Any> awaitOne(
         inTransaction: Boolean,
-        block: suspend Database.() -> Query<T>,
+        block: suspend (MangaDb) -> Query<T>,
     ): T {
         return dispatch(inTransaction) { block(db).executeAsOne() }
     }
 
     override suspend fun <T : Any> awaitOneExecutable(
         inTransaction: Boolean,
-        block: suspend Database.() -> ExecutableQuery<T>,
+        block: suspend (MangaDb) -> ExecutableQuery<T>,
     ): T {
         return dispatch(inTransaction) { block(db).executeAsOne() }
     }
 
     override suspend fun <T : Any> awaitOneOrNull(
         inTransaction: Boolean,
-        block: suspend Database.() -> Query<T>,
+        block: suspend (MangaDb) -> Query<T>,
     ): T? {
         return dispatch(inTransaction) { block(db).executeAsOneOrNull() }
     }
 
     override suspend fun <T : Any> awaitOneOrNullExecutable(
         inTransaction: Boolean,
-        block: suspend Database.() -> ExecutableQuery<T>,
+        block: suspend (MangaDb) -> ExecutableQuery<T>,
     ): T? {
         return dispatch(inTransaction) { block(db).executeAsOneOrNull() }
     }
 
-    override fun <T : Any> subscribeToList(block: Database.() -> Query<T>): Flow<List<T>> {
+    override fun <T : Any> subscribeToList(block: (MangaDb) -> Query<T>): Flow<List<T>> {
         return block(db).asFlow().mapToList(queryDispatcher)
     }
 
-    override fun <T : Any> subscribeToOne(block: Database.() -> Query<T>): Flow<T> {
+    override fun <T : Any> subscribeToOne(block: (MangaDb) -> Query<T>): Flow<T> {
         return block(db).asFlow().mapToOne(queryDispatcher)
     }
 
-    override fun <T : Any> subscribeToOneOrNull(block: Database.() -> Query<T>): Flow<T?> {
+    override fun <T : Any> subscribeToOneOrNull(block: (MangaDb) -> Query<T>): Flow<T?> {
         return block(db).asFlow().mapToOneOrNull(queryDispatcher)
     }
 
     override fun <T : Any> subscribeToPagingSource(
-        countQuery: Database.() -> Query<Long>,
-        queryProvider: Database.(Long, Long) -> Query<T>,
+        countQuery: (MangaDb) -> Query<Long>,
+        queryProvider: (MangaDb, Long, Long) -> Query<T>,
     ): PagingSource<Long, T> {
         return QueryPagingMangaSource(
             handler = this,
             countQuery = countQuery,
-            queryProvider = { limit, offset ->
-                queryProvider.invoke(db, limit, offset)
-            },
+            queryProvider = queryProvider,
         )
     }
 
-    private suspend fun <T> dispatch(inTransaction: Boolean, block: suspend Database.() -> T): T {
+    private suspend fun <T> dispatch(inTransaction: Boolean, block: suspend (MangaDb) -> T): T {
         // Create a transaction if needed and run the calling block inside it.
         if (inTransaction) {
             return withMangaTransaction { block(db) }
@@ -103,3 +101,4 @@ class AndroidMangaDatabaseHandler(
         return withContext(context) { block(db) }
     }
 }
+

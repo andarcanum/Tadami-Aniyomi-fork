@@ -27,13 +27,13 @@ class NovelBackupCreator(
     private suspend fun backupNovel(novel: Novel, options: BackupOptions): BackupNovel {
         val novelObject = novel.toBackupNovel()
 
-        novelObject.excludedScanlators = handler.awaitList {
-            novel_excluded_scanlatorsQueries.getExcludedScanlatorsByNovelId(novel.id)
+        novelObject.excludedScanlators = handler.awaitList { db ->
+            db.novel_excluded_scanlatorsQueries.getExcludedScanlatorsByNovelId(novel.id)
         }
 
         if (options.chapters) {
-            handler.awaitList {
-                novel_chaptersQueries.getChaptersByNovelId(
+            handler.awaitList { db ->
+                db.novel_chaptersQueries.getChaptersByNovelId(
                     novelId = novel.id,
                     applyScanlatorFilter = 0, // false
                     mapper = backupChapterMapper,
@@ -54,7 +54,7 @@ class NovelBackupCreator(
             val historyByNovelId = historyRepository.getHistoryByNovelId(novel.id)
             if (historyByNovelId.isNotEmpty()) {
                 val history = historyByNovelId.map { history ->
-                    val chapter = handler.awaitOne { novel_chaptersQueries.getChapterById(history.chapterId) }
+                    val chapter = handler.awaitOne { db -> db.novel_chaptersQueries.getChapterById(history.chapterId) }
                     BackupHistory(chapter.url, history.readAt?.time ?: 0L, history.readDuration)
                 }
                 if (history.isNotEmpty()) {

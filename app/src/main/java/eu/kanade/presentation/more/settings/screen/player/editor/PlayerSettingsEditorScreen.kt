@@ -14,7 +14,6 @@ import eu.kanade.presentation.more.settings.screen.player.editor.components.File
 import eu.kanade.presentation.util.Screen
 
 object PlayerSettingsEditorScreen : Screen() {
-
     @Composable
     override fun Content() {
         val context = LocalContext.current

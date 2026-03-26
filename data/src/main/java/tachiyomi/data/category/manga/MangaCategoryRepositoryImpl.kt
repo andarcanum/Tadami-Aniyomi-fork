@@ -1,7 +1,7 @@
 package tachiyomi.data.category.manga
 
 import kotlinx.coroutines.flow.Flow
-import tachiyomi.data.Database
+import tachiyomi.`data`.Database
 import tachiyomi.data.handlers.manga.MangaDatabaseHandler
 import tachiyomi.domain.category.manga.repository.MangaCategoryRepository
 import tachiyomi.domain.category.model.Category
@@ -12,52 +12,52 @@ class MangaCategoryRepositoryImpl(
 ) : MangaCategoryRepository {
 
     override suspend fun getMangaCategory(id: Long): Category? {
-        return handler.awaitOneOrNull { categoriesQueries.getCategory(id, ::mapCategory) }
+        return handler.awaitOneOrNull { db -> db.categoriesQueries.getCategory(id, ::mapCategory) }
     }
 
     override suspend fun getAllMangaCategories(): List<Category> {
-        return handler.awaitList { categoriesQueries.getCategories(::mapCategory) }
+        return handler.awaitList { db -> db.categoriesQueries.getCategories(::mapCategory) }
     }
 
     override suspend fun getAllVisibleMangaCategories(): List<Category> {
-        return handler.awaitList { categoriesQueries.getVisibleCategories(::mapCategory) }
+        return handler.awaitList { db -> db.categoriesQueries.getVisibleCategories(::mapCategory) }
     }
 
     override fun getAllMangaCategoriesAsFlow(): Flow<List<Category>> {
-        return handler.subscribeToList { categoriesQueries.getCategories(::mapCategory) }
+        return handler.subscribeToList { db -> db.categoriesQueries.getCategories(::mapCategory) }
     }
 
     override fun getAllVisibleMangaCategoriesAsFlow(): Flow<List<Category>> {
-        return handler.subscribeToList { categoriesQueries.getVisibleCategories(::mapCategory) }
+        return handler.subscribeToList { db -> db.categoriesQueries.getVisibleCategories(::mapCategory) }
     }
 
     override suspend fun getCategoriesByMangaId(mangaId: Long): List<Category> {
-        return handler.awaitList {
-            categoriesQueries.getCategoriesByMangaId(mangaId, ::mapCategory)
+        return handler.awaitList { db ->
+            db.categoriesQueries.getCategoriesByMangaId(mangaId, ::mapCategory)
         }
     }
 
     override suspend fun getVisibleCategoriesByMangaId(mangaId: Long): List<Category> {
-        return handler.awaitList {
-            categoriesQueries.getVisibleCategoriesByMangaId(mangaId, ::mapCategory)
+        return handler.awaitList { db ->
+            db.categoriesQueries.getVisibleCategoriesByMangaId(mangaId, ::mapCategory)
         }
     }
 
     override fun getCategoriesByMangaIdAsFlow(mangaId: Long): Flow<List<Category>> {
-        return handler.subscribeToList {
-            categoriesQueries.getCategoriesByMangaId(mangaId, ::mapCategory)
+        return handler.subscribeToList { db ->
+            db.categoriesQueries.getCategoriesByMangaId(mangaId, ::mapCategory)
         }
     }
 
     override fun getVisibleCategoriesByMangaIdAsFlow(mangaId: Long): Flow<List<Category>> {
-        return handler.subscribeToList {
-            categoriesQueries.getVisibleCategoriesByMangaId(mangaId, ::mapCategory)
+        return handler.subscribeToList { db ->
+            db.categoriesQueries.getVisibleCategoriesByMangaId(mangaId, ::mapCategory)
         }
     }
 
     override suspend fun insertMangaCategory(category: Category) {
-        handler.await {
-            categoriesQueries.insert(
+        handler.await { db ->
+            db.categoriesQueries.insert(
                 name = category.name,
                 order = category.order,
                 flags = category.flags,
@@ -66,15 +66,15 @@ class MangaCategoryRepositoryImpl(
     }
 
     override suspend fun updatePartialMangaCategory(update: CategoryUpdate) {
-        handler.await {
-            updatePartialBlocking(update)
+        handler.await { db ->
+            db.updatePartialBlocking(update)
         }
     }
 
     override suspend fun updatePartialMangaCategories(updates: List<CategoryUpdate>) {
-        handler.await(inTransaction = true) {
+        handler.await(inTransaction = true) { db ->
             for (update in updates) {
-                updatePartialBlocking(update)
+                db.updatePartialBlocking(update)
             }
         }
     }
@@ -90,14 +90,14 @@ class MangaCategoryRepositoryImpl(
     }
 
     override suspend fun updateAllMangaCategoryFlags(flags: Long?) {
-        handler.await {
-            categoriesQueries.updateAllFlags(flags)
+        handler.await { db ->
+            db.categoriesQueries.updateAllFlags(flags)
         }
     }
 
     override suspend fun deleteMangaCategory(categoryId: Long) {
-        handler.await {
-            categoriesQueries.delete(
+        handler.await { db ->
+            db.categoriesQueries.delete(
                 categoryId = categoryId,
             )
         }
@@ -119,3 +119,5 @@ class MangaCategoryRepositoryImpl(
         )
     }
 }
+
+

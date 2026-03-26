@@ -20,16 +20,16 @@ class NovelRepositoryImpl(
 ) : NovelRepository {
 
     override suspend fun getNovelById(id: Long): Novel {
-        return handler.awaitOne { novelsQueries.getNovelById(id, NovelMapper::mapNovel) }
+        return handler.awaitOne { db -> db.novelsQueries.getNovelById(id, NovelMapper::mapNovel) }
     }
 
     override suspend fun getNovelByIdAsFlow(id: Long): Flow<Novel> {
-        return handler.subscribeToOne { novelsQueries.getNovelById(id, NovelMapper::mapNovel) }
+        return handler.subscribeToOne { db -> db.novelsQueries.getNovelById(id, NovelMapper::mapNovel) }
     }
 
     override suspend fun getNovelByUrlAndSourceId(url: String, sourceId: Long): Novel? {
-        return handler.awaitOneOrNull {
-            novelsQueries.getNovelByUrlAndSource(
+        return handler.awaitOneOrNull { db ->
+            db.novelsQueries.getNovelByUrlAndSource(
                 url,
                 sourceId,
                 NovelMapper::mapNovel,
@@ -38,8 +38,8 @@ class NovelRepositoryImpl(
     }
 
     override fun getNovelByUrlAndSourceIdAsFlow(url: String, sourceId: Long): Flow<Novel?> {
-        return handler.subscribeToOneOrNull {
-            novelsQueries.getNovelByUrlAndSource(
+        return handler.subscribeToOneOrNull { db ->
+            db.novelsQueries.getNovelByUrlAndSource(
                 url,
                 sourceId,
                 NovelMapper::mapNovel,
@@ -48,28 +48,28 @@ class NovelRepositoryImpl(
     }
 
     override suspend fun getNovelFavorites(): List<Novel> {
-        return handler.awaitList { novelsQueries.getFavorites(NovelMapper::mapNovel) }
+        return handler.awaitList { db -> db.novelsQueries.getFavorites(NovelMapper::mapNovel) }
     }
 
     override suspend fun getReadNovelNotInLibrary(): List<Novel> {
-        return handler.awaitList { novelsQueries.getReadNovelNotInLibrary(NovelMapper::mapNovel) }
+        return handler.awaitList { db -> db.novelsQueries.getReadNovelNotInLibrary(NovelMapper::mapNovel) }
     }
 
     override suspend fun getLibraryNovel(): List<LibraryNovel> {
-        return handler.awaitList { novellibraryViewQueries.library(NovelMapper::mapLibraryNovel) }
+        return handler.awaitList { db -> db.novellibraryViewQueries.library(NovelMapper::mapLibraryNovel) }
     }
 
     override fun getLibraryNovelAsFlow(): Flow<List<LibraryNovel>> {
-        return handler.subscribeToList { novellibraryViewQueries.library(NovelMapper::mapLibraryNovel) }
+        return handler.subscribeToList { db -> db.novellibraryViewQueries.library(NovelMapper::mapLibraryNovel) }
     }
 
     override fun getNovelFavoritesBySourceId(sourceId: Long): Flow<List<Novel>> {
-        return handler.subscribeToList { novelsQueries.getFavoriteBySourceId(sourceId, NovelMapper::mapNovel) }
+        return handler.subscribeToList { db -> db.novelsQueries.getFavoriteBySourceId(sourceId, NovelMapper::mapNovel) }
     }
 
     override suspend fun insertNovel(novel: Novel): Long? {
-        return handler.awaitOneOrNullExecutable(inTransaction = true) {
-            novelsQueries.insert(
+        return handler.awaitOneOrNullExecutable(inTransaction = true) { db ->
+            db.novelsQueries.insert(
                 source = novel.source,
                 url = novel.url,
                 author = novel.author,
@@ -90,7 +90,7 @@ class NovelRepositoryImpl(
                 updateStrategy = novel.updateStrategy,
                 version = novel.version,
             )
-            novelsQueries.selectLastInsertedRowId()
+            db.novelsQueries.selectLastInsertedRowId()
         }
     }
 
@@ -116,7 +116,7 @@ class NovelRepositoryImpl(
 
     override suspend fun resetNovelViewerFlags(): Boolean {
         return try {
-            handler.await { novelsQueries.resetViewerFlags() }
+            handler.await { db -> db.novelsQueries.resetViewerFlags() }
             true
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e)
@@ -125,9 +125,9 @@ class NovelRepositoryImpl(
     }
 
     private suspend fun partialUpdateNovel(vararg novelUpdates: NovelUpdate) {
-        handler.await(inTransaction = true) {
+        handler.await(inTransaction = true) { db ->
             novelUpdates.forEach { value ->
-                novelsQueries.update(
+                db.novelsQueries.update(
                     source = value.source,
                     url = value.url,
                     author = value.author,
@@ -163,3 +163,4 @@ class NovelRepositoryImpl(
         }
     }
 }
+

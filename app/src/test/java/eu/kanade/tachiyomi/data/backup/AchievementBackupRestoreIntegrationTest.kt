@@ -21,6 +21,7 @@ import tachiyomi.data.achievement.UserProfileManager
 import tachiyomi.data.achievement.UserProfileRepositoryImpl
 import tachiyomi.data.achievement.database.AchievementsDatabase
 import tachiyomi.data.achievement.repository.AchievementRepositoryImpl
+import tachiyomi.db.achievement.AchievementsDatabase as SqlDelightAchievementsDatabase
 import tachiyomi.domain.achievement.model.Achievement
 import tachiyomi.domain.achievement.model.AchievementCategory
 import tachiyomi.domain.achievement.model.AchievementProgress
@@ -58,7 +59,7 @@ class AchievementBackupRestoreIntegrationTest {
         context = ApplicationProvider.getApplicationContext()
 
         driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
-        tachiyomi.data.achievement.AchievementsDatabase.Schema.create(driver)
+        SqlDelightAchievementsDatabase.Schema.create(driver)
         database = AchievementsDatabase(driver)
 
         achievementRepository = AchievementRepositoryImpl(database)

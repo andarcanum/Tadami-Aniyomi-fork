@@ -47,8 +47,8 @@ import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
-import cafe.adriel.voyager.core.screen.Screen
 import eu.kanade.presentation.components.TabbedDialogPaddings
+import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.Video
@@ -100,7 +100,7 @@ class EpisodeOptionsDialogScreen(
     private val episodeId: Long,
     private val animeId: Long,
     private val sourceId: Long,
-) : Screen {
+) : Screen() {
 
     @Composable
     override fun Content() {

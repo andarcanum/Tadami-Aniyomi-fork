@@ -9,9 +9,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import cafe.adriel.voyager.core.screen.Screen
+import eu.kanade.presentation.util.Screen
 
-object SecretHallOfFameScreen : Screen {
+object SecretHallOfFameScreen : Screen() {
     @Composable
     override fun Content() {
         Box(

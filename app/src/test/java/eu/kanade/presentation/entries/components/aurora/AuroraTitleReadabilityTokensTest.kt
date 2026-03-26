@@ -12,9 +12,9 @@ class AuroraTitleReadabilityTokensTest {
         resolveAuroraHeroOverlayAlphaStops(isDark = false) shouldBe listOf(
             0.00f to 0.00f,
             0.28f to 0.00f,
-            0.56f to 0.06f,
-            0.82f to 0.30f,
-            1.00f to 0.60f,
+            0.60f to 0.04f,
+            0.82f to 0.28f,
+            1.00f to 0.58f,
         )
     }
 
@@ -31,8 +31,8 @@ class AuroraTitleReadabilityTokensTest {
             colors = AuroraColors.Light,
             isActive = false,
         ) shouldBe AuroraHeroSecondaryButtonPalette(
-            containerColor = Color(0xD1FFFFFF),
-            borderColor = Color(0xFFD7E3F1),
+            containerColor = Color(0xE6FFFFFF),
+            borderColor = Color(0xFFB8CCE0),
             contentColor = AuroraColors.Light.textSecondary,
         )
     }
@@ -44,8 +44,8 @@ class AuroraTitleReadabilityTokensTest {
             Color(0xEEF2F7FD),
         )
         resolveAuroraDetailCardBorderColors(AuroraColors.Light) shouldBe listOf(
-            Color(0xFFBCD0E5),
-            Color(0xFFD7E3F1),
+            Color(0xFF9DB4CC),
+            Color(0xFFB8CCE0),
         )
     }
 

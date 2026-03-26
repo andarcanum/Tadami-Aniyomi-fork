@@ -6,7 +6,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import tachiyomi.data.achievement.database.AchievementsDatabase
-import tachiyomi.data.achievement.AchievementsDatabase as SqlDelightAchievementsDatabase
+import tachiyomi.db.achievement.AchievementsDatabase as SqlDelightAchievementsDatabase
 
 /**
  * Base test class for achievement system tests.

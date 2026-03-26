@@ -11,8 +11,8 @@ class NovelUpdatesRepositoryImpl(
 ) : NovelUpdatesRepository {
 
     override suspend fun awaitWithRead(read: Boolean, after: Long, limit: Long): List<NovelUpdatesWithRelations> {
-        return databaseHandler.awaitList {
-            novelupdatesViewQueries.getUpdatesByReadStatus(
+        return databaseHandler.awaitList { db ->
+            db.novelupdatesViewQueries.getUpdatesByReadStatus(
                 read = read,
                 after = after,
                 limit = limit,
@@ -22,14 +22,14 @@ class NovelUpdatesRepositoryImpl(
     }
 
     override fun subscribeAllNovelUpdates(after: Long, limit: Long): Flow<List<NovelUpdatesWithRelations>> {
-        return databaseHandler.subscribeToList {
-            novelupdatesViewQueries.getRecentUpdates(after, limit, ::mapUpdatesWithRelations)
+        return databaseHandler.subscribeToList { db ->
+            db.novelupdatesViewQueries.getRecentUpdates(after, limit, ::mapUpdatesWithRelations)
         }
     }
 
     override fun subscribeWithRead(read: Boolean, after: Long, limit: Long): Flow<List<NovelUpdatesWithRelations>> {
-        return databaseHandler.subscribeToList {
-            novelupdatesViewQueries.getUpdatesByReadStatus(
+        return databaseHandler.subscribeToList { db ->
+            db.novelupdatesViewQueries.getUpdatesByReadStatus(
                 read = read,
                 after = after,
                 limit = limit,

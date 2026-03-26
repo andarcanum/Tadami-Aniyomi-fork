@@ -13,7 +13,6 @@ import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.util.LocalBackPress
 
 interface SearchableSettings : Screen {
-
     @Composable
     @ReadOnlyComposable
     fun getTitleRes(): StringResource

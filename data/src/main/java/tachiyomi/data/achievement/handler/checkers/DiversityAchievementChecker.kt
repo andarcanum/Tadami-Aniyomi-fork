@@ -1,26 +1,26 @@
 package tachiyomi.data.achievement.handler.checkers
 
 /**
- * Проверщик достижений разнообразия.
+ * РџСЂРѕРІРµСЂС‰РёРє РґРѕСЃС‚РёР¶РµРЅРёР№ СЂР°Р·РЅРѕРѕР±СЂР°Р·РёСЏ.
  *
- * Вычисляет разнообразие в пользовательской активности для достижений типа DIVERSITY.
- * Поддерживает кэширование для оптимизации производительности.
+ * Р’С‹С‡РёСЃР»СЏРµС‚ СЂР°Р·РЅРѕРѕР±СЂР°Р·РёРµ РІ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРѕР№ Р°РєС‚РёРІРЅРѕСЃС‚Рё РґР»СЏ РґРѕСЃС‚РёР¶РµРЅРёР№ С‚РёРїР° DIVERSITY.
+ * РџРѕРґРґРµСЂР¶РёРІР°РµС‚ РєСЌС€РёСЂРѕРІР°РЅРёРµ РґР»СЏ РѕРїС‚РёРјРёР·Р°С†РёРё РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЊРЅРѕСЃС‚Рё.
  *
- * Типы разнообразия:
- * - Жанры (Genre): Количество уникальных жанров в библиотеке
- * - Источники (Source): Количество уникальных источников в библиотеке
+ * РўРёРїС‹ СЂР°Р·РЅРѕРѕР±СЂР°Р·РёСЏ:
+ * - Р–Р°РЅСЂС‹ (Genre): РљРѕР»РёС‡РµСЃС‚РІРѕ СѓРЅРёРєР°Р»СЊРЅС‹С… Р¶Р°РЅСЂРѕРІ РІ Р±РёР±Р»РёРѕС‚РµРєРµ
+ * - РСЃС‚РѕС‡РЅРёРєРё (Source): РљРѕР»РёС‡РµСЃС‚РІРѕ СѓРЅРёРєР°Р»СЊРЅС‹С… РёСЃС‚РѕС‡РЅРёРєРѕРІ РІ Р±РёР±Р»РёРѕС‚РµРєРµ
  *
- * Категории:
- * - Manga: Только манга
- * - Anime: Только аниме
- * - Both: Манга + аниме вместе
+ * РљР°С‚РµРіРѕСЂРёРё:
+ * - Manga: РўРѕР»СЊРєРѕ РјР°РЅРіР°
+ * - Anime: РўРѕР»СЊРєРѕ Р°РЅРёРјРµ
+ * - Both: РњР°РЅРіР° + Р°РЅРёРјРµ РІРјРµСЃС‚Рµ
  *
- * Кэширование:
- * - Результаты кэшируются на 5 минут
- * - Кэш очищается при изменениях библиотеки
+ * РљСЌС€РёСЂРѕРІР°РЅРёРµ:
+ * - Р РµР·СѓР»СЊС‚Р°С‚С‹ РєСЌС€РёСЂСѓСЋС‚СЃСЏ РЅР° 5 РјРёРЅСѓС‚
+ * - РљСЌС€ РѕС‡РёС‰Р°РµС‚СЃСЏ РїСЂРё РёР·РјРµРЅРµРЅРёСЏС… Р±РёР±Р»РёРѕС‚РµРєРё
  *
- * @param mangaHandler Обработчик БД манги для запросов
- * @param animeHandler Обработчик БД аниме для запросов
+ * @param mangaHandler РћР±СЂР°Р±РѕС‚С‡РёРє Р‘Р” РјР°РЅРіРё РґР»СЏ Р·Р°РїСЂРѕСЃРѕРІ
+ * @param animeHandler РћР±СЂР°Р±РѕС‚С‡РёРє Р‘Р” Р°РЅРёРјРµ РґР»СЏ Р·Р°РїСЂРѕСЃРѕРІ
  *
  * @see AchievementType.DIVERSITY
  */
@@ -43,7 +43,7 @@ class DiversityAchievementChecker(
     private var animeSourceCache: Pair<Int, Long>? = null
     private var novelSourceCache: Pair<Int, Long>? = null
 
-    /** Продолжительность кэша в миллисекундах (5 минут) */
+    /** РџСЂРѕРґРѕР»Р¶РёС‚РµР»СЊРЅРѕСЃС‚СЊ РєСЌС€Р° РІ РјРёР»Р»РёСЃРµРєСѓРЅРґР°С… (5 РјРёРЅСѓС‚) */
     private val cacheDuration = 5 * 60 * 1000 // 5 minutes
 
     /**
@@ -57,16 +57,13 @@ class DiversityAchievementChecker(
             }
         }
 
-        val mangaGenres = mangaHandler.awaitList {
-            mangasQueries.getLibraryGenres()
+        val mangaGenres = mangaHandler.awaitList { db -> db.mangasQueries.getLibraryGenres()
         }
 
-        val animeGenres = animeHandler.awaitList {
-            animesQueries.getLibraryGenres()
+        val animeGenres = animeHandler.awaitList { db -> db.animesQueries.getLibraryGenres()
         }
 
-        val novelGenres = novelHandler.awaitList {
-            novelsQueries.getLibraryGenres()
+        val novelGenres = novelHandler.awaitList { db -> db.novelsQueries.getLibraryGenres()
         }
 
         // Combine and parse unique genres from both manga and anime
@@ -87,16 +84,13 @@ class DiversityAchievementChecker(
             }
         }
 
-        val mangaSources = mangaHandler.awaitList {
-            mangasQueries.getLibrarySources()
+        val mangaSources = mangaHandler.awaitList { db -> db.mangasQueries.getLibrarySources()
         }
 
-        val animeSources = animeHandler.awaitList {
-            animesQueries.getLibrarySources()
+        val animeSources = animeHandler.awaitList { db -> db.animesQueries.getLibrarySources()
         }
 
-        val novelSources = novelHandler.awaitList {
-            novelsQueries.getLibrarySources()
+        val novelSources = novelHandler.awaitList { db -> db.novelsQueries.getLibrarySources()
         }
 
         // Combine and get unique sources from both manga and anime
@@ -116,8 +110,7 @@ class DiversityAchievementChecker(
             }
         }
 
-        val mangaGenres = mangaHandler.awaitList {
-            mangasQueries.getLibraryGenres()
+        val mangaGenres = mangaHandler.awaitList { db -> db.mangasQueries.getLibraryGenres()
         }
 
         val count = parseAndGetUniqueGenres(mangaGenres)
@@ -136,8 +129,7 @@ class DiversityAchievementChecker(
             }
         }
 
-        val animeGenres = animeHandler.awaitList {
-            animesQueries.getLibraryGenres()
+        val animeGenres = animeHandler.awaitList { db -> db.animesQueries.getLibraryGenres()
         }
 
         val count = parseAndGetUniqueGenres(animeGenres)
@@ -156,8 +148,7 @@ class DiversityAchievementChecker(
             }
         }
 
-        val novelGenres = novelHandler.awaitList {
-            novelsQueries.getLibraryGenres()
+        val novelGenres = novelHandler.awaitList { db -> db.novelsQueries.getLibraryGenres()
         }
 
         val count = parseAndGetUniqueGenres(novelGenres)
@@ -176,8 +167,7 @@ class DiversityAchievementChecker(
             }
         }
 
-        val mangaSources = mangaHandler.awaitList {
-            mangasQueries.getLibrarySources()
+        val mangaSources = mangaHandler.awaitList { db -> db.mangasQueries.getLibrarySources()
         }
 
         val count = mangaSources.distinct().size
@@ -196,8 +186,7 @@ class DiversityAchievementChecker(
             }
         }
 
-        val animeSources = animeHandler.awaitList {
-            animesQueries.getLibrarySources()
+        val animeSources = animeHandler.awaitList { db -> db.animesQueries.getLibrarySources()
         }
 
         val count = animeSources.distinct().size
@@ -216,8 +205,7 @@ class DiversityAchievementChecker(
             }
         }
 
-        val novelSources = novelHandler.awaitList {
-            novelsQueries.getLibrarySources()
+        val novelSources = novelHandler.awaitList { db -> db.novelsQueries.getLibrarySources()
         }
 
         val count = novelSources.distinct().size

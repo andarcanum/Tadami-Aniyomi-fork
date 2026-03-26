@@ -1,6 +1,9 @@
 package mihon.buildlogic
 
 import com.android.build.api.dsl.CommonExtension
+import com.android.build.api.dsl.ApplicationExtension
+import com.android.build.api.dsl.LibraryExtension
+import com.android.build.api.dsl.TestExtension
 import org.gradle.accessors.dm.LibrariesForAndroidx
 import org.gradle.accessors.dm.LibrariesForCompose
 import org.gradle.accessors.dm.LibrariesForKotlinx
@@ -22,24 +25,52 @@ val Project.compose get() = the<LibrariesForCompose>()
 val Project.kotlinx get() = the<LibrariesForKotlinx>()
 val Project.libs get() = the<LibrariesForLibs>()
 
-internal fun Project.configureAndroid(commonExtension: CommonExtension<*, *, *, *, *, *>) {
-    commonExtension.apply {
-        compileSdk = AndroidConfig.COMPILE_SDK
-        buildToolsVersion = AndroidConfig.BUILD_TOOLS
+private fun CommonExtension.configureAndroidCommon() {
+    compileSdk = AndroidConfig.COMPILE_SDK
+}
 
-        defaultConfig {
-            minSdk = AndroidConfig.MIN_SDK
-            ndk {
-                version = AndroidConfig.NDK
-            }
-        }
-
-        compileOptions {
-            sourceCompatibility = AndroidConfig.JavaVersion
-            targetCompatibility = AndroidConfig.JavaVersion
-            isCoreLibraryDesugaringEnabled = true
-        }
+private fun ApplicationExtension.configureAndroidOptions() {
+    defaultConfig {
+        minSdk = AndroidConfig.MIN_SDK
+        ndkVersion = AndroidConfig.NDK
     }
+
+    compileOptions {
+        sourceCompatibility = AndroidConfig.JavaVersion
+        targetCompatibility = AndroidConfig.JavaVersion
+        isCoreLibraryDesugaringEnabled = true
+    }
+}
+
+private fun LibraryExtension.configureAndroidOptions() {
+    defaultConfig {
+        minSdk = AndroidConfig.MIN_SDK
+        ndkVersion = AndroidConfig.NDK
+    }
+
+    compileOptions {
+        sourceCompatibility = AndroidConfig.JavaVersion
+        targetCompatibility = AndroidConfig.JavaVersion
+        isCoreLibraryDesugaringEnabled = true
+    }
+}
+
+private fun TestExtension.configureAndroidOptions() {
+    defaultConfig {
+        minSdk = AndroidConfig.MIN_SDK
+        ndkVersion = AndroidConfig.NDK
+    }
+
+    compileOptions {
+        sourceCompatibility = AndroidConfig.JavaVersion
+        targetCompatibility = AndroidConfig.JavaVersion
+        isCoreLibraryDesugaringEnabled = true
+    }
+}
+
+internal fun Project.configureAndroid(commonExtension: ApplicationExtension) {
+    commonExtension.configureAndroidCommon()
+    commonExtension.configureAndroidOptions()
 
     tasks.withType<KotlinCompile>().configureEach {
         compilerOptions {
@@ -63,14 +94,104 @@ internal fun Project.configureAndroid(commonExtension: CommonExtension<*, *, *, 
     }
 }
 
-internal fun Project.configureCompose(commonExtension: CommonExtension<*, *, *, *, *, *>) {
+internal fun Project.configureAndroid(commonExtension: LibraryExtension) {
+    commonExtension.configureAndroidCommon()
+    commonExtension.configureAndroidOptions()
+
+    tasks.withType<KotlinCompile>().configureEach {
+        compilerOptions {
+            jvmTarget.set(AndroidConfig.JvmTarget)
+            freeCompilerArgs.addAll(
+                "-Xcontext-parameters",
+                "-Xannotation-default-target=param-property",
+                "-opt-in=kotlin.RequiresOptIn",
+            )
+
+            // Treat all Kotlin warnings as errors (disabled by default)
+            // Override by setting warningsAsErrors=true in your ~/.gradle/gradle.properties
+            val warningsAsErrors: String? by project
+            allWarningsAsErrors.set(warningsAsErrors.toBoolean())
+
+        }
+    }
+
+    dependencies {
+        "coreLibraryDesugaring"(libs.desugar)
+    }
+}
+
+internal fun Project.configureAndroid(commonExtension: TestExtension) {
+    commonExtension.configureAndroidCommon()
+    commonExtension.configureAndroidOptions()
+
+    tasks.withType<KotlinCompile>().configureEach {
+        compilerOptions {
+            jvmTarget.set(AndroidConfig.JvmTarget)
+            freeCompilerArgs.addAll(
+                "-Xcontext-parameters",
+                "-Xannotation-default-target=param-property",
+                "-opt-in=kotlin.RequiresOptIn",
+            )
+
+            // Treat all Kotlin warnings as errors (disabled by default)
+            // Override by setting warningsAsErrors=true in your ~/.gradle/gradle.properties
+            val warningsAsErrors: String? by project
+            allWarningsAsErrors.set(warningsAsErrors.toBoolean())
+
+        }
+    }
+
+    dependencies {
+        "coreLibraryDesugaring"(libs.desugar)
+    }
+}
+
+private fun ApplicationExtension.configureComposeOptions() {
+    buildFeatures {
+        compose = true
+    }
+}
+
+private fun LibraryExtension.configureComposeOptions() {
+    buildFeatures {
+        compose = true
+    }
+}
+
+internal fun Project.configureCompose(commonExtension: ApplicationExtension) {
     pluginManager.apply(kotlinx.plugins.compose.compiler.get().pluginId)
 
+    commonExtension.configureComposeOptions()
+
     commonExtension.apply {
-        buildFeatures {
-            compose = true
+        dependencies {
+            "implementation"(platform(compose.bom))
+        }
+    }
+
+    extensions.configure<ComposeCompilerGradlePluginExtension> {
+        val enableMetrics = project.providers.gradleProperty("enableComposeCompilerMetrics").orNull.toBoolean()
+        val enableReports = project.providers.gradleProperty("enableComposeCompilerReports").orNull.toBoolean()
+
+        val rootBuildDir = rootProject.layout.buildDirectory.asFile.get()
+        val relativePath = projectDir.relativeTo(rootDir)
+
+        if (enableMetrics) {
+            rootBuildDir.resolve("compose-metrics").resolve(relativePath).let(metricsDestination::set)
         }
 
+        if (enableReports) {
+            rootBuildDir.resolve("compose-reports").resolve(relativePath).let(reportsDestination::set)
+        }
+    }
+}
+
+internal fun Project.configureCompose(commonExtension: LibraryExtension) {
+    pluginManager.apply(kotlinx.plugins.compose.compiler.get().pluginId)
+
+    commonExtension.configureComposeOptions()
+
+    commonExtension.apply {
         dependencies {
             "implementation"(platform(compose.bom))
         }
@@ -94,6 +215,12 @@ internal fun Project.configureCompose(commonExtension: CommonExtension<*, *, *, 
 }
 
 internal fun Project.configureTest() {
+    configurations.findByName("testRuntimeOnly")?.let {
+        dependencies {
+            "testRuntimeOnly"(libs.junitPlatformLauncher)
+        }
+    }
+
     tasks.withType<Test> {
         useJUnitPlatform()
         testLogging {

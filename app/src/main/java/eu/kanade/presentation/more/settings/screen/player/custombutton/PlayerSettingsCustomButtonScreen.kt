@@ -22,7 +22,6 @@ import tachiyomi.domain.custombuttons.model.CustomButtonUpdate
 import tachiyomi.presentation.core.screens.LoadingScreen
 
 object PlayerSettingsCustomButtonScreen : Screen() {
-
     @Composable
     override fun Content() {
         val context = LocalContext.current

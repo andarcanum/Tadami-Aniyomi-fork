@@ -10,30 +10,30 @@ class AnimeTrackRepositoryImpl(
 ) : AnimeTrackRepository {
 
     override suspend fun getTrackByAnimeId(id: Long): AnimeTrack? {
-        return handler.awaitOneOrNull { anime_syncQueries.getTrackByAnimeId(id, AnimeTrackMapper::mapTrack) }
+        return handler.awaitOneOrNull { db -> db.anime_syncQueries.getTrackByAnimeId(id, AnimeTrackMapper::mapTrack) }
     }
 
     override suspend fun getTracksByAnimeId(animeId: Long): List<AnimeTrack> {
-        return handler.awaitList {
-            anime_syncQueries.getTracksByAnimeId(animeId, AnimeTrackMapper::mapTrack)
+        return handler.awaitList { db ->
+            db.anime_syncQueries.getTracksByAnimeId(animeId, AnimeTrackMapper::mapTrack)
         }
     }
 
     override fun getAnimeTracksAsFlow(): Flow<List<AnimeTrack>> {
-        return handler.subscribeToList {
-            anime_syncQueries.getAnimeTracks(AnimeTrackMapper::mapTrack)
+        return handler.subscribeToList { db ->
+            db.anime_syncQueries.getAnimeTracks(AnimeTrackMapper::mapTrack)
         }
     }
 
     override fun getTracksByAnimeIdAsFlow(animeId: Long): Flow<List<AnimeTrack>> {
-        return handler.subscribeToList {
-            anime_syncQueries.getTracksByAnimeId(animeId, AnimeTrackMapper::mapTrack)
+        return handler.subscribeToList { db ->
+            db.anime_syncQueries.getTracksByAnimeId(animeId, AnimeTrackMapper::mapTrack)
         }
     }
 
     override suspend fun delete(animeId: Long, trackerId: Long) {
-        handler.await {
-            anime_syncQueries.delete(
+        handler.await { db ->
+            db.anime_syncQueries.delete(
                 animeId = animeId,
                 syncId = trackerId,
             )
@@ -49,9 +49,9 @@ class AnimeTrackRepositoryImpl(
     }
 
     private suspend fun insertValues(vararg tracks: AnimeTrack) {
-        handler.await(inTransaction = true) {
+        handler.await(inTransaction = true) { db ->
             tracks.forEach { animeTrack ->
-                anime_syncQueries.insert(
+                db.anime_syncQueries.insert(
                     animeId = animeTrack.animeId,
                     syncId = animeTrack.trackerId,
                     remoteId = animeTrack.remoteId,
@@ -70,3 +70,4 @@ class AnimeTrackRepositoryImpl(
         }
     }
 }
+

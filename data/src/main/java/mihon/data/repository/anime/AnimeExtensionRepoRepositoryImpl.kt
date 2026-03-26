@@ -12,25 +12,25 @@ class AnimeExtensionRepoRepositoryImpl(
     private val handler: AnimeDatabaseHandler,
 ) : AnimeExtensionRepoRepository {
     override fun subscribeAll(): Flow<List<ExtensionRepo>> {
-        return handler.subscribeToList { extension_reposQueries.findAll(::mapExtensionRepo) }
+        return handler.subscribeToList { db -> db.extension_reposQueries.findAll(::mapExtensionRepo) }
     }
 
     override suspend fun getAll(): List<ExtensionRepo> {
-        return handler.awaitList { extension_reposQueries.findAll(::mapExtensionRepo) }
+        return handler.awaitList { db -> db.extension_reposQueries.findAll(::mapExtensionRepo) }
     }
 
     override suspend fun getRepo(baseUrl: String): ExtensionRepo? {
-        return handler.awaitOneOrNull { extension_reposQueries.findOne(baseUrl, ::mapExtensionRepo) }
+        return handler.awaitOneOrNull { db -> db.extension_reposQueries.findOne(baseUrl, ::mapExtensionRepo) }
     }
 
     override suspend fun getRepoBySigningKeyFingerprint(fingerprint: String): ExtensionRepo? {
-        return handler.awaitOneOrNull {
-            extension_reposQueries.findOneBySigningKeyFingerprint(fingerprint, ::mapExtensionRepo)
+        return handler.awaitOneOrNull { db ->
+            db.extension_reposQueries.findOneBySigningKeyFingerprint(fingerprint, ::mapExtensionRepo)
         }
     }
 
     override fun getCount(): Flow<Int> {
-        return handler.subscribeToOne { extension_reposQueries.count() }.map { it.toInt() }
+        return handler.subscribeToOne { db -> db.extension_reposQueries.count() }.map { it.toInt() }
     }
 
     override suspend fun insertRepo(
@@ -41,7 +41,7 @@ class AnimeExtensionRepoRepositoryImpl(
         signingKeyFingerprint: String,
     ) {
         try {
-            handler.await { extension_reposQueries.insert(baseUrl, name, shortName, website, signingKeyFingerprint) }
+            handler.await { db -> db.extension_reposQueries.insert(baseUrl, name, shortName, website, signingKeyFingerprint) }
         } catch (ex: SQLiteException) {
             throw SaveExtensionRepoException(ex)
         }
@@ -55,15 +55,15 @@ class AnimeExtensionRepoRepositoryImpl(
         signingKeyFingerprint: String,
     ) {
         try {
-            handler.await { extension_reposQueries.upsert(baseUrl, name, shortName, website, signingKeyFingerprint) }
+            handler.await { db -> db.extension_reposQueries.upsert(baseUrl, name, shortName, website, signingKeyFingerprint) }
         } catch (ex: SQLiteException) {
             throw SaveExtensionRepoException(ex)
         }
     }
 
     override suspend fun replaceRepo(newRepo: ExtensionRepo) {
-        handler.await {
-            extension_reposQueries.replace(
+        handler.await { db ->
+            db.extension_reposQueries.replace(
                 newRepo.baseUrl,
                 newRepo.name,
                 newRepo.shortName,
@@ -74,7 +74,7 @@ class AnimeExtensionRepoRepositoryImpl(
     }
 
     override suspend fun deleteRepo(baseUrl: String) {
-        return handler.await { extension_reposQueries.delete(baseUrl) }
+        return handler.await { db -> db.extension_reposQueries.delete(baseUrl) }
     }
 
     private fun mapExtensionRepo(

@@ -10,12 +10,12 @@ class AnimeStubSourceRepositoryImpl(
 ) : AnimeStubSourceRepository {
 
     override fun subscribeAllAnime(): Flow<List<StubAnimeSource>> {
-        return handler.subscribeToList { animesourcesQueries.findAll(::mapStubSource) }
+        return handler.subscribeToList { db -> db.animesourcesQueries.findAll(::mapStubSource) }
     }
 
     override suspend fun getStubAnimeSource(id: Long): StubAnimeSource? {
-        return handler.awaitOneOrNull {
-            animesourcesQueries.findOne(
+        return handler.awaitOneOrNull { db ->
+            db.animesourcesQueries.findOne(
                 id,
                 ::mapStubSource,
             )
@@ -23,7 +23,7 @@ class AnimeStubSourceRepositoryImpl(
     }
 
     override suspend fun upsertStubAnimeSource(id: Long, lang: String, name: String) {
-        handler.await { animesourcesQueries.upsert(id, lang, name) }
+        handler.await { db -> db.animesourcesQueries.upsert(id, lang, name) }
     }
 
     private fun mapStubSource(

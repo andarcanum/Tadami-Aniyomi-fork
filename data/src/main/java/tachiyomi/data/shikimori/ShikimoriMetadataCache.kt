@@ -12,8 +12,8 @@ class ShikimoriMetadataCache(
 
     suspend fun get(animeId: Long): ShikimoriMetadata? {
         return try {
-            handler.awaitOneOrNull {
-                shikimori_metadata_cacheQueries.getByAnimeId(animeId)
+            handler.awaitOneOrNull { db ->
+                db.shikimori_metadata_cacheQueries.getByAnimeId(animeId)
             }?.toShikimoriMetadata()
         } catch (e: Exception) {
             logcat(LogPriority.ERROR) { "Failed to get Shikimori cache for anime $animeId: ${e.message}" }
@@ -23,8 +23,8 @@ class ShikimoriMetadataCache(
 
     suspend fun upsert(metadata: ShikimoriMetadata) {
         try {
-            handler.await {
-                shikimori_metadata_cacheQueries.upsert(
+            handler.await { db ->
+                db.shikimori_metadata_cacheQueries.upsert(
                     anime_id = metadata.animeId,
                     shikimori_id = metadata.shikimoriId,
                     score = metadata.score,
@@ -43,8 +43,8 @@ class ShikimoriMetadataCache(
 
     suspend fun delete(animeId: Long) {
         try {
-            handler.await {
-                shikimori_metadata_cacheQueries.deleteByAnimeId(animeId)
+            handler.await { db ->
+                db.shikimori_metadata_cacheQueries.deleteByAnimeId(animeId)
             }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR) { "Failed to delete Shikimori cache: ${e.message}" }
@@ -53,8 +53,8 @@ class ShikimoriMetadataCache(
 
     suspend fun clearAll() {
         try {
-            handler.await {
-                shikimori_metadata_cacheQueries.clearAll()
+            handler.await { db ->
+                db.shikimori_metadata_cacheQueries.clearAll()
             }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR) { "Failed to clear Shikimori cache: ${e.message}" }
@@ -64,8 +64,8 @@ class ShikimoriMetadataCache(
     suspend fun deleteStaleEntries() {
         try {
             val thirtyDaysAgo = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000)
-            handler.await {
-                shikimori_metadata_cacheQueries.deleteStaleEntries(thirtyDaysAgo)
+            handler.await { db ->
+                db.shikimori_metadata_cacheQueries.deleteStaleEntries(thirtyDaysAgo)
             }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR) { "Failed to delete stale entries: ${e.message}" }

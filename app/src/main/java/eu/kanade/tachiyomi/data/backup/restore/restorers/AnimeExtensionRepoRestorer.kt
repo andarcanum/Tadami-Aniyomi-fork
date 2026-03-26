@@ -24,8 +24,7 @@ class AnimeExtensionRepoRestorer(
         } else if (shaExists != null) {
             error("${shaExists.name} has the same signing key fingerprint")
         } else {
-            animeHandler.await {
-                extension_reposQueries.insert(
+            animeHandler.await { db -> db.extension_reposQueries.insert(
                     backupRepo.baseUrl,
                     backupRepo.name,
                     backupRepo.shortName,
