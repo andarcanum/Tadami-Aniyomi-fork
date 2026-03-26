@@ -25,7 +25,7 @@ class NovelPluginRepoService(
                 client.newCall(GET(url))
                     .awaitSuccess()
                     .use { response ->
-                        val payload = response.body?.string().orEmpty()
+                        val payload = response.body.string()
                         if (payload.isBlank()) {
                             emptyList()
                         } else {

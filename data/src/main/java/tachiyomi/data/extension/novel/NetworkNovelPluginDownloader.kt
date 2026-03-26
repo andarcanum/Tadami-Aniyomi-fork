@@ -12,7 +12,7 @@ class NetworkNovelPluginDownloader(
     override suspend fun download(url: String): ByteArray {
         return withContext(Dispatchers.IO) {
             val response = client.newCall(GET(url)).awaitSuccess()
-            response.body?.bytes() ?: ByteArray(0)
+            response.body.bytes()
         }
     }
 }

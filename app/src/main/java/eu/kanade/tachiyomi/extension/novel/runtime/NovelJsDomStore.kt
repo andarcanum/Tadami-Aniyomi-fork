@@ -243,7 +243,7 @@ class NovelJsDomStore {
 
     fun replaceWith(handle: Int, newHtml: String) {
         val node = nodes[handle] ?: return
-        val parsed = Jsoup.parseBodyFragment(newHtml).body()?.childNodes() ?: return
+        val parsed = Jsoup.parseBodyFragment(newHtml).body().childNodes()
         if (parsed.isEmpty()) {
             node.remove()
         } else {

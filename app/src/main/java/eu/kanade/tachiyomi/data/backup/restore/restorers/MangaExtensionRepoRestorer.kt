@@ -24,7 +24,8 @@ class MangaExtensionRepoRestorer(
         } else if (shaExists != null) {
             error("${shaExists.name} has the same signing key fingerprint")
         } else {
-            mangaHandler.await { db -> db.extension_reposQueries.insert(
+            mangaHandler.await { db ->
+                db.extension_reposQueries.insert(
                     backupRepo.baseUrl,
                     backupRepo.name,
                     backupRepo.shortName,

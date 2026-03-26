@@ -24,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.TopAppBar
@@ -218,7 +219,7 @@ fun AppBarActions(
 
     actions.filterIsInstance<AppBar.Action>().map {
         TooltipBox(
-            positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+            positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
             tooltip = {
                 PlainTooltip {
                     Text(it.title)
@@ -242,7 +243,7 @@ fun AppBarActions(
     val overflowActions = actions.filterIsInstance<AppBar.OverflowAction>()
     if (overflowActions.isNotEmpty()) {
         TooltipBox(
-            positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+            positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
             tooltip = {
                 PlainTooltip {
                     Text(stringResource(MR.strings.action_menu_overflow_description))
@@ -376,7 +377,7 @@ fun SearchToolbar(
                     // Don't show search action
                 } else if (searchQuery == null) {
                     TooltipBox(
-                        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
                         tooltip = {
                             PlainTooltip {
                                 Text(stringResource(MR.strings.action_search))
@@ -396,7 +397,7 @@ fun SearchToolbar(
                     }
                 } else if (searchQuery.isNotEmpty()) {
                     TooltipBox(
-                        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
                         tooltip = {
                             PlainTooltip {
                                 Text(stringResource(MR.strings.action_reset))

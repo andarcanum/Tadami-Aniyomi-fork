@@ -30,7 +30,9 @@ class MangaHistoryRepositoryImpl(
     }
 
     override suspend fun getHistoryByMangaId(mangaId: Long): List<MangaHistory> {
-        return handler.awaitList { db -> db.historyQueries.getHistoryByMangaId(mangaId, MangaHistoryMapper::mapMangaHistory) }
+        return handler.awaitList { db ->
+            db.historyQueries.getHistoryByMangaId(mangaId, MangaHistoryMapper::mapMangaHistory)
+        }
     }
 
     override suspend fun resetMangaHistory(historyId: Long) {

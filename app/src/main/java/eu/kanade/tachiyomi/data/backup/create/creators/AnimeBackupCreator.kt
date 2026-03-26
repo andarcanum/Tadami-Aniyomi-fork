@@ -50,7 +50,9 @@ class AnimeBackupCreator(
         }
 
         if (options.tracking) {
-            val tracks = handler.awaitList { db -> db.anime_syncQueries.getTracksByAnimeId(anime.id, backupAnimeTrackMapper) }
+            val tracks = handler.awaitList { db ->
+                db.anime_syncQueries.getTracksByAnimeId(anime.id, backupAnimeTrackMapper)
+            }
             if (tracks.isNotEmpty()) {
                 animeObject.tracking = tracks
             }

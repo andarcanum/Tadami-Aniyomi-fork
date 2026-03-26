@@ -98,4 +98,3 @@ class AndroidNovelDatabaseHandler(
         return withContext(context) { block(db) }
     }
 }
-

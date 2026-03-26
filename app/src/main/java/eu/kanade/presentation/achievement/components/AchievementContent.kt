@@ -57,8 +57,7 @@ fun AchievementContent(
             )
 
             // Show detail dialog if achievement is selected
-            if (state.selectedAchievement != null) {
-                val achievement = state.selectedAchievement!!
+            state.selectedAchievement?.let { achievement ->
                 val progress = state.progress[achievement.id]
                 AchievementDetailDialog(
                     achievement = achievement,

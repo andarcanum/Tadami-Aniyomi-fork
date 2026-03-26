@@ -25,6 +25,6 @@ class NovelPluginDownloader(
     private suspend fun fetchBytes(url: String): ByteArray {
         return client.newCall(GET(url))
             .awaitSuccess()
-            .use { response -> response.body?.bytes() ?: ByteArray(0) }
+            .use { response -> response.body.bytes() }
     }
 }

@@ -161,4 +161,3 @@ class NovelChapterRepositoryImpl(
         version = version,
     )
 }
-

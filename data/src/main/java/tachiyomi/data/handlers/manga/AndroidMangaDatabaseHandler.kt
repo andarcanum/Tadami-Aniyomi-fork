@@ -101,4 +101,3 @@ class AndroidMangaDatabaseHandler(
         return withContext(context) { block(db) }
     }
 }
-

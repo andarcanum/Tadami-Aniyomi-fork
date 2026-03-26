@@ -1,6 +1,7 @@
 import java.util.Properties
 
 pluginManagement {
+    includeBuild("gradle/build-logic")
     resolutionStrategy {
         eachPlugin {
             val regex = "com.android.(library|application)".toRegex()

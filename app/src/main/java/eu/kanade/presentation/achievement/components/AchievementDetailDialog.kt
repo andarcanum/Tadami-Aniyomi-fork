@@ -655,6 +655,6 @@ private fun AuroraRewardItem(
 }
 
 private fun formatDate(timestamp: Long): String {
-    val formatter = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale("ru"))
+    val formatter = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.forLanguageTag("ru"))
     return formatter.format(Date(timestamp))
 }

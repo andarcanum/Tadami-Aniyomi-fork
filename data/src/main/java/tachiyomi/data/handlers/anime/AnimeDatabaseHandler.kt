@@ -46,4 +46,3 @@ interface AnimeDatabaseHandler {
         queryProvider: (AnimeDb, Long, Long) -> Query<T>,
     ): PagingSource<Long, T>
 }
-

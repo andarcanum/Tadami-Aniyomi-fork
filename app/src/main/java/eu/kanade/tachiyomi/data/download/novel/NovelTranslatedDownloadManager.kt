@@ -68,15 +68,17 @@ class NovelTranslatedDownloadManager(
         return runCatching {
             when (format) {
                 NovelTranslatedDownloadFormat.TXT -> {
-                    file.openOutputStream()?.bufferedWriter(Charsets.UTF_8)?.use { writer ->
+                    val outputStream = file.openOutputStream()
+                    outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
                         writer.write(content)
-                    } ?: error("Unable to open destination stream")
+                    }
                 }
                 NovelTranslatedDownloadFormat.DOCX -> {
                     val docxBytes = buildDocxBytes(content)
-                    file.openOutputStream()?.use { output ->
+                    val output = file.openOutputStream()
+                    output.use {
                         output.write(docxBytes)
-                    } ?: error("Unable to open destination stream")
+                    }
                 }
             }
         }

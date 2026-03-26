@@ -4,12 +4,14 @@ import android.content.res.Configuration.ORIENTATION_LANDSCAPE
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.rememberSplineBasedDecay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.AnchoredDraggableDefaults
 import androidx.compose.foundation.gestures.AnchoredDraggableState
 import androidx.compose.foundation.gestures.DraggableAnchors
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.ScrollScope
+import androidx.compose.foundation.gestures.TargetedFlingBehavior
 import androidx.compose.foundation.gestures.anchoredDraggable
 import androidx.compose.foundation.gestures.animateTo
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -52,11 +54,11 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-const val AdaptiveSheetScrimTestTag = "adaptive_sheet_scrim"
-const val AdaptiveSheetSurfaceTestTag = "adaptive_sheet_surface"
+const val ADAPTIVE_SHEET_SCRIM_TEST_TAG = "adaptive_sheet_scrim"
+const val ADAPTIVE_SHEET_SURFACE_TEST_TAG = "adaptive_sheet_surface"
 
-private val sheetAnimationSpec = tween<Float>(durationMillis = 350)
-private const val phoneScrimAlpha = 0.5f
+private val SHEET_ANIMATION_SPEC = tween<Float>(durationMillis = 350)
+private const val PHONE_SCRIM_ALPHA = 0.5f
 
 @Composable
 fun AdaptiveSheet(
@@ -102,7 +104,7 @@ private fun TabletAdaptiveSheet(
     var targetAlpha by remember { mutableFloatStateOf(0f) }
     val alpha by animateFloatAsState(
         targetValue = targetAlpha,
-        animationSpec = sheetAnimationSpec,
+        animationSpec = SHEET_ANIMATION_SPEC,
         label = "alpha",
     )
     var dismissRequested by remember { mutableStateOf(false) }
@@ -116,7 +118,7 @@ private fun TabletAdaptiveSheet(
 
     Box(
         modifier = Modifier
-            .testTag(AdaptiveSheetScrimTestTag)
+            .testTag(ADAPTIVE_SHEET_SCRIM_TEST_TAG)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -128,7 +130,7 @@ private fun TabletAdaptiveSheet(
     ) {
         Surface(
             modifier = Modifier
-                .testTag(AdaptiveSheetSurfaceTestTag)
+                .testTag(ADAPTIVE_SHEET_SURFACE_TEST_TAG)
                 .requiredWidthIn(max = maxWidth)
                 .then(modifier)
                 .clickable(
@@ -161,25 +163,21 @@ private fun PhoneAdaptiveSheet(
 ) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
-    val decayAnimationSpec = rememberSplineBasedDecay<Float>()
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
     val maxHeight = screenHeight * 0.95f
     var scrimTargetAlpha by remember { mutableFloatStateOf(0f) }
     val scrimAlpha by animateFloatAsState(
         targetValue = scrimTargetAlpha,
-        animationSpec = sheetAnimationSpec,
+        animationSpec = SHEET_ANIMATION_SPEC,
         label = "alpha",
     )
 
-    val anchoredDraggableState = remember {
-        AnchoredDraggableState(
-            initialValue = 1,
-            snapAnimationSpec = sheetAnimationSpec,
-            decayAnimationSpec = decayAnimationSpec,
-            positionalThreshold = { with(density) { 56.dp.toPx() } },
-            velocityThreshold = { with(density) { 125.dp.toPx() } },
-        )
-    }
+    val anchoredDraggableState = remember { AnchoredDraggableState(initialValue = 1) }
+    val flingBehavior = AnchoredDraggableDefaults.flingBehavior(
+        anchoredDraggableState,
+        { with(density) { 56.dp.toPx() } },
+        SHEET_ANIMATION_SPEC,
+    )
 
     val internalOnDismissRequest: () -> Unit = {
         if (anchoredDraggableState.settledValue == 0) {
@@ -192,7 +190,7 @@ private fun PhoneAdaptiveSheet(
 
     Box(
         modifier = Modifier
-            .testTag(AdaptiveSheetScrimTestTag)
+            .testTag(ADAPTIVE_SHEET_SCRIM_TEST_TAG)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -204,7 +202,7 @@ private fun PhoneAdaptiveSheet(
     ) {
         Surface(
             modifier = Modifier
-                .testTag(AdaptiveSheetSurfaceTestTag)
+                .testTag(ADAPTIVE_SHEET_SURFACE_TEST_TAG)
                 .sizeIn(
                     maxWidth = maxWidth,
                     maxHeight = maxHeight,
@@ -237,13 +235,14 @@ private fun PhoneAdaptiveSheet(
                     if (enableSwipeDismiss) {
                         sheetModifier
                             .nestedScroll(
-                                remember(anchoredDraggableState) {
-                                    anchoredDraggableState.preUpPostDownNestedScrollConnection()
+                                remember(anchoredDraggableState, flingBehavior) {
+                                    anchoredDraggableState.preUpPostDownNestedScrollConnection(flingBehavior)
                                 },
                             )
                             .anchoredDraggable(
                                 state = anchoredDraggableState,
                                 orientation = Orientation.Vertical,
+                                flingBehavior = flingBehavior,
                             )
                     } else {
                         sheetModifier
@@ -263,7 +262,7 @@ private fun PhoneAdaptiveSheet(
         }
 
         LaunchedEffect(Unit) {
-            scrimTargetAlpha = phoneScrimAlpha
+            scrimTargetAlpha = PHONE_SCRIM_ALPHA
             anchoredDraggableState.animateTo(0)
         }
 
@@ -279,8 +278,14 @@ private fun PhoneAdaptiveSheet(
     }
 }
 
-private fun AnchoredDraggableState<Int>.preUpPostDownNestedScrollConnection() =
+private fun AnchoredDraggableState<Int>.preUpPostDownNestedScrollConnection(
+    flingBehavior: TargetedFlingBehavior,
+) =
     object : NestedScrollConnection {
+        private val scrollScope = object : ScrollScope {
+            override fun scrollBy(pixels: Float): Float = dispatchRawDelta(pixels)
+        }
+
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
             val delta = available.toFloat()
             return if (delta < 0 && source == NestedScrollSource.UserInput) {
@@ -305,7 +310,9 @@ private fun AnchoredDraggableState<Int>.preUpPostDownNestedScrollConnection() =
         override suspend fun onPreFling(available: Velocity): Velocity {
             val toFling = available.toFloat()
             return if (toFling < 0 && offset > anchors.minPosition()) {
-                settle(toFling)
+                with(flingBehavior) {
+                    scrollScope.performFling(toFling)
+                }
                 available
             } else {
                 Velocity.Zero
@@ -315,7 +322,9 @@ private fun AnchoredDraggableState<Int>.preUpPostDownNestedScrollConnection() =
         override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
             val toFling = available.toFloat()
             return if (toFling > 0) {
-                settle(toFling)
+                with(flingBehavior) {
+                    scrollScope.performFling(toFling)
+                }
                 available
             } else {
                 Velocity.Zero

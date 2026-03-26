@@ -46,4 +46,3 @@ interface MangaDatabaseHandler {
         queryProvider: (MangaDb, Long, Long) -> Query<T>,
     ): PagingSource<Long, T>
 }
-

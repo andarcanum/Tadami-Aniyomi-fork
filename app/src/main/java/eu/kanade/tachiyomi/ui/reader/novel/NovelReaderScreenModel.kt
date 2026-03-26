@@ -1974,7 +1974,7 @@ class NovelReaderScreenModel(
             return paragraphLikeNodes
         }
 
-        val text = (document.body()?.wholeText() ?: document.text())
+        val text = document.body().wholeText()
             .sanitizeTextBlock()
         if (text.isBlank()) return emptyList()
 
@@ -1992,12 +1992,11 @@ class NovelReaderScreenModel(
     ): List<ContentBlock> {
         val document = Jsoup.parse(rawHtml)
         val blocks = mutableListOf<ContentBlock>()
-        val candidates = document.body()?.select("p, li, blockquote, h1, h2, h3, h4, h5, h6, pre, img")
-            ?.filterNot { node ->
+        val candidates = document.body().select("p, li, blockquote, h1, h2, h3, h4, h5, h6, pre, img")
+            .filterNot { node ->
                 node.tagName().equals("p", ignoreCase = true) &&
                     node.parent()?.tagName()?.equals("li", ignoreCase = true) == true
             }
-            .orEmpty()
 
         for (element in candidates) {
             if (element.tagName().equals("img", ignoreCase = true)) {
@@ -2351,7 +2350,7 @@ class NovelReaderScreenModel(
     private fun extractJsonCandidate(rawPayload: String): String? {
         val trimmed = rawPayload.trim()
         if (trimmed.startsWith("<")) {
-            val htmlTextCandidate = Jsoup.parse(trimmed).body()?.wholeText().orEmpty().trim()
+            val htmlTextCandidate = Jsoup.parse(trimmed).body().wholeText().trim()
             if (looksLikeStructuredPayload(htmlTextCandidate)) {
                 return htmlTextCandidate
             }

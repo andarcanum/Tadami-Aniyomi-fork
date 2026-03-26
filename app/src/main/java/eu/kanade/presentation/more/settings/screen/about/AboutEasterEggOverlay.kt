@@ -110,7 +110,6 @@ internal fun AboutEasterEggOverlay(
                 delay(DISMISS_DURATION_MS.toLong())
                 onDismissFinished()
             }
-            else -> Unit
         }
     }
 

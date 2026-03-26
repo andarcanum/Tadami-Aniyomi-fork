@@ -50,19 +50,19 @@ class AniyomiMPVView(context: Context, attributes: AttributeSet) : BaseMPVView(c
     var isExiting = false
 
     private fun getPropertyInt(property: String): Int? {
-        return MPVLib.getPropertyInt(property) as Int?
+        return MPVLib.getPropertyInt(property)
     }
 
     private fun getPropertyBoolean(property: String): Boolean? {
-        return MPVLib.getPropertyBoolean(property) as Boolean?
+        return MPVLib.getPropertyBoolean(property)
     }
 
     private fun getPropertyDouble(property: String): Double? {
-        return MPVLib.getPropertyDouble(property) as Double?
+        return MPVLib.getPropertyDouble(property)
     }
 
     private fun getPropertyString(property: String): String? {
-        return MPVLib.getPropertyString(property) as String?
+        return MPVLib.getPropertyString(property)
     }
 
     val duration: Int?

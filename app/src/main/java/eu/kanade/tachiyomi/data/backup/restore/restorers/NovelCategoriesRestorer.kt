@@ -25,7 +25,8 @@ class NovelCategoriesRestorer(
                     val dbCategory = dbCategoriesByName[it.name]
                     if (dbCategory != null) return@map dbCategory
                     val order = nextOrder++
-                    novelHandler.awaitOneExecutable { db -> db.categoriesQueries.insert(it.name, order, it.flags)
+                    novelHandler.awaitOneExecutable { db ->
+                        db.categoriesQueries.insert(it.name, order, it.flags)
                         db.categoriesQueries.selectLastInsertedRowId()
                     }
                         .let { id ->

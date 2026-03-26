@@ -14,7 +14,7 @@ internal fun prependChapterHeadingIfMissing(
 
     return runCatching {
         val document = Jsoup.parseBodyFragment(rawHtml)
-        val body = document.body() ?: return rawHtml
+        val body = document.body()
         if (body.select("h1, h2, h3, h4, h5, h6").isNotEmpty()) {
             return body.html()
         }

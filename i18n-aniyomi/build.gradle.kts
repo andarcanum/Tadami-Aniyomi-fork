@@ -1,7 +1,7 @@
+import dev.icerock.gradle.tasks.GenerateMultiplatformResourcesTask
 import mihon.buildlogic.AndroidConfig
 import mihon.buildlogic.generatedBuildDir
 import mihon.buildlogic.tasks.getLocalesConfigTask
-import dev.icerock.gradle.tasks.GenerateMultiplatformResourcesTask
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 
 plugins {

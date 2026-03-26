@@ -326,7 +326,7 @@ class NovelJsSource internal constructor(
 
             val pageResult = when {
                 sourcePage == 1 && directChapters.isNotEmpty() -> directChapters
-                sourcePage == 1 && probePageResult != null -> probePageResult!!.chapters
+                sourcePage == 1 && probePageResult != null -> probePageResult.chapters
                 hasParsePage == true -> parseSinglePage(sourcePage)?.chapters.orEmpty()
                 else -> directChapters
             }

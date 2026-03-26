@@ -57,13 +57,16 @@ class DiversityAchievementChecker(
             }
         }
 
-        val mangaGenres = mangaHandler.awaitList { db -> db.mangasQueries.getLibraryGenres()
+        val mangaGenres = mangaHandler.awaitList { db ->
+            db.mangasQueries.getLibraryGenres()
         }
 
-        val animeGenres = animeHandler.awaitList { db -> db.animesQueries.getLibraryGenres()
+        val animeGenres = animeHandler.awaitList { db ->
+            db.animesQueries.getLibraryGenres()
         }
 
-        val novelGenres = novelHandler.awaitList { db -> db.novelsQueries.getLibraryGenres()
+        val novelGenres = novelHandler.awaitList { db ->
+            db.novelsQueries.getLibraryGenres()
         }
 
         // Combine and parse unique genres from both manga and anime
@@ -84,13 +87,16 @@ class DiversityAchievementChecker(
             }
         }
 
-        val mangaSources = mangaHandler.awaitList { db -> db.mangasQueries.getLibrarySources()
+        val mangaSources = mangaHandler.awaitList { db ->
+            db.mangasQueries.getLibrarySources()
         }
 
-        val animeSources = animeHandler.awaitList { db -> db.animesQueries.getLibrarySources()
+        val animeSources = animeHandler.awaitList { db ->
+            db.animesQueries.getLibrarySources()
         }
 
-        val novelSources = novelHandler.awaitList { db -> db.novelsQueries.getLibrarySources()
+        val novelSources = novelHandler.awaitList { db ->
+            db.novelsQueries.getLibrarySources()
         }
 
         // Combine and get unique sources from both manga and anime
@@ -110,7 +116,8 @@ class DiversityAchievementChecker(
             }
         }
 
-        val mangaGenres = mangaHandler.awaitList { db -> db.mangasQueries.getLibraryGenres()
+        val mangaGenres = mangaHandler.awaitList { db ->
+            db.mangasQueries.getLibraryGenres()
         }
 
         val count = parseAndGetUniqueGenres(mangaGenres)
@@ -129,7 +136,8 @@ class DiversityAchievementChecker(
             }
         }
 
-        val animeGenres = animeHandler.awaitList { db -> db.animesQueries.getLibraryGenres()
+        val animeGenres = animeHandler.awaitList { db ->
+            db.animesQueries.getLibraryGenres()
         }
 
         val count = parseAndGetUniqueGenres(animeGenres)
@@ -148,7 +156,8 @@ class DiversityAchievementChecker(
             }
         }
 
-        val novelGenres = novelHandler.awaitList { db -> db.novelsQueries.getLibraryGenres()
+        val novelGenres = novelHandler.awaitList { db ->
+            db.novelsQueries.getLibraryGenres()
         }
 
         val count = parseAndGetUniqueGenres(novelGenres)
@@ -167,7 +176,8 @@ class DiversityAchievementChecker(
             }
         }
 
-        val mangaSources = mangaHandler.awaitList { db -> db.mangasQueries.getLibrarySources()
+        val mangaSources = mangaHandler.awaitList { db ->
+            db.mangasQueries.getLibrarySources()
         }
 
         val count = mangaSources.distinct().size
@@ -186,7 +196,8 @@ class DiversityAchievementChecker(
             }
         }
 
-        val animeSources = animeHandler.awaitList { db -> db.animesQueries.getLibrarySources()
+        val animeSources = animeHandler.awaitList { db ->
+            db.animesQueries.getLibrarySources()
         }
 
         val count = animeSources.distinct().size
@@ -205,7 +216,8 @@ class DiversityAchievementChecker(
             }
         }
 
-        val novelSources = novelHandler.awaitList { db -> db.novelsQueries.getLibrarySources()
+        val novelSources = novelHandler.awaitList { db ->
+            db.novelsQueries.getLibrarySources()
         }
 
         val count = novelSources.distinct().size

@@ -46,4 +46,3 @@ interface NovelDatabaseHandler {
         queryProvider: (NovelDb, Long, Long) -> Query<T>,
     ): PagingSource<Long, T>
 }
-

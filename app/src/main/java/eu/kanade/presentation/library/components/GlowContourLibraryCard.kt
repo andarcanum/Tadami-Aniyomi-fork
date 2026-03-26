@@ -134,7 +134,7 @@ private fun createScaledGlowContourPath(
     svgWidth: Float,
     svgHeight: Float,
 ): Path {
-    val androidPath = PathParser.createPathFromPathData(pathData) ?: android.graphics.Path()
+    val androidPath = PathParser.createPathFromPathData(pathData)
     val matrix = AndroidMatrix().apply {
         setScale(size.width / svgWidth, size.height / svgHeight)
     }

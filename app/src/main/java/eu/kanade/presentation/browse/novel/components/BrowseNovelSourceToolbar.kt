@@ -78,7 +78,7 @@ fun BrowseNovelSourceToolbar(
                                 AppBar.Action(
                                     title = stringResource(MR.strings.action_settings),
                                     icon = Icons.Outlined.Settings,
-                                    onClick = { onSettingsClick?.invoke() },
+                                    onClick = onSettingsClick,
                                 ),
                             )
                         }

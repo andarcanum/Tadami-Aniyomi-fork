@@ -1,8 +1,8 @@
 import mihon.buildlogic.Config
+import mihon.buildlogic.generatedBuildDir
 import mihon.buildlogic.getBuildTime
 import mihon.buildlogic.getCommitCount
 import mihon.buildlogic.getGitSha
-import mihon.buildlogic.generatedBuildDir
 import mihon.buildlogic.tasks.getLocalesConfigTask
 
 plugins {
@@ -149,14 +149,14 @@ android {
         includeInBundle = Config.includeDependencyInfo
     }
 
-        buildFeatures {
-            viewBinding = true
-            buildConfig = true
+    buildFeatures {
+        viewBinding = true
+        buildConfig = true
 
-            // Disable some unused things
-            aidl = false
-            shaders = false
-        }
+        // Disable some unused things
+        aidl = false
+        shaders = false
+    }
 
     lint {
         abortOnError = false

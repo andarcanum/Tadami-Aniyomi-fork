@@ -267,4 +267,3 @@ private class ClearNovelDatabaseScreenModel : StateScreenModel<ClearNovelDatabas
         ) : State
     }
 }
-

@@ -82,7 +82,7 @@ data class BrowseNovelSourceScreen(
 
         if (screenModel.source is StubNovelSource) {
             MissingNovelSourceScreen(
-                source = screenModel.source as StubNovelSource,
+                source = screenModel.source,
                 navigateUp = navigateUp,
             )
             return

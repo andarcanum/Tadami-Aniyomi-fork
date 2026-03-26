@@ -27,6 +27,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
@@ -268,11 +269,11 @@ private fun ActivityBar(
     )
 
     // Month formatter for short month names in Russian
-    val monthFormatter = remember { DateTimeFormatter.ofPattern("MMM", Locale("ru")) }
+    val monthFormatter = remember { DateTimeFormatter.ofPattern("MMM", Locale.forLanguageTag("ru")) }
     val monthLabel = month.format(monthFormatter).lowercase().take(3)
 
     TooltipBox(
-        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
         tooltip = {
             PlainTooltip {
                 ActivityTooltipContent(month = month, stats = stats)
@@ -343,9 +344,9 @@ private fun ActivityTooltipContent(
     val colors = AuroraTheme.colors
 
     // Full month name formatter
-    val fullMonthFormatter = remember { DateTimeFormatter.ofPattern("LLLL yyyy", Locale("ru")) }
+    val fullMonthFormatter = remember { DateTimeFormatter.ofPattern("LLLL yyyy", Locale.forLanguageTag("ru")) }
     val monthName = month.format(fullMonthFormatter)
-        .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale("ru")) else it.toString() }
+        .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.forLanguageTag("ru")) else it.toString() }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,

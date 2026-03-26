@@ -7,24 +7,23 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.test.assertDoesNotExist
-import androidx.compose.ui.test.assertExists
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
-import androidx.compose.ui.test.waitForIdle
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.util.Screen
-import tachiyomi.presentation.core.components.AdaptiveSheetScrimTestTag
-import tachiyomi.presentation.core.components.AdaptiveSheetSurfaceTestTag
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
+import tachiyomi.presentation.core.components.ADAPTIVE_SHEET_SCRIM_TEST_TAG
+import tachiyomi.presentation.core.components.ADAPTIVE_SHEET_SURFACE_TEST_TAG
 import java.util.concurrent.atomic.AtomicInteger
 
 class AdaptiveSheetTest {
@@ -48,11 +47,11 @@ class AdaptiveSheetTest {
         composeTestRule.mainClock.advanceTimeBy(500)
         composeTestRule.waitForIdle()
 
-        composeTestRule.onNodeWithTag(AdaptiveSheetSurfaceTestTag).assertExists()
+        composeTestRule.onNodeWithTag(ADAPTIVE_SHEET_SURFACE_TEST_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithText("Root sheet content").assertIsDisplayed()
 
-        composeTestRule.onNodeWithTag(AdaptiveSheetScrimTestTag).performClick()
-        composeTestRule.onNodeWithTag(AdaptiveSheetScrimTestTag).performClick()
+        composeTestRule.onNodeWithTag(ADAPTIVE_SHEET_SCRIM_TEST_TAG).performClick()
+        composeTestRule.onNodeWithTag(ADAPTIVE_SHEET_SCRIM_TEST_TAG).performClick()
 
         composeTestRule.mainClock.advanceTimeBy(500)
         composeTestRule.waitForIdle()
@@ -77,10 +76,10 @@ class AdaptiveSheetTest {
         composeTestRule.mainClock.advanceTimeBy(500)
         composeTestRule.waitForIdle()
 
-        composeTestRule.onNodeWithTag(AdaptiveSheetSurfaceTestTag).assertExists()
+        composeTestRule.onNodeWithTag(ADAPTIVE_SHEET_SURFACE_TEST_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithText("Swipe disabled content").assertIsDisplayed()
 
-        composeTestRule.onNodeWithTag(AdaptiveSheetSurfaceTestTag).performTouchInput {
+        composeTestRule.onNodeWithTag(ADAPTIVE_SHEET_SURFACE_TEST_TAG).performTouchInput {
             swipeDown()
         }
         composeTestRule.mainClock.advanceTimeBy(500)
@@ -88,7 +87,7 @@ class AdaptiveSheetTest {
 
         assertEquals(0, dismissCount.get())
 
-        composeTestRule.onNodeWithTag(AdaptiveSheetScrimTestTag).performClick()
+        composeTestRule.onNodeWithTag(ADAPTIVE_SHEET_SCRIM_TEST_TAG).performClick()
         composeTestRule.mainClock.advanceTimeBy(500)
         composeTestRule.waitForIdle()
 
@@ -110,7 +109,7 @@ class AdaptiveSheetTest {
         composeTestRule.mainClock.advanceTimeBy(500)
         composeTestRule.waitForIdle()
 
-        composeTestRule.onNodeWithText("Root navigator content").assertExists()
+        composeTestRule.onNodeWithText("Root navigator content").assertIsDisplayed()
         composeTestRule.onNodeWithText("Push child").performClick()
         composeTestRule.mainClock.advanceTimeBy(500)
         composeTestRule.waitForIdle()
@@ -121,7 +120,7 @@ class AdaptiveSheetTest {
         composeTestRule.mainClock.advanceTimeBy(500)
         composeTestRule.waitForIdle()
 
-        composeTestRule.onNodeWithText("Child navigator content").assertDoesNotExist()
+        composeTestRule.onAllNodesWithText("Child navigator content").assertCountEquals(0)
         composeTestRule.onNodeWithText("Root navigator content").assertIsDisplayed()
         assertEquals(0, dismissCount.get())
 

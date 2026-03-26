@@ -3,8 +3,8 @@ package tachiyomi.data.handlers.novel
 import androidx.paging.PagingSource
 import androidx.paging.PagingState
 import app.cash.sqldelight.Query
-import tachiyomi.novel.data.NovelDatabase as NovelDb
 import kotlin.properties.Delegates
+import tachiyomi.novel.data.NovelDatabase as NovelDb
 
 class QueryPagingNovelSource<RowType : Any>(
     val handler: NovelDatabaseHandler,
@@ -74,4 +74,3 @@ class QueryPagingNovelSource<RowType : Any>(
         invalidate()
     }
 }
-

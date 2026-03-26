@@ -189,10 +189,10 @@ fun AchievementScreen(
                     }
 
                     // Show detail dialog if achievement is selected
-                    if (state.selectedAchievement != null) {
+                    state.selectedAchievement?.let { achievement ->
                         eu.kanade.presentation.achievement.components.AchievementDetailDialog(
-                            achievement = state.selectedAchievement!!,
-                            progress = state.progress[state.selectedAchievement!!.id],
+                            achievement = achievement,
+                            progress = state.progress[achievement.id],
                             onDismiss = onDialogDismiss,
                         )
                     }

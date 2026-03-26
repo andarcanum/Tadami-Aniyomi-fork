@@ -172,7 +172,9 @@ class AnimeRepositoryImpl(
     }
 
     override suspend fun getAnimeSeasonsById(parentId: Long): List<SeasonAnime> {
-        return handler.awaitList { db -> db.animeseasonsViewQueries.getAnimeSeasonsById(parentId, AnimeMapper::mapSeasonAnime) }
+        return handler.awaitList { db ->
+            db.animeseasonsViewQueries.getAnimeSeasonsById(parentId, AnimeMapper::mapSeasonAnime)
+        }
     }
 
     override fun getAnimeSeasonsByIdAsFlow(parentId: Long): Flow<List<SeasonAnime>> {
@@ -247,4 +249,3 @@ class AnimeRepositoryImpl(
         }
     }
 }
-

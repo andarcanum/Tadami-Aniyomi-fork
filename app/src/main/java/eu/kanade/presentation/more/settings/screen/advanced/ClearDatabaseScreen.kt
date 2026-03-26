@@ -268,4 +268,3 @@ private class ClearDatabaseScreenModel : StateScreenModel<ClearDatabaseScreenMod
         ) : State
     }
 }
-

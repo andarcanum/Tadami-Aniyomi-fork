@@ -21,7 +21,6 @@ import tachiyomi.data.achievement.UserProfileManager
 import tachiyomi.data.achievement.UserProfileRepositoryImpl
 import tachiyomi.data.achievement.database.AchievementsDatabase
 import tachiyomi.data.achievement.repository.AchievementRepositoryImpl
-import tachiyomi.db.achievement.AchievementsDatabase as SqlDelightAchievementsDatabase
 import tachiyomi.domain.achievement.model.Achievement
 import tachiyomi.domain.achievement.model.AchievementCategory
 import tachiyomi.domain.achievement.model.AchievementProgress
@@ -31,6 +30,7 @@ import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import tachiyomi.db.achievement.AchievementsDatabase as SqlDelightAchievementsDatabase
 
 /**
  * Integration tests for achievement backup/restore cycle.

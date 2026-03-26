@@ -81,8 +81,6 @@ internal fun Project.configureAndroid(commonExtension: ApplicationExtension) {
                 "-opt-in=kotlin.RequiresOptIn",
             )
 
-            // Treat all Kotlin warnings as errors (disabled by default)
-            // Override by setting warningsAsErrors=true in your ~/.gradle/gradle.properties
             val warningsAsErrors: String? by project
             allWarningsAsErrors.set(warningsAsErrors.toBoolean())
 
@@ -107,8 +105,6 @@ internal fun Project.configureAndroid(commonExtension: LibraryExtension) {
                 "-opt-in=kotlin.RequiresOptIn",
             )
 
-            // Treat all Kotlin warnings as errors (disabled by default)
-            // Override by setting warningsAsErrors=true in your ~/.gradle/gradle.properties
             val warningsAsErrors: String? by project
             allWarningsAsErrors.set(warningsAsErrors.toBoolean())
 
@@ -133,8 +129,6 @@ internal fun Project.configureAndroid(commonExtension: TestExtension) {
                 "-opt-in=kotlin.RequiresOptIn",
             )
 
-            // Treat all Kotlin warnings as errors (disabled by default)
-            // Override by setting warningsAsErrors=true in your ~/.gradle/gradle.properties
             val warningsAsErrors: String? by project
             allWarningsAsErrors.set(warningsAsErrors.toBoolean())
 

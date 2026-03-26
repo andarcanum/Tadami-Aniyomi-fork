@@ -161,4 +161,3 @@ class ChapterRepositoryImpl(
         version = version,
     )
 }
-

@@ -1,6 +1,6 @@
 [versions]
-aboutlib_plugin_version = "13.2.1"
-aboutlib_runtime_version = "11.6.3"
+aboutlib_plugin_version = "14.0.0-b03"
+aboutlib_runtime_version = "14.0.0-b03"
 leakcanary = "2.14"
 moko = "0.26.1"
 okhttp_version = "5.0.0-alpha.14"

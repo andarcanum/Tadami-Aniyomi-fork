@@ -41,7 +41,9 @@ class AnimeExtensionRepoRepositoryImpl(
         signingKeyFingerprint: String,
     ) {
         try {
-            handler.await { db -> db.extension_reposQueries.insert(baseUrl, name, shortName, website, signingKeyFingerprint) }
+            handler.await { db ->
+                db.extension_reposQueries.insert(baseUrl, name, shortName, website, signingKeyFingerprint)
+            }
         } catch (ex: SQLiteException) {
             throw SaveExtensionRepoException(ex)
         }
@@ -55,7 +57,9 @@ class AnimeExtensionRepoRepositoryImpl(
         signingKeyFingerprint: String,
     ) {
         try {
-            handler.await { db -> db.extension_reposQueries.upsert(baseUrl, name, shortName, website, signingKeyFingerprint) }
+            handler.await { db ->
+                db.extension_reposQueries.upsert(baseUrl, name, shortName, website, signingKeyFingerprint)
+            }
         } catch (ex: SQLiteException) {
             throw SaveExtensionRepoException(ex)
         }

@@ -351,4 +351,3 @@ private class ClearAnimeDatabaseScreenModel : StateScreenModel<ClearAnimeDatabas
         ) : State
     }
 }
-

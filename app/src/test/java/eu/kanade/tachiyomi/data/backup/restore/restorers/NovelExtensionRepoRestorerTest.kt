@@ -1,20 +1,20 @@
 package eu.kanade.tachiyomi.data.backup.restore.restorers
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import datanovel.Novel_history
+import datanovel.Novels
 import eu.kanade.tachiyomi.data.backup.models.BackupExtensionRepos
+import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import mihon.domain.extensionrepo.novel.interactor.GetNovelExtensionRepo
 import org.junit.jupiter.api.Test
-import io.kotest.matchers.shouldBe
 import tachiyomi.data.DateColumnAdapter
 import tachiyomi.data.MangaUpdateStrategyColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.handlers.novel.NovelDatabaseHandler
 import tachiyomi.novel.data.NovelDatabase
-import datanovel.Novel_history
-import datanovel.Novels
 
 class NovelExtensionRepoRestorerTest {
 

@@ -101,4 +101,3 @@ class AndroidAnimeDatabaseHandler(
         return withContext(context) { block(db) }
     }
 }
-

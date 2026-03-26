@@ -179,7 +179,7 @@ class GetAnilistMetadata(
                 }
 
                 logcat(LogPriority.INFO) {
-                    "Anilist match: id=${firstResult!!.remote_id}, score=${firstResult.score}, " +
+                    "Anilist match: id=${firstResult.remote_id}, score=${firstResult.score}, " +
                         "type=${firstResult.publishing_type}, cover=${firstResult.cover_url}, query=$usedQuery"
                 }
 

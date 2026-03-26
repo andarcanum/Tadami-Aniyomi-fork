@@ -104,9 +104,10 @@ class NovelDownloadManager(
         val source = sourceManager?.get(novel.source) ?: return false
         val text = source.getChapterText(chapter.toSNovelChapter())
         val file = chapterFile(novel, chapter.id, create = true) ?: return false
-        file.openOutputStream()?.bufferedWriter(Charsets.UTF_8)?.use { writer ->
+        val outputStream = file.openOutputStream()
+        outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
             writer.write(text)
-        } ?: return false
+        }
         downloadCache?.onNovelDownloadsChanged(novel)
         return true
     }
@@ -158,7 +159,8 @@ class NovelDownloadManager(
             ?.takeIf { it.exists() }
             ?.let { file ->
                 runCatching {
-                    file.openInputStream()?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                    val inputStream = file.openInputStream()
+                    inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
                 }.getOrNull()
             }
             ?.let { return it }

@@ -61,10 +61,10 @@ class NovelJsRuntimeFactory(
                     val headers = response.headers.toMultimap()
                         .mapValues { (_, values) -> values.joinToString(",") }
                     val responseBody = response.body
-                    val bodyBytes = responseBody?.bytes()
-                    val bodyCharset = responseBody?.contentType()?.charset(Charsets.UTF_8) ?: Charsets.UTF_8
-                    val body = bodyBytes?.toString(bodyCharset)
-                    val bodyBase64 = bodyBytes?.let { Base64.getEncoder().encodeToString(it) }
+                    val bodyCharset = responseBody.contentType()?.charset(Charsets.UTF_8) ?: Charsets.UTF_8
+                    val bodyBytes = responseBody.bytes()
+                    val body = bodyBytes.toString(bodyCharset)
+                    val bodyBase64 = Base64.getEncoder().encodeToString(bodyBytes)
                     json.encodeToString(
                         JsFetchResponse(
                             status = response.code,
@@ -359,7 +359,7 @@ class NovelJsRuntimeFactory(
                     if (!response.isSuccessful) {
                         error("gRPC-web request failed: HTTP ${response.code}")
                     }
-                    response.body?.bytes() ?: ByteArray(0)
+                    response.body.bytes()
                 }
 
             return extractGrpcWebPayload(responseBytes)

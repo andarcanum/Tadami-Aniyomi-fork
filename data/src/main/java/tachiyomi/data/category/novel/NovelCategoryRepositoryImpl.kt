@@ -142,5 +142,3 @@ class NovelCategoryRepositoryImpl(
         hidden = hidden == 1L,
     )
 }
-
-

@@ -1,5 +1,6 @@
 package eu.kanade.presentation.entries.anime
 
+import android.content.ClipData
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.slideInHorizontally
@@ -37,10 +38,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -667,7 +668,7 @@ private fun VideoList(
     getHosterList: () -> List<Hoster>?,
 ) {
     val downloadManager = Injekt.get<AnimeDownloadManager>()
-    val clipboardManager = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val copiedString = stringResource(AYMR.strings.copied_video_link_to_clipboard)
@@ -700,8 +701,12 @@ private fun VideoList(
                     onDownloadClicked = { downloadEpisode(useExternalDownloader) },
                     onExtDownloadClicked = { downloadEpisode(!useExternalDownloader) },
                     onCopyClicked = {
-                        clipboardManager.setText(AnnotatedString(currentVideo.videoUrl))
-                        scope.launch { context.toast(copiedString) }
+                        scope.launch {
+                            clipboard.setClipEntry(
+                                ClipEntry(ClipData.newPlainText(null, currentVideo.videoUrl)),
+                            )
+                            context.toast(copiedString)
+                        }
                     },
                     onExtPlayerClicked = {
                         scope.launch {

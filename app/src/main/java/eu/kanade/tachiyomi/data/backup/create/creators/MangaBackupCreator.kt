@@ -56,7 +56,9 @@ class MangaBackupCreator(
         }
 
         if (options.tracking) {
-            val tracks = handler.awaitList { db -> db.manga_syncQueries.getTracksByMangaId(manga.id, backupMangaTrackMapper) }
+            val tracks = handler.awaitList { db ->
+                db.manga_syncQueries.getTracksByMangaId(manga.id, backupMangaTrackMapper)
+            }
             if (tracks.isNotEmpty()) {
                 mangaObject.tracking = tracks
             }

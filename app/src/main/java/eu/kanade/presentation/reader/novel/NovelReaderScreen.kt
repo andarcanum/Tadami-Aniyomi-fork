@@ -1911,8 +1911,7 @@ fun NovelReaderScreen(
                                         progressPercent = currentRestoreProgress,
                                         onComplete = {
                                             shouldRestoreWebScroll = false
-                                            val settledProgress = view?.resolveCurrentWebViewProgressPercent()
-                                                ?: webProgressPercent
+                                            val settledProgress = view.resolveCurrentWebViewProgressPercent()
                                             if (shouldDispatchWebProgressUpdate(
                                                     false,
                                                     settledProgress,
@@ -1926,7 +1925,7 @@ fun NovelReaderScreen(
                                                     encodeWebScrollProgressPercent(settledProgress),
                                                 )
                                             }
-                                            view?.revealReaderDocumentAndWebView()
+                                            view.revealReaderDocumentAndWebView()
                                         },
                                     )
                                 } else {

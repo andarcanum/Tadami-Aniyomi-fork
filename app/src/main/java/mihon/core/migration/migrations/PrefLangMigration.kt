@@ -41,7 +41,7 @@ class PrefLangMigration : Migration {
 
     private fun String.isValidCode(): Boolean {
         try {
-            val locale = Locale(this)
+            val locale = Locale.forLanguageTag(this)
             if (locale.isO3Language == locale.language && locale.language == locale.getDisplayName(Locale.ENGLISH)) {
                 return false
             }

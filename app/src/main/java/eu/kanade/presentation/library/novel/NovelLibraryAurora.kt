@@ -184,7 +184,7 @@ fun NovelLibraryAuroraContent(
     val isSelectionMode = selection.isNotEmpty() && onToggleSelection != null
     val onClickNovelItem: (LibraryNovel) -> Unit = { libraryNovel ->
         if (isSelectionMode) {
-            onToggleSelection?.invoke(libraryNovel)
+            onToggleSelection(libraryNovel)
         } else {
             onNovelClicked(libraryNovel.novel.id)
         }

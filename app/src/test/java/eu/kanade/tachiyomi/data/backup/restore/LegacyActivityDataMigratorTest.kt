@@ -12,11 +12,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import tachiyomi.data.achievement.ActivityDataRepositoryImpl
 import tachiyomi.data.achievement.database.AchievementsDatabase
-import tachiyomi.db.achievement.AchievementsDatabase as SqlDelightAchievementsDatabase
 import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import tachiyomi.db.achievement.AchievementsDatabase as SqlDelightAchievementsDatabase
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])

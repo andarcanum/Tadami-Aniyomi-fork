@@ -5,15 +5,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
-import androidx.compose.ui.test.onAllNodes
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.waitForIdle
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.achievement.components.AchievementActivityGraph
 import eu.kanade.presentation.achievement.components.AchievementStatsComparison
@@ -31,7 +28,6 @@ class AchievementScreenTest {
 
     @Test
     fun statsComparison_displaysCorrectValues() {
-        // Given
         val currentStats = MonthStats(
             chaptersRead = 127,
             episodesWatched = 45,
@@ -45,7 +41,6 @@ class AchievementScreenTest {
             achievementsUnlocked = 5,
         )
 
-        // When
         composeTestRule.setContent {
             CompositionLocalProvider(LocalAuroraColors provides AuroraColors.Dark) {
                 Box(
@@ -61,7 +56,6 @@ class AchievementScreenTest {
             }
         }
 
-        // Then
         composeTestRule.onNodeWithText("Сравнение с прошлым месяцем").assertIsDisplayed()
         composeTestRule.onNodeWithText("127").assertIsDisplayed()
         composeTestRule.onNodeWithText("Глав прочитано").assertIsDisplayed()
@@ -69,10 +63,8 @@ class AchievementScreenTest {
 
     @Test
     fun activityGraph_displaysTitleAndBars() {
-        // Given
         val yearlyStats = generateTestYearlyStats()
 
-        // When
         composeTestRule.setContent {
             CompositionLocalProvider(LocalAuroraColors provides AuroraColors.Dark) {
                 Box(
@@ -85,14 +77,11 @@ class AchievementScreenTest {
             }
         }
 
-        // Then
         composeTestRule.onNodeWithText("Активность за год").assertIsDisplayed()
-        // Note: Legend removed as per design decision
     }
 
     @Test
     fun statCards_displayWithDifferentValueLengths() {
-        // Given - stats with very different value lengths
         val currentStats = MonthStats(
             chaptersRead = 9999,
             episodesWatched = 1,
@@ -100,7 +89,6 @@ class AchievementScreenTest {
             achievementsUnlocked = 999,
         )
 
-        // When
         composeTestRule.setContent {
             CompositionLocalProvider(LocalAuroraColors provides AuroraColors.Dark) {
                 Box(
@@ -116,17 +104,14 @@ class AchievementScreenTest {
             }
         }
 
-        // Then - all stat cards should be visible with different length values
         composeTestRule.onNodeWithText("9999").assertIsDisplayed()
         composeTestRule.onNodeWithText("1").assertIsDisplayed()
     }
 
     @Test
     fun activityGraph_tooltipShowsOnLongPress() {
-        // Given
         val yearlyStats = generateTestYearlyStats()
 
-        // When
         composeTestRule.setContent {
             CompositionLocalProvider(LocalAuroraColors provides AuroraColors.Dark) {
                 Box(
@@ -139,17 +124,14 @@ class AchievementScreenTest {
             }
         }
 
-        // Then - perform long press on first bar
-        composeTestRule.onAllNodes(hasContentDescription("Activity bar", substring = true))[0]
+        composeTestRule.onAllNodesWithContentDescription("Activity bar", substring = true)[0]
             .performTouchInput { longClick() }
 
-        // Tooltip should appear with month name
         composeTestRule.waitForIdle()
     }
 
     @Test
     fun activityGraph_displaysCorrectMetricsInTooltip() {
-        // Given - stats with known values
         val month = YearMonth.now().minusMonths(1)
         val stats = MonthStats(
             chaptersRead = 5,
@@ -159,7 +141,6 @@ class AchievementScreenTest {
         )
         val yearlyStats = listOf(month to stats)
 
-        // When
         composeTestRule.setContent {
             CompositionLocalProvider(LocalAuroraColors provides AuroraColors.Dark) {
                 Box(
@@ -172,15 +153,13 @@ class AchievementScreenTest {
             }
         }
 
-        // Then - long press and verify tooltip content
-        composeTestRule.onAllNodes(hasContentDescription("Activity bar", substring = true))[0]
+        composeTestRule.onAllNodesWithContentDescription("Activity bar", substring = true)[0]
             .performTouchInput { longClick() }
         composeTestRule.waitForIdle()
 
-        // Verify tooltip shows correct data
-        composeTestRule.onNodeWithText("Всего: 8").assertExists()
-        composeTestRule.onNodeWithText("Глав: 5").assertExists()
-        composeTestRule.onNodeWithText("Эпизодов: 3").assertExists()
+        composeTestRule.onNodeWithText("Всего: 8").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Глав: 5").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Эпизодов: 3").assertIsDisplayed()
     }
 
     private fun generateTestYearlyStats(): List<Pair<YearMonth, MonthStats>> {
@@ -195,7 +174,7 @@ class AchievementScreenTest {
                 timeInAppMinutes = (0..300).random(),
                 achievementsUnlocked = (0..3).random(),
             )
-            stats.add(0, month to monthStats) // Add to beginning to maintain chronological order
+            stats.add(0, month to monthStats)
         }
 
         return stats
