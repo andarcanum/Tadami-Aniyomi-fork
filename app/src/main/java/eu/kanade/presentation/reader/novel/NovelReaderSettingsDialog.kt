@@ -116,6 +116,7 @@ fun NovelReaderSettingsDialog(
                     currentPageReaderActive = currentPageReaderActive,
                     overrideEnabled = overrideEnabled,
                     preferences = preferences,
+                    onDismissRequest = onDismissRequest,
                 )
             }
             else -> {
@@ -158,6 +159,7 @@ private fun GeneralTab(
     currentPageReaderActive: Boolean,
     overrideEnabled: Boolean,
     preferences: NovelReaderPreferences,
+    onDismissRequest: () -> Unit,
 ) {
     var showGeminiSettings by remember { mutableStateOf(false) }
 
@@ -165,11 +167,15 @@ private fun GeneralTab(
         value: T,
         copyOverride: (NovelReaderOverride, T) -> NovelReaderOverride,
         setGlobal: (T) -> Unit,
+        dismissFamily: NovelReaderSettingsFamily? = null,
     ) {
         if (overrideEnabled) {
             preferences.updateSourceOverride(sourceId) { copyOverride(it, value) }
         } else {
             setGlobal(value)
+        }
+        if (dismissFamily != null && shouldDismissReaderSettingsDialogAfterFamilyChange(dismissFamily)) {
+            onDismissRequest()
         }
     }
 
@@ -182,6 +188,12 @@ private fun GeneralTab(
             pageReaderEnabled = currentPageReaderActive,
             showWebView = currentWebViewActive,
             bionicReadingEnabled = settings.bionicReading,
+        )
+    }
+    val chapterSwipeControlsEnabled = remember(settings.swipeGestures, currentPageReaderActive) {
+        areChapterSwipeControlsEnabled(
+            swipeGesturesEnabled = settings.swipeGestures,
+            pageReaderEnabled = currentPageReaderActive,
         )
     }
     val surfaceStrategy = remember { resolveNovelReaderSettingsSurfaceStrategy() }
@@ -259,7 +271,14 @@ private fun GeneralTab(
             title = stringResource(AYMR.strings.novel_reader_page_mode),
             subtitle = stringResource(AYMR.strings.novel_reader_page_mode_summary),
             checked = settings.pageReader,
-            onCheckedChanged = { update(it, { o, v -> o.copy(pageReader = v) }, { preferences.pageReader().set(it) }) },
+            onCheckedChanged = {
+                update(
+                    it,
+                    { o, v -> o.copy(pageReader = v) },
+                    { preferences.pageReader().set(it) },
+                    dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
+                )
+            },
         )
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_prefer_webview_renderer),
@@ -274,6 +293,7 @@ private fun GeneralTab(
                     it,
                     { o, v -> o.copy(preferWebViewRenderer = v) },
                     { preferences.preferWebViewRenderer().set(it) },
+                    dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
                 )
             },
         )
@@ -290,6 +310,7 @@ private fun GeneralTab(
                     it,
                     { o, v -> o.copy(richNativeRendererExperimental = v) },
                     { preferences.richNativeRendererExperimental().set(it) },
+                    dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
                 )
             },
         )
@@ -319,7 +340,7 @@ private fun GeneralTab(
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_swipe_to_next),
             checked = settings.swipeToNextChapter,
-            enabled = settings.swipeGestures,
+            enabled = chapterSwipeControlsEnabled,
             onCheckedChanged = {
                 update(
                     it,
@@ -331,7 +352,7 @@ private fun GeneralTab(
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_swipe_to_prev),
             checked = settings.swipeToPrevChapter,
-            enabled = settings.swipeGestures,
+            enabled = chapterSwipeControlsEnabled,
             onCheckedChanged = {
                 update(
                     it,

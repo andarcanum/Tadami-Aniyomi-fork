@@ -299,7 +299,9 @@ class NovelReaderScreenModel(
         lastSavedRead = chapter.read
         val savedNativeProgress = decodeNativeScrollProgress(chapter.lastPageRead)
         val savedWebProgress = decodeWebScrollProgressPercent(chapter.lastPageRead)
+        val savedPageReaderProgress = decodePageReaderProgress(chapter.lastPageRead)
         initialProgressIndex = savedNativeProgress?.index
+            ?: savedPageReaderProgress?.index
             ?: savedWebProgress
             ?: chapter.lastPageRead.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
         hasProgressChanged = false
@@ -502,15 +504,17 @@ class NovelReaderScreenModel(
         val geminiCacheAvailableInUi = settings.geminiEnabled && hasGeminiTranslationCache
         val decodedNativeProgress = decodeNativeScrollProgress(chapter.lastPageRead)
         val decodedWebProgressPercent = decodeWebScrollProgressPercent(chapter.lastPageRead)
+        val decodedPageReaderProgress = decodePageReaderProgress(chapter.lastPageRead)
         val lastSavedIndex = when {
             decodedNativeProgress != null -> decodedNativeProgress.index
+            decodedPageReaderProgress != null -> 0
             decodedWebProgressPercent != null -> 0
             else -> chapter.lastPageRead.coerceAtLeast(0L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
         }
         val lastSavedScrollOffsetPx = decodedNativeProgress?.offsetPx ?: 0
         val lastSavedWebProgressPercent = when {
             decodedWebProgressPercent != null -> decodedWebProgressPercent
-            decodedNativeProgress != null -> 0
+            decodedNativeProgress != null || decodedPageReaderProgress != null -> 0
             else -> chapter.lastPageRead.coerceIn(0L, 100L).toInt()
         }
         val chapterNavigation = chapterOrderList.let { chapters ->
@@ -600,6 +604,7 @@ class NovelReaderScreenModel(
             lastSavedIndex = lastSavedIndex,
             lastSavedScrollOffsetPx = lastSavedScrollOffsetPx,
             lastSavedWebProgressPercent = lastSavedWebProgressPercent,
+            lastSavedPageReaderProgress = decodedPageReaderProgress,
             previousChapterId = chapterNavigation.first,
             nextChapterId = chapterNavigation.second,
             chapterWebUrl = chapterWebUrl,
@@ -972,15 +977,17 @@ class NovelReaderScreenModel(
         if (currentState is State.Success) {
             val decodedNativeProgress = decodeNativeScrollProgress(progress)
             val decodedWebProgressPercent = decodeWebScrollProgressPercent(progress)
+            val decodedPageReaderProgress = decodePageReaderProgress(progress)
             val lastSavedIndex = when {
                 decodedNativeProgress != null -> decodedNativeProgress.index
+                decodedPageReaderProgress != null -> 0
                 decodedWebProgressPercent != null -> currentState.lastSavedIndex
                 else -> progress.coerceAtLeast(0L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
             }
             val lastSavedScrollOffsetPx = decodedNativeProgress?.offsetPx ?: 0
             val lastSavedWebProgressPercent = when {
                 decodedWebProgressPercent != null -> decodedWebProgressPercent
-                decodedNativeProgress != null -> currentState.lastSavedWebProgressPercent
+                decodedNativeProgress != null || decodedPageReaderProgress != null -> 0
                 else -> progress.coerceIn(0L, 100L).toInt()
             }
             mutableState.value = currentState.copy(
@@ -988,6 +995,7 @@ class NovelReaderScreenModel(
                 lastSavedIndex = lastSavedIndex,
                 lastSavedScrollOffsetPx = lastSavedScrollOffsetPx,
                 lastSavedWebProgressPercent = lastSavedWebProgressPercent,
+                lastSavedPageReaderProgress = decodedPageReaderProgress,
             )
         }
     }
@@ -2754,6 +2762,7 @@ class NovelReaderScreenModel(
             val lastSavedIndex: Int,
             val lastSavedScrollOffsetPx: Int,
             val lastSavedWebProgressPercent: Int,
+            val lastSavedPageReaderProgress: PageReaderProgress? = null,
             val previousChapterId: Long?,
             val nextChapterId: Long?,
             val chapterWebUrl: String?,

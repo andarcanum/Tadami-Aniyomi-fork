@@ -4,10 +4,17 @@ private const val NATIVE_SCROLL_MARKER = 5_000_000_000L
 private const val NATIVE_SCROLL_OFFSET_BASE = 1_000_000L
 private const val WEB_SCROLL_MARKER = 6_000_000_000L
 private const val WEB_SCROLL_MAX_PERCENT = 100L
+private const val PAGE_READER_MARKER = 7_000_000_000L
+private const val PAGE_READER_TOTAL_BASE = 1_000_000L
 
 internal data class NativeScrollProgress(
     val index: Int,
     val offsetPx: Int,
+)
+
+data class PageReaderProgress(
+    val index: Int,
+    val totalItems: Int,
 )
 
 internal fun encodeNativeScrollProgress(
@@ -37,4 +44,22 @@ internal fun decodeWebScrollProgressPercent(value: Long): Int? {
         return null
     }
     return (value - WEB_SCROLL_MARKER).toInt().coerceIn(0, WEB_SCROLL_MAX_PERCENT.toInt())
+}
+
+internal fun encodePageReaderProgress(
+    index: Int,
+    totalItems: Int,
+): Long {
+    val safeTotalItems = totalItems.coerceAtLeast(1).coerceAtMost((PAGE_READER_TOTAL_BASE - 1).toInt())
+    val safeIndex = index.coerceIn(0, safeTotalItems - 1)
+    return PAGE_READER_MARKER + (safeIndex.toLong() * PAGE_READER_TOTAL_BASE) + safeTotalItems.toLong()
+}
+
+internal fun decodePageReaderProgress(value: Long): PageReaderProgress? {
+    if (value < PAGE_READER_MARKER) return null
+    val payload = value - PAGE_READER_MARKER
+    val index = (payload / PAGE_READER_TOTAL_BASE).toInt().coerceAtLeast(0)
+    val totalItems = (payload % PAGE_READER_TOTAL_BASE).toInt().coerceAtLeast(1)
+    val safeIndex = index.coerceIn(0, totalItems - 1)
+    return PageReaderProgress(index = safeIndex, totalItems = totalItems)
 }

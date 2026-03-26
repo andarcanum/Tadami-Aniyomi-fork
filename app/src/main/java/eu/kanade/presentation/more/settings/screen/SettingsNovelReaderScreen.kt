@@ -62,6 +62,7 @@ import eu.kanade.presentation.reader.novel.importNovelReaderCustomFont
 import eu.kanade.presentation.reader.novel.intervalToAutoScrollSpeed
 import eu.kanade.presentation.reader.novel.novelReaderBackgroundPresets
 import eu.kanade.presentation.reader.novel.novelReaderPresetThemes
+import eu.kanade.presentation.reader.novel.areChapterSwipeControlsEnabled
 import eu.kanade.presentation.reader.novel.readNovelReaderCustomBackgroundItems
 import eu.kanade.presentation.reader.novel.removeNovelReaderCustomBackgroundItem
 import eu.kanade.presentation.reader.novel.removeNovelReaderCustomFont
@@ -692,6 +693,12 @@ object SettingsNovelReaderScreen : SearchableSettings {
                 bionicReadingEnabled = bionicReading,
             )
         }
+        val chapterSwipeControlsEnabled = remember(swipeGestures, pageReader) {
+            areChapterSwipeControlsEnabled(
+                swipeGesturesEnabled = swipeGestures,
+                pageReaderEnabled = pageReader,
+            )
+        }
         val autoScrollIntervalPref = prefs.autoScrollInterval()
         val autoScrollInterval by autoScrollIntervalPref.collectAsState()
         val autoScrollSpeed = intervalToAutoScrollSpeed(autoScrollInterval)
@@ -777,12 +784,12 @@ object SettingsNovelReaderScreen : SearchableSettings {
                 Preference.PreferenceItem.SwitchPreference(
                     preference = prefs.swipeToNextChapter(),
                     title = stringResource(AYMR.strings.novel_reader_swipe_to_next),
-                    enabled = swipeGestures,
+                    enabled = chapterSwipeControlsEnabled,
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = prefs.swipeToPrevChapter(),
                     title = stringResource(AYMR.strings.novel_reader_swipe_to_prev),
-                    enabled = swipeGestures,
+                    enabled = chapterSwipeControlsEnabled,
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = prefs.tapToScroll(),

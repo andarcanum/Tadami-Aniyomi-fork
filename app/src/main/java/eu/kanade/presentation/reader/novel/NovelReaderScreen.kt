@@ -159,9 +159,11 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelPluginImageResolver
+import eu.kanade.tachiyomi.ui.reader.novel.PageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreenModel
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichBlockTextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
+import eu.kanade.tachiyomi.ui.reader.novel.encodePageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodeNativeScrollProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodeWebScrollProgressPercent
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
@@ -269,6 +271,23 @@ fun NovelReaderScreen(
                 contentBlocksCount = state.contentBlocks.size,
                 richContentUnsupportedFeaturesDetected = state.richContentUnsupportedFeaturesDetected,
             ),
+        )
+    }
+    LaunchedEffect(
+        state.chapter.id,
+        state.readerSettings.preferWebViewRenderer,
+        state.readerSettings.richNativeRendererExperimental,
+        state.readerSettings.pageReader,
+        state.contentBlocks.size,
+        state.richContentUnsupportedFeaturesDetected,
+    ) {
+        showWebView = syncShowWebViewWithReaderSettings(
+            currentShowWebView = showWebView,
+            preferWebViewRenderer = state.readerSettings.preferWebViewRenderer,
+            richNativeRendererExperimentalEnabled = state.readerSettings.richNativeRendererExperimental,
+            pageReaderEnabled = state.readerSettings.pageReader,
+            contentBlocksCount = state.contentBlocks.size,
+            richContentUnsupportedFeaturesDetected = state.richContentUnsupportedFeaturesDetected,
         )
     }
     val readerPreferences = remember { Injekt.get<NovelReaderPreferences>() }
@@ -517,10 +536,25 @@ fun NovelReaderScreen(
     val paragraphSpacing = remember(state.readerSettings.paragraphSpacing) {
         resolveParagraphSpacingDp(state.readerSettings.paragraphSpacing)
     }
+    val initialNativeReaderIndex = remember(
+        state.lastSavedIndex,
+        state.lastSavedPageReaderProgress,
+        state.contentBlocks.size,
+    ) {
+        resolveInitialNativeReaderIndex(
+            nativeLastSavedIndex = state.lastSavedIndex,
+            savedPageReaderProgress = state.lastSavedPageReaderProgress,
+            itemCount = state.contentBlocks.size,
+        )
+    }
     val textListState = rememberLazyListState(
-        initialFirstVisibleItemIndex = state.lastSavedIndex
+        initialFirstVisibleItemIndex = initialNativeReaderIndex
             .coerceIn(0, (state.contentBlocks.lastIndex).coerceAtLeast(0)),
-        initialFirstVisibleItemScrollOffset = state.lastSavedScrollOffsetPx.coerceAtLeast(0),
+        initialFirstVisibleItemScrollOffset = if (state.lastSavedPageReaderProgress != null) {
+            0
+        } else {
+            state.lastSavedScrollOffsetPx.coerceAtLeast(0)
+        },
     )
 
     // Получаем размеры system bars
@@ -609,12 +643,13 @@ fun NovelReaderScreen(
             )
         }
     }
-    val shouldPaginateRichForPageReader = shouldPaginateForPageReader &&
-        state.readerSettings.richNativeRendererExperimental &&
-        !state.readerSettings.bionicReading &&
-        !state.richContentUnsupportedFeaturesDetected &&
-        state.richContentBlocks.isNotEmpty() &&
-        state.richContentBlocks.none { it is NovelRichContentBlock.Image }
+    val shouldPaginateRichForPageReader = shouldUseRichNativePageRenderer(
+        richNativeRendererExperimentalEnabled = state.readerSettings.richNativeRendererExperimental,
+        pageReaderEnabled = shouldPaginateForPageReader,
+        bionicReadingEnabled = state.readerSettings.bionicReading,
+        richContentBlocks = state.richContentBlocks,
+        richContentUnsupportedFeaturesDetected = state.richContentUnsupportedFeaturesDetected,
+    )
     val richPageReaderPages: List<List<RichPageSlice>> = remember(
         state.chapter.id,
         state.richContentBlocks,
@@ -684,7 +719,11 @@ fun NovelReaderScreen(
     )
     val nativeScrollItemsCount = if (useRichNativeScroll) richScrollBlocks.size else scrollContentBlocks.size
     val pagerState = rememberPagerState(
-        initialPage = state.lastSavedIndex.coerceIn(0, pageReaderItemsCount.coerceAtLeast(1) - 1),
+        initialPage = resolveInitialPageReaderPage(
+            savedPageReaderProgress = state.lastSavedPageReaderProgress,
+            legacyLastSavedIndex = state.lastSavedIndex,
+            pageCount = pageReaderItemsCount.coerceAtLeast(1),
+        ),
         pageCount = { pageReaderItemsCount.coerceAtLeast(1) },
     )
     val readingProgressPercent by remember(
@@ -976,22 +1015,28 @@ fun NovelReaderScreen(
             if (!showWebView && scrollContentBlocks.isNotEmpty()) {
                 // Отслеживание прогресса в зависимости от режима
                 if (usePageReader) {
-                    LaunchedEffect(pagerState.currentPage, pageReaderItemsCount) {
-                        onReadingProgress(
-                            pagerState.currentPage,
-                            pageReaderItemsCount,
-                            pagerState.currentPage.toLong(),
-                        )
-                    }
-                    DisposableEffect(pagerState, pageReaderItemsCount) {
-                        onDispose {
+                        LaunchedEffect(pagerState.currentPage, pageReaderItemsCount) {
                             onReadingProgress(
                                 pagerState.currentPage,
                                 pageReaderItemsCount,
-                                pagerState.currentPage.toLong(),
+                                encodePageReaderProgress(
+                                    index = pagerState.currentPage,
+                                    totalItems = pageReaderItemsCount,
+                                ),
                             )
                         }
-                    }
+                        DisposableEffect(pagerState, pageReaderItemsCount) {
+                            onDispose {
+                                onReadingProgress(
+                                    pagerState.currentPage,
+                                    pageReaderItemsCount,
+                                    encodePageReaderProgress(
+                                        index = pagerState.currentPage,
+                                        totalItems = pageReaderItemsCount,
+                                    ),
+                                )
+                            }
+                        }
                 } else {
                     LaunchedEffect(
                         textListState.firstVisibleItemIndex,
@@ -1113,6 +1158,7 @@ fun NovelReaderScreen(
                                             )
                                         }.filter { it.text.text.isNotBlank() },
                                         paragraphSpacingPx = paragraphSpacingPx,
+                                        chapterTitle = state.chapter.name,
                                     )
                                     renderBlocks.forEach { block ->
                                         if (block.spacingBeforePx > 0) {
@@ -1125,7 +1171,14 @@ fun NovelReaderScreen(
                                         Text(
                                             text = block.text,
                                             modifier = Modifier.fillMaxWidth(),
-                                            style = baseTextStyle
+                                            style = resolvePageReaderBlockTextStyle(
+                                                baseStyle = baseTextStyle,
+                                                isChapterTitle = block.isChapterTitle,
+                                                fontSize = state.readerSettings.fontSize,
+                                                lineHeight = state.readerSettings.lineHeight,
+                                                fontFamily = composeFontFamily,
+                                                chapterTitleFontFamily = chapterTitleFontFamily,
+                                            )
                                                 .withOptionalTextAlign(
                                                     resolvePageReaderRenderTextAlign(
                                                         globalTextAlign = state.readerSettings.textAlign,
@@ -1140,6 +1193,7 @@ fun NovelReaderScreen(
                                         textBlocks = state.textBlocks.filter { it.isNotBlank() },
                                         paragraphSpacingPx = paragraphSpacingPx,
                                         forceParagraphIndent = state.readerSettings.forceParagraphIndent,
+                                        chapterTitle = state.chapter.name,
                                     )
                                     renderBlocks.forEach { block ->
                                         if (block.spacingBeforePx > 0) {
@@ -1156,7 +1210,14 @@ fun NovelReaderScreen(
                                                 AnnotatedString(block.text)
                                             },
                                             modifier = Modifier.fillMaxWidth(),
-                                            style = baseTextStyle
+                                            style = resolvePageReaderBlockTextStyle(
+                                                baseStyle = baseTextStyle,
+                                                isChapterTitle = block.isChapterTitle,
+                                                fontSize = state.readerSettings.fontSize,
+                                                lineHeight = state.readerSettings.lineHeight,
+                                                fontFamily = composeFontFamily,
+                                                chapterTitleFontFamily = chapterTitleFontFamily,
+                                            )
                                                 .withOptionalTextAlign(
                                                     resolvePageReaderRenderTextAlign(
                                                         globalTextAlign = state.readerSettings.textAlign,
@@ -4982,6 +5043,56 @@ internal fun shouldStartInWebView(
     return preferWebViewRenderer
 }
 
+internal fun syncShowWebViewWithReaderSettings(
+    currentShowWebView: Boolean,
+    preferWebViewRenderer: Boolean,
+    richNativeRendererExperimentalEnabled: Boolean,
+    pageReaderEnabled: Boolean,
+    contentBlocksCount: Int,
+    richContentUnsupportedFeaturesDetected: Boolean,
+): Boolean {
+    val expectedShowWebView = shouldStartInWebView(
+        preferWebViewRenderer = preferWebViewRenderer,
+        richNativeRendererExperimentalEnabled = richNativeRendererExperimentalEnabled,
+        pageReaderEnabled = pageReaderEnabled,
+        contentBlocksCount = contentBlocksCount,
+        richContentUnsupportedFeaturesDetected = richContentUnsupportedFeaturesDetected,
+    )
+    return if (currentShowWebView == expectedShowWebView) {
+        currentShowWebView
+    } else {
+        expectedShowWebView
+    }
+}
+
+internal fun resolveInitialPageReaderPage(
+    savedPageReaderProgress: PageReaderProgress?,
+    legacyLastSavedIndex: Int,
+    pageCount: Int,
+): Int {
+    val safePageCount = pageCount.coerceAtLeast(1)
+    val lastPageIndex = safePageCount - 1
+    val savedProgress = savedPageReaderProgress ?: return legacyLastSavedIndex.coerceIn(0, lastPageIndex)
+    if (safePageCount == 1 || savedProgress.totalItems <= 1) return 0
+    val sourceLastPageIndex = (savedProgress.totalItems - 1).coerceAtLeast(1)
+    val normalizedProgress = savedProgress.index.toFloat() / sourceLastPageIndex.toFloat()
+    return (normalizedProgress * lastPageIndex.toFloat()).roundToInt().coerceIn(0, lastPageIndex)
+}
+
+internal fun resolveInitialNativeReaderIndex(
+    nativeLastSavedIndex: Int,
+    savedPageReaderProgress: PageReaderProgress?,
+    itemCount: Int,
+): Int {
+    val safeItemCount = itemCount.coerceAtLeast(1)
+    val lastItemIndex = safeItemCount - 1
+    val savedProgress = savedPageReaderProgress ?: return nativeLastSavedIndex.coerceIn(0, lastItemIndex)
+    if (safeItemCount == 1 || savedProgress.totalItems <= 1) return 0
+    val sourceLastPageIndex = (savedProgress.totalItems - 1).coerceAtLeast(1)
+    val normalizedProgress = savedProgress.index.toFloat() / sourceLastPageIndex.toFloat()
+    return (normalizedProgress * lastItemIndex.toFloat()).roundToInt().coerceIn(0, lastItemIndex)
+}
+
 internal fun shouldUseRichNativeScrollRenderer(
     richNativeRendererExperimentalEnabled: Boolean,
     showWebView: Boolean,
@@ -4994,6 +5105,21 @@ internal fun shouldUseRichNativeScrollRenderer(
     if (showWebView || usePageReader || bionicReadingEnabled) return false
     if (richContentUnsupportedFeaturesDetected) return false
     return richContentBlocks.isNotEmpty()
+}
+
+internal fun shouldUseRichNativePageRenderer(
+    richNativeRendererExperimentalEnabled: Boolean,
+    pageReaderEnabled: Boolean,
+    bionicReadingEnabled: Boolean,
+    richContentBlocks: List<NovelRichContentBlock>,
+    richContentUnsupportedFeaturesDetected: Boolean,
+): Boolean {
+    if (!pageReaderEnabled) return false
+    if (!richNativeRendererExperimentalEnabled) return false
+    if (bionicReadingEnabled) return false
+    if (richContentUnsupportedFeaturesDetected) return false
+    if (richContentBlocks.isEmpty()) return false
+    return richContentBlocks.none { it is NovelRichContentBlock.Image }
 }
 
 internal enum class ReaderTapAction {
@@ -5045,6 +5171,7 @@ internal data class PlainPageRenderBlock(
     val text: String,
     val spacingBeforePx: Int,
     val firstLineIndentEm: Float?,
+    val isChapterTitle: Boolean = false,
 )
 
 internal data class RichPageBlockText(
@@ -5058,6 +5185,7 @@ internal data class RichPageRenderBlock(
     val spacingBeforePx: Int,
     val firstLineIndentEm: Float?,
     val sourceTextAlign: NovelRichBlockTextAlign? = null,
+    val isChapterTitle: Boolean = false,
 )
 
 internal fun paginatePlainPageBlocks(
@@ -5424,19 +5552,25 @@ internal fun buildPlainPageRenderBlocks(
     textBlocks: List<String>,
     paragraphSpacingPx: Int,
     forceParagraphIndent: Boolean,
+    chapterTitle: String? = null,
 ): List<PlainPageRenderBlock> {
     if (page.isEmpty()) return emptyList()
     return page.mapIndexed { index, slice ->
         val previousBlockIndex = page.getOrNull(index - 1)?.blockIndex
         val startsNewBlock = index > 0 && previousBlockIndex != slice.blockIndex
+        val fullBlockText = textBlocks[slice.blockIndex]
         PlainPageRenderBlock(
-            text = textBlocks[slice.blockIndex].substring(slice.range.start, slice.range.endExclusive),
+            text = fullBlockText.substring(slice.range.start, slice.range.endExclusive),
             spacingBeforePx = if (startsNewBlock) paragraphSpacingPx.coerceAtLeast(0) else 0,
             firstLineIndentEm = if (forceParagraphIndent && slice.range.start == 0) {
                 FORCED_PARAGRAPH_FIRST_LINE_INDENT_EM
             } else {
                 null
             },
+            isChapterTitle = chapterTitle != null &&
+                slice.blockIndex == 0 &&
+                slice.range.start == 0 &&
+                isNativeChapterTitleText(fullBlockText, chapterTitle),
         )
     }
 }
@@ -5445,6 +5579,7 @@ internal fun buildRichPageRenderBlocks(
     page: List<RichPageSlice>,
     blockTexts: List<RichPageBlockText>,
     paragraphSpacingPx: Int,
+    chapterTitle: String? = null,
 ): List<RichPageRenderBlock> {
     if (page.isEmpty()) return emptyList()
     return page.mapIndexed { index, slice ->
@@ -5456,6 +5591,10 @@ internal fun buildRichPageRenderBlocks(
             spacingBeforePx = if (startsNewBlock) paragraphSpacingPx.coerceAtLeast(0) else 0,
             firstLineIndentEm = if (slice.range.start == 0) blockText.firstLineIndentEm else null,
             sourceTextAlign = blockText.sourceTextAlign,
+            isChapterTitle = chapterTitle != null &&
+                slice.blockIndex == 0 &&
+                slice.range.start == 0 &&
+                isNativeChapterTitleText(blockText.text.text, chapterTitle),
         )
     }
 }
@@ -5492,7 +5631,6 @@ internal fun resolveRendererSettingsAvailability(
 ): RendererSettingsAvailability {
     val preferWebViewReason = if (pageReaderEnabled) RendererSettingDisableReason.PAGE_MODE else null
     val richNativeReason = when {
-        pageReaderEnabled -> RendererSettingDisableReason.PAGE_MODE
         showWebView -> RendererSettingDisableReason.WEBVIEW_ACTIVE
         bionicReadingEnabled -> RendererSettingDisableReason.BIONIC_READING
         else -> null
@@ -5503,6 +5641,19 @@ internal fun resolveRendererSettingsAvailability(
         richNativeEnabled = richNativeReason == null,
         richNativeReason = richNativeReason,
     )
+}
+
+internal fun areChapterSwipeControlsEnabled(
+    swipeGesturesEnabled: Boolean,
+    pageReaderEnabled: Boolean,
+): Boolean {
+    return swipeGesturesEnabled && !pageReaderEnabled
+}
+
+internal fun shouldDismissReaderSettingsDialogAfterFamilyChange(
+    family: NovelReaderSettingsFamily,
+): Boolean {
+    return family == NovelReaderSettingsFamily.RENDERER_TUNING
 }
 
 internal enum class NovelReaderSettingsFamily {
@@ -6371,6 +6522,23 @@ private fun TextStyle.withOptionalFirstLineIndentEm(firstLineIndentEm: Float?): 
     } else {
         copy(textIndent = TextIndent(firstLine = firstLineIndentEm.em))
     }
+}
+
+private fun resolvePageReaderBlockTextStyle(
+    baseStyle: TextStyle,
+    isChapterTitle: Boolean,
+    fontSize: Int,
+    lineHeight: Float,
+    fontFamily: FontFamily?,
+    chapterTitleFontFamily: FontFamily?,
+): TextStyle {
+    if (!isChapterTitle) return baseStyle
+    return baseStyle.copy(
+        fontSize = (fontSize * 1.12f).sp,
+        lineHeight = (lineHeight * 1.08f).em,
+        fontFamily = chapterTitleFontFamily ?: fontFamily,
+        fontWeight = FontWeight.SemiBold,
+    )
 }
 
 internal fun resolvePageReaderLayoutTextAlign(

@@ -16,12 +16,18 @@ import eu.kanade.tachiyomi.ui.reader.novel.NovelRichBlockTextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichTextSegment
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichTextStyle
+import eu.kanade.tachiyomi.ui.reader.novel.PageReaderProgress
+import eu.kanade.tachiyomi.ui.reader.novel.decodePageReaderProgress
+import eu.kanade.tachiyomi.ui.reader.novel.encodeNativeScrollProgress
+import eu.kanade.tachiyomi.ui.reader.novel.encodePageReaderProgress
+import eu.kanade.tachiyomi.ui.reader.novel.encodeWebScrollProgressPercent
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import kotlin.math.abs
@@ -1056,6 +1062,28 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `plain paged page assembly marks chapter title block`() {
+        val renderBlocks = buildPlainPageRenderBlocks(
+            page = listOf(
+                PlainPageSlice(
+                    blockIndex = 0,
+                    range = TextPageRange(start = 0, endExclusive = "Chapter 12".length),
+                ),
+                PlainPageSlice(
+                    blockIndex = 1,
+                    range = TextPageRange(start = 0, endExclusive = "First paragraph".length),
+                ),
+            ),
+            textBlocks = listOf("Chapter 12", "First paragraph"),
+            paragraphSpacingPx = 12,
+            forceParagraphIndent = true,
+            chapterTitle = "Chapter 12",
+        )
+
+        assertEquals(listOf(true, false), renderBlocks.map { it.isChapterTitle })
+    }
+
+    @Test
     fun `rich paged page assembly preserves spans and paragraph boundaries`() {
         val blockTexts = listOf(
             buildRichPageReaderBlockText(
@@ -1097,6 +1125,40 @@ class NovelReaderUiVisibilityTest {
             )
                 .any { it.item == "https://example.org" },
         )
+    }
+
+    @Test
+    fun `rich paged page assembly marks chapter title block`() {
+        val blockTexts = listOf(
+            buildRichPageReaderBlockText(
+                block = NovelRichContentBlock.Paragraph(
+                    segments = listOf(NovelRichTextSegment(text = "Chapter 12")),
+                ),
+            ),
+            buildRichPageReaderBlockText(
+                block = NovelRichContentBlock.Paragraph(
+                    segments = listOf(NovelRichTextSegment(text = "First paragraph")),
+                ),
+            ),
+        )
+
+        val renderBlocks = buildRichPageRenderBlocks(
+            page = listOf(
+                RichPageSlice(
+                    blockIndex = 0,
+                    range = TextPageRange(start = 0, endExclusive = "Chapter 12".length),
+                ),
+                RichPageSlice(
+                    blockIndex = 1,
+                    range = TextPageRange(start = 0, endExclusive = "First paragraph".length),
+                ),
+            ),
+            blockTexts = blockTexts,
+            paragraphSpacingPx = 12,
+            chapterTitle = "Chapter 12",
+        )
+
+        assertEquals(listOf(true, false), renderBlocks.map { it.isChapterTitle })
     }
 
     @Test
@@ -1417,6 +1479,48 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `runtime sync disables webview immediately when page reader becomes active`() {
+        assertFalse(
+            syncShowWebViewWithReaderSettings(
+                currentShowWebView = true,
+                preferWebViewRenderer = true,
+                richNativeRendererExperimentalEnabled = false,
+                pageReaderEnabled = true,
+                contentBlocksCount = 5,
+                richContentUnsupportedFeaturesDetected = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `runtime sync re-enables webview when page reader turns off and preference still requires it`() {
+        assertTrue(
+            syncShowWebViewWithReaderSettings(
+                currentShowWebView = false,
+                preferWebViewRenderer = true,
+                richNativeRendererExperimentalEnabled = false,
+                pageReaderEnabled = false,
+                contentBlocksCount = 5,
+                richContentUnsupportedFeaturesDetected = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `runtime sync leaves webview disabled when active renderer is no longer valid`() {
+        assertFalse(
+            syncShowWebViewWithReaderSettings(
+                currentShowWebView = true,
+                preferWebViewRenderer = false,
+                richNativeRendererExperimentalEnabled = false,
+                pageReaderEnabled = false,
+                contentBlocksCount = 5,
+                richContentUnsupportedFeaturesDetected = false,
+            ),
+        )
+    }
+
+    @Test
     fun `rich native scroll renderer supports images unless bionic or unsupported`() {
         assertTrue(
             shouldUseRichNativeScrollRenderer(
@@ -1562,8 +1666,8 @@ class NovelReaderUiVisibilityTest {
         )
         assertFalse(pageModeState.preferWebViewEnabled)
         assertTrue(pageModeState.preferWebViewReason == RendererSettingDisableReason.PAGE_MODE)
-        assertFalse(pageModeState.richNativeEnabled)
-        assertTrue(pageModeState.richNativeReason == RendererSettingDisableReason.PAGE_MODE)
+        assertTrue(pageModeState.richNativeEnabled)
+        assertTrue(pageModeState.richNativeReason == null)
 
         val webViewState = resolveRendererSettingsAvailability(
             pageReaderEnabled = false,
@@ -1583,6 +1687,113 @@ class NovelReaderUiVisibilityTest {
         assertTrue(bionicState.preferWebViewEnabled)
         assertFalse(bionicState.richNativeEnabled)
         assertTrue(bionicState.richNativeReason == RendererSettingDisableReason.BIONIC_READING)
+    }
+
+    @Test
+    fun `renderer tuning changes dismiss quick reader settings dialog`() {
+        assertTrue(
+            shouldDismissReaderSettingsDialogAfterFamilyChange(
+                NovelReaderSettingsFamily.RENDERER_TUNING,
+            ),
+        )
+        assertFalse(
+            shouldDismissReaderSettingsDialogAfterFamilyChange(
+                NovelReaderSettingsFamily.LIVE_TEXT_STYLING,
+            ),
+        )
+    }
+
+    @Test
+    fun `rich paged renderer is allowed for text only rich chapters`() {
+        assertTrue(
+            shouldUseRichNativePageRenderer(
+                richNativeRendererExperimentalEnabled = true,
+                pageReaderEnabled = true,
+                bionicReadingEnabled = false,
+                richContentBlocks = listOf(
+                    NovelRichContentBlock.Paragraph(
+                        segments = listOf(
+                            NovelRichTextSegment(
+                                text = "Styled",
+                                style = NovelRichTextStyle(bold = true),
+                            ),
+                        ),
+                    ),
+                    NovelRichContentBlock.BlockQuote(
+                        segments = listOf(NovelRichTextSegment("Quoted")),
+                        textAlign = NovelRichBlockTextAlign.JUSTIFY,
+                    ),
+                ),
+                richContentUnsupportedFeaturesDetected = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `rich paged renderer falls back for images unsupported content and bionic reading`() {
+        assertFalse(
+            shouldUseRichNativePageRenderer(
+                richNativeRendererExperimentalEnabled = true,
+                pageReaderEnabled = true,
+                bionicReadingEnabled = false,
+                richContentBlocks = listOf(
+                    NovelRichContentBlock.Image(url = "https://example.org/image.jpg"),
+                ),
+                richContentUnsupportedFeaturesDetected = false,
+            ),
+        )
+        assertFalse(
+            shouldUseRichNativePageRenderer(
+                richNativeRendererExperimentalEnabled = true,
+                pageReaderEnabled = true,
+                bionicReadingEnabled = false,
+                richContentBlocks = listOf(
+                    NovelRichContentBlock.Paragraph(
+                        segments = listOf(NovelRichTextSegment("Styled")),
+                    ),
+                ),
+                richContentUnsupportedFeaturesDetected = true,
+            ),
+        )
+        assertFalse(
+            shouldUseRichNativePageRenderer(
+                richNativeRendererExperimentalEnabled = true,
+                pageReaderEnabled = true,
+                bionicReadingEnabled = true,
+                richContentBlocks = listOf(
+                    NovelRichContentBlock.Paragraph(
+                        segments = listOf(NovelRichTextSegment("Styled")),
+                    ),
+                ),
+                richContentUnsupportedFeaturesDetected = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `chapter swipe controls are disabled while page mode is active`() {
+        assertFalse(
+            areChapterSwipeControlsEnabled(
+                swipeGesturesEnabled = true,
+                pageReaderEnabled = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `chapter swipe controls require swipe gestures and scroll mode`() {
+        assertTrue(
+            areChapterSwipeControlsEnabled(
+                swipeGesturesEnabled = true,
+                pageReaderEnabled = false,
+            ),
+        )
+        assertFalse(
+            areChapterSwipeControlsEnabled(
+                swipeGesturesEnabled = false,
+                pageReaderEnabled = false,
+            ),
+        )
     }
 
     @Test
@@ -1692,6 +1903,55 @@ class NovelReaderUiVisibilityTest {
                 globalTextAlign = ReaderTextAlign.SOURCE,
             ) == TextAlign.Start,
         )
+    }
+
+    @Test
+    fun `page reader progress restore scales to current page count after repagination`() {
+        assertEquals(
+            8,
+            resolveInitialPageReaderPage(
+                savedPageReaderProgress = PageReaderProgress(index = 4, totalItems = 5),
+                legacyLastSavedIndex = 0,
+                pageCount = 9,
+            ),
+        )
+    }
+
+    @Test
+    fun `page reader progress restore clamps safely when new page count shrinks`() {
+        assertEquals(
+            2,
+            resolveInitialPageReaderPage(
+                savedPageReaderProgress = PageReaderProgress(index = 9, totalItems = 10),
+                legacyLastSavedIndex = 0,
+                pageCount = 3,
+            ),
+        )
+    }
+
+    @Test
+    fun `page reader progress also normalizes native list restore when reopening in scroll mode`() {
+        assertEquals(
+            8,
+            resolveInitialNativeReaderIndex(
+                nativeLastSavedIndex = 0,
+                savedPageReaderProgress = PageReaderProgress(index = 4, totalItems = 5),
+                itemCount = 9,
+            ),
+        )
+    }
+
+    @Test
+    fun `page reader progress roundtrip stays distinct from native and web progress`() {
+        assertEquals(
+            PageReaderProgress(index = 7, totalItems = 10),
+            decodePageReaderProgress(
+                encodePageReaderProgress(index = 7, totalItems = 10),
+            ),
+        )
+
+        assertNull(decodePageReaderProgress(encodeNativeScrollProgress(index = 7, offsetPx = 420)))
+        assertNull(decodePageReaderProgress(encodeWebScrollProgressPercent(42)))
     }
 
     @Test

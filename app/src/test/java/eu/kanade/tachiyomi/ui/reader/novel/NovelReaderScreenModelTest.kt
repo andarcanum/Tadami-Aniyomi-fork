@@ -1244,6 +1244,42 @@ class NovelReaderScreenModelTest {
     }
 
     @Test
+    fun `encoded page reader progress is restored separately from native and web state`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+                lastPageRead = encodePageReaderProgress(index = 7, totalItems = 10),
+            )
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            state.lastSavedPageReaderProgress shouldBe PageReaderProgress(index = 7, totalItems = 10)
+            state.lastSavedIndex shouldBe 0
+            state.lastSavedWebProgressPercent shouldBe 0
+            Unit
+        }
+    }
+
+    @Test
     fun `progress callback after read completion does not reset chapter to unread`() {
         runBlocking {
             val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
