@@ -25,6 +25,9 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnIntensity
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnShadowIntensity
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnSpeed
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
@@ -1968,6 +1971,48 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `page turn placeholder keeps page progress index contract`() {
         assertEquals(7, resolvePageTurnRendererProgressPageIndex(currentPage = 7))
+    }
+
+    @Test
+    fun `book and curl resolve to distinct page turn presets`() {
+        val bookPreset = resolveNovelPageTurnPreset(
+            style = NovelPageTransitionStyle.BOOK,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+        )
+        val curlPreset = resolveNovelPageTurnPreset(
+            style = NovelPageTransitionStyle.CURL,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+        )
+
+        assertTrue(bookPreset.curlAmount < curlPreset.curlAmount)
+        assertTrue(bookPreset.shadowAlpha < curlPreset.shadowAlpha)
+        assertTrue(bookPreset.backPageAlpha < curlPreset.backPageAlpha)
+    }
+
+    @Test
+    fun `page turn tuning values modify preset output without changing selected style`() {
+        val basePreset = resolveNovelPageTurnPreset(
+            style = NovelPageTransitionStyle.CURL,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+        )
+        val tunedPreset = resolveNovelPageTurnPreset(
+            style = NovelPageTransitionStyle.CURL,
+            speed = NovelPageTurnSpeed.FAST,
+            intensity = NovelPageTurnIntensity.HIGH,
+            shadowIntensity = NovelPageTurnShadowIntensity.LOW,
+        )
+
+        assertEquals(NovelPageTransitionStyle.CURL, basePreset.style)
+        assertEquals(NovelPageTransitionStyle.CURL, tunedPreset.style)
+        assertTrue(tunedPreset.animationDurationMillis < basePreset.animationDurationMillis)
+        assertTrue(tunedPreset.curlAmount > basePreset.curlAmount)
+        assertTrue(tunedPreset.shadowAlpha < basePreset.shadowAlpha)
     }
 
     @Test
