@@ -68,6 +68,9 @@ import eu.kanade.presentation.reader.novel.intervalToAutoScrollSpeed
 import eu.kanade.presentation.reader.novel.novelPageTurnIntensityEntries
 import eu.kanade.presentation.reader.novel.novelPageTurnShadowIntensityEntries
 import eu.kanade.presentation.reader.novel.novelPageTurnSpeedEntries
+import eu.kanade.presentation.reader.novel.novelPageTurnIntensitySliderIndex
+import eu.kanade.presentation.reader.novel.novelPageTurnShadowIntensitySliderIndex
+import eu.kanade.presentation.reader.novel.novelPageTurnSpeedSliderIndex
 import eu.kanade.presentation.reader.novel.novelPageTurnTuningSummary
 import eu.kanade.presentation.reader.novel.novelPageTransitionStyleEntries
 import eu.kanade.presentation.reader.novel.novelPageTransitionStyleSubtitle
@@ -80,6 +83,10 @@ import eu.kanade.presentation.reader.novel.removeNovelReaderCustomFont
 import eu.kanade.presentation.reader.novel.renameNovelReaderCustomBackgroundItem
 import eu.kanade.presentation.reader.novel.replaceNovelReaderCustomBackgroundItem
 import eu.kanade.presentation.reader.novel.resolveCustomBackgroundDeletion
+import eu.kanade.presentation.reader.novel.resolveNovelPageTurnIntensitySliderValue
+import eu.kanade.presentation.reader.novel.resolveNovelPageTurnShadowIntensitySliderValue
+import eu.kanade.presentation.reader.novel.resolveNovelPageTurnSliderLabel
+import eu.kanade.presentation.reader.novel.resolveNovelPageTurnSpeedSliderValue
 import eu.kanade.presentation.reader.novel.resolveNovelReaderSettingsSurfaceStrategy
 import eu.kanade.presentation.reader.novel.resolveRendererSettingsAvailability
 import eu.kanade.presentation.reader.novel.shouldShowPageTurnTuningControls
@@ -886,28 +893,49 @@ object SettingsNovelReaderScreen : SearchableSettings {
                 )
                 if (pageTurnTuningExpanded) {
                     add(
-                        Preference.PreferenceItem.ListPreference(
-                            preference = pageTurnSpeedPref,
-                            entries = pageTurnSpeedEntries,
+                        Preference.PreferenceItem.SliderPreference(
+                            value = novelPageTurnSpeedSliderIndex(pageTurnSpeed),
                             title = stringResource(AYMR.strings.novel_reader_page_turn_speed),
-                            subtitleProvider = { value: NovelPageTurnSpeed, entries -> entries[value].orEmpty() },
+                            subtitle = resolveNovelPageTurnSliderLabel(
+                                value = pageTurnSpeed,
+                                entries = pageTurnSpeedEntries,
+                            ),
+                            valueRange = 0..(pageTurnSpeedEntries.size - 1),
+                            onValueChanged = { value ->
+                                pageTurnSpeedPref.set(resolveNovelPageTurnSpeedSliderValue(value))
+                                true
+                            },
                         ),
                     )
                     add(
-                        Preference.PreferenceItem.ListPreference(
-                            preference = pageTurnIntensityPref,
-                            entries = pageTurnIntensityEntries,
+                        Preference.PreferenceItem.SliderPreference(
+                            value = novelPageTurnIntensitySliderIndex(pageTurnIntensity),
                             title = stringResource(AYMR.strings.novel_reader_page_turn_intensity),
-                            subtitleProvider = { value: NovelPageTurnIntensity, entries -> entries[value].orEmpty() },
+                            subtitle = resolveNovelPageTurnSliderLabel(
+                                value = pageTurnIntensity,
+                                entries = pageTurnIntensityEntries,
+                            ),
+                            valueRange = 0..(pageTurnIntensityEntries.size - 1),
+                            onValueChanged = { value ->
+                                pageTurnIntensityPref.set(resolveNovelPageTurnIntensitySliderValue(value))
+                                true
+                            },
                         ),
                     )
                     add(
-                        Preference.PreferenceItem.ListPreference(
-                            preference = pageTurnShadowIntensityPref,
-                            entries = pageTurnShadowEntries,
+                        Preference.PreferenceItem.SliderPreference(
+                            value = novelPageTurnShadowIntensitySliderIndex(pageTurnShadowIntensity),
                             title = stringResource(AYMR.strings.novel_reader_page_turn_shadow_intensity),
-                            subtitleProvider = { value: NovelPageTurnShadowIntensity, entries ->
-                                entries[value].orEmpty()
+                            subtitle = resolveNovelPageTurnSliderLabel(
+                                value = pageTurnShadowIntensity,
+                                entries = pageTurnShadowEntries,
+                            ),
+                            valueRange = 0..(pageTurnShadowEntries.size - 1),
+                            onValueChanged = { value ->
+                                pageTurnShadowIntensityPref.set(
+                                    resolveNovelPageTurnShadowIntensitySliderValue(value),
+                                )
+                                true
                             },
                         ),
                     )

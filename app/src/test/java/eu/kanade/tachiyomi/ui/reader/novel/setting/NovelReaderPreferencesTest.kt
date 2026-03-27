@@ -110,6 +110,19 @@ class NovelReaderPreferencesTest {
     }
 
     @Test
+    fun `page turn tuning preferences round trip expanded boundary values`() {
+        val prefs = createPrefs()
+
+        prefs.pageTurnSpeed().set(NovelPageTurnSpeed.SLOWER)
+        prefs.pageTurnIntensity().set(NovelPageTurnIntensity.SOFTER)
+        prefs.pageTurnShadowIntensity().set(NovelPageTurnShadowIntensity.STRONGER)
+
+        prefs.pageTurnSpeed().get() shouldBe NovelPageTurnSpeed.SLOWER
+        prefs.pageTurnIntensity().get() shouldBe NovelPageTurnIntensity.SOFTER
+        prefs.pageTurnShadowIntensity().get() shouldBe NovelPageTurnShadowIntensity.STRONGER
+    }
+
+    @Test
     fun `enable source override copies new settings`() {
         val prefs = createPrefs()
         val sourceId = 123L

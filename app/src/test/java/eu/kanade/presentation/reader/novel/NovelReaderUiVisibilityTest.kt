@@ -4,6 +4,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -12,6 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.core.view.WindowInsetsControllerCompat
+import eu.wewox.pagecurl.ExperimentalPageCurlApi
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichBlockTextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichTextSegment
@@ -419,6 +422,14 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `page reader progress percent starts at zero and ends at one hundred`() {
+        assertEquals(0, resolvePageReaderReadingProgressPercent(pageIndex = 0, pageCount = 5))
+        assertEquals(50, resolvePageReaderReadingProgressPercent(pageIndex = 2, pageCount = 5))
+        assertEquals(100, resolvePageReaderReadingProgressPercent(pageIndex = 4, pageCount = 5))
+        assertEquals(100, resolvePageReaderReadingProgressPercent(pageIndex = 0, pageCount = 1))
+    }
+
+    @Test
     fun `time to end is unknown before reading pace is collected`() {
         val minutes = estimateNovelReaderRemainingMinutes(
             paceState = NovelReaderReadingPaceState(),
@@ -462,6 +473,7 @@ class NovelReaderUiVisibilityTest {
                 showReaderUi = true,
                 verticalSeekbarEnabled = true,
                 showWebView = false,
+                usePageReader = false,
                 textBlocksCount = 10,
             ),
         )
@@ -471,6 +483,7 @@ class NovelReaderUiVisibilityTest {
                 showReaderUi = false,
                 verticalSeekbarEnabled = true,
                 showWebView = false,
+                usePageReader = false,
                 textBlocksCount = 10,
             ),
         )
@@ -480,6 +493,7 @@ class NovelReaderUiVisibilityTest {
                 showReaderUi = true,
                 verticalSeekbarEnabled = true,
                 showWebView = true,
+                usePageReader = false,
                 textBlocksCount = 1,
             ),
         )
@@ -488,8 +502,50 @@ class NovelReaderUiVisibilityTest {
                 showReaderUi = true,
                 verticalSeekbarEnabled = true,
                 showWebView = true,
+                usePageReader = false,
                 textBlocksCount = 10,
             ),
+        )
+        assertTrue(
+            shouldShowVerticalSeekbar(
+                showReaderUi = true,
+                verticalSeekbarEnabled = true,
+                showWebView = false,
+                usePageReader = true,
+                textBlocksCount = 1,
+            ),
+        )
+    }
+
+    @Test
+    fun `page rail labels show first and last page inside seekbar`() {
+        assertEquals(
+            Pair(null, null),
+            resolveReaderPageRailLabels(pageCount = 0),
+        )
+        assertEquals(
+            Pair("1", "1"),
+            resolveReaderPageRailLabels(pageCount = 1),
+        )
+        assertEquals(
+            Pair("1", "10"),
+            resolveReaderPageRailLabels(pageCount = 10),
+        )
+    }
+
+    @Test
+    fun `page seekbar ticks are resolved per page`() {
+        assertEquals(
+            emptyList<Float>(),
+            resolveReaderVerticalSeekbarTickFractions(pageCount = 0),
+        )
+        assertEquals(
+            emptyList<Float>(),
+            resolveReaderVerticalSeekbarTickFractions(pageCount = 1),
+        )
+        assertEquals(
+            listOf(0f, 1f / 3f, 2f / 3f, 1f),
+            resolveReaderVerticalSeekbarTickFractions(pageCount = 4),
         )
     }
 
@@ -696,6 +752,22 @@ class NovelReaderUiVisibilityTest {
     fun `fullscreen reader restores system bars on dispose`() {
         assertTrue(shouldRestoreSystemBarsOnDispose(fullScreenMode = true))
         assertTrue(shouldRestoreSystemBarsOnDispose(fullScreenMode = false))
+    }
+
+    @Test
+    fun `page reader resets ui visibility on chapter change`() {
+        assertFalse(
+            resolveReaderUiAfterChapterChange(
+                currentShowReaderUi = true,
+                usePageReader = true,
+            ),
+        )
+        assertTrue(
+            resolveReaderUiAfterChapterChange(
+                currentShowReaderUi = true,
+                usePageReader = false,
+            ),
+        )
     }
 
     @Test
@@ -1974,6 +2046,46 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `page turn renderer resolves current page from curl state instead of pager state`() {
+        assertEquals(
+            6,
+            resolvePageReaderCurrentPage(
+                pageReaderRendererRoute = NovelPageReaderRendererRoute.PAGE_TURN_RENDERER,
+                pagerCurrentPage = 0,
+                pageTurnCurrentPage = 6,
+            ),
+        )
+    }
+
+    @Test
+    fun `compose pager keeps current page sourced from pager state`() {
+        assertEquals(
+            3,
+            resolvePageReaderCurrentPage(
+                pageReaderRendererRoute = NovelPageReaderRendererRoute.COMPOSE_PAGER,
+                pagerCurrentPage = 3,
+                pageTurnCurrentPage = 6,
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn seekbar thumb follows curl page rather than pager state`() {
+        val seekbarValue = resolveReaderVerticalSeekbarValue(
+            showWebView = false,
+            webProgressPercent = 0,
+            usePageReader = true,
+            pageReaderRendererRoute = NovelPageReaderRendererRoute.PAGE_TURN_RENDERER,
+            pagerCurrentPage = 0,
+            pageTurnCurrentPage = 6,
+            seekbarItemsCount = 11,
+            readingProgressPercent = 60,
+        )
+
+        assertEquals(0.6f, seekbarValue, 0.0001f)
+    }
+
+    @Test
     fun `book and curl resolve to distinct page turn presets`() {
         val bookPreset = resolveNovelPageTurnPreset(
             style = NovelPageTransitionStyle.BOOK,
@@ -1991,6 +2103,86 @@ class NovelReaderUiVisibilityTest {
         assertTrue(bookPreset.curlAmount < curlPreset.curlAmount)
         assertTrue(bookPreset.shadowAlpha < curlPreset.shadowAlpha)
         assertTrue(bookPreset.backPageAlpha < curlPreset.backPageAlpha)
+    }
+
+    @Test
+    fun `page turn preset widens the gap between slow and fast tuning`() {
+        val slowPreset = resolveNovelPageTurnPreset(
+            style = NovelPageTransitionStyle.BOOK,
+            speed = NovelPageTurnSpeed.SLOW,
+            intensity = NovelPageTurnIntensity.LOW,
+            shadowIntensity = NovelPageTurnShadowIntensity.LOW,
+        )
+        val fastPreset = resolveNovelPageTurnPreset(
+            style = NovelPageTransitionStyle.BOOK,
+            speed = NovelPageTurnSpeed.FAST,
+            intensity = NovelPageTurnIntensity.HIGH,
+            shadowIntensity = NovelPageTurnShadowIntensity.HIGH,
+        )
+
+        assertTrue(slowPreset.animationDurationMillis - fastPreset.animationDurationMillis >= 240)
+        assertTrue(slowPreset.curlAmount < fastPreset.curlAmount)
+        assertTrue(slowPreset.shadowAlpha < fastPreset.shadowAlpha)
+    }
+
+    @Test
+    fun `page turn slider mappings round trip the expanded value set`() {
+        assertEquals(0, novelPageTurnSpeedSliderIndex(NovelPageTurnSpeed.SLOWER))
+        assertEquals(NovelPageTurnSpeed.SLOWER, resolveNovelPageTurnSpeedSliderValue(0))
+        assertEquals(4, novelPageTurnSpeedSliderIndex(NovelPageTurnSpeed.FASTER))
+        assertEquals(NovelPageTurnSpeed.FASTER, resolveNovelPageTurnSpeedSliderValue(4))
+
+        assertEquals(0, novelPageTurnIntensitySliderIndex(NovelPageTurnIntensity.SOFTER))
+        assertEquals(NovelPageTurnIntensity.SOFTER, resolveNovelPageTurnIntensitySliderValue(0))
+        assertEquals(4, novelPageTurnIntensitySliderIndex(NovelPageTurnIntensity.STRONGER))
+        assertEquals(NovelPageTurnIntensity.STRONGER, resolveNovelPageTurnIntensitySliderValue(4))
+
+        assertEquals(0, novelPageTurnShadowIntensitySliderIndex(NovelPageTurnShadowIntensity.SOFTER))
+        assertEquals(
+            NovelPageTurnShadowIntensity.SOFTER,
+            resolveNovelPageTurnShadowIntensitySliderValue(0),
+        )
+        assertEquals(4, novelPageTurnShadowIntensitySliderIndex(NovelPageTurnShadowIntensity.STRONGER))
+        assertEquals(
+            NovelPageTurnShadowIntensity.STRONGER,
+            resolveNovelPageTurnShadowIntensitySliderValue(4),
+        )
+    }
+
+    @Test
+    fun `page turn tuning summary text formats expanded labels`() {
+        assertEquals(
+            "Slower speed • Stronger intensity • Softer shadow",
+            resolveNovelPageTurnTuningSummaryText(
+                format = "%1\$s speed • %2\$s intensity • %3\$s shadow",
+                speedLabel = "Slower",
+                intensityLabel = "Stronger",
+                shadowLabel = "Softer",
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn preset responds to the new slider extremes`() {
+        val softerPreset = resolveNovelPageTurnPreset(
+            style = NovelPageTransitionStyle.BOOK,
+            speed = NovelPageTurnSpeed.SLOWER,
+            intensity = NovelPageTurnIntensity.SOFTER,
+            shadowIntensity = NovelPageTurnShadowIntensity.SOFTER,
+        )
+        val strongerPreset = resolveNovelPageTurnPreset(
+            style = NovelPageTransitionStyle.BOOK,
+            speed = NovelPageTurnSpeed.FASTER,
+            intensity = NovelPageTurnIntensity.STRONGER,
+            shadowIntensity = NovelPageTurnShadowIntensity.STRONGER,
+        )
+
+        assertEquals(NovelPageTransitionStyle.BOOK, softerPreset.style)
+        assertEquals(NovelPageTransitionStyle.BOOK, strongerPreset.style)
+        assertTrue(softerPreset.animationDurationMillis > strongerPreset.animationDurationMillis)
+        assertTrue(softerPreset.curlAmount < strongerPreset.curlAmount)
+        assertTrue(softerPreset.shadowAlpha < strongerPreset.shadowAlpha)
+        assertTrue(softerPreset.backPageAlpha < strongerPreset.backPageAlpha)
     }
 
     @Test
@@ -2013,6 +2205,20 @@ class NovelReaderUiVisibilityTest {
         assertTrue(tunedPreset.animationDurationMillis < basePreset.animationDurationMillis)
         assertTrue(tunedPreset.curlAmount > basePreset.curlAmount)
         assertTrue(tunedPreset.shadowAlpha < basePreset.shadowAlpha)
+    }
+
+    @Test
+    fun `page reader content layout keeps text padding separate from full page surface`() {
+        val layout = resolveNovelPageReaderContentLayout(
+            contentPadding = 20.dp,
+            statusBarTopPadding = 12.dp,
+            horizontalMargin = 18,
+        )
+
+        assertEquals(32.dp, layout.textPadding.calculateTopPadding())
+        assertEquals(20.dp, layout.textPadding.calculateBottomPadding())
+        assertEquals(18.dp, layout.textPadding.calculateLeftPadding(LayoutDirection.Ltr))
+        assertEquals(18.dp, layout.textPadding.calculateRightPadding(LayoutDirection.Ltr))
     }
 
     @Test
@@ -2044,6 +2250,40 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `page turn renderer config keeps back page color parchment tinted instead of pure white`() {
+        val config = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.CURL,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            textBackground = Color.White,
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+
+        assertNotEquals(Color.White, config.backPageColor)
+        assertTrue(config.backPageColor.luminance() < Color.White.luminance())
+    }
+
+    @Test
+    fun `page turn renderer config keeps back page color visibly warmer than white`() {
+        val config = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.CURL,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            textBackground = Color.White,
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+
+        assertTrue(
+            config.backPageColor.luminance() < 0.90f,
+            "expected parchment-like back face, got ${config.backPageColor}",
+        )
+    }
+
+    @Test
     fun `page turn renderer config disables unavailable turn directions without losing center tap`() {
         val config = resolveNovelPageTurnRendererConfig(
             style = NovelPageTransitionStyle.CURL,
@@ -2060,7 +2300,44 @@ class NovelReaderUiVisibilityTest {
         assertFalse(config.tapBackwardEnabled)
         assertTrue(config.tapForwardEnabled)
         assertTrue(config.tapCustomEnabled)
-        assertTrue(config.centerTapWidthFraction > 0.2f)
+        assertTrue(config.centerTapWidthFraction >= 0.2f)
+    }
+
+    @Test
+    @OptIn(ExperimentalPageCurlApi::class)
+    fun `page turn renderer keeps backward tap zones wide enough for left side taps`() {
+        val bookConfig = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.BOOK,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            textBackground = Color(0xFFF8F2E7),
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+        val bookTapInteraction = createPageTurnTapInteraction(bookConfig)
+        val curlTapInteraction = createPageTurnTapInteraction(
+            resolveNovelPageTurnRendererConfig(
+                style = NovelPageTransitionStyle.CURL,
+                speed = NovelPageTurnSpeed.NORMAL,
+                intensity = NovelPageTurnIntensity.MEDIUM,
+                shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+                textBackground = Color(0xFFF8F2E7),
+                canMoveBackward = true,
+                canMoveForward = true,
+            ),
+        )
+
+        assertEquals(
+            0.4f,
+            bookTapInteraction.backward.target.right,
+            0.0001f,
+        )
+        assertEquals(
+            0.4f,
+            curlTapInteraction.backward.target.right,
+            0.0001f,
+        )
     }
 
     @Test
@@ -2214,8 +2491,8 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `renderer tuning changes dismiss quick reader settings dialog`() {
-        assertTrue(
+    fun `renderer tuning changes keep quick reader settings dialog open`() {
+        assertFalse(
             shouldDismissReaderSettingsDialogAfterFamilyChange(
                 NovelReaderSettingsFamily.RENDERER_TUNING,
             ),

@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import kotlin.math.abs
 
@@ -83,6 +84,8 @@ internal fun ComposePagerPageRenderer(
     readerSettings: NovelReaderSettings,
     textColor: Color,
     textBackground: Color,
+    backgroundTexture: NovelReaderBackgroundTexture,
+    nativeTextureStrengthPercent: Int,
     composeFontFamily: FontFamily?,
     chapterTitleFontFamily: FontFamily?,
     contentPadding: Dp,
@@ -173,6 +176,8 @@ internal fun ComposePagerPageRenderer(
             readerSettings = readerSettings,
             textColor = textColor,
             textBackground = textBackground,
+            backgroundTexture = backgroundTexture,
+            nativeTextureStrengthPercent = nativeTextureStrengthPercent,
             composeFontFamily = composeFontFamily,
             chapterTitleFontFamily = chapterTitleFontFamily,
             contentPadding = contentPadding,

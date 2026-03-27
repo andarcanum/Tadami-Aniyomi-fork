@@ -4,6 +4,7 @@ package eu.kanade.presentation.reader.novel
 
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -15,10 +16,13 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
@@ -28,6 +32,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnIntensity
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnShadowIntensity
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnSpeed
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.wewox.pagecurl.ExperimentalPageCurlApi
 import eu.wewox.pagecurl.config.PageCurlConfig
@@ -115,13 +120,8 @@ internal fun resolveNovelPageTurnRendererConfig(
     } else {
         (0.54f + (preset.curlAmount * 0.18f)).coerceIn(0.56f, 0.74f)
     }
-    val centerTapWidth = if (isCurl) 0.30f else 0.36f
-    val mixTarget = if (textBackground.luminance() < 0.5f) Color.White else Color.Black
-    val backPageColor = lerp(
-        start = textBackground,
-        stop = mixTarget,
-        fraction = if (isCurl) 0.09f else 0.06f,
-    )
+    // Keep the center band narrow so left-side taps still feel like page turns.
+    val centerTapWidth = 0.20f
     val shadowRadiusDp = if (isCurl) {
         18f + (preset.shadowAlpha * 24f)
     } else {
@@ -142,13 +142,30 @@ internal fun resolveNovelPageTurnRendererConfig(
         centerTapWidthFraction = centerTapWidth,
         shadowRadiusDp = shadowRadiusDp,
         shadowOffsetXDp = shadowOffsetXDp,
-        backPageColor = backPageColor,
+        backPageColor = resolveNovelPageTurnBackPageColor(textBackground),
         shadowColor = Color.Black,
         dragBackwardEnabled = canMoveBackward,
         dragForwardEnabled = canMoveForward,
         tapBackwardEnabled = canMoveBackward,
         tapForwardEnabled = canMoveForward,
         tapCustomEnabled = true,
+    )
+}
+
+private fun resolveNovelPageTurnBackPageColor(
+    textBackground: Color,
+): Color {
+    val isLightBackground = textBackground.luminance() >= 0.65f
+    val parchmentTone = if (isLightBackground) {
+        Color(0xFFE6D4AA)
+    } else {
+        Color(0xFF2F2418)
+    }
+
+    return lerp(
+        start = textBackground,
+        stop = parchmentTone,
+        fraction = if (isLightBackground) 0.82f else 0.28f,
     )
 }
 
@@ -176,7 +193,7 @@ private fun resolvePageTurnCustomTapAction(
     }
 }
 
-private fun createPageTurnTapInteraction(
+internal fun createPageTurnTapInteraction(
     config: NovelPageTurnRendererConfig,
 ): PageCurlConfig.TargetTapInteraction {
     val edgeTapWidth = ((1f - config.centerTapWidthFraction) / 2f).coerceIn(0.18f, 0.4f)
@@ -232,6 +249,14 @@ internal fun PageTurnPageRenderer(
     readerSettings: NovelReaderSettings,
     textColor: Color,
     textBackground: Color,
+    backgroundTexture: NovelReaderBackgroundTexture,
+    nativeTextureStrengthPercent: Int,
+    backgroundImageModel: Any?,
+    backgroundModeIdentity: String,
+    isBackgroundMode: Boolean,
+    activeBackgroundTexture: NovelReaderBackgroundTexture,
+    activeOledEdgeGradient: Boolean,
+    isDarkTheme: Boolean,
     composeFontFamily: FontFamily?,
     chapterTitleFontFamily: FontFamily?,
     contentPadding: Dp,
@@ -239,6 +264,9 @@ internal fun PageTurnPageRenderer(
     hasPreviousChapter: Boolean,
     hasNextChapter: Boolean,
     onToggleUi: () -> Unit,
+    requestedPage: Int,
+    onRequestedPageConsumed: () -> Unit,
+    onCurrentPageChange: (Int) -> Unit,
     onMoveBackward: () -> Unit,
     onMoveForward: () -> Unit,
     onOpenPreviousChapter: () -> Unit,
@@ -247,7 +275,9 @@ internal fun PageTurnPageRenderer(
     val safeContentPages = remember(contentPages) {
         contentPages.ifEmpty { listOf(NovelPageContentPage(emptyList())) }
     }
-    val currentPage = pagerState.currentPage.coerceIn(0, safeContentPages.lastIndex)
+    val pagerCurrentPage = pagerState.currentPage.coerceIn(0, safeContentPages.lastIndex)
+    val pageCurlState = rememberPageCurlState(initialCurrent = pagerCurrentPage)
+    val currentPage = pageCurlState.current.coerceIn(0, safeContentPages.lastIndex)
     val rendererConfig = remember(
         transitionStyle,
         readerSettings.pageTurnSpeed,
@@ -270,9 +300,11 @@ internal fun PageTurnPageRenderer(
         )
     }
     val latestToggleUi by rememberUpdatedState(onToggleUi)
+    val latestRequestedPage by rememberUpdatedState(requestedPage)
+    val latestRequestedPageConsumed by rememberUpdatedState(onRequestedPageConsumed)
+    val latestCurrentPageChange by rememberUpdatedState(onCurrentPageChange)
     val latestOpenPreviousChapter by rememberUpdatedState(onOpenPreviousChapter)
     val latestOpenNextChapter by rememberUpdatedState(onOpenNextChapter)
-    val pageCurlState = rememberPageCurlState(initialCurrent = currentPage)
     val latestRendererConfig by rememberUpdatedState(rendererConfig)
     val latestPageCount by rememberUpdatedState(safeContentPages.size)
     val latestHasPreviousChapter by rememberUpdatedState(hasPreviousChapter)
@@ -312,7 +344,7 @@ internal fun PageTurnPageRenderer(
 
     SideEffect {
         pageCurlConfig.backPageColor = rendererConfig.backPageColor
-        pageCurlConfig.backPageContentAlpha = rendererConfig.preset.backPageAlpha
+        pageCurlConfig.backPageContentAlpha = 0f
         pageCurlConfig.shadowColor = rendererConfig.shadowColor
         pageCurlConfig.shadowAlpha = rendererConfig.preset.shadowAlpha
         pageCurlConfig.shadowRadius = rendererConfig.shadowRadiusDp.dp
@@ -326,9 +358,9 @@ internal fun PageTurnPageRenderer(
         pageCurlConfig.tapInteraction = createPageTurnTapInteraction(rendererConfig)
     }
 
-    LaunchedEffect(currentPage, safeContentPages.size) {
-        if (pageCurlState.current != currentPage) {
-            pageCurlState.snapTo(currentPage)
+    LaunchedEffect(pagerCurrentPage, safeContentPages.size) {
+        if (pageCurlState.current != pagerCurrentPage) {
+            pageCurlState.snapTo(pagerCurrentPage)
         }
     }
 
@@ -336,67 +368,184 @@ internal fun PageTurnPageRenderer(
         snapshotFlow { pageCurlState.current }
             .map { it.coerceIn(0, safeContentPages.lastIndex) }
             .distinctUntilChanged()
-            .filter { it != pagerState.currentPage }
             .collectLatest { targetPage ->
-                pagerState.scrollToPage(targetPage)
+                latestCurrentPageChange(targetPage)
+                if (targetPage != pagerState.currentPage) {
+                    pagerState.scrollToPage(targetPage)
+                }
             }
     }
 
-    PageCurl(
-        count = safeContentPages.size,
-        key = { it },
-        state = pageCurlState,
-        config = pageCurlConfig,
-        modifier = Modifier
-            .fillMaxSize()
-            .pointerInput(
-                pageCurlState.current,
-                safeContentPages.size,
-                hasPreviousChapter,
-                hasNextChapter,
-            ) {
-                val thresholdPx = 160.dp.toPx()
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    val pageAtGestureStart = pageCurlState.current
-                    var currentPosition = down.position
+    LaunchedEffect(latestRequestedPage, safeContentPages.size) {
+        val targetPage = latestRequestedPage
+        if (targetPage < 0 || safeContentPages.isEmpty()) return@LaunchedEffect
+        val clampedTarget = targetPage.coerceIn(0, safeContentPages.lastIndex)
+        if (pageCurlState.current != clampedTarget) {
+            pageCurlState.snapTo(clampedTarget)
+        }
+        latestRequestedPageConsumed()
+    }
 
-                    while (true) {
-                        val event = awaitPointerEvent(PointerEventPass.Final)
-                        val change = event.changes.firstOrNull { it.id == down.id }
-                            ?: event.changes.firstOrNull()
-                            ?: break
-                        currentPosition = change.position
-                        if (!change.pressed) break
-                    }
-
-                    when (
-                        resolvePageReaderBoundaryChapterSwipeAction(
-                            currentPage = pageAtGestureStart,
-                            pageCount = safeContentPages.size,
-                            deltaX = currentPosition.x - down.position.x,
-                            deltaY = currentPosition.y - down.position.y,
-                            thresholdPx = thresholdPx,
-                            hasPreviousChapter = hasPreviousChapter,
-                            hasNextChapter = hasNextChapter,
-                        )
-                    ) {
-                        HorizontalChapterSwipeAction.PREVIOUS -> latestOpenPreviousChapter()
-                        HorizontalChapterSwipeAction.NEXT -> latestOpenNextChapter()
-                        HorizontalChapterSwipeAction.NONE -> Unit
-                    }
-                }
-            },
-    ) { page ->
-        NovelPageReaderPageContent(
-            contentPage = safeContentPages.getOrElse(page) { NovelPageContentPage(emptyList()) },
-            readerSettings = readerSettings,
-            textColor = textColor,
-            textBackground = textBackground,
-            composeFontFamily = composeFontFamily,
-            chapterTitleFontFamily = chapterTitleFontFamily,
-            contentPadding = contentPadding,
-            statusBarTopPadding = statusBarTopPadding,
+    BoxWithConstraints(
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        val density = LocalDensity.current
+        val pageSize = IntSize(
+            width = with(density) { maxWidth.roundToPx() }.coerceAtLeast(1),
+            height = with(density) { maxHeight.roundToPx() }.coerceAtLeast(1),
         )
+        val contentPaddingPx = with(density) { contentPadding.roundToPx() }
+        val statusBarTopPaddingPx = with(density) { statusBarTopPadding.roundToPx() }
+        val snapshotCache = remember(
+            pageSize,
+            transitionStyle,
+            readerSettings.fontFamily,
+            readerSettings.fontSize,
+            readerSettings.lineHeight,
+            readerSettings.margin,
+            readerSettings.textAlign,
+            readerSettings.forceBoldText,
+            readerSettings.forceItalicText,
+            readerSettings.textShadow,
+            readerSettings.textShadowColor,
+            readerSettings.textShadowBlur,
+            readerSettings.textShadowX,
+            readerSettings.textShadowY,
+            readerSettings.bionicReading,
+            textColor,
+            textBackground,
+            backgroundTexture,
+            nativeTextureStrengthPercent,
+            backgroundImageModel,
+            backgroundModeIdentity,
+            isBackgroundMode,
+            activeBackgroundTexture,
+            activeOledEdgeGradient,
+            isDarkTheme,
+            composeFontFamily,
+            chapterTitleFontFamily,
+            safeContentPages,
+            rendererConfig.backPageColor,
+        ) {
+            NovelPageTurnSnapshotCache<ImageBitmap>(maxSize = 3)
+        }
+
+        PageCurl(
+            count = safeContentPages.size,
+            key = { it },
+            state = pageCurlState,
+            config = pageCurlConfig,
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(
+                    pageCurlState.current,
+                    safeContentPages.size,
+                    hasPreviousChapter,
+                    hasNextChapter,
+                ) {
+                    val thresholdPx = 160.dp.toPx()
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val pageAtGestureStart = pageCurlState.current
+                        var currentPosition = down.position
+
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Final)
+                            val change = event.changes.firstOrNull { it.id == down.id }
+                                ?: event.changes.firstOrNull()
+                                ?: break
+                            currentPosition = change.position
+                            if (!change.pressed) break
+                        }
+
+                        when (
+                            resolvePageReaderBoundaryChapterSwipeAction(
+                                currentPage = pageAtGestureStart,
+                                pageCount = safeContentPages.size,
+                                deltaX = currentPosition.x - down.position.x,
+                                deltaY = currentPosition.y - down.position.y,
+                                thresholdPx = thresholdPx,
+                                hasPreviousChapter = hasPreviousChapter,
+                                hasNextChapter = hasNextChapter,
+                            )
+                        ) {
+                            HorizontalChapterSwipeAction.PREVIOUS -> latestOpenPreviousChapter()
+                            HorizontalChapterSwipeAction.NEXT -> latestOpenNextChapter()
+                            HorizontalChapterSwipeAction.NONE -> Unit
+                        }
+                    }
+                },
+        ) { page ->
+            val contentPage = safeContentPages.getOrElse(page) { NovelPageContentPage(emptyList()) }
+            val pageTexture = if (isBackgroundMode) activeBackgroundTexture else backgroundTexture
+            val pageTextureStrengthPercent = if (isBackgroundMode) 0 else nativeTextureStrengthPercent
+            val pageSurfaceColor = if (isBackgroundMode) null else rendererConfig.backPageColor
+            val pageSnapshotKey = resolveNovelPageTurnSnapshotKey(
+                style = rendererConfig.style,
+                pageIndex = page,
+                pageCount = safeContentPages.size,
+                pageContentHash = contentPage.hashCode(),
+                pageSize = pageSize,
+                fontFamilyKey = readerSettings.fontFamily,
+                chapterTitleFontFamilyKey = chapterTitleFontFamily?.hashCode()?.toString().orEmpty(),
+                fontSize = readerSettings.fontSize,
+                lineHeight = readerSettings.lineHeight,
+                margin = readerSettings.margin,
+                contentPaddingPx = contentPaddingPx,
+                statusBarTopPaddingPx = statusBarTopPaddingPx,
+                textAlign = readerSettings.textAlign,
+                textColor = textColor,
+                textBackground = textBackground,
+                pageSurfaceColor = pageSurfaceColor ?: Color.Transparent,
+                isBackgroundMode = isBackgroundMode,
+                backgroundImageIdentity = backgroundModeIdentity,
+                backgroundTextureName = pageTexture.name,
+                nativeTextureStrengthPercentEffective = pageTextureStrengthPercent,
+                oledEdgeGradient = if (isBackgroundMode) activeOledEdgeGradient else false,
+                isDarkTheme = isDarkTheme,
+                backgroundTexture = pageTexture,
+                nativeTextureStrengthPercent = pageTextureStrengthPercent,
+                forceBoldText = readerSettings.forceBoldText,
+                forceItalicText = readerSettings.forceItalicText,
+                textShadow = readerSettings.textShadow,
+                textShadowColor = readerSettings.textShadowColor,
+                textShadowBlur = readerSettings.textShadowBlur,
+                textShadowX = readerSettings.textShadowX,
+                textShadowY = readerSettings.textShadowY,
+                bionicReading = readerSettings.bionicReading,
+            )
+            NovelPageTurnSnapshotRenderer(
+                snapshotKey = pageSnapshotKey,
+                snapshotCache = snapshotCache,
+                preferCachedBitmap = !isBackgroundMode,
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                if (isBackgroundMode) {
+                    NovelAtmosphereBackground(
+                        backgroundColor = textBackground,
+                        backgroundTexture = pageTexture,
+                        nativeTextureStrengthPercent = pageTextureStrengthPercent,
+                        oledEdgeGradient = activeOledEdgeGradient,
+                        isDarkTheme = isDarkTheme,
+                        pageEdgeShadow = false,
+                        pageEdgeShadowAlpha = 0f,
+                        backgroundImageModel = backgroundImageModel,
+                    )
+                }
+                NovelPageReaderPageContent(
+                    contentPage = contentPage,
+                    readerSettings = readerSettings,
+                    textColor = textColor,
+                    textBackground = textBackground,
+                    pageSurfaceColor = pageSurfaceColor,
+                    backgroundTexture = pageTexture,
+                    nativeTextureStrengthPercent = pageTextureStrengthPercent,
+                    composeFontFamily = composeFontFamily,
+                    chapterTitleFontFamily = chapterTitleFontFamily,
+                    contentPadding = contentPadding,
+                    statusBarTopPadding = statusBarTopPadding,
+                )
+            }
+        }
     }
 }

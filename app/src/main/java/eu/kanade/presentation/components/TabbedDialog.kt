@@ -44,6 +44,7 @@ fun TabbedDialog(
     onDismissRequest: () -> Unit,
     tabTitles: ImmutableList<String>,
     modifier: Modifier = Modifier,
+    enableSwipeDismiss: Boolean = true,
     tabOverflowMenuContent: (@Composable ColumnScope.(() -> Unit) -> Unit)? = null,
     onOverflowMenuClicked: (() -> Unit)? = null,
     overflowIcon: ImageVector? = null,
@@ -52,6 +53,7 @@ fun TabbedDialog(
 ) {
     AdaptiveSheet(
         modifier = modifier,
+        enableSwipeDismiss = enableSwipeDismiss,
         onDismissRequest = onDismissRequest,
     ) {
         val scope = rememberCoroutineScope()

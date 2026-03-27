@@ -42,6 +42,8 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -772,16 +774,23 @@ fun NovelReaderScreen(
         ),
         pageCount = { pageReaderItemsCount.coerceAtLeast(1) },
     )
+    var pageTurnCurrentPage by remember(state.chapter.id) {
+        mutableIntStateOf(pagerState.currentPage)
+    }
+    var pageTurnRequestedPage by remember(state.chapter.id) {
+        mutableIntStateOf(-1)
+    }
     val pageReaderProgressPageIndex by remember(
         pageReaderRendererRoute,
         pagerState.currentPage,
+        pageTurnCurrentPage,
     ) {
         derivedStateOf {
-            if (pageReaderRendererRoute == NovelPageReaderRendererRoute.PAGE_TURN_RENDERER) {
-                resolvePageTurnRendererProgressPageIndex(pagerState.currentPage)
-            } else {
-                pagerState.currentPage
-            }
+            resolvePageReaderCurrentPage(
+                pageReaderRendererRoute = pageReaderRendererRoute,
+                pagerCurrentPage = pagerState.currentPage,
+                pageTurnCurrentPage = pageTurnCurrentPage,
+            )
         }
     }
     val readingProgressPercent by remember(
@@ -798,9 +807,10 @@ fun NovelReaderScreen(
             when {
                 showWebView -> webProgressPercent
                 usePageReader -> {
-                    (((pageReaderProgressPageIndex + 1).toFloat() / pageReaderItemsCount.toFloat()) * 100f)
-                        .roundToInt()
-                        .coerceIn(0, 100)
+                    resolvePageReaderReadingProgressPercent(
+                        pageIndex = pageReaderProgressPageIndex,
+                        pageCount = pageReaderItemsCount,
+                    )
                 }
                 nativeScrollItemsCount <= 0 -> 0
                 !textListState.canScrollForward -> 100
@@ -863,6 +873,13 @@ fun NovelReaderScreen(
         showReaderUi = showReaderUI,
     )
 
+    LaunchedEffect(state.chapter.id, usePageReader) {
+        showReaderUI = resolveReaderUiAfterChapterChange(
+            currentShowReaderUi = showReaderUI,
+            usePageReader = usePageReader,
+        )
+    }
+
     // Volume Buttons Handler
     val coroutineScope = rememberCoroutineScope()
     suspend fun moveBackwardByReaderAction() {
@@ -874,8 +891,9 @@ fun NovelReaderScreen(
                 onOpenPreviousChapter?.invoke(state.previousChapterId)
             }
         } else if (usePageReader) {
-            val currentPage = pagerState.currentPage
+            val currentPage = pageReaderProgressPageIndex
             if (currentPage > 0) {
+                pageTurnCurrentPage = currentPage - 1
                 pagerState.animateScrollToPage(currentPage - 1)
             } else if (state.readerSettings.swipeToPrevChapter && state.previousChapterId != null) {
                 onOpenPreviousChapter?.invoke(state.previousChapterId)
@@ -896,8 +914,9 @@ fun NovelReaderScreen(
                 onOpenNextChapter?.invoke(state.nextChapterId)
             }
         } else if (usePageReader) {
-            val currentPage = pagerState.currentPage
+            val currentPage = pageReaderProgressPageIndex
             if (currentPage < pageReaderItemsCount - 1) {
+                pageTurnCurrentPage = currentPage + 1
                 pagerState.animateScrollToPage(currentPage + 1)
             } else if (state.readerSettings.swipeToNextChapter && state.nextChapterId != null) {
                 onOpenNextChapter?.invoke(state.nextChapterId)
@@ -1012,8 +1031,9 @@ fun NovelReaderScreen(
                 stepRemainderPx = 0f
                 delay(autoScrollPageDelayMs(autoScrollSpeed))
                 if (showReaderUI || showWebView || !autoScrollEnabled) continue
-                val currentPage = pagerState.currentPage
+                val currentPage = pageReaderProgressPageIndex
                 if (currentPage < pageReaderItemsCount - 1) {
+                    pageTurnCurrentPage = currentPage + 1
                     pagerState.animateScrollToPage(currentPage + 1)
                 } else if (state.readerSettings.swipeToNextChapter && state.nextChapterId != null) {
                     autoScrollEnabled = false
@@ -1052,7 +1072,7 @@ fun NovelReaderScreen(
             .fillMaxSize()
             .onSizeChanged { pageViewportSize = it },
     ) {
-        ReaderAtmosphereBackground(
+        NovelAtmosphereBackground(
             backgroundColor = textBackground,
             backgroundTexture = activeBackgroundTexture,
             nativeTextureStrengthPercent = if (isBackgroundMode) {
@@ -1141,9 +1161,11 @@ fun NovelReaderScreen(
                             contentPages = pageReaderContentPages,
                             transitionStyle = activePageTransitionStyle,
                             readerSettings = state.readerSettings,
-                        textColor = textColor,
-                        textBackground = textBackground,
-                        composeFontFamily = composeFontFamily,
+                            textColor = textColor,
+                            textBackground = textBackground,
+                            backgroundTexture = state.readerSettings.backgroundTexture,
+                            nativeTextureStrengthPercent = state.readerSettings.nativeTextureStrengthPercent,
+                            composeFontFamily = composeFontFamily,
                             chapterTitleFontFamily = chapterTitleFontFamily,
                             contentPadding = contentPaddingPx,
                             statusBarTopPadding = statusBarTopPadding,
@@ -1161,15 +1183,26 @@ fun NovelReaderScreen(
                             contentPages = pageReaderContentPages,
                             transitionStyle = activePageTransitionStyle,
                             readerSettings = state.readerSettings,
-                        textColor = textColor,
-                        textBackground = textBackground,
-                        composeFontFamily = composeFontFamily,
+                            textColor = textColor,
+                            textBackground = textBackground,
+                            backgroundTexture = state.readerSettings.backgroundTexture,
+                            nativeTextureStrengthPercent = state.readerSettings.nativeTextureStrengthPercent,
+                            backgroundImageModel = if (isBackgroundMode) backgroundImageModel else null,
+                            backgroundModeIdentity = if (isBackgroundMode) backgroundModeIdentity else "",
+                            isBackgroundMode = isBackgroundMode,
+                            activeBackgroundTexture = activeBackgroundTexture,
+                            activeOledEdgeGradient = activeOledEdgeGradient,
+                            isDarkTheme = isDarkTheme,
+                            composeFontFamily = composeFontFamily,
                             chapterTitleFontFamily = chapterTitleFontFamily,
                             contentPadding = contentPaddingPx,
                             statusBarTopPadding = statusBarTopPadding,
                             hasPreviousChapter = state.previousChapterId != null,
                             hasNextChapter = state.nextChapterId != null,
                             onToggleUi = { showReaderUI = !showReaderUI },
+                            requestedPage = pageTurnRequestedPage,
+                            onRequestedPageConsumed = { pageTurnRequestedPage = -1 },
+                            onCurrentPageChange = { pageTurnCurrentPage = it },
                             onMoveBackward = { coroutineScope.launch { moveBackwardByReaderAction() } },
                             onMoveForward = { coroutineScope.launch { moveForwardByReaderAction() } },
                             onOpenPreviousChapter = { state.previousChapterId?.let { onOpenPreviousChapter?.invoke(it) } },
@@ -2055,6 +2088,7 @@ fun NovelReaderScreen(
                 showReaderUi = showReaderUI,
                 verticalSeekbarEnabled = state.readerSettings.verticalSeekbar,
                 showWebView = showWebView,
+                usePageReader = usePageReader,
                 textBlocksCount = seekbarItemsCount,
             )
         ) {
@@ -2063,34 +2097,43 @@ fun NovelReaderScreen(
                 webProgressPercent,
                 usePageReader,
                 pagerState.currentPage,
+                pageTurnCurrentPage,
                 textListState.firstVisibleItemIndex,
                 textListState.canScrollForward,
                 seekbarItemsCount,
                 readingProgressPercent,
             ) {
                 derivedStateOf {
-                    if (showWebView) {
-                        webProgressPercent.coerceIn(0, 100) / 100f
-                    } else if (!usePageReader) {
-                        // For long paragraphs/index-based lists, index ratio can lag behind.
-                        // Use effective reading progress so thumb reaches the real chapter end.
-                        readingProgressPercent.coerceIn(0, 100) / 100f
-                    } else {
-                        val max = (seekbarItemsCount - 1).coerceAtLeast(1)
-                        val current = pagerState.currentPage
-                        current.toFloat() / max.toFloat()
-                    }
+                    resolveReaderVerticalSeekbarValue(
+                        showWebView = showWebView,
+                        webProgressPercent = webProgressPercent,
+                        usePageReader = usePageReader,
+                        pageReaderRendererRoute = pageReaderRendererRoute,
+                        pagerCurrentPage = pagerState.currentPage,
+                        pageTurnCurrentPage = pageTurnCurrentPage,
+                        seekbarItemsCount = seekbarItemsCount,
+                        readingProgressPercent = readingProgressPercent,
+                    )
                 }
             }
-            val (seekbarTopLabel, seekbarBottomLabel) = verticalSeekbarLabels(
-                readingProgressPercent = readingProgressPercent,
-                showScrollPercentage = state.readerSettings.showScrollPercentage,
-            )
+            val (pageRailTopLabel, pageRailBottomLabel) = if (usePageReader) {
+                resolveReaderPageRailLabels(pageReaderItemsCount)
+            } else {
+                verticalSeekbarLabels(
+                    readingProgressPercent = readingProgressPercent,
+                    showScrollPercentage = state.readerSettings.showScrollPercentage,
+                )
+            }
+            val pageSeekbarTickFractions = if (usePageReader) {
+                resolveReaderVerticalSeekbarTickFractions(pageReaderItemsCount)
+            } else {
+                emptyList()
+            }
             Column(
                 modifier = Modifier
                     .align(androidx.compose.ui.Alignment.CenterEnd)
                     .padding(end = MaterialTheme.padding.small)
-                    .size(width = 30.dp, height = 270.dp),
+                    .size(width = if (usePageReader) 40.dp else 30.dp, height = 270.dp),
                 horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
             ) {
                 if (state.readerSettings.geminiEnabled) {
@@ -2171,8 +2214,9 @@ fun NovelReaderScreen(
                 }
                 LnReaderVerticalSeekbar(
                     progress = seekbarValue,
-                    topLabel = seekbarTopLabel,
-                    bottomLabel = seekbarBottomLabel,
+                    topLabel = pageRailTopLabel,
+                    bottomLabel = pageRailBottomLabel,
+                    tickFractions = pageSeekbarTickFractions,
                     onProgressChange = { value ->
                         if (showWebView) {
                             val targetPercent = (value * 100f).roundToInt().coerceIn(0, 100)
@@ -2198,10 +2242,17 @@ fun NovelReaderScreen(
                             val target = (value * maxIndex.toFloat())
                                 .roundToInt()
                                 .coerceIn(0, maxIndex)
-                            coroutineScope.launch {
-                                if (usePageReader) {
-                                    pagerState.scrollToPage(target)
+                            if (usePageReader) {
+                                pageTurnCurrentPage = target
+                                if (pageReaderRendererRoute == NovelPageReaderRendererRoute.PAGE_TURN_RENDERER) {
+                                    pageTurnRequestedPage = target
                                 } else {
+                                    coroutineScope.launch {
+                                        pagerState.scrollToPage(target)
+                                    }
+                                }
+                            } else {
+                                coroutineScope.launch {
                                     textListState.scrollToItem(target)
                                 }
                             }
@@ -4581,13 +4632,24 @@ private fun LnReaderVerticalSeekbar(
     progress: Float,
     topLabel: String?,
     bottomLabel: String?,
+    tickFractions: List<Float> = emptyList(),
     onProgressChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var containerHeightPx by remember { mutableFloatStateOf(0f) }
+    var scrubProgress by remember { mutableFloatStateOf(progress) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val isDragged by interactionSource.collectIsDraggedAsState()
+    val thumbProgress = if (isDragged) scrubProgress else progress
     val trackColor = MaterialTheme.colorScheme.outline
     val progressColor = MaterialTheme.colorScheme.primary
     val containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+
+    LaunchedEffect(progress, isDragged) {
+        if (!isDragged) {
+            scrubProgress = progress
+        }
+    }
 
     fun normalizeProgressFromY(y: Float): Float {
         if (containerHeightPx <= 0f) return progress
@@ -4606,16 +4668,21 @@ private fun LnReaderVerticalSeekbar(
             .onSizeChanged { containerHeightPx = it.height.toFloat() }
             .pointerInput(containerHeightPx) {
                 detectTapGestures { offset ->
-                    onProgressChange(normalizeProgressFromY(offset.y))
+                    val newProgress = normalizeProgressFromY(offset.y)
+                    scrubProgress = newProgress
+                    onProgressChange(newProgress)
                 }
             }
             .draggable(
                 orientation = Orientation.Vertical,
+                interactionSource = interactionSource,
                 state = rememberDraggableState { delta ->
                     val trackTop = containerHeightPx * 0.125f
                     val trackHeight = (containerHeightPx * 0.75f).coerceAtLeast(1f)
-                    val currentY = trackTop + (trackHeight * progress)
-                    onProgressChange(normalizeProgressFromY(currentY + delta))
+                    val currentY = trackTop + (trackHeight * thumbProgress)
+                    val newProgress = normalizeProgressFromY(currentY + delta)
+                    scrubProgress = newProgress
+                    onProgressChange(newProgress)
                 },
             ),
     ) {
@@ -4651,9 +4718,12 @@ private fun LnReaderVerticalSeekbar(
                     val centerX = size.width / 2f
                     val trackTop = 0f
                     val trackBottom = size.height
-                    val trackWidth = 1.dp.toPx()
-                    val thumbY = trackTop + ((trackBottom - trackTop) * progress.coerceIn(0f, 1f))
-                    val thumbRadius = 4.dp.toPx()
+                    val trackWidth = if (isDragged) 1.5.dp.toPx() else 1.dp.toPx()
+                    val activeProgress = thumbProgress.coerceIn(0f, 1f)
+                    val thumbY = trackTop + ((trackBottom - trackTop) * activeProgress)
+                    val thumbRadius = if (isDragged) 5.5.dp.toPx() else 4.dp.toPx()
+                    val thumbHaloRadius = if (isDragged) 9.dp.toPx() else 0f
+                    val tickRadius = if (isDragged) 1.75.dp.toPx() else 1.5.dp.toPx()
 
                     drawLine(
                         color = trackColor,
@@ -4667,8 +4737,29 @@ private fun LnReaderVerticalSeekbar(
                         end = Offset(centerX, thumbY),
                         strokeWidth = trackWidth,
                     )
+                    tickFractions.forEach { tickFraction ->
+                        val normalizedTickFraction = tickFraction.coerceIn(0f, 1f)
+                        val tickY = trackTop + ((trackBottom - trackTop) * normalizedTickFraction)
+                        val tickColor = if (normalizedTickFraction <= activeProgress) {
+                            progressColor.copy(alpha = if (isDragged) 0.95f else 0.85f)
+                        } else {
+                            trackColor.copy(alpha = 0.75f)
+                        }
+                        drawCircle(
+                            color = tickColor,
+                            radius = tickRadius,
+                            center = Offset(centerX, tickY),
+                        )
+                    }
+                    if (thumbHaloRadius > 0f) {
+                        drawCircle(
+                            color = progressColor.copy(alpha = 0.18f),
+                            radius = thumbHaloRadius,
+                            center = Offset(centerX, thumbY),
+                        )
+                    }
                     drawCircle(
-                        color = progressColor,
+                        color = if (isDragged) progressColor else progressColor.copy(alpha = 0.92f),
                         radius = thumbRadius,
                         center = Offset(centerX, thumbY),
                     )
@@ -4952,6 +5043,35 @@ internal fun estimateNovelReaderRemainingMinutes(
     return ceil(remaining / speed).toInt().coerceAtLeast(1)
 }
 
+internal fun resolvePageReaderReadingProgressPercent(
+    pageIndex: Int,
+    pageCount: Int,
+): Int {
+    val safePageCount = pageCount.coerceAtLeast(0)
+    if (safePageCount <= 0) return 0
+    if (safePageCount == 1) return 100
+
+    val safePageIndex = pageIndex.coerceIn(0, safePageCount - 1)
+    return ((safePageIndex.toFloat() / (safePageCount - 1).toFloat()) * 100f)
+        .roundToInt()
+        .coerceIn(0, 100)
+}
+
+internal fun resolveReaderPageRailLabels(
+    pageCount: Int,
+): Pair<String?, String?> {
+    val safePageCount = pageCount.coerceAtLeast(0)
+    if (safePageCount <= 0) return null to null
+    return "1" to safePageCount.toString()
+}
+
+internal fun resolveReaderVerticalSeekbarTickFractions(pageCount: Int): List<Float> {
+    val safePageCount = pageCount.coerceAtLeast(0)
+    if (safePageCount <= 1) return emptyList()
+    val denominator = (safePageCount - 1).toFloat()
+    return List(safePageCount) { index -> index.toFloat() / denominator }
+}
+
 internal fun countNovelWords(blocks: List<String>): Int {
     if (blocks.isEmpty()) return 0
     return blocks.sumOf { block -> novelWordRegex.findAll(block).count() }
@@ -4970,9 +5090,16 @@ internal fun shouldShowVerticalSeekbar(
     showReaderUi: Boolean,
     verticalSeekbarEnabled: Boolean,
     @Suppress("UNUSED_PARAMETER") showWebView: Boolean,
+    usePageReader: Boolean,
     textBlocksCount: Int,
 ): Boolean {
-    return showReaderUi && verticalSeekbarEnabled && textBlocksCount > 1
+    return showReaderUi &&
+        verticalSeekbarEnabled &&
+        if (usePageReader) {
+            textBlocksCount > 0
+        } else {
+            textBlocksCount > 1
+        }
 }
 
 internal fun shouldStartInWebView(
@@ -5110,6 +5237,47 @@ internal fun resolvePageReaderRendererRoute(
     return when (resolvePageTransitionEngine(activeStyle)) {
         NovelPageTransitionEngine.COMPOSE_PAGER -> NovelPageReaderRendererRoute.COMPOSE_PAGER
         NovelPageTransitionEngine.PAGE_TURN_RENDERER -> NovelPageReaderRendererRoute.PAGE_TURN_RENDERER
+    }
+}
+
+internal fun resolvePageReaderCurrentPage(
+    pageReaderRendererRoute: NovelPageReaderRendererRoute?,
+    pagerCurrentPage: Int,
+    pageTurnCurrentPage: Int,
+): Int {
+    return if (pageReaderRendererRoute == NovelPageReaderRendererRoute.PAGE_TURN_RENDERER) {
+        resolvePageTurnRendererProgressPageIndex(pageTurnCurrentPage)
+    } else {
+        pagerCurrentPage.coerceAtLeast(0)
+    }
+}
+
+internal fun resolveReaderVerticalSeekbarValue(
+    showWebView: Boolean,
+    webProgressPercent: Int,
+    usePageReader: Boolean,
+    pageReaderRendererRoute: NovelPageReaderRendererRoute?,
+    pagerCurrentPage: Int,
+    pageTurnCurrentPage: Int,
+    seekbarItemsCount: Int,
+    readingProgressPercent: Int,
+): Float {
+    return when {
+        showWebView -> webProgressPercent.coerceIn(0, 100) / 100f
+        !usePageReader -> {
+            // For long paragraphs/index-based lists, index ratio can lag behind.
+            // Use effective reading progress so thumb reaches the real chapter end.
+            readingProgressPercent.coerceIn(0, 100) / 100f
+        }
+        else -> {
+            val max = (seekbarItemsCount - 1).coerceAtLeast(1)
+            val current = resolvePageReaderCurrentPage(
+                pageReaderRendererRoute = pageReaderRendererRoute,
+                pagerCurrentPage = pagerCurrentPage,
+                pageTurnCurrentPage = pageTurnCurrentPage,
+            )
+            current.toFloat() / max.toFloat()
+        }
     }
 }
 
@@ -5720,7 +5888,7 @@ internal fun areChapterSwipeControlsEnabled(
 internal fun shouldDismissReaderSettingsDialogAfterFamilyChange(
     family: NovelReaderSettingsFamily,
 ): Boolean {
-    return family == NovelReaderSettingsFamily.RENDERER_TUNING
+    return false
 }
 
 internal enum class NovelReaderSettingsFamily {
@@ -6774,6 +6942,13 @@ internal fun shouldRestoreSystemBarsOnDispose(
     fullScreenMode: Boolean,
 ): Boolean {
     return true
+}
+
+internal fun resolveReaderUiAfterChapterChange(
+    currentShowReaderUi: Boolean,
+    usePageReader: Boolean,
+): Boolean {
+    return if (usePageReader) false else currentShowReaderUi
 }
 
 @Composable

@@ -39,39 +39,47 @@ internal fun resolveNovelPageTurnPreset(
     return base.copy(
         animationDurationMillis = base.animationDurationMillis + speed.durationDeltaMillis(),
         curlAmount = (base.curlAmount + intensity.curlDelta()).coerceIn(0.28f, 0.92f),
-        shadowAlpha = (base.shadowAlpha + shadowIntensity.shadowDelta()).coerceIn(0.12f, 0.72f),
+        shadowAlpha = (base.shadowAlpha + shadowIntensity.shadowDelta()).coerceIn(0.08f, 0.72f),
         backPageAlpha = (base.backPageAlpha + intensity.backPageDelta()).coerceIn(0.10f, 0.48f),
     )
 }
 
 private fun NovelPageTurnSpeed.durationDeltaMillis(): Int {
     return when (this) {
+        NovelPageTurnSpeed.SLOWER -> 180
         NovelPageTurnSpeed.SLOW -> 120
         NovelPageTurnSpeed.NORMAL -> 0
-        NovelPageTurnSpeed.FAST -> -100
+        NovelPageTurnSpeed.FAST -> -120
+        NovelPageTurnSpeed.FASTER -> -180
     }
 }
 
 private fun NovelPageTurnIntensity.curlDelta(): Float {
     return when (this) {
-        NovelPageTurnIntensity.LOW -> -0.10f
+        NovelPageTurnIntensity.SOFTER -> -0.16f
+        NovelPageTurnIntensity.LOW -> -0.08f
         NovelPageTurnIntensity.MEDIUM -> 0f
-        NovelPageTurnIntensity.HIGH -> 0.12f
+        NovelPageTurnIntensity.HIGH -> 0.08f
+        NovelPageTurnIntensity.STRONGER -> 0.16f
     }
 }
 
 private fun NovelPageTurnIntensity.backPageDelta(): Float {
     return when (this) {
+        NovelPageTurnIntensity.SOFTER -> -0.08f
         NovelPageTurnIntensity.LOW -> -0.04f
         NovelPageTurnIntensity.MEDIUM -> 0f
-        NovelPageTurnIntensity.HIGH -> 0.06f
+        NovelPageTurnIntensity.HIGH -> 0.04f
+        NovelPageTurnIntensity.STRONGER -> 0.08f
     }
 }
 
 private fun NovelPageTurnShadowIntensity.shadowDelta(): Float {
     return when (this) {
-        NovelPageTurnShadowIntensity.LOW -> -0.10f
+        NovelPageTurnShadowIntensity.SOFTER -> -0.16f
+        NovelPageTurnShadowIntensity.LOW -> -0.08f
         NovelPageTurnShadowIntensity.MEDIUM -> 0f
-        NovelPageTurnShadowIntensity.HIGH -> 0.12f
+        NovelPageTurnShadowIntensity.HIGH -> 0.08f
+        NovelPageTurnShadowIntensity.STRONGER -> 0.16f
     }
 }

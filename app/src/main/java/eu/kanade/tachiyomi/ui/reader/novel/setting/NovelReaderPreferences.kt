@@ -164,21 +164,27 @@ enum class NovelPageTransitionStyle {
 }
 
 enum class NovelPageTurnSpeed {
+    SLOWER,
     SLOW,
     NORMAL,
     FAST,
+    FASTER,
 }
 
 enum class NovelPageTurnIntensity {
+    SOFTER,
     LOW,
     MEDIUM,
     HIGH,
+    STRONGER,
 }
 
 enum class NovelPageTurnShadowIntensity {
+    SOFTER,
     LOW,
     MEDIUM,
     HIGH,
+    STRONGER,
 }
 
 enum class GeminiPromptMode {

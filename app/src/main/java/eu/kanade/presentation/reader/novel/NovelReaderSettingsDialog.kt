@@ -107,6 +107,7 @@ fun NovelReaderSettingsDialog(
     TabbedDialog(
         onDismissRequest = onDismissRequest,
         tabTitles = tabTitles,
+        enableSwipeDismiss = false,
         modifier = Modifier.fillMaxHeight(0.7f),
     ) { page ->
         when (page) {
@@ -338,45 +339,62 @@ private fun GeneralTab(
                     },
                 )
                 if (pageTurnTuningExpanded) {
-                    ListPreferenceWidget(
-                        value = settings.pageTurnSpeed,
-                        title = stringResource(AYMR.strings.novel_reader_page_turn_speed),
-                        subtitle = pageTurnSpeedEntries[settings.pageTurnSpeed].orEmpty(),
-                        icon = null,
-                        entries = pageTurnSpeedEntries,
-                        onValueChange = {
+                    LnReaderSliderRow(
+                        label = stringResource(AYMR.strings.novel_reader_page_turn_speed),
+                        valueText = { value ->
+                            resolveNovelPageTurnSliderLabel(
+                                value = resolveNovelPageTurnSpeedSliderValue(value.roundToInt()),
+                                entries = pageTurnSpeedEntries,
+                            )
+                        },
+                        committedValue = novelPageTurnSpeedSliderIndex(settings.pageTurnSpeed).toFloat(),
+                        range = 0f..(pageTurnSpeedEntries.size - 1).toFloat(),
+                        steps = pageTurnSpeedEntries.size - 2,
+                        onCommit = { value ->
                             update(
-                                it,
+                                resolveNovelPageTurnSpeedSliderValue(value.roundToInt()),
                                 { o, v -> o.copy(pageTurnSpeed = v) },
                                 { preferences.pageTurnSpeed().set(it) },
                                 dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
                             )
                         },
                     )
-                    ListPreferenceWidget(
-                        value = settings.pageTurnIntensity,
-                        title = stringResource(AYMR.strings.novel_reader_page_turn_intensity),
-                        subtitle = pageTurnIntensityEntries[settings.pageTurnIntensity].orEmpty(),
-                        icon = null,
-                        entries = pageTurnIntensityEntries,
-                        onValueChange = {
+                    LnReaderSliderRow(
+                        label = stringResource(AYMR.strings.novel_reader_page_turn_intensity),
+                        valueText = { value ->
+                            resolveNovelPageTurnSliderLabel(
+                                value = resolveNovelPageTurnIntensitySliderValue(value.roundToInt()),
+                                entries = pageTurnIntensityEntries,
+                            )
+                        },
+                        committedValue = novelPageTurnIntensitySliderIndex(settings.pageTurnIntensity).toFloat(),
+                        range = 0f..(pageTurnIntensityEntries.size - 1).toFloat(),
+                        steps = pageTurnIntensityEntries.size - 2,
+                        onCommit = { value ->
                             update(
-                                it,
+                                resolveNovelPageTurnIntensitySliderValue(value.roundToInt()),
                                 { o, v -> o.copy(pageTurnIntensity = v) },
                                 { preferences.pageTurnIntensity().set(it) },
                                 dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
                             )
                         },
                     )
-                    ListPreferenceWidget(
-                        value = settings.pageTurnShadowIntensity,
-                        title = stringResource(AYMR.strings.novel_reader_page_turn_shadow_intensity),
-                        subtitle = pageTurnShadowEntries[settings.pageTurnShadowIntensity].orEmpty(),
-                        icon = null,
-                        entries = pageTurnShadowEntries,
-                        onValueChange = {
+                    LnReaderSliderRow(
+                        label = stringResource(AYMR.strings.novel_reader_page_turn_shadow_intensity),
+                        valueText = { value ->
+                            resolveNovelPageTurnSliderLabel(
+                                value = resolveNovelPageTurnShadowIntensitySliderValue(value.roundToInt()),
+                                entries = pageTurnShadowEntries,
+                            )
+                        },
+                        committedValue = novelPageTurnShadowIntensitySliderIndex(
+                            settings.pageTurnShadowIntensity,
+                        ).toFloat(),
+                        range = 0f..(pageTurnShadowEntries.size - 1).toFloat(),
+                        steps = pageTurnShadowEntries.size - 2,
+                        onCommit = { value ->
                             update(
-                                it,
+                                resolveNovelPageTurnShadowIntensitySliderValue(value.roundToInt()),
                                 { o, v -> o.copy(pageTurnShadowIntensity = v) },
                                 { preferences.pageTurnShadowIntensity().set(it) },
                                 dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
