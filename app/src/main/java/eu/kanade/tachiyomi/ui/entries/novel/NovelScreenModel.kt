@@ -34,6 +34,7 @@ import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.source.novel.NovelSiteSource
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
+import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -168,28 +169,12 @@ class NovelScreenModel(
 
     fun getResumeOrNextChapter(): NovelChapter? {
         val state = successState ?: return null
-        val chapters = state.chapters.sortedWith(Comparator(getNovelChapterSort(state.novel)))
-        if (chapters.isEmpty()) return null
-
-        chapters.firstOrNull { it.lastPageRead > 0L && !it.read }?.let { return it }
-
-        val lastReadIndex = chapters.indexOfLast { it.read || it.lastPageRead > 0L }
-        if (lastReadIndex >= 0) {
-            chapters.drop(lastReadIndex + 1).firstOrNull { !it.read }?.let { return it }
-            return chapters[lastReadIndex]
-        }
-
-        return chapters.firstOrNull { !it.read } ?: chapters.firstOrNull()
+        return resolveNovelResumeChapter(state.chapters)
     }
 
     fun getNextUnreadChapter(): NovelChapter? {
         val state = successState ?: return null
-        val chapters = state.processedChapters
-        return if (state.novel.sortDescending()) {
-            chapters.findLast { !it.read }
-        } else {
-            chapters.find { !it.read }
-        }
+        return resolveNovelResumeChapter(state.processedChapters)
     }
 
     init {

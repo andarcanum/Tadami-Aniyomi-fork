@@ -399,6 +399,52 @@ class NovelLibraryScreenModelTest {
         screenModel.getNextUnreadChapter(novel)?.id shouldBe 103L
     }
 
+    @Test
+    fun `resume selection follows source order when chapter numbers are out of order`() = runTest(testDispatcher) {
+        val novel = Novel.create().copy(
+            id = 11L,
+            title = "Novel",
+            source = 1L,
+            chapterFlags = Novel.CHAPTER_SORTING_NUMBER or Novel.CHAPTER_SORT_DESC,
+        )
+        coEvery {
+            chapterRepository.getChapterByNovelId(novelId = novel.id, applyScanlatorFilter = true)
+        } returns listOf(
+            novelChapter(
+                id = 201L,
+                novelId = novel.id,
+                sourceOrder = 2L,
+                chapterNumber = 1.0,
+                read = true,
+            ),
+            novelChapter(
+                id = 202L,
+                novelId = novel.id,
+                sourceOrder = 0L,
+                chapterNumber = 10.0,
+                read = true,
+            ),
+            novelChapter(
+                id = 203L,
+                novelId = novel.id,
+                sourceOrder = 1L,
+                chapterNumber = 20.0,
+                read = false,
+            ),
+        )
+
+        val screenModel = trackedNovelLibraryScreenModel(
+            getLibraryNovel = getLibraryNovel,
+            chapterRepository = chapterRepository,
+            basePreferences = basePreferences,
+            libraryPreferences = libraryPreferences,
+            hasDownloadedChapters = { false },
+            downloadedIdsDispatcher = testDispatcher,
+        )
+
+        screenModel.getNextUnreadChapter(novel)?.id shouldBe 201L
+    }
+
     private fun trackedNovelLibraryScreenModel(
         getLibraryNovel: GetLibraryNovel,
         chapterRepository: NovelChapterRepository,

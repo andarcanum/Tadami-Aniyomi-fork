@@ -17,6 +17,7 @@ import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadManager
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.ui.entries.novel.NovelDownloadAction
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
+import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
@@ -546,21 +547,8 @@ class NovelLibraryScreenModel(
         val chapters = chapterRepository.getChapterByNovelId(
             novelId = novel.id,
             applyScanlatorFilter = true,
-        ).sortedBy { it.sourceOrder }
-        if (chapters.isEmpty()) return null
-
-        // Keep reading from an in-progress chapter first.
-        chapters.firstOrNull { it.lastPageRead > 0L && !it.read }?.let { return it }
-
-        // Continue from the next unread chapter in reader navigation order.
-        val lastReadIndex = chapters.indexOfLast { it.read || it.lastPageRead > 0L }
-        if (lastReadIndex >= 0) {
-            chapters.drop(lastReadIndex + 1).firstOrNull { !it.read }?.let { return it }
-            return chapters[lastReadIndex]
-        }
-
-        // Fallback for "nothing read yet".
-        return chapters.firstOrNull { !it.read }
+        )
+        return resolveNovelResumeChapter(chapters)
     }
 
     private suspend fun getSortedNovelChapters(novel: Novel): List<NovelChapter> {

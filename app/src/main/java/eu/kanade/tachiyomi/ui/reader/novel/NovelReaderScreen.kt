@@ -4,14 +4,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.reader.novel.NovelReaderScreen
+import eu.kanade.presentation.reader.novel.NovelReaderChapterHandoffPolicy
 import eu.kanade.presentation.reader.novel.NovelReaderSystemUiSession
 import eu.kanade.presentation.reader.novel.SystemUIController
+import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
@@ -27,6 +30,7 @@ class NovelReaderScreen(
         val screenModel = rememberScreenModel { NovelReaderScreenModel(chapterId) }
         val state by screenModel.state.collectAsStateWithLifecycle()
         val currentState = state
+        val coroutineScope = rememberCoroutineScope()
         var showReaderUi by remember { mutableStateOf(false) }
 
         val activeReaderSettings = (currentState as? NovelReaderScreenModel.State.Success)?.readerSettings
@@ -93,12 +97,20 @@ class NovelReaderScreen(
                 onRefreshDeepSeekModels = screenModel::refreshDeepSeekModels,
                 onTestDeepSeekConnection = screenModel::testDeepSeekConnection,
                 onOpenPreviousChapter = { previousChapterId ->
-                    NovelReaderSystemUiSession.markInternalChapterReplace()
-                    navigator.replace(NovelReaderScreen(previousChapterId))
+                    coroutineScope.launch {
+                        screenModel.awaitPendingProgressPersistence()
+                        NovelReaderSystemUiSession.markInternalChapterReplace()
+                        NovelReaderChapterHandoffPolicy.markInternalChapterHandoff()
+                        navigator.replace(NovelReaderScreen(previousChapterId))
+                    }
                 },
                 onOpenNextChapter = { nextChapterId ->
-                    NovelReaderSystemUiSession.markInternalChapterReplace()
-                    navigator.replace(NovelReaderScreen(nextChapterId))
+                    coroutineScope.launch {
+                        screenModel.awaitPendingProgressPersistence()
+                        NovelReaderSystemUiSession.markInternalChapterReplace()
+                        NovelReaderChapterHandoffPolicy.markInternalChapterHandoff()
+                        navigator.replace(NovelReaderScreen(nextChapterId))
+                    }
                 },
             )
         }

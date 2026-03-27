@@ -21,6 +21,25 @@ internal object NovelReaderSystemUiSession {
     }
 }
 
+internal object NovelReaderChapterHandoffPolicy {
+    @Volatile
+    private var internalChapterHandoffPending = false
+
+    fun markInternalChapterHandoff() {
+        internalChapterHandoffPending = true
+    }
+
+    fun consumeInternalChapterHandoff(): Boolean {
+        val pending = internalChapterHandoffPending
+        internalChapterHandoffPending = false
+        return pending
+    }
+
+    fun clear() {
+        internalChapterHandoffPending = false
+    }
+}
+
 internal data class ReaderSystemBarsState(
     val isLightStatusBars: Boolean,
     val isLightNavigationBars: Boolean,
@@ -67,6 +86,12 @@ internal fun shouldRestoreSystemBarsOnDispose(
     isInternalChapterReplace: Boolean,
 ): Boolean {
     return !isInternalChapterReplace
+}
+
+internal fun shouldRestoreSavedPageReaderProgress(
+    isInternalChapterHandoff: Boolean,
+): Boolean {
+    return !isInternalChapterHandoff
 }
 
 internal fun WindowInsetsControllerCompat.captureReaderSystemBarsState(): ReaderSystemBarsState {

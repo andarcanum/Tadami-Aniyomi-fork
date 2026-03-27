@@ -21,6 +21,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -1842,6 +1843,53 @@ class NovelReaderScreenModelTest {
             chapterRepo.completedUpdates.size shouldBe 2
             chapterRepo.completedUpdates[0].lastPageRead shouldBe 1L
             chapterRepo.completedUpdates[1].lastPageRead shouldBe 3L
+        }
+    }
+
+    @Test
+    fun `flush pending progress waits for the in flight chapter update`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+            val chapterRepo = BlockingNovelChapterRepository(chapter)
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = chapterRepo,
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            screenModel.updateReadingProgress(currentIndex = 1, totalItems = 10)
+            withTimeout(1_000) {
+                while (chapterRepo.startedUpdates.isEmpty()) {
+                    yield()
+                }
+            }
+
+            val flushJob = async { screenModel.awaitPendingProgressPersistence() }
+            yield()
+            flushJob.isCompleted shouldBe false
+
+            chapterRepo.allowNextUpdate()
+            flushJob.await()
+
+            chapterRepo.completedUpdates.size shouldBe 1
+            chapterRepo.completedUpdates.single().lastPageRead shouldBe 1L
         }
     }
 

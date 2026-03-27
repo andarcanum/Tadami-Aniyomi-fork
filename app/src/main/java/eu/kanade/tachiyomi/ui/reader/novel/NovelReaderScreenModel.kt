@@ -210,6 +210,8 @@ class NovelReaderScreenModel(
     private val progressPersistenceMutex = Mutex()
     private var pendingProgressPersistence: PendingProgressPersistence? = null
     private var progressPersistenceJob: Job? = null
+    @Volatile
+    private var progressPersistenceScheduled = false
     private val structuredJson = Json {
         ignoreUnknownKeys = true
         isLenient = true
@@ -742,6 +744,7 @@ class NovelReaderScreenModel(
     }
 
     private fun enqueueProgressPersistence(update: PendingProgressPersistence) {
+        progressPersistenceScheduled = true
         screenModelScope.launch(NonCancellable) {
             progressPersistenceMutex.withLock {
                 pendingProgressPersistence = pendingProgressPersistence?.merge(update) ?: update
@@ -749,9 +752,30 @@ class NovelReaderScreenModel(
                     return@launch
                 }
                 progressPersistenceJob = screenModelScope.launch(NonCancellable) {
-                    flushPendingProgressPersistence()
+                    try {
+                        flushPendingProgressPersistence()
+                    } finally {
+                        progressPersistenceMutex.withLock {
+                            progressPersistenceJob = null
+                            progressPersistenceScheduled = pendingProgressPersistence != null
+                        }
+                    }
                 }
             }
+        }
+    }
+
+    suspend fun awaitPendingProgressPersistence() {
+        while (true) {
+            val activeJob = progressPersistenceMutex.withLock {
+                progressPersistenceJob?.takeIf { it.isActive }
+            }
+            if (activeJob != null) {
+                activeJob.join()
+                continue
+            }
+            if (!progressPersistenceScheduled) return
+            kotlinx.coroutines.yield()
         }
     }
 
@@ -1026,6 +1050,7 @@ class NovelReaderScreenModel(
         if (chapterId != null) {
             val finalReadDurationMs = (System.currentTimeMillis() - chapterReadStartTimeMs).coerceAtLeast(0L)
             screenModelScope.launch(NonCancellable) {
+                awaitPendingProgressPersistence()
                 flushPendingHistorySnapshot(
                     chapterId = chapterId,
                     additionalReadDurationMs = finalReadDurationMs,

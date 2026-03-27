@@ -758,6 +758,9 @@ fun NovelReaderScreen(
         )
     }
     val pageReaderItemsCount = pageReaderContentPages.size
+    val isInternalChapterHandoff = remember(state.chapter.id) {
+        NovelReaderChapterHandoffPolicy.consumeInternalChapterHandoff()
+    }
     val useRichNativeScroll = shouldUseRichNativeScrollRenderer(
         richNativeRendererExperimentalEnabled = state.readerSettings.richNativeRendererExperimental,
         showWebView = showWebView,
@@ -772,6 +775,7 @@ fun NovelReaderScreen(
             savedPageReaderProgress = state.lastSavedPageReaderProgress,
             legacyLastSavedIndex = state.lastSavedIndex,
             pageCount = pageReaderItemsCount.coerceAtLeast(1),
+            isInternalChapterHandoff = isInternalChapterHandoff,
         ),
         pageCount = { pageReaderItemsCount.coerceAtLeast(1) },
     )
@@ -5143,9 +5147,11 @@ internal fun resolveInitialPageReaderPage(
     savedPageReaderProgress: PageReaderProgress?,
     legacyLastSavedIndex: Int,
     pageCount: Int,
+    isInternalChapterHandoff: Boolean = false,
 ): Int {
     val safePageCount = pageCount.coerceAtLeast(1)
     val lastPageIndex = safePageCount - 1
+    if (!shouldRestoreSavedPageReaderProgress(isInternalChapterHandoff)) return 0
     val savedProgress = savedPageReaderProgress ?: return legacyLastSavedIndex.coerceIn(0, lastPageIndex)
     if (safePageCount == 1 || savedProgress.totalItems <= 1) return 0
     val sourceLastPageIndex = (savedProgress.totalItems - 1).coerceAtLeast(1)

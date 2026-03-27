@@ -346,6 +346,42 @@ class NovelScreenModelTest {
     }
 
     @Test
+    fun `resume selection follows source order when chapter numbers are out of order`() {
+        runBlocking {
+            val novel = novelForResumeTests(104L)
+            val chapter1 = novelChapter(
+                id = 1L,
+                novelId = novel.id,
+                sourceOrder = 2L,
+                chapterNumber = 1.0,
+                read = true,
+            )
+            val chapter2 = novelChapter(
+                id = 2L,
+                novelId = novel.id,
+                sourceOrder = 0L,
+                chapterNumber = 10.0,
+                read = true,
+            )
+            val chapter3 = novelChapter(
+                id = 3L,
+                novelId = novel.id,
+                sourceOrder = 1L,
+                chapterNumber = 20.0,
+                read = false,
+            )
+            val screenModel = createResumeScreenModel(novel, listOf(chapter1, chapter2, chapter3))
+
+            try {
+                awaitResumeScreenModel(screenModel)
+                screenModel.getResumeOrNextChapter()?.id shouldBe chapter1.id
+            } finally {
+                screenModel.onDispose()
+            }
+        }
+    }
+
+    @Test
     fun `cached novel state does not restore saved chapter list scroll position`() {
         runBlocking {
             val novel = novelForResumeTests(104L)
@@ -567,6 +603,7 @@ class NovelScreenModelTest {
     private fun novelChapter(
         id: Long,
         novelId: Long,
+        sourceOrder: Long = 0L,
         chapterNumber: Double,
         read: Boolean,
         lastPageRead: Long = 0L,
@@ -574,6 +611,7 @@ class NovelScreenModelTest {
         return NovelChapter.create().copy(
             id = id,
             novelId = novelId,
+            sourceOrder = sourceOrder,
             chapterNumber = chapterNumber,
             read = read,
             lastPageRead = lastPageRead,
