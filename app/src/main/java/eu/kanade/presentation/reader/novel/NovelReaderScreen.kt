@@ -105,6 +105,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -883,6 +884,8 @@ fun NovelReaderScreen(
 
     // Volume Buttons Handler
     val coroutineScope = rememberCoroutineScope()
+    val latestShowReaderUi by rememberUpdatedState(showReaderUi)
+    val latestTapToScrollEnabled by rememberUpdatedState(state.readerSettings.tapToScroll)
     suspend fun moveBackwardByReaderAction() {
         if (showWebView) {
             val webView = webViewInstance
@@ -936,7 +939,7 @@ fun NovelReaderScreen(
         }
         if (event.action == KeyEvent.ACTION_DOWN) return true
         if (event.action != KeyEvent.ACTION_UP) return false
-        if (showReaderUi) return true
+        if (latestShowReaderUi) return true
         return when (event.keyCode) {
             KeyEvent.KEYCODE_VOLUME_UP -> {
                 coroutineScope.launch { moveBackwardByReaderAction() }
@@ -1221,20 +1224,20 @@ fun NovelReaderScreen(
                                 state.nextChapterId,
                                 nativeScrollItemsCount,
                             ) {
-                                detectTapGestures(
-                                    onTap = { offset ->
-                                        when (
-                                            resolveReaderTapAction(
-                                                tapX = offset.x,
-                                                width = size.width.toFloat(),
-                                                tapToScrollEnabled = state.readerSettings.tapToScroll,
-                                            )
-                                        ) {
-                                            ReaderTapAction.TOGGLE_UI -> onSetShowReaderUi(!showReaderUi)
-                                            ReaderTapAction.BACKWARD -> coroutineScope.launch {
-                                                moveBackwardByReaderAction()
-                                            }
-                                            ReaderTapAction.FORWARD -> coroutineScope.launch {
+                                    detectTapGestures(
+                                        onTap = { offset ->
+                                            when (
+                                                resolveReaderTapAction(
+                                                    tapX = offset.x,
+                                                    width = size.width.toFloat(),
+                                                    tapToScrollEnabled = latestTapToScrollEnabled,
+                                                )
+                                            ) {
+                                                ReaderTapAction.TOGGLE_UI -> onSetShowReaderUi(!latestShowReaderUi)
+                                                ReaderTapAction.BACKWARD -> coroutineScope.launch {
+                                                    moveBackwardByReaderAction()
+                                                }
+                                                ReaderTapAction.FORWARD -> coroutineScope.launch {
                                                 moveForwardByReaderAction()
                                             }
                                         }
@@ -1685,11 +1688,11 @@ fun NovelReaderScreen(
                                         resolveReaderTapAction(
                                             tapX = e.x,
                                             width = viewWidth.toFloat(),
-                                            tapToScrollEnabled = state.readerSettings.tapToScroll,
+                                            tapToScrollEnabled = latestTapToScrollEnabled,
                                         )
                                     ) {
                                             ReaderTapAction.TOGGLE_UI -> {
-                                                onSetShowReaderUi(!showReaderUi)
+                                                onSetShowReaderUi(!latestShowReaderUi)
                                                 true
                                             }
                                         ReaderTapAction.BACKWARD -> {
@@ -1715,7 +1718,7 @@ fun NovelReaderScreen(
                                     horizontalSwipeHandled = false
                                 }
                                 MotionEvent.ACTION_UP -> {
-                                    if (!showReaderUi && !horizontalSwipeHandled) {
+                                    if (!latestShowReaderUi && !horizontalSwipeHandled) {
                                         when (
                                             resolveHorizontalChapterSwipeAction(
                                                 swipeGesturesEnabled = state.readerSettings.swipeGestures,
@@ -2083,6 +2086,23 @@ fun NovelReaderScreen(
             pageReaderItemsCount
         } else {
             nativeScrollItemsCount
+        }
+        val showPageReaderDismissLayer = shouldShowPageReaderDismissLayer(
+            showReaderUi = showReaderUi,
+            usePageReader = usePageReader,
+        )
+        if (showPageReaderDismissLayer) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(showPageReaderDismissLayer) {
+                        detectTapGestures(
+                            onTap = {
+                                onSetShowReaderUi(false)
+                            },
+                        )
+                    },
+            )
         }
         if (
             shouldShowVerticalSeekbar(
@@ -5106,6 +5126,13 @@ internal fun shouldShowVerticalSeekbar(
         } else {
             textBlocksCount > 1
         }
+}
+
+internal fun shouldShowPageReaderDismissLayer(
+    showReaderUi: Boolean,
+    usePageReader: Boolean,
+): Boolean {
+    return showReaderUi && usePageReader
 }
 
 internal fun shouldStartInWebView(

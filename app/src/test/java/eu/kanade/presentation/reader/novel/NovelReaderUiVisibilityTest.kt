@@ -523,6 +523,28 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `page reader dismiss layer is only shown when reader ui is visible`() {
+        assertTrue(
+            shouldShowPageReaderDismissLayer(
+                showReaderUi = true,
+                usePageReader = true,
+            ),
+        )
+        assertFalse(
+            shouldShowPageReaderDismissLayer(
+                showReaderUi = false,
+                usePageReader = true,
+            ),
+        )
+        assertFalse(
+            shouldShowPageReaderDismissLayer(
+                showReaderUi = true,
+                usePageReader = false,
+            ),
+        )
+    }
+
+    @Test
     fun `page rail labels show first and last page inside seekbar`() {
         assertEquals(
             Pair(null, null),
