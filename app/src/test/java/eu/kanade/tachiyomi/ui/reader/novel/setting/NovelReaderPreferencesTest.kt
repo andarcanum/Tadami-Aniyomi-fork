@@ -64,6 +64,9 @@ class NovelReaderPreferencesTest {
         prefs.geminiEnabled().get() shouldBe false
         prefs.geminiPromptMode().get() shouldBe GeminiPromptMode.ADULT_18
         prefs.geminiModel().get() shouldBe "gemini-3.1-flash-lite-preview"
+        prefs.pageTurnSpeed().get() shouldBe NovelPageTurnSpeed.NORMAL
+        prefs.pageTurnIntensity().get() shouldBe NovelPageTurnIntensity.MEDIUM
+        prefs.pageTurnShadowIntensity().get() shouldBe NovelPageTurnShadowIntensity.MEDIUM
         prefs.geminiTemperature().get() shouldBe 0.7f
         prefs.geminiReasoningEffort().get() shouldBe "minimal"
         prefs.geminiBudgetTokens().get() shouldBe 8192
@@ -91,6 +94,19 @@ class NovelReaderPreferencesTest {
         prefs.pageTransitionStyle().set(NovelPageTransitionStyle.BOOK)
 
         prefs.pageTransitionStyle().get() shouldBe NovelPageTransitionStyle.BOOK
+    }
+
+    @Test
+    fun `page turn tuning preferences round trip persisted values`() {
+        val prefs = createPrefs()
+
+        prefs.pageTurnSpeed().set(NovelPageTurnSpeed.FAST)
+        prefs.pageTurnIntensity().set(NovelPageTurnIntensity.HIGH)
+        prefs.pageTurnShadowIntensity().set(NovelPageTurnShadowIntensity.LOW)
+
+        prefs.pageTurnSpeed().get() shouldBe NovelPageTurnSpeed.FAST
+        prefs.pageTurnIntensity().get() shouldBe NovelPageTurnIntensity.HIGH
+        prefs.pageTurnShadowIntensity().get() shouldBe NovelPageTurnShadowIntensity.LOW
     }
 
     @Test
@@ -125,6 +141,9 @@ class NovelReaderPreferencesTest {
         prefs.autoScrollOffset().set(480)
         prefs.prefetchNextChapter().set(true)
         prefs.pageTransitionStyle().set(NovelPageTransitionStyle.DEPTH)
+        prefs.pageTurnSpeed().set(NovelPageTurnSpeed.SLOW)
+        prefs.pageTurnIntensity().set(NovelPageTurnIntensity.LOW)
+        prefs.pageTurnShadowIntensity().set(NovelPageTurnShadowIntensity.HIGH)
         prefs.bionicReading().set(true)
         prefs.geminiApiKey().set("test-key")
         prefs.geminiModel().set("gemini-2.5-pro")
@@ -190,6 +209,9 @@ class NovelReaderPreferencesTest {
         override?.autoScrollOffset shouldBe 480
         override?.prefetchNextChapter shouldBe true
         override?.pageTransitionStyle shouldBe NovelPageTransitionStyle.DEPTH
+        override?.pageTurnSpeed shouldBe NovelPageTurnSpeed.SLOW
+        override?.pageTurnIntensity shouldBe NovelPageTurnIntensity.LOW
+        override?.pageTurnShadowIntensity shouldBe NovelPageTurnShadowIntensity.HIGH
         override?.bionicReading shouldBe true
         override?.geminiApiKey shouldBe "test-key"
         override?.geminiModel shouldBe "gemini-2.5-pro"
@@ -256,6 +278,9 @@ class NovelReaderPreferencesTest {
         prefs.autoScrollOffset().set(0)
         prefs.prefetchNextChapter().set(false)
         prefs.pageTransitionStyle().set(NovelPageTransitionStyle.SLIDE)
+        prefs.pageTurnSpeed().set(NovelPageTurnSpeed.NORMAL)
+        prefs.pageTurnIntensity().set(NovelPageTurnIntensity.MEDIUM)
+        prefs.pageTurnShadowIntensity().set(NovelPageTurnShadowIntensity.MEDIUM)
         prefs.bionicReading().set(false)
         prefs.geminiApiKey().set("")
         prefs.geminiModel().set("gemini-3.1-flash-lite-preview")
@@ -321,6 +346,9 @@ class NovelReaderPreferencesTest {
                 autoScrollOffset = 240,
                 prefetchNextChapter = true,
                 pageTransitionStyle = NovelPageTransitionStyle.CURL,
+                pageTurnSpeed = NovelPageTurnSpeed.FAST,
+                pageTurnIntensity = NovelPageTurnIntensity.HIGH,
+                pageTurnShadowIntensity = NovelPageTurnShadowIntensity.LOW,
                 bionicReading = true,
                 geminiApiKey = "override-key",
                 geminiModel = "gemini-2.5-pro",
@@ -385,6 +413,9 @@ class NovelReaderPreferencesTest {
         settings.autoScrollOffset shouldBe 240
         settings.prefetchNextChapter shouldBe true
         settings.pageTransitionStyle shouldBe NovelPageTransitionStyle.CURL
+        settings.pageTurnSpeed shouldBe NovelPageTurnSpeed.FAST
+        settings.pageTurnIntensity shouldBe NovelPageTurnIntensity.HIGH
+        settings.pageTurnShadowIntensity shouldBe NovelPageTurnShadowIntensity.LOW
         settings.bionicReading shouldBe true
         settings.geminiApiKey shouldBe "override-key"
         settings.geminiModel shouldBe "gemini-2.5-pro"

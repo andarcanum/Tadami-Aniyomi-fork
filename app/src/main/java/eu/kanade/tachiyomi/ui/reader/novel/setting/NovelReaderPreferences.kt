@@ -56,6 +56,9 @@ data class NovelReaderSettings(
     val preferWebViewRenderer: Boolean,
     val richNativeRendererExperimental: Boolean,
     val pageTransitionStyle: NovelPageTransitionStyle = NovelPageTransitionStyle.SLIDE,
+    val pageTurnSpeed: NovelPageTurnSpeed = NovelPageTurnSpeed.NORMAL,
+    val pageTurnIntensity: NovelPageTurnIntensity = NovelPageTurnIntensity.MEDIUM,
+    val pageTurnShadowIntensity: NovelPageTurnShadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
     val verticalSeekbar: Boolean,
     val swipeToNextChapter: Boolean,
     val swipeToPrevChapter: Boolean,
@@ -160,6 +163,24 @@ enum class NovelPageTransitionStyle {
     CURL,
 }
 
+enum class NovelPageTurnSpeed {
+    SLOW,
+    NORMAL,
+    FAST,
+}
+
+enum class NovelPageTurnIntensity {
+    LOW,
+    MEDIUM,
+    HIGH,
+}
+
+enum class NovelPageTurnShadowIntensity {
+    LOW,
+    MEDIUM,
+    HIGH,
+}
+
 enum class GeminiPromptMode {
     CLASSIC,
     ADULT_18,
@@ -229,6 +250,9 @@ data class NovelReaderOverride(
     val preferWebViewRenderer: Boolean? = null,
     val richNativeRendererExperimental: Boolean? = null,
     val pageTransitionStyle: NovelPageTransitionStyle? = null,
+    val pageTurnSpeed: NovelPageTurnSpeed? = null,
+    val pageTurnIntensity: NovelPageTurnIntensity? = null,
+    val pageTurnShadowIntensity: NovelPageTurnShadowIntensity? = null,
     val verticalSeekbar: Boolean? = null,
     val swipeToNextChapter: Boolean? = null,
     val swipeToPrevChapter: Boolean? = null,
@@ -387,6 +411,15 @@ class NovelReaderPreferences(
 
     fun pageTransitionStyle() =
         preferenceStore.getEnum("novel_reader_page_transition_style", NovelPageTransitionStyle.SLIDE)
+
+    fun pageTurnSpeed() =
+        preferenceStore.getEnum("novel_reader_page_turn_speed", NovelPageTurnSpeed.NORMAL)
+
+    fun pageTurnIntensity() =
+        preferenceStore.getEnum("novel_reader_page_turn_intensity", NovelPageTurnIntensity.MEDIUM)
+
+    fun pageTurnShadowIntensity() =
+        preferenceStore.getEnum("novel_reader_page_turn_shadow_intensity", NovelPageTurnShadowIntensity.MEDIUM)
 
     fun preserveSourceTextAlignInNative() =
         preferenceStore.getBoolean("novel_reader_preserve_source_text_align_in_native", true)
@@ -602,6 +635,9 @@ class NovelReaderPreferences(
                 preferWebViewRenderer = preferWebViewRenderer().get(),
                 richNativeRendererExperimental = richNativeRendererExperimental().get(),
                 pageTransitionStyle = pageTransitionStyle().get(),
+                pageTurnSpeed = pageTurnSpeed().get(),
+                pageTurnIntensity = pageTurnIntensity().get(),
+                pageTurnShadowIntensity = pageTurnShadowIntensity().get(),
                 verticalSeekbar = verticalSeekbar().get(),
                 swipeToNextChapter = swipeToNextChapter().get(),
                 swipeToPrevChapter = swipeToPrevChapter().get(),
@@ -704,6 +740,10 @@ class NovelReaderPreferences(
             richNativeRendererExperimental =
             override?.richNativeRendererExperimental ?: richNativeRendererExperimental().get(),
             pageTransitionStyle = override?.pageTransitionStyle ?: pageTransitionStyle().get(),
+            pageTurnSpeed = override?.pageTurnSpeed ?: pageTurnSpeed().get(),
+            pageTurnIntensity = override?.pageTurnIntensity ?: pageTurnIntensity().get(),
+            pageTurnShadowIntensity =
+            override?.pageTurnShadowIntensity ?: pageTurnShadowIntensity().get(),
             verticalSeekbar = override?.verticalSeekbar ?: verticalSeekbar().get(),
             swipeToNextChapter = override?.swipeToNextChapter ?: swipeToNextChapter().get(),
             swipeToPrevChapter = override?.swipeToPrevChapter ?: swipeToPrevChapter().get(),
@@ -842,6 +882,9 @@ class NovelReaderPreferences(
             preferWebViewRenderer().changes(),
             richNativeRendererExperimental().changes(),
             pageTransitionStyle().changes(),
+            pageTurnSpeed().changes(),
+            pageTurnIntensity().changes(),
+            pageTurnShadowIntensity().changes(),
             verticalSeekbar().changes(),
             swipeToNextChapter().changes(),
             swipeToPrevChapter().changes(),
@@ -858,14 +901,17 @@ class NovelReaderPreferences(
                 values[3] as Boolean,
                 values[4] as Boolean,
                 values[5] as NovelPageTransitionStyle,
-                values[6] as Boolean,
-                values[7] as Boolean,
-                values[8] as Boolean,
+                values[6] as NovelPageTurnSpeed,
+                values[7] as NovelPageTurnIntensity,
+                values[8] as NovelPageTurnShadowIntensity,
                 values[9] as Boolean,
                 values[10] as Boolean,
-                values[11] as Int,
-                values[12] as Int,
+                values[11] as Boolean,
+                values[12] as Boolean,
                 values[13] as Boolean,
+                values[14] as Int,
+                values[15] as Int,
+                values[16] as Boolean,
             )
         }.distinctUntilChanged()
 
@@ -1027,6 +1073,10 @@ class NovelReaderPreferences(
                 richNativeRendererExperimental =
                 override?.richNativeRendererExperimental ?: navigation.richNativeRendererExperimental,
                 pageTransitionStyle = override?.pageTransitionStyle ?: navigation.pageTransitionStyle,
+                pageTurnSpeed = override?.pageTurnSpeed ?: navigation.pageTurnSpeed,
+                pageTurnIntensity = override?.pageTurnIntensity ?: navigation.pageTurnIntensity,
+                pageTurnShadowIntensity =
+                override?.pageTurnShadowIntensity ?: navigation.pageTurnShadowIntensity,
                 verticalSeekbar = override?.verticalSeekbar ?: navigation.verticalSeekbar,
                 swipeToNextChapter = override?.swipeToNextChapter ?: navigation.swipeToNextChapter,
                 swipeToPrevChapter = override?.swipeToPrevChapter ?: navigation.swipeToPrevChapter,
@@ -1128,6 +1178,9 @@ class NovelReaderPreferences(
         val preferWebViewRenderer: Boolean,
         val richNativeRendererExperimental: Boolean,
         val pageTransitionStyle: NovelPageTransitionStyle,
+        val pageTurnSpeed: NovelPageTurnSpeed,
+        val pageTurnIntensity: NovelPageTurnIntensity,
+        val pageTurnShadowIntensity: NovelPageTurnShadowIntensity,
         val verticalSeekbar: Boolean,
         val swipeToNextChapter: Boolean,
         val swipeToPrevChapter: Boolean,
