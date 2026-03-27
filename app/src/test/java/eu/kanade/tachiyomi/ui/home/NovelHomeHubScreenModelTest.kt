@@ -17,6 +17,16 @@ class NovelHomeHubScreenModelTest {
         resolveNovelHomeHeroChapterId(chapters, fromChapterId = 999L) shouldBe 103L
     }
 
+    @Test
+    fun `hero chapter id reloads when the hero chapter changes inside the same novel`() {
+        shouldReloadNovelHomeHeroChapterId(
+            previousHeroNovelId = 1L,
+            previousHeroChapterId = 30L,
+            currentHeroNovelId = 1L,
+            currentHeroChapterId = 33L,
+        ) shouldBe true
+    }
+
     private fun chapter(
         id: Long,
         read: Boolean,

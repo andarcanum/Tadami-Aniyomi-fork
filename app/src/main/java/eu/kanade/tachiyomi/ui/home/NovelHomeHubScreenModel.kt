@@ -129,7 +129,7 @@ class NovelHomeHubScreenModel(
                 userProfilePreferences.avatarUrl().changes(),
                 historyRepository.getNovelHistory("").map { it.take(7) },
                 getLibraryNovel.subscribe().map { it.take(10) },
-            ) { name, avatar, historyList, novelList ->
+                ) { name, avatar, historyList, novelList ->
                 LiveData(name, avatar, historyList, novelList)
             }.collectLatest { data ->
                 val hero = data.historyList.firstOrNull()
@@ -139,7 +139,7 @@ class NovelHomeHubScreenModel(
                 if (hasData && !state.value.isInitialized) {
                     fastCache.markInitialized()
                 }
-                val previousHeroId = mutableState.value.hero?.novelId
+                val previousHero = mutableState.value.hero
 
                 mutableState.update {
                     it.copy(
@@ -153,7 +153,15 @@ class NovelHomeHubScreenModel(
                     )
                 }
 
-                if (hero != null && hero.novelId != previousHeroId) {
+                if (
+                    hero != null &&
+                    shouldReloadNovelHomeHeroChapterId(
+                        previousHeroNovelId = previousHero?.novelId,
+                        previousHeroChapterId = previousHero?.chapterId,
+                        currentHeroNovelId = hero.novelId,
+                        currentHeroChapterId = hero.chapterId,
+                    )
+                ) {
                     loadHeroChapterId(hero.novelId, hero.chapterId)
                 }
 
@@ -343,4 +351,14 @@ internal fun resolveNovelHomeHeroChapterId(
     }
 
     return chapters.firstOrNull { !it.read }?.id ?: chapters.first().id
+}
+
+internal fun shouldReloadNovelHomeHeroChapterId(
+    previousHeroNovelId: Long?,
+    previousHeroChapterId: Long?,
+    currentHeroNovelId: Long,
+    currentHeroChapterId: Long,
+): Boolean {
+    return previousHeroNovelId != currentHeroNovelId ||
+        previousHeroChapterId != currentHeroChapterId
 }
