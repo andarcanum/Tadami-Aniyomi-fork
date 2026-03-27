@@ -6935,20 +6935,6 @@ internal fun resolveNativeScrollProgressForTracking(
     return normalizedIndex.coerceAtMost(normalizedCount - 1) to normalizedCount
 }
 
-internal fun shouldHideSystemBars(
-    fullScreenMode: Boolean,
-    showReaderUi: Boolean,
-): Boolean {
-    return fullScreenMode && !showReaderUi
-}
-
-internal fun shouldRestoreSystemBarsOnDispose(
-    @Suppress("UNUSED_PARAMETER")
-    fullScreenMode: Boolean,
-): Boolean {
-    return true
-}
-
 internal fun resolveReaderUiAfterChapterChange(
     currentShowReaderUi: Boolean,
     usePageReader: Boolean,
@@ -7507,57 +7493,6 @@ private fun SystemUIController(
         // transiently restore prior icon mode on first reveal.
         insetsController.restoreReaderSystemBarsState(activeSystemBarsState)
     }
-}
-
-internal data class ReaderSystemBarsState(
-    val isLightStatusBars: Boolean,
-    val isLightNavigationBars: Boolean,
-    val systemBarsBehavior: Int,
-)
-
-internal fun resolveReaderExitSystemBarsState(
-    captured: ReaderSystemBarsState?,
-    current: ReaderSystemBarsState,
-): ReaderSystemBarsState {
-    return captured ?: current
-}
-
-internal fun resolveActiveReaderSystemBarsState(
-    showReaderUi: Boolean,
-    fullScreenMode: Boolean,
-    base: ReaderSystemBarsState,
-): ReaderSystemBarsState {
-    if (showReaderUi) {
-        return base.copy(
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE,
-        )
-    }
-    if (!fullScreenMode) {
-        return base.copy(
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE,
-        )
-    }
-    return base.copy(
-        isLightStatusBars = false, // When fullscreen, transient bars should have light icons
-        isLightNavigationBars = false,
-        systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE,
-    )
-}
-
-private fun WindowInsetsControllerCompat.captureReaderSystemBarsState(): ReaderSystemBarsState {
-    return ReaderSystemBarsState(
-        isLightStatusBars = isAppearanceLightStatusBars,
-        isLightNavigationBars = isAppearanceLightNavigationBars,
-        systemBarsBehavior = systemBarsBehavior,
-    )
-}
-
-private fun WindowInsetsControllerCompat.restoreReaderSystemBarsState(
-    state: ReaderSystemBarsState,
-) {
-    isAppearanceLightStatusBars = state.isLightStatusBars
-    isAppearanceLightNavigationBars = state.isLightNavigationBars
-    systemBarsBehavior = state.systemBarsBehavior
 }
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {

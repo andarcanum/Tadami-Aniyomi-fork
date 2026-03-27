@@ -749,9 +749,31 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `fullscreen reader restores system bars on dispose`() {
-        assertTrue(shouldRestoreSystemBarsOnDispose(fullScreenMode = true))
-        assertTrue(shouldRestoreSystemBarsOnDispose(fullScreenMode = false))
+    fun `chapter handoff should not restore system bars on dispose in fullscreen`() {
+        // When switching chapters we replace the screen (`navigator.replace(...)`), which disposes the old
+        // reader screen. Restoring system bars in this dispose path causes a visible flash (and sometimes
+        // bars that remain visible) during the intermediate Loading state of the next chapter.
+        //
+        // This test is intentionally red until the system-ui policy distinguishes internal chapter replaces
+        // from true reader exits.
+        assertFalse(shouldRestoreSystemBarsOnDispose(fullScreenMode = true))
+    }
+
+    @Test
+    fun `reader exit restores captured system bars state`() {
+        val captured = ReaderSystemBarsState(
+            isLightStatusBars = true,
+            isLightNavigationBars = false,
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE,
+        )
+        val current = captured.copy(
+            isLightStatusBars = false,
+            isLightNavigationBars = true,
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT,
+        )
+
+        assertEquals(captured, resolveReaderExitSystemBarsState(captured = captured, current = current))
+        assertEquals(current, resolveReaderExitSystemBarsState(captured = null, current = current))
     }
 
     @Test
