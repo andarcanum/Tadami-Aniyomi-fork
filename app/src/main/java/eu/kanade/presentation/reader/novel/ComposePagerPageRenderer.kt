@@ -4,28 +4,18 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -112,22 +102,6 @@ internal fun ComposePagerPageRenderer(
     val latestOpenPreviousChapter by rememberUpdatedState(onOpenPreviousChapter)
     val latestOpenNextChapter by rememberUpdatedState(onOpenNextChapter)
     val edgeSwipeThresholdPx = with(density) { 160.dp.toPx() }
-    val baseTextStyle = resolvePageReaderBaseTextStyle(
-        baseStyle = MaterialTheme.typography.bodyLarge,
-        color = textColor,
-        backgroundColor = textBackground,
-        fontSize = readerSettings.fontSize,
-        lineHeight = readerSettings.lineHeight,
-        fontFamily = composeFontFamily,
-        textAlign = null,
-        forceBoldText = readerSettings.forceBoldText,
-        forceItalicText = readerSettings.forceItalicText,
-        textShadow = readerSettings.textShadow,
-        textShadowColor = readerSettings.textShadowColor,
-        textShadowBlur = readerSettings.textShadowBlur,
-        textShadowX = readerSettings.textShadowX,
-        textShadowY = readerSettings.textShadowY,
-    )
     HorizontalPager(
         state = pagerState,
         modifier = Modifier
@@ -194,15 +168,17 @@ internal fun ComposePagerPageRenderer(
             style = transitionStyle,
             pageOffset = pageOffset,
         )
-        Box(
+        NovelPageReaderPageContent(
+            contentPage = contentPage,
+            readerSettings = readerSettings,
+            textColor = textColor,
+            textBackground = textBackground,
+            composeFontFamily = composeFontFamily,
+            chapterTitleFontFamily = chapterTitleFontFamily,
+            contentPadding = contentPadding,
+            statusBarTopPadding = statusBarTopPadding,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(
-                    top = contentPadding + statusBarTopPadding,
-                    bottom = contentPadding,
-                    start = readerSettings.margin.dp,
-                    end = readerSettings.margin.dp,
-                )
                 .graphicsLayer {
                     alpha = if (transitionSpec.hideOffscreenPages && abs(pageOffset) > 0.5f) {
                         0f
@@ -217,67 +193,6 @@ internal fun ComposePagerPageRenderer(
                         transitionSpec.translationXFraction
                     }
                 },
-            contentAlignment = Alignment.TopStart,
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                contentPage.blocks.forEach { block ->
-                    if (block.spacingBeforePx > 0) {
-                        Spacer(
-                            modifier = Modifier.height(
-                                with(density) { block.spacingBeforePx.toDp() },
-                            ),
-                        )
-                    }
-                    when (block) {
-                        is NovelPageContentBlock.Plain -> {
-                            Text(
-                                text = if (readerSettings.bionicReading) {
-                                    toBionicText(block.text)
-                                } else {
-                                    AnnotatedString(block.text)
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                style = resolvePageReaderBlockTextStyle(
-                                    baseStyle = baseTextStyle,
-                                    isChapterTitle = block.isChapterTitle,
-                                    fontSize = readerSettings.fontSize,
-                                    lineHeight = readerSettings.lineHeight,
-                                    fontFamily = composeFontFamily,
-                                    chapterTitleFontFamily = chapterTitleFontFamily,
-                                )
-                                    .withOptionalTextAlign(
-                                        resolvePageReaderRenderTextAlign(
-                                            globalTextAlign = readerSettings.textAlign,
-                                        ),
-                                    )
-                                    .withOptionalFirstLineIndentEm(block.firstLineIndentEm),
-                            )
-                        }
-                        is NovelPageContentBlock.Rich -> {
-                            Text(
-                                text = block.text,
-                                modifier = Modifier.fillMaxWidth(),
-                                style = resolvePageReaderBlockTextStyle(
-                                    baseStyle = baseTextStyle,
-                                    isChapterTitle = block.isChapterTitle,
-                                    fontSize = readerSettings.fontSize,
-                                    lineHeight = readerSettings.lineHeight,
-                                    fontFamily = composeFontFamily,
-                                    chapterTitleFontFamily = chapterTitleFontFamily,
-                                )
-                                    .withOptionalTextAlign(
-                                        resolvePageReaderRenderTextAlign(
-                                            globalTextAlign = readerSettings.textAlign,
-                                        ),
-                                    )
-                                    .withOptionalFirstLineIndentEm(block.firstLineIndentEm),
-                            )
-                        }
-                    }
-                }
-            }
-        }
+        )
     }
 }

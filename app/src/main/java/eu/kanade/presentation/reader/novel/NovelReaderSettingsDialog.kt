@@ -63,6 +63,7 @@ import eu.kanade.presentation.components.TabbedDialog
 import eu.kanade.presentation.more.settings.widget.EditTextPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.ListPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.SwitchPreferenceWidget
+import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
@@ -198,6 +199,16 @@ private fun GeneralTab(
         )
     }
     val pageTransitionEntries = novelPageTransitionStyleEntries()
+    val pageTurnSpeedEntries = novelPageTurnSpeedEntries()
+    val pageTurnIntensityEntries = novelPageTurnIntensityEntries()
+    val pageTurnShadowEntries = novelPageTurnShadowIntensityEntries()
+    val showPageTurnTuning = shouldShowPageTurnTuningControls(
+        pageReaderEnabled = settings.pageReader,
+        style = settings.pageTransitionStyle,
+    )
+    var pageTurnTuningExpanded by rememberSaveable(settings.pageReader, settings.pageTransitionStyle) {
+        mutableStateOf(false)
+    }
     val surfaceStrategy = remember { resolveNovelReaderSettingsSurfaceStrategy() }
 
     @Composable
@@ -301,6 +312,79 @@ private fun GeneralTab(
                     )
                 },
             )
+            if (showPageTurnTuning) {
+                TextPreferenceWidget(
+                    title = stringResource(AYMR.strings.novel_reader_page_turn_tuning),
+                    subtitle = novelPageTurnTuningSummary(
+                        speed = settings.pageTurnSpeed,
+                        intensity = settings.pageTurnIntensity,
+                        shadowIntensity = settings.pageTurnShadowIntensity,
+                        speedEntries = pageTurnSpeedEntries,
+                        intensityEntries = pageTurnIntensityEntries,
+                        shadowEntries = pageTurnShadowEntries,
+                    ),
+                    widget = {
+                        Icon(
+                            imageVector = if (pageTurnTuningExpanded) {
+                                Icons.Filled.KeyboardArrowDown
+                            } else {
+                                Icons.AutoMirrored.Filled.KeyboardArrowRight
+                            },
+                            contentDescription = null,
+                        )
+                    },
+                    onPreferenceClick = {
+                        pageTurnTuningExpanded = !pageTurnTuningExpanded
+                    },
+                )
+                if (pageTurnTuningExpanded) {
+                    ListPreferenceWidget(
+                        value = settings.pageTurnSpeed,
+                        title = stringResource(AYMR.strings.novel_reader_page_turn_speed),
+                        subtitle = pageTurnSpeedEntries[settings.pageTurnSpeed].orEmpty(),
+                        icon = null,
+                        entries = pageTurnSpeedEntries,
+                        onValueChange = {
+                            update(
+                                it,
+                                { o, v -> o.copy(pageTurnSpeed = v) },
+                                { preferences.pageTurnSpeed().set(it) },
+                                dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
+                            )
+                        },
+                    )
+                    ListPreferenceWidget(
+                        value = settings.pageTurnIntensity,
+                        title = stringResource(AYMR.strings.novel_reader_page_turn_intensity),
+                        subtitle = pageTurnIntensityEntries[settings.pageTurnIntensity].orEmpty(),
+                        icon = null,
+                        entries = pageTurnIntensityEntries,
+                        onValueChange = {
+                            update(
+                                it,
+                                { o, v -> o.copy(pageTurnIntensity = v) },
+                                { preferences.pageTurnIntensity().set(it) },
+                                dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
+                            )
+                        },
+                    )
+                    ListPreferenceWidget(
+                        value = settings.pageTurnShadowIntensity,
+                        title = stringResource(AYMR.strings.novel_reader_page_turn_shadow_intensity),
+                        subtitle = pageTurnShadowEntries[settings.pageTurnShadowIntensity].orEmpty(),
+                        icon = null,
+                        entries = pageTurnShadowEntries,
+                        onValueChange = {
+                            update(
+                                it,
+                                { o, v -> o.copy(pageTurnShadowIntensity = v) },
+                                { preferences.pageTurnShadowIntensity().set(it) },
+                                dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
+                            )
+                        },
+                    )
+                }
+            }
         }
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_prefer_webview_renderer),

@@ -2016,6 +2016,82 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `page turn renderer config maps book and curl to distinct drag profiles`() {
+        val bookConfig = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.BOOK,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            textBackground = Color(0xFFF8F2E7),
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+        val curlConfig = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.CURL,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            textBackground = Color(0xFFF8F2E7),
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+
+        assertEquals(NovelPageTurnDragMode.START_END, bookConfig.dragMode)
+        assertEquals(NovelPageTurnDragMode.GESTURE, curlConfig.dragMode)
+        assertTrue(bookConfig.dragActivationEdgeFraction < curlConfig.dragActivationEdgeFraction)
+        assertTrue(bookConfig.shadowRadiusDp < curlConfig.shadowRadiusDp)
+        assertTrue(bookConfig.preset.curlAmount < curlConfig.preset.curlAmount)
+    }
+
+    @Test
+    fun `page turn renderer config disables unavailable turn directions without losing center tap`() {
+        val config = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.CURL,
+            speed = NovelPageTurnSpeed.FAST,
+            intensity = NovelPageTurnIntensity.HIGH,
+            shadowIntensity = NovelPageTurnShadowIntensity.LOW,
+            textBackground = Color(0xFF171717),
+            canMoveBackward = false,
+            canMoveForward = true,
+        )
+
+        assertFalse(config.dragBackwardEnabled)
+        assertTrue(config.dragForwardEnabled)
+        assertFalse(config.tapBackwardEnabled)
+        assertTrue(config.tapForwardEnabled)
+        assertTrue(config.tapCustomEnabled)
+        assertTrue(config.centerTapWidthFraction > 0.2f)
+    }
+
+    @Test
+    fun `page turn tuning controls only show for book and curl in page mode`() {
+        assertFalse(
+            shouldShowPageTurnTuningControls(
+                pageReaderEnabled = false,
+                style = NovelPageTransitionStyle.BOOK,
+            ),
+        )
+        assertFalse(
+            shouldShowPageTurnTuningControls(
+                pageReaderEnabled = true,
+                style = NovelPageTransitionStyle.SLIDE,
+            ),
+        )
+        assertTrue(
+            shouldShowPageTurnTuningControls(
+                pageReaderEnabled = true,
+                style = NovelPageTransitionStyle.BOOK,
+            ),
+        )
+        assertTrue(
+            shouldShowPageTurnTuningControls(
+                pageReaderEnabled = true,
+                style = NovelPageTransitionStyle.CURL,
+            ),
+        )
+    }
+
+    @Test
     fun `rich page content contract stays stable across compose and page turn transition routes`() {
         val richBlockTexts = listOf(
             buildRichPageReaderBlockText(

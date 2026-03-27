@@ -28,17 +28,5 @@ internal fun novelPageTransitionStyleSubtitle(
     style: NovelPageTransitionStyle,
     entries: Map<NovelPageTransitionStyle, String>,
 ): String {
-    val currentLabel = entries[style].orEmpty()
-    return when (style) {
-        NovelPageTransitionStyle.BOOK,
-        NovelPageTransitionStyle.CURL,
-        -> {
-            stringResource(
-                AYMR.strings.novel_reader_page_transition_style_page_turn_fallback,
-                currentLabel,
-                entries[NovelPageTransitionStyle.SLIDE].orEmpty(),
-            )
-        }
-        else -> currentLabel
-    }
+    return entries[style].orEmpty()
 }
