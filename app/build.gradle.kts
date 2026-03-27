@@ -303,6 +303,7 @@ dependencies {
     implementation(libs.aboutLibraries.compose)
     implementation(libs.bundles.voyager)
     implementation(libs.compose.materialmotion)
+    implementation(libs.compose.pagecurl)
     implementation(libs.swipe)
     implementation(libs.compose.webview)
     implementation(libs.compose.grid)
