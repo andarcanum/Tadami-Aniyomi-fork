@@ -2,6 +2,25 @@ package eu.kanade.presentation.reader.novel
 
 import androidx.core.view.WindowInsetsControllerCompat
 
+internal object NovelReaderSystemUiSession {
+    @Volatile
+    private var internalChapterReplacePending = false
+
+    fun markInternalChapterReplace() {
+        internalChapterReplacePending = true
+    }
+
+    fun consumeInternalChapterReplace(): Boolean {
+        val pending = internalChapterReplacePending
+        internalChapterReplacePending = false
+        return pending
+    }
+
+    fun clear() {
+        internalChapterReplacePending = false
+    }
+}
+
 internal data class ReaderSystemBarsState(
     val isLightStatusBars: Boolean,
     val isLightNavigationBars: Boolean,
@@ -45,10 +64,9 @@ internal fun shouldHideSystemBars(
 }
 
 internal fun shouldRestoreSystemBarsOnDispose(
-    @Suppress("UNUSED_PARAMETER")
-    fullScreenMode: Boolean,
+    isInternalChapterReplace: Boolean,
 ): Boolean {
-    return true
+    return !isInternalChapterReplace
 }
 
 internal fun WindowInsetsControllerCompat.captureReaderSystemBarsState(): ReaderSystemBarsState {

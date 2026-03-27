@@ -31,6 +31,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnIntensity
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnShadowIntensity
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnSpeed
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
@@ -41,6 +42,10 @@ import kotlin.math.abs
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
 
 class NovelReaderUiVisibilityTest {
+    @AfterEach
+    fun resetNovelReaderSystemUiSession() {
+        NovelReaderSystemUiSession.clear()
+    }
 
     @Test
     fun `background preset catalog exposes five unique built-ins`() {
@@ -749,14 +754,17 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `chapter handoff should not restore system bars on dispose in fullscreen`() {
-        // When switching chapters we replace the screen (`navigator.replace(...)`), which disposes the old
-        // reader screen. Restoring system bars in this dispose path causes a visible flash (and sometimes
-        // bars that remain visible) during the intermediate Loading state of the next chapter.
-        //
-        // This test is intentionally red until the system-ui policy distinguishes internal chapter replaces
-        // from true reader exits.
-        assertFalse(shouldRestoreSystemBarsOnDispose(fullScreenMode = true))
+    fun `chapter handoff should not restore system bars on dispose`() {
+        assertFalse(shouldRestoreSystemBarsOnDispose(isInternalChapterReplace = true))
+        assertTrue(shouldRestoreSystemBarsOnDispose(isInternalChapterReplace = false))
+    }
+
+    @Test
+    fun `internal chapter replace token is consumed once`() {
+        NovelReaderSystemUiSession.markInternalChapterReplace()
+
+        assertTrue(NovelReaderSystemUiSession.consumeInternalChapterReplace())
+        assertFalse(NovelReaderSystemUiSession.consumeInternalChapterReplace())
     }
 
     @Test

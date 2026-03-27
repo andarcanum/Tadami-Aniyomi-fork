@@ -257,9 +257,10 @@ fun NovelReaderScreen(
     onTestDeepSeekConnection: () -> Unit = {},
     onOpenPreviousChapter: ((Long) -> Unit)? = null,
     onOpenNextChapter: ((Long) -> Unit)? = null,
+    showReaderUi: Boolean,
+    onSetShowReaderUi: (Boolean) -> Unit,
 ) {
     var showSettings by remember { mutableStateOf(false) }
-    var showReaderUI by remember { mutableStateOf(false) } // UI скрыт по умолчанию
     var showWebView by remember(
         state.chapter.id,
         state.readerSettings.preferWebViewRenderer,
@@ -583,7 +584,7 @@ fun NovelReaderScreen(
     val baseContentPadding = MaterialTheme.padding.small
     val contentPaddingPx = with(density) {
         resolveReaderContentPaddingPx(
-            showReaderUi = showReaderUI,
+            showReaderUi = showReaderUi,
             basePaddingPx = baseContentPadding.roundToPx(),
         ).toDp()
     }
@@ -850,7 +851,7 @@ fun NovelReaderScreen(
         )
     }
     val showBottomInfoOverlay = shouldShowBottomInfoOverlay(
-        showReaderUi = showReaderUI,
+        showReaderUi = showReaderUi,
         showBatteryAndTime = state.readerSettings.showBatteryAndTime,
         showKindleInfoBlock = state.readerSettings.showKindleInfoBlock,
         showTimeToEnd = state.readerSettings.showTimeToEnd,
@@ -867,16 +868,12 @@ fun NovelReaderScreen(
     }
 
     // Управление System UI для fullscreen режима
-    SystemUIController(
-        fullScreenMode = state.readerSettings.fullScreenMode,
-        keepScreenOn = state.readerSettings.keepScreenOn,
-        showReaderUi = showReaderUI,
-    )
-
     LaunchedEffect(state.chapter.id, usePageReader) {
-        showReaderUI = resolveReaderUiAfterChapterChange(
-            currentShowReaderUi = showReaderUI,
-            usePageReader = usePageReader,
+        onSetShowReaderUi(
+            resolveReaderUiAfterChapterChange(
+                currentShowReaderUi = showReaderUi,
+                usePageReader = usePageReader,
+            ),
         )
     }
 
@@ -935,7 +932,7 @@ fun NovelReaderScreen(
         }
         if (event.action == KeyEvent.ACTION_DOWN) return true
         if (event.action != KeyEvent.ACTION_UP) return false
-        if (showReaderUI) return true
+        if (showReaderUi) return true
         return when (event.keyCode) {
             KeyEvent.KEYCODE_VOLUME_UP -> {
                 coroutineScope.launch { moveBackwardByReaderAction() }
@@ -954,7 +951,7 @@ fun NovelReaderScreen(
         state.readerSettings.useVolumeButtons,
         usePageReader,
         showWebView,
-        showReaderUI,
+        showReaderUi,
         pageReaderItemsCount,
         nativeScrollItemsCount,
     ) {
@@ -975,7 +972,7 @@ fun NovelReaderScreen(
         autoScrollEnabled,
         autoScrollSpeed,
         usePageReader,
-        showReaderUI,
+        showReaderUi,
         showWebView,
         webViewInstance,
         state.nextChapterId,
@@ -986,7 +983,7 @@ fun NovelReaderScreen(
         var previousFrameNanos: Long? = null
         var stepRemainderPx = 0f
         while (isActive && autoScrollEnabled) {
-            if (showReaderUI) {
+            if (showReaderUi) {
                 previousFrameNanos = null
                 stepRemainderPx = 0f
                 delay(120)
@@ -1030,7 +1027,7 @@ fun NovelReaderScreen(
                 previousFrameNanos = null
                 stepRemainderPx = 0f
                 delay(autoScrollPageDelayMs(autoScrollSpeed))
-                if (showReaderUI || showWebView || !autoScrollEnabled) continue
+                if (showReaderUi || showWebView || !autoScrollEnabled) continue
                 val currentPage = pageReaderProgressPageIndex
                 if (currentPage < pageReaderItemsCount - 1) {
                     pageTurnCurrentPage = currentPage + 1
@@ -1171,7 +1168,7 @@ fun NovelReaderScreen(
                             statusBarTopPadding = statusBarTopPadding,
                             hasPreviousChapter = state.previousChapterId != null,
                             hasNextChapter = state.nextChapterId != null,
-                            onToggleUi = { showReaderUI = !showReaderUI },
+                            onToggleUi = { onSetShowReaderUi(!showReaderUi) },
                             onMoveBackward = { coroutineScope.launch { moveBackwardByReaderAction() } },
                             onMoveForward = { coroutineScope.launch { moveForwardByReaderAction() } },
                             onOpenPreviousChapter = { state.previousChapterId?.let { onOpenPreviousChapter?.invoke(it) } },
@@ -1199,7 +1196,7 @@ fun NovelReaderScreen(
                             statusBarTopPadding = statusBarTopPadding,
                             hasPreviousChapter = state.previousChapterId != null,
                             hasNextChapter = state.nextChapterId != null,
-                            onToggleUi = { showReaderUI = !showReaderUI },
+                            onToggleUi = { onSetShowReaderUi(!showReaderUi) },
                             requestedPage = pageTurnRequestedPage,
                             onRequestedPageConsumed = { pageTurnRequestedPage = -1 },
                             onCurrentPageChange = { pageTurnCurrentPage = it },
@@ -1229,7 +1226,7 @@ fun NovelReaderScreen(
                                                 tapToScrollEnabled = state.readerSettings.tapToScroll,
                                             )
                                         ) {
-                                            ReaderTapAction.TOGGLE_UI -> showReaderUI = !showReaderUI
+                                            ReaderTapAction.TOGGLE_UI -> onSetShowReaderUi(!showReaderUi)
                                             ReaderTapAction.BACKWARD -> coroutineScope.launch {
                                                 moveBackwardByReaderAction()
                                             }
@@ -1286,7 +1283,7 @@ fun NovelReaderScreen(
                                         state.readerSettings.swipeToNextChapter,
                                         state.readerSettings.swipeToPrevChapter,
                                         usePageReader,
-                                        showReaderUI,
+                                        showReaderUi,
                                         showWebView,
                                         state.previousChapterId,
                                         state.nextChapterId,
@@ -1310,7 +1307,7 @@ fun NovelReaderScreen(
                                                 if (!change.pressed) break
                                             }
 
-                                            if (showReaderUI || showWebView || usePageReader) {
+                                            if (showReaderUi || showWebView || usePageReader) {
                                                 return@awaitEachGesture
                                             }
 
@@ -1576,14 +1573,14 @@ fun NovelReaderScreen(
                 val initialMaxWebViewStatusInsetPx = with(density) { 16.dp.roundToPx() }
                 val initialPaddingTop = resolveWebViewPaddingTopPx(
                     statusBarHeightPx = statusBarHeight,
-                    showReaderUi = showReaderUI,
+                    showReaderUi = showReaderUi,
                     appBarHeightPx = appBarHeight,
                     basePaddingPx = initialWebReaderPaddingPx,
                     maxStatusBarInsetPx = initialMaxWebViewStatusInsetPx,
                 )
                 val initialPaddingBottom = resolveWebViewPaddingBottomPx(
                     navigationBarHeightPx = navigationBarHeight,
-                    showReaderUi = showReaderUI,
+                    showReaderUi = showReaderUi,
                     bottomBarHeightPx = bottomBarHeight,
                     basePaddingPx = initialWebReaderPaddingPx,
                 )
@@ -1687,10 +1684,10 @@ fun NovelReaderScreen(
                                             tapToScrollEnabled = state.readerSettings.tapToScroll,
                                         )
                                     ) {
-                                        ReaderTapAction.TOGGLE_UI -> {
-                                            showReaderUI = !showReaderUI
-                                            true
-                                        }
+                                            ReaderTapAction.TOGGLE_UI -> {
+                                                onSetShowReaderUi(!showReaderUi)
+                                                true
+                                            }
                                         ReaderTapAction.BACKWARD -> {
                                             coroutineScope.launch { moveBackwardByReaderAction() }
                                             true
@@ -1714,7 +1711,7 @@ fun NovelReaderScreen(
                                     horizontalSwipeHandled = false
                                 }
                                 MotionEvent.ACTION_UP -> {
-                                    if (!showReaderUI && !horizontalSwipeHandled) {
+                                    if (!showReaderUi && !horizontalSwipeHandled) {
                                         when (
                                             resolveHorizontalChapterSwipeAction(
                                                 swipeGesturesEnabled = state.readerSettings.swipeGestures,
@@ -1736,7 +1733,7 @@ fun NovelReaderScreen(
                                             HorizontalChapterSwipeAction.NONE -> Unit
                                         }
                                     }
-                                    if (!showReaderUI && !horizontalSwipeHandled) {
+                                    if (!showReaderUi && !horizontalSwipeHandled) {
                                         val deltaX = event.x - touchStartX
                                         val deltaY = event.y - touchStartY
                                         val gestureDurationMillis = (event.eventTime - touchStartEventTime)
@@ -1784,14 +1781,14 @@ fun NovelReaderScreen(
                         val maxWebViewStatusInsetPx = with(density) { 16.dp.roundToPx() }
                         val paddingTop = resolveWebViewPaddingTopPx(
                             statusBarHeightPx = statusBarHeight,
-                            showReaderUi = showReaderUI,
+                            showReaderUi = showReaderUi,
                             appBarHeightPx = appBarHeight,
                             basePaddingPx = webReaderPaddingPx,
                             maxStatusBarInsetPx = maxWebViewStatusInsetPx,
                         )
                         val paddingBottom = resolveWebViewPaddingBottomPx(
                             navigationBarHeightPx = navigationBarHeight,
-                            showReaderUi = showReaderUI,
+                            showReaderUi = showReaderUi,
                             bottomBarHeightPx = bottomBarHeight,
                             basePaddingPx = webReaderPaddingPx,
                         )
@@ -2085,7 +2082,7 @@ fun NovelReaderScreen(
         }
         if (
             shouldShowVerticalSeekbar(
-                showReaderUi = showReaderUI,
+                showReaderUi = showReaderUi,
                 verticalSeekbarEnabled = state.readerSettings.verticalSeekbar,
                 showWebView = showWebView,
                 usePageReader = usePageReader,
@@ -2267,7 +2264,7 @@ fun NovelReaderScreen(
             }
         }
 
-        if (shouldShowPersistentProgressLine(showReaderUi = showReaderUI)) {
+        if (shouldShowPersistentProgressLine(showReaderUi = showReaderUi)) {
             val lineColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
             Box(
                 modifier = Modifier
@@ -2298,7 +2295,7 @@ fun NovelReaderScreen(
             .copy(alpha = if (isSystemInDarkTheme()) 0.9f else 0.95f)
         // Top AppBar with status bar support
         AnimatedVisibility(
-            visible = showReaderUI,
+            visible = showReaderUi,
             enter = slideInVertically(
                 initialOffsetY = { -it },
                 animationSpec = panelSlideSpec,
@@ -2354,11 +2351,11 @@ fun NovelReaderScreen(
                                 onClick = {
                                     val nextState = resolveAutoScrollUiStateOnToggle(
                                         currentEnabled = autoScrollEnabled,
-                                        showReaderUi = showReaderUI,
+                                        showReaderUi = showReaderUi,
                                         autoScrollExpanded = autoScrollExpanded,
                                     )
                                     autoScrollEnabled = nextState.autoScrollEnabled
-                                    showReaderUI = nextState.showReaderUi
+                                    onSetShowReaderUi(nextState.showReaderUi)
                                     autoScrollExpanded = nextState.autoScrollExpanded
                                 },
                                 modifier = Modifier.padding(top = 12.dp),
@@ -2415,7 +2412,7 @@ fun NovelReaderScreen(
 
         // Bottom navigation in LNReader-like style
         AnimatedVisibility(
-            visible = showReaderUI,
+            visible = showReaderUi,
             enter = slideInVertically(
                 initialOffsetY = { it },
                 animationSpec = panelSlideSpec,
@@ -7428,7 +7425,7 @@ internal fun toBionicText(text: String): AnnotatedString {
 }
 
 @Composable
-private fun SystemUIController(
+internal fun SystemUIController(
     fullScreenMode: Boolean,
     keepScreenOn: Boolean,
     showReaderUi: Boolean,
@@ -7451,14 +7448,18 @@ private fun SystemUIController(
             val activity = view.context.findActivity() ?: return@onDispose
             val window = activity.window
             val insetsController = WindowCompat.getInsetsController(window, view)
+            val internalChapterReplace = NovelReaderSystemUiSession.consumeInternalChapterReplace()
             val restoredState = resolveReaderExitSystemBarsState(
                 captured = capturedSystemBarsState.value,
                 current = insetsController.captureReaderSystemBarsState(),
             )
-            if (shouldRestoreSystemBarsOnDispose(fullScreenMode)) {
+            if (shouldRestoreSystemBarsOnDispose(isInternalChapterReplace = internalChapterReplace)) {
                 insetsController.show(WindowInsetsCompat.Type.systemBars())
             }
             insetsController.restoreReaderSystemBarsState(restoredState)
+            if (!internalChapterReplace) {
+                NovelReaderSystemUiSession.clear()
+            }
             window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
