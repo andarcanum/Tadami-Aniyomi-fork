@@ -31,6 +31,7 @@ class NovelReaderPreferencesTest {
         prefs.textAlign().get() shouldBe TextAlign.SOURCE
         prefs.preferWebViewRenderer().get() shouldBe false
         prefs.richNativeRendererExperimental().get() shouldBe true
+        prefs.pageTransitionStyle().get() shouldBe NovelPageTransitionStyle.SLIDE
         prefs.forceParagraphIndent().get() shouldBe true
         prefs.preserveSourceTextAlignInNative().get() shouldBe true
         prefs.paragraphSpacing().get() shouldBe 12
@@ -84,6 +85,15 @@ class NovelReaderPreferencesTest {
     }
 
     @Test
+    fun `page transition style preference round trips persisted value`() {
+        val prefs = createPrefs()
+
+        prefs.pageTransitionStyle().set(NovelPageTransitionStyle.BOOK)
+
+        prefs.pageTransitionStyle().get() shouldBe NovelPageTransitionStyle.BOOK
+    }
+
+    @Test
     fun `enable source override copies new settings`() {
         val prefs = createPrefs()
         val sourceId = 123L
@@ -114,6 +124,7 @@ class NovelReaderPreferencesTest {
         prefs.autoScrollInterval().set(7)
         prefs.autoScrollOffset().set(480)
         prefs.prefetchNextChapter().set(true)
+        prefs.pageTransitionStyle().set(NovelPageTransitionStyle.DEPTH)
         prefs.bionicReading().set(true)
         prefs.geminiApiKey().set("test-key")
         prefs.geminiModel().set("gemini-2.5-pro")
@@ -178,6 +189,7 @@ class NovelReaderPreferencesTest {
         override?.autoScrollInterval shouldBe 7
         override?.autoScrollOffset shouldBe 480
         override?.prefetchNextChapter shouldBe true
+        override?.pageTransitionStyle shouldBe NovelPageTransitionStyle.DEPTH
         override?.bionicReading shouldBe true
         override?.geminiApiKey shouldBe "test-key"
         override?.geminiModel shouldBe "gemini-2.5-pro"
@@ -243,6 +255,7 @@ class NovelReaderPreferencesTest {
         prefs.autoScrollInterval().set(10)
         prefs.autoScrollOffset().set(0)
         prefs.prefetchNextChapter().set(false)
+        prefs.pageTransitionStyle().set(NovelPageTransitionStyle.SLIDE)
         prefs.bionicReading().set(false)
         prefs.geminiApiKey().set("")
         prefs.geminiModel().set("gemini-3.1-flash-lite-preview")
@@ -307,6 +320,7 @@ class NovelReaderPreferencesTest {
                 autoScrollInterval = 3,
                 autoScrollOffset = 240,
                 prefetchNextChapter = true,
+                pageTransitionStyle = NovelPageTransitionStyle.CURL,
                 bionicReading = true,
                 geminiApiKey = "override-key",
                 geminiModel = "gemini-2.5-pro",
@@ -370,6 +384,7 @@ class NovelReaderPreferencesTest {
         settings.autoScrollInterval shouldBe 3
         settings.autoScrollOffset shouldBe 240
         settings.prefetchNextChapter shouldBe true
+        settings.pageTransitionStyle shouldBe NovelPageTransitionStyle.CURL
         settings.bionicReading shouldBe true
         settings.geminiApiKey shouldBe "override-key"
         settings.geminiModel shouldBe "gemini-2.5-pro"

@@ -60,6 +60,8 @@ import eu.kanade.presentation.reader.novel.ensureLegacyNovelReaderBackgroundItem
 import eu.kanade.presentation.reader.novel.importNovelReaderCustomBackgroundItem
 import eu.kanade.presentation.reader.novel.importNovelReaderCustomFont
 import eu.kanade.presentation.reader.novel.intervalToAutoScrollSpeed
+import eu.kanade.presentation.reader.novel.novelPageTransitionStyleEntries
+import eu.kanade.presentation.reader.novel.novelPageTransitionStyleSubtitle
 import eu.kanade.presentation.reader.novel.novelReaderBackgroundPresets
 import eu.kanade.presentation.reader.novel.novelReaderPresetThemes
 import eu.kanade.presentation.reader.novel.areChapterSwipeControlsEnabled
@@ -77,6 +79,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
@@ -684,8 +687,10 @@ object SettingsNovelReaderScreen : SearchableSettings {
         val swipeGestures by swipeGesturesPref.collectAsState()
         val pageReaderPref = prefs.pageReader()
         val pageReader by pageReaderPref.collectAsState()
+        val pageTransitionStylePref = prefs.pageTransitionStyle()
         val bionicReadingPref = prefs.bionicReading()
         val bionicReading by bionicReadingPref.collectAsState()
+        val pageTransitionEntries = novelPageTransitionStyleEntries()
         val rendererAvailability = remember(pageReader, bionicReading) {
             resolveRendererSettingsAvailability(
                 pageReaderEnabled = pageReader,
@@ -799,6 +804,15 @@ object SettingsNovelReaderScreen : SearchableSettings {
                     preference = pageReaderPref,
                     title = stringResource(AYMR.strings.novel_reader_page_mode),
                     subtitle = stringResource(AYMR.strings.novel_reader_page_mode_summary),
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = pageTransitionStylePref,
+                    entries = pageTransitionEntries,
+                    title = stringResource(AYMR.strings.novel_reader_page_transition_style),
+                    subtitleProvider = { value: NovelPageTransitionStyle, entries ->
+                        novelPageTransitionStyleSubtitle(value, entries)
+                    },
+                    enabled = pageReader,
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = prefs.preferWebViewRenderer(),

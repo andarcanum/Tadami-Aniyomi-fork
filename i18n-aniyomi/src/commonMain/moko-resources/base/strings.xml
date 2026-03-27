@@ -483,6 +483,13 @@
     <string name="novel_reader_tap_to_scroll">Tap edges to navigate</string>
     <string name="novel_reader_page_mode">Page mode</string>
     <string name="novel_reader_page_mode_summary">Display content in pages instead of continuous scroll</string>
+    <string name="novel_reader_page_transition_style">Page transition style</string>
+    <string name="novel_reader_page_transition_style_instant">Instant</string>
+    <string name="novel_reader_page_transition_style_slide">Slide</string>
+    <string name="novel_reader_page_transition_style_depth">Depth</string>
+    <string name="novel_reader_page_transition_style_book">Book</string>
+    <string name="novel_reader_page_transition_style_curl">Curl</string>
+    <string name="novel_reader_page_transition_style_page_turn_fallback">%1$s • currently falls back to %2$s visuals</string>
     <string name="novel_reader_prefer_webview_renderer">Prefer WebView renderer</string>
     <string name="novel_reader_prefer_webview_renderer_summary">Open chapter in WebView by default. Disable to use native renderer.</string>
     <string name="novel_reader_rich_native_renderer_experimental">Use rich native rendering (experimental)</string>

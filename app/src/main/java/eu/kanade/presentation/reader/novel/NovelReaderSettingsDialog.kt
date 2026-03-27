@@ -61,6 +61,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.components.TabbedDialog
 import eu.kanade.presentation.more.settings.widget.EditTextPreferenceWidget
+import eu.kanade.presentation.more.settings.widget.ListPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.SwitchPreferenceWidget
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
@@ -196,6 +197,7 @@ private fun GeneralTab(
             pageReaderEnabled = currentPageReaderActive,
         )
     }
+    val pageTransitionEntries = novelPageTransitionStyleEntries()
     val surfaceStrategy = remember { resolveNovelReaderSettingsSurfaceStrategy() }
 
     @Composable
@@ -280,6 +282,26 @@ private fun GeneralTab(
                 )
             },
         )
+        if (settings.pageReader) {
+            ListPreferenceWidget(
+                value = settings.pageTransitionStyle,
+                title = stringResource(AYMR.strings.novel_reader_page_transition_style),
+                subtitle = novelPageTransitionStyleSubtitle(
+                    style = settings.pageTransitionStyle,
+                    entries = pageTransitionEntries,
+                ),
+                icon = null,
+                entries = pageTransitionEntries,
+                onValueChange = {
+                    update(
+                        it,
+                        { o, v -> o.copy(pageTransitionStyle = v) },
+                        { preferences.pageTransitionStyle().set(it) },
+                        dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
+                    )
+                },
+            )
+        }
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_prefer_webview_renderer),
             subtitle = rendererSubtitle(

@@ -7,6 +7,7 @@ import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceModelsService
@@ -1275,6 +1276,52 @@ class NovelReaderScreenModelTest {
             state.lastSavedPageReaderProgress shouldBe PageReaderProgress(index = 7, totalItems = 10)
             state.lastSavedIndex shouldBe 0
             state.lastSavedWebProgressPercent shouldBe 0
+            Unit
+        }
+    }
+
+    @Test
+    fun `page reader progress restore is independent from selected transition style`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+                lastPageRead = encodePageReaderProgress(index = 7, totalItems = 10),
+            )
+
+            suspend fun loadStateFor(style: NovelPageTransitionStyle): NovelReaderScreenModel.State.Success {
+                val preferences = createNovelReaderPreferences().also {
+                    it.pageTransitionStyle().set(style)
+                }
+                val screenModel = trackedNovelReaderScreenModel(
+                    chapterId = chapter.id,
+                    novelChapterRepository = FakeNovelChapterRepository(chapter),
+                    getNovel = GetNovel(FakeNovelRepository(novel)),
+                    sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                    pluginStorage = FakeNovelPluginStorage(emptyList()),
+                    novelReaderPreferences = preferences,
+                    isSystemDark = { false },
+                )
+
+                withTimeout(1_000) {
+                    while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                        yield()
+                    }
+                }
+
+                return screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            }
+
+            val slideState = loadStateFor(NovelPageTransitionStyle.SLIDE)
+            val curlState = loadStateFor(NovelPageTransitionStyle.CURL)
+
+            slideState.lastSavedPageReaderProgress shouldBe PageReaderProgress(index = 7, totalItems = 10)
+            curlState.lastSavedPageReaderProgress shouldBe slideState.lastSavedPageReaderProgress
+            curlState.lastSavedIndex shouldBe slideState.lastSavedIndex
+            curlState.lastSavedWebProgressPercent shouldBe slideState.lastSavedWebProgressPercent
             Unit
         }
     }
