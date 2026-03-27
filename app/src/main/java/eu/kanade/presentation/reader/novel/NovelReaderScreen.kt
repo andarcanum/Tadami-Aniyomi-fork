@@ -2117,7 +2117,10 @@ fun NovelReaderScreen(
                 }
             }
             val (pageRailTopLabel, pageRailBottomLabel) = if (usePageReader) {
-                resolveReaderPageRailLabels(pageReaderItemsCount)
+                resolveReaderPageRailLabels(
+                    pageIndex = pageReaderProgressPageIndex,
+                    pageCount = pageReaderItemsCount,
+                )
             } else {
                 verticalSeekbarLabels(
                     readingProgressPercent = readingProgressPercent,
@@ -5058,11 +5061,13 @@ internal fun resolvePageReaderReadingProgressPercent(
 }
 
 internal fun resolveReaderPageRailLabels(
+    pageIndex: Int,
     pageCount: Int,
 ): Pair<String?, String?> {
     val safePageCount = pageCount.coerceAtLeast(0)
     if (safePageCount <= 0) return null to null
-    return "1" to safePageCount.toString()
+    val currentPage = pageIndex.coerceIn(0, safePageCount - 1) + 1
+    return currentPage.toString() to safePageCount.toString()
 }
 
 internal fun resolveReaderVerticalSeekbarTickFractions(pageCount: Int): List<Float> {

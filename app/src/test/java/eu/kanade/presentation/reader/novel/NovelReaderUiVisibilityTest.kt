@@ -521,15 +521,15 @@ class NovelReaderUiVisibilityTest {
     fun `page rail labels show first and last page inside seekbar`() {
         assertEquals(
             Pair(null, null),
-            resolveReaderPageRailLabels(pageCount = 0),
+            resolveReaderPageRailLabels(pageIndex = 0, pageCount = 0),
         )
         assertEquals(
             Pair("1", "1"),
-            resolveReaderPageRailLabels(pageCount = 1),
+            resolveReaderPageRailLabels(pageIndex = 0, pageCount = 1),
         )
         assertEquals(
-            Pair("1", "10"),
-            resolveReaderPageRailLabels(pageCount = 10),
+            Pair("7", "10"),
+            resolveReaderPageRailLabels(pageIndex = 6, pageCount = 10),
         )
     }
 
