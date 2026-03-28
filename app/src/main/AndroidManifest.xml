@@ -34,7 +34,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
-        android:name=".App"
+        android:name="eu.kanade.tachiyomi.App"
         android:allowBackup="false"
         android:enableOnBackInvokedCallback="true"
         android:hardwareAccelerated="true"
@@ -49,7 +49,7 @@
         android:theme="@style/Theme.Tachiyomi">
 
         <activity
-            android:name=".ui.main.MainActivity"
+            android:name="eu.kanade.tachiyomi.ui.main.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize"
@@ -116,13 +116,13 @@
         </activity>
 
         <activity
-            android:name=".crash.CrashActivity"
+            android:name="eu.kanade.tachiyomi.crash.CrashActivity"
             android:exported="false"
             android:process=":error_handler" />
 
 
         <activity
-            android:name=".ui.deeplink.anime.DeepLinkAnimeActivity"
+            android:name="eu.kanade.tachiyomi.ui.deeplink.anime.DeepLinkAnimeActivity"
             android:exported="true"
             android:label="@string/action_global_anime_search"
             android:launchMode="singleTask"
@@ -149,7 +149,7 @@
         </activity>
 
         <activity
-            android:name=".ui.deeplink.manga.DeepLinkMangaActivity"
+            android:name="eu.kanade.tachiyomi.ui.deeplink.manga.DeepLinkMangaActivity"
             android:exported="true"
             android:label="@string/action_global_manga_search"
             android:launchMode="singleTask"
@@ -180,7 +180,7 @@
         </activity>
 
         <activity
-            android:name=".ui.deeplink.novel.DeepLinkNovelActivity"
+            android:name="eu.kanade.tachiyomi.ui.deeplink.novel.DeepLinkNovelActivity"
             android:exported="true"
             android:label="@string/label_novel"
             android:launchMode="singleTask"
@@ -207,7 +207,7 @@
         </activity>
 
         <activity
-            android:name=".ui.reader.ReaderActivity"
+            android:name="eu.kanade.tachiyomi.ui.reader.ReaderActivity"
             android:exported="false"
             android:launchMode="singleTask">
             <intent-filter>
@@ -219,7 +219,7 @@
                 android:resource="@xml/s_pen_actions" />
         </activity>
         <activity
-            android:name=".ui.player.PlayerActivity"
+            android:name="eu.kanade.tachiyomi.ui.player.PlayerActivity"
             android:autoRemoveFromRecents="true"
             android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize|keyboardHidden|keyboard|uiMode"
             android:exported="false"
@@ -235,27 +235,27 @@
                 android:resource="@xml/s_pen_actions"/>
         </activity>
         <activity
-            android:name=".ui.security.UnlockActivity"
+            android:name="eu.kanade.tachiyomi.ui.security.UnlockActivity"
             android:exported="false"
             android:theme="@style/Theme.Tachiyomi" />
 
         <activity
-            android:name=".ui.webview.WebViewActivity"
+            android:name="eu.kanade.tachiyomi.ui.webview.WebViewActivity"
             android:configChanges="uiMode|orientation|screenSize"
             android:exported="false" />
 
         <activity
-            android:name=".extension.manga.util.MangaExtensionInstallActivity"
+            android:name="eu.kanade.tachiyomi.extension.manga.util.MangaExtensionInstallActivity"
             android:exported="false"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <activity
-            android:name=".extension.anime.util.AnimeExtensionInstallActivity"
+            android:name="eu.kanade.tachiyomi.extension.anime.util.AnimeExtensionInstallActivity"
             android:exported="false"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <activity
-            android:name=".ui.setting.track.TrackLoginActivity"
+            android:name="eu.kanade.tachiyomi.ui.setting.track.TrackLoginActivity"
             android:exported="true"
             android:label="@string/track_activity_name">
             <intent-filter>
@@ -275,16 +275,16 @@
         </activity>
 
         <receiver
-            android:name=".data.notification.NotificationReceiver"
+            android:name="eu.kanade.tachiyomi.data.notification.NotificationReceiver"
             android:exported="false" />
 
         <service
-            android:name=".extension.manga.util.MangaExtensionInstallService"
+            android:name="eu.kanade.tachiyomi.extension.manga.util.MangaExtensionInstallService"
             android:exported="false"
             android:foregroundServiceType="shortService" />
 
         <service
-            android:name=".extension.anime.util.AnimeExtensionInstallService"
+            android:name="eu.kanade.tachiyomi.extension.anime.util.AnimeExtensionInstallService"
             android:exported="false"
             android:foregroundServiceType="shortService" />
         <service

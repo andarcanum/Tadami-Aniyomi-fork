@@ -14,11 +14,12 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.core.preference.asState
 import eu.kanade.core.util.addOrRemove
 import eu.kanade.core.util.insertSeparators
+import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.entries.manga.interactor.GetExcludedScanlators
 import eu.kanade.domain.entries.manga.interactor.SetExcludedScanlators
 import eu.kanade.domain.entries.manga.interactor.UpdateManga
 import eu.kanade.domain.entries.manga.model.chaptersFiltered
-import eu.kanade.domain.entries.manga.model.downloadedFilter
+import eu.kanade.domain.entries.manga.model.effectiveDownloadedFilter
 import eu.kanade.domain.entries.manga.model.toSManga
 import eu.kanade.domain.items.chapter.interactor.GetAvailableScanlators
 import eu.kanade.domain.items.chapter.interactor.GetScanlatorChapterCounts
@@ -99,6 +100,7 @@ class MangaScreenModel(
     private val lifecycle: Lifecycle,
     private val mangaId: Long,
     private val isFromSource: Boolean,
+    private val basePreferences: BasePreferences = Injekt.get(),
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
     private val trackPreferences: TrackPreferences = Injekt.get(),
     readerPreferences: ReaderPreferences = Injekt.get(),
@@ -263,9 +265,16 @@ class MangaScreenModel(
                     availableScanlators = availableScanlators,
                     scanlatorChapterCounts = scanlatorChapterCounts,
                     excludedScanlators = initialExcludedScanlators,
+                    downloadedOnly = basePreferences.downloadedOnly().get(),
                     isRefreshingData = needRefreshInfo || needRefreshChapter,
                     dialog = null,
                 )
+            }
+            screenModelScope.launchIO {
+                basePreferences.downloadedOnly().changes()
+                    .collectLatest { downloadedOnly ->
+                        updateSuccessState { it.copy(downloadedOnly = downloadedOnly) }
+                    }
             }
 
             // Start observe tracking since it only needs mangaId
@@ -723,7 +732,10 @@ class MangaScreenModel(
      */
     fun getNextUnreadChapter(): Chapter? {
         val successState = successState ?: return null
-        return successState.chapters.getNextUnread(successState.manga)
+        return successState.chapters.getNextUnread(
+            manga = successState.manga,
+            downloadedOnly = successState.downloadedOnly,
+        )
     }
 
     fun saveScrollPosition(index: Int, offset: Int) {
@@ -1251,6 +1263,7 @@ class MangaScreenModel(
             val availableScanlators: Set<String>,
             val scanlatorChapterCounts: Map<String, Int>,
             val excludedScanlators: Set<String>,
+            val downloadedOnly: Boolean = false,
             val trackingCount: Int = 0,
             val hasLoggedInTrackers: Boolean = false,
             val isRefreshingData: Boolean = false,
@@ -1311,7 +1324,7 @@ class MangaScreenModel(
                 get() = scanlatorChapterCounts.size > 1
 
             val filterActive: Boolean
-                get() = scanlatorFilterActive || manga.chaptersFiltered()
+                get() = scanlatorFilterActive || manga.chaptersFiltered(downloadedOnly)
 
             val trackingAvailable: Boolean
                 get() = trackingCount > 0
@@ -1323,7 +1336,7 @@ class MangaScreenModel(
             private fun List<ChapterList.Item>.applyFilters(manga: Manga): Sequence<ChapterList.Item> {
                 val isLocalManga = manga.isLocal()
                 val unreadFilter = manga.unreadFilter
-                val downloadedFilter = manga.downloadedFilter
+                val downloadedFilter = manga.effectiveDownloadedFilter(downloadedOnly)
                 val bookmarkedFilter = manga.bookmarkedFilter
                 return asSequence()
                     .filter { (chapter) -> applyFilter(unreadFilter) { !chapter.read } }

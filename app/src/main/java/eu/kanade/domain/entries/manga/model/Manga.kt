@@ -1,6 +1,5 @@
 package eu.kanade.domain.entries.manga.model
 
-import eu.kanade.domain.base.BasePreferences
 import eu.kanade.tachiyomi.data.cache.MangaCoverCache
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderOrientation
@@ -10,8 +9,6 @@ import tachiyomi.core.metadata.comicinfo.ComicInfo
 import tachiyomi.core.metadata.comicinfo.ComicInfoPublishingStatus
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.items.chapter.model.Chapter
-import uy.kohesive.injekt.Injekt
-import uy.kohesive.injekt.api.get
 
 // TODO: move these into the domain model
 val Manga.readingMode: Long
@@ -21,17 +18,19 @@ val Manga.readerOrientation: Long
     get() = viewerFlags and ReaderOrientation.MASK.toLong()
 
 val Manga.downloadedFilter: TriState
-    get() {
-        if (Injekt.get<BasePreferences>().downloadedOnly().get()) return TriState.ENABLED_IS
-        return when (downloadedFilterRaw) {
-            Manga.CHAPTER_SHOW_DOWNLOADED -> TriState.ENABLED_IS
-            Manga.CHAPTER_SHOW_NOT_DOWNLOADED -> TriState.ENABLED_NOT
-            else -> TriState.DISABLED
-        }
+    get() = when (downloadedFilterRaw) {
+        Manga.CHAPTER_SHOW_DOWNLOADED -> TriState.ENABLED_IS
+        Manga.CHAPTER_SHOW_NOT_DOWNLOADED -> TriState.ENABLED_NOT
+        else -> TriState.DISABLED
     }
-fun Manga.chaptersFiltered(): Boolean {
+
+fun Manga.effectiveDownloadedFilter(downloadedOnly: Boolean): TriState {
+    return if (downloadedOnly) TriState.ENABLED_IS else downloadedFilter
+}
+
+fun Manga.chaptersFiltered(downloadedOnly: Boolean): Boolean {
     return unreadFilter != TriState.DISABLED ||
-        downloadedFilter != TriState.DISABLED ||
+        effectiveDownloadedFilter(downloadedOnly) != TriState.DISABLED ||
         bookmarkedFilter != TriState.DISABLED
 }
 
@@ -85,7 +84,7 @@ fun SManga.toDomainManga(sourceId: Long): Manga {
     )
 }
 
-fun Manga.hasCustomCover(coverCache: MangaCoverCache = Injekt.get()): Boolean {
+fun Manga.hasCustomCover(coverCache: MangaCoverCache): Boolean {
     return coverCache.getCustomCoverFile(id).exists()
 }
 

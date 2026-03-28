@@ -80,13 +80,10 @@ import eu.kanade.tachiyomi.util.system.powerManager
 import eu.kanade.tachiyomi.util.system.toShareIntent
 import eu.kanade.tachiyomi.util.system.toast
 import `is`.xyz.mpv.MPVLib
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
@@ -119,6 +116,16 @@ class PlayerActivity : BaseActivity() {
     private var mediaSession: MediaSession? = null
     private val gesturePreferences: GesturePreferences by lazy { viewModel.gesturePreferences }
     private val playerPreferences: PlayerPreferences by lazy { viewModel.playerPreferences }
+    private val playerStartupCoordinator by lazy {
+        PlayerStartupCoordinator(
+            chaptersProvider = { viewModel.chapters.value },
+            currentPositionProvider = { viewModel.pos.value },
+            setWaitingSkipIntro = { viewModel.waitingSkipIntro = it },
+            aniSkipResponse = { duration -> viewModel.aniSkipResponse(duration) },
+            updateChapters = viewModel::updateChapters,
+            setChapter = viewModel::setChapter,
+        )
+    }
     private val audioPreferences: AudioPreferences = Injekt.get()
     private val advancedPlayerPreferences: AdvancedPlayerPreferences = Injekt.get()
     private val networkPreferences: NetworkPreferences = Injekt.get()
@@ -165,7 +172,6 @@ class PlayerActivity : BaseActivity() {
         }
 
         internal const val MPV_DIR = "mpv"
-        private const val MPV_FONTS_DIR = "fonts"
         private const val MPV_SCRIPTS_DIR = "scripts"
         private const val MPV_SCRIPTS_OPTS_DIR = "script-opts"
         private const val MPV_SHADERS_DIR = "shaders"
@@ -512,69 +518,18 @@ class PlayerActivity : BaseActivity() {
     }
 
     private fun copyFontsDirectory(mpvDir: UniFile) {
-        // TODO: I think this is a bad hack.
-        //  We need to find a way to let MPV directly access our fonts directory.
-        CoroutineScope(Dispatchers.IO).launchIO {
-            val fontsDirectory = mpvDir.createDirectory(MPV_FONTS_DIR)!!
-
-            storageManager.getFontsDirectory()?.listFiles()?.forEach { font ->
-                val outFile = fontsDirectory.createFile(font.name)
-                outFile?.let {
-                    font.openInputStream().copyTo(it.openOutputStream())
-                }
-            }
-
-            MPVLib.setPropertyString("sub-fonts-dir", fontsDirectory.filePath!!)
-            MPVLib.setPropertyString("osd-fonts-dir", fontsDirectory.filePath!!)
+        lifecycleScope.launchIO {
+            PlayerFontBridge.copyFontsDirectory(storageManager, mpvDir)
         }
     }
 
     fun setupCustomButtons(buttons: List<CustomButton>) {
-        CoroutineScope(Dispatchers.IO).launchIO {
-            val scriptsDir = {
-                UniFile.fromFile(applicationContext.filesDir)
-                    ?.createDirectory(MPV_DIR)
-                    ?.createDirectory(MPV_SCRIPTS_DIR)
-            }
-
-            val primaryButtonId = viewModel.primaryButton.value?.id ?: 0L
-
-            val customButtonsContent = buildString {
-                append(
-                    """
-                        local lua_modules = mp.find_config_file('scripts')
-                        if lua_modules then
-                            package.path = package.path .. ';' .. lua_modules .. '/?.lua;' .. lua_modules .. '/?/init.lua;' .. '${scriptsDir()!!.filePath}' .. '/?.lua'
-                        end
-                        local aniyomi = require 'aniyomi'
-                    """.trimIndent(),
-                )
-
-                buttons.forEach { button ->
-                    append(
-                        """
-                            ${button.getButtonOnStartup(primaryButtonId)}
-                            function button${button.id}()
-                                ${button.getButtonContent(primaryButtonId)}
-                            end
-                            mp.register_script_message('call_button_${button.id}', button${button.id})
-                            function button${button.id}long()
-                                ${button.getButtonLongPressContent(primaryButtonId)}
-                            end
-                            mp.register_script_message('call_button_${button.id}_long', button${button.id}long)
-                        """.trimIndent(),
-                    )
-                }
-            }
-
-            val file = scriptsDir()?.createFile("custombuttons.lua")
-            file?.openOutputStream()?.bufferedWriter()?.use {
-                it.write(customButtonsContent)
-            }
-
-            file?.let {
-                MPVLib.command(arrayOf("load-script", it.filePath))
-            }
+        lifecycleScope.launchIO {
+            PlayerCustomButtonBridge.setupCustomButtons(
+                filesDir = applicationContext.filesDir,
+                buttons = buttons,
+                primaryButtonId = viewModel.primaryButton.value?.id ?: 0L,
+            )
         }
     }
 
@@ -1193,34 +1148,20 @@ class PlayerActivity : BaseActivity() {
     // at void eu.kanade.tachiyomi.ui.player.PlayerActivity.fileLoaded() (PlayerActivity.kt:1874)
     // at void eu.kanade.tachiyomi.ui.player.PlayerActivity.event(int) (PlayerActivity.kt:1566)
     // at void is.xyz.mpv.MPVLib.event(int) (MPVLib.java:86)
-    private fun fileLoaded() {
+    private suspend fun fileLoaded() {
         if (player.isExiting) return
         setMpvOptions()
         setMpvMediaTitle()
         setupPlayerOrientation()
         setupChapters()
         setupTracks()
-
-        // aniSkip stuff
-        viewModel.waitingSkipIntro = playerPreferences.waitingTimeIntroSkip().get()
-        runBlocking {
-            if (
-                viewModel.introSkipEnabled &&
-                playerPreferences.aniSkipEnabled().get() &&
-                !(playerPreferences.disableAniSkipOnChapters().get() && viewModel.chapters.value.isNotEmpty())
-            ) {
-                viewModel.aniSkipResponse(player.duration)?.let {
-                    viewModel.updateChapters(
-                        ChapterUtils.mergeChapters(
-                            currentChapters = viewModel.chapters.value,
-                            stamps = it,
-                            duration = player.duration,
-                        ),
-                    )
-                    viewModel.setChapter(viewModel.pos.value)
-                }
-            }
-        }
+        playerStartupCoordinator.handleAniSkip(
+            playerDuration = player.duration,
+            waitingSkipIntro = playerPreferences.waitingTimeIntroSkip().get(),
+            introSkipEnabled = viewModel.introSkipEnabled,
+            aniSkipEnabled = playerPreferences.aniSkipEnabled().get(),
+            disableAniSkipOnChapters = playerPreferences.disableAniSkipOnChapters().get(),
+        )
     }
 
     private fun setMpvOptions() {

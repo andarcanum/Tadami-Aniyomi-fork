@@ -773,18 +773,3 @@ private fun homeHeaderLayoutElementLabel(element: HomeHeaderLayoutElement): Stri
         HomeHeaderLayoutElement.Streak -> stringResource(AYMR.strings.home_header_layout_element_streak)
     }
 }
-
-@Composable
-private fun homeStreakCounterStyleLabel(style: HomeStreakCounterStyle): String {
-    return when (style) {
-        HomeStreakCounterStyle.ClassicBadge -> {
-            stringResource(AYMR.strings.home_header_layout_editor_streak_style_classic_badge)
-        }
-        HomeStreakCounterStyle.NumberBadgeOnly -> {
-            stringResource(AYMR.strings.home_header_layout_editor_streak_style_number_badge_only)
-        }
-        HomeStreakCounterStyle.NoBadge -> {
-            stringResource(AYMR.strings.home_header_layout_editor_streak_style_no_badge)
-        }
-    }
-}

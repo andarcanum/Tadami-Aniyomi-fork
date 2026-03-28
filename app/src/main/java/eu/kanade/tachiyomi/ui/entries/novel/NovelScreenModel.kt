@@ -8,11 +8,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.entries.novel.interactor.GetNovelExcludedScanlators
 import eu.kanade.domain.entries.novel.interactor.SetNovelExcludedScanlators
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.entries.novel.model.chaptersFiltered
-import eu.kanade.domain.entries.novel.model.downloadedFilter
+import eu.kanade.domain.entries.novel.model.effectiveDownloadedFilter
 import eu.kanade.domain.entries.novel.model.toSNovel
 import eu.kanade.domain.items.novelchapter.interactor.GetAvailableNovelScanlators
 import eu.kanade.domain.items.novelchapter.interactor.GetNovelScanlatorChapterCounts
@@ -100,6 +101,7 @@ data class NovelEpubExportPreferencesState(
 class NovelScreenModel(
     private val lifecycle: Lifecycle,
     private val novelId: Long,
+    private val basePreferences: BasePreferences = Injekt.get(),
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
     private val getNovelWithChapters: GetNovelWithChapters = Injekt.get(),
     private val updateNovel: UpdateNovel = Injekt.get(),
@@ -331,6 +333,7 @@ class NovelScreenModel(
                     availableScanlators = availableScanlators,
                     scanlatorChapterCounts = scanlatorChapterCounts,
                     excludedScanlators = initialExcludedScanlators,
+                    downloadedOnly = basePreferences.downloadedOnly().get(),
                     isRefreshingData = shouldAutoRefreshNovel || shouldAutoRefreshChapters,
                     dialog = null,
                     selectedChapterIds = emptySet(),
@@ -349,6 +352,12 @@ class NovelScreenModel(
                         emptySet()
                     },
                 )
+            }
+            screenModelScope.launchIO {
+                basePreferences.downloadedOnly().changes()
+                    .collectLatest { downloadedOnly ->
+                        updateSuccessState { it.copy(downloadedOnly = downloadedOnly) }
+                    }
             }
             logRefreshSnapshot(
                 stage = "initial-state",
@@ -1421,6 +1430,7 @@ class NovelScreenModel(
             val availableScanlators: Set<String>,
             val scanlatorChapterCounts: Map<String, Int>,
             val excludedScanlators: Set<String>,
+            val downloadedOnly: Boolean = false,
             val isRefreshingData: Boolean,
             val dialog: Dialog?,
             val trackingCount: Int = 0,
@@ -1451,7 +1461,7 @@ class NovelScreenModel(
                 get() = availableScanlators.size > 1
 
             val filterActive: Boolean
-                get() = scanlatorFilterActive || novel.chaptersFiltered()
+                get() = scanlatorFilterActive || novel.chaptersFiltered(downloadedOnly)
 
             val trackingAvailable: Boolean
                 get() = trackingCount > 0
@@ -1467,7 +1477,9 @@ class NovelScreenModel(
                                 chapter.url in chapterPageVisibleUrls
                             ) &&
                             applyFilter(novel.unreadFilter) { !chapter.read } &&
-                            applyFilter(novel.downloadedFilter) { chapter.id in downloadedChapterIds } &&
+                            applyFilter(novel.effectiveDownloadedFilter(downloadedOnly)) {
+                                chapter.id in downloadedChapterIds
+                            } &&
                             applyFilter(novel.bookmarkedFilter) { chapter.bookmark }
                     }
                     .sortedWith(chapterSort)

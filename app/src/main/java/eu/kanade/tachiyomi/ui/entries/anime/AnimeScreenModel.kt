@@ -13,11 +13,12 @@ import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.core.util.addOrRemove
 import eu.kanade.core.util.insertSeparators
+import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.entries.anime.interactor.SetAnimeViewerFlags
 import eu.kanade.domain.entries.anime.interactor.SyncSeasonsWithSource
 import eu.kanade.domain.entries.anime.interactor.UpdateAnime
-import eu.kanade.domain.entries.anime.model.downloadedFilter
-import eu.kanade.domain.entries.anime.model.seasonDownloadedFilter
+import eu.kanade.domain.entries.anime.model.effectiveDownloadedFilter
+import eu.kanade.domain.entries.anime.model.effectiveSeasonDownloadedFilter
 import eu.kanade.domain.entries.anime.model.toSAnime
 import eu.kanade.domain.items.episode.interactor.SetSeenStatus
 import eu.kanade.domain.items.episode.interactor.SyncEpisodesWithSource
@@ -118,6 +119,7 @@ class AnimeScreenModel(
     private val lifecycle: Lifecycle,
     private val animeId: Long,
     private val isFromSource: Boolean,
+    private val basePreferences: BasePreferences = Injekt.get(),
     private val downloadPreferences: DownloadPreferences = Injekt.get(),
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
     private val trackPreferences: TrackPreferences = Injekt.get(),
@@ -377,11 +379,18 @@ class AnimeScreenModel(
                     isFromSource = isFromSource,
                     episodes = episodes,
                     seasons = seasons,
+                    downloadedOnly = basePreferences.downloadedOnly().get(),
                     isRefreshingData = needRefreshInfo || needRefreshEpisode || needRefreshSeason,
                     dialog = null,
                     // Start with isMetadataLoading = true if metadata will be loaded
                     isMetadataLoading = willLoadMetadata,
                 )
+            }
+            screenModelScope.launchIO {
+                basePreferences.downloadedOnly().changes()
+                    .collectLatest { downloadedOnly ->
+                        updateSuccessState { it.copy(downloadedOnly = downloadedOnly) }
+                    }
             }
             // Start observe tracking since it only needs animeId
             observeTrackers()
@@ -891,7 +900,11 @@ class AnimeScreenModel(
     }
 
     suspend fun getNextUnseenEpisode(anime: Anime): Episode? {
-        return getEpisodesByAnimeId.await(anime.id).getNextUnseen(anime, downloadManager)
+        return getEpisodesByAnimeId.await(anime.id).getNextUnseen(
+            anime = anime,
+            downloadManager = downloadManager,
+            downloadedOnly = basePreferences.downloadedOnly().get(),
+        )
     }
 
     /**
@@ -899,7 +912,10 @@ class AnimeScreenModel(
      */
     fun getNextUnseenEpisode(): Episode? {
         val successState = successState ?: return null
-        return successState.episodes.getNextUnseen(successState.anime)
+        return successState.episodes.getNextUnseen(
+            anime = successState.anime,
+            downloadedOnly = successState.downloadedOnly,
+        )
     }
 
     fun saveScrollPosition(index: Int, offset: Int) {
@@ -1893,6 +1909,7 @@ class AnimeScreenModel(
             val isFromSource: Boolean,
             val episodes: List<EpisodeList.Item>,
             val seasons: List<AnimeSeasonItem>,
+            val downloadedOnly: Boolean = false,
             val trackingCount: Int = 0,
             val hasLoggedInTrackers: Boolean = false,
             val isRefreshingData: Boolean = false,
@@ -2003,7 +2020,7 @@ class AnimeScreenModel(
             private fun List<EpisodeList.Item>.applyFilters(anime: Anime): Sequence<EpisodeList.Item> {
                 val isLocalAnime = anime.isLocal()
                 val unseenFilter = anime.unseenFilter
-                val downloadedFilter = anime.downloadedFilter
+                val downloadedFilter = anime.effectiveDownloadedFilter(downloadedOnly)
                 val bookmarkedFilter = anime.bookmarkedFilter
                 val fillermarkedFilter = anime.fillermarkedFilter
                 return asSequence()
@@ -2021,7 +2038,7 @@ class AnimeScreenModel(
 
             private fun List<AnimeSeasonItem>.applySeasonFilters(anime: Anime): Sequence<AnimeSeasonItem> {
                 val unseenFilter = anime.seasonUnseenFilter
-                val downloadedFilter = anime.seasonDownloadedFilter
+                val downloadedFilter = anime.effectiveSeasonDownloadedFilter(downloadedOnly)
                 val startedFilter = anime.seasonStartedFilter
                 val completedFilter = anime.seasonCompletedFilter
                 val bookmarkedFilter = anime.seasonBookmarkedFilter

@@ -289,7 +289,7 @@ internal class MigrateMangaDialogScreenModel(
         }
 
         // Update custom cover (recheck if custom cover exists)
-        if (migrateCustomCover && oldManga.hasCustomCover()) {
+        if (migrateCustomCover && oldManga.hasCustomCover(coverCache)) {
             coverCache.setCustomCoverToCache(
                 newManga,
                 coverCache.getCustomCoverFile(oldManga.id).inputStream(),

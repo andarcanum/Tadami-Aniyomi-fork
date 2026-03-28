@@ -12,13 +12,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import aniyomi.domain.anime.SeasonDisplayMode
-import eu.kanade.domain.base.BasePreferences
-import eu.kanade.domain.entries.anime.model.seasonDownloadedFilter
+import eu.kanade.domain.entries.anime.model.effectiveSeasonDownloadedFilter
 import eu.kanade.presentation.components.TabbedDialog
 import eu.kanade.presentation.components.TabbedDialogPaddings
 import kotlinx.collections.immutable.persistentListOf
@@ -35,13 +33,11 @@ import tachiyomi.presentation.core.components.SliderItem
 import tachiyomi.presentation.core.components.SortItem
 import tachiyomi.presentation.core.components.TriStateItem
 import tachiyomi.presentation.core.i18n.stringResource
-import uy.kohesive.injekt.Injekt
-import uy.kohesive.injekt.api.get
-
 @Composable
 fun SeasonSettingsDialog(
     onDismissRequest: () -> Unit,
     anime: Anime? = null,
+    downloadedOnly: Boolean,
 
     // Filter page
     onDownloadFilterChanged: (TriState) -> Unit,
@@ -76,8 +72,6 @@ fun SeasonSettingsDialog(
         )
     }
 
-    val downloadedOnly = remember { Injekt.get<BasePreferences>().downloadedOnly().get() }
-
     TabbedDialog(
         onDismissRequest = onDismissRequest,
         tabTitles = persistentListOf(
@@ -103,7 +97,7 @@ fun SeasonSettingsDialog(
             when (page) {
                 0 -> {
                     SeasonFilterPage(
-                        downloadFilter = anime?.seasonDownloadedFilter ?: TriState.DISABLED,
+                        downloadFilter = anime?.effectiveSeasonDownloadedFilter(downloadedOnly) ?: TriState.DISABLED,
                         onDownloadFilterChanged = onDownloadFilterChanged
                             .takeUnless { downloadedOnly },
                         unseenFilter = anime?.seasonUnseenFilter ?: TriState.DISABLED,

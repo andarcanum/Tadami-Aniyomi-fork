@@ -35,7 +35,7 @@ class MangaCoverScreenModel(
     private val mangaId: Long,
     private val getManga: GetManga = Injekt.get(),
     private val imageSaver: ImageSaver = Injekt.get(),
-    private val coverCache: MangaCoverCache = Injekt.get(),
+    val coverCache: MangaCoverCache = Injekt.get(),
     private val updateManga: UpdateManga = Injekt.get(),
 
     val snackbarHostState: SnackbarHostState = SnackbarHostState(),

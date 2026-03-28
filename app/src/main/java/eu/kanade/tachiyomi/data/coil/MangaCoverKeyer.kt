@@ -9,9 +9,11 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import tachiyomi.domain.entries.manga.model.Manga as DomainManga
 
-class MangaKeyer : Keyer<DomainManga> {
+class MangaKeyer(
+    private val coverCache: MangaCoverCache = Injekt.get(),
+) : Keyer<DomainManga> {
     override fun key(data: DomainManga, options: Options): String {
-        return if (data.hasCustomCover()) {
+        return if (data.hasCustomCover(coverCache)) {
             "manga;${data.id};${data.coverLastModified}"
         } else {
             "manga;${data.thumbnailUrl};${data.coverLastModified}"

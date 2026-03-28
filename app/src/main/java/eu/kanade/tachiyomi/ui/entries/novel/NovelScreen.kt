@@ -483,6 +483,7 @@ class NovelScreen(
                 NovelChapterSettingsDialog(
                     onDismissRequest = screenModel::dismissDialog,
                     novel = successState.novel,
+                    downloadedOnly = successState.downloadedOnly,
                     onDownloadFilterChanged = screenModel::setDownloadedFilter,
                     onUnreadFilterChanged = screenModel::setUnreadFilter,
                     onBookmarkedFilterChanged = screenModel::setBookmarkedFilter,

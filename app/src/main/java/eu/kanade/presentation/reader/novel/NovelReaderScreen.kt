@@ -1,4 +1,4 @@
-package eu.kanade.presentation.reader.novel
+﻿package eu.kanade.presentation.reader.novel
 
 import android.app.Activity
 import android.content.BroadcastReceiver
@@ -6,14 +6,9 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.IntentFilter
-import android.graphics.BitmapFactory
 import android.os.BatteryManager
 import android.os.Build
 import android.os.SystemClock
-import android.text.Layout
-import android.text.StaticLayout
-import android.text.TextPaint
-import android.text.format.DateFormat
 import android.view.GestureDetector
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -111,7 +106,6 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -132,24 +126,18 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextIndent
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -161,14 +149,11 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelPluginImageResolver
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreenModel
-import eu.kanade.tachiyomi.ui.reader.novel.NovelRichBlockTextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
-import eu.kanade.tachiyomi.ui.reader.novel.PageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodeNativeScrollProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodePageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodeWebScrollProgressPercent
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
@@ -185,7 +170,6 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.json.JSONObject
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.padding
@@ -194,17 +178,8 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.ByteArrayInputStream
 import java.io.File
-import java.net.URLConnection
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
-import java.util.Date
-import java.util.Locale
 import kotlin.math.abs
-import kotlin.math.ceil
-import kotlin.math.hypot
-import kotlin.math.max
 import kotlin.math.roundToInt
-import android.graphics.Color as AndroidColor
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
 
 @Composable
@@ -560,7 +535,7 @@ fun NovelReaderScreen(
         },
     )
 
-    // Получаем размеры system bars
+    // РџРѕР»СѓС‡Р°РµРј СЂР°Р·РјРµСЂС‹ system bars
     val view = LocalView.current
     val density = LocalDensity.current
     val rootInsets = ViewCompat.getRootWindowInsets(view)
@@ -575,9 +550,9 @@ fun NovelReaderScreen(
         ?: rootInsets?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom
         ?: 0
 
-    // Высота AppBar (стандартная Material3 AppBar ~64dp + statusBar)
+    // Р’С‹СЃРѕС‚Р° AppBar (СЃС‚Р°РЅРґР°СЂС‚РЅР°СЏ Material3 AppBar ~64dp + statusBar)
     val appBarHeight = with(density) { (64.dp + statusBarHeight.toDp()).toPx().toInt() }
-    // Высота Bottom bar (~80dp + navigation bar)
+    // Р’С‹СЃРѕС‚Р° Bottom bar (~80dp + navigation bar)
     val bottomBarHeight = with(density) { (80.dp + navigationBarHeight.toDp()).toPx().toInt() }
     val statusBarTopPadding = with(density) { statusBarHeight.toDp() }
     val tapScrollStepPx = with(density) { (configuration.screenHeightDp.dp * 0.8f).toPx() }
@@ -871,7 +846,7 @@ fun NovelReaderScreen(
         }
     }
 
-    // Управление System UI для fullscreen режима
+    // РЈРїСЂР°РІР»РµРЅРёРµ System UI РґР»СЏ fullscreen СЂРµР¶РёРјР°
     LaunchedEffect(state.chapter.id, usePageReader) {
         onSetShowReaderUi(
             resolveReaderUiAfterChapterChange(
@@ -1089,12 +1064,12 @@ fun NovelReaderScreen(
             pageEdgeShadowAlpha = state.readerSettings.pageEdgeShadowAlpha,
             backgroundImageModel = if (isBackgroundMode) backgroundImageModel else null,
         )
-        // Контент (текст главы) - занимает весь экран, padding ВНУТРИ через contentPadding
+        // РљРѕРЅС‚РµРЅС‚ (С‚РµРєСЃС‚ РіР»Р°РІС‹) - Р·Р°РЅРёРјР°РµС‚ РІРµСЃСЊ СЌРєСЂР°РЅ, padding Р’РќРЈРўР Р С‡РµСЂРµР· contentPadding
         androidx.compose.foundation.layout.Box(
             modifier = Modifier.fillMaxSize(),
         ) {
             if (!showWebView && scrollContentBlocks.isNotEmpty()) {
-                // Отслеживание прогресса в зависимости от режима
+                // РћС‚СЃР»РµР¶РёРІР°РЅРёРµ РїСЂРѕРіСЂРµСЃСЃР° РІ Р·Р°РІРёСЃРёРјРѕСЃС‚Рё РѕС‚ СЂРµР¶РёРјР°
                 if (usePageReader) {
                     LaunchedEffect(pageReaderProgressPageIndex, pageReaderItemsCount) {
                         onReadingProgress(
@@ -1157,7 +1132,7 @@ fun NovelReaderScreen(
                     }
                 }
 
-                // Page Reader Mode (постраничный режим)
+                // Page Reader Mode (РїРѕСЃС‚СЂР°РЅРёС‡РЅС‹Р№ СЂРµР¶РёРј)
                 if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
                     ComposePagerPageRenderer(
                         pagerState = pagerState,
@@ -1216,7 +1191,7 @@ fun NovelReaderScreen(
                         onOpenNextChapter = { state.nextChapterId?.let { onOpenNextChapter?.invoke(it) } },
                     )
                 } else {
-                    // Scroll Mode (режим прокрутки, по умолчанию)
+                    // Scroll Mode (СЂРµР¶РёРј РїСЂРѕРєСЂСѓС‚РєРё, РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ)
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
@@ -2028,7 +2003,7 @@ fun NovelReaderScreen(
             }
         }
 
-        // UI overlay - накладывается поверх контента
+        // UI overlay - РЅР°РєР»Р°РґС‹РІР°РµС‚СЃСЏ РїРѕРІРµСЂС… РєРѕРЅС‚РµРЅС‚Р°
         AnimatedVisibility(
             visible = showBottomInfoOverlay,
             enter = fadeIn(),
@@ -2171,10 +2146,10 @@ fun NovelReaderScreen(
                         else -> Icons.Outlined.PlayArrow
                     }
                     val quickActionDescription = when {
-                        state.isGeminiTranslating -> "Остановить перевод"
-                        hasTranslationResult && state.isGeminiTranslationVisible -> "Показать оригинал"
-                        hasTranslationResult -> "Показать перевод"
-                        else -> "Запустить перевод"
+                        state.isGeminiTranslating -> "РћСЃС‚Р°РЅРѕРІРёС‚СЊ РїРµСЂРµРІРѕРґ"
+                        hasTranslationResult && state.isGeminiTranslationVisible -> "РџРѕРєР°Р·Р°С‚СЊ РѕСЂРёРіРёРЅР°Р»"
+                        hasTranslationResult -> "РџРѕРєР°Р·Р°С‚СЊ РїРµСЂРµРІРѕРґ"
+                        else -> "Р—Р°РїСѓСЃС‚РёС‚СЊ РїРµСЂРµРІРѕРґ"
                     }
                     val quickActionContainerColor = when {
                         state.isGeminiTranslating -> MaterialTheme.colorScheme.errorContainer
@@ -2610,32 +2585,6 @@ fun NovelReaderScreen(
     }
 }
 
-private data class GeminiStatusPresentation(
-    val title: String,
-    val subtitle: String,
-)
-
-private fun geminiStatusPresentation(uiState: GeminiTranslationUiState): GeminiStatusPresentation {
-    return when (uiState) {
-        GeminiTranslationUiState.Translating -> GeminiStatusPresentation(
-            title = "Перевод выполняется",
-            subtitle = "Обновление текста в реальном времени",
-        )
-        GeminiTranslationUiState.CachedVisible -> GeminiStatusPresentation(
-            title = "Показывается перевод",
-            subtitle = "Можно быстро переключать оригинал и перевод",
-        )
-        GeminiTranslationUiState.CachedHidden -> GeminiStatusPresentation(
-            title = "Кэш готов",
-            subtitle = "Можно быстро переключать оригинал и перевод",
-        )
-        GeminiTranslationUiState.Ready -> GeminiStatusPresentation(
-            title = "Готов к запуску",
-            subtitle = "Выберите модель и запустите перевод главы",
-        )
-    }
-}
-
 @Composable
 private fun GeminiTranslationDialog(
     readerSettings: NovelReaderSettings,
@@ -2831,48 +2780,48 @@ private fun GeminiTranslationDialog(
         listOf(
             GenerationPreset(
                 id = "anchor_plus",
-                title = "Канон+",
+                title = "РљР°РЅРѕРЅ+",
                 temperature = 0.62f,
                 topP = 0.9f,
                 topK = 36,
-                scenario = "Длинные главы с плотным лором и терминами",
-                advantage = "Стабильный стиль, высокая связность и минимум случайного шума",
+                scenario = "Р”Р»РёРЅРЅС‹Рµ РіР»Р°РІС‹ СЃ РїР»РѕС‚РЅС‹Рј Р»РѕСЂРѕРј Рё С‚РµСЂРјРёРЅР°РјРё",
+                advantage = "РЎС‚Р°Р±РёР»СЊРЅС‹Р№ СЃС‚РёР»СЊ, РІС‹СЃРѕРєР°СЏ СЃРІСЏР·РЅРѕСЃС‚СЊ Рё РјРёРЅРёРјСѓРј СЃР»СѓС‡Р°Р№РЅРѕРіРѕ С€СѓРјР°",
             ),
             GenerationPreset(
                 id = "authorial",
-                title = "Авторский",
+                title = "РђРІС‚РѕСЂСЃРєРёР№",
                 temperature = 0.76f,
                 topP = 0.93f,
                 topK = 48,
-                scenario = "Повседневные сцены, внутренние монологи, драма",
-                advantage = "Более литературная подача и живые формулировки без перегиба",
+                scenario = "РџРѕРІСЃРµРґРЅРµРІРЅС‹Рµ СЃС†РµРЅС‹, РІРЅСѓС‚СЂРµРЅРЅРёРµ РјРѕРЅРѕР»РѕРіРё, РґСЂР°РјР°",
+                advantage = "Р‘РѕР»РµРµ Р»РёС‚РµСЂР°С‚СѓСЂРЅР°СЏ РїРѕРґР°С‡Р° Рё Р¶РёРІС‹Рµ С„РѕСЂРјСѓР»РёСЂРѕРІРєРё Р±РµР· РїРµСЂРµРіРёР±Р°",
             ),
             GenerationPreset(
                 id = "dialogue_plus",
-                title = "Живые диалоги",
+                title = "Р–РёРІС‹Рµ РґРёР°Р»РѕРіРё",
                 temperature = 0.88f,
                 topP = 0.95f,
                 topK = 56,
-                scenario = "Разговорные главы, пикировки, юмор, флирт",
-                advantage = "Речь персонажей звучит естественнее и эмоциональнее",
+                scenario = "Р Р°Р·РіРѕРІРѕСЂРЅС‹Рµ РіР»Р°РІС‹, РїРёРєРёСЂРѕРІРєРё, СЋРјРѕСЂ, С„Р»РёСЂС‚",
+                advantage = "Р РµС‡СЊ РїРµСЂСЃРѕРЅР°Р¶РµР№ Р·РІСѓС‡РёС‚ РµСЃС‚РµСЃС‚РІРµРЅРЅРµРµ Рё СЌРјРѕС†РёРѕРЅР°Р»СЊРЅРµРµ",
             ),
             GenerationPreset(
                 id = "private_pulse",
-                title = "18+ Импульс",
+                title = "18+ РРјРїСѓР»СЊСЃ",
                 temperature = 0.98f,
                 topP = 0.97f,
                 topK = 72,
-                scenario = "Эротические и напряжённые сцены",
-                advantage = "Максимум чувственности, экспрессии и «живого» ритма",
+                scenario = "Р­СЂРѕС‚РёС‡РµСЃРєРёРµ Рё РЅР°РїСЂСЏР¶С‘РЅРЅС‹Рµ СЃС†РµРЅС‹",
+                advantage = "РњР°РєСЃРёРјСѓРј С‡СѓРІСЃС‚РІРµРЅРЅРѕСЃС‚Рё, СЌРєСЃРїСЂРµСЃСЃРёРё Рё В«Р¶РёРІРѕРіРѕВ» СЂРёС‚РјР°",
             ),
             GenerationPreset(
                 id = "unbound",
-                title = "Без тормозов",
+                title = "Р‘РµР· С‚РѕСЂРјРѕР·РѕРІ",
                 temperature = 1.08f,
                 topP = 0.985f,
                 topK = 96,
-                scenario = "Экспериментальный режим для самых дерзких глав",
-                advantage = "Пиковая креативность и вариативность слога",
+                scenario = "Р­РєСЃРїРµСЂРёРјРµРЅС‚Р°Р»СЊРЅС‹Р№ СЂРµР¶РёРј РґР»СЏ СЃР°РјС‹С… РґРµСЂР·РєРёС… РіР»Р°РІ",
+                advantage = "РџРёРєРѕРІР°СЏ РєСЂРµР°С‚РёРІРЅРѕСЃС‚СЊ Рё РІР°СЂРёР°С‚РёРІРЅРѕСЃС‚СЊ СЃР»РѕРіР°",
             ),
         )
     }
@@ -2880,30 +2829,30 @@ private fun GeminiTranslationDialog(
         listOf(
             GenerationPreset(
                 id = "deepseek_balanced",
-                title = "DeepSeek Баланс",
+                title = "DeepSeek Р‘Р°Р»Р°РЅСЃ",
                 temperature = 1.3f,
                 topP = 0.9f,
                 topK = null,
-                scenario = "Стабильный креативный перевод на каждый день",
-                advantage = "Живой текст с контролируемым уровнем вариативности",
+                scenario = "РЎС‚Р°Р±РёР»СЊРЅС‹Р№ РєСЂРµР°С‚РёРІРЅС‹Р№ РїРµСЂРµРІРѕРґ РЅР° РєР°Р¶РґС‹Р№ РґРµРЅСЊ",
+                advantage = "Р–РёРІРѕР№ С‚РµРєСЃС‚ СЃ РєРѕРЅС‚СЂРѕР»РёСЂСѓРµРјС‹Рј СѓСЂРѕРІРЅРµРј РІР°СЂРёР°С‚РёРІРЅРѕСЃС‚Рё",
             ),
             GenerationPreset(
                 id = "deepseek_expressive",
-                title = "DeepSeek Экспрессия",
+                title = "DeepSeek Р­РєСЃРїСЂРµСЃСЃРёСЏ",
                 temperature = 1.4f,
                 topP = 0.93f,
                 topK = null,
-                scenario = "Диалоги, эмоции, романтика и 18+ сцены",
-                advantage = "Более яркая и естественная подача реплик и тональности",
+                scenario = "Р”РёР°Р»РѕРіРё, СЌРјРѕС†РёРё, СЂРѕРјР°РЅС‚РёРєР° Рё 18+ СЃС†РµРЅС‹",
+                advantage = "Р‘РѕР»РµРµ СЏСЂРєР°СЏ Рё РµСЃС‚РµСЃС‚РІРµРЅРЅР°СЏ РїРѕРґР°С‡Р° СЂРµРїР»РёРє Рё С‚РѕРЅР°Р»СЊРЅРѕСЃС‚Рё",
             ),
             GenerationPreset(
                 id = "deepseek_creative",
-                title = "DeepSeek Креатив",
+                title = "DeepSeek РљСЂРµР°С‚РёРІ",
                 temperature = 1.5f,
                 topP = 0.95f,
                 topK = null,
-                scenario = "Максимально смелый и вариативный стиль",
-                advantage = "Пиковая творческая свобода без переусложнения настроек",
+                scenario = "РњР°РєСЃРёРјР°Р»СЊРЅРѕ СЃРјРµР»С‹Р№ Рё РІР°СЂРёР°С‚РёРІРЅС‹Р№ СЃС‚РёР»СЊ",
+                advantage = "РџРёРєРѕРІР°СЏ С‚РІРѕСЂС‡РµСЃРєР°СЏ СЃРІРѕР±РѕРґР° Р±РµР· РїРµСЂРµСѓСЃР»РѕР¶РЅРµРЅРёСЏ РЅР°СЃС‚СЂРѕРµРє",
             ),
         )
     }
@@ -2993,7 +2942,7 @@ private fun GeminiTranslationDialog(
     } else {
         defaultGenerationPresets
     }
-    val tabTitles = remember { persistentListOf("Основные", "Промпт", "Еще") }
+    val tabTitles = remember { persistentListOf("РћСЃРЅРѕРІРЅС‹Рµ", "РџСЂРѕРјРїС‚", "Р•С‰Рµ") }
 
     LaunchedEffect(tempProvider) {
         if (tempProvider == NovelTranslationProvider.AIRFORCE) {
@@ -3031,13 +2980,13 @@ private fun GeminiTranslationDialog(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = "AI Переводчик",
+                text = "AI РџРµСЂРµРІРѕРґС‡РёРє",
                 style = MaterialTheme.typography.titleMedium,
             )
             if (page == 0) {
                 GeminiSettingsBlock(
-                    title = "Статус и действия",
-                    subtitle = "Запуск, остановка и переключение отображения",
+                    title = "РЎС‚Р°С‚СѓСЃ Рё РґРµР№СЃС‚РІРёСЏ",
+                    subtitle = "Р—Р°РїСѓСЃРє, РѕСЃС‚Р°РЅРѕРІРєР° Рё РїРµСЂРµРєР»СЋС‡РµРЅРёРµ РѕС‚РѕР±СЂР°Р¶РµРЅРёСЏ",
                 ) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
@@ -3087,21 +3036,21 @@ private fun GeminiTranslationDialog(
                                     if (privateBridgeUnlocked) {
                                         onStart()
                                     } else {
-                                        onAddLog("🔒 $privateProviderLabel bridge is locked. Unlock it first.")
+                                        onAddLog("рџ”’ $privateProviderLabel bridge is locked. Unlock it first.")
                                     }
                                 }
                             },
                             enabled = isTranslating || privateBridgeUnlocked,
                             modifier = Modifier.weight(1f),
                         ) {
-                            Text(if (isTranslating) "Остановить" else "Запустить")
+                            Text(if (isTranslating) "РћСЃС‚Р°РЅРѕРІРёС‚СЊ" else "Р—Р°РїСѓСЃС‚РёС‚СЊ")
                         }
                         OutlinedButton(
                             onClick = onToggleVisibility,
                             enabled = hasTranslationResult,
                             modifier = Modifier.weight(1f),
                         ) {
-                            Text(if (isVisible) "Оригинал" else "Перевод")
+                            Text(if (isVisible) "РћСЂРёРіРёРЅР°Р»" else "РџРµСЂРµРІРѕРґ")
                         }
                     }
 
@@ -3111,7 +3060,7 @@ private fun GeminiTranslationDialog(
                             horizontalArrangement = Arrangement.End,
                         ) {
                             TextButton(onClick = onClear) {
-                                Text("Очистить кэш главы")
+                                Text("РћС‡РёСЃС‚РёС‚СЊ РєСЌС€ РіР»Р°РІС‹")
                             }
                         }
                     }
@@ -3120,12 +3069,12 @@ private fun GeminiTranslationDialog(
 
             if (page == 0 || page == 1) {
                 GeminiSettingsBlock(
-                    title = "Основные параметры",
-                    subtitle = "Модель, режим промпта и производительность",
+                    title = "РћСЃРЅРѕРІРЅС‹Рµ РїР°СЂР°РјРµС‚СЂС‹",
+                    subtitle = "РњРѕРґРµР»СЊ, СЂРµР¶РёРј РїСЂРѕРјРїС‚Р° Рё РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЊРЅРѕСЃС‚СЊ",
                 ) {
                     if (page == 0) {
                         Text(
-                            "Провайдер",
+                            "РџСЂРѕРІР°Р№РґРµСЂ",
                             style = MaterialTheme.typography.labelLarge,
                         )
                         val providerCards = listOf(
@@ -3197,9 +3146,9 @@ private fun GeminiTranslationDialog(
                             ) {
                                 Text(
                                     text = if (isPrivateProviderUnlocked) {
-                                        "$privateProviderLabel bridge подключен и разблокирован."
+                                        "$privateProviderLabel bridge РїРѕРґРєР»СЋС‡РµРЅ Рё СЂР°Р·Р±Р»РѕРєРёСЂРѕРІР°РЅ."
                                     } else {
-                                        "$privateProviderLabel bridge подключен. Для работы нужен unlock."
+                                        "$privateProviderLabel bridge РїРѕРґРєР»СЋС‡РµРЅ. Р”Р»СЏ СЂР°Р±РѕС‚С‹ РЅСѓР¶РµРЅ unlock."
                                     },
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                     style = MaterialTheme.typography.bodySmall,
@@ -3211,7 +3160,7 @@ private fun GeminiTranslationDialog(
                             OutlinedTextField(
                                 value = tempPrivatePassword,
                                 onValueChange = { tempPrivatePassword = it },
-                                label = { Text("Пароль $privateProviderLabel bridge") },
+                                label = { Text("РџР°СЂРѕР»СЊ $privateProviderLabel bridge") },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                             )
@@ -3220,16 +3169,16 @@ private fun GeminiTranslationDialog(
                                     onClick = {
                                         val password = tempPrivatePassword.trim()
                                         if (password.isBlank()) {
-                                            onAddLog("🔒 Enter bridge password")
+                                            onAddLog("рџ”’ Enter bridge password")
                                         } else {
                                             val unlocked = GeminiPrivateBridge.unlock(password)
                                             if (unlocked) {
                                                 isPrivateProviderUnlocked = true
                                                 onSetGeminiPrivateUnlocked(true)
                                                 tempPrivatePassword = ""
-                                                onAddLog("✅ $privateProviderLabel bridge unlocked")
+                                                onAddLog("вњ… $privateProviderLabel bridge unlocked")
                                             } else {
-                                                onAddLog("❌ Invalid bridge password")
+                                                onAddLog("вќЊ Invalid bridge password")
                                             }
                                         }
                                     },
@@ -3241,7 +3190,7 @@ private fun GeminiTranslationDialog(
                                         tempPrivatePassword = ""
                                     },
                                 ) {
-                                    Text("Очистить")
+                                    Text("РћС‡РёСЃС‚РёС‚СЊ")
                                 }
                             }
                         }
@@ -3251,12 +3200,12 @@ private fun GeminiTranslationDialog(
                             NovelTranslationProvider.GEMINI_PRIVATE,
                             -> {
                                 Text(
-                                    "Модель",
+                                    "РњРѕРґРµР»СЊ",
                                     style = MaterialTheme.typography.labelLarge,
                                 )
                                 eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
                                     value = tempModel,
-                                    title = "Текущая модель",
+                                    title = "РўРµРєСѓС‰Р°СЏ РјРѕРґРµР»СЊ",
                                     subtitle = modelMap[tempModel] ?: tempModel,
                                     icon = null,
                                     entries = modelMap,
@@ -3269,14 +3218,14 @@ private fun GeminiTranslationDialog(
                             }
                             NovelTranslationProvider.OPENROUTER -> {
                                 Text(
-                                    "OpenRouter модели (free)",
+                                    "OpenRouter РјРѕРґРµР»Рё (free)",
                                     style = MaterialTheme.typography.labelLarge,
                                 )
                                 if (openRouterAllModelEntries.isNotEmpty()) {
                                     eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
                                         value = tempOpenRouterModel,
-                                        title = "Бесплатные модели (${openRouterAllModelEntries.size})",
-                                        subtitle = tempOpenRouterModel.ifBlank { "Выберите free модель (:free)" },
+                                        title = "Р‘РµСЃРїР»Р°С‚РЅС‹Рµ РјРѕРґРµР»Рё (${openRouterAllModelEntries.size})",
+                                        subtitle = tempOpenRouterModel.ifBlank { "Р’С‹Р±РµСЂРёС‚Рµ free РјРѕРґРµР»СЊ (:free)" },
                                         icon = null,
                                         entries = openRouterAllModelEntries,
                                         onValueChange = { selected ->
@@ -3289,7 +3238,7 @@ private fun GeminiTranslationDialog(
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     OutlinedButton(onClick = onRefreshOpenRouterModels) {
                                         Text(
-                                            if (isOpenRouterModelsLoading) "Загрузка моделей..." else "Обновить список",
+                                            if (isOpenRouterModelsLoading) "Р—Р°РіСЂСѓР·РєР° РјРѕРґРµР»РµР№..." else "РћР±РЅРѕРІРёС‚СЊ СЃРїРёСЃРѕРє",
                                         )
                                     }
                                 }
@@ -3299,20 +3248,20 @@ private fun GeminiTranslationDialog(
                                         tempOpenRouterModel = it
                                         onSetOpenRouterModel(it)
                                     },
-                                    label = { Text("Model ID (только :free)") },
+                                    label = { Text("Model ID (С‚РѕР»СЊРєРѕ :free)") },
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
                             NovelTranslationProvider.DEEPSEEK -> {
                                 Text(
-                                    "DeepSeek модели",
+                                    "DeepSeek РјРѕРґРµР»Рё",
                                     style = MaterialTheme.typography.labelLarge,
                                 )
                                 if (deepSeekAllModelEntries.isNotEmpty()) {
                                     eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
                                         value = tempDeepSeekModel,
-                                        title = "Модели (${deepSeekAllModelEntries.size})",
-                                        subtitle = tempDeepSeekModel.ifBlank { "Выберите модель" },
+                                        title = "РњРѕРґРµР»Рё (${deepSeekAllModelEntries.size})",
+                                        subtitle = tempDeepSeekModel.ifBlank { "Р’С‹Р±РµСЂРёС‚Рµ РјРѕРґРµР»СЊ" },
                                         icon = null,
                                         entries = deepSeekAllModelEntries,
                                         onValueChange = { selected ->
@@ -3325,7 +3274,7 @@ private fun GeminiTranslationDialog(
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     OutlinedButton(onClick = onRefreshDeepSeekModels) {
                                         Text(
-                                            if (isDeepSeekModelsLoading) "Загрузка моделей..." else "Обновить список",
+                                            if (isDeepSeekModelsLoading) "Р—Р°РіСЂСѓР·РєР° РјРѕРґРµР»РµР№..." else "РћР±РЅРѕРІРёС‚СЊ СЃРїРёСЃРѕРє",
                                         )
                                     }
                                 }
@@ -3346,13 +3295,13 @@ private fun GeminiTranslationDialog(
                     if (page == 1) {
                         if (!isPrivateSingleRequestMode) {
                             Text(
-                                "Режим промпта",
+                                "Р РµР¶РёРј РїСЂРѕРјРїС‚Р°",
                                 style = MaterialTheme.typography.labelLarge,
                             )
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 items(
                                     listOf(
-                                        GeminiPromptMode.CLASSIC to "Классический",
+                                        GeminiPromptMode.CLASSIC to "РљР»Р°СЃСЃРёС‡РµСЃРєРёР№",
                                         GeminiPromptMode.ADULT_18 to "18+",
                                     ),
                                 ) { option ->
@@ -3364,13 +3313,13 @@ private fun GeminiTranslationDialog(
                                             onAddLog("?? Prompt mode: ${option.second}")
                                         },
                                     ) {
-                                        Text(if (selected) "• ${option.second}" else option.second)
+                                        Text(if (selected) "вЂў ${option.second}" else option.second)
                                     }
                                 }
                             }
 
                             Text(
-                                "Стиль перевода",
+                                "РЎС‚РёР»СЊ РїРµСЂРµРІРѕРґР°",
                                 style = MaterialTheme.typography.labelLarge,
                             )
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3380,10 +3329,10 @@ private fun GeminiTranslationDialog(
                                         onClick = {
                                             tempStylePreset = preset.id
                                             onSetGeminiStylePreset(preset.id)
-                                            onAddLog("?? Стиль: ${preset.title}")
+                                            onAddLog("?? РЎС‚РёР»СЊ: ${preset.title}")
                                         },
                                     ) {
-                                        Text(if (selected) "• ${preset.title}" else preset.title)
+                                        Text(if (selected) "вЂў ${preset.title}" else preset.title)
                                     }
                                 }
                             }
@@ -3403,12 +3352,12 @@ private fun GeminiTranslationDialog(
                                             style = MaterialTheme.typography.labelLarge,
                                         )
                                         Text(
-                                            text = "Для чего: ${selectedStylePreset.scenario}",
+                                            text = "Р”Р»СЏ С‡РµРіРѕ: ${selectedStylePreset.scenario}",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                         Text(
-                                            text = "Преимущество: ${selectedStylePreset.advantage}",
+                                            text = "РџСЂРµРёРјСѓС‰РµСЃС‚РІРѕ: ${selectedStylePreset.advantage}",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -3417,7 +3366,7 @@ private fun GeminiTranslationDialog(
                             }
 
                             Text(
-                                "Модификаторы промпта",
+                                "РњРѕРґРёС„РёРєР°С‚РѕСЂС‹ РїСЂРѕРјРїС‚Р°",
                                 style = MaterialTheme.typography.labelLarge,
                             )
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3459,7 +3408,7 @@ private fun GeminiTranslationDialog(
                                         modifier = Modifier.clickable { showCustomPromptDialog = true },
                                     ) {
                                         Text(
-                                            text = if (tempCustomModifier.isBlank()) "+ Свой" else "Свой",
+                                            text = if (tempCustomModifier.isBlank()) "+ РЎРІРѕР№" else "РЎРІРѕР№",
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                             style = MaterialTheme.typography.labelMedium,
                                         )
@@ -3474,8 +3423,8 @@ private fun GeminiTranslationDialog(
                             ) {
                                 Text(
                                     text =
-                                    "$privateProviderLabel: используются зашитые правила private bridge " +
-                                        "и авто-режим без пользовательских модификаторов.",
+                                    "$privateProviderLabel: РёСЃРїРѕР»СЊР·СѓСЋС‚СЃСЏ Р·Р°С€РёС‚С‹Рµ РїСЂР°РІРёР»Р° private bridge " +
+                                        "Рё Р°РІС‚Рѕ-СЂРµР¶РёРј Р±РµР· РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёС… РјРѕРґРёС„РёРєР°С‚РѕСЂРѕРІ.",
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                     style = MaterialTheme.typography.bodySmall,
                                 )
@@ -3485,7 +3434,7 @@ private fun GeminiTranslationDialog(
 
                     if (page == 0 && !isPrivateSingleRequestMode) {
                         Text(
-                            "Скорость (батч-параллельность)",
+                            "РЎРєРѕСЂРѕСЃС‚СЊ (Р±Р°С‚С‡-РїР°СЂР°Р»Р»РµР»СЊРЅРѕСЃС‚СЊ)",
                             style = MaterialTheme.typography.labelLarge,
                         )
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3504,7 +3453,7 @@ private fun GeminiTranslationDialog(
                                         onAddLog("?? Speed: $label")
                                     },
                                 ) {
-                                    Text(if (selected) "• $label" else label)
+                                    Text(if (selected) "вЂў $label" else label)
                                 }
                             }
                         }
@@ -3518,8 +3467,8 @@ private fun GeminiTranslationDialog(
                         ) {
                             Text(
                                 text =
-                                "$privateProviderLabel: отправка идет одним запросом на главу. " +
-                                    "При ошибке включается fallback (batch=40, concurrency=1).",
+                                "$privateProviderLabel: РѕС‚РїСЂР°РІРєР° РёРґРµС‚ РѕРґРЅРёРј Р·Р°РїСЂРѕСЃРѕРј РЅР° РіР»Р°РІСѓ. " +
+                                    "РџСЂРё РѕС€РёР±РєРµ РІРєР»СЋС‡Р°РµС‚СЃСЏ fallback (batch=40, concurrency=1).",
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                 style = MaterialTheme.typography.bodySmall,
                             )
@@ -3536,7 +3485,7 @@ private fun GeminiTranslationDialog(
                             )
                     ) {
                         Text(
-                            "Уровень размышления",
+                            "РЈСЂРѕРІРµРЅСЊ СЂР°Р·РјС‹С€Р»РµРЅРёСЏ",
                             style = MaterialTheme.typography.labelLarge,
                         )
                         val reasoningOptions = if (tempModel == "gemini-3-pro-preview") {
@@ -3553,7 +3502,7 @@ private fun GeminiTranslationDialog(
                                         onAddLog("?? Reasoning: ${option.uppercase()}")
                                     },
                                 ) {
-                                    Text(if (tempReasoning == option) "• ${option.uppercase()}" else option.uppercase())
+                                    Text(if (tempReasoning == option) "вЂў ${option.uppercase()}" else option.uppercase())
                                 }
                             }
                         }
@@ -3563,8 +3512,8 @@ private fun GeminiTranslationDialog(
 
             if (page == 2) {
                 GeminiSettingsBlock(
-                    title = "Система и кэш",
-                    subtitle = "API ключ, кэш и ручной контроль потоков",
+                    title = "РЎРёСЃС‚РµРјР° Рё РєСЌС€",
+                    subtitle = "API РєР»СЋС‡, РєСЌС€ Рё СЂСѓС‡РЅРѕР№ РєРѕРЅС‚СЂРѕР»СЊ РїРѕС‚РѕРєРѕРІ",
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -3572,7 +3521,7 @@ private fun GeminiTranslationDialog(
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "Автостарт перевода для English",
+                            text = "РђРІС‚РѕСЃС‚Р°СЂС‚ РїРµСЂРµРІРѕРґР° РґР»СЏ English",
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
                         )
@@ -3591,7 +3540,7 @@ private fun GeminiTranslationDialog(
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "Превентивный перевод следующей главы (30%)",
+                            text = "РџСЂРµРІРµРЅС‚РёРІРЅС‹Р№ РїРµСЂРµРІРѕРґ СЃР»РµРґСѓСЋС‰РµР№ РіР»Р°РІС‹ (30%)",
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
                         )
@@ -3620,7 +3569,7 @@ private fun GeminiTranslationDialog(
                                 onCheckedChange = { enabled ->
                                     tempPrivatePythonLikeMode = enabled
                                     onSetGeminiPrivatePythonLikeMode(enabled)
-                                    onAddLog("🔀 Private Python-like: ${if (enabled) "ON" else "OFF"}")
+                                    onAddLog("рџ”Ђ Private Python-like: ${if (enabled) "ON" else "OFF"}")
                                 },
                             )
                         }
@@ -3669,7 +3618,7 @@ private fun GeminiTranslationDialog(
                                     when {
                                         isOpenRouterSelected -> "OpenRouter API key"
                                         isDeepSeekSelected -> "DeepSeek API key"
-                                        else -> "API ключ"
+                                        else -> "API РєР»СЋС‡"
                                     },
                                 )
                             },
@@ -3693,12 +3642,12 @@ private fun GeminiTranslationDialog(
                                         onAddLog("?? DeepSeek settings saved")
                                     } else {
                                         onSetGeminiApiKey(tempKey)
-                                        onAddLog("?? API ключ сохранен")
+                                        onAddLog("?? API РєР»СЋС‡ СЃРѕС…СЂР°РЅРµРЅ")
                                     }
                                 },
                                 modifier = Modifier.weight(1f),
                             ) {
-                                Text("Сохранить")
+                                Text("РЎРѕС…СЂР°РЅРёС‚СЊ")
                             }
                             TextButton(
                                 onClick = {
@@ -3736,9 +3685,9 @@ private fun GeminiTranslationDialog(
                                     }
                                     Text(
                                         if (isTesting) {
-                                            "Проверка..."
+                                            "РџСЂРѕРІРµСЂРєР°..."
                                         } else {
-                                            "Тест подключения"
+                                            "РўРµСЃС‚ РїРѕРґРєР»СЋС‡РµРЅРёСЏ"
                                         },
                                     )
                                 }
@@ -3762,9 +3711,9 @@ private fun GeminiTranslationDialog(
                                     }
                                     Text(
                                         if (isLoading) {
-                                            "Обновление..."
+                                            "РћР±РЅРѕРІР»РµРЅРёРµ..."
                                         } else {
-                                            "Обновить модели"
+                                            "РћР±РЅРѕРІРёС‚СЊ РјРѕРґРµР»Рё"
                                         },
                                     )
                                 }
@@ -3776,7 +3725,7 @@ private fun GeminiTranslationDialog(
                             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                         ) {
                             Text(
-                                text = "Кэш: ${if (tempDisableCache) "OFF" else "ON"}",
+                                text = "РљСЌС€: ${if (tempDisableCache) "OFF" else "ON"}",
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.weight(1f),
                             )
@@ -3785,7 +3734,7 @@ private fun GeminiTranslationDialog(
                                 onCheckedChange = { enabled ->
                                     tempDisableCache = !enabled
                                     onSetGeminiDisableCache(tempDisableCache)
-                                    onAddLog("?? Кэш: ${if (tempDisableCache) "OFF" else "ON"}")
+                                    onAddLog("?? РљСЌС€: ${if (tempDisableCache) "OFF" else "ON"}")
                                 },
                             )
                         }
@@ -3796,7 +3745,7 @@ private fun GeminiTranslationDialog(
                                     tempBatch = it
                                     applyBatchAndConcurrency()
                                 },
-                                label = { Text("Батч") },
+                                label = { Text("Р‘Р°С‚С‡") },
                                 modifier = Modifier.weight(1f),
                             )
                             OutlinedTextField(
@@ -3805,15 +3754,15 @@ private fun GeminiTranslationDialog(
                                     tempConcurrency = it
                                     applyBatchAndConcurrency()
                                 },
-                                label = { Text("Потоки") },
+                                label = { Text("РџРѕС‚РѕРєРё") },
                                 modifier = Modifier.weight(1f),
                             )
                         }
                         TextButton(onClick = {
                             onClearAllCache()
-                            onAddLog("??? Очищен весь кэш")
+                            onAddLog("??? РћС‡РёС‰РµРЅ РІРµСЃСЊ РєСЌС€")
                         }) {
-                            Text("Очистить весь кэш")
+                            Text("РћС‡РёСЃС‚РёС‚СЊ РІРµСЃСЊ РєСЌС€")
                         }
                     }
                 }
@@ -3821,11 +3770,11 @@ private fun GeminiTranslationDialog(
 
             if (page == 1) {
                 GeminiSettingsBlock(
-                    title = "Генерация",
-                    subtitle = "Пресеты и ручные параметры sampling",
+                    title = "Р“РµРЅРµСЂР°С†РёСЏ",
+                    subtitle = "РџСЂРµСЃРµС‚С‹ Рё СЂСѓС‡РЅС‹Рµ РїР°СЂР°РјРµС‚СЂС‹ sampling",
                 ) {
                     TextButton(onClick = { showGenerationConfig = !showGenerationConfig }) {
-                        Text(if (showGenerationConfig) "Скрыть генерацию" else "Генерация")
+                        Text(if (showGenerationConfig) "РЎРєСЂС‹С‚СЊ РіРµРЅРµСЂР°С†РёСЋ" else "Р“РµРЅРµСЂР°С†РёСЏ")
                     }
                     if (showGenerationConfig) {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3851,7 +3800,7 @@ private fun GeminiTranslationDialog(
                                         }
                                     },
                                 ) {
-                                    Text(if (isSelected) "• ${preset.title}" else preset.title)
+                                    Text(if (isSelected) "вЂў ${preset.title}" else preset.title)
                                 }
                             }
                         }
@@ -3871,12 +3820,12 @@ private fun GeminiTranslationDialog(
                                     style = MaterialTheme.typography.labelLarge,
                                 )
                                 Text(
-                                    text = "Для чего: ${selectedPreset.scenario}",
+                                    text = "Р”Р»СЏ С‡РµРіРѕ: ${selectedPreset.scenario}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 Text(
-                                    text = "Преимущество: ${selectedPreset.advantage}",
+                                    text = "РџСЂРµРёРјСѓС‰РµСЃС‚РІРѕ: ${selectedPreset.advantage}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -3934,8 +3883,8 @@ private fun GeminiTranslationDialog(
                         }
                         if (isDeepSeekSelected) {
                             Text(
-                                text = "Для DeepSeek используется диапазон Temperature 1.3-1.5 " +
-                                    "и TopP 0.9-0.95. TopK не применяется.",
+                                text = "Р”Р»СЏ DeepSeek РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РґРёР°РїР°Р·РѕРЅ Temperature 1.3-1.5 " +
+                                    "Рё TopP 0.9-0.95. TopK РЅРµ РїСЂРёРјРµРЅСЏРµС‚СЃСЏ.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -3946,8 +3895,8 @@ private fun GeminiTranslationDialog(
 
             if (page == 2) {
                 GeminiSettingsBlock(
-                    title = "Логи",
-                    subtitle = "Диагностика запросов и ответа модели",
+                    title = "Р›РѕРіРё",
+                    subtitle = "Р”РёР°РіРЅРѕСЃС‚РёРєР° Р·Р°РїСЂРѕСЃРѕРІ Рё РѕС‚РІРµС‚Р° РјРѕРґРµР»Рё",
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -3955,15 +3904,15 @@ private fun GeminiTranslationDialog(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "Логи (${logs.size})",
+                            text = "Р›РѕРіРё (${logs.size})",
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(onClick = { showLogs = !showLogs }) {
-                                Text(if (showLogs) "Скрыть" else "Показать")
+                                Text(if (showLogs) "РЎРєСЂС‹С‚СЊ" else "РџРѕРєР°Р·Р°С‚СЊ")
                             }
                             TextButton(onClick = onClearLogs) {
-                                Text("Очистить")
+                                Text("РћС‡РёСЃС‚РёС‚СЊ")
                             }
                         }
                     }
@@ -3976,7 +3925,7 @@ private fun GeminiTranslationDialog(
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             if (logs.isEmpty()) {
-                                Text("Логи пока пусты", style = MaterialTheme.typography.bodySmall)
+                                Text("Р›РѕРіРё РїРѕРєР° РїСѓСЃС‚С‹", style = MaterialTheme.typography.bodySmall)
                             } else {
                                 logs.forEach { log ->
                                     Text(log, style = MaterialTheme.typography.bodySmall)
@@ -3992,18 +3941,18 @@ private fun GeminiTranslationDialog(
     if (showCustomPromptDialog) {
         AlertDialog(
             onDismissRequest = { showCustomPromptDialog = false },
-            title = { Text("Свой модификатор промпта") },
+            title = { Text("РЎРІРѕР№ РјРѕРґРёС„РёРєР°С‚РѕСЂ РїСЂРѕРјРїС‚Р°") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = tempCustomModifier,
                         onValueChange = { tempCustomModifier = it },
-                        label = { Text("Свои инструкции") },
+                        label = { Text("РЎРІРѕРё РёРЅСЃС‚СЂСѓРєС†РёРё") },
                         minLines = 4,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
-                        "Текст будет добавлен в системный промпт как дополнительная инструкция.",
+                        "РўРµРєСЃС‚ Р±СѓРґРµС‚ РґРѕР±Р°РІР»РµРЅ РІ СЃРёСЃС‚РµРјРЅС‹Р№ РїСЂРѕРјРїС‚ РєР°Рє РґРѕРїРѕР»РЅРёС‚РµР»СЊРЅР°СЏ РёРЅСЃС‚СЂСѓРєС†РёСЏ.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -4012,10 +3961,10 @@ private fun GeminiTranslationDialog(
             confirmButton = {
                 TextButton(onClick = {
                     onSetGeminiCustomPromptModifier(tempCustomModifier)
-                    onAddLog("?? Обновлен свой промпт")
+                    onAddLog("?? РћР±РЅРѕРІР»РµРЅ СЃРІРѕР№ РїСЂРѕРјРїС‚")
                     showCustomPromptDialog = false
                 }) {
-                    Text("Сохранить")
+                    Text("РЎРѕС…СЂР°РЅРёС‚СЊ")
                 }
             },
             dismissButton = {
@@ -4024,634 +3973,12 @@ private fun GeminiTranslationDialog(
                         tempCustomModifier = ""
                         onSetGeminiCustomPromptModifier("")
                         showCustomPromptDialog = false
-                    }) { Text("Очистить") }
-                    TextButton(onClick = { showCustomPromptDialog = false }) { Text("Отмена") }
+                    }) { Text("РћС‡РёСЃС‚РёС‚СЊ") }
+                    TextButton(onClick = { showCustomPromptDialog = false }) { Text("РћС‚РјРµРЅР°") }
                 }
             },
         )
     }
-}
-
-@Composable
-private fun GeminiSettingsBlock(
-    title: String,
-    subtitle: String? = null,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-        border = BorderStroke(
-            width = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
-        ),
-        tonalElevation = 1.dp,
-        shadowElevation = 2.dp,
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            content = {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                subtitle?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                content()
-            },
-        )
-    }
-}
-
-private fun WebView.restoreWebViewScroll(
-    progressPercent: Int,
-    maxAttempts: Int = 14,
-    onComplete: (() -> Unit)? = null,
-) {
-    if (progressPercent <= 0) {
-        onComplete?.invoke()
-        return
-    }
-
-    fun attemptRestore(attempt: Int) {
-        val totalScrollable = resolveWebViewTotalScrollablePx(
-            contentHeightPx = resolveWebViewContentHeightPx(),
-            viewHeightPx = height,
-        )
-        if (totalScrollable <= 0 && attempt < maxAttempts) {
-            postDelayed({ attemptRestore(attempt + 1) }, 42L)
-            return
-        }
-        if (totalScrollable > 0) {
-            val targetY = ((progressPercent.toFloat() / 100f) * totalScrollable.toFloat()).roundToInt()
-            scrollTo(0, targetY.coerceIn(0, totalScrollable))
-        }
-        onComplete?.invoke()
-    }
-
-    post { attemptRestore(0) }
-}
-
-private fun WebView.resolveCurrentWebViewProgressPercent(
-    scrollYOverride: Int? = null,
-): Int {
-    val contentHeight = resolveWebViewContentHeightPx()
-    val totalScrollable = resolveWebViewTotalScrollablePx(
-        contentHeightPx = contentHeight,
-        viewHeightPx = height,
-    )
-    return resolveWebViewScrollProgressPercent(
-        scrollY = scrollYOverride ?: scrollY,
-        totalScrollable = totalScrollable,
-    )
-}
-
-@Suppress("DEPRECATION")
-private fun WebView.resolveWebViewContentHeightPx(): Int {
-    val childHeight = getChildAt(0)?.height ?: 0
-    val scaledContentHeight = (contentHeight * scale).roundToInt()
-    return maxOf(childHeight, scaledContentHeight)
-}
-
-private const val WEB_READER_STYLE_ELEMENT_ID = "__an_reader_style__"
-private const val WEB_READER_BOOTSTRAP_STYLE_ELEMENT_ID = "__an_reader_bootstrap_style__"
-
-private fun WebView.revealReaderDocumentAndWebView() {
-    evaluateJavascript(
-        """
-        (function() {
-            const bootstrapStyle = document.getElementById('$WEB_READER_BOOTSTRAP_STYLE_ELEMENT_ID');
-            if (bootstrapStyle) {
-                bootstrapStyle.remove();
-            }
-        })();
-        """.trimIndent(),
-        { _ ->
-            val reveal = {
-                animate().cancel()
-                if (alpha >= 1f) {
-                    alpha = 1f
-                } else {
-                    animate()
-                        .alpha(1f)
-                        .setDuration(120L)
-                        .start()
-                }
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                postVisualStateCallback(
-                    SystemClock.uptimeMillis(),
-                    object : WebView.VisualStateCallback() {
-                        override fun onComplete(requestId: Long) {
-                            post(reveal)
-                        }
-                    },
-                )
-            } else {
-                post(reveal)
-            }
-        },
-    )
-}
-
-internal fun buildInitialWebReaderHtml(
-    rawHtml: String,
-    readerCss: String,
-): String {
-    val injection = buildString {
-        append("<style id=\"")
-        append(WEB_READER_STYLE_ELEMENT_ID)
-        append("\">")
-        append(escapeCssForInlineStyleTag(readerCss))
-        append("</style>")
-        append("<style id=\"")
-        append(WEB_READER_BOOTSTRAP_STYLE_ELEMENT_ID)
-        append("\">")
-        append(buildWebReaderBootstrapCss())
-        append("</style>")
-    }
-    return injectHtmlFragmentIntoHead(rawHtml, injection)
-}
-
-internal fun escapeCssForInlineStyleTag(css: String): String {
-    return css.replace("</style", "<\\\\/style", ignoreCase = true)
-}
-
-private fun buildWebReaderBootstrapCss(): String {
-    return "html, body { visibility: hidden !important; }"
-}
-
-private const val FORCED_PARAGRAPH_FIRST_LINE_INDENT_EM = 2f
-private const val EARLY_WEBVIEW_REVEAL_IMAGE_THRESHOLD = 6
-private val webViewHtmlImageTagRegex = Regex("<img\\b", RegexOption.IGNORE_CASE)
-private val hexNovelsPluginImageUrlRegex = Regex("""(?:novelimg|heximg)://hexnovels\b""", RegexOption.IGNORE_CASE)
-private val novelWordRegex = Regex("""[\p{L}\p{N}']+""")
-
-internal fun shouldUseEarlyWebViewReveal(rawHtml: String): Boolean {
-    if (rawHtml.isBlank()) return false
-    if (hexNovelsPluginImageUrlRegex.containsMatchIn(rawHtml)) return true
-
-    val imageCount = webViewHtmlImageTagRegex
-        .findAll(rawHtml)
-        .take(EARLY_WEBVIEW_REVEAL_IMAGE_THRESHOLD)
-        .count()
-    return imageCount >= EARLY_WEBVIEW_REVEAL_IMAGE_THRESHOLD
-}
-
-private fun injectHtmlFragmentIntoHead(
-    rawHtml: String,
-    fragment: String,
-): String {
-    val headCloseRegex = Regex("</head>", RegexOption.IGNORE_CASE)
-    if (headCloseRegex.containsMatchIn(rawHtml)) {
-        return headCloseRegex.replaceFirst(rawHtml, "$fragment</head>")
-    }
-
-    val bodyOpenRegex = Regex("<body[^>]*>", RegexOption.IGNORE_CASE)
-    val bodyOpenMatch = bodyOpenRegex.find(rawHtml)
-    if (bodyOpenMatch != null) {
-        val insertIndex = bodyOpenMatch.range.last + 1
-        return rawHtml.substring(0, insertIndex) + fragment + rawHtml.substring(insertIndex)
-    }
-
-    return fragment + rawHtml
-}
-
-internal fun buildWebReaderCssText(
-    fontFaceCss: String,
-    paddingTop: Int,
-    paddingBottom: Int,
-    paddingHorizontal: Int,
-    fontSizePx: Int,
-    lineHeightMultiplier: Float,
-    paragraphSpacingPx: Int,
-    textAlignCss: String?,
-    firstLineIndentCss: String?,
-    textColorHex: String,
-    backgroundHex: String,
-    appearanceMode: NovelReaderAppearanceMode,
-    backgroundTexture: NovelReaderBackgroundTexture,
-    oledEdgeGradient: Boolean,
-    backgroundImageUrl: String?,
-    fontFamilyName: String?,
-    customCss: String,
-    textShadowCss: String?,
-    forceBoldText: Boolean,
-    forceItalicText: Boolean,
-): String {
-    val escapedFontFamily = fontFamilyName
-        ?.replace("\\", "\\\\")
-        ?.replace("'", "\\'")
-    val fontVariable = escapedFontFamily?.let { "'$it', sans-serif" }.orEmpty()
-    val resolvedParagraphSpacingPx = paragraphSpacingPx.coerceIn(0, 32)
-
-    return buildString {
-        append(fontFaceCss)
-        append('\n')
-        append(":root {\n")
-        append("  --an-reader-bg: $backgroundHex;\n")
-        append("  --an-reader-fg: $textColorHex;\n")
-        if (!textAlignCss.isNullOrBlank()) {
-            append("  --an-reader-align: $textAlignCss;\n")
-        }
-        if (!firstLineIndentCss.isNullOrBlank()) {
-            append("  --an-reader-first-line-indent: $firstLineIndentCss;\n")
-        }
-        append("  --an-reader-size: ${fontSizePx}px;\n")
-        append("  --an-reader-line-height: ${lineHeightMultiplier.coerceAtLeast(1f)};\n")
-        append("  --an-reader-paragraph-spacing: ${resolvedParagraphSpacingPx}px;\n")
-        if (!textShadowCss.isNullOrBlank()) {
-            append("  --an-reader-text-shadow: $textShadowCss;\n")
-        }
-        if (fontVariable.isNotBlank()) {
-            append("  --an-reader-font: $fontVariable;\n")
-        }
-        append("  --an-reader-font-weight: ${if (forceBoldText) "700" else "400"};\n")
-        append("  --an-reader-font-style: ${if (forceItalicText) "italic" else "normal"};\n")
-        append("}\n")
-        append("html, body {\n")
-        append("  margin: 0 !important;\n")
-        append("  min-height: 0 !important;\n")
-        append("  height: auto !important;\n")
-        append("  background: var(--an-reader-bg) !important;\n")
-        append("  color: var(--an-reader-fg) !important;\n")
-        append("}\n")
-        append("body {\n")
-        append("  padding-top: ${paddingTop}px !important;\n")
-        append("  padding-bottom: ${paddingBottom}px !important;\n")
-        append("  padding-left: ${paddingHorizontal}px !important;\n")
-        append("  padding-right: ${paddingHorizontal}px !important;\n")
-        append("  font-size: var(--an-reader-size) !important;\n")
-        append("  line-height: var(--an-reader-line-height) !important;\n")
-        if (!textAlignCss.isNullOrBlank()) {
-            append("  text-align: var(--an-reader-align) !important;\n")
-        }
-        append("  word-break: break-word !important;\n")
-        append("  overflow-wrap: anywhere !important;\n")
-        append("  -webkit-text-size-adjust: 100% !important;\n")
-        if (!textShadowCss.isNullOrBlank()) {
-            append("  text-shadow: var(--an-reader-text-shadow) !important;\n")
-        }
-        if (fontVariable.isNotBlank()) {
-            append("  font-family: var(--an-reader-font) !important;\n")
-        }
-        append("  font-weight: var(--an-reader-font-weight) !important;\n")
-        append("  font-style: var(--an-reader-font-style) !important;\n")
-        append("}\n")
-        append("body > * {\n")
-        append("  margin-top: 0 !important;\n")
-        append("  padding-top: 0 !important;\n")
-        append("}\n")
-        append("body h1, body h2, body h3, body h4, body h5, body h6 {\n")
-        append("  line-height: 1.35 !important;\n")
-        append("  font-weight: 600 !important;\n")
-        append("}\n")
-        append("body h1 {\n")
-        append("  font-size: 1.24em !important;\n")
-        append("  margin-top: 0 !important;\n")
-        append("  margin-bottom: 0.7em !important;\n")
-        append("}\n")
-        append("body p, body div, body article, body section, body blockquote, body pre, body li {\n")
-        append("  margin-bottom: ${resolvedParagraphSpacingPx}px !important;\n")
-        append("}\n")
-        append("body span.an-reader-bionic {\n")
-        append("  font-weight: 600 !important;\n")
-        append("}\n")
-        append("body h2 {\n")
-        append("  font-size: 1.12em !important;\n")
-        append("}\n")
-        append("body h3 {\n")
-        append("  font-size: 1.06em !important;\n")
-        append("}\n")
-        append("body .an-reader-chapter-title {\n")
-        append("  font-size: 1.16em !important;\n")
-        append("  font-weight: 600 !important;\n")
-        append("  margin-top: 0 !important;\n")
-        append("  margin-bottom: 0.85em !important;\n")
-        append("}\n")
-        append("body > :first-child {\n")
-        append("  margin-top: 0 !important;\n")
-        append("  padding-top: 0 !important;\n")
-        append("}\n")
-        append("body > :first-child > :first-child,\n")
-        append("body > :first-child > :first-child > :first-child {\n")
-        append("  margin-top: 0 !important;\n")
-        append("  padding-top: 0 !important;\n")
-        append("}\n")
-        append("body > :last-child {\n")
-        append("  margin-bottom: 0 !important;\n")
-        append("  padding-bottom: 0 !important;\n")
-        append("}\n")
-        append("body > :last-child > :last-child,\n")
-        append("body > :last-child > :last-child > :last-child {\n")
-        append("  margin-bottom: 0 !important;\n")
-        append("  padding-bottom: 0 !important;\n")
-        append("}\n")
-        append(
-            "body p:first-child, body h1:first-child, body h2:first-child, body h3:first-child, " +
-                "body h4:first-child, body h5:first-child, body h6:first-child, body ul:first-child, " +
-                "body ol:first-child, body blockquote:first-child, body pre:first-child {\n",
-        )
-        append("  margin-top: 0 !important;\n")
-        append("}\n")
-        append("body, body *:not(img):not(svg):not(video):not(canvas):not(iframe), body *::before, body *::after {\n")
-        append("  color: var(--an-reader-fg) !important;\n")
-        if (!textAlignCss.isNullOrBlank()) {
-            append("  text-align: var(--an-reader-align) !important;\n")
-        }
-        append("  line-height: var(--an-reader-line-height) !important;\n")
-        append("  background-color: transparent !important;\n")
-        if (!textShadowCss.isNullOrBlank()) {
-            append("  text-shadow: var(--an-reader-text-shadow) !important;\n")
-        }
-        if (fontVariable.isNotBlank()) {
-            append("  font-family: var(--an-reader-font) !important;\n")
-        }
-        append("}\n")
-        append("a {\n")
-        append("  color: var(--an-reader-fg) !important;\n")
-        if (fontVariable.isNotBlank()) {
-            append("  font-family: var(--an-reader-font) !important;\n")
-        }
-        append("}\n")
-        if (!firstLineIndentCss.isNullOrBlank()) {
-            append("body p, body div, body article, body section {\n")
-            append("  text-indent: var(--an-reader-first-line-indent) !important;\n")
-            append("}\n")
-            append("body .an-reader-chapter-title,\n")
-            append("body h1, body h2, body h3, body h4, body h5, body h6 {\n")
-            append("  text-indent: 0 !important;\n")
-            append("}\n")
-        }
-        append(
-            buildWebReaderAtmosphereCss(
-                appearanceMode = appearanceMode,
-                backgroundTexture = backgroundTexture,
-                oledEdgeGradient = oledEdgeGradient,
-                backgroundImageUrl = backgroundImageUrl,
-            ),
-        )
-        append(customCss)
-    }
-}
-
-internal fun buildWebReaderAtmosphereCss(
-    appearanceMode: NovelReaderAppearanceMode,
-    backgroundTexture: NovelReaderBackgroundTexture,
-    oledEdgeGradient: Boolean,
-    backgroundImageUrl: String?,
-): String {
-    if (appearanceMode == NovelReaderAppearanceMode.BACKGROUND) {
-        if (backgroundImageUrl.isNullOrBlank()) return ""
-        return buildString {
-            append("html, body {\n")
-            append("  background-color: var(--an-reader-bg) !important;\n")
-            append("  background-image: url('$backgroundImageUrl') !important;\n")
-            append("  background-repeat: no-repeat !important;\n")
-            append("  background-size: cover !important;\n")
-            append("  background-position: center center !important;\n")
-            append("  background-attachment: fixed !important;\n")
-            append("}\n")
-        }
-    }
-
-    val textureLayers = when (backgroundTexture) {
-        NovelReaderBackgroundTexture.NONE -> null
-        NovelReaderBackgroundTexture.PAPER_GRAIN ->
-            "url('file:///android_asset/textures/texture_paper.webp')"
-        NovelReaderBackgroundTexture.LINEN ->
-            "url('file:///android_asset/textures/texture_linen.webp')"
-        NovelReaderBackgroundTexture.PARCHMENT ->
-            "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.14), transparent 45%), " +
-                "radial-gradient(circle at 80% 75%, rgba(0,0,0,0.12), transparent 42%)"
-    }
-    val oledLayer = if (oledEdgeGradient) {
-        "radial-gradient(circle at center, rgba(0,0,0,0.0) 38%, rgba(0,0,0,0.36) 100%)"
-    } else {
-        null
-    }
-    if (textureLayers == null && oledLayer == null) return ""
-
-    return buildString {
-        val layers = listOfNotNull(oledLayer, textureLayers)
-        if (layers.isNotEmpty()) {
-            val repeatValues = buildList {
-                if (oledLayer != null) add("no-repeat")
-                if (textureLayers != null) {
-                    if (backgroundTexture == NovelReaderBackgroundTexture.PARCHMENT) {
-                        add("no-repeat")
-                    } else {
-                        add("repeat")
-                    }
-                }
-            }.joinToString(", ")
-            append("html, body {\n")
-            append("  background-color: var(--an-reader-bg) !important;\n")
-            append("  background-image: ${layers.joinToString(", ")} !important;\n")
-            append("  background-repeat: $repeatValues !important;\n")
-            append("  background-attachment: fixed !important;\n")
-            append("}\n")
-        }
-    }
-}
-
-private fun WebView.applyReaderCss(
-    fontFaceCss: String,
-    paddingTop: Int,
-    paddingBottom: Int,
-    paddingHorizontal: Int,
-    fontSizePx: Int,
-    lineHeightMultiplier: Float,
-    paragraphSpacingPx: Int,
-    textAlignCss: String?,
-    firstLineIndentCss: String?,
-    textColorHex: String,
-    backgroundHex: String,
-    appearanceMode: NovelReaderAppearanceMode,
-    backgroundTexture: NovelReaderBackgroundTexture,
-    oledEdgeGradient: Boolean,
-    backgroundImageUrl: String?,
-    fontFamilyName: String?,
-    customCss: String,
-    textShadowCss: String?,
-    forceBoldText: Boolean,
-    forceItalicText: Boolean,
-    bionicReadingEnabled: Boolean,
-) {
-    val css = buildWebReaderCssText(
-        fontFaceCss = fontFaceCss,
-        paddingTop = paddingTop,
-        paddingBottom = paddingBottom,
-        paddingHorizontal = paddingHorizontal,
-        fontSizePx = fontSizePx,
-        lineHeightMultiplier = lineHeightMultiplier,
-        paragraphSpacingPx = paragraphSpacingPx,
-        textAlignCss = textAlignCss,
-        firstLineIndentCss = firstLineIndentCss,
-        textColorHex = textColorHex,
-        backgroundHex = backgroundHex,
-        appearanceMode = appearanceMode,
-        backgroundTexture = backgroundTexture,
-        oledEdgeGradient = oledEdgeGradient,
-        backgroundImageUrl = backgroundImageUrl,
-        fontFamilyName = fontFamilyName,
-        customCss = customCss,
-        textShadowCss = textShadowCss,
-        forceBoldText = forceBoldText,
-        forceItalicText = forceItalicText,
-    )
-    val escapedFontFamily = fontFamilyName
-        ?.replace("\\", "\\\\")
-        ?.replace("'", "\\'")
-    val shouldForceFontFamily = escapedFontFamily != null
-    val quotedCss = JSONObject.quote(css)
-    val fontFlag = if (shouldForceFontFamily) "true" else "false"
-    val alignFlag = if (textAlignCss.isNullOrBlank()) "false" else "true"
-    val firstLineIndentFlag = if (firstLineIndentCss.isNullOrBlank()) "false" else "true"
-    evaluateJavascript(
-        """
-        (function() {
-            const styleId = '$WEB_READER_STYLE_ELEMENT_ID';
-            let style = document.getElementById(styleId);
-            if (!style) {
-                style = document.createElement('style');
-                style.id = styleId;
-                document.head.appendChild(style);
-            }
-            style.textContent = $quotedCss;
-
-            const shouldForceFont = $fontFlag;
-            const shouldForceAlign = $alignFlag;
-            const shouldForceFirstLineIndent = $firstLineIndentFlag;
-            const firstLineIndentTags = new Set(['p', 'div', 'article', 'section']);
-            const emptyBlockTags = new Set(['p', 'div', 'article', 'section', 'li', 'blockquote', 'pre']);
-            const invisibleSpaceRegex = /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g;
-            const mediaContentSelector = 'img,svg,video,canvas,iframe,picture,hr';
-            const root = document.body;
-            if (!root) return;
-            const nodes = root.querySelectorAll('*');
-            for (const node of nodes) {
-                if (!(node instanceof HTMLElement)) continue;
-                if (shouldForceAlign) {
-                    node.removeAttribute('align');
-                }
-                node.removeAttribute('bgcolor');
-                node.removeAttribute('color');
-                const tag = node.tagName.toLowerCase();
-                if (
-                    tag === 'img' || tag === 'svg' || tag === 'video' ||
-                    tag === 'canvas' || tag === 'iframe' || tag === 'source' || tag === 'picture'
-                ) {
-                    continue;
-                }
-                if (emptyBlockTags.has(tag)) {
-                    const normalizedText = (node.textContent || '')
-                        .replace(invisibleSpaceRegex, ' ')
-                        .trim();
-                    const hasMediaContent = node.querySelector(mediaContentSelector) !== null;
-                    if (!hasMediaContent && normalizedText.length === 0) {
-                        node.style.setProperty('display', 'none', 'important');
-                        node.style.setProperty('margin', '0', 'important');
-                        node.style.setProperty('padding', '0', 'important');
-                        continue;
-                    }
-                }
-                node.style.setProperty('background-color', 'transparent', 'important');
-                node.style.setProperty('color', 'var(--an-reader-fg)', 'important');
-                if (shouldForceAlign) {
-                    node.style.setProperty('text-align', 'var(--an-reader-align)', 'important');
-                } else if (node.style.getPropertyValue('text-align').includes('--an-reader-align')) {
-                    node.style.removeProperty('text-align');
-                }
-                if (shouldForceFirstLineIndent && firstLineIndentTags.has(tag)) {
-                    node.style.setProperty('text-indent', 'var(--an-reader-first-line-indent)', 'important');
-                } else if (node.style.getPropertyValue('text-indent').includes('--an-reader-first-line-indent')) {
-                    node.style.removeProperty('text-indent');
-                }
-                node.style.setProperty('line-height', 'var(--an-reader-line-height)', 'important');
-                if (shouldForceFont) {
-                    node.style.setProperty('font-family', 'var(--an-reader-font)', 'important');
-                }
-            }
-        })();
-        """.trimIndent(),
-        null,
-    )
-    val bionicJavascript = buildWebReaderBionicJavascript(bionicReadingEnabled)
-    evaluateJavascript(
-        if (bionicJavascript.isBlank()) buildWebReaderBionicResetJavascript() else bionicJavascript,
-        null,
-    )
-}
-
-internal fun buildWebReaderBionicJavascript(enabled: Boolean): String {
-    if (!enabled) return ""
-    return """
-        (function() {
-            const root = document.body;
-            if (!root) return;
-            const existing = Array.from(root.querySelectorAll('span.an-reader-bionic'));
-            for (const span of existing) {
-                span.replaceWith(document.createTextNode(span.textContent || ''));
-            }
-            root.normalize();
-            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-                acceptNode(node) {
-                    if (!node || !node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
-                    const parent = node.parentElement;
-                    if (!parent) return NodeFilter.FILTER_REJECT;
-                    if (parent.closest('script,style,noscript,textarea,svg,.an-reader-bionic')) {
-                        return NodeFilter.FILTER_REJECT;
-                    }
-                    return NodeFilter.FILTER_ACCEPT;
-                }
-            });
-            const nodes = [];
-            while (walker.nextNode()) nodes.push(walker.currentNode);
-            for (const textNode of nodes) {
-                const text = textNode.nodeValue || '';
-                const fragment = document.createDocumentFragment();
-                const parts = text.match(/\S+|\s+/g) || [];
-                for (const token of parts) {
-                    if (/^\s+$/.test(token)) {
-                        fragment.appendChild(document.createTextNode(token));
-                        continue;
-                    }
-                    const emphasizeCount = Math.max(1, Math.ceil(token.length * 0.5));
-                    const span = document.createElement('span');
-                    span.className = 'an-reader-bionic';
-                    span.textContent = token.slice(0, emphasizeCount);
-                    fragment.appendChild(span);
-                    const remainder = token.slice(emphasizeCount);
-                    if (remainder) {
-                        fragment.appendChild(document.createTextNode(remainder));
-                    }
-                }
-                textNode.replaceWith(fragment);
-            }
-        })();
-    """.trimIndent()
-}
-
-private fun buildWebReaderBionicResetJavascript(): String {
-    return """
-        (function() {
-            const root = document.body;
-            if (!root) return;
-            const spans = Array.from(root.querySelectorAll('span.an-reader-bionic'));
-            for (const span of spans) {
-                span.replaceWith(document.createTextNode(span.textContent || ''));
-            }
-            root.normalize();
-        })();
-    """.trimIndent()
 }
 
 @Composable
@@ -4926,2055 +4253,6 @@ private fun ReaderAtmosphereBackground(
     }
 }
 
-internal data class ReaderAtmosphereRadialLayer(
-    val centerXFraction: Float,
-    val centerYFraction: Float,
-    val colorStops: List<Pair<Float, Color>>,
-)
-
-internal fun buildReaderAtmosphereRadialLayers(
-    backgroundTexture: NovelReaderBackgroundTexture,
-    oledEdgeGradient: Boolean,
-    isDarkTheme: Boolean,
-    intensityFactor: Float,
-): List<ReaderAtmosphereRadialLayer> {
-    val layers = mutableListOf<ReaderAtmosphereRadialLayer>()
-
-    if (backgroundTexture == NovelReaderBackgroundTexture.PARCHMENT) {
-        val parchmentDarkAlpha = (0.12f * intensityFactor).coerceIn(0f, 0.48f)
-        val parchmentLightAlpha = (0.14f * intensityFactor).coerceIn(0f, 0.56f)
-        // Draw order must follow CSS background layering (bottom -> top on Canvas).
-        // CSS for parchment: white highlight is listed before dark stain, so it is above it.
-        // Canvas paints later layers on top, therefore we add dark first, then white.
-        layers += ReaderAtmosphereRadialLayer(
-            centerXFraction = 0.8f,
-            centerYFraction = 0.75f,
-            colorStops = listOf(
-                0f to Color.Black.copy(alpha = parchmentDarkAlpha),
-                0.42f to Color.Transparent,
-                1f to Color.Transparent,
-            ),
-        )
-        layers += ReaderAtmosphereRadialLayer(
-            centerXFraction = 0.2f,
-            centerYFraction = 0.2f,
-            colorStops = listOf(
-                0f to Color.White.copy(alpha = parchmentLightAlpha),
-                0.45f to Color.Transparent,
-                1f to Color.Transparent,
-            ),
-        )
-    }
-
-    if (oledEdgeGradient && isDarkTheme) {
-        val oledBlendT = ((intensityFactor - 1f) / 3f).coerceIn(0f, 1f)
-        val oledEdgeAlpha = 0.36f - (0.08f * oledBlendT)
-        layers += ReaderAtmosphereRadialLayer(
-            centerXFraction = 0.5f,
-            centerYFraction = 0.5f,
-            colorStops = listOf(
-                0f to Color.Transparent,
-                0.38f to Color.Transparent,
-                1f to Color.Black.copy(alpha = oledEdgeAlpha),
-            ),
-        )
-    }
-
-    return layers
-}
-
-internal fun resolveNativeTextureIntensityFactor(strengthPercent: Int): Float {
-    val clamped = strengthPercent.coerceIn(0, 200)
-    return clamped / 50f
-}
-
-internal fun calculateRadialGradientFarthestCornerRadius(
-    size: Size,
-    center: Offset,
-): Float {
-    val topLeft = hypot(center.x.toDouble(), center.y.toDouble()).toFloat()
-    val topRight = hypot((size.width - center.x).toDouble(), center.y.toDouble()).toFloat()
-    val bottomLeft = hypot(center.x.toDouble(), (size.height - center.y).toDouble()).toFloat()
-    val bottomRight = hypot((size.width - center.x).toDouble(), (size.height - center.y).toDouble()).toFloat()
-    return max(max(topLeft, topRight), max(bottomLeft, bottomRight))
-}
-
-internal fun shouldShowBottomInfoOverlay(
-    showReaderUi: Boolean,
-    showBatteryAndTime: Boolean,
-    showKindleInfoBlock: Boolean,
-    showTimeToEnd: Boolean,
-    showWordCount: Boolean,
-): Boolean {
-    val kindleInfoVisible = showKindleInfoBlock && (showTimeToEnd || showWordCount)
-    return showReaderUi && (showBatteryAndTime || kindleInfoVisible)
-}
-
-internal fun shouldShowPersistentProgressLine(
-    showReaderUi: Boolean,
-): Boolean {
-    return !showReaderUi
-}
-
-internal fun resolveParagraphSpacingDp(
-    spacing: Int,
-): androidx.compose.ui.unit.Dp {
-    return spacing.coerceIn(0, 32).dp
-}
-
-internal data class NovelReaderReadingPaceState(
-    val lastProgressPercent: Int? = null,
-    val lastTimestampMs: Long? = null,
-    val smoothedProgressPerMinute: Float? = null,
-)
-
-internal fun updateNovelReaderReadingPace(
-    paceState: NovelReaderReadingPaceState,
-    readingProgressPercent: Int,
-    timestampMs: Long,
-): NovelReaderReadingPaceState {
-    val clampedProgress = readingProgressPercent.coerceIn(0, 100)
-    val lastProgress = paceState.lastProgressPercent
-    val lastTimestamp = paceState.lastTimestampMs
-    if (lastProgress == null || lastTimestamp == null || timestampMs <= lastTimestamp) {
-        return paceState.copy(lastProgressPercent = clampedProgress, lastTimestampMs = timestampMs)
-    }
-
-    val deltaProgress = (clampedProgress - lastProgress).toFloat()
-    val deltaMs = timestampMs - lastTimestamp
-    val sampled = if (deltaProgress > 0f && deltaMs in 5_000L..600_000L) {
-        val rawPerMinute = deltaProgress / (deltaMs.toFloat() / 60_000f)
-        when (val existing = paceState.smoothedProgressPerMinute) {
-            null -> rawPerMinute
-            else -> (existing * 0.7f) + (rawPerMinute * 0.3f)
-        }
-    } else {
-        paceState.smoothedProgressPerMinute
-    }
-
-    return paceState.copy(
-        lastProgressPercent = clampedProgress,
-        lastTimestampMs = timestampMs,
-        smoothedProgressPerMinute = sampled,
-    )
-}
-
-internal fun estimateNovelReaderRemainingMinutes(
-    paceState: NovelReaderReadingPaceState,
-    readingProgressPercent: Int,
-): Int? {
-    val remaining = (100 - readingProgressPercent.coerceIn(0, 100)).toFloat()
-    if (remaining <= 0f) return 0
-    val speed = paceState.smoothedProgressPerMinute ?: return null
-    if (speed <= 0.01f) return null
-    return ceil(remaining / speed).toInt().coerceAtLeast(1)
-}
-
-internal fun resolvePageReaderReadingProgressPercent(
-    pageIndex: Int,
-    pageCount: Int,
-): Int {
-    val safePageCount = pageCount.coerceAtLeast(0)
-    if (safePageCount <= 0) return 0
-    if (safePageCount == 1) return 100
-
-    val safePageIndex = pageIndex.coerceIn(0, safePageCount - 1)
-    return ((safePageIndex.toFloat() / (safePageCount - 1).toFloat()) * 100f)
-        .roundToInt()
-        .coerceIn(0, 100)
-}
-
-internal fun resolveReaderPageRailLabels(
-    pageIndex: Int,
-    pageCount: Int,
-): Pair<String?, String?> {
-    val safePageCount = pageCount.coerceAtLeast(0)
-    if (safePageCount <= 0) return null to null
-    val currentPage = pageIndex.coerceIn(0, safePageCount - 1) + 1
-    return currentPage.toString() to safePageCount.toString()
-}
-
-internal fun resolveReaderVerticalSeekbarTickFractions(pageCount: Int): List<Float> {
-    val safePageCount = pageCount.coerceAtLeast(0)
-    if (safePageCount <= 1) return emptyList()
-    val denominator = (safePageCount - 1).toFloat()
-    return List(safePageCount) { index -> index.toFloat() / denominator }
-}
-
-internal fun countNovelWords(blocks: List<String>): Int {
-    if (blocks.isEmpty()) return 0
-    return blocks.sumOf { block -> novelWordRegex.findAll(block).count() }
-}
-
-internal fun estimateNovelReadWords(
-    totalWords: Int,
-    readingProgressPercent: Int,
-): Int {
-    if (totalWords <= 0) return 0
-    val clampedPercent = readingProgressPercent.coerceIn(0, 100)
-    return ((totalWords.toFloat() * clampedPercent.toFloat()) / 100f).roundToInt().coerceIn(0, totalWords)
-}
-
-internal fun shouldShowVerticalSeekbar(
-    showReaderUi: Boolean,
-    verticalSeekbarEnabled: Boolean,
-    @Suppress("UNUSED_PARAMETER") showWebView: Boolean,
-    usePageReader: Boolean,
-    textBlocksCount: Int,
-): Boolean {
-    return showReaderUi &&
-        verticalSeekbarEnabled &&
-        if (usePageReader) {
-            textBlocksCount > 0
-        } else {
-            textBlocksCount > 1
-        }
-}
-
-internal fun shouldShowPageReaderDismissLayer(
-    showReaderUi: Boolean,
-    usePageReader: Boolean,
-): Boolean {
-    return showReaderUi && usePageReader
-}
-
-internal fun shouldStartInWebView(
-    preferWebViewRenderer: Boolean,
-    richNativeRendererExperimentalEnabled: Boolean,
-    pageReaderEnabled: Boolean,
-    contentBlocksCount: Int,
-    richContentUnsupportedFeaturesDetected: Boolean,
-): Boolean {
-    if (contentBlocksCount <= 0) return true
-    if (pageReaderEnabled) return false
-    if (richNativeRendererExperimentalEnabled && richContentUnsupportedFeaturesDetected) return true
-    return preferWebViewRenderer
-}
-
-internal fun syncShowWebViewWithReaderSettings(
-    currentShowWebView: Boolean,
-    preferWebViewRenderer: Boolean,
-    richNativeRendererExperimentalEnabled: Boolean,
-    pageReaderEnabled: Boolean,
-    contentBlocksCount: Int,
-    richContentUnsupportedFeaturesDetected: Boolean,
-): Boolean {
-    val expectedShowWebView = shouldStartInWebView(
-        preferWebViewRenderer = preferWebViewRenderer,
-        richNativeRendererExperimentalEnabled = richNativeRendererExperimentalEnabled,
-        pageReaderEnabled = pageReaderEnabled,
-        contentBlocksCount = contentBlocksCount,
-        richContentUnsupportedFeaturesDetected = richContentUnsupportedFeaturesDetected,
-    )
-    return if (currentShowWebView == expectedShowWebView) {
-        currentShowWebView
-    } else {
-        expectedShowWebView
-    }
-}
-
-internal fun resolveInitialPageReaderPage(
-    savedPageReaderProgress: PageReaderProgress?,
-    legacyLastSavedIndex: Int,
-    pageCount: Int,
-    isInternalChapterHandoff: Boolean = false,
-): Int {
-    val safePageCount = pageCount.coerceAtLeast(1)
-    val lastPageIndex = safePageCount - 1
-    if (!shouldRestoreSavedPageReaderProgress(isInternalChapterHandoff)) return 0
-    val savedProgress = savedPageReaderProgress ?: return legacyLastSavedIndex.coerceIn(0, lastPageIndex)
-    if (safePageCount == 1 || savedProgress.totalItems <= 1) return 0
-    val sourceLastPageIndex = (savedProgress.totalItems - 1).coerceAtLeast(1)
-    val normalizedProgress = savedProgress.index.toFloat() / sourceLastPageIndex.toFloat()
-    return (normalizedProgress * lastPageIndex.toFloat()).roundToInt().coerceIn(0, lastPageIndex)
-}
-
-internal fun resolveInitialNativeReaderIndex(
-    nativeLastSavedIndex: Int,
-    savedPageReaderProgress: PageReaderProgress?,
-    itemCount: Int,
-): Int {
-    val safeItemCount = itemCount.coerceAtLeast(1)
-    val lastItemIndex = safeItemCount - 1
-    val savedProgress = savedPageReaderProgress ?: return nativeLastSavedIndex.coerceIn(0, lastItemIndex)
-    if (safeItemCount == 1 || savedProgress.totalItems <= 1) return 0
-    val sourceLastPageIndex = (savedProgress.totalItems - 1).coerceAtLeast(1)
-    val normalizedProgress = savedProgress.index.toFloat() / sourceLastPageIndex.toFloat()
-    return (normalizedProgress * lastItemIndex.toFloat()).roundToInt().coerceIn(0, lastItemIndex)
-}
-
-internal fun shouldUseRichNativeScrollRenderer(
-    richNativeRendererExperimentalEnabled: Boolean,
-    showWebView: Boolean,
-    usePageReader: Boolean,
-    bionicReadingEnabled: Boolean,
-    richContentBlocks: List<NovelRichContentBlock>,
-    richContentUnsupportedFeaturesDetected: Boolean,
-): Boolean {
-    if (!richNativeRendererExperimentalEnabled) return false
-    if (showWebView || usePageReader || bionicReadingEnabled) return false
-    if (richContentUnsupportedFeaturesDetected) return false
-    return richContentBlocks.isNotEmpty()
-}
-
-internal fun shouldUseRichNativePageRenderer(
-    richNativeRendererExperimentalEnabled: Boolean,
-    pageReaderEnabled: Boolean,
-    bionicReadingEnabled: Boolean,
-    richContentBlocks: List<NovelRichContentBlock>,
-    richContentUnsupportedFeaturesDetected: Boolean,
-): Boolean {
-    if (!pageReaderEnabled) return false
-    if (!richNativeRendererExperimentalEnabled) return false
-    if (bionicReadingEnabled) return false
-    if (richContentUnsupportedFeaturesDetected) return false
-    if (richContentBlocks.isEmpty()) return false
-    return richContentBlocks.none { it is NovelRichContentBlock.Image }
-}
-
-internal enum class NovelPageTransitionEngine {
-    COMPOSE_PAGER,
-    PAGE_TURN_RENDERER,
-}
-
-internal fun resolvePageTransitionEngine(
-    style: NovelPageTransitionStyle,
-): NovelPageTransitionEngine {
-    return when (style) {
-        NovelPageTransitionStyle.INSTANT,
-        NovelPageTransitionStyle.SLIDE,
-        NovelPageTransitionStyle.DEPTH,
-        -> NovelPageTransitionEngine.COMPOSE_PAGER
-        NovelPageTransitionStyle.BOOK,
-        NovelPageTransitionStyle.CURL,
-        -> NovelPageTransitionEngine.PAGE_TURN_RENDERER
-    }
-}
-
-internal fun resolveActivePageTransitionStyle(
-    requestedStyle: NovelPageTransitionStyle,
-    pageTurnRendererSupported: Boolean,
-): NovelPageTransitionStyle {
-    val requestedEngine = resolvePageTransitionEngine(requestedStyle)
-    if (requestedEngine == NovelPageTransitionEngine.PAGE_TURN_RENDERER && !pageTurnRendererSupported) {
-        return NovelPageTransitionStyle.SLIDE
-    }
-    return requestedStyle
-}
-
-internal enum class NovelPageReaderRendererRoute {
-    COMPOSE_PAGER,
-    PAGE_TURN_RENDERER,
-}
-
-internal fun resolvePageReaderRendererRoute(
-    usePageReader: Boolean,
-    activeStyle: NovelPageTransitionStyle,
-): NovelPageReaderRendererRoute? {
-    if (!usePageReader) return null
-    return when (resolvePageTransitionEngine(activeStyle)) {
-        NovelPageTransitionEngine.COMPOSE_PAGER -> NovelPageReaderRendererRoute.COMPOSE_PAGER
-        NovelPageTransitionEngine.PAGE_TURN_RENDERER -> NovelPageReaderRendererRoute.PAGE_TURN_RENDERER
-    }
-}
-
-internal fun resolvePageReaderCurrentPage(
-    pageReaderRendererRoute: NovelPageReaderRendererRoute?,
-    pagerCurrentPage: Int,
-    pageTurnCurrentPage: Int,
-): Int {
-    return if (pageReaderRendererRoute == NovelPageReaderRendererRoute.PAGE_TURN_RENDERER) {
-        resolvePageTurnRendererProgressPageIndex(pageTurnCurrentPage)
-    } else {
-        pagerCurrentPage.coerceAtLeast(0)
-    }
-}
-
-internal fun resolveReaderVerticalSeekbarValue(
-    showWebView: Boolean,
-    webProgressPercent: Int,
-    usePageReader: Boolean,
-    pageReaderRendererRoute: NovelPageReaderRendererRoute?,
-    pagerCurrentPage: Int,
-    pageTurnCurrentPage: Int,
-    seekbarItemsCount: Int,
-    readingProgressPercent: Int,
-): Float {
-    return when {
-        showWebView -> webProgressPercent.coerceIn(0, 100) / 100f
-        !usePageReader -> {
-            // For long paragraphs/index-based lists, index ratio can lag behind.
-            // Use effective reading progress so thumb reaches the real chapter end.
-            readingProgressPercent.coerceIn(0, 100) / 100f
-        }
-        else -> {
-            val max = (seekbarItemsCount - 1).coerceAtLeast(1)
-            val current = resolvePageReaderCurrentPage(
-                pageReaderRendererRoute = pageReaderRendererRoute,
-                pagerCurrentPage = pagerCurrentPage,
-                pageTurnCurrentPage = pageTurnCurrentPage,
-            )
-            current.toFloat() / max.toFloat()
-        }
-    }
-}
-
-internal enum class ReaderTapAction {
-    TOGGLE_UI,
-    BACKWARD,
-    FORWARD,
-}
-
-internal fun resolveReaderTapAction(
-    tapX: Float,
-    width: Float,
-    tapToScrollEnabled: Boolean,
-): ReaderTapAction {
-    val safeWidth = width.coerceAtLeast(1f)
-    val leftBoundary = safeWidth * 0.3f
-    val rightBoundary = safeWidth * 0.7f
-    val clampedTapX = tapX.coerceIn(0f, safeWidth)
-    val inCenter = clampedTapX > leftBoundary && clampedTapX < rightBoundary
-    if (inCenter || !tapToScrollEnabled) return ReaderTapAction.TOGGLE_UI
-    return if (clampedTapX <= leftBoundary) ReaderTapAction.BACKWARD else ReaderTapAction.FORWARD
-}
-
-internal fun resolvePageReaderBlocks(
-    shouldPaginate: Boolean,
-    textBlocks: List<String>,
-    paragraphSpacingDp: Int,
-    paginate: (List<String>, Int) -> List<String>,
-): List<String> {
-    val fallbackBlocks = textBlocks.takeIf { it.isNotEmpty() } ?: listOf("")
-    if (!shouldPaginate) return fallbackBlocks
-
-    val nonBlankBlocks = textBlocks.filter { it.isNotBlank() }
-    if (nonBlankBlocks.isEmpty()) return fallbackBlocks
-
-    return paginate(nonBlankBlocks, paragraphSpacingDp.coerceIn(0, 32)).ifEmpty { fallbackBlocks }
-}
-
-internal data class PlainPageSlice(
-    val blockIndex: Int,
-    val range: TextPageRange,
-)
-
-internal data class RichPageSlice(
-    val blockIndex: Int,
-    val range: TextPageRange,
-)
-
-internal data class PlainPageRenderBlock(
-    val text: String,
-    val spacingBeforePx: Int,
-    val firstLineIndentEm: Float?,
-    val isChapterTitle: Boolean = false,
-)
-
-internal data class RichPageBlockText(
-    val text: AnnotatedString,
-    val firstLineIndentEm: Float?,
-    val sourceTextAlign: NovelRichBlockTextAlign? = null,
-)
-
-internal data class RichPageRenderBlock(
-    val text: AnnotatedString,
-    val spacingBeforePx: Int,
-    val firstLineIndentEm: Float?,
-    val sourceTextAlign: NovelRichBlockTextAlign? = null,
-    val isChapterTitle: Boolean = false,
-)
-
-internal sealed interface NovelPageContentBlock {
-    val spacingBeforePx: Int
-    val firstLineIndentEm: Float?
-    val isChapterTitle: Boolean
-
-    data class Plain(
-        val text: String,
-        override val spacingBeforePx: Int,
-        override val firstLineIndentEm: Float?,
-        override val isChapterTitle: Boolean = false,
-    ) : NovelPageContentBlock
-
-    data class Rich(
-        val text: AnnotatedString,
-        override val spacingBeforePx: Int,
-        override val firstLineIndentEm: Float?,
-        val sourceTextAlign: NovelRichBlockTextAlign? = null,
-        override val isChapterTitle: Boolean = false,
-    ) : NovelPageContentBlock
-}
-
-internal data class NovelPageContentPage(
-    val blocks: List<NovelPageContentBlock>,
-)
-
-internal fun paginatePlainPageBlocks(
-    textBlocks: List<String>,
-    paragraphSpacingPx: Int,
-    widthPx: Int,
-    heightPx: Int,
-    textSizePx: Float,
-    lineHeightMultiplier: Float,
-    typeface: android.graphics.Typeface?,
-    textAlign: ReaderTextAlign,
-): List<List<PlainPageSlice>> {
-    val safeHeight = heightPx.coerceAtLeast(1)
-    val approximateMetrics = ApproximateTextMetrics(
-        charsPerLine = (widthPx.coerceAtLeast(1) / (textSizePx.coerceAtLeast(1f) * 0.55f))
-            .toInt()
-            .coerceAtLeast(15),
-        lineHeightPx = (textSizePx.coerceAtLeast(1f) * lineHeightMultiplier.coerceAtLeast(1f))
-            .toInt()
-            .coerceAtLeast(1),
-    )
-    val layouts = textBlocks.map { block ->
-        block to buildReaderStaticLayout(
-            text = block,
-            widthPx = widthPx,
-            textSizePx = textSizePx,
-            lineHeightMultiplier = lineHeightMultiplier,
-            typeface = typeface,
-            textAlign = textAlign,
-        )
-    }
-
-    if (layouts.isEmpty()) return emptyList()
-
-    val pages = mutableListOf<MutableList<PlainPageSlice>>()
-    var currentPage = mutableListOf<PlainPageSlice>()
-    var remainingHeight = safeHeight
-
-    fun flushPage() {
-        if (currentPage.isNotEmpty()) {
-            pages += currentPage
-            currentPage = mutableListOf()
-        }
-        remainingHeight = safeHeight
-    }
-
-    layouts.forEachIndexed { blockIndex, (text, layout) ->
-        if (text.isBlank()) return@forEachIndexed
-        if (layout == null) {
-            val blockPages = paginateTextIntoPageRanges(
-                text = text,
-                widthPx = widthPx,
-                heightPx = safeHeight,
-                textSizePx = textSizePx,
-                lineHeightMultiplier = lineHeightMultiplier,
-                typeface = typeface,
-                textAlign = textAlign,
-            )
-            val blockHeight = measureApproximateTextHeight(
-                text = text,
-                metrics = approximateMetrics,
-            )
-            blockPages.forEachIndexed { sliceIndex, range ->
-                val spacingBefore = if (currentPage.isNotEmpty() && sliceIndex == 0) {
-                    paragraphSpacingPx.coerceAtLeast(0)
-                } else {
-                    0
-                }
-                if (remainingHeight <= spacingBefore) {
-                    flushPage()
-                }
-                if (
-                    currentPage.isNotEmpty() &&
-                    sliceIndex == 0 &&
-                    blockHeight <= safeHeight &&
-                    blockHeight + spacingBefore > remainingHeight
-                ) {
-                    flushPage()
-                }
-                val sliceHeight = measureApproximateTextHeight(
-                    text = text.substring(range.start, range.endExclusive),
-                    metrics = approximateMetrics,
-                ).coerceAtMost(safeHeight)
-                currentPage += PlainPageSlice(blockIndex = blockIndex, range = range)
-                remainingHeight -= spacingBefore + sliceHeight
-                if (sliceIndex < blockPages.lastIndex || remainingHeight <= 0) {
-                    flushPage()
-                }
-            }
-            return@forEachIndexed
-        }
-
-        val blockHeight = resolveStaticLayoutHeight(layout)
-        var startLine = 0
-        var isFirstSliceOfBlock = true
-
-        while (startLine < layout.lineCount) {
-            val spacingBefore = if (currentPage.isNotEmpty() && isFirstSliceOfBlock) {
-                paragraphSpacingPx.coerceAtLeast(0)
-            } else {
-                0
-            }
-
-            if (remainingHeight <= spacingBefore) {
-                flushPage()
-                continue
-            }
-
-            if (
-                currentPage.isNotEmpty() &&
-                isFirstSliceOfBlock &&
-                blockHeight <= safeHeight &&
-                blockHeight + spacingBefore > remainingHeight
-            ) {
-                flushPage()
-                continue
-            }
-
-            val slice = resolveStaticLayoutSliceForHeight(
-                text = text,
-                layout = layout,
-                startLine = startLine,
-                availableHeight = remainingHeight - spacingBefore,
-            )
-
-            if (slice == null) {
-                flushPage()
-                continue
-            }
-
-            currentPage += PlainPageSlice(blockIndex = blockIndex, range = slice.range)
-            remainingHeight -= spacingBefore + slice.heightPx
-            startLine = slice.nextStartLine
-            isFirstSliceOfBlock = false
-
-            if (remainingHeight <= 0) {
-                flushPage()
-            }
-        }
-    }
-
-    flushPage()
-    return pages
-}
-
-internal fun buildRichPageReaderChapterAnnotatedText(
-    richBlocks: List<NovelRichContentBlock>,
-    paragraphSpacingDp: Int,
-    forcedParagraphFirstLineIndentEm: Float? = null,
-): AnnotatedString {
-    if (richBlocks.isEmpty()) return AnnotatedString("")
-
-    val paragraphSeparator = resolvePageReaderParagraphSeparator(paragraphSpacingDp)
-
-    return buildAnnotatedString {
-        var appendedAny = false
-        richBlocks.forEach { block ->
-            val blockText = buildRichPageReaderBlockAnnotatedText(
-                block = block,
-                forcedParagraphFirstLineIndentEm = forcedParagraphFirstLineIndentEm,
-            )
-            if (blockText.text.isBlank()) return@forEach
-            if (appendedAny) append(paragraphSeparator)
-            append(blockText)
-            appendedAny = true
-        }
-    }
-}
-
-internal fun buildRichPageReaderBlockAnnotatedText(
-    block: NovelRichContentBlock,
-    forcedParagraphFirstLineIndentEm: Float? = null,
-): AnnotatedString {
-    return buildRichPageReaderBlockText(
-        block = block,
-        forcedParagraphFirstLineIndentEm = forcedParagraphFirstLineIndentEm,
-    ).text
-}
-
-internal fun buildRichPageReaderBlockText(
-    block: NovelRichContentBlock,
-    forcedParagraphFirstLineIndentEm: Float? = null,
-): RichPageBlockText {
-    val blockText: AnnotatedString = when (block) {
-        is NovelRichContentBlock.Paragraph -> buildNovelRichAnnotatedString(block.segments)
-        is NovelRichContentBlock.Heading -> buildNovelRichAnnotatedString(block.segments)
-        is NovelRichContentBlock.BlockQuote -> buildNovelRichAnnotatedString(block.segments)
-        NovelRichContentBlock.HorizontalRule -> AnnotatedString("* * *")
-        is NovelRichContentBlock.Image -> AnnotatedString("")
-    }
-    if (blockText.text.isBlank()) {
-        return RichPageBlockText(
-            text = AnnotatedString(""),
-            firstLineIndentEm = null,
-            sourceTextAlign = null,
-        )
-    }
-    if (block !is NovelRichContentBlock.Paragraph) {
-        val sourceTextAlign = when (block) {
-            is NovelRichContentBlock.Heading -> block.textAlign
-            is NovelRichContentBlock.BlockQuote -> block.textAlign
-            else -> null
-        }
-        return RichPageBlockText(
-            text = blockText,
-            firstLineIndentEm = null,
-            sourceTextAlign = sourceTextAlign,
-        )
-    }
-
-    val firstLineIndentEm = forcedParagraphFirstLineIndentEm ?: block.firstLineIndentEm
-    return RichPageBlockText(
-        text = blockText,
-        firstLineIndentEm = firstLineIndentEm,
-        sourceTextAlign = block.textAlign,
-    )
-}
-
-internal fun paginateRichPageBlocks(
-    blockTexts: List<RichPageBlockText>,
-    paragraphSpacingPx: Int,
-    widthPx: Int,
-    heightPx: Int,
-    textSizePx: Float,
-    lineHeightMultiplier: Float,
-    typeface: android.graphics.Typeface?,
-    textAlign: ReaderTextAlign,
-): List<List<RichPageSlice>> {
-    val safeHeight = heightPx.coerceAtLeast(1)
-    val approximateMetrics = ApproximateTextMetrics(
-        charsPerLine = (widthPx.coerceAtLeast(1) / (textSizePx.coerceAtLeast(1f) * 0.55f))
-            .toInt()
-            .coerceAtLeast(15),
-        lineHeightPx = (textSizePx.coerceAtLeast(1f) * lineHeightMultiplier.coerceAtLeast(1f))
-            .toInt()
-            .coerceAtLeast(1),
-    )
-    val layouts = blockTexts.map { blockText ->
-        blockText to buildReaderStaticLayout(
-            text = blockText.text.text,
-            widthPx = widthPx,
-            textSizePx = textSizePx,
-            lineHeightMultiplier = lineHeightMultiplier,
-            typeface = typeface,
-            textAlign = textAlign,
-        )
-    }
-
-    if (layouts.isEmpty()) return emptyList()
-
-    val pages = mutableListOf<MutableList<RichPageSlice>>()
-    var currentPage = mutableListOf<RichPageSlice>()
-    var remainingHeight = safeHeight
-
-    fun flushPage() {
-        if (currentPage.isNotEmpty()) {
-            pages += currentPage
-            currentPage = mutableListOf()
-        }
-        remainingHeight = safeHeight
-    }
-
-    layouts.forEachIndexed { blockIndex, (blockText, layout) ->
-        if (blockText.text.text.isBlank()) return@forEachIndexed
-        if (layout == null) {
-            val blockPages = paginateTextIntoPageRanges(
-                text = blockText.text.text,
-                widthPx = widthPx,
-                heightPx = safeHeight,
-                textSizePx = textSizePx,
-                lineHeightMultiplier = lineHeightMultiplier,
-                typeface = typeface,
-                textAlign = textAlign,
-            )
-            val blockHeight = measureApproximateTextHeight(
-                text = blockText.text.text,
-                metrics = approximateMetrics,
-            )
-            blockPages.forEachIndexed { sliceIndex, range ->
-                val spacingBefore = if (currentPage.isNotEmpty() && sliceIndex == 0) {
-                    paragraphSpacingPx.coerceAtLeast(0)
-                } else {
-                    0
-                }
-                if (remainingHeight <= spacingBefore) {
-                    flushPage()
-                }
-                if (
-                    currentPage.isNotEmpty() &&
-                    sliceIndex == 0 &&
-                    blockHeight <= safeHeight &&
-                    blockHeight + spacingBefore > remainingHeight
-                ) {
-                    flushPage()
-                }
-                val sliceHeight = measureApproximateTextHeight(
-                    text = blockText.text.text.substring(range.start, range.endExclusive),
-                    metrics = approximateMetrics,
-                ).coerceAtMost(safeHeight)
-                currentPage += RichPageSlice(blockIndex = blockIndex, range = range)
-                remainingHeight -= spacingBefore + sliceHeight
-                if (sliceIndex < blockPages.lastIndex || remainingHeight <= 0) {
-                    flushPage()
-                }
-            }
-            return@forEachIndexed
-        }
-
-        val blockHeight = resolveStaticLayoutHeight(layout)
-        var startLine = 0
-        var isFirstSliceOfBlock = true
-
-        while (startLine < layout.lineCount) {
-            val spacingBefore = if (currentPage.isNotEmpty() && isFirstSliceOfBlock) {
-                paragraphSpacingPx.coerceAtLeast(0)
-            } else {
-                0
-            }
-
-            if (remainingHeight <= spacingBefore) {
-                flushPage()
-                continue
-            }
-
-            if (
-                currentPage.isNotEmpty() &&
-                isFirstSliceOfBlock &&
-                blockHeight <= safeHeight &&
-                blockHeight + spacingBefore > remainingHeight
-            ) {
-                flushPage()
-                continue
-            }
-
-            val slice = resolveStaticLayoutSliceForHeight(
-                text = blockText.text.text,
-                layout = layout,
-                startLine = startLine,
-                availableHeight = remainingHeight - spacingBefore,
-            )
-
-            if (slice == null) {
-                flushPage()
-                continue
-            }
-
-            currentPage += RichPageSlice(blockIndex = blockIndex, range = slice.range)
-            remainingHeight -= spacingBefore + slice.heightPx
-            startLine = slice.nextStartLine
-            isFirstSliceOfBlock = false
-
-            if (remainingHeight <= 0) {
-                flushPage()
-            }
-        }
-    }
-
-    flushPage()
-    return pages
-}
-
-internal fun buildPlainPageRenderBlocks(
-    page: List<PlainPageSlice>,
-    textBlocks: List<String>,
-    paragraphSpacingPx: Int,
-    forceParagraphIndent: Boolean,
-    chapterTitle: String? = null,
-): List<PlainPageRenderBlock> {
-    if (page.isEmpty()) return emptyList()
-    return page.mapIndexed { index, slice ->
-        val previousBlockIndex = page.getOrNull(index - 1)?.blockIndex
-        val startsNewBlock = index > 0 && previousBlockIndex != slice.blockIndex
-        val fullBlockText = textBlocks[slice.blockIndex]
-        PlainPageRenderBlock(
-            text = fullBlockText.substring(slice.range.start, slice.range.endExclusive),
-            spacingBeforePx = if (startsNewBlock) paragraphSpacingPx.coerceAtLeast(0) else 0,
-            firstLineIndentEm = if (forceParagraphIndent && slice.range.start == 0) {
-                FORCED_PARAGRAPH_FIRST_LINE_INDENT_EM
-            } else {
-                null
-            },
-            isChapterTitle = chapterTitle != null &&
-                slice.blockIndex == 0 &&
-                slice.range.start == 0 &&
-                isNativeChapterTitleText(fullBlockText, chapterTitle),
-        )
-    }
-}
-
-internal fun buildRichPageRenderBlocks(
-    page: List<RichPageSlice>,
-    blockTexts: List<RichPageBlockText>,
-    paragraphSpacingPx: Int,
-    chapterTitle: String? = null,
-): List<RichPageRenderBlock> {
-    if (page.isEmpty()) return emptyList()
-    return page.mapIndexed { index, slice ->
-        val previousBlockIndex = page.getOrNull(index - 1)?.blockIndex
-        val startsNewBlock = index > 0 && previousBlockIndex != slice.blockIndex
-        val blockText = blockTexts[slice.blockIndex]
-        RichPageRenderBlock(
-            text = blockText.text.subSequence(TextRange(slice.range.start, slice.range.endExclusive)),
-            spacingBeforePx = if (startsNewBlock) paragraphSpacingPx.coerceAtLeast(0) else 0,
-            firstLineIndentEm = if (slice.range.start == 0) blockText.firstLineIndentEm else null,
-            sourceTextAlign = blockText.sourceTextAlign,
-            isChapterTitle = chapterTitle != null &&
-                slice.blockIndex == 0 &&
-                slice.range.start == 0 &&
-                isNativeChapterTitleText(blockText.text.text, chapterTitle),
-        )
-    }
-}
-
-internal fun normalizePageReaderContentPages(
-    useRichPageReader: Boolean,
-    plainPages: List<List<PlainPageSlice>>,
-    richPages: List<List<RichPageSlice>>,
-    plainTextBlocks: List<String>,
-    richBlockTexts: List<RichPageBlockText>,
-    paragraphSpacingPx: Int,
-    forceParagraphIndent: Boolean,
-    chapterTitle: String? = null,
-): List<NovelPageContentPage> {
-    return if (useRichPageReader) {
-        richPages.map { page ->
-            NovelPageContentPage(
-                blocks = buildRichPageRenderBlocks(
-                    page = page,
-                    blockTexts = richBlockTexts,
-                    paragraphSpacingPx = paragraphSpacingPx,
-                    chapterTitle = chapterTitle,
-                ).map { block ->
-                    NovelPageContentBlock.Rich(
-                        text = block.text,
-                        spacingBeforePx = block.spacingBeforePx,
-                        firstLineIndentEm = block.firstLineIndentEm,
-                        sourceTextAlign = block.sourceTextAlign,
-                        isChapterTitle = block.isChapterTitle,
-                    )
-                },
-            )
-        }
-    } else {
-        plainPages.map { page ->
-            NovelPageContentPage(
-                blocks = buildPlainPageRenderBlocks(
-                    page = page,
-                    textBlocks = plainTextBlocks,
-                    paragraphSpacingPx = paragraphSpacingPx,
-                    forceParagraphIndent = forceParagraphIndent,
-                    chapterTitle = chapterTitle,
-                ).map { block ->
-                    NovelPageContentBlock.Plain(
-                        text = block.text,
-                        spacingBeforePx = block.spacingBeforePx,
-                        firstLineIndentEm = block.firstLineIndentEm,
-                        isChapterTitle = block.isChapterTitle,
-                    )
-                },
-            )
-        }
-    }
-}
-
-internal fun resolvePageReaderParagraphSeparator(
-    paragraphSpacingDp: Int,
-): String {
-    return if (paragraphSpacingDp.coerceIn(0, 32) >= 20) "\n\n" else "\n"
-}
-
-internal fun shouldEnableJavaScriptInReaderWebView(
-    pluginRequestsJavaScript: Boolean,
-): Boolean {
-    return pluginRequestsJavaScript
-}
-
-internal enum class RendererSettingDisableReason {
-    PAGE_MODE,
-    WEBVIEW_ACTIVE,
-    BIONIC_READING,
-}
-
-internal data class RendererSettingsAvailability(
-    val preferWebViewEnabled: Boolean,
-    val preferWebViewReason: RendererSettingDisableReason?,
-    val richNativeEnabled: Boolean,
-    val richNativeReason: RendererSettingDisableReason?,
-)
-
-internal fun resolveRendererSettingsAvailability(
-    pageReaderEnabled: Boolean,
-    showWebView: Boolean,
-    bionicReadingEnabled: Boolean,
-): RendererSettingsAvailability {
-    val preferWebViewReason = if (pageReaderEnabled) RendererSettingDisableReason.PAGE_MODE else null
-    val richNativeReason = when {
-        showWebView -> RendererSettingDisableReason.WEBVIEW_ACTIVE
-        bionicReadingEnabled -> RendererSettingDisableReason.BIONIC_READING
-        else -> null
-    }
-    return RendererSettingsAvailability(
-        preferWebViewEnabled = preferWebViewReason == null,
-        preferWebViewReason = preferWebViewReason,
-        richNativeEnabled = richNativeReason == null,
-        richNativeReason = richNativeReason,
-    )
-}
-
-internal fun areChapterSwipeControlsEnabled(
-    swipeGesturesEnabled: Boolean,
-    pageReaderEnabled: Boolean,
-): Boolean {
-    return swipeGesturesEnabled && !pageReaderEnabled
-}
-
-internal fun shouldDismissReaderSettingsDialogAfterFamilyChange(
-    family: NovelReaderSettingsFamily,
-): Boolean {
-    return false
-}
-
-internal enum class NovelReaderSettingsFamily {
-    SOURCE_ALIGNMENT_POLICY,
-    CHAPTER_CACHE_POLICY,
-    LIVE_TEXT_STYLING,
-    RENDERER_TUNING,
-}
-
-internal data class NovelReaderSettingsSurfaceStrategy(
-    val globalOnlyFamilies: Set<NovelReaderSettingsFamily>,
-    val quickDialogOnlyFamilies: Set<NovelReaderSettingsFamily>,
-)
-
-internal fun resolveNovelReaderSettingsSurfaceStrategy(): NovelReaderSettingsSurfaceStrategy {
-    return NovelReaderSettingsSurfaceStrategy(
-        globalOnlyFamilies = setOf(
-            NovelReaderSettingsFamily.SOURCE_ALIGNMENT_POLICY,
-            NovelReaderSettingsFamily.CHAPTER_CACHE_POLICY,
-        ),
-        quickDialogOnlyFamilies = setOf(
-            NovelReaderSettingsFamily.LIVE_TEXT_STYLING,
-            NovelReaderSettingsFamily.RENDERER_TUNING,
-        ),
-    )
-}
-
-internal fun areQuickDialogKindleDependentControlsEnabled(
-    showKindleInfoBlock: Boolean,
-): Boolean {
-    return showKindleInfoBlock
-}
-
-internal fun verticalSeekbarLabels(
-    readingProgressPercent: Int,
-    showScrollPercentage: Boolean,
-): Pair<String?, String?> {
-    if (!showScrollPercentage) return null to null
-    val clamped = readingProgressPercent.coerceIn(0, 100)
-    return clamped.toString() to "100"
-}
-
-internal data class ReaderBackgroundSelection(
-    val source: NovelReaderBackgroundSource,
-    val preset: NovelReaderBackgroundPreset,
-    val customId: String?,
-    val customPath: String?,
-    val customIsDarkHint: Boolean?,
-)
-
-private const val READER_BACKGROUND_PRESET_URL_PREFIX = "https://reader-background.local/preset/"
-private const val READER_BACKGROUND_CUSTOM_URL = "https://reader-background.local/custom"
-private const val READER_FONT_USER_URL_PREFIX = "https://reader-font.local/user/"
-
-internal fun resolveReaderBackgroundSelection(
-    backgroundSource: NovelReaderBackgroundSource,
-    backgroundPresetId: String,
-    customBackgroundPath: String,
-    customBackgroundExists: Boolean,
-    customBackgroundId: String = "",
-    customBackgroundItems: List<NovelReaderCustomBackgroundItem> = emptyList(),
-): ReaderBackgroundSelection {
-    val fallbackPreset = novelReaderBackgroundPresets.first()
-    val preset = novelReaderBackgroundPresets
-        .firstOrNull { it.id == backgroundPresetId }
-        ?: fallbackPreset
-    val selectedCustomFromCatalog = customBackgroundItems.firstOrNull { item ->
-        item.id == customBackgroundId &&
-            item.absolutePath.isNotBlank()
-    }
-    val hasLegacyCustom = backgroundSource == NovelReaderBackgroundSource.CUSTOM &&
-        customBackgroundPath.isNotBlank() &&
-        customBackgroundExists
-    return if (backgroundSource == NovelReaderBackgroundSource.CUSTOM && selectedCustomFromCatalog != null) {
-        ReaderBackgroundSelection(
-            source = NovelReaderBackgroundSource.CUSTOM,
-            preset = preset,
-            customId = selectedCustomFromCatalog.id,
-            customPath = selectedCustomFromCatalog.absolutePath,
-            customIsDarkHint = selectedCustomFromCatalog.isDarkHint,
-        )
-    } else if (hasLegacyCustom) {
-        ReaderBackgroundSelection(
-            source = NovelReaderBackgroundSource.CUSTOM,
-            preset = preset,
-            customId = customBackgroundId.ifBlank { customBackgroundPath },
-            customPath = customBackgroundPath,
-            customIsDarkHint = null,
-        )
-    } else {
-        ReaderBackgroundSelection(
-            source = NovelReaderBackgroundSource.PRESET,
-            preset = preset,
-            customId = null,
-            customPath = null,
-            customIsDarkHint = null,
-        )
-    }
-}
-
-internal fun resolveReaderTextColorForBackgroundMode(averageLuminance: Float): Color {
-    return if (averageLuminance >= 0.55f) {
-        Color(0xFF111111)
-    } else {
-        Color(0xFFEDEDED)
-    }
-}
-
-internal fun resolveReaderBackgroundWebImageUrl(selection: ReaderBackgroundSelection): String {
-    return when (selection.source) {
-        NovelReaderBackgroundSource.PRESET -> "$READER_BACKGROUND_PRESET_URL_PREFIX${selection.preset.id}"
-        NovelReaderBackgroundSource.CUSTOM -> {
-            val selectedId = selection.customId.orEmpty()
-            if (selectedId.isBlank()) {
-                READER_BACKGROUND_CUSTOM_URL
-            } else {
-                "$READER_BACKGROUND_CUSTOM_URL?id=${selectedId.encodeUrlParam()}"
-            }
-        }
-    }
-}
-
-internal fun resolveReaderBackgroundIdentity(selection: ReaderBackgroundSelection): String {
-    return when (selection.source) {
-        NovelReaderBackgroundSource.PRESET -> "preset:${selection.preset.id}"
-        NovelReaderBackgroundSource.CUSTOM -> "custom:${selection.customId ?: selection.customPath.orEmpty()}"
-    }
-}
-
-private fun resolveReaderBackgroundWebResourceResponse(
-    requestUrl: String,
-    context: Context,
-    selection: ReaderBackgroundSelection,
-): WebResourceResponse? {
-    if (requestUrl.startsWith(READER_BACKGROUND_PRESET_URL_PREFIX)) {
-        val requestedPresetId = requestUrl
-            .removePrefix(READER_BACKGROUND_PRESET_URL_PREFIX)
-            .substringBefore('?')
-        val requestedPreset = novelReaderBackgroundPresets
-            .firstOrNull { it.id == requestedPresetId }
-            ?: selection.preset
-        return runCatching {
-            WebResourceResponse(
-                "image/jpeg",
-                null,
-                context.resources.openRawResource(requestedPreset.imageResId),
-            )
-        }.getOrNull()
-    }
-    if (!requestUrl.startsWith(READER_BACKGROUND_CUSTOM_URL)) return null
-    val customPath = selection.customPath ?: return null
-    val customFile = File(customPath)
-    if (!customFile.exists() || !customFile.isFile) return null
-    val mimeType = URLConnection.guessContentTypeFromName(customFile.name) ?: "image/*"
-    return runCatching {
-        WebResourceResponse(
-            mimeType,
-            null,
-            customFile.inputStream(),
-        )
-    }.getOrNull()
-}
-
-internal fun loadNovelReaderTypeface(
-    context: Context,
-    font: NovelReaderFontOption,
-    forceBoldText: Boolean = false,
-    forceItalicText: Boolean = false,
-): android.graphics.Typeface? {
-    val baseTypeface = runCatching {
-        when (font.source) {
-            NovelReaderFontSource.BUILT_IN -> font.fontResId?.let { ResourcesCompat.getFont(context, it) }
-            NovelReaderFontSource.LOCAL_PRIVATE -> {
-                if (font.assetPath.isBlank()) {
-                    null
-                } else {
-                    android.graphics.Typeface.createFromAsset(context.assets, font.assetPath)
-                }
-            }
-            NovelReaderFontSource.USER_IMPORTED ->
-                font.filePath
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { android.graphics.Typeface.createFromFile(it) }
-        }
-    }.getOrNull()
-    return resolveForcedReaderTypeface(
-        typeface = baseTypeface,
-        forceBoldText = forceBoldText,
-        forceItalicText = forceItalicText,
-    )
-}
-
-internal fun resolveForcedReaderTypeface(
-    typeface: android.graphics.Typeface?,
-    forceBoldText: Boolean,
-    forceItalicText: Boolean,
-): android.graphics.Typeface? {
-    if (typeface == null) return null
-    val style = resolveForcedReaderTypefaceStyle(forceBoldText, forceItalicText)
-    return android.graphics.Typeface.create(typeface, style)
-}
-
-internal fun resolveForcedReaderTypefaceStyle(
-    forceBoldText: Boolean,
-    forceItalicText: Boolean,
-): Int {
-    return when {
-        forceBoldText && forceItalicText -> android.graphics.Typeface.BOLD_ITALIC
-        forceBoldText -> android.graphics.Typeface.BOLD
-        forceItalicText -> android.graphics.Typeface.ITALIC
-        else -> android.graphics.Typeface.NORMAL
-    }
-}
-
-internal fun resolveNovelReaderComposeFontFamily(
-    font: NovelReaderFontOption,
-    typeface: android.graphics.Typeface?,
-): FontFamily? {
-    return when (font.source) {
-        NovelReaderFontSource.BUILT_IN -> font.fontResId?.let { FontFamily(Font(it)) }
-        NovelReaderFontSource.LOCAL_PRIVATE,
-        NovelReaderFontSource.USER_IMPORTED,
-        -> typeface?.let { FontFamily(it) }
-    }
-}
-
-internal fun buildNovelReaderFontFaceCss(font: NovelReaderFontOption): String {
-    val fontFamilyName = font.id.takeIf { it.isNotBlank() } ?: return ""
-    val fontUrl = when (font.source) {
-        NovelReaderFontSource.BUILT_IN,
-        NovelReaderFontSource.LOCAL_PRIVATE,
-        -> font.assetPath.takeIf {
-            it.isNotBlank()
-        }?.let { "file:///android_asset/${encodeReaderFontUrlPath(it, preserveSlashes = true)}" }
-        NovelReaderFontSource.USER_IMPORTED ->
-            font.filePath
-                ?.takeIf { it.isNotBlank() }
-                ?.let { "$READER_FONT_USER_URL_PREFIX${encodeReaderFontUrlPath(File(it).name)}" }
-    } ?: return ""
-    return """
-        @font-face {
-            font-family: '$fontFamilyName';
-            src: url('$fontUrl');
-        }
-    """.trimIndent()
-}
-
-private fun resolveReaderFontWebResourceResponse(
-    requestUrl: String,
-    selectedFont: NovelReaderFontOption,
-): WebResourceResponse? {
-    if (!requestUrl.startsWith(READER_FONT_USER_URL_PREFIX)) return null
-    if (selectedFont.source != NovelReaderFontSource.USER_IMPORTED) return null
-    val filePath = selectedFont.filePath ?: return null
-    val fontFile = File(filePath)
-    if (!fontFile.exists() || !fontFile.isFile) return null
-    val requestedFileName = requestUrl
-        .removePrefix(READER_FONT_USER_URL_PREFIX)
-        .substringBefore('?')
-    if (encodeReaderFontUrlPath(fontFile.name) != requestedFileName) return null
-    val mimeType = when {
-        fontFile.name.endsWith(".otf", ignoreCase = true) -> "font/otf"
-        else -> "font/ttf"
-    }
-    return runCatching {
-        WebResourceResponse(
-            mimeType,
-            null,
-            fontFile.inputStream(),
-        )
-    }.getOrNull()
-}
-
-private fun encodeReaderFontUrlPath(
-    value: String,
-    preserveSlashes: Boolean = false,
-): String {
-    return if (!preserveSlashes) {
-        URLEncoder.encode(value, Charsets.UTF_8).replace("+", "%20")
-    } else {
-        value.split('/')
-            .joinToString("/") { segment ->
-                URLEncoder.encode(segment, Charsets.UTF_8).replace("+", "%20")
-            }
-    }
-}
-
-private fun String.encodeUrlParam(): String {
-    return URLEncoder.encode(this, StandardCharsets.UTF_8.name())
-}
-
-internal fun buildWebReaderCssFingerprint(
-    chapterId: Long,
-    paddingTop: Int,
-    paddingBottom: Int,
-    paddingHorizontal: Int,
-    fontSizePx: Int,
-    lineHeightMultiplier: Float,
-    paragraphSpacingPx: Int,
-    textAlignCss: String?,
-    firstLineIndentCss: String?,
-    textColorHex: String,
-    backgroundHex: String,
-    appearanceMode: NovelReaderAppearanceMode,
-    backgroundTexture: NovelReaderBackgroundTexture,
-    oledEdgeGradient: Boolean,
-    backgroundImageIdentity: String?,
-    fontFamilyName: String?,
-    customCss: String,
-    textShadowCss: String?,
-    forceBoldText: Boolean,
-    forceItalicText: Boolean,
-): String {
-    return buildString {
-        append(chapterId)
-        append('|').append(paddingTop)
-        append('|').append(paddingBottom)
-        append('|').append(paddingHorizontal)
-        append('|').append(fontSizePx)
-        append('|').append(lineHeightMultiplier)
-        append('|').append(paragraphSpacingPx)
-        append('|').append(textAlignCss ?: "<site>")
-        append('|').append(firstLineIndentCss ?: "<site>")
-        append('|').append(textColorHex)
-        append('|').append(backgroundHex)
-        append('|').append(appearanceMode.name)
-        append('|').append(backgroundTexture.name)
-        append('|').append(oledEdgeGradient)
-        append('|').append(backgroundImageIdentity ?: "<none>")
-        append('|').append(fontFamilyName.orEmpty())
-        append('|').append(customCss)
-        append('|').append(textShadowCss ?: "<none>")
-        append('|').append(forceBoldText)
-        append('|').append(forceItalicText)
-    }
-}
-
-internal enum class VerticalChapterSwipeAction {
-    NONE,
-    NEXT,
-    PREVIOUS,
-}
-
-internal enum class HorizontalChapterSwipeAction {
-    NONE,
-    NEXT,
-    PREVIOUS,
-}
-
-internal fun resolveHorizontalChapterSwipeAction(
-    swipeGesturesEnabled: Boolean,
-    deltaX: Float,
-    deltaY: Float,
-    thresholdPx: Float,
-    hasPreviousChapter: Boolean,
-    hasNextChapter: Boolean,
-): HorizontalChapterSwipeAction {
-    if (!swipeGesturesEnabled) return HorizontalChapterSwipeAction.NONE
-    if (abs(deltaX) <= abs(deltaY)) return HorizontalChapterSwipeAction.NONE
-    if (deltaX > thresholdPx && hasPreviousChapter) return HorizontalChapterSwipeAction.PREVIOUS
-    if (deltaX < -thresholdPx && hasNextChapter) return HorizontalChapterSwipeAction.NEXT
-    return HorizontalChapterSwipeAction.NONE
-}
-
-internal fun resolveVerticalChapterSwipeAction(
-    swipeGesturesEnabled: Boolean,
-    swipeToNextChapter: Boolean,
-    swipeToPrevChapter: Boolean,
-    deltaX: Float,
-    deltaY: Float,
-    minSwipeDistancePx: Float,
-    horizontalTolerancePx: Float,
-    gestureDurationMillis: Long,
-    minHoldDurationMillis: Long,
-    wasNearChapterEndAtDown: Boolean,
-    wasNearChapterStartAtDown: Boolean,
-    isNearChapterEnd: Boolean,
-    isNearChapterStart: Boolean,
-): VerticalChapterSwipeAction {
-    if (!swipeGesturesEnabled) return VerticalChapterSwipeAction.NONE
-    if (gestureDurationMillis < minHoldDurationMillis) return VerticalChapterSwipeAction.NONE
-
-    val absX = abs(deltaX)
-    val absY = abs(deltaY)
-    if (absY < minSwipeDistancePx) return VerticalChapterSwipeAction.NONE
-    if (absY <= absX + horizontalTolerancePx) return VerticalChapterSwipeAction.NONE
-
-    if (swipeToNextChapter && deltaY < 0f && wasNearChapterEndAtDown && isNearChapterEnd) {
-        return VerticalChapterSwipeAction.NEXT
-    }
-    if (swipeToPrevChapter && deltaY > 0f && wasNearChapterStartAtDown && isNearChapterStart) {
-        return VerticalChapterSwipeAction.PREVIOUS
-    }
-    return VerticalChapterSwipeAction.NONE
-}
-
-internal fun resolveWebViewVerticalChapterSwipeAction(
-    swipeGesturesEnabled: Boolean,
-    swipeToNextChapter: Boolean,
-    swipeToPrevChapter: Boolean,
-    deltaX: Float,
-    deltaY: Float,
-    minSwipeDistancePx: Float,
-    horizontalTolerancePx: Float,
-    gestureDurationMillis: Long,
-    minHoldDurationMillis: Long,
-    wasNearChapterEndAtDown: Boolean,
-    wasNearChapterStartAtDown: Boolean,
-    isNearChapterEnd: Boolean,
-    isNearChapterStart: Boolean,
-): VerticalChapterSwipeAction {
-    if (!swipeGesturesEnabled) return VerticalChapterSwipeAction.NONE
-    if (gestureDurationMillis < minHoldDurationMillis) return VerticalChapterSwipeAction.NONE
-
-    val absX = abs(deltaX)
-    val absY = abs(deltaY)
-    if (absY < minSwipeDistancePx) return VerticalChapterSwipeAction.NONE
-    if (absY <= absX + horizontalTolerancePx) return VerticalChapterSwipeAction.NONE
-
-    if (swipeToNextChapter && deltaY < 0f && wasNearChapterEndAtDown && isNearChapterEnd) {
-        return VerticalChapterSwipeAction.NEXT
-    }
-    if (swipeToPrevChapter && deltaY > 0f && wasNearChapterStartAtDown && isNearChapterStart) {
-        return VerticalChapterSwipeAction.PREVIOUS
-    }
-    return VerticalChapterSwipeAction.NONE
-}
-
-internal fun resolveReaderContentPaddingPx(
-    showReaderUi: Boolean,
-    basePaddingPx: Int,
-): Int {
-    return basePaddingPx
-}
-
-internal fun resolveWebViewPaddingTopPx(
-    statusBarHeightPx: Int,
-    @Suppress("UNUSED_PARAMETER") showReaderUi: Boolean,
-    @Suppress("UNUSED_PARAMETER") appBarHeightPx: Int,
-    basePaddingPx: Int,
-    maxStatusBarInsetPx: Int = Int.MAX_VALUE,
-): Int {
-    val safeStatusInset = statusBarHeightPx
-        .coerceAtLeast(0)
-        .coerceAtMost(maxStatusBarInsetPx.coerceAtLeast(0))
-    return safeStatusInset + basePaddingPx.coerceAtLeast(0)
-}
-
-internal fun resolveWebViewTextAlignCss(
-    textAlign: ReaderTextAlign,
-): String? {
-    return when (textAlign) {
-        ReaderTextAlign.SOURCE -> null
-        ReaderTextAlign.LEFT -> "left"
-        ReaderTextAlign.CENTER -> "center"
-        ReaderTextAlign.JUSTIFY -> "justify"
-        ReaderTextAlign.RIGHT -> "right"
-    }
-}
-
-internal fun resolveWebViewFirstLineIndentCss(
-    forceParagraphIndent: Boolean,
-): String? {
-    return if (forceParagraphIndent) {
-        "${FORCED_PARAGRAPH_FIRST_LINE_INDENT_EM}em"
-    } else {
-        null
-    }
-}
-
-internal fun resolveAutoReaderShadowColor(
-    customShadowColor: Color?,
-    textColor: Color,
-    backgroundColor: Color,
-): Color {
-    if (customShadowColor != null) return customShadowColor
-    val prefersLightShadow = backgroundColor.luminance() < 0.5f || textColor.luminance() > 0.5f
-    return if (prefersLightShadow) {
-        Color.White.copy(alpha = 0.55f)
-    } else {
-        Color.Black.copy(alpha = 0.55f)
-    }
-}
-
-internal fun resolveWebReaderTextShadowCss(
-    textShadowEnabled: Boolean,
-    textShadowColor: String,
-    textShadowBlur: Float,
-    textShadowX: Float,
-    textShadowY: Float,
-    textColor: Color,
-    backgroundColor: Color,
-): String? {
-    if (!textShadowEnabled) return null
-    val customColor = parseReaderColor(textShadowColor)
-    val shadowColor = resolveAutoReaderShadowColor(
-        customShadowColor = customColor,
-        textColor = textColor,
-        backgroundColor = backgroundColor,
-    )
-    val blur = textShadowBlur.coerceAtLeast(0f)
-    return "${formatCssPixel(
-        textShadowX,
-    )} ${formatCssPixel(textShadowY)} ${formatCssPixel(blur)} ${colorToCssRgba(shadowColor)}"
-}
-
-internal fun resolvePageEdgeShadowColor(
-    pageEdgeShadowAlpha: Float,
-    backgroundColor: Color,
-): Color {
-    val alpha = pageEdgeShadowAlpha.coerceIn(0.05f, 1f)
-    return if (backgroundColor.luminance() < 0.5f) {
-        Color.White.copy(alpha = alpha * 0.35f)
-    } else {
-        Color.Black.copy(alpha = alpha)
-    }
-}
-
-private fun formatCssPixel(value: Float): String {
-    val rounded = ((value * 10f).roundToInt()) / 10f
-    return if (abs(rounded - rounded.roundToInt().toFloat()) < 0.001f) {
-        "${rounded.roundToInt()}px"
-    } else {
-        String.format(Locale.US, "%.1fpx", rounded)
-    }
-}
-
-private fun colorToCssRgba(color: Color): String {
-    val red = (color.red * 255f).roundToInt().coerceIn(0, 255)
-    val green = (color.green * 255f).roundToInt().coerceIn(0, 255)
-    val blue = (color.blue * 255f).roundToInt().coerceIn(0, 255)
-    val alpha = color.alpha.coerceIn(0f, 1f)
-    return String.format(Locale.US, "rgba(%d,%d,%d,%.3f)", red, green, blue, alpha)
-}
-
-@Composable
-private fun NovelRichNativeScrollItem(
-    block: NovelRichContentBlock,
-    index: Int,
-    lastIndex: Int,
-    chapterTitle: String,
-    novelTitle: String,
-    sourceId: Long,
-    chapterWebUrl: String?,
-    novelUrl: String?,
-    statusBarTopPadding: androidx.compose.ui.unit.Dp,
-    textColor: Color,
-    backgroundColor: Color,
-    fontSize: Int,
-    lineHeight: Float,
-    composeFontFamily: FontFamily?,
-    chapterTitleFontFamily: FontFamily?,
-    paragraphSpacing: androidx.compose.ui.unit.Dp,
-    textAlign: ReaderTextAlign,
-    forceParagraphIndent: Boolean,
-    preserveSourceTextAlignInNative: Boolean,
-    forceBoldText: Boolean,
-    forceItalicText: Boolean,
-    textShadow: Boolean,
-    textShadowColor: String,
-    textShadowBlur: Float,
-    textShadowX: Float,
-    textShadowY: Float,
-) {
-    val context = LocalContext.current
-    val textShadowImpl = remember(
-        textShadow,
-        textShadowColor,
-        textShadowBlur,
-        textShadowX,
-        textShadowY,
-        textColor,
-        backgroundColor,
-    ) {
-        if (textShadow) {
-            val customColor = parseReaderColor(textShadowColor)
-            val shadowColor = resolveAutoReaderShadowColor(
-                customShadowColor = customColor,
-                textColor = textColor,
-                backgroundColor = backgroundColor,
-            )
-            Shadow(
-                color = shadowColor,
-                offset = androidx.compose.ui.geometry.Offset(textShadowX, textShadowY),
-                blurRadius = textShadowBlur,
-            )
-        } else {
-            null
-        }
-    }
-    val onLinkClick: (String) -> Unit = { rawUrl ->
-        val resolvedUrl = resolveNovelReaderLinkUrl(
-            rawUrl = rawUrl,
-            chapterWebUrl = chapterWebUrl,
-            novelUrl = novelUrl,
-        )
-        if (!resolvedUrl.isNullOrBlank()) {
-            context.startActivity(
-                WebViewActivity.newIntent(
-                    context = context,
-                    url = resolvedUrl,
-                    sourceId = sourceId,
-                    title = novelTitle,
-                ),
-            )
-        }
-    }
-    when (block) {
-        is NovelRichContentBlock.Paragraph -> {
-            val text = buildNovelRichAnnotatedString(block.segments)
-            val isChapterTitle = index == 0 && isNativeChapterTitleText(text.text, chapterTitle)
-            val paragraphStyle = MaterialTheme.typography.bodyLarge.copy(
-                color = textColor,
-                fontSize = if (isChapterTitle) (fontSize * 1.12f).sp else fontSize.sp,
-                lineHeight = if (isChapterTitle) (lineHeight * 1.08f).em else lineHeight.em,
-                fontFamily = if (isChapterTitle) chapterTitleFontFamily ?: composeFontFamily else composeFontFamily,
-                fontWeight = if (isChapterTitle) {
-                    FontWeight.SemiBold
-                } else if (forceBoldText) {
-                    FontWeight.Bold
-                } else {
-                    FontWeight.Normal
-                },
-                fontStyle = if (forceItalicText) FontStyle.Italic else FontStyle.Normal,
-                shadow = textShadowImpl,
-            ).withOptionalTextAlign(
-                resolveNativeTextAlign(
-                    globalTextAlign = textAlign,
-                    preserveSourceTextAlignInNative = preserveSourceTextAlignInNative,
-                    sourceTextAlign = block.textAlign,
-                ),
-            ).withOptionalFirstLineIndentEm(
-                resolveNativeFirstLineIndentEm(
-                    forceParagraphIndent = forceParagraphIndent && !isChapterTitle,
-                    sourceFirstLineIndentEm = block.firstLineIndentEm,
-                ),
-            )
-            if (isChapterTitle) {
-                Column(
-                    modifier = Modifier.padding(
-                        top = statusBarTopPadding + 10.dp,
-                        bottom = if (index == lastIndex) 0.dp else 18.dp,
-                    ),
-                ) {
-                    NovelRichAnnotatedText(
-                        text = text,
-                        style = paragraphStyle.copy(color = MaterialTheme.colorScheme.primary),
-                        onLinkClick = onLinkClick,
-                    )
-                    Box(
-                        modifier = Modifier
-                            .padding(top = 8.dp)
-                            .fillMaxWidth(0.72f)
-                            .height(1.dp)
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
-                    )
-                }
-            } else {
-                NovelRichAnnotatedText(
-                    text = text,
-                    style = paragraphStyle,
-                    modifier = Modifier.padding(
-                        top = if (index == 0) statusBarTopPadding else 0.dp,
-                        bottom = if (index == lastIndex) 0.dp else paragraphSpacing,
-                    ),
-                    onLinkClick = onLinkClick,
-                )
-            }
-        }
-        is NovelRichContentBlock.Heading -> {
-            val headingScale = when (block.level) {
-                1 -> 1.24f
-                2 -> 1.18f
-                3 -> 1.13f
-                else -> 1.08f
-            }
-            NovelRichAnnotatedText(
-                text = buildNovelRichAnnotatedString(block.segments),
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    color = textColor,
-                    fontSize = (fontSize * headingScale).sp,
-                    lineHeight = (lineHeight * 1.1f).em,
-                    fontFamily = composeFontFamily,
-                    fontWeight = if (forceBoldText) FontWeight.Bold else FontWeight.SemiBold,
-                    fontStyle = if (forceItalicText) FontStyle.Italic else FontStyle.Normal,
-                    shadow = textShadowImpl,
-                ).withOptionalTextAlign(
-                    resolveNativeTextAlign(
-                        globalTextAlign = textAlign,
-                        preserveSourceTextAlignInNative = preserveSourceTextAlignInNative,
-                        sourceTextAlign = block.textAlign,
-                    ),
-                ),
-                modifier = Modifier.padding(
-                    top = if (index == 0) statusBarTopPadding else 4.dp,
-                    bottom = if (index == lastIndex) 0.dp else paragraphSpacing + 2.dp,
-                ),
-                onLinkClick = onLinkClick,
-            )
-        }
-        is NovelRichContentBlock.BlockQuote -> {
-            NovelRichAnnotatedText(
-                text = buildNovelRichAnnotatedString(block.segments),
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    color = textColor.copy(alpha = 0.92f),
-                    fontSize = fontSize.sp,
-                    lineHeight = lineHeight.em,
-                    fontFamily = composeFontFamily,
-                    fontWeight = if (forceBoldText) FontWeight.Bold else FontWeight.Normal,
-                    fontStyle = if (forceItalicText) FontStyle.Italic else FontStyle.Normal,
-                    shadow = textShadowImpl,
-                ).withOptionalTextAlign(
-                    resolveNativeTextAlign(
-                        globalTextAlign = textAlign,
-                        preserveSourceTextAlignInNative = preserveSourceTextAlignInNative,
-                        sourceTextAlign = block.textAlign,
-                    ),
-                ),
-                modifier = Modifier
-                    .padding(
-                        top = if (index == 0) statusBarTopPadding else 0.dp,
-                        bottom = if (index == lastIndex) 0.dp else paragraphSpacing,
-                    )
-                    .padding(start = 12.dp),
-                onLinkClick = onLinkClick,
-            )
-        }
-        NovelRichContentBlock.HorizontalRule -> {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        top = if (index == 0) statusBarTopPadding else 4.dp,
-                        bottom = if (index == lastIndex) 4.dp else paragraphSpacing + 4.dp,
-                    )
-                    .height(1.dp)
-                    .background(textColor.copy(alpha = 0.22f)),
-            )
-        }
-        is NovelRichContentBlock.Image -> {
-            val imageModel = if (NovelPluginImage.isSupported(block.url)) {
-                NovelPluginImage(block.url)
-            } else {
-                block.url
-            }
-            AsyncImage(
-                model = imageModel,
-                contentDescription = block.alt,
-                contentScale = ContentScale.FillWidth,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        top = if (index == 0) statusBarTopPadding else 0.dp,
-                        bottom = if (index == lastIndex) 0.dp else paragraphSpacing,
-                    ),
-            )
-        }
-    }
-}
-
-internal fun resolveReaderTextShadow(
-    textShadowEnabled: Boolean,
-    textShadowColor: String,
-    textShadowBlur: Float,
-    textShadowX: Float,
-    textShadowY: Float,
-    textColor: Color,
-    backgroundColor: Color,
-): Shadow? {
-    if (!textShadowEnabled) return null
-    val customColor = parseReaderColor(textShadowColor)
-    val shadowColor = resolveAutoReaderShadowColor(
-        customShadowColor = customColor,
-        textColor = textColor,
-        backgroundColor = backgroundColor,
-    )
-    return Shadow(
-        color = shadowColor,
-        offset = Offset(textShadowX, textShadowY),
-        blurRadius = textShadowBlur,
-    )
-}
-
-internal fun resolvePageReaderBaseTextStyle(
-    baseStyle: TextStyle,
-    color: Color,
-    backgroundColor: Color,
-    fontSize: Int,
-    lineHeight: Float,
-    fontFamily: FontFamily?,
-    textAlign: TextAlign?,
-    forceBoldText: Boolean,
-    forceItalicText: Boolean,
-    textShadow: Boolean,
-    textShadowColor: String,
-    textShadowBlur: Float,
-    textShadowX: Float,
-    textShadowY: Float,
-): TextStyle {
-    return baseStyle.copy(
-        color = color,
-        fontSize = fontSize.sp,
-        lineHeight = lineHeight.em,
-        fontFamily = fontFamily,
-        fontWeight = if (forceBoldText) FontWeight.Bold else FontWeight.Normal,
-        fontStyle = if (forceItalicText) FontStyle.Italic else FontStyle.Normal,
-        shadow = resolveReaderTextShadow(
-            textShadowEnabled = textShadow,
-            textShadowColor = textShadowColor,
-            textShadowBlur = textShadowBlur,
-            textShadowX = textShadowX,
-            textShadowY = textShadowY,
-            textColor = color,
-            backgroundColor = backgroundColor,
-        ),
-    ).withOptionalTextAlign(textAlign)
-}
-
-@Composable
-private fun NovelRichAnnotatedText(
-    text: AnnotatedString,
-    style: TextStyle,
-    modifier: Modifier = Modifier,
-    onLinkClick: (String) -> Unit,
-) {
-    val hasLinkAnnotations = remember(text) {
-        text.length > 0 && text.getStringAnnotations(tag = "URL", start = 0, end = text.length).isNotEmpty()
-    }
-    if (!hasLinkAnnotations) {
-        Text(
-            text = text,
-            style = style,
-            modifier = modifier,
-        )
-        return
-    }
-
-    @Suppress("DEPRECATION")
-    ClickableText(
-        text = text,
-        style = style,
-        modifier = modifier,
-        onClick = { offset ->
-            resolveNovelRichLinkAtCharOffset(text, offset)?.let(onLinkClick)
-        },
-    )
-}
-
-private fun novelReaderTextAlign(textAlign: ReaderTextAlign): TextAlign? {
-    return when (textAlign) {
-        ReaderTextAlign.SOURCE -> null
-        ReaderTextAlign.LEFT -> TextAlign.Start
-        ReaderTextAlign.CENTER -> TextAlign.Center
-        ReaderTextAlign.JUSTIFY -> TextAlign.Justify
-        ReaderTextAlign.RIGHT -> TextAlign.End
-    }
-}
-
-internal fun TextStyle.withOptionalTextAlign(textAlign: TextAlign?): TextStyle {
-    return if (textAlign == null) this else copy(textAlign = textAlign)
-}
-
-internal fun TextStyle.withOptionalFirstLineIndentEm(firstLineIndentEm: Float?): TextStyle {
-    return if (firstLineIndentEm == null) {
-        this
-    } else {
-        copy(textIndent = TextIndent(firstLine = firstLineIndentEm.em))
-    }
-}
-
-internal fun resolvePageReaderBlockTextStyle(
-    baseStyle: TextStyle,
-    isChapterTitle: Boolean,
-    fontSize: Int,
-    lineHeight: Float,
-    fontFamily: FontFamily?,
-    chapterTitleFontFamily: FontFamily?,
-): TextStyle {
-    if (!isChapterTitle) return baseStyle
-    return baseStyle.copy(
-        fontSize = (fontSize * 1.12f).sp,
-        lineHeight = (lineHeight * 1.08f).em,
-        fontFamily = chapterTitleFontFamily ?: fontFamily,
-        fontWeight = FontWeight.SemiBold,
-    )
-}
-
-internal fun resolvePageReaderLayoutTextAlign(
-    globalTextAlign: ReaderTextAlign,
-    @Suppress("UNUSED_PARAMETER") preserveSourceTextAlignInNative: Boolean,
-): ReaderTextAlign {
-    return if (globalTextAlign == ReaderTextAlign.SOURCE) {
-        // Page mode always needs a deterministic alignment for layout and pagination.
-        ReaderTextAlign.LEFT
-    } else {
-        globalTextAlign
-    }
-}
-
-internal fun resolvePageReaderRenderTextAlign(
-    globalTextAlign: ReaderTextAlign,
-): TextAlign {
-    return novelReaderTextAlign(textAlign = globalTextAlign) ?: TextAlign.Start
-}
-
-internal fun resolveNativeTextAlign(
-    globalTextAlign: ReaderTextAlign,
-    preserveSourceTextAlignInNative: Boolean,
-    sourceTextAlign: NovelRichBlockTextAlign? = null,
-): TextAlign? {
-    if (!preserveSourceTextAlignInNative) {
-        return novelReaderTextAlign(textAlign = globalTextAlign)
-    }
-    return when (sourceTextAlign) {
-        NovelRichBlockTextAlign.LEFT -> TextAlign.Start
-        NovelRichBlockTextAlign.CENTER -> TextAlign.Center
-        NovelRichBlockTextAlign.JUSTIFY -> TextAlign.Justify
-        NovelRichBlockTextAlign.RIGHT -> TextAlign.End
-        null -> novelReaderTextAlign(textAlign = globalTextAlign)
-    }
-}
-
-internal fun resolveNativeFirstLineIndentEm(
-    forceParagraphIndent: Boolean,
-    sourceFirstLineIndentEm: Float?,
-): Float? {
-    return if (forceParagraphIndent) {
-        FORCED_PARAGRAPH_FIRST_LINE_INDENT_EM
-    } else {
-        sourceFirstLineIndentEm
-    }
-}
-
-internal fun resolveNovelRichLinkAtCharOffset(
-    text: AnnotatedString,
-    offset: Int,
-): String? {
-    if (text.isEmpty()) return null
-    val clamped = offset.coerceIn(0, text.length - 1)
-    return text.getStringAnnotations(
-        tag = "URL",
-        start = clamped,
-        end = (clamped + 1).coerceAtMost(text.length),
-    ).lastOrNull()?.item
-}
-
-internal fun resolveNovelReaderLinkUrl(
-    rawUrl: String,
-    chapterWebUrl: String?,
-    novelUrl: String?,
-): String? {
-    val trimmed = rawUrl.trim()
-    if (trimmed.isBlank()) return null
-    trimmed.toHttpUrlOrNull()?.let { return it.toString() }
-    chapterWebUrl?.toHttpUrlOrNull()?.resolve(trimmed)?.let { return it.toString() }
-    novelUrl?.toHttpUrlOrNull()?.resolve(trimmed)?.let { return it.toString() }
-    return null
-}
-
-internal fun isNativeChapterTitleText(
-    blockText: String,
-    chapterName: String,
-): Boolean {
-    val normalizedBlock = blockText
-        .replace('\u00A0', ' ')
-        .replace(Regex("\\s+"), " ")
-        .trim()
-    val normalizedChapter = chapterName
-        .replace('\u00A0', ' ')
-        .replace(Regex("\\s+"), " ")
-        .trim()
-    return normalizedBlock.isNotBlank() && normalizedBlock == normalizedChapter
-}
-
-internal fun resolveWebViewPaddingBottomPx(
-    navigationBarHeightPx: Int,
-    @Suppress("UNUSED_PARAMETER") showReaderUi: Boolean,
-    @Suppress("UNUSED_PARAMETER") bottomBarHeightPx: Int,
-    basePaddingPx: Int,
-): Int {
-    return navigationBarHeightPx.coerceAtLeast(0) + basePaddingPx.coerceAtLeast(0)
-}
-
-internal fun shouldTrackWebViewProgress(
-    shouldRestoreWebScroll: Boolean,
-): Boolean {
-    return !shouldRestoreWebScroll
-}
-
-internal fun shouldDispatchWebProgressUpdate(
-    shouldRestoreWebScroll: Boolean,
-    newPercent: Int,
-    currentPercent: Int,
-): Boolean {
-    return shouldTrackWebViewProgress(shouldRestoreWebScroll) && newPercent != currentPercent
-}
-
-internal fun resolveWebViewTotalScrollablePx(
-    contentHeightPx: Int,
-    viewHeightPx: Int,
-): Int {
-    return (contentHeightPx - viewHeightPx).coerceAtLeast(0)
-}
-
-internal fun resolveWebViewScrollProgressPercent(
-    scrollY: Int,
-    totalScrollable: Int,
-): Int {
-    if (totalScrollable <= 0) return 0
-    val ratio = scrollY.toFloat() / totalScrollable.toFloat()
-    return (ratio * 100f).roundToInt().coerceIn(0, 100)
-}
-
-internal fun resolveFinalWebViewProgressPercent(
-    resolvedPercent: Int?,
-    cachedPercent: Int,
-): Int {
-    val safeCached = cachedPercent.coerceIn(0, 100)
-    val safeResolved = resolvedPercent?.coerceIn(0, 100) ?: return safeCached
-    if (safeResolved == 0 && safeCached > 0) {
-        return safeCached
-    }
-    return safeResolved
-}
-
-internal fun resolveNativeScrollProgressForTracking(
-    firstVisibleItemIndex: Int,
-    textBlocksCount: Int,
-    canScrollForward: Boolean,
-): Pair<Int, Int> {
-    val normalizedCount = textBlocksCount.coerceAtLeast(0)
-    val normalizedIndex = firstVisibleItemIndex.coerceAtLeast(0)
-    if (normalizedCount <= 1) {
-        return if (canScrollForward) 0 to 2 else 1 to 2
-    }
-    if (!canScrollForward) {
-        return (normalizedCount - 1) to normalizedCount
-    }
-    return normalizedIndex.coerceAtMost(normalizedCount - 1) to normalizedCount
-}
-
-internal fun resolveReaderUiAfterChapterChange(
-    currentShowReaderUi: Boolean,
-    usePageReader: Boolean,
-): Boolean {
-    return if (usePageReader) false else currentShowReaderUi
-}
-
 @Composable
 private fun rememberBatteryLevel(context: Context): State<Int> {
     val batteryLevelState = remember(context) { mutableIntStateOf(readBatteryLevel(context)) }
@@ -7028,436 +4306,6 @@ private fun rememberCurrentTimeText(context: Context): State<String> {
     }
 
     return timeState
-}
-
-private fun readBatteryLevel(
-    context: Context,
-    batteryIntent: Intent? = null,
-): Int {
-    val levelFromIntent = resolveBatteryLevelPercent(
-        level = batteryIntent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1,
-        scale = batteryIntent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1,
-    )
-    if (levelFromIntent != null) return levelFromIntent
-
-    val manager = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
-    val directLevel = manager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
-    if (directLevel in 0..100) return directLevel
-
-    val fallbackIntent = batteryIntent ?: context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-    resolveBatteryLevelPercent(
-        level = fallbackIntent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1,
-        scale = fallbackIntent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1,
-    )?.let { return it }
-    return 100
-}
-
-internal fun resolveBatteryLevelPercent(
-    level: Int,
-    scale: Int,
-): Int? {
-    if (level < 0 || scale <= 0) return null
-    return ((level * 100f) / scale.toFloat()).roundToInt().coerceIn(0, 100)
-}
-
-private fun currentTimeString(context: Context): String {
-    return DateFormat.getTimeFormat(context).format(Date())
-}
-
-private fun sampleReaderBackgroundLuminance(path: String): Float? {
-    return runCatching {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(path, bounds)
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
-        val maxDimension = max(bounds.outWidth, bounds.outHeight).coerceAtLeast(1)
-        val sampleSize = (maxDimension / 96).coerceAtLeast(1)
-        val options = BitmapFactory.Options().apply {
-            inSampleSize = sampleSize
-            inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
-        }
-        val sampled = BitmapFactory.decodeFile(path, options) ?: return@runCatching null
-        try {
-            val width = sampled.width.coerceAtLeast(1)
-            val height = sampled.height.coerceAtLeast(1)
-            val stepX = (width / 12).coerceAtLeast(1)
-            val stepY = (height / 12).coerceAtLeast(1)
-            var luminanceSum = 0f
-            var sampledPixels = 0
-            var x = 0
-            while (x < width) {
-                var y = 0
-                while (y < height) {
-                    val pixel = sampled.getPixel(x, y)
-                    val color = Color(pixel)
-                    luminanceSum += color.luminance()
-                    sampledPixels++
-                    y += stepY
-                }
-                x += stepX
-            }
-            if (sampledPixels == 0) null else (luminanceSum / sampledPixels).coerceIn(0f, 1f)
-        } finally {
-            sampled.recycle()
-        }
-    }.getOrNull()
-}
-
-private fun parseReaderColor(value: String?): Color? {
-    val normalized = value?.trim().orEmpty()
-    if (normalized.isBlank()) return null
-    val hex = normalized.removePrefix("#")
-    return when (hex.length) {
-        6 -> runCatching {
-            val rgb = hex.toLong(16).toInt()
-            val argb = (0xFF shl 24) or rgb
-            Color(argb)
-        }.getOrNull()
-        8 -> {
-            // Accept both #AARRGGBB (Android) and #RRGGBBAA (CSS-style).
-            runCatching {
-                val packed = hex.toLong(16).toInt()
-                val argbAlpha = (packed ushr 24) and 0xFF
-                val rgbaAlpha = packed and 0xFF
-                val shouldTreatAsArgb = when {
-                    argbAlpha == 0 && rgbaAlpha > 0 -> false
-                    rgbaAlpha == 0 && argbAlpha > 0 -> true
-                    else -> true
-                }
-                if (shouldTreatAsArgb) {
-                    Color(packed)
-                } else {
-                    val rr = (packed shr 24) and 0xFF
-                    val gg = (packed shr 16) and 0xFF
-                    val bb = (packed shr 8) and 0xFF
-                    val aa = packed and 0xFF
-                    Color((aa shl 24) or (rr shl 16) or (gg shl 8) or bb)
-                }
-            }.getOrNull()
-        }
-        else -> runCatching { Color(AndroidColor.parseColor(normalized)) }.getOrNull()
-    }
-}
-
-internal fun parseReaderColorForTest(value: String?): Color? = parseReaderColor(value)
-
-internal fun colorToCssHex(color: Color): String {
-    val argb = color.toArgb()
-    val alpha = (argb shr 24) and 0xFF
-    val red = (argb shr 16) and 0xFF
-    val green = (argb shr 8) and 0xFF
-    val blue = argb and 0xFF
-    return if (alpha == 0xFF) {
-        String.format(Locale.US, "#%02X%02X%02X", red, green, blue)
-    } else {
-        String.format(Locale.US, "#%02X%02X%02X%02X", red, green, blue, alpha)
-    }
-}
-
-internal fun intervalToAutoScrollSpeed(intervalSeconds: Int): Int {
-    val clamped = intervalSeconds.coerceIn(1, 60)
-    val normalized = (60 - clamped).toFloat() / 59f
-    return (1f + normalized * 99f).roundToInt().coerceIn(1, 100)
-}
-
-internal fun autoScrollSpeedToInterval(speed: Int): Int {
-    val clamped = speed.coerceIn(1, 100)
-    val normalized = (clamped - 1).toFloat() / 99f
-    return (60f - normalized * 59f).roundToInt().coerceIn(1, 60)
-}
-
-internal fun autoScrollPageDelayMs(speed: Int): Long {
-    val clamped = speed.coerceIn(1, 100)
-    return (10_000 - (clamped - 1) * 80).toLong().coerceIn(2_000L, 10_000L)
-}
-
-internal fun autoScrollScrollStepPx(speed: Int): Float {
-    val clamped = speed.coerceIn(1, 100)
-    return 1.5f + (clamped - 1) * (8.5f / 99f)
-}
-
-internal fun autoScrollFrameStepPx(
-    speed: Int,
-    frameDeltaNanos: Long,
-): Float {
-    val baseStepPx = autoScrollScrollStepPx(speed)
-    val normalizedDelta = frameDeltaNanos.coerceIn(1L, 250_000_000L).toFloat() / 16_000_000f
-    return (baseStepPx * normalizedDelta).coerceAtLeast(0.05f)
-}
-
-internal data class AutoScrollStepResult(
-    val stepPx: Int,
-    val remainderPx: Float,
-)
-
-internal data class AutoScrollUiState(
-    val autoScrollEnabled: Boolean,
-    val showReaderUi: Boolean,
-    val autoScrollExpanded: Boolean,
-)
-
-internal fun resolveAutoScrollUiStateOnToggle(
-    currentEnabled: Boolean,
-    showReaderUi: Boolean,
-    autoScrollExpanded: Boolean,
-): AutoScrollUiState {
-    val toggledEnabled = !currentEnabled
-    return if (toggledEnabled) {
-        AutoScrollUiState(
-            autoScrollEnabled = true,
-            showReaderUi = false,
-            autoScrollExpanded = false,
-        )
-    } else {
-        AutoScrollUiState(
-            autoScrollEnabled = false,
-            showReaderUi = showReaderUi,
-            autoScrollExpanded = autoScrollExpanded,
-        )
-    }
-}
-
-internal fun resolveInitialAutoScrollEnabled(
-    @Suppress("UNUSED_PARAMETER")
-    savedPreferenceEnabled: Boolean,
-): Boolean {
-    return false
-}
-
-internal fun resolveAutoScrollStep(
-    frameStepPx: Float,
-    previousRemainderPx: Float,
-): AutoScrollStepResult {
-    val totalStep = frameStepPx.coerceAtLeast(0f) + previousRemainderPx.coerceAtLeast(0f)
-    val stepPx = totalStep.toInt().coerceAtLeast(0)
-    return AutoScrollStepResult(
-        stepPx = stepPx,
-        remainderPx = totalStep - stepPx,
-    )
-}
-
-internal data class TextPageRange(
-    val start: Int,
-    val endExclusive: Int,
-)
-
-internal fun paginateTextIntoPageRanges(
-    text: String,
-    widthPx: Int,
-    heightPx: Int,
-    textSizePx: Float,
-    lineHeightMultiplier: Float,
-    typeface: android.graphics.Typeface?,
-    textAlign: ReaderTextAlign,
-): List<TextPageRange> {
-    if (text.isBlank()) return emptyList()
-
-    val safeWidth = widthPx.coerceAtLeast(1)
-    val safeHeight = heightPx.coerceAtLeast(1)
-
-    val layout = buildReaderStaticLayout(
-        text = text,
-        widthPx = safeWidth,
-        textSizePx = textSizePx,
-        lineHeightMultiplier = lineHeightMultiplier,
-        typeface = typeface,
-        textAlign = textAlign,
-    ) ?: run {
-        val safeTextSize = textSizePx.coerceAtLeast(1f)
-        val approxCharsPerLine = (safeWidth / (safeTextSize * 0.55f)).toInt().coerceAtLeast(15)
-        val approxLinesPerPage = (safeHeight / (safeTextSize * lineHeightMultiplier.coerceAtLeast(1f)))
-            .toInt()
-            .coerceAtLeast(8)
-        val chunkSize = (approxCharsPerLine * approxLinesPerPage).coerceAtLeast(120)
-        val ranges = mutableListOf<TextPageRange>()
-        var start = 0
-        while (start < text.length) {
-            val end = (start + chunkSize).coerceAtMost(text.length)
-            val trimmed = trimTextRange(text, start, end)
-            if (trimmed != null) ranges += trimmed
-            start = end
-        }
-        return ranges
-    }
-
-    if (layout.lineCount <= 0) return listOf(TextPageRange(0, text.length))
-
-    val ranges = mutableListOf<TextPageRange>()
-    var startLine = 0
-    while (startLine < layout.lineCount) {
-        val slice = resolveStaticLayoutSliceForHeight(
-            text = text,
-            layout = layout,
-            startLine = startLine,
-            availableHeight = safeHeight,
-        ) ?: break
-        ranges += slice.range
-        startLine = slice.nextStartLine
-    }
-
-    return if (ranges.isNotEmpty()) ranges else listOf(TextPageRange(0, text.length))
-}
-
-internal fun paginateAnnotatedTextIntoPages(
-    text: AnnotatedString,
-    widthPx: Int,
-    heightPx: Int,
-    textSizePx: Float,
-    lineHeightMultiplier: Float,
-    typeface: android.graphics.Typeface?,
-    textAlign: ReaderTextAlign,
-): List<AnnotatedString> {
-    if (text.text.isBlank()) return emptyList()
-    val ranges = paginateTextIntoPageRanges(
-        text = text.text,
-        widthPx = widthPx,
-        heightPx = heightPx,
-        textSizePx = textSizePx,
-        lineHeightMultiplier = lineHeightMultiplier,
-        typeface = typeface,
-        textAlign = textAlign,
-    )
-    return ranges.map { range ->
-        text.subSequence(TextRange(range.start, range.endExclusive))
-    }
-}
-
-internal fun paginateTextIntoPages(
-    text: String,
-    widthPx: Int,
-    heightPx: Int,
-    textSizePx: Float,
-    lineHeightMultiplier: Float,
-    typeface: android.graphics.Typeface?,
-    textAlign: ReaderTextAlign,
-): List<String> {
-    return paginateTextIntoPageRanges(
-        text = text,
-        widthPx = widthPx,
-        heightPx = heightPx,
-        textSizePx = textSizePx,
-        lineHeightMultiplier = lineHeightMultiplier,
-        typeface = typeface,
-        textAlign = textAlign,
-    ).map { range ->
-        text.substring(range.start, range.endExclusive)
-    }
-}
-
-private fun trimTextRange(
-    text: String,
-    startInclusive: Int,
-    endExclusive: Int,
-): TextPageRange? {
-    var start = startInclusive.coerceIn(0, text.length)
-    var end = endExclusive.coerceIn(start, text.length)
-    while (start < end && text[start].isWhitespace()) start++
-    while (end > start && text[end - 1].isWhitespace()) end--
-    return if (start < end) TextPageRange(start, end) else null
-}
-
-private data class StaticLayoutSlice(
-    val range: TextPageRange,
-    val nextStartLine: Int,
-    val heightPx: Int,
-)
-
-private data class ApproximateTextMetrics(
-    val charsPerLine: Int,
-    val lineHeightPx: Int,
-)
-
-private fun buildReaderStaticLayout(
-    text: String,
-    widthPx: Int,
-    textSizePx: Float,
-    lineHeightMultiplier: Float,
-    typeface: android.graphics.Typeface?,
-    textAlign: ReaderTextAlign,
-): StaticLayout? {
-    return runCatching {
-        val paint = TextPaint().apply {
-            isAntiAlias = true
-            this.textSize = textSizePx.coerceAtLeast(1f)
-            this.typeface = typeface
-        }
-        StaticLayout.Builder.obtain(text, 0, text.length, paint, widthPx.coerceAtLeast(1))
-            .setAlignment(textAlign.toLayoutAlignment())
-            .setIncludePad(false)
-            .setLineSpacing(0f, lineHeightMultiplier.coerceAtLeast(1f))
-            .build()
-    }.getOrNull()
-}
-
-private fun resolveStaticLayoutHeight(
-    layout: StaticLayout,
-): Int {
-    if (layout.lineCount <= 0) return 0
-    return layout.getLineBottom(layout.lineCount - 1) - layout.getLineTop(0)
-}
-
-private fun resolveStaticLayoutSliceForHeight(
-    text: String,
-    layout: StaticLayout,
-    startLine: Int,
-    availableHeight: Int,
-): StaticLayoutSlice? {
-    if (startLine >= layout.lineCount || availableHeight <= 0) return null
-
-    val startOffset = layout.getLineStart(startLine)
-    var endLineExclusive = startLine
-    while (
-        endLineExclusive < layout.lineCount &&
-        layout.getLineBottom(endLineExclusive) - layout.getLineTop(startLine) <= availableHeight
-    ) {
-        endLineExclusive++
-    }
-    val endLine = if (endLineExclusive > startLine) endLineExclusive - 1 else startLine
-    val endOffset = layout.getLineEnd(endLine).coerceIn(startOffset, text.length)
-    val range = trimTextRange(text, startOffset, endOffset) ?: return null
-    return StaticLayoutSlice(
-        range = range,
-        nextStartLine = endLine + 1,
-        heightPx = layout.getLineBottom(endLine) - layout.getLineTop(startLine),
-    )
-}
-
-private fun measureApproximateTextHeight(
-    text: String,
-    metrics: ApproximateTextMetrics,
-): Int {
-    if (text.isBlank()) return metrics.lineHeightPx
-    val lineCount = text.split('\n').sumOf { line ->
-        ceil(line.length.toDouble() / metrics.charsPerLine.toDouble()).toInt().coerceAtLeast(1)
-    }.coerceAtLeast(1)
-    return lineCount * metrics.lineHeightPx
-}
-
-private fun ReaderTextAlign.toLayoutAlignment(): Layout.Alignment {
-    return when (this) {
-        ReaderTextAlign.SOURCE -> Layout.Alignment.ALIGN_NORMAL
-        ReaderTextAlign.LEFT -> Layout.Alignment.ALIGN_NORMAL
-        ReaderTextAlign.CENTER -> Layout.Alignment.ALIGN_CENTER
-        ReaderTextAlign.JUSTIFY -> Layout.Alignment.ALIGN_NORMAL
-        ReaderTextAlign.RIGHT -> Layout.Alignment.ALIGN_OPPOSITE
-    }
-}
-
-internal fun toBionicText(text: String): AnnotatedString {
-    if (text.isBlank()) return AnnotatedString(text)
-    return buildAnnotatedString {
-        Regex("\\S+|\\s+").findAll(text).forEach { match ->
-            val token = match.value
-            if (token.firstOrNull()?.isWhitespace() == true) {
-                append(token)
-            } else {
-                val emphasizeCount = ceil(token.length * 0.5f).toInt().coerceAtLeast(1)
-                withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) {
-                    append(token.take(emphasizeCount))
-                }
-                append(token.drop(emphasizeCount))
-            }
-        }
-    }
 }
 
 @Composable
@@ -7537,3 +4385,4 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     is ContextWrapper -> baseContext.findActivity()
     else -> null
 }
+

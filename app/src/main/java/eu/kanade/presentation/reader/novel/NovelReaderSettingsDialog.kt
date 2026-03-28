@@ -830,7 +830,7 @@ private fun ReadingTab(
         }
     }
 
-    val selectedTheme = currentTheme(settings.backgroundColor.orEmpty(), settings.textColor.orEmpty())
+    val selectedTheme = resolveNovelReaderColorTheme(settings.backgroundColor.orEmpty(), settings.textColor.orEmpty())
     val isPreset = selectedTheme != null && novelReaderPresetThemes.contains(selectedTheme)
     val isCustom = selectedTheme != null && settings.customThemes.contains(selectedTheme)
     val colorTiles = remember(settings.customThemes) {
@@ -1063,7 +1063,7 @@ private fun ReadingTab(
                     icon = null,
                     value = settings.textShadowColor.orEmpty(),
                     onConfirm = { value ->
-                        if (!isValidColorOrBlank(value)) return@EditTextPreferenceWidget false
+                        if (!isValidNovelReaderColorOrBlank(value)) return@EditTextPreferenceWidget false
                         update(value.trim(), { o, v ->
                             o.copy(textShadowColor = v)
                         }, { preferences.textShadowColor().set(it) })
@@ -1276,7 +1276,7 @@ private fun ReadingTab(
                 icon = null,
                 value = settings.backgroundColor.orEmpty(),
                 onConfirm = { value ->
-                    if (!isValidColorOrBlank(value)) return@EditTextPreferenceWidget false
+                        if (!isValidNovelReaderColorOrBlank(value)) return@EditTextPreferenceWidget false
                     update(value, { o, v -> o.copy(backgroundColor = v) }, { preferences.backgroundColor().set(it) })
                     true
                 },
@@ -1289,7 +1289,7 @@ private fun ReadingTab(
                 icon = null,
                 value = settings.textColor.orEmpty(),
                 onConfirm = { value ->
-                    if (!isValidColorOrBlank(value)) return@EditTextPreferenceWidget false
+                        if (!isValidNovelReaderColorOrBlank(value)) return@EditTextPreferenceWidget false
                     update(value, { o, v -> o.copy(textColor = v) }, { preferences.textColor().set(it) })
                     true
                 },
@@ -2038,8 +2038,8 @@ private fun ThemeTile(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val background = parseColor(theme.backgroundColor) ?: MaterialTheme.colorScheme.surface
-    val foreground = parseColor(theme.textColor) ?: MaterialTheme.colorScheme.onSurface
+        val background = parseNovelReaderColor(theme.backgroundColor) ?: MaterialTheme.colorScheme.surface
+        val foreground = parseNovelReaderColor(theme.textColor) ?: MaterialTheme.colorScheme.onSurface
     Box(
         modifier = Modifier
             .size(34.dp)
@@ -2092,88 +2092,4 @@ private fun backgroundPresetDescription(presetId: String): String {
             stringResource(AYMR.strings.novel_reader_background_preset_dark_wood_description)
         else -> ""
     }
-}
-
-private fun parseColor(value: String): Color? {
-    return runCatching { Color(AndroidColor.parseColor(value)) }.getOrNull()
-}
-
-private fun currentTheme(backgroundColor: String, textColor: String): NovelReaderColorTheme? {
-    if (backgroundColor.isBlank() || textColor.isBlank()) return null
-    if (!isValidColorOrBlank(backgroundColor) || !isValidColorOrBlank(textColor)) return null
-    return NovelReaderColorTheme(backgroundColor = backgroundColor, textColor = textColor)
-}
-
-internal data class ThemeModeSelection(
-    val theme: NovelReaderTheme,
-    val backgroundColor: String,
-    val textColor: String,
-)
-
-internal data class AppearanceControlState(
-    val themeControlsEnabled: Boolean,
-    val backgroundControlsEnabled: Boolean,
-)
-
-internal data class CustomBackgroundDeletionResolution(
-    val nextCustomId: String,
-    val keepCustomSource: Boolean,
-    val fallbackPresetId: String,
-)
-
-internal fun resolveAppearanceControlState(
-    appearanceMode: NovelReaderAppearanceMode,
-): AppearanceControlState {
-    return when (appearanceMode) {
-        NovelReaderAppearanceMode.THEME -> AppearanceControlState(
-            themeControlsEnabled = true,
-            backgroundControlsEnabled = false,
-        )
-        NovelReaderAppearanceMode.BACKGROUND -> AppearanceControlState(
-            themeControlsEnabled = false,
-            backgroundControlsEnabled = true,
-        )
-    }
-}
-
-internal fun resolveThemeModeSelection(theme: NovelReaderTheme): ThemeModeSelection {
-    // Base mode selection must restore fallback theme colors from reader screen logic.
-    return ThemeModeSelection(
-        theme = theme,
-        backgroundColor = "",
-        textColor = "",
-    )
-}
-
-internal fun resolveCustomBackgroundDeletion(
-    selectedId: String,
-    deletedId: String,
-    remainingCustomIds: List<String>,
-    fallbackPresetId: String,
-): CustomBackgroundDeletionResolution {
-    if (selectedId != deletedId) {
-        return CustomBackgroundDeletionResolution(
-            nextCustomId = selectedId,
-            keepCustomSource = true,
-            fallbackPresetId = fallbackPresetId,
-        )
-    }
-    val nextCustomId = remainingCustomIds.firstOrNull().orEmpty()
-    return CustomBackgroundDeletionResolution(
-        nextCustomId = nextCustomId,
-        keepCustomSource = nextCustomId.isNotBlank(),
-        fallbackPresetId = fallbackPresetId,
-    )
-}
-
-internal fun resolveCustomBackgroundReplacement(
-    selectedId: String,
-    replacedId: String,
-): String {
-    return if (selectedId == replacedId) replacedId else selectedId
-}
-
-private fun isValidColorOrBlank(value: String): Boolean {
-    if (value.isBlank()) return true
-    return value.matches(Regex("^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})$"))
 }

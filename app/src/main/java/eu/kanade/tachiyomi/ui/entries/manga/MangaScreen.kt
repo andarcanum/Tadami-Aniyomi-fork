@@ -262,6 +262,7 @@ class MangaScreen(
             MangaScreenModel.Dialog.SettingsSheet -> ChapterSettingsDialog(
                 onDismissRequest = onDismissRequest,
                 manga = successState.manga,
+                downloadedOnly = successState.downloadedOnly,
                 onDownloadFilterChanged = screenModel::setDownloadedFilter,
                 onUnreadFilterChanged = screenModel::setUnreadFilter,
                 onBookmarkedFilterChanged = screenModel::setBookmarkedFilter,
@@ -296,7 +297,7 @@ class MangaScreen(
                     MangaCoverDialog(
                         manga = manga!!,
                         snackbarHostState = sm.snackbarHostState,
-                        isCustomCover = remember(manga) { manga!!.hasCustomCover() },
+                        isCustomCover = remember(manga) { manga!!.hasCustomCover(sm.coverCache) },
                         onShareClick = { sm.shareCover(context) },
                         onSaveClick = { sm.saveCover(context) },
                         onEditClick = {

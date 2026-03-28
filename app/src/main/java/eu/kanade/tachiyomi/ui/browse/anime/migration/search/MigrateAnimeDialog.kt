@@ -342,7 +342,7 @@ internal class MigrateAnimeDialogScreenModel(
         }
 
         // Update custom cover (recheck if custom cover exists)
-        if (migrateCustomCover && oldAnime.hasCustomCover()) {
+        if (migrateCustomCover && oldAnime.hasCustomCover(coverCache)) {
             coverCache.setCustomCoverToCache(
                 newAnime,
                 coverCache.getCustomCoverFile(oldAnime.id).inputStream(),
@@ -350,7 +350,7 @@ internal class MigrateAnimeDialogScreenModel(
         }
 
         // Update custom background (recheck if custom background exists)
-        if (migrateCustomBackground && oldAnime.hasCustomBackground()) {
+        if (migrateCustomBackground && oldAnime.hasCustomBackground(backgroundCache)) {
             backgroundCache.setCustomBackgroundToCache(
                 newAnime,
                 backgroundCache.getCustomBackgroundFile(oldAnime.id).inputStream(),

@@ -102,7 +102,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.PreferenceStore
@@ -1273,8 +1272,8 @@ class PlayerViewModel @JvmOverloads constructor(
         episodeReadStartTime = System.currentTimeMillis()
     }
 
-    private fun initEpisodeList(anime: Anime): List<Episode> {
-        val episodes = runBlocking { getEpisodesByAnimeId.await(anime.id) }
+    private suspend fun initEpisodeList(anime: Anime): List<Episode> {
+        val episodes = getEpisodesByAnimeId.await(anime.id)
 
         return episodes
             .sortedWith(getEpisodeSort(anime, sortDescending = false))
@@ -1289,8 +1288,8 @@ class PlayerViewModel @JvmOverloads constructor(
     }
 
     private var hasTrackers: Boolean = false
-    private val checkTrackers: (Anime) -> Unit = { anime ->
-        val tracks = runBlocking { getTracks.await(anime.id) }
+    private suspend fun checkTrackers(anime: Anime) {
+        val tracks = getTracks.await(anime.id)
         hasTrackers = tracks.isNotEmpty()
     }
 

@@ -5,17 +5,21 @@ import coil3.request.Options
 import eu.kanade.domain.entries.anime.model.hasCustomBackground
 import eu.kanade.domain.entries.anime.model.hasCustomCover
 import eu.kanade.tachiyomi.data.cache.AnimeCoverCache
+import eu.kanade.tachiyomi.data.cache.AnimeBackgroundCache
 import tachiyomi.domain.entries.anime.model.AnimeCover
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import tachiyomi.domain.entries.anime.model.Anime as DomainAnime
 
-class AnimeKeyer : Keyer<DomainAnime> {
+class AnimeKeyer(
+    private val coverCache: AnimeCoverCache = Injekt.get(),
+    private val backgroundCache: AnimeBackgroundCache = Injekt.get(),
+) : Keyer<DomainAnime> {
     override fun key(data: DomainAnime, options: Options): String {
         return when {
-            options.useBackground && data.hasCustomBackground() -> "anime;${data.id};${data.backgroundLastModified}"
+            options.useBackground && data.hasCustomBackground(backgroundCache) -> "anime;${data.id};${data.backgroundLastModified}"
             options.useBackground -> "anime;${data.backgroundUrl};${data.backgroundLastModified}"
-            data.hasCustomCover() -> "anime;${data.id};${data.coverLastModified}"
+            data.hasCustomCover(coverCache) -> "anime;${data.id};${data.coverLastModified}"
             else -> "anime;${data.thumbnailUrl};${data.coverLastModified}"
         }
     }

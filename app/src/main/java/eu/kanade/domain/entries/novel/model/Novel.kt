@@ -18,18 +18,19 @@ fun Novel.toSNovel(): SNovel = SNovel.create().also {
 
 // TODO: move these into the domain model
 val Novel.downloadedFilter: TriState
-    get() {
-        // Keep this flag-based to avoid coupling novel chapter filtering to the global manga downloaded-only mode.
-        return when (downloadedFilterRaw) {
-            Novel.CHAPTER_SHOW_DOWNLOADED -> TriState.ENABLED_IS
-            Novel.CHAPTER_SHOW_NOT_DOWNLOADED -> TriState.ENABLED_NOT
-            else -> TriState.DISABLED
-        }
+    get() = when (downloadedFilterRaw) {
+        Novel.CHAPTER_SHOW_DOWNLOADED -> TriState.ENABLED_IS
+        Novel.CHAPTER_SHOW_NOT_DOWNLOADED -> TriState.ENABLED_NOT
+        else -> TriState.DISABLED
     }
 
-fun Novel.chaptersFiltered(): Boolean {
+fun Novel.effectiveDownloadedFilter(downloadedOnly: Boolean): TriState {
+    return if (downloadedOnly) TriState.ENABLED_IS else downloadedFilter
+}
+
+fun Novel.chaptersFiltered(downloadedOnly: Boolean): Boolean {
     return unreadFilter != TriState.DISABLED ||
-        downloadedFilter != TriState.DISABLED ||
+        effectiveDownloadedFilter(downloadedOnly) != TriState.DISABLED ||
         bookmarkedFilter != TriState.DISABLED
 }
 

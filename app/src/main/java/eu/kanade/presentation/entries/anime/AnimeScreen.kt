@@ -496,8 +496,8 @@ private fun AnimeScreenSmallImpl(
     val listItem = remember(state) { state.episodeListItems }
     val hasFilters = remember(state) {
         when (state.anime.fetchType) {
-            FetchType.Seasons -> state.anime.seasonsFiltered()
-            FetchType.Episodes -> state.anime.episodesFiltered()
+            FetchType.Seasons -> state.anime.seasonsFiltered(state.downloadedOnly)
+            FetchType.Episodes -> state.anime.episodesFiltered(state.downloadedOnly)
         }
     }
 
@@ -933,8 +933,8 @@ fun AnimeScreenLargeImpl(
 
     val hasFilters = remember(state) {
         when (state.anime.fetchType) {
-            FetchType.Seasons -> state.anime.seasonsFiltered()
-            FetchType.Episodes -> state.anime.episodesFiltered()
+            FetchType.Seasons -> state.anime.seasonsFiltered(state.downloadedOnly)
+            FetchType.Episodes -> state.anime.episodesFiltered(state.downloadedOnly)
         }
     }
 

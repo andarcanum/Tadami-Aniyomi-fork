@@ -1,7 +1,9 @@
 package eu.kanade.tachiyomi.ui.entries.novel
 
+import android.content.Context
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
+import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.entries.novel.interactor.GetNovelExcludedScanlators
 import eu.kanade.domain.entries.novel.interactor.SetNovelExcludedScanlators
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
@@ -107,6 +109,10 @@ class NovelScreenModelTest {
                 ) = FakePreference(defaultValue)
                 override fun getAll(): Map<String, *> = emptyMap<String, Any>()
             }
+            val basePreferences = BasePreferences(
+                context = mockk<Context>(relaxed = true),
+                preferenceStore = preferenceStore,
+            )
             val chapterRepository = object : tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository {
                 override suspend fun addAllChapters(chapters: List<NovelChapter>): List<NovelChapter> = chapters
                 override suspend fun updateChapter(
@@ -228,6 +234,7 @@ class NovelScreenModelTest {
             val screenModel = NovelScreenModel(
                 lifecycle = lifecycleOwner.lifecycle,
                 novelId = 1L,
+                basePreferences = basePreferences,
                 libraryPreferences = libraryPreferences,
                 getNovelWithChapters = getNovelWithChapters,
                 updateNovel = updateNovel,
@@ -501,6 +508,10 @@ class NovelScreenModelTest {
     ): NovelScreenModel {
         val novelRepository = FakeNovelRepository(novel)
         val preferenceStore = FakePreferenceStore()
+        val basePreferences = BasePreferences(
+            context = mockk<Context>(relaxed = true),
+            preferenceStore = preferenceStore,
+        )
         val libraryPreferences = LibraryPreferences(preferenceStore)
         val sourceManager = FakeNovelSourceManager()
         val trackerManager = mockk<TrackerManager>().also { manager ->
@@ -550,6 +561,7 @@ class NovelScreenModelTest {
         return NovelScreenModel(
             lifecycle = FakeLifecycleOwner().lifecycle,
             novelId = novel.id,
+            basePreferences = basePreferences,
             libraryPreferences = libraryPreferences,
             getNovelWithChapters = getNovelWithChapters,
             updateNovel = updateNovel,
