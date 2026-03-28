@@ -1,5 +1,6 @@
 package eu.kanade.presentation.reader.novel
 
+import android.graphics.Typeface
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -20,7 +21,6 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
-import android.graphics.Typeface
 import kotlin.math.abs
 
 internal data class ComposePagerTransitionSpec(

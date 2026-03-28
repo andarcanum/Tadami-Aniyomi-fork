@@ -22,20 +22,20 @@ internal data class GeminiStatusPresentation(
 internal fun geminiStatusPresentation(uiState: GeminiTranslationUiState): GeminiStatusPresentation {
     return when (uiState) {
         GeminiTranslationUiState.Translating -> GeminiStatusPresentation(
-            title = "РџРµСЂРµРІРѕРґ РІС‹РїРѕР»РЅСЏРµС‚СЃСЏ",
-            subtitle = "РћР±РЅРѕРІР»РµРЅРёРµ С‚РµРєСЃС‚Р° РІ СЂРµР°Р»СЊРЅРѕРј РІСЂРµРјРµРЅРё",
+            title = "Перевод выполняется",
+            subtitle = "Обновление текста в реальном времени",
         )
         GeminiTranslationUiState.CachedVisible -> GeminiStatusPresentation(
-            title = "РџРѕРєР°Р·С‹РІР°РµС‚СЃСЏ РїРµСЂРµРІРѕРґ",
-            subtitle = "РњРѕР¶РЅРѕ Р±С‹СЃС‚СЂРѕ РїРµСЂРµРєР»СЋС‡Р°С‚СЊ РѕСЂРёРіРёРЅР°Р» Рё РїРµСЂРµРІРѕРґ",
+            title = "Показывается перевод",
+            subtitle = "Можно быстро переключать оригинал и перевод",
         )
         GeminiTranslationUiState.CachedHidden -> GeminiStatusPresentation(
-            title = "РљСЌС€ РіРѕС‚РѕРІ",
-            subtitle = "РњРѕР¶РЅРѕ Р±С‹СЃС‚СЂРѕ РїРµСЂРµРєР»СЋС‡Р°С‚СЊ РѕСЂРёРіРёРЅР°Р» Рё РїРµСЂРµРІРѕРґ",
+            title = "Кэш готов",
+            subtitle = "Можно быстро переключать оригинал и перевод",
         )
         GeminiTranslationUiState.Ready -> GeminiStatusPresentation(
-            title = "Р“РѕС‚РѕРІ Рє Р·Р°РїСѓСЃРєСѓ",
-            subtitle = "Р’С‹Р±РµСЂРёС‚Рµ РјРѕРґРµР»СЊ Рё Р·Р°РїСѓСЃС‚РёС‚Рµ РїРµСЂРµРІРѕРґ РіР»Р°РІС‹",
+            title = "Готов к запуску",
+            subtitle = "Выберите модель и запустите перевод главы",
         )
     }
 }

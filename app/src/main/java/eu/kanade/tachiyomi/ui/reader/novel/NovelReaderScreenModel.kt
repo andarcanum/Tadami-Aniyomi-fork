@@ -1,5 +1,4 @@
 package eu.kanade.tachiyomi.ui.reader.novel
-
 import android.app.Application
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
@@ -85,7 +84,6 @@ import java.util.Date
 import java.util.LinkedHashMap
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-
 class NovelReaderScreenModel(
     private val chapterId: Long,
     private val novelChapterRepository: NovelChapterRepository = Injekt.get(),
@@ -168,7 +166,6 @@ class NovelReaderScreenModel(
         )
     },
 ) : StateScreenModel<NovelReaderScreenModel.State>(State.Loading) {
-
     private var settingsJob: Job? = null
     private var rawHtml: String? = null
     private var currentNovel: Novel? = null
@@ -213,7 +210,6 @@ class NovelReaderScreenModel(
     private val progressPersistenceMutex = Mutex()
     private var pendingProgressPersistence: PendingProgressPersistence? = null
     private var progressPersistenceJob: Job? = null
-
     @Volatile
     private var progressPersistenceScheduled = false
     private val structuredJson = Json {
@@ -223,13 +219,11 @@ class NovelReaderScreenModel(
     private val resolvedHistoryRepository by lazy {
         historyRepository ?: runCatching { Injekt.get<NovelHistoryRepository>() }.getOrNull()
     }
-
     init {
         screenModelScope.launch {
             loadChapter()
         }
     }
-
     private suspend fun loadChapter() {
         val chapter = withContext(Dispatchers.IO) {
             novelChapterRepository.getChapterById(chapterId)
@@ -245,7 +239,6 @@ class NovelReaderScreenModel(
         adjacentJaomixPageJob?.cancel()
         adjacentJaomixPageJob = null
         chapterOrderList = loadChapterOrderList(novel.id)
-
         val html = try {
             val cacheReadChapters = novelReaderPreferences.cacheReadChapters().get()
             withContext(Dispatchers.IO) {
@@ -268,7 +261,6 @@ class NovelReaderScreenModel(
             logcat(LogPriority.ERROR, e) { "Failed to load novel chapter text" }
             return setError(e.message)
         }
-
         val pluginPackage = withContext(Dispatchers.IO) {
             pluginStorage.getAll()
                 .firstOrNull { it.entry.id.hashCode().toLong() == novel.source }
@@ -337,7 +329,6 @@ class NovelReaderScreenModel(
             chapterId = chapter.id,
             settings = initialSettings,
         )
-
         settingsJob?.cancel()
         settingsJob = screenModelScope.launch {
             var skippedInitialEmission = false
@@ -364,22 +355,18 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.DEEPSEEK -> refreshDeepSeekModels()
         }
     }
-
     private fun setError(message: String?) {
         mutableState.value = State.Error(message)
     }
-
     private fun scheduleNextChapterPrefetch(
         novel: Novel,
         currentChapter: NovelChapter,
         source: eu.kanade.tachiyomi.novelsource.NovelSource,
     ) {
         val nextChapter = findNextChapter(currentChapter) ?: return
-
         if (NovelReaderChapterPrefetchCache.contains(nextChapter.id)) {
             return
         }
-
         nextChapterPrefetchJob?.cancel()
         nextChapterPrefetchJob = screenModelScope.launch(Dispatchers.IO) {
             runCatching {
@@ -387,7 +374,6 @@ class NovelReaderScreenModel(
                 if (novelDownloadManager.getDownloadedChapterText(novel, nextChapter.id) != null) return@runCatching
                 if (cacheReadChapters && NovelReaderChapterDiskCacheStore.contains(nextChapter.id)) return@runCatching
                 if (NovelReaderChapterPrefetchCache.contains(nextChapter.id)) return@runCatching
-
                 val nextHtml = source.getChapterText(nextChapter.toSNovelChapter())
                 NovelReaderChapterPrefetchCache.put(nextChapter.id, nextHtml)
                 if (cacheReadChapters) {
@@ -398,7 +384,6 @@ class NovelReaderScreenModel(
             }
         }
     }
-
     private fun maybeAutoStartGeminiTranslation(settings: NovelReaderSettings) {
         if (hasTriggeredGeminiAutoStart) return
         if (!settings.geminiEnabled || !settings.geminiAutoTranslateEnglishSource) return
@@ -406,19 +391,16 @@ class NovelReaderScreenModel(
         if (!settings.hasConfiguredTranslationProvider()) return
         if (parsedTextBlocks.orEmpty().isEmpty()) return
         if (isGeminiTranslating || hasGeminiTranslationCache || geminiTranslatedByIndex.isNotEmpty()) return
-
         hasTriggeredGeminiAutoStart = true
         addGeminiLog("?? Auto-start translation for English source")
         startGeminiTranslation()
     }
-
     private fun findNextChapter(currentChapter: NovelChapter): NovelChapter? {
         return chapterOrderList
             .indexOfFirst { it.id == currentChapter.id }
             .takeIf { it >= 0 }
             ?.let { chapterOrderList.getOrNull(it + 1) }
     }
-
     private suspend fun loadChapterOrderList(novelId: Long): List<NovelChapter> {
         return withContext(Dispatchers.IO) {
             val chapters = novelChapterRepository.getChapterByNovelId(novelId, applyScanlatorFilter = true)
@@ -429,7 +411,6 @@ class NovelReaderScreenModel(
             )
         }
     }
-
     private fun maybeEnsureJaomixAdjacentPage(
         chapter: NovelChapter,
         previousChapterId: Long?,
@@ -438,29 +419,23 @@ class NovelReaderScreenModel(
     ) {
         if (nextChapterId != null && previousChapterId != null) return
         if (adjacentJaomixPageJob?.isActive == true) return
-
         val novel = currentNovel ?: return
         val source = sourceManager.get(novel.source) as? NovelJsSource ?: return
         if (!source.isJaomixPagedPlugin()) return
-
         val currentPage = ((chapter.sourceOrder / JAOMIX_PAGE_SOURCE_ORDER_STRIDE) + 1L).toInt().coerceAtLeast(1)
         val targetPage = when {
             nextChapterId == null -> currentPage + 1
             previousChapterId == null && currentPage > 1 -> currentPage - 1
             else -> null
         } ?: return
-
         if (!attemptedJaomixPages.add(targetPage)) return
-
         adjacentJaomixPageJob = screenModelScope.launch(Dispatchers.IO) {
             val pageResult = source.getChapterListPage(
                 novel = novel.toSNovel(),
                 page = targetPage,
             ) ?: return@launch
-
             val normalizedPageChapters = normalizeJaomixPageChapters(pageResult.chapters)
             if (normalizedPageChapters.isEmpty()) return@launch
-
             syncNovelChaptersWithSource.await(
                 rawSourceChapters = normalizedPageChapters,
                 novel = novel,
@@ -469,20 +444,16 @@ class NovelReaderScreenModel(
                 retainMissingChapters = true,
                 sourceOrderOffset = (pageResult.page - 1L) * JAOMIX_PAGE_SOURCE_ORDER_STRIDE,
             )
-
             chapterOrderList = loadChapterOrderList(novel.id)
-
             withContext(Dispatchers.Main.immediate) {
                 updateContent(settings)
             }
         }
     }
-
     private fun normalizeJaomixPageChapters(
         chapters: List<eu.kanade.tachiyomi.novelsource.model.SNovelChapter>,
     ): List<eu.kanade.tachiyomi.novelsource.model.SNovelChapter> {
         if (chapters.size < 2) return chapters
-
         val hasChapterNumbers = chapters.any { it.chapter_number > 0f }
         return if (hasChapterNumbers) {
             chapters.sortedWith(
@@ -493,7 +464,6 @@ class NovelReaderScreenModel(
             chapters.asReversed()
         }
     }
-
     private fun updateContent(settings: NovelReaderSettings) {
         val html = rawHtml ?: return
         val novel = currentNovel ?: return
@@ -504,7 +474,7 @@ class NovelReaderScreenModel(
             isGeminiTranslating = false
             isGeminiTranslationVisible = false
             geminiTranslationProgress = 0
-            addGeminiLog("? Gemini пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ")
+            addGeminiLog("Gemini translation stopped because Gemini is disabled.")
         }
         val geminiVisibleInUi = settings.geminiEnabled && isGeminiTranslationVisible
         val geminiCacheAvailableInUi = settings.geminiEnabled && hasGeminiTranslationCache
@@ -572,7 +542,6 @@ class NovelReaderScreenModel(
                     )
                 }
                 .also { parsedRichContentResult = it }
-
         val displayContentBlocks = if (geminiVisibleInUi) {
             applyGeminiTranslationToContentBlocks(baseContentBlocks)
         } else {
@@ -596,7 +565,6 @@ class NovelReaderScreenModel(
         } else {
             baseContent
         }
-
         mutableState.value = State.Success(
             novel = novel,
             chapter = chapter,
@@ -630,7 +598,6 @@ class NovelReaderScreenModel(
             isTestingDeepSeekConnection = isTestingDeepSeekConnection,
         )
     }
-
     private suspend fun parseAndCacheContentBlocks(
         rawHtml: String,
         chapterWebUrl: String?,
@@ -654,7 +621,6 @@ class NovelReaderScreenModel(
             .map { it.text }
         parsedRichContentResult = null
     }
-
     private suspend fun resolveChapterWebUrl(
         source: eu.kanade.tachiyomi.novelsource.NovelSource,
         chapterUrl: String,
@@ -665,7 +631,6 @@ class NovelReaderScreenModel(
             ?.getChapterWebUrl(chapterPath = chapterUrl, novelPath = novelUrl)
             ?.trim()
             ?.takeIf { it.isNotBlank() }
-
         if (sourceResolved != null) {
             sourceResolved.toHttpUrlOrNull()?.let { return it.toString() }
             resolveNovelChapterWebUrl(
@@ -674,14 +639,12 @@ class NovelReaderScreenModel(
                 novelUrl = novelUrl,
             )?.let { return it }
         }
-
         return resolveNovelChapterWebUrl(
             chapterUrl = chapterUrl,
             pluginSite = pluginSite,
             novelUrl = novelUrl,
         )
     }
-
     fun updateReadingProgress(
         currentIndex: Int,
         totalItems: Int,
@@ -696,7 +659,6 @@ class NovelReaderScreenModel(
             if (isSameInitialIndex && isSamePersistedProgress) return
             hasProgressChanged = true
         }
-
         val readThreshold = when {
             totalItems == 100 -> 0.99f
             else -> 0.95f
@@ -709,7 +671,6 @@ class NovelReaderScreenModel(
         } else {
             resolvedPersistedProgress
         }
-
         maybePrefetchNextChapterOnProgress(
             currentIndex = currentIndex,
             totalItems = totalItems,
@@ -718,11 +679,9 @@ class NovelReaderScreenModel(
             currentIndex = currentIndex,
             totalItems = totalItems,
         )
-
         if (lastSavedRead == shouldPersistRead && lastSavedProgress == newProgress) {
             return
         }
-
         val becameRead = !chapter.read && shouldPersistRead
         lastSavedRead = shouldPersistRead
         lastSavedProgress = newProgress
@@ -732,7 +691,6 @@ class NovelReaderScreenModel(
             progress = newProgress,
         )
         val shouldEmitNovelCompleted = becameRead && chapterOrderList.all { it.read }
-
         enqueueProgressPersistence(
             PendingProgressPersistence(
                 chapterId = chapter.id,
@@ -746,7 +704,6 @@ class NovelReaderScreenModel(
             ),
         )
     }
-
     private fun enqueueProgressPersistence(update: PendingProgressPersistence) {
         progressPersistenceScheduled = true
         screenModelScope.launch(NonCancellable) {
@@ -768,7 +725,6 @@ class NovelReaderScreenModel(
             }
         }
     }
-
     suspend fun awaitPendingProgressPersistence() {
         while (true) {
             val activeJob = progressPersistenceMutex.withLock {
@@ -782,7 +738,6 @@ class NovelReaderScreenModel(
             kotlinx.coroutines.yield()
         }
     }
-
     private suspend fun flushPendingProgressPersistence() {
         while (true) {
             val nextUpdate = progressPersistenceMutex.withLock {
@@ -790,7 +745,6 @@ class NovelReaderScreenModel(
                 pendingProgressPersistence = null
                 next
             }
-
             novelChapterRepository.updateChapter(
                 NovelChapterUpdate(
                     id = nextUpdate.chapterId,
@@ -798,7 +752,6 @@ class NovelReaderScreenModel(
                     lastPageRead = nextUpdate.lastPageRead,
                 ),
             )
-
             if (nextUpdate.emitReadEvent) {
                 eventBus?.tryEmit(
                     AchievementEvent.NovelChapterRead(
@@ -810,7 +763,6 @@ class NovelReaderScreenModel(
                     eventBus?.tryEmit(AchievementEvent.NovelCompleted(nextUpdate.novelId))
                 }
             }
-
             val now = System.currentTimeMillis()
             pendingHistoryReadDurationMs += nextUpdate.sessionReadDurationMs.coerceAtLeast(0L)
             if (nextUpdate.emitReadEvent) {
@@ -819,21 +771,17 @@ class NovelReaderScreenModel(
             chapterReadStartTimeMs = now
         }
     }
-
     private fun maybePrefetchNextChapterOnProgress(
         currentIndex: Int,
         totalItems: Int,
     ) {
         if (hasTriggeredNextChapterPrefetch) return
         if (!hasReachedNextChapterPrefetchThreshold(currentIndex, totalItems)) return
-
         val state = mutableState.value as? State.Success ?: return
         if (!state.readerSettings.prefetchNextChapter) return
-
         val novel = currentNovel ?: return
         val chapter = currentChapter ?: return
         val source = sourceManager.get(novel.source) ?: return
-
         hasTriggeredNextChapterPrefetch = true
         scheduleNextChapterPrefetch(
             novel = novel,
@@ -841,26 +789,22 @@ class NovelReaderScreenModel(
             source = source,
         )
     }
-
     private fun maybePrefetchNextChapterGeminiTranslationOnProgress(
         currentIndex: Int,
         totalItems: Int,
     ) {
         if (hasTriggeredNextChapterGeminiPrefetch) return
         if (!hasReachedGeminiNextChapterTranslationPrefetchThreshold(currentIndex, totalItems)) return
-
         val state = mutableState.value as? State.Success ?: return
         val settings = state.readerSettings
         if (!settings.geminiEnabled || !settings.geminiPrefetchNextChapterTranslation) return
         if (settings.geminiDisableCache) return
         if (!settings.hasConfiguredTranslationProvider()) return
-
         val novel = currentNovel ?: return
         val chapter = currentChapter ?: return
         val source = sourceManager.get(novel.source) ?: return
         val nextChapter = findNextChapter(chapter) ?: return
         if (hasReusableTranslationCache(nextChapter.id, settings)) return
-
         hasTriggeredNextChapterGeminiPrefetch = true
         scheduleNextChapterGeminiTranslationPrefetch(
             nextChapter = nextChapter,
@@ -868,7 +812,6 @@ class NovelReaderScreenModel(
             settings = settings,
         )
     }
-
     private fun hasReachedNextChapterPrefetchThreshold(
         currentIndex: Int,
         totalItems: Int,
@@ -880,19 +823,16 @@ class NovelReaderScreenModel(
             totalItems > 1 && ((currentIndex + 1).toFloat() / totalItems.toFloat()) >= 0.5f
         }
     }
-
     private fun scheduleNextChapterGeminiTranslationPrefetch(
         nextChapter: NovelChapter,
         source: eu.kanade.tachiyomi.novelsource.NovelSource,
         settings: NovelReaderSettings,
     ) {
         if (hasReusableTranslationCache(nextChapter.id, settings)) return
-
         nextChapterGeminiPrefetchJob?.cancel()
         nextChapterGeminiPrefetchJob = screenModelScope.launch(Dispatchers.IO) {
             runCatching {
                 if (hasReusableTranslationCache(nextChapter.id, settings)) return@runCatching
-
                 val cacheReadChapters = novelReaderPreferences.cacheReadChapters().get()
                 val nextHtml = NovelReaderChapterPrefetchCache.get(nextChapter.id)
                     ?: source.getChapterText(nextChapter.toSNovelChapter()).also { fetchedHtml ->
@@ -902,7 +842,6 @@ class NovelReaderScreenModel(
                         }
                     }
                 if (nextHtml.isBlank()) return@runCatching
-
                 val normalizedNextHtml = prependChapterHeadingIfMissing(
                     rawHtml = nextHtml.normalizeStructuredChapterPayload(),
                     chapterName = nextChapter.name,
@@ -911,13 +850,11 @@ class NovelReaderScreenModel(
                     .ifBlank { normalizedNextHtml }
                 val nextTextBlocks = extractTextBlocks(sanitizedNextHtml)
                 if (nextTextBlocks.isEmpty()) return@runCatching
-
                 val chunkSize = settings.geminiBatchSize.coerceIn(1, 80)
                 val chunks = nextTextBlocks.chunked(chunkSize)
                 val semaphore = Semaphore(settings.translationConcurrencyLimit())
                 val translated = mutableMapOf<Int, String>()
                 addGeminiLog("?? ${settings.translationRequestConfigLog()} (prefetch)")
-
                 coroutineScope {
                     chunks.mapIndexed { chunkIndex, chunk ->
                         async {
@@ -933,7 +870,6 @@ class NovelReaderScreenModel(
                                         "${settings.translationProvider} returned empty response for prefetched chunk ${chunkIndex + 1}",
                                     )
                                 }
-
                                 result.orEmpty().forEachIndexed { localIndex, text ->
                                     if (!text.isNullOrBlank()) {
                                         val globalIndex = chunkIndex * chunkSize + localIndex
@@ -944,9 +880,7 @@ class NovelReaderScreenModel(
                         }
                     }.awaitAll()
                 }
-
                 if (translated.isEmpty()) return@runCatching
-
                 NovelReaderTranslationDiskCacheStore.put(
                     GeminiTranslationCacheEntry(
                         chapterId = nextChapter.id,
@@ -966,7 +900,6 @@ class NovelReaderScreenModel(
             }
         }
     }
-
     private fun hasReusableTranslationCache(
         chapterId: Long,
         settings: NovelReaderSettings,
@@ -980,7 +913,6 @@ class NovelReaderScreenModel(
             cached.promptMode == settings.geminiPromptMode &&
             cached.stylePreset == settings.geminiStylePreset
     }
-
     private fun applyLocalChapterProgress(
         chapter: NovelChapter,
         read: Boolean,
@@ -1027,7 +959,6 @@ class NovelReaderScreenModel(
             )
         }
     }
-
     fun toggleChapterBookmark() {
         val chapter = currentChapter ?: return
         val bookmarked = !chapter.bookmark
@@ -1048,7 +979,6 @@ class NovelReaderScreenModel(
             )
         }
     }
-
     override fun onDispose() {
         val chapterId = currentChapter?.id
         if (chapterId != null) {
@@ -1067,7 +997,6 @@ class NovelReaderScreenModel(
         geminiTranslationJob?.cancel()
         super.onDispose()
     }
-
     fun addGeminiLog(message: String) {
         val text = message.trim()
         if (text.isBlank()) return
@@ -1075,13 +1004,11 @@ class NovelReaderScreenModel(
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         updateContent(settings)
     }
-
     fun clearGeminiLogs() {
         geminiLogs = emptyList()
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         updateContent(settings)
     }
-
     fun clearAllGeminiTranslationCache() {
         NovelReaderTranslationDiskCacheStore.clear()
         addGeminiLog("??? Clear ALL cache")
@@ -1092,101 +1019,81 @@ class NovelReaderScreenModel(
             updateContent(settings)
         }
     }
-
     fun setGeminiApiKey(value: String) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.geminiApiKey().set(value) },
         setOverride = { it.copy(geminiApiKey = value) },
     )
-
     fun setGeminiModel(value: String) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.geminiModel().set(value) },
         setOverride = { it.copy(geminiModel = value) },
     )
-
     fun setGeminiBatchSize(value: Int) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.geminiBatchSize().set(value) },
         setOverride = { it.copy(geminiBatchSize = value) },
     )
-
     fun setGeminiConcurrency(value: Int) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.geminiConcurrency().set(value) },
         setOverride = { it.copy(geminiConcurrency = value) },
     )
-
     fun setGeminiRelaxedMode(value: Boolean) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.geminiRelaxedMode().set(value) },
         setOverride = { it.copy(geminiRelaxedMode = value) },
     )
-
     fun setGeminiDisableCache(value: Boolean) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.geminiDisableCache().set(value) },
         setOverride = { it.copy(geminiDisableCache = value) },
     )
-
     fun setGeminiReasoningEffort(value: String) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.geminiReasoningEffort().set(value) },
         setOverride = { it.copy(geminiReasoningEffort = value) },
     )
-
     fun setGeminiBudgetTokens(value: Int) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.geminiBudgetTokens().set(value) },
         setOverride = { it.copy(geminiBudgetTokens = value) },
     )
-
     fun setGeminiTemperature(value: Float) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.geminiTemperature().set(value) },
         setOverride = { it.copy(geminiTemperature = value) },
     )
-
     fun setGeminiTopP(value: Float) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.geminiTopP().set(value) },
         setOverride = { it.copy(geminiTopP = value) },
     )
-
     fun setGeminiTopK(value: Int) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.geminiTopK().set(value) },
         setOverride = { it.copy(geminiTopK = value) },
     )
-
     fun setGeminiPromptMode(value: GeminiPromptMode) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.geminiPromptMode().set(value) },
         setOverride = { it.copy(geminiPromptMode = value) },
     )
-
     fun setGeminiStylePreset(value: NovelTranslationStylePreset) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.geminiStylePreset().set(value) },
         setOverride = { it.copy(geminiStylePreset = value) },
     )
-
     fun setGeminiEnabledPromptModifiers(value: List<String>) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.geminiEnabledPromptModifiers().set(value) },
         setOverride = { it.copy(geminiEnabledPromptModifiers = value) },
     )
-
     fun setGeminiCustomPromptModifier(value: String) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.geminiCustomPromptModifier().set(value) },
         setOverride = { it.copy(geminiCustomPromptModifier = value) },
     )
-
     fun setGeminiAutoTranslateEnglishSource(value: Boolean) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.geminiAutoTranslateEnglishSource().set(value) },
         setOverride = { it.copy(geminiAutoTranslateEnglishSource = value) },
     )
-
     fun setGeminiPrefetchNextChapterTranslation(value: Boolean) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.geminiPrefetchNextChapterTranslation().set(value) },
         setOverride = { it.copy(geminiPrefetchNextChapterTranslation = value) },
     )
-
     fun setGeminiPrivateUnlocked(value: Boolean) {
         novelReaderPreferences.geminiPrivateUnlocked().set(value)
     }
-
     fun setGeminiPrivatePythonLikeMode(value: Boolean) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.geminiPrivatePythonLikeMode().set(value) },
         setOverride = { it.copy(geminiPrivatePythonLikeMode = value) },
     )
-
     fun setTranslationProvider(value: NovelTranslationProvider) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.translationProvider().set(value) },
         setOverride = { it.copy(translationProvider = value) },
@@ -1199,58 +1106,47 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.DEEPSEEK -> refreshDeepSeekModels()
         }
     }
-
     fun setAirforceBaseUrl(value: String) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.airforceBaseUrl().set(value) },
         setOverride = { it.copy(airforceBaseUrl = value) },
     )
-
     fun setAirforceApiKey(value: String) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.airforceApiKey().set(value) },
         setOverride = { it.copy(airforceApiKey = value) },
     )
-
     fun setAirforceModel(value: String) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.airforceModel().set(value) },
         setOverride = { it.copy(airforceModel = value) },
     )
-
     fun setOpenRouterBaseUrl(value: String) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.openRouterBaseUrl().set(value) },
         setOverride = { it.copy(openRouterBaseUrl = value) },
     )
-
     fun setOpenRouterApiKey(value: String) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.openRouterApiKey().set(value) },
         setOverride = { it.copy(openRouterApiKey = value) },
     )
-
     fun setOpenRouterModel(value: String) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.openRouterModel().set(value) },
         setOverride = { it.copy(openRouterModel = value) },
     )
-
     fun setDeepSeekBaseUrl(value: String) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.deepSeekBaseUrl().set(value) },
         setOverride = { it.copy(deepSeekBaseUrl = value) },
     )
-
     fun setDeepSeekApiKey(value: String) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.deepSeekApiKey().set(value) },
         setOverride = { it.copy(deepSeekApiKey = value) },
     )
-
     fun setDeepSeekModel(value: String) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.deepSeekModel().set(value) },
         setOverride = { it.copy(deepSeekModel = value) },
     )
-
     fun refreshAirforceModels() {
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         if (settings.translationProvider != NovelTranslationProvider.AIRFORCE) return
         if (settings.airforceApiKey.isBlank()) return
         if (settings.airforceBaseUrl.isBlank()) return
-
         isAirforceModelsLoading = true
         updateContent(settings)
         screenModelScope.launch(Dispatchers.IO) {
@@ -1269,7 +1165,6 @@ class NovelReaderScreenModel(
             updateContent(currentSettings)
         }
     }
-
     fun testAirforceConnection() {
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         if (isTestingAirforceConnection) return
@@ -1278,7 +1173,6 @@ class NovelReaderScreenModel(
             addGeminiLog("? Airforce config invalid: fill Base URL, API key and Model")
             return
         }
-
         isTestingAirforceConnection = true
         updateContent(settings)
         screenModelScope.launch {
@@ -1302,13 +1196,11 @@ class NovelReaderScreenModel(
             updateContent(currentSettings)
         }
     }
-
     fun refreshOpenRouterModels() {
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         if (settings.translationProvider != NovelTranslationProvider.OPENROUTER) return
         if (settings.openRouterApiKey.isBlank()) return
         if (settings.openRouterBaseUrl.isBlank()) return
-
         isOpenRouterModelsLoading = true
         updateContent(settings)
         screenModelScope.launch(Dispatchers.IO) {
@@ -1327,7 +1219,6 @@ class NovelReaderScreenModel(
             updateContent(currentSettings)
         }
     }
-
     fun testOpenRouterConnection() {
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         if (isTestingOpenRouterConnection) return
@@ -1336,7 +1227,6 @@ class NovelReaderScreenModel(
             addGeminiLog("? OpenRouter config invalid: fill Base URL, API key and free Model (:free)")
             return
         }
-
         isTestingOpenRouterConnection = true
         updateContent(settings)
         screenModelScope.launch {
@@ -1360,13 +1250,11 @@ class NovelReaderScreenModel(
             updateContent(currentSettings)
         }
     }
-
     fun refreshDeepSeekModels() {
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         if (settings.translationProvider != NovelTranslationProvider.DEEPSEEK) return
         if (settings.deepSeekApiKey.isBlank()) return
         if (settings.deepSeekBaseUrl.isBlank()) return
-
         isDeepSeekModelsLoading = true
         updateContent(settings)
         screenModelScope.launch(Dispatchers.IO) {
@@ -1385,7 +1273,6 @@ class NovelReaderScreenModel(
             updateContent(currentSettings)
         }
     }
-
     fun testDeepSeekConnection() {
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         if (isTestingDeepSeekConnection) return
@@ -1394,7 +1281,6 @@ class NovelReaderScreenModel(
             addGeminiLog("? DeepSeek config invalid: fill Base URL, API key and Model")
             return
         }
-
         isTestingDeepSeekConnection = true
         updateContent(settings)
         screenModelScope.launch {
@@ -1418,7 +1304,6 @@ class NovelReaderScreenModel(
             updateContent(currentSettings)
         }
     }
-
     private fun updateGeminiSetting(
         setGlobal: () -> Unit,
         setOverride: (NovelReaderOverride) -> NovelReaderOverride,
@@ -1430,39 +1315,33 @@ class NovelReaderScreenModel(
             setGlobal()
         }
     }
-
     fun startGeminiTranslation() {
         if (isGeminiTranslating) return
         val currentState = mutableState.value as? State.Success ?: return
         val chapter = currentChapter ?: return
         val baseTextBlocks = parsedTextBlocks.orEmpty()
         if (baseTextBlocks.isEmpty()) return
-
         val settings = currentState.readerSettings
         if (!settings.geminiEnabled) {
-            addGeminiLog("? Gemini пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ")
+            addGeminiLog("Gemini translation is disabled.")
             return
         }
         if (!settings.hasConfiguredTranslationProvider()) {
             addGeminiLog("? Translation provider is not configured")
             return
         }
-
         geminiTranslatedByIndex = emptyMap()
         isGeminiTranslationVisible = false
         hasGeminiTranslationCache = false
         isGeminiTranslating = true
         geminiTranslationProgress = 0
-        addGeminiLog("?? ${settings.translationProvider} start. Model: ${settings.translationCacheModelId()}")
-        addGeminiLog("?? ${settings.translationRequestConfigLog()}")
+            addGeminiLog("Gemini translation stopped because Gemini is disabled.")
         updateContent(settings)
-
         geminiTranslationJob?.cancel()
         geminiTranslationJob = screenModelScope.launch {
             val translated = mutableMapOf<Int, String>()
             val indexedBlocks = baseTextBlocks.mapIndexed { index, text -> index to text }
             val updateMutex = Mutex()
-
             suspend fun runChunkedTranslation(
                 chunks: List<List<Pair<Int, String>>>,
                 chunkSize: Int,
@@ -1474,7 +1353,6 @@ class NovelReaderScreenModel(
                 addGeminiLog(
                     "?? Split into ${chunks.size} chunks. Batch: $chunkSize, Concurrency: $concurrencyLimit",
                 )
-
                 coroutineScope {
                     chunks.mapIndexed { chunkIndex, chunk ->
                         async {
@@ -1490,7 +1368,6 @@ class NovelReaderScreenModel(
                                         "${settings.translationProvider} returned empty response for chunk ${chunkIndex + 1}",
                                     )
                                 }
-
                                 updateMutex.withLock {
                                     if (result != null) {
                                         var successCount = 0
@@ -1506,7 +1383,6 @@ class NovelReaderScreenModel(
                                     } else {
                                         addGeminiLog("?? Chunk ${chunkIndex + 1} returned empty result")
                                     }
-
                                     completedChunks += 1
                                     geminiTranslationProgress =
                                         (((completedChunks).toFloat() / chunks.size.toFloat()) * 100f)
@@ -1522,7 +1398,6 @@ class NovelReaderScreenModel(
                     }.awaitAll()
                 }
             }
-
             try {
                 if (settings.shouldUseSinglePrivateChapterRequestMode()) {
                     addGeminiLog("?? Private Gemini mode: forcing one request for the whole chapter")
@@ -1532,7 +1407,6 @@ class NovelReaderScreenModel(
                         onLog = { message -> addGeminiLog(message) },
                     )
                     val singleSuccess = singleResult?.any { !it.isNullOrBlank() } == true
-
                     if (singleSuccess) {
                         var successCount = 0
                         singleResult.orEmpty().forEachIndexed { index, text ->
@@ -1572,7 +1446,6 @@ class NovelReaderScreenModel(
                         strictOnNull = !settings.geminiRelaxedMode,
                     )
                 }
-
                 if (translated.isNotEmpty()) {
                     geminiTranslatedByIndex = translated.toMap()
                     hasGeminiTranslationCache = true
@@ -1616,7 +1489,6 @@ class NovelReaderScreenModel(
             }
         }
     }
-
     fun stopGeminiTranslation() {
         geminiTranslationJob?.cancel()
         geminiTranslationJob = null
@@ -1626,7 +1498,6 @@ class NovelReaderScreenModel(
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         updateContent(settings)
     }
-
     fun toggleGeminiTranslationVisibility() {
         if (geminiTranslatedByIndex.isEmpty()) return
         isGeminiTranslationVisible = !isGeminiTranslationVisible
@@ -1634,7 +1505,6 @@ class NovelReaderScreenModel(
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         updateContent(settings)
     }
-
     fun clearGeminiTranslation() {
         val chapter = currentChapter ?: return
         geminiTranslationJob?.cancel()
@@ -1649,7 +1519,6 @@ class NovelReaderScreenModel(
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         updateContent(settings)
     }
-
     private fun restoreGeminiTranslationFromCache(
         chapterId: Long,
         settings: NovelReaderSettings,
@@ -1683,7 +1552,6 @@ class NovelReaderScreenModel(
         isGeminiTranslationVisible = true
         addGeminiLog("?? Restored cached translation")
     }
-
     private fun applyGeminiTranslationToContentBlocks(
         blocks: List<ContentBlock>,
     ): List<ContentBlock> {
@@ -1704,7 +1572,6 @@ class NovelReaderScreenModel(
             }
         }
     }
-
     private fun applyGeminiTranslationToRichContentBlocks(
         blocks: List<NovelRichContentBlock>,
     ): List<NovelRichContentBlock> {
@@ -1732,7 +1599,6 @@ class NovelReaderScreenModel(
             }
         }
     }
-
     private fun buildRawHtmlFromContentBlocks(blocks: List<ContentBlock>): String {
         return buildString {
             blocks.forEach { block ->
@@ -1753,7 +1619,6 @@ class NovelReaderScreenModel(
             }
         }
     }
-
     private fun NovelReaderSettings.resolveTranslationPromptModifiers(): String {
         val modifierText = GeminiPromptModifiers.buildPromptText(
             enabledIds = geminiEnabledPromptModifiers,
@@ -1767,7 +1632,6 @@ class NovelReaderScreenModel(
         ).filter { it.isNotBlank() }
             .joinToString("\n\n")
     }
-
     private fun NovelReaderSettings.toGeminiTranslationParams(): GeminiTranslationParams {
         return GeminiTranslationParams(
             apiKey = geminiApiKey,
@@ -1786,7 +1650,6 @@ class NovelReaderScreenModel(
             privatePythonLikeMode = geminiPrivatePythonLikeMode,
         )
     }
-
     private fun NovelReaderSettings.toAirforceTranslationParams(): AirforceTranslationParams {
         return AirforceTranslationParams(
             baseUrl = airforceBaseUrl,
@@ -1800,7 +1663,6 @@ class NovelReaderScreenModel(
             topP = geminiTopP,
         )
     }
-
     private fun NovelReaderSettings.toOpenRouterTranslationParams(): OpenRouterTranslationParams {
         return OpenRouterTranslationParams(
             baseUrl = openRouterBaseUrl,
@@ -1814,7 +1676,6 @@ class NovelReaderScreenModel(
             topP = geminiTopP,
         )
     }
-
     private fun NovelReaderSettings.toDeepSeekTranslationParams(): DeepSeekTranslationParams {
         return DeepSeekTranslationParams(
             baseUrl = deepSeekBaseUrl,
@@ -1830,7 +1691,6 @@ class NovelReaderScreenModel(
             frequencyPenalty = DEEPSEEK_DEFAULT_FREQUENCY_PENALTY,
         )
     }
-
     private fun NovelReaderSettings.translationRequestConfigLog(): String {
         val common = buildString {
             append("provider=").append(translationProvider.name)
@@ -1848,7 +1708,6 @@ class NovelReaderScreenModel(
             append(", relaxed=").append(geminiRelaxedMode)
             append(", cache=").append(!geminiDisableCache)
         }
-
         val sampling = when (translationProvider) {
             NovelTranslationProvider.GEMINI -> {
                 "temp=${geminiTemperature.toLogFloat()}, topP=${geminiTopP.toLogFloat()}, topK=$geminiTopK, " +
@@ -1881,9 +1740,7 @@ class NovelReaderScreenModel(
         }
         return "$common, $sampling"
     }
-
     private fun Float.toLogFloat(): String = String.format(Locale.US, "%.3f", this)
-
     private suspend fun requestTranslationBatch(
         segments: List<String>,
         settings: NovelReaderSettings,
@@ -1927,7 +1784,6 @@ class NovelReaderScreenModel(
             }
         }
     }
-
     private fun NovelReaderSettings.hasConfiguredTranslationProvider(): Boolean {
         if (!geminiEnabled) return false
         return when (translationProvider) {
@@ -1950,7 +1806,6 @@ class NovelReaderScreenModel(
             }
         }
     }
-
     private fun NovelReaderSettings.translationConcurrencyLimit(): Int {
         return when (translationProvider) {
             NovelTranslationProvider.GEMINI -> geminiConcurrency.coerceIn(1, 8)
@@ -1962,7 +1817,6 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.DEEPSEEK -> geminiConcurrency.coerceIn(1, MAX_DEEPSEEK_CONCURRENCY)
         }
     }
-
     private fun NovelReaderSettings.translationCacheModelId(): String {
         return when (translationProvider) {
             NovelTranslationProvider.GEMINI -> geminiModel.normalizeGeminiModelId()
@@ -1972,23 +1826,19 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.DEEPSEEK -> deepSeekModel.trim()
         }
     }
-
     private fun NovelReaderSettings.shouldUseSinglePrivateChapterRequestMode(): Boolean {
         return translationProvider == NovelTranslationProvider.GEMINI_PRIVATE &&
             GeminiPrivateBridge.isInstalled() &&
             (GeminiPrivateBridge.forceSingleChapterRequest() || geminiPrivatePythonLikeMode)
     }
-
     private fun NovelReaderSettings.requiresPrivateBridgeUnlock(): Boolean {
         return translationProvider == NovelTranslationProvider.GEMINI_PRIVATE &&
             GeminiPrivateBridge.isInstalled()
     }
-
     private fun NovelReaderSettings.isPrivateBridgeUnlocked(): Boolean {
         if (!requiresPrivateBridgeUnlock()) return true
         return geminiPrivateUnlocked || GeminiPrivateBridge.isUnlocked()
     }
-
     private fun String.normalizeGeminiModelId(): String {
         return when (trim()) {
             // Legacy key kept for backward compatibility with old settings.
@@ -1997,7 +1847,6 @@ class NovelReaderScreenModel(
             else -> this
         }
     }
-
     private fun extractTextBlocks(rawHtml: String): List<String> {
         val document = Jsoup.parse(rawHtml)
         val paragraphLikeNodes = document.select("p, li, blockquote, h1, h2, h3, h4, h5, h6, pre")
@@ -2010,17 +1859,14 @@ class NovelReaderScreenModel(
         if (paragraphLikeNodes.isNotEmpty()) {
             return paragraphLikeNodes
         }
-
         val text = document.body().wholeText()
             .sanitizeTextBlock()
         if (text.isBlank()) return emptyList()
-
         return text.split(Regex("\n{2,}"))
             .flatMap { block -> block.split('\n') }
             .map { it.sanitizeTextBlock() }
             .filter { it.isNotBlank() }
     }
-
     private fun extractContentBlocks(
         rawHtml: String,
         chapterWebUrl: String?,
@@ -2038,7 +1884,6 @@ class NovelReaderScreenModel(
         )
         return blocks
     }
-
     private fun collectContentBlocks(
         node: Node,
         blocks: MutableList<ContentBlock>,
@@ -2056,7 +1901,11 @@ class NovelReaderScreenModel(
             is Element -> {
                 val tag = node.tagName().lowercase()
                 when {
-                    tag == "script" || tag == "style" || tag == "head" || tag == "meta" || tag == "link" ||
+                    tag == "script" ||
+                        tag == "style" ||
+                        tag == "head" ||
+                        tag == "meta" ||
+                        tag == "link" ||
                         tag == "noscript" -> Unit
                     tag == "img" -> {
                         val rawUrl = node.attr("src")
@@ -2075,8 +1924,16 @@ class NovelReaderScreenModel(
                             alt = node.attr("alt").sanitizeTextBlock().ifBlank { null },
                         )
                     }
-                    tag == "p" || tag == "li" || tag == "blockquote" || tag == "h1" || tag == "h2" ||
-                        tag == "h3" || tag == "h4" || tag == "h5" || tag == "h6" || tag == "pre" -> {
+                    tag == "p" ||
+                        tag == "li" ||
+                        tag == "blockquote" ||
+                        tag == "h1" ||
+                        tag == "h2" ||
+                        tag == "h3" ||
+                        tag == "h4" ||
+                        tag == "h5" ||
+                        tag == "h6" ||
+                        tag == "pre" -> {
                         val text = node.text().sanitizeTextBlock()
                         if (text.isBlank()) return
                         val structuredBlocks = parseStructuredFragmentToBlocks(
@@ -2090,7 +1947,7 @@ class NovelReaderScreenModel(
                             return
                         }
                         val normalizedText = if (tag == "li") {
-                            "- $text"
+                            "• $text"
                         } else {
                             text
                         }
@@ -2117,7 +1974,6 @@ class NovelReaderScreenModel(
             }
         }
     }
-
     private fun parseStructuredFragmentToBlocks(
         rawPayload: String,
         chapterWebUrl: String?,
@@ -2125,7 +1981,6 @@ class NovelReaderScreenModel(
         pluginSite: String?,
     ): List<ContentBlock> {
         if (!looksLikeStructuredPayload(rawPayload)) return emptyList()
-
         val parsedRoot = parseStructuredRoot(rawPayload)
         val renderedHtml = if (parsedRoot != null) {
             val attachmentUrls = extractStructuredAttachmentUrls(parsedRoot)
@@ -2135,14 +1990,12 @@ class NovelReaderScreenModel(
             renderStructuredPayloadFallback(rawPayload).orEmpty()
         }.trim()
         if (renderedHtml.isBlank()) return emptyList()
-
         val renderedDoc = Jsoup.parse("<div>$renderedHtml</div>")
         val renderedCandidates = renderedDoc.select("p, li, blockquote, h1, h2, h3, h4, h5, h6, pre, img")
             .filterNot { node ->
                 node.tagName().equals("p", ignoreCase = true) &&
                     node.parent()?.tagName()?.equals("li", ignoreCase = true) == true
             }
-
         return renderedCandidates.mapNotNull { candidate ->
             if (candidate.tagName().equals("img", ignoreCase = true)) {
                 val rawUrl = candidate.attr("src")
@@ -2165,7 +2018,7 @@ class NovelReaderScreenModel(
                     null
                 } else {
                     val normalized = if (candidate.tagName().equals("li", ignoreCase = true)) {
-                        "вЂў $candidateText"
+                        "• $candidateText"
                     } else {
                         candidateText
                     }
@@ -2174,7 +2027,6 @@ class NovelReaderScreenModel(
             }
         }
     }
-
     private fun resolveContentResourceUrl(
         rawUrl: String,
         chapterWebUrl: String?,
@@ -2192,20 +2044,16 @@ class NovelReaderScreenModel(
         if (trimmed.startsWith("blob:", ignoreCase = true)) {
             return null
         }
-
         trimmed.toHttpUrlOrNull()?.let { return it.toString() }
-
         chapterWebUrl
             ?.let { resolveUrl(trimmed, it).trim().toHttpUrlOrNull() }
             ?.let { return it.toString() }
-
         return resolveNovelChapterWebUrl(
             chapterUrl = trimmed,
             pluginSite = pluginSite,
             novelUrl = novelUrl,
         )
     }
-
     private fun resolveRichContentBlocks(
         blocks: List<NovelRichContentBlock>,
         chapterWebUrl: String?,
@@ -2227,7 +2075,6 @@ class NovelReaderScreenModel(
             }
         }
     }
-
     private fun normalizeHtml(
         rawHtml: String,
         settings: NovelReaderSettings,
@@ -2275,11 +2122,9 @@ class NovelReaderScreenModel(
                 append("</script>")
             }
         }
-
         if (rawHtml.contains("<html", ignoreCase = true)) {
             return if (injection.isNotBlank()) injectIntoHtml(rawHtml, injection) else rawHtml
         }
-
         val style = buildString {
             append(baseStyle)
             if (css != null) {
@@ -2287,7 +2132,6 @@ class NovelReaderScreenModel(
                 append(css)
             }
         }
-
         return """
             <!doctype html>
             <html>
@@ -2303,7 +2147,6 @@ class NovelReaderScreenModel(
             </html>
         """.trimIndent()
     }
-
     private fun injectIntoHtml(rawHtml: String, injection: String): String {
         val headClose = Regex("</head>", RegexOption.IGNORE_CASE)
         if (headClose.containsMatchIn(rawHtml)) {
@@ -2320,20 +2163,17 @@ class NovelReaderScreenModel(
         }
         return injection + rawHtml
     }
-
     private fun String.sanitizeTextBlock(): String {
         return this
             .replace('\u00A0', ' ')
             .replace("\r", "")
             .trim()
     }
-
     private fun String.normalizeStructuredChapterPayload(): String {
         val trimmedPayload = trim()
         if (looksLikeHtmlPayload(trimmedPayload)) {
             return this
         }
-
         val parsedRoot = parseStructuredRoot(this)
         if (parsedRoot != null) {
             val attachmentUrls = extractStructuredAttachmentUrls(parsedRoot)
@@ -2346,47 +2186,38 @@ class NovelReaderScreenModel(
                 return "<div>$rendered</div>"
             }
         }
-
         val fallbackRendered = renderStructuredPayloadFallback(this).orEmpty().trim()
         return if (fallbackRendered.isBlank()) this else "<div>$fallbackRendered</div>"
     }
-
     private fun parseStructuredRoot(rawPayload: String): JsonElement? {
         val trimmed = rawPayload
             .trim()
             .removePrefix("\uFEFF")
             .trim()
         if (!looksLikeStructuredPayload(trimmed)) return null
-
         val parseCandidates = linkedSetOf(trimmed)
         extractJsonCandidate(trimmed)?.let { parseCandidates += it }
         normalizeJsonLikePayload(trimmed)?.let { parseCandidates += it }
-
         parseCandidates.forEach { candidate ->
             val parsed = parseStructuredCandidate(candidate, decodeDepth = 0) ?: return@forEach
             if (parsed is JsonObject || parsed is JsonArray) {
                 return parsed
             }
         }
-
         return null
     }
-
     private fun parseStructuredCandidate(
         candidate: String,
         decodeDepth: Int,
     ): JsonElement? {
         if (decodeDepth > 4) return null
-
         val trimmed = candidate.trim().trimEnd(';').trim()
         if (trimmed.isBlank()) return null
-
         val directParsed = runCatching { structuredJson.parseToJsonElement(trimmed) }.getOrNull()
         if (directParsed != null) {
             if (directParsed is JsonObject || directParsed is JsonArray) {
                 return directParsed
             }
-
             val primitiveContent = (directParsed as? JsonPrimitive)
                 ?.contentOrNull
                 ?.trim()
@@ -2395,20 +2226,17 @@ class NovelReaderScreenModel(
                 return parseStructuredCandidate(primitiveContent, decodeDepth + 1)
             }
         }
-
         if (trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
             val decoded = runCatching { structuredJson.decodeFromString<String>(trimmed) }.getOrNull()
             if (!decoded.isNullOrBlank()) {
                 return parseStructuredCandidate(decoded, decodeDepth + 1)
             }
         }
-
         val normalizedCandidate = normalizeJsonLikePayload(trimmed)
             ?.takeIf { it != trimmed }
             ?: return null
         return parseStructuredCandidate(normalizedCandidate, decodeDepth + 1)
     }
-
     private fun looksLikeStructuredPayload(rawValue: String): Boolean {
         if (rawValue.isBlank()) return false
         val trimmed = rawValue.trim()
@@ -2423,7 +2251,6 @@ class NovelReaderScreenModel(
             (trimmed.contains("\"type\"") && trimmed.contains("content")) ||
             (trimmed.contains("'type'") && trimmed.contains("content"))
     }
-
     private fun extractJsonCandidate(rawPayload: String): String? {
         val trimmed = rawPayload.trim()
         if (trimmed.startsWith("<")) {
@@ -2432,7 +2259,6 @@ class NovelReaderScreenModel(
                 return htmlTextCandidate
             }
         }
-
         val objectStart =
             trimmed.indexOf('{').takeIf { it >= 0 } ?: trimmed.indexOf('[').takeIf { it >= 0 } ?: return null
         val objectEnd = trimmed.lastIndexOf('}').takeIf { it > objectStart }
@@ -2440,24 +2266,20 @@ class NovelReaderScreenModel(
             ?: return null
         return trimmed.substring(objectStart, objectEnd + 1).trim()
     }
-
     private fun normalizeJsonLikePayload(rawPayload: String): String? {
         var candidate = rawPayload
             .trim()
             .removePrefix("\uFEFF")
             .trim()
-
         if (candidate.startsWith("return ")) {
             candidate = candidate.removePrefix("return ").trim()
         }
         candidate = candidate.trimEnd(';').trim()
         if (!looksLikeStructuredPayload(candidate)) return null
-
         if (candidate.startsWith("'") && candidate.endsWith("'")) {
             val inner = candidate.substring(1, candidate.lastIndex).replace("\"", "\\\"")
             candidate = "\"$inner\""
         }
-
         if (candidate.contains("\\\"")) {
             candidate = candidate.replace("\\\"", "\"")
         }
@@ -2467,7 +2289,6 @@ class NovelReaderScreenModel(
         if (candidate.contains("\\t")) {
             candidate = candidate.replace("\\t", "\t")
         }
-
         candidate = Regex("([\\{,]\\s*)([A-Za-z_][A-Za-z0-9_\\-]*)(\\s*:)").replace(candidate, "$1\"$2\"$3")
         candidate = Regex("\"([A-Za-z_][A-Za-z0-9_\\-]*)\\s*:\\s*\"").replace(candidate, "\"$1\":\"")
         candidate = Regex("'([^'\\\\]*(?:\\\\.[^'\\\\]*)*)'").replace(candidate) { match ->
@@ -2476,7 +2297,6 @@ class NovelReaderScreenModel(
         candidate = Regex(",\\s*([}\\]])").replace(candidate, "$1")
         return candidate
     }
-
     private fun findStructuredNode(element: JsonElement): JsonElement? {
         return when (element) {
             is JsonObject -> {
@@ -2500,7 +2320,6 @@ class NovelReaderScreenModel(
             else -> null
         }
     }
-
     private fun isStructuredNode(element: JsonObject): Boolean {
         val normalizedType = normalizeStructuredType(element["type"].asStringOrNull())
         if (normalizedType != null && normalizedType in STRUCTURED_NODE_TYPES) {
@@ -2511,11 +2330,9 @@ class NovelReaderScreenModel(
             (element["text"].asStringOrNull() != null) ||
             (element["attrs"] is JsonObject)
     }
-
     private fun extractStructuredAttachmentUrls(root: JsonElement): Map<String, String> {
         val rootObject = root as? JsonObject ?: return emptyMap()
         val mapping = mutableMapOf<String, String>()
-
         fun appendAttachmentMapping(attachment: JsonObject) {
             val url = attachment["url"].asStringOrNull()?.trim().orEmpty()
             if (url.isBlank()) return
@@ -2526,7 +2343,6 @@ class NovelReaderScreenModel(
                 mapping[key] = url
             }
         }
-
         when (val attachments = rootObject["attachments"]) {
             is JsonArray -> attachments.forEach { entry ->
                 val attachment = entry as? JsonObject ?: return@forEach
@@ -2544,7 +2360,6 @@ class NovelReaderScreenModel(
         }
         return mapping
     }
-
     private fun renderStructuredElementAsHtml(
         element: JsonElement,
         attachmentUrls: Map<String, String>,
@@ -2559,7 +2374,6 @@ class NovelReaderScreenModel(
             else -> ""
         }
     }
-
     private fun renderStructuredNodeAsHtml(
         node: JsonObject,
         attachmentUrls: Map<String, String>,
@@ -2567,7 +2381,6 @@ class NovelReaderScreenModel(
         val type = normalizeStructuredType(node["type"].asStringOrNull()).orEmpty()
         val attrs = node["attrs"] as? JsonObject
         val children = node["content"] as? JsonArray
-
         fun renderChildren(): String {
             if (children == null) return ""
             return buildString {
@@ -2576,7 +2389,6 @@ class NovelReaderScreenModel(
                 }
             }
         }
-
         return when (type) {
             "doc" -> renderChildren()
             "paragraph" -> "<p>${renderChildren()}</p>"
@@ -2608,7 +2420,6 @@ class NovelReaderScreenModel(
             }
         }
     }
-
     private fun renderStructuredImageNode(
         attrs: JsonObject?,
         attachmentUrls: Map<String, String>,
@@ -2619,7 +2430,6 @@ class NovelReaderScreenModel(
         if (directUrl.isNotBlank()) {
             return "<img src=\"${directUrl.escapeHtmlAttribute()}\" alt=\"$altText\" />"
         }
-
         val imageReferences = mutableListOf<String>()
         attrs["image"].asStringOrNull()?.trim()?.takeIf { it.isNotBlank() }?.let { imageReferences += it }
         when (val imagesNode = attrs["images"]) {
@@ -2650,13 +2460,11 @@ class NovelReaderScreenModel(
             "<img src=\"${url.escapeHtmlAttribute()}\" alt=\"$altText\" />"
         }
     }
-
     private fun applyStructuredMarks(
         text: String,
         marks: JsonArray?,
     ): String {
         if (marks == null || marks.isEmpty()) return text
-
         var rendered = text
         marks.forEach { markElement ->
             val mark = markElement as? JsonObject ?: return@forEach
@@ -2678,15 +2486,12 @@ class NovelReaderScreenModel(
         }
         return rendered
     }
-
     private fun JsonElement?.asStringOrNull(): String? {
         return (this as? JsonPrimitive)?.contentOrNull
     }
-
     private fun JsonElement?.asIntOrNull(): Int? {
         return (this as? JsonPrimitive)?.intOrNull
     }
-
     private fun String.escapeHtml(): String {
         return replace("&", "&amp;")
             .replace("<", "&lt;")
@@ -2694,21 +2499,16 @@ class NovelReaderScreenModel(
             .replace("\"", "&quot;")
             .replace("'", "&#39;")
     }
-
     private fun String.escapeHtmlAttribute(): String {
         return escapeHtml()
     }
-
     private fun renderStructuredPayloadFallback(rawPayload: String): String? {
         val candidate = extractJsonCandidate(rawPayload) ?: rawPayload.trim()
         if (!looksLikeStructuredPayload(candidate)) return null
-
         val normalized = normalizeJsonLikePayload(candidate) ?: candidate
         val textSegments = extractStructuredTextFallbackSegments(normalized)
         val imageSegments = extractStructuredImageFallbackUrls(normalized)
-
         if (textSegments.isEmpty() && imageSegments.isEmpty()) return null
-
         val html = buildString {
             textSegments.forEach { segment ->
                 append("<p>${segment.escapeHtml()}</p>")
@@ -2719,14 +2519,12 @@ class NovelReaderScreenModel(
         }.trim()
         return html.takeIf { it.isNotBlank() }
     }
-
     private fun looksLikeHtmlPayload(rawPayload: String): Boolean {
         val trimmed = rawPayload.trim()
         if (!trimmed.contains('<') || !trimmed.contains('>')) return false
         return Regex("(?is)<\\s*(html|body|div|main|article|section|p|ul|ol|li|h1|h2|h3|h4|h5|h6|span)\\b")
             .containsMatchIn(trimmed)
     }
-
     private fun extractStructuredTextFallbackSegments(payload: String): List<String> {
         val results = mutableListOf<String>()
         val textRegex = Regex("(?is)\"text\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"")
@@ -2741,12 +2539,11 @@ class NovelReaderScreenModel(
                 .replace("\\u00A0", " ")
                 .sanitizeTextBlock()
             if (decodedText.isBlank()) return@forEach
-
             val contextStart = (match.range.first - 220).coerceAtLeast(0)
             val context = payload.substring(contextStart, match.range.first).lowercase()
             val isListItemContext = context.contains("listitem") || context.contains("bulletlist")
-            val normalized = if (isListItemContext && !decodedText.startsWith("вЂў")) {
-                "вЂў $decodedText"
+            val normalized = if (isListItemContext && !decodedText.startsWith("•")) {
+                "• $decodedText"
             } else {
                 decodedText
             }
@@ -2754,12 +2551,10 @@ class NovelReaderScreenModel(
         }
         return results
     }
-
     private fun extractStructuredImageFallbackUrls(payload: String): List<String> {
         val urlRegex = Regex("(?is)\"url\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"")
         val directHttpRegex = Regex("(?i)https?://[^\\s\"'<>]+\\.(?:png|jpe?g|gif|webp|bmp|svg)")
         val urls = linkedSetOf<String>()
-
         urlRegex.findAll(payload).forEach { match ->
             val url = match.groupValues.getOrNull(1).orEmpty()
                 .replace("\\\\", "\\")
@@ -2770,17 +2565,14 @@ class NovelReaderScreenModel(
                 urls += url
             }
         }
-
         directHttpRegex.findAll(payload).forEach { match ->
             val url = match.value.trim()
             if (url.isNotBlank()) {
                 urls += url
             }
         }
-
         return urls.toList()
     }
-
     private fun normalizeStructuredType(type: String?): String? {
         return type
             ?.trim()
@@ -2789,7 +2581,6 @@ class NovelReaderScreenModel(
             ?.replace("_", "")
             ?.replace("-", "")
     }
-
     private suspend fun saveHistorySnapshot(chapterId: Long, sessionReadDurationMs: Long) {
         runCatching {
             resolvedHistoryRepository?.upsertNovelHistory(
@@ -2803,18 +2594,15 @@ class NovelReaderScreenModel(
             logcat(LogPriority.ERROR, error) { "Failed to save novel history snapshot" }
         }
     }
-
     private suspend fun flushPendingHistorySnapshot(
         chapterId: Long,
         additionalReadDurationMs: Long = 0L,
     ) {
         val readDurationMs = (pendingHistoryReadDurationMs + additionalReadDurationMs).coerceAtLeast(0L)
         if (readDurationMs <= 0L) return
-
         pendingHistoryReadDurationMs = 0L
         saveHistorySnapshot(chapterId, readDurationMs)
     }
-
     sealed interface State {
         data object Loading : State
         data class Error(val message: String?) : State
@@ -2851,12 +2639,10 @@ class NovelReaderScreenModel(
             val isTestingDeepSeekConnection: Boolean = false,
         ) : State
     }
-
     sealed interface ContentBlock {
         data class Text(val text: String) : ContentBlock
         data class Image(val url: String, val alt: String?) : ContentBlock
     }
-
     private data class PendingProgressPersistence(
         val chapterId: Long,
         val novelId: Long,
@@ -2880,7 +2666,6 @@ class NovelReaderScreenModel(
             )
         }
     }
-
     companion object {
         private const val JAOMIX_PAGE_SOURCE_ORDER_STRIDE = 1_000L
         private const val MAX_DEEPSEEK_CONCURRENCY = 32
@@ -2892,7 +2677,6 @@ class NovelReaderScreenModel(
         private const val DEEPSEEK_TOP_P_MAX = 0.95f
         private const val DEEPSEEK_DEFAULT_PRESENCE_PENALTY = 0.15f
         private const val DEEPSEEK_DEFAULT_FREQUENCY_PENALTY = 0.15f
-
         private val STRUCTURED_NODE_TYPES = setOf(
             "doc",
             "paragraph",
@@ -2908,16 +2692,13 @@ class NovelReaderScreenModel(
         )
     }
 }
-
 internal fun sanitizeChapterHtmlForReader(rawHtml: String): String {
     if (rawHtml.isBlank()) return rawHtml
-
     val document = Jsoup.parseBodyFragment(rawHtml)
     document.outputSettings().prettyPrint(false)
     document.select(
         "script, style, iframe, svg, canvas, object, embed, form, input, button, select, textarea, noscript, meta, link",
     ).remove()
-
     document.select("*").forEach { element ->
         val attributesToRemove = element.attributes()
             .asList()
@@ -2926,18 +2707,14 @@ internal fun sanitizeChapterHtmlForReader(rawHtml: String): String {
         attributesToRemove.forEach { attributeName ->
             element.removeAttr(attributeName)
         }
-
         sanitizeReaderInlineStyle(element.attr("style"))?.let { sanitizedStyle ->
             element.attr("style", sanitizedStyle)
         } ?: element.removeAttr("style")
     }
-
     return document.body().html()
 }
-
 internal fun sanitizeReaderInlineStyle(rawStyle: String): String? {
     if (rawStyle.isBlank()) return null
-
     val allowedProperties = setOf(
         "text-align",
         "text-indent",
@@ -2956,15 +2733,12 @@ internal fun sanitizeReaderInlineStyle(rawStyle: String): String? {
             if (propertyName !in allowedProperties || propertyValue.isBlank()) return@mapNotNull null
             "$propertyName: $propertyValue"
         }
-
     return sanitizedDeclarations.joinToString("; ").ifBlank { null }
 }
-
 internal fun isGeminiSourceLanguageEnglish(sourceLang: String): Boolean {
     val normalized = sourceLang.trim().lowercase()
-    return normalized == "english" || normalized == "en" || normalized == "Р°РЅРіР»РёР№СЃРєРёР№"
+    return normalized == "english" || normalized == "en" || normalized == "английский"
 }
-
 internal fun hasReachedGeminiNextChapterTranslationPrefetchThreshold(
     currentIndex: Int,
     totalItems: Int,
@@ -2976,34 +2750,28 @@ internal fun hasReachedGeminiNextChapterTranslationPrefetchThreshold(
         totalItems > 1 && ((currentIndex + 1).toFloat() / totalItems.toFloat()) >= 0.3f
     }
 }
-
 internal object NovelReaderChapterPrefetchCache {
     private const val MAX_ENTRIES = 4
-
     private val cache = object : LinkedHashMap<Long, String>(MAX_ENTRIES, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, String>?): Boolean {
             return size > MAX_ENTRIES
         }
     }
-
     fun get(chapterId: Long): String? {
         return synchronized(cache) {
             cache[chapterId]
         }
     }
-
     fun put(chapterId: Long, html: String) {
         synchronized(cache) {
             cache[chapterId] = html
         }
     }
-
     fun contains(chapterId: Long): Boolean {
         return synchronized(cache) {
             cache.containsKey(chapterId)
         }
     }
-
     fun clear() {
         synchronized(cache) {
             cache.clear()

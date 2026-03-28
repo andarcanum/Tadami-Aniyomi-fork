@@ -539,12 +539,16 @@ internal fun paginatePlainPageBlocks(
             null
         }
         val approximateMetrics = ApproximateTextMetrics(
-            charsPerLine = ((widthPx - (firstLineIndentPx ?: 0)).coerceAtLeast(1) /
-                (blockMetrics.textSizePx.coerceAtLeast(1f) * 0.55f))
+            charsPerLine = (
+                (widthPx - (firstLineIndentPx ?: 0)).coerceAtLeast(1) /
+                    (blockMetrics.textSizePx.coerceAtLeast(1f) * 0.55f)
+                )
                 .toInt()
                 .coerceAtLeast(15),
-            lineHeightPx = (blockMetrics.textSizePx.coerceAtLeast(1f) *
-                blockMetrics.lineHeightMultiplier.coerceAtLeast(1f))
+            lineHeightPx = (
+                blockMetrics.textSizePx.coerceAtLeast(1f) *
+                    blockMetrics.lineHeightMultiplier.coerceAtLeast(1f)
+                )
                 .toInt()
                 .coerceAtLeast(1),
         )
@@ -768,12 +772,16 @@ internal fun paginateRichPageBlocks(
             textSizePx = blockMetrics.textSizePx,
         )
         val approximateMetrics = ApproximateTextMetrics(
-            charsPerLine = ((widthPx - (firstLineIndentPx ?: 0)).coerceAtLeast(1) /
-                (blockMetrics.textSizePx.coerceAtLeast(1f) * 0.55f))
+            charsPerLine = (
+                (widthPx - (firstLineIndentPx ?: 0)).coerceAtLeast(1) /
+                    (blockMetrics.textSizePx.coerceAtLeast(1f) * 0.55f)
+                )
                 .toInt()
                 .coerceAtLeast(15),
-            lineHeightPx = (blockMetrics.textSizePx.coerceAtLeast(1f) *
-                blockMetrics.lineHeightMultiplier.coerceAtLeast(1f))
+            lineHeightPx = (
+                blockMetrics.textSizePx.coerceAtLeast(1f) *
+                    blockMetrics.lineHeightMultiplier.coerceAtLeast(1f)
+                )
                 .toInt()
                 .coerceAtLeast(1),
         )
@@ -902,9 +910,11 @@ internal fun buildPlainPageRenderBlocks(
             firstLineIndentEm = if (
                 forceParagraphIndent &&
                 slice.range.start == 0 &&
-                !(chapterTitle != null &&
-                    slice.blockIndex == 0 &&
-                    isNativeChapterTitleText(fullBlockText, chapterTitle))
+                !(
+                    chapterTitle != null &&
+                        slice.blockIndex == 0 &&
+                        isNativeChapterTitleText(fullBlockText, chapterTitle)
+                    )
             ) {
                 FORCED_PARAGRAPH_FIRST_LINE_INDENT_EM
             } else {

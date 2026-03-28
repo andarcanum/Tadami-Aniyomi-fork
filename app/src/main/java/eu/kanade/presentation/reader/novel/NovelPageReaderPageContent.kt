@@ -40,8 +40,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
-import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
 import kotlin.math.roundToInt
+import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
 
 internal data class NovelPageReaderContentLayout(
     val textPadding: PaddingValues,

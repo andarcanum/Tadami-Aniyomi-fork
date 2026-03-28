@@ -22,6 +22,9 @@
 -keep,allowoptimization class is.xyz.mpv.** { public protected *; }
 -keep,allowoptimization class com.arthenica.** { public protected *; }
 
+# WorkManager/Room use reflection for the generated database implementation in release builds.
+-keep class * extends androidx.room.RoomDatabase { <init>(); }
+
 # From extensions-lib
 -keep,allowoptimization class eu.kanade.tachiyomi.network.interceptor.RateLimitInterceptorKt { public protected *; }
 -keep,allowoptimization class eu.kanade.tachiyomi.network.interceptor.SpecificHostRateLimitInterceptorKt { public protected *; }

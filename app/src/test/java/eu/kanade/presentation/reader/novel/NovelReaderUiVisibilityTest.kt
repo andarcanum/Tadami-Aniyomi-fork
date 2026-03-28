@@ -2480,6 +2480,38 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `page turn custom tap action keeps center tap when tap to scroll is disabled`() {
+        assertEquals(
+            PageTurnCustomTapAction.TOGGLE_UI,
+            resolvePageTurnCustomTapAction(
+                tapXFraction = 0.5f,
+                currentPage = 0,
+                pageCount = 3,
+                centerTapWidthFraction = 0.2f,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+                tapToScrollEnabled = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn custom tap action ignores edge chapter navigation when tap to scroll is disabled`() {
+        assertEquals(
+            PageTurnCustomTapAction.NONE,
+            resolvePageTurnCustomTapAction(
+                tapXFraction = 0.05f,
+                currentPage = 0,
+                pageCount = 3,
+                centerTapWidthFraction = 0.2f,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+                tapToScrollEnabled = false,
+            ),
+        )
+    }
+
+    @Test
     @OptIn(ExperimentalPageCurlApi::class)
     fun `page turn renderer keeps backward tap zones wide enough for left side taps`() {
         val bookConfig = resolveNovelPageTurnRendererConfig(

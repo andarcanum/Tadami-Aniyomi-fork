@@ -2176,10 +2176,10 @@ fun NovelReaderScreen(
                         else -> Icons.Outlined.PlayArrow
                     }
                     val quickActionDescription = when {
-                        state.isGeminiTranslating -> "РћСЃС‚Р°РЅРѕРІРёС‚СЊ РїРµСЂРµРІРѕРґ"
-                        hasTranslationResult && state.isGeminiTranslationVisible -> "РџРѕРєР°Р·Р°С‚СЊ РѕСЂРёРіРёРЅР°Р»"
-                        hasTranslationResult -> "РџРѕРєР°Р·Р°С‚СЊ РїРµСЂРµРІРѕРґ"
-                        else -> "Р—Р°РїСѓСЃС‚РёС‚СЊ РїРµСЂРµРІРѕРґ"
+                        state.isGeminiTranslating -> "Остановить перевод"
+                        hasTranslationResult && state.isGeminiTranslationVisible -> "Показать оригинал"
+                        hasTranslationResult -> "Показать перевод"
+                        else -> "Запустить перевод"
                     }
                     val quickActionContainerColor = when {
                         state.isGeminiTranslating -> MaterialTheme.colorScheme.errorContainer
@@ -2810,7 +2810,7 @@ private fun GeminiTranslationDialog(
         listOf(
             GenerationPreset(
                 id = "anchor_plus",
-                title = "РљР°РЅРѕРЅ+",
+                title = "Канон+",
                 temperature = 0.62f,
                 topP = 0.9f,
                 topK = 36,
@@ -2821,7 +2821,7 @@ private fun GeminiTranslationDialog(
             ),
             GenerationPreset(
                 id = "authorial",
-                title = "РђРІС‚РѕСЂСЃРєРёР№",
+                title = "Авторский",
                 temperature = 0.76f,
                 topP = 0.93f,
                 topK = 48,
@@ -2832,7 +2832,7 @@ private fun GeminiTranslationDialog(
             ),
             GenerationPreset(
                 id = "dialogue_plus",
-                title = "Р–РёРІС‹Рµ РґРёР°Р»РѕРіРё",
+                title = "Живые диалоги",
                 temperature = 0.88f,
                 topP = 0.95f,
                 topK = 56,
@@ -2843,7 +2843,7 @@ private fun GeminiTranslationDialog(
             ),
             GenerationPreset(
                 id = "private_pulse",
-                title = "18+ РРјРїСѓР»СЊСЃ",
+                title = "18+ Импульс",
                 temperature = 0.98f,
                 topP = 0.97f,
                 topK = 72,
@@ -2853,7 +2853,7 @@ private fun GeminiTranslationDialog(
             ),
             GenerationPreset(
                 id = "unbound",
-                title = "Р‘РµР· С‚РѕСЂРјРѕР·РѕРІ",
+                title = "Без тормозов",
                 temperature = 1.08f,
                 topP = 0.985f,
                 topK = 96,
@@ -2868,7 +2868,7 @@ private fun GeminiTranslationDialog(
         listOf(
             GenerationPreset(
                 id = "deepseek_balanced",
-                title = "DeepSeek Р‘Р°Р»Р°РЅСЃ",
+                title = "DeepSeek Баланс",
                 temperature = 1.3f,
                 topP = 0.9f,
                 topK = null,
@@ -2879,7 +2879,7 @@ private fun GeminiTranslationDialog(
             ),
             GenerationPreset(
                 id = "deepseek_expressive",
-                title = "DeepSeek Р­РєСЃРїСЂРµСЃСЃРёСЏ",
+                title = "DeepSeek Экспрессия",
                 temperature = 1.4f,
                 topP = 0.93f,
                 topK = null,
@@ -2890,7 +2890,7 @@ private fun GeminiTranslationDialog(
             ),
             GenerationPreset(
                 id = "deepseek_creative",
-                title = "DeepSeek РљСЂРµР°С‚РёРІ",
+                title = "DeepSeek Креатив",
                 temperature = 1.5f,
                 topP = 0.95f,
                 topK = null,
@@ -2987,7 +2987,7 @@ private fun GeminiTranslationDialog(
     } else {
         defaultGenerationPresets
     }
-    val tabTitles = remember { persistentListOf("РћСЃРЅРѕРІРЅС‹Рµ", "РџСЂРѕРјРїС‚", "Р•С‰Рµ") }
+    val tabTitles = remember { persistentListOf("Основные", "Промпт", "Еще") }
 
     LaunchedEffect(tempProvider) {
         if (tempProvider == NovelTranslationProvider.AIRFORCE) {
@@ -3025,13 +3025,13 @@ private fun GeminiTranslationDialog(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = "AI РџРµСЂРµРІРѕРґС‡РёРє",
+                text = "AI Переводчик",
                 style = MaterialTheme.typography.titleMedium,
             )
             if (page == 0) {
                 GeminiSettingsBlock(
-                    title = "РЎС‚Р°С‚СѓСЃ Рё РґРµР№СЃС‚РІРёСЏ",
-                    subtitle = "Р—Р°РїСѓСЃРє, РѕСЃС‚Р°РЅРѕРІРєР° Рё РїРµСЂРµРєР»СЋС‡РµРЅРёРµ РѕС‚РѕР±СЂР°Р¶РµРЅРёСЏ",
+                    title = "Статус и действия",
+                    subtitle = "Запуск, остановка и переключение отображения",
                 ) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
@@ -3081,21 +3081,21 @@ private fun GeminiTranslationDialog(
                                     if (privateBridgeUnlocked) {
                                         onStart()
                                     } else {
-                                        onAddLog("рџ”’ $privateProviderLabel bridge is locked. Unlock it first.")
+                                        onAddLog("🔒 $privateProviderLabel bridge is locked. Unlock it first.")
                                     }
                                 }
                             },
                             enabled = isTranslating || privateBridgeUnlocked,
                             modifier = Modifier.weight(1f),
                         ) {
-                            Text(if (isTranslating) "РћСЃС‚Р°РЅРѕРІРёС‚СЊ" else "Р—Р°РїСѓСЃС‚РёС‚СЊ")
+                            Text(if (isTranslating) "Остановить" else "Запустить")
                         }
                         OutlinedButton(
                             onClick = onToggleVisibility,
                             enabled = hasTranslationResult,
                             modifier = Modifier.weight(1f),
                         ) {
-                            Text(if (isVisible) "РћСЂРёРіРёРЅР°Р»" else "РџРµСЂРµРІРѕРґ")
+                            Text(if (isVisible) "Оригинал" else "Перевод")
                         }
                     }
 
@@ -3105,7 +3105,7 @@ private fun GeminiTranslationDialog(
                             horizontalArrangement = Arrangement.End,
                         ) {
                             TextButton(onClick = onClear) {
-                                Text("РћС‡РёСЃС‚РёС‚СЊ РєСЌС€ РіР»Р°РІС‹")
+                                Text("Очистить кэш главы")
                             }
                         }
                     }
@@ -3114,12 +3114,12 @@ private fun GeminiTranslationDialog(
 
             if (page == 0 || page == 1) {
                 GeminiSettingsBlock(
-                    title = "РћСЃРЅРѕРІРЅС‹Рµ РїР°СЂР°РјРµС‚СЂС‹",
-                    subtitle = "РњРѕРґРµР»СЊ, СЂРµР¶РёРј РїСЂРѕРјРїС‚Р° Рё РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЊРЅРѕСЃС‚СЊ",
+                    title = "Основные параметры",
+                    subtitle = "Модель, режим промпта и производительность",
                 ) {
                     if (page == 0) {
                         Text(
-                            "РџСЂРѕРІР°Р№РґРµСЂ",
+                            "Провайдер",
                             style = MaterialTheme.typography.labelLarge,
                         )
                         val providerCards = listOf(
@@ -3207,7 +3207,7 @@ private fun GeminiTranslationDialog(
                             OutlinedTextField(
                                 value = tempPrivatePassword,
                                 onValueChange = { tempPrivatePassword = it },
-                                label = { Text("РџР°СЂРѕР»СЊ $privateProviderLabel bridge") },
+                                label = { Text("Пароль $privateProviderLabel bridge") },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                             )
@@ -3216,16 +3216,16 @@ private fun GeminiTranslationDialog(
                                     onClick = {
                                         val password = tempPrivatePassword.trim()
                                         if (password.isBlank()) {
-                                            onAddLog("рџ”’ Enter bridge password")
+                                            onAddLog("🔒 Enter bridge password")
                                         } else {
                                             val unlocked = GeminiPrivateBridge.unlock(password)
                                             if (unlocked) {
                                                 isPrivateProviderUnlocked = true
                                                 onSetGeminiPrivateUnlocked(true)
                                                 tempPrivatePassword = ""
-                                                onAddLog("вњ… $privateProviderLabel bridge unlocked")
+                                                onAddLog("✅ $privateProviderLabel bridge unlocked")
                                             } else {
-                                                onAddLog("вќЊ Invalid bridge password")
+                                                onAddLog("❌ Invalid bridge password")
                                             }
                                         }
                                     },
@@ -3237,7 +3237,7 @@ private fun GeminiTranslationDialog(
                                         tempPrivatePassword = ""
                                     },
                                 ) {
-                                    Text("РћС‡РёСЃС‚РёС‚СЊ")
+                                    Text("Очистить")
                                 }
                             }
                         }
@@ -3247,12 +3247,12 @@ private fun GeminiTranslationDialog(
                             NovelTranslationProvider.GEMINI_PRIVATE,
                             -> {
                                 Text(
-                                    "РњРѕРґРµР»СЊ",
+                                    "Модель",
                                     style = MaterialTheme.typography.labelLarge,
                                 )
                                 eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
                                     value = tempModel,
-                                    title = "РўРµРєСѓС‰Р°СЏ РјРѕРґРµР»СЊ",
+                                    title = "Текущая модель",
                                     subtitle = modelMap[tempModel] ?: tempModel,
                                     icon = null,
                                     entries = modelMap,
@@ -3265,7 +3265,7 @@ private fun GeminiTranslationDialog(
                             }
                             NovelTranslationProvider.OPENROUTER -> {
                                 Text(
-                                    "OpenRouter РјРѕРґРµР»Рё (free)",
+                                    "OpenRouter модели (free)",
                                     style = MaterialTheme.typography.labelLarge,
                                 )
                                 if (openRouterAllModelEntries.isNotEmpty()) {
@@ -3302,20 +3302,20 @@ private fun GeminiTranslationDialog(
                                         tempOpenRouterModel = it
                                         onSetOpenRouterModel(it)
                                     },
-                                    label = { Text("Model ID (С‚РѕР»СЊРєРѕ :free)") },
+                                    label = { Text("Model ID (только :free)") },
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
                             NovelTranslationProvider.DEEPSEEK -> {
                                 Text(
-                                    "DeepSeek РјРѕРґРµР»Рё",
+                                    "DeepSeek модели",
                                     style = MaterialTheme.typography.labelLarge,
                                 )
                                 if (deepSeekAllModelEntries.isNotEmpty()) {
                                     eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
                                         value = tempDeepSeekModel,
-                                        title = "РњРѕРґРµР»Рё (${deepSeekAllModelEntries.size})",
-                                        subtitle = tempDeepSeekModel.ifBlank { "Р’С‹Р±РµСЂРёС‚Рµ РјРѕРґРµР»СЊ" },
+                                        title = "Модели (${deepSeekAllModelEntries.size})",
+                                        subtitle = tempDeepSeekModel.ifBlank { "Выберите модель" },
                                         icon = null,
                                         entries = deepSeekAllModelEntries,
                                         onValueChange = { selected ->
@@ -3353,13 +3353,13 @@ private fun GeminiTranslationDialog(
                     if (page == 1) {
                         if (!isPrivateSingleRequestMode) {
                             Text(
-                                "Р РµР¶РёРј РїСЂРѕРјРїС‚Р°",
+                                "Режим промпта",
                                 style = MaterialTheme.typography.labelLarge,
                             )
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 items(
                                     listOf(
-                                        GeminiPromptMode.CLASSIC to "РљР»Р°СЃСЃРёС‡РµСЃРєРёР№",
+                                        GeminiPromptMode.CLASSIC to "Классический",
                                         GeminiPromptMode.ADULT_18 to "18+",
                                     ),
                                 ) { option ->
@@ -3371,13 +3371,13 @@ private fun GeminiTranslationDialog(
                                             onAddLog("?? Prompt mode: ${option.second}")
                                         },
                                     ) {
-                                        Text(if (selected) "вЂў ${option.second}" else option.second)
+                                        Text(if (selected) "• ${option.second}" else option.second)
                                     }
                                 }
                             }
 
                             Text(
-                                "РЎС‚РёР»СЊ РїРµСЂРµРІРѕРґР°",
+                                "Стиль перевода",
                                 style = MaterialTheme.typography.labelLarge,
                             )
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3387,10 +3387,10 @@ private fun GeminiTranslationDialog(
                                         onClick = {
                                             tempStylePreset = preset.id
                                             onSetGeminiStylePreset(preset.id)
-                                            onAddLog("?? РЎС‚РёР»СЊ: ${preset.title}")
+                                            onAddLog("?? Стиль: ${preset.title}")
                                         },
                                     ) {
-                                        Text(if (selected) "вЂў ${preset.title}" else preset.title)
+                                        Text(if (selected) "• ${preset.title}" else preset.title)
                                     }
                                 }
                             }
@@ -3410,12 +3410,12 @@ private fun GeminiTranslationDialog(
                                             style = MaterialTheme.typography.labelLarge,
                                         )
                                         Text(
-                                            text = "Р”Р»СЏ С‡РµРіРѕ: ${selectedStylePreset.scenario}",
+                                            text = "Для чего: ${selectedStylePreset.scenario}",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                         Text(
-                                            text = "РџСЂРµРёРјСѓС‰РµСЃС‚РІРѕ: ${selectedStylePreset.advantage}",
+                                            text = "Преимущество: ${selectedStylePreset.advantage}",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -3424,7 +3424,7 @@ private fun GeminiTranslationDialog(
                             }
 
                             Text(
-                                "РњРѕРґРёС„РёРєР°С‚РѕСЂС‹ РїСЂРѕРјРїС‚Р°",
+                                "Модификаторы промпта",
                                 style = MaterialTheme.typography.labelLarge,
                             )
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3466,7 +3466,7 @@ private fun GeminiTranslationDialog(
                                         modifier = Modifier.clickable { showCustomPromptDialog = true },
                                     ) {
                                         Text(
-                                            text = if (tempCustomModifier.isBlank()) "+ РЎРІРѕР№" else "РЎРІРѕР№",
+                                            text = if (tempCustomModifier.isBlank()) "+ Свой" else "Свой",
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                             style = MaterialTheme.typography.labelMedium,
                                         )
@@ -3494,7 +3494,7 @@ private fun GeminiTranslationDialog(
 
                     if (page == 0 && !isPrivateSingleRequestMode) {
                         Text(
-                            "РЎРєРѕСЂРѕСЃС‚СЊ (Р±Р°С‚С‡-РїР°СЂР°Р»Р»РµР»СЊРЅРѕСЃС‚СЊ)",
+                            "Скорость (батч-параллельность)",
                             style = MaterialTheme.typography.labelLarge,
                         )
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3513,7 +3513,7 @@ private fun GeminiTranslationDialog(
                                         onAddLog("?? Speed: $label")
                                     },
                                 ) {
-                                    Text(if (selected) "вЂў $label" else label)
+                                    Text(if (selected) "• $label" else label)
                                 }
                             }
                         }
@@ -3547,7 +3547,7 @@ private fun GeminiTranslationDialog(
                             )
                     ) {
                         Text(
-                            "РЈСЂРѕРІРµРЅСЊ СЂР°Р·РјС‹С€Р»РµРЅРёСЏ",
+                            "Уровень размышления",
                             style = MaterialTheme.typography.labelLarge,
                         )
                         val reasoningOptions = if (tempModel == "gemini-3-pro-preview") {
@@ -3580,8 +3580,8 @@ private fun GeminiTranslationDialog(
 
             if (page == 2) {
                 GeminiSettingsBlock(
-                    title = "РЎРёСЃС‚РµРјР° Рё РєСЌС€",
-                    subtitle = "API РєР»СЋС‡, РєСЌС€ Рё СЂСѓС‡РЅРѕР№ РєРѕРЅС‚СЂРѕР»СЊ РїРѕС‚РѕРєРѕРІ",
+                    title = "Система и кэш",
+                    subtitle = "API ключ, кэш и ручной контроль потоков",
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -3589,7 +3589,7 @@ private fun GeminiTranslationDialog(
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "РђРІС‚РѕСЃС‚Р°СЂС‚ РїРµСЂРµРІРѕРґР° РґР»СЏ English",
+                            text = "Автостарт перевода для English",
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
                         )
@@ -3608,7 +3608,7 @@ private fun GeminiTranslationDialog(
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "РџСЂРµРІРµРЅС‚РёРІРЅС‹Р№ РїРµСЂРµРІРѕРґ СЃР»РµРґСѓСЋС‰РµР№ РіР»Р°РІС‹ (30%)",
+                            text = "Превентивный перевод следующей главы (30%)",
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
                         )
@@ -3637,7 +3637,7 @@ private fun GeminiTranslationDialog(
                                 onCheckedChange = { enabled ->
                                     tempPrivatePythonLikeMode = enabled
                                     onSetGeminiPrivatePythonLikeMode(enabled)
-                                    onAddLog("рџ”Ђ Private Python-like: ${if (enabled) "ON" else "OFF"}")
+                                    onAddLog("🔀 Private Python-like: ${if (enabled) "ON" else "OFF"}")
                                 },
                             )
                         }
@@ -3686,7 +3686,7 @@ private fun GeminiTranslationDialog(
                                     when {
                                         isOpenRouterSelected -> "OpenRouter API key"
                                         isDeepSeekSelected -> "DeepSeek API key"
-                                        else -> "API РєР»СЋС‡"
+                                        else -> "API ключ"
                                     },
                                 )
                             },
@@ -3710,12 +3710,12 @@ private fun GeminiTranslationDialog(
                                         onAddLog("?? DeepSeek settings saved")
                                     } else {
                                         onSetGeminiApiKey(tempKey)
-                                        onAddLog("?? API РєР»СЋС‡ СЃРѕС…СЂР°РЅРµРЅ")
+                                        onAddLog("?? API ключ сохранен")
                                     }
                                 },
                                 modifier = Modifier.weight(1f),
                             ) {
-                                Text("РЎРѕС…СЂР°РЅРёС‚СЊ")
+                                Text("Сохранить")
                             }
                             TextButton(
                                 onClick = {
@@ -3753,9 +3753,9 @@ private fun GeminiTranslationDialog(
                                     }
                                     Text(
                                         if (isTesting) {
-                                            "РџСЂРѕРІРµСЂРєР°..."
+                                            "Проверка..."
                                         } else {
-                                            "РўРµСЃС‚ РїРѕРґРєР»СЋС‡РµРЅРёСЏ"
+                                            "Тест подключения"
                                         },
                                     )
                                 }
@@ -3779,9 +3779,9 @@ private fun GeminiTranslationDialog(
                                     }
                                     Text(
                                         if (isLoading) {
-                                            "РћР±РЅРѕРІР»РµРЅРёРµ..."
+                                            "Обновление..."
                                         } else {
-                                            "РћР±РЅРѕРІРёС‚СЊ РјРѕРґРµР»Рё"
+                                            "Обновить модели"
                                         },
                                     )
                                 }
@@ -3793,7 +3793,7 @@ private fun GeminiTranslationDialog(
                             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                         ) {
                             Text(
-                                text = "РљСЌС€: ${if (tempDisableCache) "OFF" else "ON"}",
+                                text = "Кэш: ${if (tempDisableCache) "OFF" else "ON"}",
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.weight(1f),
                             )
@@ -3802,7 +3802,7 @@ private fun GeminiTranslationDialog(
                                 onCheckedChange = { enabled ->
                                     tempDisableCache = !enabled
                                     onSetGeminiDisableCache(tempDisableCache)
-                                    onAddLog("?? РљСЌС€: ${if (tempDisableCache) "OFF" else "ON"}")
+                                    onAddLog("?? Кэш: ${if (tempDisableCache) "OFF" else "ON"}")
                                 },
                             )
                         }
@@ -3813,7 +3813,7 @@ private fun GeminiTranslationDialog(
                                     tempBatch = it
                                     applyBatchAndConcurrency()
                                 },
-                                label = { Text("Р‘Р°С‚С‡") },
+                                label = { Text("Батч") },
                                 modifier = Modifier.weight(1f),
                             )
                             OutlinedTextField(
@@ -3822,15 +3822,15 @@ private fun GeminiTranslationDialog(
                                     tempConcurrency = it
                                     applyBatchAndConcurrency()
                                 },
-                                label = { Text("РџРѕС‚РѕРєРё") },
+                                label = { Text("Потоки") },
                                 modifier = Modifier.weight(1f),
                             )
                         }
                         TextButton(onClick = {
                             onClearAllCache()
-                            onAddLog("??? РћС‡РёС‰РµРЅ РІРµСЃСЊ РєСЌС€")
+                            onAddLog("??? Очищен весь кэш")
                         }) {
-                            Text("РћС‡РёСЃС‚РёС‚СЊ РІРµСЃСЊ РєСЌС€")
+                            Text("Очистить весь кэш")
                         }
                     }
                 }
@@ -3838,11 +3838,11 @@ private fun GeminiTranslationDialog(
 
             if (page == 1) {
                 GeminiSettingsBlock(
-                    title = "Р“РµРЅРµСЂР°С†РёСЏ",
-                    subtitle = "РџСЂРµСЃРµС‚С‹ Рё СЂСѓС‡РЅС‹Рµ РїР°СЂР°РјРµС‚СЂС‹ sampling",
+                    title = "Генерация",
+                    subtitle = "Пресеты и ручные параметры sampling",
                 ) {
                     TextButton(onClick = { showGenerationConfig = !showGenerationConfig }) {
-                        Text(if (showGenerationConfig) "РЎРєСЂС‹С‚СЊ РіРµРЅРµСЂР°С†РёСЋ" else "Р“РµРЅРµСЂР°С†РёСЏ")
+                        Text(if (showGenerationConfig) "Скрыть генерацию" else "Генерация")
                     }
                     if (showGenerationConfig) {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3868,7 +3868,7 @@ private fun GeminiTranslationDialog(
                                         }
                                     },
                                 ) {
-                                    Text(if (isSelected) "вЂў ${preset.title}" else preset.title)
+                                    Text(if (isSelected) "• ${preset.title}" else preset.title)
                                 }
                             }
                         }
@@ -3888,12 +3888,12 @@ private fun GeminiTranslationDialog(
                                     style = MaterialTheme.typography.labelLarge,
                                 )
                                 Text(
-                                    text = "Р”Р»СЏ С‡РµРіРѕ: ${selectedPreset.scenario}",
+                                    text = "Для чего: ${selectedPreset.scenario}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 Text(
-                                    text = "РџСЂРµРёРјСѓС‰РµСЃС‚РІРѕ: ${selectedPreset.advantage}",
+                                    text = "Преимущество: ${selectedPreset.advantage}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -3964,8 +3964,8 @@ private fun GeminiTranslationDialog(
 
             if (page == 2) {
                 GeminiSettingsBlock(
-                    title = "Р›РѕРіРё",
-                    subtitle = "Р”РёР°РіРЅРѕСЃС‚РёРєР° Р·Р°РїСЂРѕСЃРѕРІ Рё РѕС‚РІРµС‚Р° РјРѕРґРµР»Рё",
+                    title = "Логи",
+                    subtitle = "Диагностика запросов и ответа модели",
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -3973,15 +3973,15 @@ private fun GeminiTranslationDialog(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "Р›РѕРіРё (${logs.size})",
+                            text = "Логи (${logs.size})",
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(onClick = { showLogs = !showLogs }) {
-                                Text(if (showLogs) "РЎРєСЂС‹С‚СЊ" else "РџРѕРєР°Р·Р°С‚СЊ")
+                                Text(if (showLogs) "Скрыть" else "Показать")
                             }
                             TextButton(onClick = onClearLogs) {
-                                Text("РћС‡РёСЃС‚РёС‚СЊ")
+                                Text("Очистить")
                             }
                         }
                     }
@@ -3994,7 +3994,7 @@ private fun GeminiTranslationDialog(
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             if (logs.isEmpty()) {
-                                Text("Р›РѕРіРё РїРѕРєР° РїСѓСЃС‚С‹", style = MaterialTheme.typography.bodySmall)
+                                Text("Логи пока пусты", style = MaterialTheme.typography.bodySmall)
                             } else {
                                 logs.forEach { log ->
                                     Text(log, style = MaterialTheme.typography.bodySmall)
@@ -4010,13 +4010,13 @@ private fun GeminiTranslationDialog(
     if (showCustomPromptDialog) {
         AlertDialog(
             onDismissRequest = { showCustomPromptDialog = false },
-            title = { Text("РЎРІРѕР№ РјРѕРґРёС„РёРєР°С‚РѕСЂ РїСЂРѕРјРїС‚Р°") },
+            title = { Text("Свой модификатор промпта") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = tempCustomModifier,
                         onValueChange = { tempCustomModifier = it },
-                        label = { Text("РЎРІРѕРё РёРЅСЃС‚СЂСѓРєС†РёРё") },
+                        label = { Text("Свои инструкции") },
                         minLines = 4,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -4031,10 +4031,10 @@ private fun GeminiTranslationDialog(
             confirmButton = {
                 TextButton(onClick = {
                     onSetGeminiCustomPromptModifier(tempCustomModifier)
-                    onAddLog("?? РћР±РЅРѕРІР»РµРЅ СЃРІРѕР№ РїСЂРѕРјРїС‚")
+                    onAddLog("?? Обновлен свой промпт")
                     showCustomPromptDialog = false
                 }) {
-                    Text("РЎРѕС…СЂР°РЅРёС‚СЊ")
+                    Text("Сохранить")
                 }
             },
             dismissButton = {
@@ -4043,8 +4043,8 @@ private fun GeminiTranslationDialog(
                         tempCustomModifier = ""
                         onSetGeminiCustomPromptModifier("")
                         showCustomPromptDialog = false
-                    }) { Text("РћС‡РёСЃС‚РёС‚СЊ") }
-                    TextButton(onClick = { showCustomPromptDialog = false }) { Text("РћС‚РјРµРЅР°") }
+                    }) { Text("Очистить") }
+                    TextButton(onClick = { showCustomPromptDialog = false }) { Text("Отмена") }
                 }
             },
         )

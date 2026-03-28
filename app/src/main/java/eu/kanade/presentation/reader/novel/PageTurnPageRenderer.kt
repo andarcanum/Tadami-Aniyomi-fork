@@ -2,6 +2,7 @@
 
 package eu.kanade.presentation.reader.novel
 
+import android.graphics.Typeface
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -41,7 +42,6 @@ import eu.wewox.pagecurl.page.rememberPageCurlState
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import android.graphics.Typeface
 
 internal enum class NovelPageTurnDragMode {
     START_END,
@@ -66,7 +66,7 @@ internal data class NovelPageTurnRendererConfig(
     val tapCustomEnabled: Boolean,
 )
 
-private enum class PageTurnCustomTapAction {
+internal enum class PageTurnCustomTapAction {
     NONE,
     TOGGLE_UI,
     OPEN_PREVIOUS_CHAPTER,
@@ -168,13 +168,14 @@ private fun resolveNovelPageTurnBackPageColor(
     )
 }
 
-private fun resolvePageTurnCustomTapAction(
+internal fun resolvePageTurnCustomTapAction(
     tapXFraction: Float,
     currentPage: Int,
     pageCount: Int,
     centerTapWidthFraction: Float,
     hasPreviousChapter: Boolean,
     hasNextChapter: Boolean,
+    tapToScrollEnabled: Boolean,
 ): PageTurnCustomTapAction {
     if (pageCount <= 0) return PageTurnCustomTapAction.NONE
     val safeTapX = tapXFraction.coerceIn(0f, 1f)
@@ -184,9 +185,9 @@ private fun resolvePageTurnCustomTapAction(
     val isLastPage = currentPage >= pageCount - 1
     return when {
         safeTapX in centerStart..centerEnd -> PageTurnCustomTapAction.TOGGLE_UI
-        safeTapX < centerStart && isFirstPage && hasPreviousChapter ->
+        tapToScrollEnabled && safeTapX < centerStart && isFirstPage && hasPreviousChapter ->
             PageTurnCustomTapAction.OPEN_PREVIOUS_CHAPTER
-        safeTapX > centerEnd && isLastPage && hasNextChapter ->
+        tapToScrollEnabled && safeTapX > centerEnd && isLastPage && hasNextChapter ->
             PageTurnCustomTapAction.OPEN_NEXT_CHAPTER
         else -> PageTurnCustomTapAction.NONE
     }
@@ -284,10 +285,6 @@ internal fun PageTurnPageRenderer(
         readerSettings.pageTurnIntensity,
         readerSettings.pageTurnShadowIntensity,
         textBackground,
-        currentPage,
-        safeContentPages.size,
-        hasPreviousChapter,
-        hasNextChapter,
     ) {
         resolveNovelPageTurnRendererConfig(
             style = transitionStyle,
@@ -295,9 +292,15 @@ internal fun PageTurnPageRenderer(
             intensity = readerSettings.pageTurnIntensity,
             shadowIntensity = readerSettings.pageTurnShadowIntensity,
             textBackground = textBackground,
-            canMoveBackward = currentPage > 0,
-            canMoveForward = currentPage < safeContentPages.lastIndex,
+            canMoveBackward = true,
+            canMoveForward = true,
         )
+    }
+    val dragInteraction = remember(rendererConfig) {
+        createPageTurnDragInteraction(rendererConfig)
+    }
+    val tapInteraction = remember(rendererConfig) {
+        createPageTurnTapInteraction(rendererConfig)
     }
     val latestToggleUi by rememberUpdatedState(onToggleUi)
     val latestRequestedPage by rememberUpdatedState(requestedPage)
@@ -309,6 +312,7 @@ internal fun PageTurnPageRenderer(
     val latestPageCount by rememberUpdatedState(safeContentPages.size)
     val latestHasPreviousChapter by rememberUpdatedState(hasPreviousChapter)
     val latestHasNextChapter by rememberUpdatedState(hasNextChapter)
+    val latestTapToScrollEnabled by rememberUpdatedState(readerSettings.tapToScroll)
     val pageCurlConfig = rememberPageCurlConfig(
         onCustomTap = { size, offset ->
             when (
@@ -323,6 +327,7 @@ internal fun PageTurnPageRenderer(
                     centerTapWidthFraction = latestRendererConfig.centerTapWidthFraction,
                     hasPreviousChapter = latestHasPreviousChapter,
                     hasNextChapter = latestHasNextChapter,
+                    tapToScrollEnabled = latestTapToScrollEnabled,
                 )
             ) {
                 PageTurnCustomTapAction.TOGGLE_UI -> {
@@ -349,13 +354,13 @@ internal fun PageTurnPageRenderer(
         pageCurlConfig.shadowAlpha = rendererConfig.preset.shadowAlpha
         pageCurlConfig.shadowRadius = rendererConfig.shadowRadiusDp.dp
         pageCurlConfig.shadowOffset = DpOffset(rendererConfig.shadowOffsetXDp.dp, 0.dp)
-        pageCurlConfig.dragBackwardEnabled = rendererConfig.dragBackwardEnabled
-        pageCurlConfig.dragForwardEnabled = rendererConfig.dragForwardEnabled
-        pageCurlConfig.tapBackwardEnabled = rendererConfig.tapBackwardEnabled
-        pageCurlConfig.tapForwardEnabled = rendererConfig.tapForwardEnabled
+        pageCurlConfig.dragBackwardEnabled = currentPage > 0
+        pageCurlConfig.dragForwardEnabled = currentPage < safeContentPages.lastIndex
+        pageCurlConfig.tapBackwardEnabled = latestTapToScrollEnabled && currentPage > 0
+        pageCurlConfig.tapForwardEnabled = latestTapToScrollEnabled && currentPage < safeContentPages.lastIndex
         pageCurlConfig.tapCustomEnabled = rendererConfig.tapCustomEnabled
-        pageCurlConfig.dragInteraction = createPageTurnDragInteraction(rendererConfig)
-        pageCurlConfig.tapInteraction = createPageTurnTapInteraction(rendererConfig)
+        pageCurlConfig.dragInteraction = dragInteraction
+        pageCurlConfig.tapInteraction = tapInteraction
     }
 
     LaunchedEffect(pagerCurrentPage, safeContentPages.size) {
