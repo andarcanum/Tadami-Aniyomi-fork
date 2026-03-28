@@ -46,8 +46,8 @@ internal fun resolveNovelPageTurnPreset(
 
 private fun NovelPageTurnSpeed.durationDeltaMillis(): Int {
     return when (this) {
-        NovelPageTurnSpeed.SLOWER -> 180
-        NovelPageTurnSpeed.SLOW -> 120
+        NovelPageTurnSpeed.SLOWER -> 360
+        NovelPageTurnSpeed.SLOW -> 260
         NovelPageTurnSpeed.NORMAL -> 0
         NovelPageTurnSpeed.FAST -> -120
         NovelPageTurnSpeed.FASTER -> -180
@@ -56,8 +56,8 @@ private fun NovelPageTurnSpeed.durationDeltaMillis(): Int {
 
 private fun NovelPageTurnIntensity.curlDelta(): Float {
     return when (this) {
-        NovelPageTurnIntensity.SOFTER -> -0.16f
-        NovelPageTurnIntensity.LOW -> -0.08f
+        NovelPageTurnIntensity.SOFTER -> -0.32f
+        NovelPageTurnIntensity.LOW -> -0.16f
         NovelPageTurnIntensity.MEDIUM -> 0f
         NovelPageTurnIntensity.HIGH -> 0.08f
         NovelPageTurnIntensity.STRONGER -> 0.16f
@@ -66,8 +66,8 @@ private fun NovelPageTurnIntensity.curlDelta(): Float {
 
 private fun NovelPageTurnIntensity.backPageDelta(): Float {
     return when (this) {
-        NovelPageTurnIntensity.SOFTER -> -0.08f
-        NovelPageTurnIntensity.LOW -> -0.04f
+        NovelPageTurnIntensity.SOFTER -> -0.16f
+        NovelPageTurnIntensity.LOW -> -0.08f
         NovelPageTurnIntensity.MEDIUM -> 0f
         NovelPageTurnIntensity.HIGH -> 0.04f
         NovelPageTurnIntensity.STRONGER -> 0.08f

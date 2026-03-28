@@ -2238,6 +2238,60 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `page turn speed presets use the updated slow and slower durations`() {
+        val slowerBookPreset = resolveNovelPageTurnPreset(
+            style = NovelPageTransitionStyle.BOOK,
+            speed = NovelPageTurnSpeed.SLOWER,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+        )
+        val slowBookPreset = resolveNovelPageTurnPreset(
+            style = NovelPageTransitionStyle.BOOK,
+            speed = NovelPageTurnSpeed.SLOW,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+        )
+        val slowerCurlPreset = resolveNovelPageTurnPreset(
+            style = NovelPageTransitionStyle.CURL,
+            speed = NovelPageTurnSpeed.SLOWER,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+        )
+        val slowCurlPreset = resolveNovelPageTurnPreset(
+            style = NovelPageTransitionStyle.CURL,
+            speed = NovelPageTurnSpeed.SLOW,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+        )
+
+        assertEquals(780, slowerBookPreset.animationDurationMillis)
+        assertEquals(680, slowBookPreset.animationDurationMillis)
+        assertEquals(740, slowerCurlPreset.animationDurationMillis)
+        assertEquals(640, slowCurlPreset.animationDurationMillis)
+    }
+
+    @Test
+    fun `page turn softer and low intensity use the updated stronger offsets`() {
+        val softerPreset = resolveNovelPageTurnPreset(
+            style = NovelPageTransitionStyle.CURL,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.SOFTER,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+        )
+        val lowPreset = resolveNovelPageTurnPreset(
+            style = NovelPageTransitionStyle.CURL,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.LOW,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+        )
+
+        assertEquals(0.40f, softerPreset.curlAmount, 0.0001f)
+        assertEquals(0.16f, softerPreset.backPageAlpha, 0.0001f)
+        assertEquals(0.56f, lowPreset.curlAmount, 0.0001f)
+        assertEquals(0.24f, lowPreset.backPageAlpha, 0.0001f)
+    }
+
+    @Test
     fun `page turn tuning values modify preset output without changing selected style`() {
         val basePreset = resolveNovelPageTurnPreset(
             style = NovelPageTransitionStyle.CURL,
