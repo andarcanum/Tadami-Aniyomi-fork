@@ -65,6 +65,9 @@ import kotlinx.serialization.json.intOrNull
 import logcat.LogPriority
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Element
+import org.jsoup.nodes.Node
+import org.jsoup.nodes.TextNode
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.handler.AchievementEventBus
 import tachiyomi.data.achievement.model.AchievementEvent
@@ -501,7 +504,7 @@ class NovelReaderScreenModel(
             isGeminiTranslating = false
             isGeminiTranslationVisible = false
             geminiTranslationProgress = 0
-            addGeminiLog("? Gemini ���������� �������� � ����������")
+            addGeminiLog("? Gemini пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ")
         }
         val geminiVisibleInUi = settings.geminiEnabled && isGeminiTranslationVisible
         val geminiCacheAvailableInUi = settings.geminiEnabled && hasGeminiTranslationCache
@@ -1437,7 +1440,7 @@ class NovelReaderScreenModel(
 
         val settings = currentState.readerSettings
         if (!settings.geminiEnabled) {
-            addGeminiLog("? Gemini ���������� ��������")
+            addGeminiLog("? Gemini пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ")
             return
         }
         if (!settings.hasConfiguredTranslationProvider()) {
@@ -2026,53 +2029,93 @@ class NovelReaderScreenModel(
     ): List<ContentBlock> {
         val document = Jsoup.parse(rawHtml)
         val blocks = mutableListOf<ContentBlock>()
-        val candidates = document.body().select("p, li, blockquote, h1, h2, h3, h4, h5, h6, pre, img")
-            .filterNot { node ->
-                node.tagName().equals("p", ignoreCase = true) &&
-                    node.parent()?.tagName()?.equals("li", ignoreCase = true) == true
-            }
+        collectContentBlocks(
+            node = document.body(),
+            blocks = blocks,
+            chapterWebUrl = chapterWebUrl,
+            novelUrl = novelUrl,
+            pluginSite = pluginSite,
+        )
+        return blocks
+    }
 
-        for (element in candidates) {
-            if (element.tagName().equals("img", ignoreCase = true)) {
-                val rawUrl = element.attr("src")
-                    .ifBlank { element.attr("data-src") }
-                    .ifBlank { element.attr("data-original") }
-                    .trim()
-                if (rawUrl.isBlank()) continue
-                val resolvedUrl = resolveContentResourceUrl(
-                    rawUrl = rawUrl,
-                    chapterWebUrl = chapterWebUrl,
-                    novelUrl = novelUrl,
-                    pluginSite = pluginSite,
-                ) ?: continue
-                blocks += ContentBlock.Image(
-                    url = resolvedUrl,
-                    alt = element.attr("alt").sanitizeTextBlock().ifBlank { null },
-                )
-            } else {
-                val text = element.text().sanitizeTextBlock()
+    private fun collectContentBlocks(
+        node: Node,
+        blocks: MutableList<ContentBlock>,
+        chapterWebUrl: String?,
+        novelUrl: String,
+        pluginSite: String?,
+    ) {
+        when (node) {
+            is TextNode -> {
+                val text = node.text().sanitizeTextBlock()
                 if (text.isNotBlank()) {
-                    val structuredBlocks = parseStructuredFragmentToBlocks(
-                        rawPayload = text,
-                        chapterWebUrl = chapterWebUrl,
-                        novelUrl = novelUrl,
-                        pluginSite = pluginSite,
-                    )
-                    if (structuredBlocks.isNotEmpty()) {
-                        blocks += structuredBlocks
-                        continue
+                    blocks += ContentBlock.Text(text)
+                }
+            }
+            is Element -> {
+                val tag = node.tagName().lowercase()
+                when {
+                    tag == "script" || tag == "style" || tag == "head" || tag == "meta" || tag == "link" ||
+                        tag == "noscript" -> Unit
+                    tag == "img" -> {
+                        val rawUrl = node.attr("src")
+                            .ifBlank { node.attr("data-src") }
+                            .ifBlank { node.attr("data-original") }
+                            .trim()
+                        if (rawUrl.isBlank()) return
+                        val resolvedUrl = resolveContentResourceUrl(
+                            rawUrl = rawUrl,
+                            chapterWebUrl = chapterWebUrl,
+                            novelUrl = novelUrl,
+                            pluginSite = pluginSite,
+                        ) ?: return
+                        blocks += ContentBlock.Image(
+                            url = resolvedUrl,
+                            alt = node.attr("alt").sanitizeTextBlock().ifBlank { null },
+                        )
                     }
-                    val normalizedText = if (element.tagName().equals("li", ignoreCase = true)) {
-                        "• $text"
-                    } else {
-                        text
+                    tag == "p" || tag == "li" || tag == "blockquote" || tag == "h1" || tag == "h2" ||
+                        tag == "h3" || tag == "h4" || tag == "h5" || tag == "h6" || tag == "pre" -> {
+                        val text = node.text().sanitizeTextBlock()
+                        if (text.isBlank()) return
+                        val structuredBlocks = parseStructuredFragmentToBlocks(
+                            rawPayload = text,
+                            chapterWebUrl = chapterWebUrl,
+                            novelUrl = novelUrl,
+                            pluginSite = pluginSite,
+                        )
+                        if (structuredBlocks.isNotEmpty()) {
+                            blocks += structuredBlocks
+                            return
+                        }
+                        val normalizedText = if (tag == "li") {
+                            "- $text"
+                        } else {
+                            text
+                        }
+                        blocks += ContentBlock.Text(normalizedText)
                     }
-                    blocks += ContentBlock.Text(normalizedText)
+                    node.selectFirst("p, li, blockquote, h1, h2, h3, h4, h5, h6, pre, img") == null -> {
+                        val text = node.wholeText().sanitizeTextBlock()
+                        if (text.isNotBlank()) {
+                            blocks += ContentBlock.Text(text)
+                        }
+                    }
+                    else -> {
+                        node.childNodes().forEach { child ->
+                            collectContentBlocks(
+                                node = child,
+                                blocks = blocks,
+                                chapterWebUrl = chapterWebUrl,
+                                novelUrl = novelUrl,
+                                pluginSite = pluginSite,
+                            )
+                        }
+                    }
                 }
             }
         }
-
-        return blocks
     }
 
     private fun parseStructuredFragmentToBlocks(
@@ -2122,7 +2165,7 @@ class NovelReaderScreenModel(
                     null
                 } else {
                     val normalized = if (candidate.tagName().equals("li", ignoreCase = true)) {
-                        "• $candidateText"
+                        "вЂў $candidateText"
                     } else {
                         candidateText
                     }
@@ -2702,8 +2745,8 @@ class NovelReaderScreenModel(
             val contextStart = (match.range.first - 220).coerceAtLeast(0)
             val context = payload.substring(contextStart, match.range.first).lowercase()
             val isListItemContext = context.contains("listitem") || context.contains("bulletlist")
-            val normalized = if (isListItemContext && !decodedText.startsWith("•")) {
-                "• $decodedText"
+            val normalized = if (isListItemContext && !decodedText.startsWith("вЂў")) {
+                "вЂў $decodedText"
             } else {
                 decodedText
             }
@@ -2919,7 +2962,7 @@ internal fun sanitizeReaderInlineStyle(rawStyle: String): String? {
 
 internal fun isGeminiSourceLanguageEnglish(sourceLang: String): Boolean {
     val normalized = sourceLang.trim().lowercase()
-    return normalized == "english" || normalized == "en" || normalized == "английский"
+    return normalized == "english" || normalized == "en" || normalized == "Р°РЅРіР»РёР№СЃРєРёР№"
 }
 
 internal fun hasReachedGeminiNextChapterTranslationPrefetchThreshold(

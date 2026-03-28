@@ -15,12 +15,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
+import android.graphics.Typeface
 import kotlin.math.abs
 
 internal data class ComposePagerTransitionSpec(
@@ -85,8 +85,8 @@ internal fun ComposePagerPageRenderer(
     textBackground: Color,
     backgroundTexture: NovelReaderBackgroundTexture,
     nativeTextureStrengthPercent: Int,
-    composeFontFamily: FontFamily?,
-    chapterTitleFontFamily: FontFamily?,
+    textTypeface: Typeface?,
+    chapterTitleTypeface: Typeface?,
     contentPadding: Dp,
     statusBarTopPadding: Dp,
     hasPreviousChapter: Boolean,
@@ -177,8 +177,8 @@ internal fun ComposePagerPageRenderer(
             textBackground = textBackground,
             backgroundTexture = backgroundTexture,
             nativeTextureStrengthPercent = nativeTextureStrengthPercent,
-            composeFontFamily = composeFontFamily,
-            chapterTitleFontFamily = chapterTitleFontFamily,
+            textTypeface = textTypeface,
+            chapterTitleTypeface = chapterTitleTypeface,
             contentPadding = contentPadding,
             statusBarTopPadding = statusBarTopPadding,
             modifier = Modifier

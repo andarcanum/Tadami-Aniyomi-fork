@@ -1,8 +1,10 @@
 package eu.kanade.presentation.reader.novel
 
 import android.text.Layout
+import android.text.SpannableStringBuilder
 import android.text.StaticLayout
 import android.text.TextPaint
+import android.text.style.LeadingMarginSpan
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -169,13 +171,14 @@ internal data class TextPageRange(
 )
 
 internal fun paginateTextIntoPageRanges(
-    text: String,
+    text: CharSequence,
     widthPx: Int,
     heightPx: Int,
     textSizePx: Float,
     lineHeightMultiplier: Float,
     typeface: android.graphics.Typeface?,
     textAlign: ReaderTextAlign,
+    firstLineIndentPx: Int? = null,
 ): List<TextPageRange> {
     if (text.isBlank()) return emptyList()
 
@@ -189,6 +192,7 @@ internal fun paginateTextIntoPageRanges(
         lineHeightMultiplier = lineHeightMultiplier,
         typeface = typeface,
         textAlign = textAlign,
+        firstLineIndentPx = firstLineIndentPx,
     ) ?: run {
         val safeTextSize = textSizePx.coerceAtLeast(1f)
         val approxCharsPerLine = (safeWidth / (safeTextSize * 0.55f)).toInt().coerceAtLeast(15)
@@ -272,7 +276,7 @@ internal fun paginateTextIntoPages(
 }
 
 private fun trimTextRange(
-    text: String,
+    text: CharSequence,
     startInclusive: Int,
     endExclusive: Int,
 ): TextPageRange? {
@@ -294,21 +298,40 @@ internal data class ApproximateTextMetrics(
     val lineHeightPx: Int,
 )
 
+private data class PageReaderBlockLayoutMetrics(
+    val textSizePx: Float,
+    val lineHeightMultiplier: Float,
+)
+
 internal fun buildReaderStaticLayout(
-    text: String,
+    text: CharSequence,
     widthPx: Int,
     textSizePx: Float,
     lineHeightMultiplier: Float,
     typeface: android.graphics.Typeface?,
     textAlign: ReaderTextAlign,
+    firstLineIndentPx: Int? = null,
 ): StaticLayout? {
     return runCatching {
+        val layoutText = firstLineIndentPx
+            ?.takeIf { it > 0 }
+            ?.let { indentPx ->
+                SpannableStringBuilder(text).apply {
+                    setSpan(
+                        LeadingMarginSpan.Standard(indentPx, 0),
+                        0,
+                        length,
+                        android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                    )
+                }
+            }
+            ?: text
         val paint = TextPaint().apply {
             isAntiAlias = true
             this.textSize = textSizePx.coerceAtLeast(1f)
             this.typeface = typeface
         }
-        StaticLayout.Builder.obtain(text, 0, text.length, paint, widthPx.coerceAtLeast(1))
+        StaticLayout.Builder.obtain(layoutText, 0, layoutText.length, paint, widthPx.coerceAtLeast(1))
             .setAlignment(textAlign.toLayoutAlignment())
             .setIncludePad(false)
             .setLineSpacing(0f, lineHeightMultiplier.coerceAtLeast(1f))
@@ -324,7 +347,7 @@ internal fun resolveStaticLayoutHeight(
 }
 
 internal fun resolveStaticLayoutSliceForHeight(
-    text: String,
+    text: CharSequence,
     layout: StaticLayout,
     startLine: Int,
     availableHeight: Int,
@@ -358,6 +381,34 @@ internal fun measureApproximateTextHeight(
         ceil(line.length.toDouble() / metrics.charsPerLine.toDouble()).toInt().coerceAtLeast(1)
     }.coerceAtLeast(1)
     return lineCount * metrics.lineHeightPx
+}
+
+private fun resolvePageReaderFirstLineIndentPx(
+    firstLineIndentEm: Float?,
+    textSizePx: Float,
+): Int? {
+    return firstLineIndentEm
+        ?.takeIf { it > 0f }
+        ?.let { (textSizePx.coerceAtLeast(1f) * it).roundToInt().coerceAtLeast(1) }
+}
+
+private fun resolvePageReaderBlockLayoutMetrics(
+    isChapterTitle: Boolean,
+    textSizePx: Float,
+    lineHeightMultiplier: Float,
+): PageReaderBlockLayoutMetrics {
+    return if (isChapterTitle) {
+        PageReaderBlockLayoutMetrics(
+            textSizePx = textSizePx * PAGE_READER_CHAPTER_TITLE_FONT_SIZE_MULTIPLIER,
+            lineHeightMultiplier = lineHeightMultiplier *
+                PAGE_READER_CHAPTER_TITLE_LINE_HEIGHT_MULTIPLIER,
+        )
+    } else {
+        PageReaderBlockLayoutMetrics(
+            textSizePx = textSizePx,
+            lineHeightMultiplier = lineHeightMultiplier,
+        )
+    }
 }
 
 private fun ReaderTextAlign.toLayoutAlignment(): Layout.Alignment {
@@ -453,29 +504,10 @@ internal fun paginatePlainPageBlocks(
     lineHeightMultiplier: Float,
     typeface: android.graphics.Typeface?,
     textAlign: ReaderTextAlign,
+    forceParagraphIndent: Boolean = false,
+    chapterTitle: String? = null,
 ): List<List<PlainPageSlice>> {
     val safeHeight = heightPx.coerceAtLeast(1)
-    val approximateMetrics = ApproximateTextMetrics(
-        charsPerLine = (widthPx.coerceAtLeast(1) / (textSizePx.coerceAtLeast(1f) * 0.55f))
-            .toInt()
-            .coerceAtLeast(15),
-        lineHeightPx = (textSizePx.coerceAtLeast(1f) * lineHeightMultiplier.coerceAtLeast(1f))
-            .toInt()
-            .coerceAtLeast(1),
-    )
-    val layouts = textBlocks.map { block ->
-        block to buildReaderStaticLayout(
-            text = block,
-            widthPx = widthPx,
-            textSizePx = textSizePx,
-            lineHeightMultiplier = lineHeightMultiplier,
-            typeface = typeface,
-            textAlign = textAlign,
-        )
-    }
-
-    if (layouts.isEmpty()) return emptyList()
-
     val pages = mutableListOf<MutableList<PlainPageSlice>>()
     var currentPage = mutableListOf<PlainPageSlice>()
     var remainingHeight = safeHeight
@@ -488,8 +520,43 @@ internal fun paginatePlainPageBlocks(
         remainingHeight = safeHeight
     }
 
-    layouts.forEachIndexed { blockIndex, (text, layout) ->
+    textBlocks.forEachIndexed { blockIndex, text ->
         if (text.isBlank()) return@forEachIndexed
+        val isChapterTitle = blockIndex == 0 &&
+            chapterTitle != null &&
+            isNativeChapterTitleText(text, chapterTitle)
+        val blockMetrics = resolvePageReaderBlockLayoutMetrics(
+            isChapterTitle = isChapterTitle,
+            textSizePx = textSizePx,
+            lineHeightMultiplier = lineHeightMultiplier,
+        )
+        val firstLineIndentPx = if (forceParagraphIndent && !isChapterTitle) {
+            resolvePageReaderFirstLineIndentPx(
+                firstLineIndentEm = FORCED_PARAGRAPH_FIRST_LINE_INDENT_EM,
+                textSizePx = blockMetrics.textSizePx,
+            )
+        } else {
+            null
+        }
+        val approximateMetrics = ApproximateTextMetrics(
+            charsPerLine = ((widthPx - (firstLineIndentPx ?: 0)).coerceAtLeast(1) /
+                (blockMetrics.textSizePx.coerceAtLeast(1f) * 0.55f))
+                .toInt()
+                .coerceAtLeast(15),
+            lineHeightPx = (blockMetrics.textSizePx.coerceAtLeast(1f) *
+                blockMetrics.lineHeightMultiplier.coerceAtLeast(1f))
+                .toInt()
+                .coerceAtLeast(1),
+        )
+        val layout = buildReaderStaticLayout(
+            text = text,
+            widthPx = widthPx,
+            textSizePx = blockMetrics.textSizePx,
+            lineHeightMultiplier = blockMetrics.lineHeightMultiplier,
+            typeface = typeface,
+            textAlign = textAlign,
+            firstLineIndentPx = firstLineIndentPx,
+        )
         if (layout == null) {
             val blockPages = paginateTextIntoPageRanges(
                 text = text,
@@ -499,6 +566,7 @@ internal fun paginatePlainPageBlocks(
                 lineHeightMultiplier = lineHeightMultiplier,
                 typeface = typeface,
                 textAlign = textAlign,
+                firstLineIndentPx = firstLineIndentPx,
             )
             val blockHeight = measureApproximateTextHeight(
                 text = text,
@@ -669,29 +737,9 @@ internal fun paginateRichPageBlocks(
     lineHeightMultiplier: Float,
     typeface: android.graphics.Typeface?,
     textAlign: ReaderTextAlign,
+    chapterTitle: String? = null,
 ): List<List<RichPageSlice>> {
     val safeHeight = heightPx.coerceAtLeast(1)
-    val approximateMetrics = ApproximateTextMetrics(
-        charsPerLine = (widthPx.coerceAtLeast(1) / (textSizePx.coerceAtLeast(1f) * 0.55f))
-            .toInt()
-            .coerceAtLeast(15),
-        lineHeightPx = (textSizePx.coerceAtLeast(1f) * lineHeightMultiplier.coerceAtLeast(1f))
-            .toInt()
-            .coerceAtLeast(1),
-    )
-    val layouts = blockTexts.map { blockText ->
-        blockText to buildReaderStaticLayout(
-            text = blockText.text.text,
-            widthPx = widthPx,
-            textSizePx = textSizePx,
-            lineHeightMultiplier = lineHeightMultiplier,
-            typeface = typeface,
-            textAlign = textAlign,
-        )
-    }
-
-    if (layouts.isEmpty()) return emptyList()
-
     val pages = mutableListOf<MutableList<RichPageSlice>>()
     var currentPage = mutableListOf<RichPageSlice>()
     var remainingHeight = safeHeight
@@ -704,8 +752,40 @@ internal fun paginateRichPageBlocks(
         remainingHeight = safeHeight
     }
 
-    layouts.forEachIndexed { blockIndex, (blockText, layout) ->
+    blockTexts.forEachIndexed { blockIndex, blockText ->
         if (blockText.text.text.isBlank()) return@forEachIndexed
+        val isChapterTitle = blockIndex == 0 &&
+            chapterTitle != null &&
+            isNativeChapterTitleText(blockText.text.text, chapterTitle)
+        val firstLineIndentEm = if (isChapterTitle) null else blockText.firstLineIndentEm
+        val blockMetrics = resolvePageReaderBlockLayoutMetrics(
+            isChapterTitle = isChapterTitle,
+            textSizePx = textSizePx,
+            lineHeightMultiplier = lineHeightMultiplier,
+        )
+        val firstLineIndentPx = resolvePageReaderFirstLineIndentPx(
+            firstLineIndentEm = firstLineIndentEm,
+            textSizePx = blockMetrics.textSizePx,
+        )
+        val approximateMetrics = ApproximateTextMetrics(
+            charsPerLine = ((widthPx - (firstLineIndentPx ?: 0)).coerceAtLeast(1) /
+                (blockMetrics.textSizePx.coerceAtLeast(1f) * 0.55f))
+                .toInt()
+                .coerceAtLeast(15),
+            lineHeightPx = (blockMetrics.textSizePx.coerceAtLeast(1f) *
+                blockMetrics.lineHeightMultiplier.coerceAtLeast(1f))
+                .toInt()
+                .coerceAtLeast(1),
+        )
+        val layout = buildReaderStaticLayout(
+            text = blockText.text.text,
+            widthPx = widthPx,
+            textSizePx = blockMetrics.textSizePx,
+            lineHeightMultiplier = blockMetrics.lineHeightMultiplier,
+            typeface = typeface,
+            textAlign = textAlign,
+            firstLineIndentPx = firstLineIndentPx,
+        )
         if (layout == null) {
             val blockPages = paginateTextIntoPageRanges(
                 text = blockText.text.text,
@@ -715,6 +795,7 @@ internal fun paginateRichPageBlocks(
                 lineHeightMultiplier = lineHeightMultiplier,
                 typeface = typeface,
                 textAlign = textAlign,
+                firstLineIndentPx = firstLineIndentPx,
             )
             val blockHeight = measureApproximateTextHeight(
                 text = blockText.text.text,
@@ -818,7 +899,13 @@ internal fun buildPlainPageRenderBlocks(
         PlainPageRenderBlock(
             text = fullBlockText.substring(slice.range.start, slice.range.endExclusive),
             spacingBeforePx = if (startsNewBlock) paragraphSpacingPx.coerceAtLeast(0) else 0,
-            firstLineIndentEm = if (forceParagraphIndent && slice.range.start == 0) {
+            firstLineIndentEm = if (
+                forceParagraphIndent &&
+                slice.range.start == 0 &&
+                !(chapterTitle != null &&
+                    slice.blockIndex == 0 &&
+                    isNativeChapterTitleText(fullBlockText, chapterTitle))
+            ) {
                 FORCED_PARAGRAPH_FIRST_LINE_INDENT_EM
             } else {
                 null
@@ -842,15 +929,16 @@ internal fun buildRichPageRenderBlocks(
         val previousBlockIndex = page.getOrNull(index - 1)?.blockIndex
         val startsNewBlock = index > 0 && previousBlockIndex != slice.blockIndex
         val blockText = blockTexts[slice.blockIndex]
+        val isChapterTitle = chapterTitle != null &&
+            slice.blockIndex == 0 &&
+            slice.range.start == 0 &&
+            isNativeChapterTitleText(blockText.text.text, chapterTitle)
         RichPageRenderBlock(
             text = blockText.text.subSequence(TextRange(slice.range.start, slice.range.endExclusive)),
             spacingBeforePx = if (startsNewBlock) paragraphSpacingPx.coerceAtLeast(0) else 0,
-            firstLineIndentEm = if (slice.range.start == 0) blockText.firstLineIndentEm else null,
+            firstLineIndentEm = if (slice.range.start == 0 && !isChapterTitle) blockText.firstLineIndentEm else null,
             sourceTextAlign = blockText.sourceTextAlign,
-            isChapterTitle = chapterTitle != null &&
-                slice.blockIndex == 0 &&
-                slice.range.start == 0 &&
-                isNativeChapterTitleText(blockText.text.text, chapterTitle),
+            isChapterTitle = isChapterTitle,
         )
     }
 }

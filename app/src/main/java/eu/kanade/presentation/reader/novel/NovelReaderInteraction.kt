@@ -310,6 +310,13 @@ internal fun shouldShowVerticalSeekbar(
         }
 }
 
+internal fun shouldPaginateForPageReader(
+    pageReaderEnabled: Boolean,
+    textBlocksCount: Int,
+): Boolean {
+    return pageReaderEnabled && textBlocksCount > 0
+}
+
 internal fun shouldShowPageReaderDismissLayer(
     showReaderUi: Boolean,
     usePageReader: Boolean,
@@ -407,8 +414,7 @@ internal fun shouldUseRichNativePageRenderer(
     if (!richNativeRendererExperimentalEnabled) return false
     if (bionicReadingEnabled) return false
     if (richContentUnsupportedFeaturesDetected) return false
-    if (richContentBlocks.isEmpty()) return false
-    return richContentBlocks.none { it is NovelRichContentBlock.Image }
+    return richContentBlocks.any { it !is NovelRichContentBlock.Image }
 }
 
 internal enum class NovelPageTransitionEngine {

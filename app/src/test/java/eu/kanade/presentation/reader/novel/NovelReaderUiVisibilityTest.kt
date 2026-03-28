@@ -4,6 +4,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -11,6 +12,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsControllerCompat
@@ -1212,6 +1214,36 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `paragraph indent makes pagination more conservative`() {
+        val textBlocks = listOf("The quick brown fox jumps over the lazy dog ".repeat(3).trim())
+        val compactPages = paginatePlainPageBlocks(
+            textBlocks = textBlocks,
+            paragraphSpacingPx = 0,
+            widthPx = 220,
+            heightPx = 72,
+            textSizePx = 20f,
+            lineHeightMultiplier = 1.2f,
+            typeface = null,
+            textAlign = ReaderTextAlign.LEFT,
+            forceParagraphIndent = false,
+        )
+        val indentedPages = paginatePlainPageBlocks(
+            textBlocks = textBlocks,
+            paragraphSpacingPx = 0,
+            widthPx = 220,
+            heightPx = 72,
+            textSizePx = 20f,
+            lineHeightMultiplier = 1.2f,
+            typeface = null,
+            textAlign = ReaderTextAlign.LEFT,
+            forceParagraphIndent = true,
+        )
+
+        assertTrue(compactPages.isNotEmpty())
+        assertTrue(indentedPages.size >= compactPages.size)
+    }
+
+    @Test
     fun `rich paged page assembly preserves spans and paragraph boundaries`() {
         val blockTexts = listOf(
             buildRichPageReaderBlockText(
@@ -1262,11 +1294,13 @@ class NovelReaderUiVisibilityTest {
                 block = NovelRichContentBlock.Paragraph(
                     segments = listOf(NovelRichTextSegment(text = "Chapter 12")),
                 ),
+                forcedParagraphFirstLineIndentEm = FORCED_PARAGRAPH_FIRST_LINE_INDENT_EM,
             ),
             buildRichPageReaderBlockText(
                 block = NovelRichContentBlock.Paragraph(
                     segments = listOf(NovelRichTextSegment(text = "First paragraph")),
                 ),
+                forcedParagraphFirstLineIndentEm = FORCED_PARAGRAPH_FIRST_LINE_INDENT_EM,
             ),
         )
 
@@ -1287,6 +1321,7 @@ class NovelReaderUiVisibilityTest {
         )
 
         assertEquals(listOf(true, false), renderBlocks.map { it.isChapterTitle })
+        assertEquals(listOf(null, 2f), renderBlocks.map { it.firstLineIndentEm })
     }
 
     @Test
@@ -1675,6 +1710,28 @@ class NovelReaderUiVisibilityTest {
                 pageReaderEnabled = true,
                 contentBlocksCount = 0,
                 richContentUnsupportedFeaturesDetected = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `page reader depends on text blocks rather than image blocks`() {
+        assertTrue(
+            shouldPaginateForPageReader(
+                pageReaderEnabled = true,
+                textBlocksCount = 1,
+            ),
+        )
+        assertFalse(
+            shouldPaginateForPageReader(
+                pageReaderEnabled = false,
+                textBlocksCount = 1,
+            ),
+        )
+        assertFalse(
+            shouldPaginateForPageReader(
+                pageReaderEnabled = true,
+                textBlocksCount = 0,
             ),
         )
     }
@@ -2328,6 +2385,18 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `page reader reserves bottom book inset`() {
+        assertEquals(
+            30.dp,
+            resolveNovelPageReaderBookBottomInset(
+                density = Density(1f),
+                fontSize = 20,
+                lineHeight = 1.2f,
+            ),
+        )
+    }
+
+    @Test
     fun `page turn renderer config maps book and curl to distinct drag profiles`() {
         val bookConfig = resolveNovelPageTurnRendererConfig(
             style = NovelPageTransitionStyle.BOOK,
@@ -2637,13 +2706,27 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `rich paged renderer falls back for images unsupported content and bionic reading`() {
+    fun `rich paged renderer allows mixed text and images but still blocks unsupported modes`() {
         assertFalse(
             shouldUseRichNativePageRenderer(
                 richNativeRendererExperimentalEnabled = true,
                 pageReaderEnabled = true,
                 bionicReadingEnabled = false,
                 richContentBlocks = listOf(
+                    NovelRichContentBlock.Image(url = "https://example.org/image.jpg"),
+                ),
+                richContentUnsupportedFeaturesDetected = false,
+            ),
+        )
+        assertTrue(
+            shouldUseRichNativePageRenderer(
+                richNativeRendererExperimentalEnabled = true,
+                pageReaderEnabled = true,
+                bionicReadingEnabled = false,
+                richContentBlocks = listOf(
+                    NovelRichContentBlock.Paragraph(
+                        segments = listOf(NovelRichTextSegment("Styled")),
+                    ),
                     NovelRichContentBlock.Image(url = "https://example.org/image.jpg"),
                 ),
                 richContentUnsupportedFeaturesDetected = false,
@@ -3388,6 +3471,44 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `page reader spannable builder preserves android spans and indent`() {
+        val annotated = buildNovelRichAnnotatedString(
+            listOf(
+                NovelRichTextSegment(
+                    text = "Bold",
+                    style = NovelRichTextStyle(
+                        bold = true,
+                        italic = true,
+                        underline = true,
+                        strikeThrough = true,
+                        colorCss = "#112233",
+                        backgroundColorCss = "#445566",
+                    ),
+                    linkUrl = "https://example.org",
+                ),
+            ),
+        )
+
+        val specs = buildNovelPageReaderSpanSpecs(
+            text = annotated,
+            firstLineIndentPx = 24,
+        )
+
+        val spanSpec = specs.single {
+            it.start == 0 &&
+                it.end == annotated.length &&
+                it.leadingMarginPx == null
+        }
+        assertTrue(spanSpec.bold)
+        assertTrue(spanSpec.italic)
+        assertTrue(spanSpec.underline)
+        assertTrue(spanSpec.strikeThrough)
+        assertTrue(spanSpec.foregroundColor == Color(0xFF112233))
+        assertTrue(spanSpec.backgroundColor == Color(0xFF445566))
+        assertTrue(specs.single { it.leadingMarginPx != null }.leadingMarginPx == 24)
+    }
+
+    @Test
     fun `rich link helper resolves url annotation at char offset`() {
         val annotated = buildNovelRichAnnotatedString(
             listOf(
@@ -3525,6 +3646,7 @@ class NovelReaderUiVisibilityTest {
         assertEquals(TextAlign.Center, style.textAlign)
         assertEquals(3f, style.shadow?.blurRadius)
         assertEquals(Offset(2f, 1f), style.shadow?.offset)
+        assertEquals(PlatformTextStyle(includeFontPadding = false), style.platformStyle)
     }
 
     @Test

@@ -4,6 +4,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -14,6 +15,9 @@ import androidx.compose.ui.unit.sp
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichBlockTextAlign
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
+
+internal const val PAGE_READER_CHAPTER_TITLE_FONT_SIZE_MULTIPLIER = 1.12f
+internal const val PAGE_READER_CHAPTER_TITLE_LINE_HEIGHT_MULTIPLIER = 1.08f
 
 private fun novelReaderTextAlign(textAlign: ReaderTextAlign): TextAlign? {
     return when (textAlign) {
@@ -92,6 +96,7 @@ internal fun resolvePageReaderBaseTextStyle(
             textColor = color,
             backgroundColor = backgroundColor,
         ),
+        platformStyle = PlatformTextStyle(includeFontPadding = false),
     ).withOptionalTextAlign(textAlign)
 }
 
@@ -105,8 +110,8 @@ internal fun resolvePageReaderBlockTextStyle(
 ): TextStyle {
     if (!isChapterTitle) return baseStyle
     return baseStyle.copy(
-        fontSize = (fontSize * 1.12f).sp,
-        lineHeight = (lineHeight * 1.08f).em,
+        fontSize = (fontSize * PAGE_READER_CHAPTER_TITLE_FONT_SIZE_MULTIPLIER).sp,
+        lineHeight = (lineHeight * PAGE_READER_CHAPTER_TITLE_LINE_HEIGHT_MULTIPLIER).em,
         fontFamily = chapterTitleFontFamily ?: fontFamily,
         fontWeight = FontWeight.SemiBold,
     )

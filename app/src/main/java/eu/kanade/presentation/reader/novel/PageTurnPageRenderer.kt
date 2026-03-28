@@ -23,7 +23,6 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntSize
@@ -42,6 +41,7 @@ import eu.wewox.pagecurl.page.rememberPageCurlState
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import android.graphics.Typeface
 
 internal enum class NovelPageTurnDragMode {
     START_END,
@@ -256,8 +256,8 @@ internal fun PageTurnPageRenderer(
     activeBackgroundTexture: NovelReaderBackgroundTexture,
     activeOledEdgeGradient: Boolean,
     isDarkTheme: Boolean,
-    composeFontFamily: FontFamily?,
-    chapterTitleFontFamily: FontFamily?,
+    textTypeface: Typeface?,
+    chapterTitleTypeface: Typeface?,
     contentPadding: Dp,
     statusBarTopPadding: Dp,
     hasPreviousChapter: Boolean,
@@ -421,8 +421,8 @@ internal fun PageTurnPageRenderer(
             activeBackgroundTexture,
             activeOledEdgeGradient,
             isDarkTheme,
-            composeFontFamily,
-            chapterTitleFontFamily,
+            textTypeface,
+            chapterTitleTypeface,
             safeContentPages,
             rendererConfig.backPageColor,
         ) {
@@ -486,7 +486,7 @@ internal fun PageTurnPageRenderer(
                 pageContentHash = contentPage.hashCode(),
                 pageSize = pageSize,
                 fontFamilyKey = readerSettings.fontFamily,
-                chapterTitleFontFamilyKey = chapterTitleFontFamily?.hashCode()?.toString().orEmpty(),
+                chapterTitleFontFamilyKey = chapterTitleTypeface?.hashCode()?.toString().orEmpty(),
                 fontSize = readerSettings.fontSize,
                 lineHeight = readerSettings.lineHeight,
                 margin = readerSettings.margin,
@@ -539,8 +539,8 @@ internal fun PageTurnPageRenderer(
                     pageSurfaceColor = pageSurfaceColor,
                     backgroundTexture = pageTexture,
                     nativeTextureStrengthPercent = pageTextureStrengthPercent,
-                    composeFontFamily = composeFontFamily,
-                    chapterTitleFontFamily = chapterTitleFontFamily,
+                    textTypeface = textTypeface,
+                    chapterTitleTypeface = chapterTitleTypeface,
                     contentPadding = contentPadding,
                     statusBarTopPadding = statusBarTopPadding,
                 )

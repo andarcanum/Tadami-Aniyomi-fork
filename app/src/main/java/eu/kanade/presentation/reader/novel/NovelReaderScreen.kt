@@ -500,6 +500,14 @@ fun NovelReaderScreen(
             typeface = composeTypeface,
         )
     }
+    val chapterTitleTypeface = remember(context) {
+        novelReaderBuiltInFonts.firstOrNull { it.id == "domine" }?.let { font ->
+            loadNovelReaderTypeface(
+                context = context,
+                font = font,
+            )
+        }
+    }
     val chapterTitleFontFamily = remember {
         novelReaderBuiltInFonts.firstOrNull { it.id == "domine" }?.fontResId?.let { FontFamily(Font(it)) }
     }
@@ -565,8 +573,10 @@ fun NovelReaderScreen(
     val richScrollBlocks = remember(state.chapter.id, state.richContentBlocks) {
         state.richContentBlocks
     }
-    val shouldPaginateForPageReader = state.readerSettings.pageReader &&
-        scrollContentBlocks.none { it is NovelReaderScreenModel.ContentBlock.Image }
+    val shouldPaginatePageReader = shouldPaginateForPageReader(
+        pageReaderEnabled = state.readerSettings.pageReader,
+        textBlocksCount = pageReaderTextBlocks.size,
+    )
     val pageReaderLayoutTextAlign = remember(
         state.readerSettings.textAlign,
         state.readerSettings.preserveSourceTextAlignInNative,
@@ -579,7 +589,7 @@ fun NovelReaderScreen(
     val pageReaderPages: List<List<PlainPageSlice>> = remember(
         state.chapter.id,
         state.textBlocks,
-        shouldPaginateForPageReader,
+        shouldPaginatePageReader,
         state.readerSettings.fontSize,
         state.readerSettings.lineHeight,
         state.readerSettings.margin,
@@ -592,7 +602,7 @@ fun NovelReaderScreen(
         contentPaddingPx,
         statusBarTopPadding,
     ) {
-        if (!shouldPaginateForPageReader || pageReaderTextBlocks.isEmpty()) {
+        if (!shouldPaginatePageReader || pageReaderTextBlocks.isEmpty()) {
             emptyList()
         } else {
             val screenWidthPx = pageViewportSize.width.takeIf { it > 0 }
@@ -602,7 +612,15 @@ fun NovelReaderScreen(
             val horizontalPaddingPx = with(density) { (state.readerSettings.margin.dp * 2).roundToPx() }
             val topPaddingPx = with(density) { (contentPaddingPx + statusBarTopPadding).roundToPx() }
             val bottomPaddingPx = with(density) { contentPaddingPx.roundToPx() }
-            val verticalPaddingPx = topPaddingPx + bottomPaddingPx
+            val bookBottomInsetPx = with(density) {
+                resolveNovelPageReaderBookBottomInset(
+                    density = this,
+                    fontSize = state.readerSettings.fontSize,
+                    lineHeight = state.readerSettings.lineHeight,
+                ).roundToPx()
+            }
+            val pageFitSafetyPx = with(density) { 4.dp.roundToPx() }
+            val verticalPaddingPx = topPaddingPx + bottomPaddingPx + bookBottomInsetPx + pageFitSafetyPx
             paginatePlainPageBlocks(
                 textBlocks = pageReaderTextBlocks,
                 paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() },
@@ -612,12 +630,14 @@ fun NovelReaderScreen(
                 lineHeightMultiplier = state.readerSettings.lineHeight.coerceAtLeast(1f),
                 typeface = composeTypeface,
                 textAlign = pageReaderLayoutTextAlign,
+                forceParagraphIndent = state.readerSettings.forceParagraphIndent,
+                chapterTitle = state.chapter.name,
             )
         }
     }
     val shouldPaginateRichForPageReader = shouldUseRichNativePageRenderer(
         richNativeRendererExperimentalEnabled = state.readerSettings.richNativeRendererExperimental,
-        pageReaderEnabled = shouldPaginateForPageReader,
+        pageReaderEnabled = shouldPaginatePageReader,
         bionicReadingEnabled = state.readerSettings.bionicReading,
         richContentBlocks = state.richContentBlocks,
         richContentUnsupportedFeaturesDetected = state.richContentUnsupportedFeaturesDetected,
@@ -672,7 +692,15 @@ fun NovelReaderScreen(
                 val horizontalPaddingPx = with(density) { (state.readerSettings.margin.dp * 2).roundToPx() }
                 val topPaddingPx = with(density) { (contentPaddingPx + statusBarTopPadding).roundToPx() }
                 val bottomPaddingPx = with(density) { contentPaddingPx.roundToPx() }
-                val verticalPaddingPx = topPaddingPx + bottomPaddingPx
+                val bookBottomInsetPx = with(density) {
+                    resolveNovelPageReaderBookBottomInset(
+                        density = this,
+                        fontSize = state.readerSettings.fontSize,
+                        lineHeight = state.readerSettings.lineHeight,
+                    ).roundToPx()
+                }
+                val pageFitSafetyPx = with(density) { 4.dp.roundToPx() }
+                val verticalPaddingPx = topPaddingPx + bottomPaddingPx + bookBottomInsetPx + pageFitSafetyPx
                 paginateRichPageBlocks(
                     blockTexts = richPageReaderBlockTexts,
                     paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() },
@@ -682,11 +710,12 @@ fun NovelReaderScreen(
                     lineHeightMultiplier = state.readerSettings.lineHeight.coerceAtLeast(1f),
                     typeface = composeTypeface,
                     textAlign = pageReaderLayoutTextAlign,
+                    chapterTitle = state.chapter.name,
                 )
             }
         }
     }
-    val usePageReader = shouldPaginateForPageReader &&
+    val usePageReader = shouldPaginatePageReader &&
         (
             pageReaderPages.isNotEmpty() || richPageReaderPages.isNotEmpty()
             )
@@ -1135,8 +1164,8 @@ fun NovelReaderScreen(
                         textBackground = textBackground,
                         backgroundTexture = state.readerSettings.backgroundTexture,
                         nativeTextureStrengthPercent = state.readerSettings.nativeTextureStrengthPercent,
-                        composeFontFamily = composeFontFamily,
-                        chapterTitleFontFamily = chapterTitleFontFamily,
+                        textTypeface = composeTypeface,
+                        chapterTitleTypeface = chapterTitleTypeface,
                         contentPadding = contentPaddingPx,
                         statusBarTopPadding = statusBarTopPadding,
                         hasPreviousChapter = state.previousChapterId != null,
@@ -1165,8 +1194,8 @@ fun NovelReaderScreen(
                         activeBackgroundTexture = activeBackgroundTexture,
                         activeOledEdgeGradient = activeOledEdgeGradient,
                         isDarkTheme = isDarkTheme,
-                        composeFontFamily = composeFontFamily,
-                        chapterTitleFontFamily = chapterTitleFontFamily,
+                        textTypeface = composeTypeface,
+                        chapterTitleTypeface = chapterTitleTypeface,
                         contentPadding = contentPaddingPx,
                         statusBarTopPadding = statusBarTopPadding,
                         hasPreviousChapter = state.previousChapterId != null,
