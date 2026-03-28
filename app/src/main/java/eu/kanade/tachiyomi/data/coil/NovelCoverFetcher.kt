@@ -21,10 +21,10 @@ import okhttp3.Request
 import okhttp3.Response
 import okio.FileSystem
 import okio.Path.Companion.toOkioPath
+import okio.Source
 import okio.buffer
 import okio.sink
 import okio.source
-import okio.Source
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.novel.model.NovelCover
 import tachiyomi.domain.source.novel.service.NovelSourceManager

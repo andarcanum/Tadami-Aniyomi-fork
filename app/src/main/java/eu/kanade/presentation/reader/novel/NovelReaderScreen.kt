@@ -153,7 +153,6 @@ import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.TabbedDialog
@@ -161,18 +160,18 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelPluginImageResolver
-import eu.kanade.tachiyomi.ui.reader.novel.PageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreenModel
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichBlockTextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
-import eu.kanade.tachiyomi.ui.reader.novel.encodePageReaderProgress
+import eu.kanade.tachiyomi.ui.reader.novel.PageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodeNativeScrollProgress
+import eu.kanade.tachiyomi.ui.reader.novel.encodePageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodeWebScrollProgressPercent
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
@@ -1097,7 +1096,18 @@ fun NovelReaderScreen(
             if (!showWebView && scrollContentBlocks.isNotEmpty()) {
                 // Отслеживание прогресса в зависимости от режима
                 if (usePageReader) {
-                        LaunchedEffect(pageReaderProgressPageIndex, pageReaderItemsCount) {
+                    LaunchedEffect(pageReaderProgressPageIndex, pageReaderItemsCount) {
+                        onReadingProgress(
+                            pageReaderProgressPageIndex,
+                            pageReaderItemsCount,
+                            encodePageReaderProgress(
+                                index = pageReaderProgressPageIndex,
+                                totalItems = pageReaderItemsCount,
+                            ),
+                        )
+                    }
+                    DisposableEffect(pagerState, pageReaderItemsCount) {
+                        onDispose {
                             onReadingProgress(
                                 pageReaderProgressPageIndex,
                                 pageReaderItemsCount,
@@ -1107,18 +1117,7 @@ fun NovelReaderScreen(
                                 ),
                             )
                         }
-                        DisposableEffect(pagerState, pageReaderItemsCount) {
-                            onDispose {
-                                onReadingProgress(
-                                    pageReaderProgressPageIndex,
-                                    pageReaderItemsCount,
-                                    encodePageReaderProgress(
-                                        index = pageReaderProgressPageIndex,
-                                        totalItems = pageReaderItemsCount,
-                                    ),
-                                )
-                            }
-                        }
+                    }
                 } else {
                     LaunchedEffect(
                         textListState.firstVisibleItemIndex,
@@ -1160,58 +1159,62 @@ fun NovelReaderScreen(
 
                 // Page Reader Mode (постраничный режим)
                 if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
-                        ComposePagerPageRenderer(
-                            pagerState = pagerState,
-                            contentPages = pageReaderContentPages,
-                            transitionStyle = activePageTransitionStyle,
-                            readerSettings = state.readerSettings,
-                            textColor = textColor,
-                            textBackground = textBackground,
-                            backgroundTexture = state.readerSettings.backgroundTexture,
-                            nativeTextureStrengthPercent = state.readerSettings.nativeTextureStrengthPercent,
-                            composeFontFamily = composeFontFamily,
-                            chapterTitleFontFamily = chapterTitleFontFamily,
-                            contentPadding = contentPaddingPx,
-                            statusBarTopPadding = statusBarTopPadding,
-                            hasPreviousChapter = state.previousChapterId != null,
-                            hasNextChapter = state.nextChapterId != null,
-                            onToggleUi = { onSetShowReaderUi(!showReaderUi) },
-                            onMoveBackward = { coroutineScope.launch { moveBackwardByReaderAction() } },
-                            onMoveForward = { coroutineScope.launch { moveForwardByReaderAction() } },
-                            onOpenPreviousChapter = { state.previousChapterId?.let { onOpenPreviousChapter?.invoke(it) } },
-                            onOpenNextChapter = { state.nextChapterId?.let { onOpenNextChapter?.invoke(it) } },
-                        )
+                    ComposePagerPageRenderer(
+                        pagerState = pagerState,
+                        contentPages = pageReaderContentPages,
+                        transitionStyle = activePageTransitionStyle,
+                        readerSettings = state.readerSettings,
+                        textColor = textColor,
+                        textBackground = textBackground,
+                        backgroundTexture = state.readerSettings.backgroundTexture,
+                        nativeTextureStrengthPercent = state.readerSettings.nativeTextureStrengthPercent,
+                        composeFontFamily = composeFontFamily,
+                        chapterTitleFontFamily = chapterTitleFontFamily,
+                        contentPadding = contentPaddingPx,
+                        statusBarTopPadding = statusBarTopPadding,
+                        hasPreviousChapter = state.previousChapterId != null,
+                        hasNextChapter = state.nextChapterId != null,
+                        onToggleUi = { onSetShowReaderUi(!showReaderUi) },
+                        onMoveBackward = { coroutineScope.launch { moveBackwardByReaderAction() } },
+                        onMoveForward = { coroutineScope.launch { moveForwardByReaderAction() } },
+                        onOpenPreviousChapter = {
+                            state.previousChapterId?.let { onOpenPreviousChapter?.invoke(it) }
+                        },
+                        onOpenNextChapter = { state.nextChapterId?.let { onOpenNextChapter?.invoke(it) } },
+                    )
                 } else if (pageReaderRendererRoute == NovelPageReaderRendererRoute.PAGE_TURN_RENDERER) {
-                        PageTurnPageRenderer(
-                            pagerState = pagerState,
-                            contentPages = pageReaderContentPages,
-                            transitionStyle = activePageTransitionStyle,
-                            readerSettings = state.readerSettings,
-                            textColor = textColor,
-                            textBackground = textBackground,
-                            backgroundTexture = state.readerSettings.backgroundTexture,
-                            nativeTextureStrengthPercent = state.readerSettings.nativeTextureStrengthPercent,
-                            backgroundImageModel = if (isBackgroundMode) backgroundImageModel else null,
-                            backgroundModeIdentity = if (isBackgroundMode) backgroundModeIdentity else "",
-                            isBackgroundMode = isBackgroundMode,
-                            activeBackgroundTexture = activeBackgroundTexture,
-                            activeOledEdgeGradient = activeOledEdgeGradient,
-                            isDarkTheme = isDarkTheme,
-                            composeFontFamily = composeFontFamily,
-                            chapterTitleFontFamily = chapterTitleFontFamily,
-                            contentPadding = contentPaddingPx,
-                            statusBarTopPadding = statusBarTopPadding,
-                            hasPreviousChapter = state.previousChapterId != null,
-                            hasNextChapter = state.nextChapterId != null,
-                            onToggleUi = { onSetShowReaderUi(!showReaderUi) },
-                            requestedPage = pageTurnRequestedPage,
-                            onRequestedPageConsumed = { pageTurnRequestedPage = -1 },
-                            onCurrentPageChange = { pageTurnCurrentPage = it },
-                            onMoveBackward = { coroutineScope.launch { moveBackwardByReaderAction() } },
-                            onMoveForward = { coroutineScope.launch { moveForwardByReaderAction() } },
-                            onOpenPreviousChapter = { state.previousChapterId?.let { onOpenPreviousChapter?.invoke(it) } },
-                            onOpenNextChapter = { state.nextChapterId?.let { onOpenNextChapter?.invoke(it) } },
-                        )
+                    PageTurnPageRenderer(
+                        pagerState = pagerState,
+                        contentPages = pageReaderContentPages,
+                        transitionStyle = activePageTransitionStyle,
+                        readerSettings = state.readerSettings,
+                        textColor = textColor,
+                        textBackground = textBackground,
+                        backgroundTexture = state.readerSettings.backgroundTexture,
+                        nativeTextureStrengthPercent = state.readerSettings.nativeTextureStrengthPercent,
+                        backgroundImageModel = if (isBackgroundMode) backgroundImageModel else null,
+                        backgroundModeIdentity = if (isBackgroundMode) backgroundModeIdentity else "",
+                        isBackgroundMode = isBackgroundMode,
+                        activeBackgroundTexture = activeBackgroundTexture,
+                        activeOledEdgeGradient = activeOledEdgeGradient,
+                        isDarkTheme = isDarkTheme,
+                        composeFontFamily = composeFontFamily,
+                        chapterTitleFontFamily = chapterTitleFontFamily,
+                        contentPadding = contentPaddingPx,
+                        statusBarTopPadding = statusBarTopPadding,
+                        hasPreviousChapter = state.previousChapterId != null,
+                        hasNextChapter = state.nextChapterId != null,
+                        onToggleUi = { onSetShowReaderUi(!showReaderUi) },
+                        requestedPage = pageTurnRequestedPage,
+                        onRequestedPageConsumed = { pageTurnRequestedPage = -1 },
+                        onCurrentPageChange = { pageTurnCurrentPage = it },
+                        onMoveBackward = { coroutineScope.launch { moveBackwardByReaderAction() } },
+                        onMoveForward = { coroutineScope.launch { moveForwardByReaderAction() } },
+                        onOpenPreviousChapter = {
+                            state.previousChapterId?.let { onOpenPreviousChapter?.invoke(it) }
+                        },
+                        onOpenNextChapter = { state.nextChapterId?.let { onOpenNextChapter?.invoke(it) } },
+                    )
                 } else {
                     // Scroll Mode (режим прокрутки, по умолчанию)
                     LazyColumn(
@@ -1224,20 +1227,20 @@ fun NovelReaderScreen(
                                 state.nextChapterId,
                                 nativeScrollItemsCount,
                             ) {
-                                    detectTapGestures(
-                                        onTap = { offset ->
-                                            when (
-                                                resolveReaderTapAction(
-                                                    tapX = offset.x,
-                                                    width = size.width.toFloat(),
-                                                    tapToScrollEnabled = latestTapToScrollEnabled,
-                                                )
-                                            ) {
-                                                ReaderTapAction.TOGGLE_UI -> onSetShowReaderUi(!latestShowReaderUi)
-                                                ReaderTapAction.BACKWARD -> coroutineScope.launch {
-                                                    moveBackwardByReaderAction()
-                                                }
-                                                ReaderTapAction.FORWARD -> coroutineScope.launch {
+                                detectTapGestures(
+                                    onTap = { offset ->
+                                        when (
+                                            resolveReaderTapAction(
+                                                tapX = offset.x,
+                                                width = size.width.toFloat(),
+                                                tapToScrollEnabled = latestTapToScrollEnabled,
+                                            )
+                                        ) {
+                                            ReaderTapAction.TOGGLE_UI -> onSetShowReaderUi(!latestShowReaderUi)
+                                            ReaderTapAction.BACKWARD -> coroutineScope.launch {
+                                                moveBackwardByReaderAction()
+                                            }
+                                            ReaderTapAction.FORWARD -> coroutineScope.launch {
                                                 moveForwardByReaderAction()
                                             }
                                         }
@@ -1691,10 +1694,10 @@ fun NovelReaderScreen(
                                             tapToScrollEnabled = latestTapToScrollEnabled,
                                         )
                                     ) {
-                                            ReaderTapAction.TOGGLE_UI -> {
-                                                onSetShowReaderUi(!latestShowReaderUi)
-                                                true
-                                            }
+                                        ReaderTapAction.TOGGLE_UI -> {
+                                            onSetShowReaderUi(!latestShowReaderUi)
+                                            true
+                                        }
                                         ReaderTapAction.BACKWARD -> {
                                             coroutineScope.launch { moveBackwardByReaderAction() }
                                             true

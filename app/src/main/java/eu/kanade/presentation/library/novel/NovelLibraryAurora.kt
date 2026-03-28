@@ -57,7 +57,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastAny
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
 import eu.kanade.presentation.components.AuroraCard
 import eu.kanade.presentation.components.AuroraTabRow
 import eu.kanade.presentation.components.LocalTabState
@@ -76,7 +75,6 @@ import eu.kanade.presentation.library.components.resolveGlowContourCornerIndicat
 import eu.kanade.presentation.library.components.resolveGlowContourLibraryTextSpec
 import eu.kanade.presentation.library.resolveNovelLibraryCardProgressPercent
 import eu.kanade.presentation.novel.buildNovelCoverImageRequest
-import eu.kanade.presentation.novel.sourceAwareNovelCoverModel
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec

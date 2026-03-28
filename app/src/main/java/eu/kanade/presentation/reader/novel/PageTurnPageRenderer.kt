@@ -6,6 +6,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -19,15 +20,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.pager.PagerState
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnIntensity
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnShadowIntensity
@@ -41,7 +41,6 @@ import eu.wewox.pagecurl.page.PageCurl
 import eu.wewox.pagecurl.page.rememberPageCurlState
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 
 internal enum class NovelPageTurnDragMode {

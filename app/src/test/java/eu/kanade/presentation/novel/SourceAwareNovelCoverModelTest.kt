@@ -1,7 +1,7 @@
 package eu.kanade.presentation.novel
 
-import io.mockk.mockk
 import io.kotest.matchers.shouldBe
+import io.mockk.mockk
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.entries.novel.model.NovelCover

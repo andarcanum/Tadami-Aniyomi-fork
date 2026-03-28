@@ -58,6 +58,7 @@ import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_NIGHT_
 import eu.kanade.presentation.reader.novel.NovelReaderBackgroundCard
 import eu.kanade.presentation.reader.novel.NovelReaderFontOption
 import eu.kanade.presentation.reader.novel.NovelReaderFontSource
+import eu.kanade.presentation.reader.novel.areChapterSwipeControlsEnabled
 import eu.kanade.presentation.reader.novel.autoScrollSpeedToInterval
 import eu.kanade.presentation.reader.novel.buildNovelReaderBackgroundCardsFromCustomItems
 import eu.kanade.presentation.reader.novel.buildNovelReaderFontCatalog
@@ -65,18 +66,17 @@ import eu.kanade.presentation.reader.novel.ensureLegacyNovelReaderBackgroundItem
 import eu.kanade.presentation.reader.novel.importNovelReaderCustomBackgroundItem
 import eu.kanade.presentation.reader.novel.importNovelReaderCustomFont
 import eu.kanade.presentation.reader.novel.intervalToAutoScrollSpeed
-import eu.kanade.presentation.reader.novel.novelPageTurnIntensityEntries
-import eu.kanade.presentation.reader.novel.novelPageTurnShadowIntensityEntries
-import eu.kanade.presentation.reader.novel.novelPageTurnSpeedEntries
-import eu.kanade.presentation.reader.novel.novelPageTurnIntensitySliderIndex
-import eu.kanade.presentation.reader.novel.novelPageTurnShadowIntensitySliderIndex
-import eu.kanade.presentation.reader.novel.novelPageTurnSpeedSliderIndex
-import eu.kanade.presentation.reader.novel.novelPageTurnTuningSummary
 import eu.kanade.presentation.reader.novel.novelPageTransitionStyleEntries
 import eu.kanade.presentation.reader.novel.novelPageTransitionStyleSubtitle
+import eu.kanade.presentation.reader.novel.novelPageTurnIntensityEntries
+import eu.kanade.presentation.reader.novel.novelPageTurnIntensitySliderIndex
+import eu.kanade.presentation.reader.novel.novelPageTurnShadowIntensityEntries
+import eu.kanade.presentation.reader.novel.novelPageTurnShadowIntensitySliderIndex
+import eu.kanade.presentation.reader.novel.novelPageTurnSpeedEntries
+import eu.kanade.presentation.reader.novel.novelPageTurnSpeedSliderIndex
+import eu.kanade.presentation.reader.novel.novelPageTurnTuningSummary
 import eu.kanade.presentation.reader.novel.novelReaderBackgroundPresets
 import eu.kanade.presentation.reader.novel.novelReaderPresetThemes
-import eu.kanade.presentation.reader.novel.areChapterSwipeControlsEnabled
 import eu.kanade.presentation.reader.novel.readNovelReaderCustomBackgroundItems
 import eu.kanade.presentation.reader.novel.removeNovelReaderCustomBackgroundItem
 import eu.kanade.presentation.reader.novel.removeNovelReaderCustomFont
@@ -93,13 +93,10 @@ import eu.kanade.presentation.reader.novel.shouldShowPageTurnTuningControls
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderChapterDiskCache
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderChapterDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnIntensity
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnShadowIntensity
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnSpeed
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
@@ -1001,33 +998,35 @@ object SettingsNovelReaderScreen : SearchableSettings {
 
         return Preference.PreferenceGroup(
             title = stringResource(AYMR.strings.novel_reader_navigation),
-            preferenceItems = (navigationItems + persistentListOf(
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = cacheReadChaptersUnlimitedPref,
-                    title = stringResource(AYMR.strings.novel_reader_cache_read_chapters_unlimited),
-                    subtitle = stringResource(AYMR.strings.novel_reader_cache_read_chapters_unlimited_summary),
-                    enabled = cacheReadChapters,
-                    onValueChanged = { enabled ->
-                        if (!enabled) {
-                            NovelReaderChapterDiskCacheStore.trimToCurrentLimits(unlimitedOverride = false)
-                        }
-                        true
-                    },
-                ),
-                Preference.PreferenceItem.TextPreference(
-                    title = stringResource(AYMR.strings.novel_reader_chapter_cache_size),
-                    subtitle = chapterCacheSummary,
-                ),
-                Preference.PreferenceItem.TextPreference(
-                    title = stringResource(AYMR.strings.novel_reader_clear_chapter_cache),
-                    subtitle = stringResource(AYMR.strings.novel_reader_clear_chapter_cache_summary),
-                    enabled = chapterCacheStats.entryCount > 0,
-                    onClick = {
-                        NovelReaderChapterDiskCacheStore.clear()
-                        chapterCacheRefreshTick.intValue++
-                    },
-                ),
-            )).toImmutableList(),
+            preferenceItems = (
+                navigationItems + persistentListOf(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = cacheReadChaptersUnlimitedPref,
+                        title = stringResource(AYMR.strings.novel_reader_cache_read_chapters_unlimited),
+                        subtitle = stringResource(AYMR.strings.novel_reader_cache_read_chapters_unlimited_summary),
+                        enabled = cacheReadChapters,
+                        onValueChanged = { enabled ->
+                            if (!enabled) {
+                                NovelReaderChapterDiskCacheStore.trimToCurrentLimits(unlimitedOverride = false)
+                            }
+                            true
+                        },
+                    ),
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(AYMR.strings.novel_reader_chapter_cache_size),
+                        subtitle = chapterCacheSummary,
+                    ),
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(AYMR.strings.novel_reader_clear_chapter_cache),
+                        subtitle = stringResource(AYMR.strings.novel_reader_clear_chapter_cache_summary),
+                        enabled = chapterCacheStats.entryCount > 0,
+                        onClick = {
+                            NovelReaderChapterDiskCacheStore.clear()
+                            chapterCacheRefreshTick.intValue++
+                        },
+                    ),
+                )
+                ).toImmutableList(),
         )
     }
 

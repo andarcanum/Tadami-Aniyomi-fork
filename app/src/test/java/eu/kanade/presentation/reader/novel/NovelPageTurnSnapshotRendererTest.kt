@@ -4,11 +4,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.IntSize
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
-import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
+import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
 
 class NovelPageTurnSnapshotRendererTest {
 

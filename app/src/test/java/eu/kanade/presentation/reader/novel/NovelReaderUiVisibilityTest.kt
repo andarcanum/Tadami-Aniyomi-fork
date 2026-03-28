@@ -4,8 +4,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -13,8 +11,9 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsControllerCompat
-import eu.wewox.pagecurl.ExperimentalPageCurlApi
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichBlockTextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichTextSegment
@@ -24,13 +23,14 @@ import eu.kanade.tachiyomi.ui.reader.novel.decodePageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodeNativeScrollProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodePageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodeWebScrollProgressPercent
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnIntensity
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnShadowIntensity
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnSpeed
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
+import eu.wewox.pagecurl.ExperimentalPageCurlApi
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse

@@ -67,7 +67,6 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
 import coil3.request.crossfade
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
@@ -81,7 +80,6 @@ import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
 import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
 import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.novel.buildNovelCoverImageRequest
-import eu.kanade.presentation.novel.sourceAwareNovelCoverModel
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.formatChapterNumber
 import eu.kanade.tachiyomi.data.coil.staticBlur

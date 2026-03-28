@@ -210,6 +210,7 @@ class NovelReaderScreenModel(
     private val progressPersistenceMutex = Mutex()
     private var pendingProgressPersistence: PendingProgressPersistence? = null
     private var progressPersistenceJob: Job? = null
+
     @Volatile
     private var progressPersistenceScheduled = false
     private val structuredJson = Json {

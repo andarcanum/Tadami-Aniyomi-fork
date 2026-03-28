@@ -10,8 +10,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import eu.kanade.presentation.reader.novel.NovelReaderScreen
 import eu.kanade.presentation.reader.novel.NovelReaderChapterHandoffPolicy
+import eu.kanade.presentation.reader.novel.NovelReaderScreen
 import eu.kanade.presentation.reader.novel.NovelReaderSystemUiSession
 import eu.kanade.presentation.reader.novel.SystemUIController
 import kotlinx.coroutines.launch

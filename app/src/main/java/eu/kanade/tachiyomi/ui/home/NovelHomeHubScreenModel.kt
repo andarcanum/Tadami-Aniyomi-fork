@@ -129,7 +129,7 @@ class NovelHomeHubScreenModel(
                 userProfilePreferences.avatarUrl().changes(),
                 historyRepository.getNovelHistory("").map { it.take(7) },
                 getLibraryNovel.subscribe().map { it.take(10) },
-                ) { name, avatar, historyList, novelList ->
+            ) { name, avatar, historyList, novelList ->
                 LiveData(name, avatar, historyList, novelList)
             }.collectLatest { data ->
                 val hero = data.historyList.firstOrNull()

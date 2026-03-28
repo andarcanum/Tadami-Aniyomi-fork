@@ -1,9 +1,9 @@
 package eu.kanade.tachiyomi.data.cache
 
+import android.content.Context
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import tachiyomi.domain.entries.novel.model.Novel
 import java.io.File
-import android.content.Context
 
 class NovelCoverCache private constructor(
     private val cacheDir: File,
