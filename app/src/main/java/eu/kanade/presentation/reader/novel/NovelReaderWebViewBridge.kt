@@ -13,6 +13,7 @@ import androidx.core.content.res.ResourcesCompat
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
+import org.json.JSONObject
 import java.io.File
 import java.net.URLConnection
 import java.net.URLEncoder
@@ -21,7 +22,6 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import android.graphics.Color as AndroidColor
-import org.json.JSONObject
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
 
 internal const val WEB_READER_STYLE_ELEMENT_ID = "__an_reader_style__"

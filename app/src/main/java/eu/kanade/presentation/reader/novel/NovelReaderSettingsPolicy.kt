@@ -1,10 +1,10 @@
 package eu.kanade.presentation.reader.novel
 
-import android.graphics.Color as AndroidColor
 import androidx.compose.ui.graphics.Color
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
+import android.graphics.Color as AndroidColor
 
 internal data class ThemeModeSelection(
     val theme: NovelReaderTheme,

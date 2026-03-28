@@ -3,8 +3,8 @@ package eu.kanade.presentation.reader.novel
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.os.BatteryManager
 import android.graphics.BitmapFactory
+import android.os.BatteryManager
 import android.text.format.DateFormat
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance

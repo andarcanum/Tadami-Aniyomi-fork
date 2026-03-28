@@ -16,7 +16,9 @@ internal object PlayerFontBridge {
             error("Unable to create MPV fonts directory")
         }
         copyFontFiles(
-            sourceFonts = storageManager.getFontsDirectory()?.listFiles()?.mapNotNull { it.filePath?.let(::File) }.orEmpty(),
+            sourceFonts = storageManager.getFontsDirectory()?.listFiles()?.mapNotNull {
+                it.filePath?.let(::File)
+            }.orEmpty(),
             targetFontsDirectory = fontsDirectory,
         )
         MPVLib.setPropertyString("sub-fonts-dir", fontsDirectory.absolutePath)

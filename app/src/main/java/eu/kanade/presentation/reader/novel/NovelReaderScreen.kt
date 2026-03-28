@@ -6,8 +6,6 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.IntentFilter
-import android.os.BatteryManager
-import android.os.Build
 import android.os.SystemClock
 import android.view.GestureDetector
 import android.view.KeyEvent
@@ -43,7 +41,6 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -60,7 +57,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -126,7 +122,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -149,7 +144,6 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelPluginImageResolver
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreenModel
-import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
 import eu.kanade.tachiyomi.ui.reader.novel.encodeNativeScrollProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodePageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodeWebScrollProgressPercent
@@ -170,7 +164,6 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
@@ -180,7 +173,6 @@ import java.io.ByteArrayInputStream
 import java.io.File
 import kotlin.math.abs
 import kotlin.math.roundToInt
-import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
 
 @Composable
 fun NovelReaderScreen(
@@ -1064,7 +1056,7 @@ fun NovelReaderScreen(
             pageEdgeShadowAlpha = state.readerSettings.pageEdgeShadowAlpha,
             backgroundImageModel = if (isBackgroundMode) backgroundImageModel else null,
         )
-        // РљРѕРЅС‚РµРЅС‚ (С‚РµРєСЃС‚ РіР»Р°РІС‹) - Р·Р°РЅРёРјР°РµС‚ РІРµСЃСЊ СЌРєСЂР°РЅ, padding Р’РќРЈРўР Р С‡РµСЂРµР· contentPadding
+        // Контент главы занимает весь экран; padding уже учтён в contentPadding.
         androidx.compose.foundation.layout.Box(
             modifier = Modifier.fillMaxSize(),
         ) {
@@ -2784,8 +2776,10 @@ private fun GeminiTranslationDialog(
                 temperature = 0.62f,
                 topP = 0.9f,
                 topK = 36,
-                scenario = "Р”Р»РёРЅРЅС‹Рµ РіР»Р°РІС‹ СЃ РїР»РѕС‚РЅС‹Рј Р»РѕСЂРѕРј Рё С‚РµСЂРјРёРЅР°РјРё",
-                advantage = "РЎС‚Р°Р±РёР»СЊРЅС‹Р№ СЃС‚РёР»СЊ, РІС‹СЃРѕРєР°СЏ СЃРІСЏР·РЅРѕСЃС‚СЊ Рё РјРёРЅРёРјСѓРј СЃР»СѓС‡Р°Р№РЅРѕРіРѕ С€СѓРјР°",
+                scenario = "Длинные главы с плотным лором " +
+                    "и терминами",
+                advantage = "Стабильный стиль, высокая " +
+                    "связность и минимум случайного шума",
             ),
             GenerationPreset(
                 id = "authorial",
@@ -2793,8 +2787,10 @@ private fun GeminiTranslationDialog(
                 temperature = 0.76f,
                 topP = 0.93f,
                 topK = 48,
-                scenario = "РџРѕРІСЃРµРґРЅРµРІРЅС‹Рµ СЃС†РµРЅС‹, РІРЅСѓС‚СЂРµРЅРЅРёРµ РјРѕРЅРѕР»РѕРіРё, РґСЂР°РјР°",
-                advantage = "Р‘РѕР»РµРµ Р»РёС‚РµСЂР°С‚СѓСЂРЅР°СЏ РїРѕРґР°С‡Р° Рё Р¶РёРІС‹Рµ С„РѕСЂРјСѓР»РёСЂРѕРІРєРё Р±РµР· РїРµСЂРµРіРёР±Р°",
+                scenario = "Повседневные сцены, внутренние " +
+                    "монологи, драма",
+                advantage = "Более литературная подача и " +
+                    "живые формулировки без перегиба",
             ),
             GenerationPreset(
                 id = "dialogue_plus",
@@ -2802,8 +2798,10 @@ private fun GeminiTranslationDialog(
                 temperature = 0.88f,
                 topP = 0.95f,
                 topK = 56,
-                scenario = "Р Р°Р·РіРѕРІРѕСЂРЅС‹Рµ РіР»Р°РІС‹, РїРёРєРёСЂРѕРІРєРё, СЋРјРѕСЂ, С„Р»РёСЂС‚",
-                advantage = "Р РµС‡СЊ РїРµСЂСЃРѕРЅР°Р¶РµР№ Р·РІСѓС‡РёС‚ РµСЃС‚РµСЃС‚РІРµРЅРЅРµРµ Рё СЌРјРѕС†РёРѕРЅР°Р»СЊРЅРµРµ",
+                scenario = "Разговорные главы, пикировки, " +
+                    "юмор, флирт",
+                advantage = "Речь персонажей звучит естественнее " +
+                    "и эмоциональнее",
             ),
             GenerationPreset(
                 id = "private_pulse",
@@ -2811,8 +2809,9 @@ private fun GeminiTranslationDialog(
                 temperature = 0.98f,
                 topP = 0.97f,
                 topK = 72,
-                scenario = "Р­СЂРѕС‚РёС‡РµСЃРєРёРµ Рё РЅР°РїСЂСЏР¶С‘РЅРЅС‹Рµ СЃС†РµРЅС‹",
-                advantage = "РњР°РєСЃРёРјСѓРј С‡СѓРІСЃС‚РІРµРЅРЅРѕСЃС‚Рё, СЌРєСЃРїСЂРµСЃСЃРёРё Рё В«Р¶РёРІРѕРіРѕВ» СЂРёС‚РјР°",
+                scenario = "Эротические и напряжённые сцены",
+                advantage = "Максимум чувственности, экспрессии " +
+                    "и «живого» ритма",
             ),
             GenerationPreset(
                 id = "unbound",
@@ -2820,8 +2819,10 @@ private fun GeminiTranslationDialog(
                 temperature = 1.08f,
                 topP = 0.985f,
                 topK = 96,
-                scenario = "Р­РєСЃРїРµСЂРёРјРµРЅС‚Р°Р»СЊРЅС‹Р№ СЂРµР¶РёРј РґР»СЏ СЃР°РјС‹С… РґРµСЂР·РєРёС… РіР»Р°РІ",
-                advantage = "РџРёРєРѕРІР°СЏ РєСЂРµР°С‚РёРІРЅРѕСЃС‚СЊ Рё РІР°СЂРёР°С‚РёРІРЅРѕСЃС‚СЊ СЃР»РѕРіР°",
+                scenario = "Экспериментальный режим для самых " +
+                    "дерзких глав",
+                advantage = "Пиковая креативность и вариативность " +
+                    "слога",
             ),
         )
     }
@@ -2833,8 +2834,10 @@ private fun GeminiTranslationDialog(
                 temperature = 1.3f,
                 topP = 0.9f,
                 topK = null,
-                scenario = "РЎС‚Р°Р±РёР»СЊРЅС‹Р№ РєСЂРµР°С‚РёРІРЅС‹Р№ РїРµСЂРµРІРѕРґ РЅР° РєР°Р¶РґС‹Р№ РґРµРЅСЊ",
-                advantage = "Р–РёРІРѕР№ С‚РµРєСЃС‚ СЃ РєРѕРЅС‚СЂРѕР»РёСЂСѓРµРјС‹Рј СѓСЂРѕРІРЅРµРј РІР°СЂРёР°С‚РёРІРЅРѕСЃС‚Рё",
+                scenario = "Стабильный креативный перевод на " +
+                    "каждый день",
+                advantage = "Живой текст с контролируемым уровнем " +
+                    "вариативности",
             ),
             GenerationPreset(
                 id = "deepseek_expressive",
@@ -2842,8 +2845,10 @@ private fun GeminiTranslationDialog(
                 temperature = 1.4f,
                 topP = 0.93f,
                 topK = null,
-                scenario = "Р”РёР°Р»РѕРіРё, СЌРјРѕС†РёРё, СЂРѕРјР°РЅС‚РёРєР° Рё 18+ СЃС†РµРЅС‹",
-                advantage = "Р‘РѕР»РµРµ СЏСЂРєР°СЏ Рё РµСЃС‚РµСЃС‚РІРµРЅРЅР°СЏ РїРѕРґР°С‡Р° СЂРµРїР»РёРє Рё С‚РѕРЅР°Р»СЊРЅРѕСЃС‚Рё",
+                scenario = "Диалоги, эмоции, романтика и 18+ " +
+                    "сцены",
+                advantage = "Более яркая и естественная подача " +
+                    "реплик и тональности",
             ),
             GenerationPreset(
                 id = "deepseek_creative",
@@ -2851,8 +2856,10 @@ private fun GeminiTranslationDialog(
                 temperature = 1.5f,
                 topP = 0.95f,
                 topK = null,
-                scenario = "РњР°РєСЃРёРјР°Р»СЊРЅРѕ СЃРјРµР»С‹Р№ Рё РІР°СЂРёР°С‚РёРІРЅС‹Р№ СЃС‚РёР»СЊ",
-                advantage = "РџРёРєРѕРІР°СЏ С‚РІРѕСЂС‡РµСЃРєР°СЏ СЃРІРѕР±РѕРґР° Р±РµР· РїРµСЂРµСѓСЃР»РѕР¶РЅРµРЅРёСЏ РЅР°СЃС‚СЂРѕРµРє",
+                scenario = "Максимально смелый и вариативный " +
+                    "стиль",
+                advantage = "Пиковая творческая свобода без " +
+                    "переусложнения настроек",
             ),
         )
     }
@@ -3146,9 +3153,11 @@ private fun GeminiTranslationDialog(
                             ) {
                                 Text(
                                     text = if (isPrivateProviderUnlocked) {
-                                        "$privateProviderLabel bridge РїРѕРґРєР»СЋС‡РµРЅ Рё СЂР°Р·Р±Р»РѕРєРёСЂРѕРІР°РЅ."
+                                        "$privateProviderLabel bridge подключен " +
+                                            "и разблокирован."
                                     } else {
-                                        "$privateProviderLabel bridge РїРѕРґРєР»СЋС‡РµРЅ. Р”Р»СЏ СЂР°Р±РѕС‚С‹ РЅСѓР¶РµРЅ unlock."
+                                        "$privateProviderLabel bridge подключен. " +
+                                            "Для работы нужен unlock."
                                     },
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                     style = MaterialTheme.typography.bodySmall,
@@ -3224,8 +3233,11 @@ private fun GeminiTranslationDialog(
                                 if (openRouterAllModelEntries.isNotEmpty()) {
                                     eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
                                         value = tempOpenRouterModel,
-                                        title = "Р‘РµСЃРїР»Р°С‚РЅС‹Рµ РјРѕРґРµР»Рё (${openRouterAllModelEntries.size})",
-                                        subtitle = tempOpenRouterModel.ifBlank { "Р’С‹Р±РµСЂРёС‚Рµ free РјРѕРґРµР»СЊ (:free)" },
+                                        title =
+                                        "Бесплатные модели (${openRouterAllModelEntries.size})",
+                                        subtitle = tempOpenRouterModel.ifBlank {
+                                            "Выберите free модель (:free)"
+                                        },
                                         icon = null,
                                         entries = openRouterAllModelEntries,
                                         onValueChange = { selected ->
@@ -3238,7 +3250,11 @@ private fun GeminiTranslationDialog(
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     OutlinedButton(onClick = onRefreshOpenRouterModels) {
                                         Text(
-                                            if (isOpenRouterModelsLoading) "Р—Р°РіСЂСѓР·РєР° РјРѕРґРµР»РµР№..." else "РћР±РЅРѕРІРёС‚СЊ СЃРїРёСЃРѕРє",
+                                            if (isOpenRouterModelsLoading) {
+                                                "Загрузка моделей..."
+                                            } else {
+                                                "Обновить список"
+                                            },
                                         )
                                     }
                                 }
@@ -3274,7 +3290,11 @@ private fun GeminiTranslationDialog(
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     OutlinedButton(onClick = onRefreshDeepSeekModels) {
                                         Text(
-                                            if (isDeepSeekModelsLoading) "Р—Р°РіСЂСѓР·РєР° РјРѕРґРµР»РµР№..." else "РћР±РЅРѕРІРёС‚СЊ СЃРїРёСЃРѕРє",
+                                            if (isDeepSeekModelsLoading) {
+                                                "Загрузка моделей..."
+                                            } else {
+                                                "Обновить список"
+                                            },
                                         )
                                     }
                                 }
@@ -3423,8 +3443,10 @@ private fun GeminiTranslationDialog(
                             ) {
                                 Text(
                                     text =
-                                    "$privateProviderLabel: РёСЃРїРѕР»СЊР·СѓСЋС‚СЃСЏ Р·Р°С€РёС‚С‹Рµ РїСЂР°РІРёР»Р° private bridge " +
-                                        "Рё Р°РІС‚Рѕ-СЂРµР¶РёРј Р±РµР· РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёС… РјРѕРґРёС„РёРєР°С‚РѕСЂРѕРІ.",
+                                    "$privateProviderLabel: используются " +
+                                        "защищённые правила private bridge " +
+                                        "и авто-режим без пользовательских " +
+                                        "модификаторов.",
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                     style = MaterialTheme.typography.bodySmall,
                                 )
@@ -3467,8 +3489,10 @@ private fun GeminiTranslationDialog(
                         ) {
                             Text(
                                 text =
-                                "$privateProviderLabel: РѕС‚РїСЂР°РІРєР° РёРґРµС‚ РѕРґРЅРёРј Р·Р°РїСЂРѕСЃРѕРј РЅР° РіР»Р°РІСѓ. " +
-                                    "РџСЂРё РѕС€РёР±РєРµ РІРєР»СЋС‡Р°РµС‚СЃСЏ fallback (batch=40, concurrency=1).",
+                                "$privateProviderLabel: отправка идёт " +
+                                    "одним запросом на главу. При ошибке " +
+                                    "включается fallback (batch=40, " +
+                                    "concurrency=1).",
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                 style = MaterialTheme.typography.bodySmall,
                             )
@@ -3502,7 +3526,13 @@ private fun GeminiTranslationDialog(
                                         onAddLog("?? Reasoning: ${option.uppercase()}")
                                     },
                                 ) {
-                                    Text(if (tempReasoning == option) "вЂў ${option.uppercase()}" else option.uppercase())
+                                    Text(
+                                        if (tempReasoning == option) {
+                                            "• ${option.uppercase()}"
+                                        } else {
+                                            option.uppercase()
+                                        },
+                                    )
                                 }
                             }
                         }
@@ -3883,8 +3913,9 @@ private fun GeminiTranslationDialog(
                         }
                         if (isDeepSeekSelected) {
                             Text(
-                                text = "Р”Р»СЏ DeepSeek РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РґРёР°РїР°Р·РѕРЅ Temperature 1.3-1.5 " +
-                                    "Рё TopP 0.9-0.95. TopK РЅРµ РїСЂРёРјРµРЅСЏРµС‚СЃСЏ.",
+                                text = "Для DeepSeek используется диапазон " +
+                                    "Temperature 1.3-1.5 и TopP 0.9-0.95. " +
+                                    "TopK не применяется.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -3952,7 +3983,8 @@ private fun GeminiTranslationDialog(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
-                        "РўРµРєСЃС‚ Р±СѓРґРµС‚ РґРѕР±Р°РІР»РµРЅ РІ СЃРёСЃС‚РµРјРЅС‹Р№ РїСЂРѕРјРїС‚ РєР°Рє РґРѕРїРѕР»РЅРёС‚РµР»СЊРЅР°СЏ РёРЅСЃС‚СЂСѓРєС†РёСЏ.",
+                        "Текст будет добавлен в системный " +
+                            "промпт как дополнительная инструкция.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -4385,4 +4417,3 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     is ContextWrapper -> baseContext.findActivity()
     else -> null
 }
-

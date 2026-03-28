@@ -343,15 +343,15 @@ class AnimeScreen(
                         if (it == null) return@rememberLauncherForActivityResult
                         sm.editImage(context, it)
                     }
-                        AnimeImagesDialog(
-                            anime = anime!!,
-                            snackbarHostState = sm.snackbarHostState,
-                            pagerState = sm.pagerState,
-                            isCustomCover = remember(anime) { anime!!.hasCustomCover(sm.coverCache) },
-                            isCustomBackground = remember(anime) { anime!!.hasCustomBackground(sm.backgroundCache) },
-                            onShareClick = { sm.shareImage(context) },
-                            onSaveClick = { sm.saveImage(context) },
-                            onEditClick = {
+                    AnimeImagesDialog(
+                        anime = anime!!,
+                        snackbarHostState = sm.snackbarHostState,
+                        pagerState = sm.pagerState,
+                        isCustomCover = remember(anime) { anime!!.hasCustomCover(sm.coverCache) },
+                        isCustomBackground = remember(anime) { anime!!.hasCustomBackground(sm.backgroundCache) },
+                        onShareClick = { sm.shareImage(context) },
+                        onSaveClick = { sm.saveImage(context) },
+                        onEditClick = {
                             when (it) {
                                 EditCoverAction.EDIT -> getContent.launch("image/*")
                                 EditCoverAction.DELETE -> sm.deleteCustomImage(context)

@@ -83,7 +83,6 @@ import uy.kohesive.injekt.api.get
 import java.io.File
 import kotlin.math.abs
 import kotlin.math.roundToInt
-import android.graphics.Color as AndroidColor
 
 @Composable
 fun NovelReaderSettingsDialog(
@@ -1276,7 +1275,7 @@ private fun ReadingTab(
                 icon = null,
                 value = settings.backgroundColor.orEmpty(),
                 onConfirm = { value ->
-                        if (!isValidNovelReaderColorOrBlank(value)) return@EditTextPreferenceWidget false
+                    if (!isValidNovelReaderColorOrBlank(value)) return@EditTextPreferenceWidget false
                     update(value, { o, v -> o.copy(backgroundColor = v) }, { preferences.backgroundColor().set(it) })
                     true
                 },
@@ -1289,7 +1288,7 @@ private fun ReadingTab(
                 icon = null,
                 value = settings.textColor.orEmpty(),
                 onConfirm = { value ->
-                        if (!isValidNovelReaderColorOrBlank(value)) return@EditTextPreferenceWidget false
+                    if (!isValidNovelReaderColorOrBlank(value)) return@EditTextPreferenceWidget false
                     update(value, { o, v -> o.copy(textColor = v) }, { preferences.textColor().set(it) })
                     true
                 },
@@ -2038,8 +2037,8 @@ private fun ThemeTile(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-        val background = parseNovelReaderColor(theme.backgroundColor) ?: MaterialTheme.colorScheme.surface
-        val foreground = parseNovelReaderColor(theme.textColor) ?: MaterialTheme.colorScheme.onSurface
+    val background = parseNovelReaderColor(theme.backgroundColor) ?: MaterialTheme.colorScheme.surface
+    val foreground = parseNovelReaderColor(theme.textColor) ?: MaterialTheme.colorScheme.onSurface
     Box(
         modifier = Modifier
             .size(34.dp)

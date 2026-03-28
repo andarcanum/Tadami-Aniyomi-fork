@@ -1,7 +1,7 @@
 package eu.kanade.tachiyomi.ui.player
 
-import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import tachiyomi.domain.custombuttons.model.CustomButton
