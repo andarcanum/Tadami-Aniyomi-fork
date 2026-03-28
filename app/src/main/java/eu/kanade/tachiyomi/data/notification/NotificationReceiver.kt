@@ -43,7 +43,7 @@ import tachiyomi.i18n.aniyomi.AYMR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
-import eu.kanade.tachiyomi.BuildConfig.APPLICATION_ID as ID
+import com.tadami.aurora.BuildConfig.APPLICATION_ID as ID
 
 /**
  * Global [BroadcastReceiver] that runs on UI thread

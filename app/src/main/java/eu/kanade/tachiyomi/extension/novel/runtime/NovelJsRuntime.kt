@@ -13,6 +13,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 
+// Runtime boundary: keep J2V8-specific details inside this class so callers only see the plugin API.
 class NovelJsRuntime(
     private val pluginId: String,
     private val nativeApi: NativeApi,

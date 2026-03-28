@@ -1,6 +1,6 @@
 package eu.kanade.tachiyomi.data.track.anilist
 
-import eu.kanade.tachiyomi.BuildConfig
+import com.tadami.aurora.BuildConfig
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALOAuth
 import eu.kanade.tachiyomi.data.track.anilist.dto.isExpired
 import okhttp3.Interceptor

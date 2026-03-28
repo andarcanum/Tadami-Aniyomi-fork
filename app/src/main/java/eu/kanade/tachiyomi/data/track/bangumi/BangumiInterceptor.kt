@@ -1,6 +1,6 @@
 package eu.kanade.tachiyomi.data.track.bangumi
 
-import eu.kanade.tachiyomi.BuildConfig
+import com.tadami.aurora.BuildConfig
 import eu.kanade.tachiyomi.data.track.bangumi.dto.BGMOAuth
 import eu.kanade.tachiyomi.data.track.bangumi.dto.isExpired
 import kotlinx.serialization.json.Json

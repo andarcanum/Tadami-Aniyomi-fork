@@ -1,6 +1,6 @@
 package eu.kanade.presentation.components
 
-import eu.kanade.tachiyomi.R
+import com.tadami.aurora.R
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.entries.anime.model.AnimeCover

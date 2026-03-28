@@ -19,6 +19,7 @@ import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resumeWithException
 
+// Keep OkHttp call adapters and JSON response decoding centralized in one networking helper file.
 val jsonMime = "application/json; charset=utf-8".toMediaType()
 
 @PublishedApi

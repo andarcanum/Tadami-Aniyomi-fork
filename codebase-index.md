@@ -1,14 +1,14 @@
 # Tadami Android Project - Codebase Index
 
 ## Project Overview
-**Tadami** is a fork of Aniyomi - an Android media reader application for anime and manga with a modern Aurora UI theme. Application ID: `com.tadami.aurora`, version 0.22 (code 135).
+**Tadami** is a fork of Aniyomi - an Android media reader application for anime, manga, and novels with a modern Aurora UI theme. Application ID: `com.tadami.aurora`, version 0.32 (code 149).
 
 ## Tech Stack
 - **Language**: Kotlin with Coroutines + Flow
-- **UI**: Jetpack Compose with Material3, Voyager 1.0.1 for navigation
+- **UI**: Jetpack Compose with Material3, Voyager 1.1.0-beta03 for navigation
 - **DI**: Injekt (com.github.mihonapp:injekt) - lightweight Kotlin DI
-- **Database**: SqlDelight 2.0.2 with SQLite (3 databases: manga.db, animedb, achievements.db)
-- **Image Loading**: Coil 3.1.0
+- **Database**: SqlDelight 2.3.2 with SQLite (4 databases: base manga, anime, novel, achievements)
+- **Image Loading**: Coil 3.4.0
 - **Networking**: OkHttp 5.0.0-alpha.14
 - **Serialization**: Kotlinx Serialization JSON/Protobuf
 - **Testing**: JUnit 5 (Jupiter), Kotest, MockK
@@ -18,12 +18,14 @@
 - **app**: Main application with UI and DI
 - **domain**: Business logic, use cases (interactors), repository interfaces
 - **data**: Repository implementations, database handlers, SqlDelight schemas
-- **core/common**: Shared utilities
+- **core/common**: Shared networking, preferences, JS helpers, and utilities
 - **core-metadata**: Metadata functionality
 - **source-api**: Extension API interfaces
 - **source-local**: Local source implementation
 - **presentation-core**: Shared UI components
+- **presentation-widget**: Shared widget components
 - **i18n**: Internationalization
+- **i18n-aniyomi**: Additional Aniyomi-specific translations
 
 ## Architecture Patterns
 
@@ -77,18 +79,23 @@ User Action -> AchievementEvent -> EventBus -> Handler -> Checker -> Repository 
 
 ## Database Schema (SqlDelight)
 
-### Manga Database (tachiyomi.db)
+### Base Manga Database
 - `mangas` table: source, url, title, genre, favorite, status, etc.
 - `chapters` table: manga_id, name, read, bookmark, chapter_number, etc.
 - `history` table: chapter_id, last_read, time_read
 - `categories`, `manga_sync`, `excluded_scanlators`, etc.
 
-### Anime Database (tachiyomi.animedb)
+### Anime Database
 - `animes` table: similar to mangas
 - `episodes` table: anime_id, name, seen, bookmark, episode_number, total_seconds, etc.
 - `animehistory`, `animecategories`, etc.
 
-### Achievements Database (achievements.db)
+### Novel Database
+- `novels` table: source, url, title, genre, favorite, status, and related novel metadata
+- `chapters` table: novel_id, name, read, bookmark, chapter_number, etc.
+- `novelhistory`, `novelcategories`, and related novel-specific tables
+
+### Achievements Database
 - `achievements` table: id, type, category, threshold, points, title, etc.
 - `achievement_progress` table: achievement_id, current_progress, is_unlocked, unlocked_at
 - `achievement_activity` table: date, chapters_read, episodes_watched

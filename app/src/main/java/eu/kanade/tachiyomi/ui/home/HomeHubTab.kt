@@ -110,6 +110,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import coil3.compose.AsyncImage
+import com.tadami.aurora.R
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.domain.ui.model.HomeHeaderLayoutElement
@@ -142,7 +143,6 @@ import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.presentation.theme.resolveAuroraBorderColor
 import eu.kanade.presentation.theme.resolveAuroraSurfaceColor
 import eu.kanade.presentation.util.Tab
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.browse.BrowseTab
 import eu.kanade.tachiyomi.ui.browse.anime.source.browse.BrowseAnimeSourceScreen
 import eu.kanade.tachiyomi.ui.browse.manga.source.browse.BrowseMangaSourceScreen
@@ -2688,7 +2688,7 @@ private fun HeroSection(
                     modifier = Modifier.fillMaxWidth(),
                     baseStyle = TextStyle(
                         fontSize = 28.sp,
-                        fontFamily = FontFamily(Font(eu.kanade.tachiyomi.R.font.montserrat_bold)),
+                        fontFamily = FontFamily(Font(com.tadami.aurora.R.font.montserrat_bold)),
                         lineHeight = 34.sp,
                         lineBreak = LineBreak.Heading,
                         shadow = heroTextShadow,
@@ -2704,7 +2704,7 @@ private fun HeroSection(
                     hero.title,
                     color = Color.White,
                     fontSize = 28.sp,
-                    fontFamily = FontFamily(Font(eu.kanade.tachiyomi.R.font.montserrat_bold)),
+                    fontFamily = FontFamily(Font(com.tadami.aurora.R.font.montserrat_bold)),
                     lineHeight = 34.sp,
                     style = TextStyle(lineBreak = LineBreak.Heading, shadow = heroTextShadow),
                     textAlign = TextAlign.Center,

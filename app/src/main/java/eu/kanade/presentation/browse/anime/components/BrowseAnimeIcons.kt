@@ -26,9 +26,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import coil3.compose.AsyncImage
+import com.tadami.aurora.R
 import eu.kanade.domain.source.anime.model.icon
 import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.extension.anime.model.AnimeExtension
 import eu.kanade.tachiyomi.extension.anime.util.AnimeExtensionLoader
 import tachiyomi.core.common.util.lang.withIOContext

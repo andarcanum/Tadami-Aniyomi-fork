@@ -41,6 +41,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.tadami.aurora.R
 import eu.kanade.domain.extension.anime.interactor.AnimeExtensionSourceItem
 import eu.kanade.presentation.browse.anime.components.AnimeExtensionIcon
 import eu.kanade.presentation.browse.manga.NsfwWarningDialog
@@ -49,7 +50,6 @@ import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.components.WarningBanner
 import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.TrailingWidgetBuffer
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.extension.anime.model.AnimeExtension
 import eu.kanade.tachiyomi.ui.browse.anime.extension.details.AnimeExtensionDetailsScreenModel

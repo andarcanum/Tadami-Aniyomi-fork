@@ -43,6 +43,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.tadami.aurora.R
 import eu.kanade.domain.extension.manga.interactor.MangaExtensionSourceItem
 import eu.kanade.presentation.browse.manga.components.MangaExtensionIcon
 import eu.kanade.presentation.components.AppBar
@@ -50,7 +51,6 @@ import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.components.WarningBanner
 import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.TrailingWidgetBuffer
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.extension.manga.model.MangaExtension
 import eu.kanade.tachiyomi.source.ConfigurableSource
 import eu.kanade.tachiyomi.ui.browse.manga.extension.details.MangaExtensionDetailsScreenModel

@@ -1,6 +1,6 @@
 package eu.kanade.tachiyomi.data.track.kavita
 
-import eu.kanade.tachiyomi.BuildConfig
+import com.tadami.aurora.BuildConfig
 import okhttp3.Interceptor
 import okhttp3.Response
 

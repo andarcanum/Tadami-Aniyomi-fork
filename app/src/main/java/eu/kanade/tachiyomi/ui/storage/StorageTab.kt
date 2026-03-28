@@ -9,9 +9,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
+import com.tadami.aurora.R
 import eu.kanade.presentation.components.TabbedScreen
 import eu.kanade.presentation.util.Tab
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.storage.anime.animeStorageTab
 import eu.kanade.tachiyomi.ui.storage.manga.mangaStorageTab

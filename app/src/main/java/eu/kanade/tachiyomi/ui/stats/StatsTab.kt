@@ -14,11 +14,11 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
+import com.tadami.aurora.R
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.TabbedScreen
 import eu.kanade.presentation.components.TabbedScreenAurora
 import eu.kanade.presentation.util.Tab
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.stats.anime.animeStatsTab
 import eu.kanade.tachiyomi.ui.stats.manga.mangaStatsTab

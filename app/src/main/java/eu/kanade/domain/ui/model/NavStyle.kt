@@ -7,9 +7,9 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
+import com.tadami.aurora.R
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.presentation.util.Tab
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.browse.BrowseTab
 import eu.kanade.tachiyomi.ui.history.HistoriesTab
 import eu.kanade.tachiyomi.ui.home.HomeHubTab

@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "tachiyomi.data"
+    namespace = "com.tadami.aurora.data"
 
     defaultConfig {
         consumerProguardFiles("consumer-rules.pro")

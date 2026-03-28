@@ -14,8 +14,8 @@ import coil3.imageLoader
 import coil3.request.ImageRequest
 import coil3.request.transformations
 import coil3.transform.CircleCropTransformation
+import com.tadami.aurora.R
 import eu.kanade.presentation.util.formatChapterNumber
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.core.common.Constants
 import eu.kanade.tachiyomi.core.security.SecurityPreferences
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloader

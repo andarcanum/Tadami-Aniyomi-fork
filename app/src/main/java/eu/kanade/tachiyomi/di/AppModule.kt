@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
+import com.tadami.aurora.BuildConfig
 import data.History
 import data.Mangas
 import dataanime.Animehistory
@@ -16,7 +17,6 @@ import datanovel.Novel_history
 import datanovel.Novels
 import eu.kanade.domain.track.anime.store.DelayedAnimeTrackingStore
 import eu.kanade.domain.track.manga.store.DelayedMangaTrackingStore
-import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.data.cache.AnimeBackgroundCache
 import eu.kanade.tachiyomi.data.cache.AnimeCoverCache
 import eu.kanade.tachiyomi.data.cache.ChapterCache

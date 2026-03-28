@@ -19,8 +19,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.ViewCompat
 import androidx.core.view.updatePadding
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.tadami.aurora.databinding.DownloadListBinding
 import eu.kanade.domain.ui.UiPreferences
-import eu.kanade.tachiyomi.databinding.DownloadListBinding
 import kotlinx.coroutines.CoroutineScope
 import tachiyomi.core.common.util.lang.launchUI
 import tachiyomi.i18n.MR

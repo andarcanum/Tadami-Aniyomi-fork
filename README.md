@@ -20,9 +20,22 @@ Current source version:
 ## What Is Different In This Fork
 
 - Aurora-focused UI direction with dedicated Home, library, title, and settings polish.
+- Compose-first app shell, with a few intentional legacy View/Fragment bridge surfaces kept where reader, player, auth, or extension compatibility still needs them.
 - Full anime, manga, and novel support in one app.
 - Novel-oriented development, including compatibility work for LNReader-style ecosystems.
 - User-facing Aurora customization toggles for key Home and title-card interactions.
+
+## Module Map
+
+- `app`: app shell, navigation, screens, activities, and feature wiring
+- `domain`: business logic, use cases, and repository contracts
+- `data`: repository implementations, database handlers, and SQLDelight schemas
+- `core/common`: shared networking, preferences, JS helpers, and utility code
+- `source-api`: extension contracts and source-facing APIs
+- `source-local`: local source implementation details
+- `presentation-core` and `presentation-widget`: shared Compose UI building blocks
+- `i18n` and `i18n-aniyomi`: resource bundles and translations
+- `private-modules`: optional private bridges loaded from local configuration
 
 ## Features
 

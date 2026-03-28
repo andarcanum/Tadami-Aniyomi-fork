@@ -29,12 +29,12 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.tadami.aurora.R
 import eu.kanade.domain.extension.novel.interactor.NovelExtensionSourceItem
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.TrailingWidgetBuffer
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.novelsource.ConfigurableNovelSource
 import eu.kanade.tachiyomi.ui.browse.novel.extension.details.NovelExtensionDetailsScreenModel
 import eu.kanade.tachiyomi.util.system.LocaleHelper

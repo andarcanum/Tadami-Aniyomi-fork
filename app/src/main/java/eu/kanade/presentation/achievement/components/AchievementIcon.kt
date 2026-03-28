@@ -28,8 +28,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.tadami.aurora.R
 import eu.kanade.presentation.theme.AuroraTheme
-import eu.kanade.tachiyomi.R
 import tachiyomi.domain.achievement.model.Achievement
 import kotlin.math.cos
 import kotlin.math.sin

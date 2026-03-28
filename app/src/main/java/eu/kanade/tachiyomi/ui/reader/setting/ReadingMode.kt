@@ -1,8 +1,8 @@
 package eu.kanade.tachiyomi.ui.reader.setting
 
 import androidx.annotation.DrawableRes
+import com.tadami.aurora.R
 import dev.icerock.moko.resources.StringResource
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.viewer.Viewer
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.L2RPagerViewer

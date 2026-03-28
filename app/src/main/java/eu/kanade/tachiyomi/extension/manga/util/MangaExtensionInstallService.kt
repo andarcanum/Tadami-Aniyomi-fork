@@ -5,8 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.IBinder
+import com.tadami.aurora.R
 import eu.kanade.domain.base.BasePreferences
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.extension.manga.installer.InstallerManga
 import eu.kanade.tachiyomi.extension.manga.installer.PackageInstallerInstallerManga

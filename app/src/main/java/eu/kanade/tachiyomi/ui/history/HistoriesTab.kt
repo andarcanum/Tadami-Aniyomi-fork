@@ -14,12 +14,12 @@ import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
+import com.tadami.aurora.R
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.presentation.components.TabbedScreen
 import eu.kanade.presentation.components.TabbedScreenAurora
 import eu.kanade.presentation.util.Tab
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.history.anime.AnimeHistoryScreenModel
 import eu.kanade.tachiyomi.ui.history.anime.animeHistoryTab
 import eu.kanade.tachiyomi.ui.history.anime.resumeLastEpisodeSeenEvent

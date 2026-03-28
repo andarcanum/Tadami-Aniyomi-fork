@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "tachiyomi.domain"
+    namespace = "com.tadami.aurora.domain"
 
     defaultConfig {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

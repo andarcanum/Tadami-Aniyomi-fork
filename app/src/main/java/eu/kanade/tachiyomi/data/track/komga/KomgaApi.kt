@@ -1,6 +1,6 @@
 package eu.kanade.tachiyomi.data.track.komga
 
-import eu.kanade.tachiyomi.BuildConfig
+import com.tadami.aurora.BuildConfig
 import eu.kanade.tachiyomi.data.database.models.manga.MangaTrack
 import eu.kanade.tachiyomi.data.track.model.MangaTrackSearch
 import eu.kanade.tachiyomi.network.GET

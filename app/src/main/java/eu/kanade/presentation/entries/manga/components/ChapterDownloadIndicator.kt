@@ -25,13 +25,13 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import com.tadami.aurora.R
 import eu.kanade.presentation.components.ArrowModifier
 import eu.kanade.presentation.components.DropdownMenu
 import eu.kanade.presentation.components.IndicatorModifier
 import eu.kanade.presentation.components.IndicatorSize
 import eu.kanade.presentation.components.IndicatorStrokeWidth
 import eu.kanade.presentation.components.commonClickable
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.download.manga.model.MangaDownload
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR

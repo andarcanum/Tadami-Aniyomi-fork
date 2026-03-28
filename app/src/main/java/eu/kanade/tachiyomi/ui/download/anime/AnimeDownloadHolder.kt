@@ -2,10 +2,10 @@ package eu.kanade.tachiyomi.ui.download.anime
 
 import android.view.View
 import androidx.recyclerview.widget.ItemTouchHelper
+import com.tadami.aurora.R
+import com.tadami.aurora.databinding.DownloadItemBinding
 import eu.davidea.viewholders.FlexibleViewHolder
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
-import eu.kanade.tachiyomi.databinding.DownloadItemBinding
 import eu.kanade.tachiyomi.util.view.popupMenu
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.i18n.MR

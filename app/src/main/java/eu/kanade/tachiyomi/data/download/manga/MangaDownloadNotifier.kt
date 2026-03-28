@@ -4,7 +4,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.graphics.BitmapFactory
 import androidx.core.app.NotificationCompat
-import eu.kanade.tachiyomi.R
+import com.tadami.aurora.R
 import eu.kanade.tachiyomi.core.security.SecurityPreferences
 import eu.kanade.tachiyomi.data.download.manga.model.MangaDownload
 import eu.kanade.tachiyomi.data.notification.NotificationHandler

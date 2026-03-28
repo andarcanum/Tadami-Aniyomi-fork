@@ -3,9 +3,9 @@ package eu.kanade.tachiyomi.ui.download.anime
 import android.annotation.SuppressLint
 import android.view.View
 import androidx.recyclerview.widget.ItemTouchHelper
+import com.tadami.aurora.databinding.DownloadHeaderBinding
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.viewholders.ExpandableViewHolder
-import eu.kanade.tachiyomi.databinding.DownloadHeaderBinding
 
 class AnimeDownloadHeaderHolder(view: View, adapter: FlexibleAdapter<*>) : ExpandableViewHolder(
     view,

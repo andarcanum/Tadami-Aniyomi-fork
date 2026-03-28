@@ -1,7 +1,7 @@
 package eu.kanade.tachiyomi.data.updater
 
 import android.content.Context
-import eu.kanade.tachiyomi.BuildConfig
+import com.tadami.aurora.BuildConfig
 import eu.kanade.tachiyomi.util.system.isPreviewBuildType
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.domain.release.interactor.GetApplicationRelease

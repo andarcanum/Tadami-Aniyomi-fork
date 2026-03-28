@@ -10,7 +10,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /*
- * Util functions for bridging RxJava and coroutines. Taken from TachiyomiEH/SY.
+ * Confine Rx-to-coroutine bridging to the common utility layer instead of spreading it through callers.
  */
 
 suspend fun <T> Observable<T>.awaitSingle(): T = single().awaitOne()

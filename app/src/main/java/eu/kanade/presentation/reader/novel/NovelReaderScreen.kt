@@ -154,10 +154,10 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import coil3.compose.AsyncImage
+import com.tadami.aurora.R
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.TabbedDialog
 import eu.kanade.presentation.theme.AuroraTheme
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelPluginImageResolver
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreenModel

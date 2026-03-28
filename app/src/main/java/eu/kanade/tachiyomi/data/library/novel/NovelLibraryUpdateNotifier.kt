@@ -2,7 +2,7 @@ package eu.kanade.tachiyomi.data.library.novel
 
 import android.content.Context
 import androidx.core.app.NotificationCompat
-import eu.kanade.tachiyomi.R
+import com.tadami.aurora.R
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.util.lang.chop

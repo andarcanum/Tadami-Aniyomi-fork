@@ -31,7 +31,7 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import eu.kanade.tachiyomi.R
+import com.tadami.aurora.R
 import eu.kanade.tachiyomi.ui.player.controls.components.ControlsButton
 import `is`.xyz.mpv.Utils
 import tachiyomi.i18n.aniyomi.AYMR

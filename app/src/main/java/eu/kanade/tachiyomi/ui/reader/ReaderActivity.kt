@@ -41,6 +41,8 @@ import androidx.lifecycle.lifecycleScope
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import com.google.android.material.transition.platform.MaterialContainerTransform
 import com.hippo.unifile.UniFile
+import com.tadami.aurora.R
+import com.tadami.aurora.databinding.ReaderActivityBinding
 import dev.chrisbanes.insetter.applyInsetter
 import eu.kanade.core.util.ifMangaSourcesLoaded
 import eu.kanade.domain.base.BasePreferences
@@ -52,12 +54,10 @@ import eu.kanade.presentation.reader.ReaderPageActionsDialog
 import eu.kanade.presentation.reader.ReadingModeSelectDialog
 import eu.kanade.presentation.reader.appbars.ReaderAppBars
 import eu.kanade.presentation.reader.settings.ReaderSettingsDialog
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.core.common.Constants
 import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
-import eu.kanade.tachiyomi.databinding.ReaderActivityBinding
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.base.activity.BaseActivity
 import eu.kanade.tachiyomi.ui.main.MainActivity
@@ -102,6 +102,7 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.ByteArrayOutputStream
 
+// Legacy bridge: this activity still hosts the reader while the Compose migration remains partial.
 class ReaderActivity : BaseActivity() {
 
     companion object {

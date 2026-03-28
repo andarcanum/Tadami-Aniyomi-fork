@@ -3,10 +3,10 @@ package eu.kanade.tachiyomi.ui.download.anime
 import android.view.MenuItem
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
-import eu.kanade.tachiyomi.R
+import com.tadami.aurora.R
+import com.tadami.aurora.databinding.DownloadListBinding
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
-import eu.kanade.tachiyomi.databinding.DownloadListBinding
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted

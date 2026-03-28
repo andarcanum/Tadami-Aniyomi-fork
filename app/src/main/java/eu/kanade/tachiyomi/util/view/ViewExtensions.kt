@@ -20,8 +20,8 @@ import androidx.compose.runtime.CompositionContext
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import com.tadami.aurora.R
 import eu.kanade.presentation.theme.TachiyomiTheme
-import eu.kanade.tachiyomi.R
 
 inline fun ComponentActivity.setComposeContent(
     parent: CompositionContext? = null,

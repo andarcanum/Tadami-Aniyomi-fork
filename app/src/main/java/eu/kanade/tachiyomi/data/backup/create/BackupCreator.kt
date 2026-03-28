@@ -3,7 +3,7 @@ package eu.kanade.tachiyomi.data.backup.create
 import android.content.Context
 import android.net.Uri
 import com.hippo.unifile.UniFile
-import eu.kanade.tachiyomi.BuildConfig
+import com.tadami.aurora.BuildConfig
 import eu.kanade.tachiyomi.data.backup.BackupFileValidator
 import eu.kanade.tachiyomi.data.backup.create.creators.AchievementBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.AnimeBackupCreator

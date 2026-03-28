@@ -3,9 +3,9 @@ package eu.kanade.presentation.components
 import androidx.annotation.DrawableRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.painter.Painter
+import com.tadami.aurora.R
 import eu.kanade.presentation.theme.LocalIsAuroraTheme
 import eu.kanade.presentation.util.rememberResourceBitmapPainter
-import eu.kanade.tachiyomi.R
 import tachiyomi.domain.entries.anime.model.AnimeCover
 import tachiyomi.domain.entries.manga.model.MangaCover
 import tachiyomi.domain.entries.novel.model.NovelCover

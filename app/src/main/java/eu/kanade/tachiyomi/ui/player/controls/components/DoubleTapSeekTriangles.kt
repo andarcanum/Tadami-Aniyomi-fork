@@ -15,7 +15,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import eu.kanade.tachiyomi.R
+import com.tadami.aurora.R
 
 @Composable
 fun DoubleTapSeekTriangles(isForward: Boolean) {

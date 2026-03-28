@@ -20,6 +20,7 @@ import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
+// Legacy bridge: authentication still enters through FragmentActivity on this settings screen.
 object SettingsSecurityScreen : SearchableSettings {
 
     @ReadOnlyComposable

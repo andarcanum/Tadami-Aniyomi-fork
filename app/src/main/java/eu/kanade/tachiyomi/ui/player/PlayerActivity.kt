@@ -58,6 +58,7 @@ import androidx.media.AudioAttributesCompat
 import androidx.media.AudioFocusRequestCompat
 import androidx.media.AudioManagerCompat
 import com.hippo.unifile.UniFile
+import com.tadami.aurora.databinding.PlayerLayoutBinding
 import eu.kanade.presentation.theme.TachiyomiTheme
 import eu.kanade.tachiyomi.animesource.model.ChapterType
 import eu.kanade.tachiyomi.animesource.model.Hoster
@@ -66,7 +67,6 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
-import eu.kanade.tachiyomi.databinding.PlayerLayoutBinding
 import eu.kanade.tachiyomi.network.NetworkPreferences
 import eu.kanade.tachiyomi.ui.base.activity.BaseActivity
 import eu.kanade.tachiyomi.ui.player.controls.PlayerControls
@@ -107,6 +107,7 @@ import java.io.OutputStream
 import kotlin.math.ceil
 import kotlin.math.floor
 
+// Legacy bridge: this activity still hosts the player while the Compose migration remains partial.
 class PlayerActivity : BaseActivity() {
     private val viewModel by viewModels<PlayerViewModel>(factoryProducer = { PlayerViewModelProviderFactory(this) })
     private val binding by lazy { PlayerLayoutBinding.inflate(layoutInflater) }

@@ -1,4 +1,4 @@
-﻿package eu.kanade.presentation.browse.novel.components
+package eu.kanade.presentation.browse.novel.components
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.aspectRatio
@@ -14,8 +14,8 @@ import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.tadami.aurora.R
 import eu.kanade.domain.source.novel.model.iconUrl
-import eu.kanade.tachiyomi.R
 import tachiyomi.domain.source.novel.model.Source
 
 private val defaultModifier = Modifier

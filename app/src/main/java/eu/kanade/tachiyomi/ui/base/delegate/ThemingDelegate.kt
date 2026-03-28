@@ -1,9 +1,9 @@
 package eu.kanade.tachiyomi.ui.base.delegate
 
 import android.app.Activity
+import com.tadami.aurora.R
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.AppTheme
-import eu.kanade.tachiyomi.R
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 

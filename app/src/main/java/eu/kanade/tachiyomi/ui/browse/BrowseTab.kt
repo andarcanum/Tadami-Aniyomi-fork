@@ -23,6 +23,7 @@ import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
+import com.tadami.aurora.R
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AuroraTabRow
 import eu.kanade.presentation.components.TabContent
@@ -31,7 +32,6 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.presentation.util.Tab
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.browse.anime.extension.AnimeExtensionsScreenModel
 import eu.kanade.tachiyomi.ui.browse.anime.extension.animeExtensionsTab
 import eu.kanade.tachiyomi.ui.browse.anime.migration.sources.migrateAnimeSourceTab

@@ -5,7 +5,7 @@ import app.cash.quickjs.QuickJs
 import tachiyomi.core.common.util.lang.withIOContext
 
 /**
- * Util for evaluating JavaScript in sources.
+ * Shared JS engine wrapper so callers only depend on this facade, not on QuickJS directly.
  */
 @Suppress("UNUSED", "UNCHECKED_CAST")
 class JavaScriptEngine(context: Context) {

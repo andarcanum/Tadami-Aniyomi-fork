@@ -2,7 +2,7 @@
 
 package eu.kanade.tachiyomi.util.system
 
-import eu.kanade.tachiyomi.BuildConfig
+import com.tadami.aurora.BuildConfig
 
 val updaterEnabled: Boolean
     inline get() = BuildConfig.UPDATER_ENABLED

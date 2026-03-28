@@ -56,13 +56,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import com.tadami.aurora.R
 import com.yubyf.truetypeparser.TTFFile
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.presentation.components.DropdownMenu
 import eu.kanade.presentation.player.components.ExpandableCard
 import eu.kanade.presentation.player.components.ExposedTextDropDownMenu
 import eu.kanade.presentation.player.components.SliderItem
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.player.controls.CARDS_MAX_WIDTH
 import eu.kanade.tachiyomi.ui.player.controls.panelCardsColors
 import eu.kanade.tachiyomi.ui.player.settings.SubtitleJustification

@@ -38,9 +38,9 @@ internal fun NovelPageSurfaceBackground(
             backgroundTexture == NovelReaderBackgroundTexture.LINEN
         ) {
             val imageRes = if (backgroundTexture == NovelReaderBackgroundTexture.PAPER_GRAIN) {
-                eu.kanade.tachiyomi.R.drawable.texture_paper
+                com.tadami.aurora.R.drawable.texture_paper
             } else {
-                eu.kanade.tachiyomi.R.drawable.texture_linen
+                com.tadami.aurora.R.drawable.texture_linen
             }
 
             val imageBitmap = ImageBitmap.imageResource(id = imageRes)

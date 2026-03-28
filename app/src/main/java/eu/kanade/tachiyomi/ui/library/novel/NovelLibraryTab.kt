@@ -40,6 +40,7 @@ import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
+import com.tadami.aurora.R
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.entries.components.ItemCover
 import eu.kanade.presentation.library.components.LibraryToolbar
@@ -48,7 +49,6 @@ import eu.kanade.presentation.library.novel.NovelLibrarySettingsDialog
 import eu.kanade.presentation.library.novel.resolveNovelLibraryBadgeState
 import eu.kanade.presentation.novel.sourceAwareNovelCoverModel
 import eu.kanade.presentation.util.Tab
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
 import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
 import eu.kanade.tachiyomi.ui.category.CategoriesTab

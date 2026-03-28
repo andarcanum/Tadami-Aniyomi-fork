@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.AttributeSet
 import android.view.MotionEvent
 import com.google.android.material.button.MaterialButton
-import eu.kanade.tachiyomi.R
+import com.tadami.aurora.R
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerViewer
 
 /**

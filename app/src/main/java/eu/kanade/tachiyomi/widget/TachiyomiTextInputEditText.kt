@@ -5,8 +5,8 @@ import android.util.AttributeSet
 import android.widget.EditText
 import androidx.core.view.inputmethod.EditorInfoCompat
 import com.google.android.material.textfield.TextInputEditText
+import com.tadami.aurora.R
 import eu.kanade.domain.base.BasePreferences
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.widget.TachiyomiTextInputEditText.Companion.setIncognito
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

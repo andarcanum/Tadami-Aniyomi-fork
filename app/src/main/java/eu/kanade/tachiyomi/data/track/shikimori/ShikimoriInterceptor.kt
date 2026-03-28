@@ -1,6 +1,6 @@
 package eu.kanade.tachiyomi.data.track.shikimori
 
-import eu.kanade.tachiyomi.BuildConfig
+import com.tadami.aurora.BuildConfig
 import eu.kanade.tachiyomi.data.track.shikimori.dto.SMOAuth
 import eu.kanade.tachiyomi.data.track.shikimori.dto.isExpired
 import kotlinx.serialization.json.Json

@@ -1,6 +1,6 @@
 package eu.kanade.tachiyomi.data.track.simkl
 
-import eu.kanade.tachiyomi.BuildConfig
+import com.tadami.aurora.BuildConfig
 import eu.kanade.tachiyomi.data.track.simkl.SimklApi.Companion.CLIENT_ID
 import eu.kanade.tachiyomi.data.track.simkl.dto.SimklOAuth
 import okhttp3.Interceptor

@@ -3,7 +3,7 @@ package eu.kanade.tachiyomi.data.download.novel
 import android.content.Context
 import android.graphics.BitmapFactory
 import androidx.core.app.NotificationCompat
-import eu.kanade.tachiyomi.R
+import com.tadami.aurora.R
 import eu.kanade.tachiyomi.core.security.SecurityPreferences
 import eu.kanade.tachiyomi.data.notification.NotificationHandler
 import eu.kanade.tachiyomi.data.notification.Notifications

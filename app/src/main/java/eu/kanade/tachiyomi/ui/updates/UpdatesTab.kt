@@ -47,6 +47,7 @@ import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
+import com.tadami.aurora.R
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.presentation.components.AuroraTabRow
@@ -58,7 +59,6 @@ import eu.kanade.presentation.updates.anime.AnimeUpdatesAuroraContent
 import eu.kanade.presentation.updates.manga.MangaUpdatesAuroraContent
 import eu.kanade.presentation.updates.novel.NovelUpdatesAuroraContent
 import eu.kanade.presentation.util.Tab
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.manga.MangaLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob

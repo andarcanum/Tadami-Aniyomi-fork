@@ -24,11 +24,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.os.LocaleListCompat
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import com.tadami.aurora.R
 import eu.kanade.presentation.more.settings.SettingsScaffold
 import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.util.Screen
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList

@@ -59,6 +59,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
+import com.tadami.aurora.R
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
@@ -72,7 +73,6 @@ import eu.kanade.presentation.more.settings.AuroraTopBarLayout
 import eu.kanade.presentation.more.settings.AuroraTopBarTitleText
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.Tab
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.download.anime.AnimeDownloadHeaderItem
 import eu.kanade.tachiyomi.ui.download.anime.AnimeDownloadQueueScreenModel
 import eu.kanade.tachiyomi.ui.download.anime.animeDownloadTab

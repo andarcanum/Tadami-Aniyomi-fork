@@ -3,10 +3,7 @@ package eu.kanade.tachiyomi.extension.novel.runtime
 object NovelJsPromiseShim {
     val script = """
         (function(global) {
-          // QuickJS doesn't provide an event loop. LNReader-style plugins rely on TS __awaiter which
-          // expects async Promise chaining. If we execute `.then()` handlers synchronously, deep
-          // await chains recurse and can overflow the stack. We simulate microtasks with a job queue
-          // and drain it iteratively from __resolve().
+          // QuickJS lacks an event loop, so LNReader-style promise plumbing stays local to the runtime boundary.
           var __jobQueue = [];
 
           function __queueJob(fn) {

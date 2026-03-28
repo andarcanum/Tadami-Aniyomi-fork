@@ -1,6 +1,6 @@
 package eu.kanade.tachiyomi.data.track.jellyfin
 
-import eu.kanade.tachiyomi.BuildConfig
+import com.tadami.aurora.BuildConfig
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.sourcePreferences
 import okhttp3.Interceptor

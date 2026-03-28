@@ -2,7 +2,7 @@ package eu.kanade.tachiyomi.extension
 
 import android.content.Context
 import androidx.core.app.NotificationCompat
-import eu.kanade.tachiyomi.R
+import com.tadami.aurora.R
 import eu.kanade.tachiyomi.core.security.SecurityPreferences
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
