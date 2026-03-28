@@ -13,6 +13,7 @@ import android.text.style.StyleSpan
 import android.text.style.UnderlineSpan
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.compose.foundation.layout.Box
@@ -127,6 +128,7 @@ internal fun buildNovelPageReaderSpanSpecs(
 internal fun buildNovelPageReaderSpannableText(
     text: AnnotatedString,
     firstLineIndentPx: Int? = null,
+    forcedTypefaceStyle: Int = Typeface.NORMAL,
 ): SpannableStringBuilder {
     val spannable = SpannableStringBuilder(text.text)
     buildNovelPageReaderSpanSpecs(
@@ -190,6 +192,14 @@ internal fun buildNovelPageReaderSpannableText(
             )
         }
     }
+    if (forcedTypefaceStyle != Typeface.NORMAL && text.text.isNotEmpty()) {
+        spannable.setSpan(
+            StyleSpan(forcedTypefaceStyle),
+            0,
+            text.text.length,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+        )
+    }
     return spannable
 }
 
@@ -215,6 +225,22 @@ private fun resolveNovelPageReaderTextGravity(
     }
 }
 
+private class NovelPageReaderTextView constructor(
+    context: android.content.Context,
+) : TextView(context) {
+
+    init {
+        isClickable = false
+        isLongClickable = false
+        isFocusable = false
+        isFocusableInTouchMode = false
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        return false
+    }
+}
+
 @Composable
 internal fun NovelPageReaderPageContent(
     contentPage: NovelPageContentPage,
@@ -224,6 +250,12 @@ internal fun NovelPageReaderPageContent(
     pageSurfaceColor: Color? = null,
     textTypeface: Typeface?,
     chapterTitleTypeface: Typeface?,
+    chapterTitleTextColor: Color,
+    textShadowEnabled: Boolean,
+    textShadowColor: String,
+    textShadowBlur: Float,
+    textShadowX: Float,
+    textShadowY: Float,
     contentPadding: Dp,
     statusBarTopPadding: Dp,
     backgroundTexture: NovelReaderBackgroundTexture,
@@ -280,9 +312,16 @@ internal fun NovelPageReaderPageContent(
                                 firstLineIndentEm = block.firstLineIndentEm,
                                 readerSettings = readerSettings,
                                 textColor = textColor,
+                                textBackground = textBackground,
                                 textAlign = readerSettings.textAlign,
                                 textTypeface = textTypeface,
                                 chapterTitleTypeface = chapterTitleTypeface,
+                                chapterTitleTextColor = chapterTitleTextColor,
+                                textShadowEnabled = readerSettings.textShadow,
+                                textShadowColor = readerSettings.textShadowColor,
+                                textShadowBlur = readerSettings.textShadowBlur,
+                                textShadowX = readerSettings.textShadowX,
+                                textShadowY = readerSettings.textShadowY,
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
@@ -293,9 +332,16 @@ internal fun NovelPageReaderPageContent(
                                 firstLineIndentEm = block.firstLineIndentEm,
                                 readerSettings = readerSettings,
                                 textColor = textColor,
+                                textBackground = textBackground,
                                 textAlign = readerSettings.textAlign,
                                 textTypeface = textTypeface,
                                 chapterTitleTypeface = chapterTitleTypeface,
+                                chapterTitleTextColor = chapterTitleTextColor,
+                                textShadowEnabled = readerSettings.textShadow,
+                                textShadowColor = readerSettings.textShadowColor,
+                                textShadowBlur = readerSettings.textShadowBlur,
+                                textShadowX = readerSettings.textShadowX,
+                                textShadowY = readerSettings.textShadowY,
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
@@ -313,9 +359,16 @@ private fun NovelPageReaderTextBlock(
     firstLineIndentEm: Float?,
     readerSettings: NovelReaderSettings,
     textColor: Color,
+    textBackground: Color,
     textAlign: ReaderTextAlign,
     textTypeface: Typeface?,
     chapterTitleTypeface: Typeface?,
+    chapterTitleTextColor: Color,
+    textShadowEnabled: Boolean,
+    textShadowColor: String,
+    textShadowBlur: Float,
+    textShadowX: Float,
+    textShadowY: Float,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -342,18 +395,28 @@ private fun NovelPageReaderTextBlock(
     } else {
         textTypeface
     }
+    val blockTextColor = if (isChapterTitle) chapterTitleTextColor else textColor
+    val blockTextShadow = resolveReaderTextShadow(
+        textShadowEnabled = textShadowEnabled,
+        textShadowColor = textShadowColor,
+        textShadowBlur = textShadowBlur,
+        textShadowX = textShadowX,
+        textShadowY = textShadowY,
+        textColor = blockTextColor,
+        backgroundColor = textBackground,
+    )
 
     AndroidView(
         modifier = modifier,
         factory = { context ->
-            TextView(context).apply {
+            NovelPageReaderTextView(context).apply {
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                 )
                 setPadding(0, 0, 0, 0)
                 includeFontPadding = false
-                setTextColor(textColor.toArgb())
+                setTextColor(blockTextColor.toArgb())
                 setTextSize(TypedValue.COMPLEX_UNIT_PX, blockTextSizePx)
                 setLineSpacing(0f, blockLineSpacingMultiplier)
                 typeface = blockTypeface
@@ -368,11 +431,19 @@ private fun NovelPageReaderTextBlock(
             }
         },
         update = { textView ->
-            textView.setTextColor(textColor.toArgb())
+            textView.setTextColor(blockTextColor.toArgb())
             textView.setTextSize(TypedValue.COMPLEX_UNIT_PX, blockTextSizePx)
             textView.setLineSpacing(0f, blockLineSpacingMultiplier)
             textView.typeface = blockTypeface
             textView.gravity = resolveNovelPageReaderTextGravity(textAlign)
+            blockTextShadow?.let { shadow ->
+                textView.setShadowLayer(
+                    shadow.blurRadius,
+                    shadow.offset.x,
+                    shadow.offset.y,
+                    shadow.color.toArgb(),
+                )
+            } ?: textView.setShadowLayer(0f, 0f, 0f, Color.Transparent.toArgb())
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 textView.justificationMode = if (textAlign == ReaderTextAlign.JUSTIFY) {
                     Layout.JUSTIFICATION_MODE_INTER_WORD
@@ -383,6 +454,10 @@ private fun NovelPageReaderTextBlock(
             textView.text = buildNovelPageReaderSpannableText(
                 text = text,
                 firstLineIndentPx = blockFirstLineIndentPx,
+                forcedTypefaceStyle = resolveForcedReaderTypefaceStyle(
+                    forceBoldText = readerSettings.forceBoldText,
+                    forceItalicText = readerSettings.forceItalicText,
+                ),
             )
         },
     )

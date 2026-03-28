@@ -1,5 +1,6 @@
 package eu.kanade.presentation.reader.novel
 
+import android.graphics.Typeface
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color

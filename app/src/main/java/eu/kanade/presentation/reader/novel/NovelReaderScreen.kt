@@ -450,6 +450,7 @@ fun NovelReaderScreen(
         isBackgroundMode -> backgroundModeTextColor
         else -> themeModeTextColor
     }
+    val chapterTitleTextColor = textColor
     val textBackground = when {
         isEInkMode -> Color.White
         isBackgroundMode -> backgroundModeBaseColor
@@ -500,11 +501,17 @@ fun NovelReaderScreen(
             typeface = composeTypeface,
         )
     }
-    val chapterTitleTypeface = remember(context) {
+    val chapterTitleTypeface = remember(
+        context,
+        state.readerSettings.forceBoldText,
+        state.readerSettings.forceItalicText,
+    ) {
         novelReaderBuiltInFonts.firstOrNull { it.id == "domine" }?.let { font ->
             loadNovelReaderTypeface(
                 context = context,
                 font = font,
+                forceBoldText = state.readerSettings.forceBoldText,
+                forceItalicText = state.readerSettings.forceItalicText,
             )
         }
     }
@@ -1162,6 +1169,7 @@ fun NovelReaderScreen(
                         readerSettings = state.readerSettings,
                         textColor = textColor,
                         textBackground = textBackground,
+                        chapterTitleTextColor = chapterTitleTextColor,
                         backgroundTexture = state.readerSettings.backgroundTexture,
                         nativeTextureStrengthPercent = state.readerSettings.nativeTextureStrengthPercent,
                         textTypeface = composeTypeface,
@@ -1186,6 +1194,7 @@ fun NovelReaderScreen(
                         readerSettings = state.readerSettings,
                         textColor = textColor,
                         textBackground = textBackground,
+                        chapterTitleTextColor = chapterTitleTextColor,
                         backgroundTexture = state.readerSettings.backgroundTexture,
                         nativeTextureStrengthPercent = state.readerSettings.nativeTextureStrengthPercent,
                         backgroundImageModel = if (isBackgroundMode) backgroundImageModel else null,
