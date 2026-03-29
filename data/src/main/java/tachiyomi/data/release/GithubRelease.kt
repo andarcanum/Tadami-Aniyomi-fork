@@ -12,6 +12,8 @@ data class GithubRelease(
     val version: String,
     @SerialName("body")
     val info: String,
+    @SerialName("published_at")
+    val publishedAt: String,
     @SerialName("html_url")
     val releaseLink: String,
     @SerialName("assets")

@@ -37,11 +37,11 @@ import tachiyomi.domain.library.anime.LibraryAnime
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
-import tachiyomi.i18n.aniyomi.R as AniyomiR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.math.RoundingMode
 import java.text.NumberFormat
+import tachiyomi.i18n.aniyomi.R as AniyomiR
 
 class AnimeLibraryUpdateNotifier(
     private val context: Context,

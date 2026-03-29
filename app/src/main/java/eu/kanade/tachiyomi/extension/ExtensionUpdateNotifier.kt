@@ -8,9 +8,9 @@ import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.util.system.cancelNotification
 import eu.kanade.tachiyomi.util.system.notify
-import tachiyomi.i18n.R as I18nR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import tachiyomi.i18n.R as I18nR
 
 class ExtensionUpdateNotifier(
     private val context: Context,

@@ -48,6 +48,7 @@ import eu.kanade.tachiyomi.data.coil.NovelPluginImageFetcher
 import eu.kanade.tachiyomi.data.coil.NovelPluginImageKeyer
 import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
 import eu.kanade.tachiyomi.data.notification.Notifications
+import eu.kanade.tachiyomi.data.updater.AppUpdateFileManager
 import eu.kanade.tachiyomi.di.AppModule
 import eu.kanade.tachiyomi.di.PreferenceModule
 import eu.kanade.tachiyomi.network.NetworkHelper
@@ -58,6 +59,7 @@ import eu.kanade.tachiyomi.util.system.GLUtil
 import eu.kanade.tachiyomi.util.system.WebViewUtil
 import eu.kanade.tachiyomi.util.system.animatorDurationScale
 import eu.kanade.tachiyomi.util.system.cancelNotification
+import eu.kanade.tachiyomi.util.system.isPreviewBuildType
 import eu.kanade.tachiyomi.util.system.notify
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -90,6 +92,7 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
 
     private val basePreferences: BasePreferences by injectLazy()
     private val networkPreferences: NetworkPreferences by injectLazy()
+    private val appUpdateFileManager: AppUpdateFileManager by injectLazy()
     private val sessionManager: tachiyomi.data.achievement.handler.SessionManager by injectLazy()
 
     private val disableIncognitoReceiver = DisableIncognitoReceiver()
@@ -124,6 +127,12 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         // SY -->
         Injekt.importModule(SYDomainModule())
         // SY <--
+
+        appUpdateFileManager.cleanupIfInstalledVersionReached(
+            isPreview = isPreviewBuildType,
+            installedCommitCount = BuildConfig.COMMIT_COUNT.toInt(),
+            installedVersionName = BuildConfig.VERSION_NAME,
+        )
 
         setupNotificationChannels()
 

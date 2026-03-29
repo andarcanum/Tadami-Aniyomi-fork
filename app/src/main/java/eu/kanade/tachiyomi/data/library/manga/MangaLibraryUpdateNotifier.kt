@@ -36,11 +36,11 @@ import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.library.manga.LibraryManga
 import tachiyomi.domain.source.manga.service.MangaSourceManager
 import tachiyomi.i18n.MR
-import tachiyomi.i18n.R as I18nR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.math.RoundingMode
 import java.text.NumberFormat
+import tachiyomi.i18n.R as I18nR
 
 class MangaLibraryUpdateNotifier(
     private val context: Context,

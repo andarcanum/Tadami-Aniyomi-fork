@@ -1,5 +1,6 @@
 package eu.kanade.domain
 
+import android.app.Application
 import eu.kanade.domain.download.anime.interactor.DeleteEpisodeDownload
 import eu.kanade.domain.download.manga.interactor.DeleteChapterDownload
 import eu.kanade.domain.entries.anime.interactor.SetAnimeViewerFlags
@@ -64,6 +65,7 @@ import eu.kanade.domain.track.manga.interactor.SyncChapterProgressWithTrack
 import eu.kanade.domain.track.manga.interactor.TrackChapter
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.UserProfilePreferences
+import eu.kanade.tachiyomi.data.updater.AppUpdateFileManager
 import eu.kanade.tachiyomi.ui.player.utils.TrackSelect
 import mihon.data.repository.anime.AnimeExtensionRepoRepositoryImpl
 import mihon.data.repository.manga.MangaExtensionRepoRepositoryImpl
@@ -401,6 +403,7 @@ class DomainModule : InjektModule {
         addSingletonFactory<ReleaseService> { ReleaseServiceImpl(get(), get()) }
         addFactory { GetApplicationRelease(get(), get()) }
         addSingletonFactory { AppUpdatePreferences(get()) }
+        addSingletonFactory { AppUpdateFileManager(get<Application>(), get()) }
 
         addSingletonFactory<AnimeTrackRepository> { AnimeTrackRepositoryImpl(get()) }
         addFactory { TrackEpisode(get(), get(), get(), get()) }

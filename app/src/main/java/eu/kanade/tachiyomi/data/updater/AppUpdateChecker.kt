@@ -5,11 +5,13 @@ import com.tadami.aurora.BuildConfig
 import eu.kanade.tachiyomi.util.system.isPreviewBuildType
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.domain.release.interactor.GetApplicationRelease
+import tachiyomi.domain.release.service.AppUpdatePreferences
 import uy.kohesive.injekt.injectLazy
 
 class AppUpdateChecker {
 
     private val getApplicationRelease: GetApplicationRelease by injectLazy()
+    private val appUpdatePreferences: AppUpdatePreferences by injectLazy()
 
     suspend fun checkForUpdate(context: Context, forceCheck: Boolean = false): GetApplicationRelease.Result {
         // Disabling app update checks for older Android versions that we're going to drop support for
@@ -29,14 +31,51 @@ class AppUpdateChecker {
             )
 
             when (result) {
-                is GetApplicationRelease.Result.NewUpdate -> AppUpdateNotifier(context).promptUpdate(
-                    result.release,
-                )
+                is GetApplicationRelease.Result.NewUpdate -> {
+                    val ignoredVersionPreference = appUpdatePreferences.ignoredAppUpdateVersion()
+                    val decision = resolveAppUpdatePrompt(
+                        availableVersion = result.release.version,
+                        ignoredVersion = ignoredVersionPreference.get(),
+                    )
+
+                    if (decision.nextIgnoredVersion != ignoredVersionPreference.get()) {
+                        ignoredVersionPreference.set(decision.nextIgnoredVersion)
+                    }
+
+                    if (decision.shouldPrompt) {
+                        AppUpdateNotifier(context).promptUpdate(result.release)
+                    }
+                }
                 else -> {}
             }
 
             result
         }
+    }
+}
+
+data class AppUpdatePromptDecision(
+    val shouldPrompt: Boolean,
+    val nextIgnoredVersion: String,
+)
+
+internal fun resolveAppUpdatePrompt(
+    availableVersion: String,
+    ignoredVersion: String,
+): AppUpdatePromptDecision {
+    return when {
+        ignoredVersion.isBlank() -> AppUpdatePromptDecision(
+            shouldPrompt = true,
+            nextIgnoredVersion = "",
+        )
+        ignoredVersion == availableVersion -> AppUpdatePromptDecision(
+            shouldPrompt = false,
+            nextIgnoredVersion = ignoredVersion,
+        )
+        else -> AppUpdatePromptDecision(
+            shouldPrompt = true,
+            nextIgnoredVersion = "",
+        )
     }
 }
 

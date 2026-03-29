@@ -3,7 +3,6 @@ package eu.kanade.tachiyomi.widget
 import android.content.Context
 import android.util.AttributeSet
 import android.widget.EditText
-import androidx.appcompat.R as AppCompatR
 import androidx.core.view.inputmethod.EditorInfoCompat
 import com.google.android.material.textfield.TextInputEditText
 import eu.kanade.domain.base.BasePreferences
@@ -16,6 +15,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import androidx.appcompat.R as AppCompatR
 
 /**
  * A custom [TextInputEditText] that sets [EditorInfoCompat.IME_FLAG_NO_PERSONALIZED_LEARNING] to imeOptions

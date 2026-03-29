@@ -236,6 +236,7 @@ object AboutScreen : Screen() {
                                                 onAvailableUpdate = { result ->
                                                     val updateScreen = NewUpdateScreen(
                                                         versionName = result.release.version,
+                                                        releaseDate = result.release.releaseDate,
                                                         changelogInfo = result.release.info,
                                                         releaseLink = result.release.releaseLink,
                                                         downloadLink = result.release.downloadLink,

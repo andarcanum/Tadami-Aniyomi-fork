@@ -489,6 +489,7 @@ class MainActivity : BaseActivity() {
                         if (result is GetApplicationRelease.Result.NewUpdate) {
                             val updateScreen = NewUpdateScreen(
                                 versionName = result.release.version,
+                                releaseDate = result.release.releaseDate,
                                 changelogInfo = result.release.info,
                                 releaseLink = result.release.releaseLink,
                                 downloadLink = result.release.downloadLink,

@@ -10,7 +10,6 @@ import android.view.MenuItem
 import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.appcompat.R as AppCompatR
 import androidx.annotation.MenuRes
 import androidx.appcompat.widget.PopupMenu
 import androidx.compose.material3.LocalContentColor
@@ -22,6 +21,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import eu.kanade.presentation.theme.TachiyomiTheme
+import androidx.appcompat.R as AppCompatR
 
 inline fun ComponentActivity.setComposeContent(
     parent: CompositionContext? = null,

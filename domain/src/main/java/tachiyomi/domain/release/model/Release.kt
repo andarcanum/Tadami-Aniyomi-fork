@@ -8,4 +8,5 @@ data class Release(
     val info: String,
     val releaseLink: String,
     val downloadLink: String,
+    val releaseDate: String,
 )

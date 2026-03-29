@@ -28,7 +28,6 @@ import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.injectLazy
-import java.io.File
 import kotlin.coroutines.cancellation.CancellationException
 
 class AppUpdateDownloadJob(private val context: Context, workerParams: WorkerParameters) :
@@ -36,6 +35,7 @@ class AppUpdateDownloadJob(private val context: Context, workerParams: WorkerPar
 
     private val notifier = AppUpdateNotifier(context)
     private val network: NetworkHelper by injectLazy()
+    private val appUpdateFileManager: AppUpdateFileManager by injectLazy()
 
     override suspend fun doWork(): Result {
         val url = inputData.getString(EXTRA_DOWNLOAD_URL)
@@ -103,10 +103,11 @@ class AppUpdateDownloadJob(private val context: Context, workerParams: WorkerPar
                 .await()
 
             // File where the apk will be saved.
-            val apkFile = File(context.externalCacheDir, "update.apk")
+            val apkFile = appUpdateFileManager.apkFile()
 
             if (response.isSuccessful) {
                 response.body.source().saveTo(apkFile)
+                appUpdateFileManager.recordDownloadedVersion(title)
             } else {
                 response.close()
                 throw Exception("Unsuccessful response")

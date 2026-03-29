@@ -26,7 +26,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.preference.DialogPreference
 import androidx.preference.EditTextPreference
 import androidx.preference.PreferenceFragmentCompat
-import androidx.preference.R as PreferenceR
 import androidx.preference.PreferenceScreen
 import androidx.preference.forEach
 import androidx.preference.getOnBindEditTextListener
@@ -44,6 +43,7 @@ import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.screens.LoadingScreen
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import androidx.preference.R as PreferenceR
 
 class MangaSourcePreferencesScreen(val sourceId: Long) : Screen() {
 

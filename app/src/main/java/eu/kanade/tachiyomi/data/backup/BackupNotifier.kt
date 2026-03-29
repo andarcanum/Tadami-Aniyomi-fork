@@ -15,10 +15,10 @@ import eu.kanade.tachiyomi.util.system.notify
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.storage.displayablePath
 import tachiyomi.i18n.MR
-import tachiyomi.i18n.R as I18nR
 import uy.kohesive.injekt.injectLazy
 import java.io.File
 import java.util.concurrent.TimeUnit
+import tachiyomi.i18n.R as I18nR
 
 class BackupNotifier(private val context: Context) {
 

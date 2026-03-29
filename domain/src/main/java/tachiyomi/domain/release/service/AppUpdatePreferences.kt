@@ -18,4 +18,14 @@ class AppUpdatePreferences(
         Preference.appStateKey("last_app_update_check"),
         0L,
     )
+
+    fun ignoredAppUpdateVersion() = preferenceStore.getString(
+        Preference.appStateKey("ignored_app_update_version"),
+        "",
+    )
+
+    fun downloadedAppUpdateVersion() = preferenceStore.getString(
+        Preference.appStateKey("downloaded_app_update_version"),
+        "",
+    )
 }

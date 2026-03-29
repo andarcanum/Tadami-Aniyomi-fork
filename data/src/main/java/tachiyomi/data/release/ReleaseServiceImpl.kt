@@ -24,14 +24,7 @@ class ReleaseServiceImpl(
         }
         val downloadLink = getDownloadLink(release = release) ?: return null
 
-        return Release(
-            version = release.version,
-            info = release.info.replace(gitHubUsernameMentionRegex) { mention ->
-                "[${mention.value}](https://github.com/${mention.value.substring(1)})"
-            },
-            releaseLink = release.releaseLink,
-            downloadLink = downloadLink,
-        )
+        return release.toRelease(downloadLink)
     }
 
     private fun getDownloadLink(release: GithubRelease): String? {
@@ -55,7 +48,20 @@ class ReleaseServiceImpl(
          *
          * Reference: https://stackoverflow.com/a/30281147
          */
-        private val gitHubUsernameMentionRegex = """\B@([a-z0-9](?:-(?=[a-z0-9])|[a-z0-9]){0,38}(?<=[a-z0-9]))"""
-            .toRegex(RegexOption.IGNORE_CASE)
     }
 }
+
+internal fun GithubRelease.toRelease(downloadLink: String): Release {
+    return Release(
+        version = version,
+        info = info.replace(gitHubUsernameMentionRegex) { mention ->
+            "[${mention.value}](https://github.com/${mention.value.substring(1)})"
+        },
+        releaseLink = releaseLink,
+        downloadLink = downloadLink,
+        releaseDate = publishedAt.substringBefore('T'),
+    )
+}
+
+private val gitHubUsernameMentionRegex = """\B@([a-z0-9](?:-(?=[a-z0-9])|[a-z0-9]){0,38}(?<=[a-z0-9]))"""
+    .toRegex(RegexOption.IGNORE_CASE)

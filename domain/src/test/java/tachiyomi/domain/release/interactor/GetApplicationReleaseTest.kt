@@ -40,6 +40,7 @@ class GetApplicationReleaseTest {
             "info",
             "http://example.com/release_link",
             "http://example.com/release_link.apk",
+            "2026-03-29",
         )
 
         coEvery { releaseService.latest(any()) } returns release
@@ -68,6 +69,7 @@ class GetApplicationReleaseTest {
             "info",
             "http://example.com/release_link",
             "http://example.com/release_link.apk",
+            "2026-03-29",
         )
 
         coEvery { releaseService.latest(any()) } returns release
@@ -96,6 +98,7 @@ class GetApplicationReleaseTest {
             "info",
             "http://example.com/release_link",
             "http://example.com/release_link.apk",
+            "2026-03-29",
         )
 
         coEvery { releaseService.latest(any()) } returns release
@@ -122,6 +125,7 @@ class GetApplicationReleaseTest {
             "info",
             "http://example.com/release_link",
             "http://example.com/release_link.apk",
+            "2026-03-29",
         )
 
         coEvery { releaseService.latest(any()) } returns release

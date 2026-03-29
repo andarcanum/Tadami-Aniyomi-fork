@@ -951,6 +951,10 @@
     <!--UpdateCheck-->
     <string name="update_check_confirm">Download</string>
     <string name="update_check_open">Open on GitHub</string>
+    <string name="update_check_show_changelog">Show changelog</string>
+    <string name="update_check_hide_changelog">Hide changelog</string>
+    <string name="update_check_ignore_version">Don’t show this version again</string>
+    <string name="update_check_changelog_unavailable">Changelog unavailable</string>
     <!-- reserved for future use -->
     <string name="update_check_eol">This Android version is no longer supported</string>
     <string name="update_check_no_new_updates">No new updates available</string>
