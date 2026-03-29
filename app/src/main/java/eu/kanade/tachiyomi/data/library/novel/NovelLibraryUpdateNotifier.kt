@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.util.system.notify
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.R as I18nR
 import java.math.RoundingMode
 import java.text.NumberFormat
 
@@ -96,7 +97,7 @@ class NovelLibraryUpdateNotifier(
             setContentTitle(context.stringResource(MR.strings.notification_new_chapters))
             setContentText(
                 context.resources.getQuantityString(
-                    R.plurals.notification_new_chapters_summary,
+                    I18nR.plurals.notification_new_chapters_summary,
                     updated.size,
                     updated.size,
                 ),

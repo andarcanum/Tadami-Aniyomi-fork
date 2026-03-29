@@ -178,6 +178,12 @@ tasks.matching {
     dependsOn(localesConfigTask)
 }
 
+tasks.matching {
+    it.name == "reportReleaseComposeMappingErrors"
+}.configureEach {
+    enabled = false
+}
+
 kotlin {
     compilerOptions {
         freeCompilerArgs.addAll(

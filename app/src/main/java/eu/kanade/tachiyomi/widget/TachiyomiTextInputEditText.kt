@@ -3,9 +3,9 @@ package eu.kanade.tachiyomi.widget
 import android.content.Context
 import android.util.AttributeSet
 import android.widget.EditText
+import androidx.appcompat.R as AppCompatR
 import androidx.core.view.inputmethod.EditorInfoCompat
 import com.google.android.material.textfield.TextInputEditText
-import com.tadami.aurora.R
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.tachiyomi.widget.TachiyomiTextInputEditText.Companion.setIncognito
 import kotlinx.coroutines.CoroutineScope
@@ -26,7 +26,7 @@ import uy.kohesive.injekt.api.get
 class TachiyomiTextInputEditText @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
-    defStyleAttr: Int = R.attr.editTextStyle,
+    defStyleAttr: Int = AppCompatR.attr.editTextStyle,
 ) : TextInputEditText(context, attrs, defStyleAttr) {
 
     private var scope: CoroutineScope? = null

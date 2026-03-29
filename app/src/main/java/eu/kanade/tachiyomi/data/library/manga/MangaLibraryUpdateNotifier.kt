@@ -36,6 +36,7 @@ import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.library.manga.LibraryManga
 import tachiyomi.domain.source.manga.service.MangaSourceManager
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.R as I18nR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.math.RoundingMode
@@ -195,7 +196,7 @@ class MangaLibraryUpdateNotifier(
             } else {
                 setContentText(
                     context.resources.getQuantityString(
-                        R.plurals.notification_new_chapters_summary,
+                        I18nR.plurals.notification_new_chapters_summary,
                         updates.size,
                         updates.size,
                     ),
@@ -335,7 +336,7 @@ class MangaLibraryUpdateNotifier(
             0 -> {
                 // "1 new chapter" or "5 new chapters"
                 context.resources.getQuantityString(
-                    R.plurals.notification_chapters_generic,
+                    I18nR.plurals.notification_chapters_generic,
                     chapters.size,
                     chapters.size,
                 )
@@ -368,7 +369,7 @@ class MangaLibraryUpdateNotifier(
                         ", ",
                     )
                     context.resources.getQuantityString(
-                        R.plurals.notification_chapters_multiple_and_more,
+                        I18nR.plurals.notification_chapters_multiple_and_more,
                         remaining,
                         joinedChapterNumbers,
                         remaining,

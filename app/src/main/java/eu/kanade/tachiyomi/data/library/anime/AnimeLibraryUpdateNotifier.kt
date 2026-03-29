@@ -37,6 +37,7 @@ import tachiyomi.domain.library.anime.LibraryAnime
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.i18n.aniyomi.R as AniyomiR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.math.RoundingMode
@@ -213,7 +214,7 @@ class AnimeLibraryUpdateNotifier(
             } else {
                 setContentText(
                     context.resources.getQuantityString(
-                        R.plurals.notification_new_episodes_summary,
+                        AniyomiR.plurals.notification_new_episodes_summary,
                         updates.size,
                         updates.size,
                     ),
@@ -349,7 +350,7 @@ class AnimeLibraryUpdateNotifier(
             0 -> {
                 // "1 new episode" or "5 new episodes"
                 context.resources.getQuantityString(
-                    R.plurals.notification_episodes_generic,
+                    AniyomiR.plurals.notification_episodes_generic,
                     episodes.size,
                     episodes.size,
                 )
@@ -382,7 +383,7 @@ class AnimeLibraryUpdateNotifier(
                         ", ",
                     )
                     context.resources.getQuantityString(
-                        R.plurals.notification_episodes_multiple_and_more,
+                        AniyomiR.plurals.notification_episodes_multiple_and_more,
                         remaining,
                         joinedEpisodeNumbers,
                         remaining,

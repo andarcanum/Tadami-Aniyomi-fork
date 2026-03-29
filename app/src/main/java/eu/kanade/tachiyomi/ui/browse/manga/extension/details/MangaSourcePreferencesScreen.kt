@@ -26,12 +26,12 @@ import androidx.lifecycle.lifecycleScope
 import androidx.preference.DialogPreference
 import androidx.preference.EditTextPreference
 import androidx.preference.PreferenceFragmentCompat
+import androidx.preference.R as PreferenceR
 import androidx.preference.PreferenceScreen
 import androidx.preference.forEach
 import androidx.preference.getOnBindEditTextListener
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import com.tadami.aurora.R
 import eu.kanade.core.util.ifMangaSourcesLoaded
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.util.Screen
@@ -123,7 +123,7 @@ class MangaSourcePreferencesFragment : PreferenceFragmentCompat() {
     override fun getContext(): Context? {
         val superCtx = super.getContext() ?: return null
         val tv = TypedValue()
-        superCtx.theme.resolveAttribute(R.attr.preferenceTheme, tv, true)
+        superCtx.theme.resolveAttribute(PreferenceR.attr.preferenceTheme, tv, true)
         return ContextThemeWrapper(superCtx, tv.resourceId)
     }
 

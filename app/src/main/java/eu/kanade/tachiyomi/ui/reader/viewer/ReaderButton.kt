@@ -3,8 +3,8 @@ package eu.kanade.tachiyomi.ui.reader.viewer
 import android.content.Context
 import android.util.AttributeSet
 import android.view.MotionEvent
+import com.google.android.material.R as MaterialR
 import com.google.android.material.button.MaterialButton
-import com.tadami.aurora.R
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerViewer
 
 /**
@@ -14,7 +14,7 @@ import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerViewer
 class ReaderButton @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
-    defStyleAttr: Int = R.attr.materialButtonStyle,
+    defStyleAttr: Int = MaterialR.attr.materialButtonStyle,
 ) : MaterialButton(context, attrs, defStyleAttr) {
 
     var viewer: PagerViewer? = null

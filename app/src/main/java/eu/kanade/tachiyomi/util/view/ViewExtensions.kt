@@ -10,6 +10,7 @@ import android.view.MenuItem
 import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.appcompat.R as AppCompatR
 import androidx.annotation.MenuRes
 import androidx.appcompat.widget.PopupMenu
 import androidx.compose.material3.LocalContentColor
@@ -20,7 +21,6 @@ import androidx.compose.runtime.CompositionContext
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
-import com.tadami.aurora.R
 import eu.kanade.presentation.theme.TachiyomiTheme
 
 inline fun ComponentActivity.setComposeContent(
@@ -67,7 +67,7 @@ inline fun View.popupMenu(
     noinline initMenu: (Menu.() -> Unit)? = null,
     noinline onMenuItemClick: MenuItem.() -> Unit,
 ): PopupMenu {
-    val popup = PopupMenu(context, this, Gravity.NO_GRAVITY, R.attr.actionOverflowMenuStyle, 0)
+    val popup = PopupMenu(context, this, Gravity.NO_GRAVITY, AppCompatR.attr.actionOverflowMenuStyle, 0)
     popup.menuInflater.inflate(menuRes, popup.menu)
 
     if (initMenu != null) {

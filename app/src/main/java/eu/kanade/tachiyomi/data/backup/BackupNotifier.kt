@@ -15,6 +15,7 @@ import eu.kanade.tachiyomi.util.system.notify
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.storage.displayablePath
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.R as I18nR
 import uy.kohesive.injekt.injectLazy
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -161,7 +162,7 @@ class BackupNotifier(private val context: Context) {
             setContentTitle(contentTitle)
             setContentText(
                 context.resources.getQuantityString(
-                    R.plurals.restore_completed_message,
+                    I18nR.plurals.restore_completed_message,
                     errorCount,
                     timeString,
                     errorCount,
