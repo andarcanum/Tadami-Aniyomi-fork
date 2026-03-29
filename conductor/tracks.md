@@ -23,9 +23,3 @@ This file tracks all major tracks for the project. Each track has its own detail
   *Link: [./tracks/fix_achievement_logic_20260130/](./tracks/fix_achievement_logic_20260130/)*
 - [ ] **Track: Redesign Glow Contour Text Block**
   *Link: [./tracks/glow_contour_text_design_20260314/](./tracks/glow_contour_text_design_20260314/)*
-
-
----
-
-- [x] **Track: Aurora Modern Transitions Refinement**
-*Link: [./tracks/aurora_modern_transitions_20260329/](./tracks/aurora_modern_transitions_20260329/)*
