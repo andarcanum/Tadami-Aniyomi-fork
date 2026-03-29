@@ -5,12 +5,15 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -96,8 +99,9 @@ object HomeScreen : Screen() {
     private val showBottomNavEvent = Channel<Boolean>()
 
     private const val TAB_FADE_DURATION = 200
-    private const val TAB_MODERN_ENTER_DURATION = 260
-    private const val TAB_MODERN_EXIT_DURATION = 180
+    private const val TAB_MODERN_ENTER_DURATION = 300
+    private const val TAB_MODERN_EXIT_DURATION = 170
+    private val AURORA_EASING = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1.0f)
     private const val TAB_NAVIGATOR_KEY = "HomeTabs"
 
     private val uiPreferences: UiPreferences by injectLazy()
@@ -215,20 +219,38 @@ object HomeScreen : Screen() {
                                         val enter = slideInHorizontally(
                                             animationSpec = tween(
                                                 durationMillis = TAB_MODERN_ENTER_DURATION,
-                                                easing = LinearOutSlowInEasing,
+                                                easing = AURORA_EASING,
                                             ),
-                                            initialOffsetX = { width -> direction * (width / 3) },
+                                            initialOffsetX = { width -> direction * (width / 4) },
                                         ) + fadeIn(
-                                            animationSpec = tween(durationMillis = TAB_MODERN_ENTER_DURATION),
+                                            animationSpec = tween(
+                                                durationMillis = TAB_MODERN_ENTER_DURATION,
+                                                easing = AURORA_EASING,
+                                            ),
+                                        ) + scaleIn(
+                                            initialScale = 0.95f,
+                                            animationSpec = tween(
+                                                durationMillis = TAB_MODERN_ENTER_DURATION,
+                                                easing = AURORA_EASING,
+                                            ),
                                         )
                                         val exit = slideOutHorizontally(
                                             animationSpec = tween(
                                                 durationMillis = TAB_MODERN_EXIT_DURATION,
-                                                easing = FastOutSlowInEasing,
+                                                easing = AURORA_EASING,
                                             ),
-                                            targetOffsetX = { width -> -direction * (width / 4) },
+                                            targetOffsetX = { width -> -direction * (width / 5) },
                                         ) + fadeOut(
-                                            animationSpec = tween(durationMillis = TAB_MODERN_EXIT_DURATION),
+                                            animationSpec = tween(
+                                                durationMillis = TAB_MODERN_EXIT_DURATION,
+                                                easing = AURORA_EASING,
+                                            ),
+                                        ) + scaleOut(
+                                            targetScale = 1.02f,
+                                            animationSpec = tween(
+                                                durationMillis = TAB_MODERN_EXIT_DURATION,
+                                                easing = AURORA_EASING,
+                                            ),
                                         )
                                         enter togetherWith exit
                                     }
