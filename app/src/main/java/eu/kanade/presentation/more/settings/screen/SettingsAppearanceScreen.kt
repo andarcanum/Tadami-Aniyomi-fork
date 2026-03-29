@@ -194,7 +194,7 @@ object SettingsAppearanceScreen : SearchableSettings {
         val greetingAlpha by greetingAlphaPref.collectAsState()
         val greetingColorPref = userProfilePreferences.greetingColor()
         val greetingColor by greetingColorPref.collectAsState()
-        var isAuroraCustomizationExpanded by rememberSaveable { mutableStateOf(false) }
+        var isAuroraCustomizationExpanded by rememberSaveable { mutableStateOf(true) }
         var isGreetingSettingsExpanded by rememberSaveable { mutableStateOf(false) }
         val auroraCustomizationTitle = stringResource(AYMR.strings.pref_aurora_customization)
         val greetingSettingsToggleTitle = stringResource(AYMR.strings.aurora_change_greeting_style)

@@ -52,15 +52,14 @@ data object StatsTab : Tab {
         val navigator = LocalNavigator.currentOrThrow
         val uiPreferences = Injekt.get<UiPreferences>()
         val theme by uiPreferences.appTheme().collectAsState()
-        val navigateUp = remember(navigator.canPop) {
-            if (navigator.canPop) {
-                {
-                    navigator.pop()
-                    Unit
-                }
-            } else {
-                null
+        val canNavigateUp = remember { navigator.canPop }
+        val navigateUp = if (canNavigateUp) {
+            {
+                navigator.pop()
+                Unit
             }
+        } else {
+            null
         }
 
         val tabs = statsContentTabs()
