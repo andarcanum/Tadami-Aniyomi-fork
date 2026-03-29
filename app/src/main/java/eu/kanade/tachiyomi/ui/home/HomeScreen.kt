@@ -100,7 +100,7 @@ object HomeScreen : Screen() {
 
     private const val TAB_FADE_DURATION = 200
     private const val TAB_MODERN_ENTER_DURATION = 300
-    private const val TAB_MODERN_EXIT_DURATION = 170
+    private const val TAB_MODERN_EXIT_DURATION = 300
     private val AURORA_EASING = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1.0f)
     private const val TAB_NAVIGATOR_KEY = "HomeTabs"
 
@@ -227,12 +227,6 @@ object HomeScreen : Screen() {
                                                 durationMillis = TAB_MODERN_ENTER_DURATION,
                                                 easing = AURORA_EASING,
                                             ),
-                                        ) + scaleIn(
-                                            initialScale = 0.95f,
-                                            animationSpec = tween(
-                                                durationMillis = TAB_MODERN_ENTER_DURATION,
-                                                easing = AURORA_EASING,
-                                            ),
                                         )
                                         val exit = slideOutHorizontally(
                                             animationSpec = tween(
@@ -245,14 +239,10 @@ object HomeScreen : Screen() {
                                                 durationMillis = TAB_MODERN_EXIT_DURATION,
                                                 easing = AURORA_EASING,
                                             ),
-                                        ) + scaleOut(
-                                            targetScale = 1.02f,
-                                            animationSpec = tween(
-                                                durationMillis = TAB_MODERN_EXIT_DURATION,
-                                                easing = AURORA_EASING,
-                                            ),
                                         )
-                                        enter togetherWith exit
+                                        (enter togetherWith exit).apply {
+                                            targetContentZIndex = 1f
+                                        }
                                     }
                                 }
                             },

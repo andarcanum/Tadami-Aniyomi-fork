@@ -54,8 +54,8 @@ val LocalBackPress: ProvidableCompositionLocal<(() -> Unit)?> = staticCompositio
 
 private val uiPreferences: UiPreferences = Injekt.get()
 private const val MODERN_ENTER_DURATION = 300
-private const val MODERN_EXIT_DURATION = 170
-private const val MODERN_ENTER_DELAY = 60
+private const val MODERN_EXIT_DURATION = 300
+private const val MODERN_ENTER_DELAY = 0
 private val AURORA_EASING = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1.0f)
 private val MODERN_SLIDE_DISTANCE = 30.dp
 
@@ -154,13 +154,6 @@ private fun AnimatedContentTransitionScope<Screen>.modernSharedAxisX(
             delayMillis = MODERN_ENTER_DELAY,
             easing = AURORA_EASING,
         ),
-    ) + scaleIn(
-        initialScale = if (forward) 0.95f else 1.05f,
-        animationSpec = tween(
-            durationMillis = MODERN_ENTER_DURATION,
-            delayMillis = MODERN_ENTER_DELAY,
-            easing = AURORA_EASING,
-        ),
     ) + slideInHorizontally(
         initialOffsetX = { if (forward) slideDistance else -slideDistance },
         animationSpec = tween(
@@ -174,12 +167,6 @@ private fun AnimatedContentTransitionScope<Screen>.modernSharedAxisX(
             durationMillis = MODERN_EXIT_DURATION,
             easing = AURORA_EASING,
         ),
-    ) + scaleOut(
-        targetScale = if (forward) 1.05f else 0.95f,
-        animationSpec = tween(
-            durationMillis = MODERN_EXIT_DURATION,
-            easing = AURORA_EASING,
-        ),
     ) + slideOutHorizontally(
         targetOffsetX = { if (forward) -slideDistance else slideDistance },
         animationSpec = tween(
@@ -187,5 +174,7 @@ private fun AnimatedContentTransitionScope<Screen>.modernSharedAxisX(
             easing = AURORA_EASING,
         ),
     )
-    return enter togetherWith exit
+    return (enter togetherWith exit).apply {
+        targetContentZIndex = 1f
+    }
 }
