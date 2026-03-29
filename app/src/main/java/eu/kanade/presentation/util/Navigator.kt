@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -12,12 +13,16 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.ScreenModelStore
 import cafe.adriel.voyager.core.screen.Screen
@@ -51,6 +56,8 @@ private val uiPreferences: UiPreferences = Injekt.get()
 private const val MODERN_ENTER_DURATION = 300
 private const val MODERN_EXIT_DURATION = 170
 private const val MODERN_ENTER_DELAY = 60
+private val AURORA_EASING = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1.0f)
+private val MODERN_SLIDE_DISTANCE = 30.dp
 
 interface Tab : cafe.adriel.voyager.navigator.tab.Tab {
     suspend fun onReselect(navigator: Navigator) {}
@@ -87,6 +94,8 @@ fun DefaultNavigatorScreenTransition(
 ) {
     val context = LocalContext.current
     val slideDistance = rememberSlideDistance()
+    val density = LocalDensity.current
+    val modernSlideDistance = with(density) { MODERN_SLIDE_DISTANCE.roundToPx() }
     val selectedMode = uiPreferences.navigationTransitionMode().collectAsState().value
     val resolvedMode = resolveNavigationTransitionMode(
         selectedMode = selectedMode,
@@ -105,7 +114,10 @@ fun DefaultNavigatorScreenTransition(
                     )
                 }
                 ResolvedNavigationTransitionMode.MODERN -> {
-                    modernSharedAxisX()
+                    modernSharedAxisX(
+                        forward = navigator.lastEvent != StackEvent.Pop,
+                        slideDistance = modernSlideDistance,
+                    )
                 }
             }
         },
@@ -132,31 +144,47 @@ fun ScreenTransition(
     }
 }
 
-private fun AnimatedContentTransitionScope<Screen>.modernSharedAxisX(): ContentTransform {
+private fun AnimatedContentTransitionScope<Screen>.modernSharedAxisX(
+    forward: Boolean,
+    slideDistance: Int,
+): ContentTransform {
     val enter = fadeIn(
         animationSpec = tween(
             durationMillis = MODERN_ENTER_DURATION,
             delayMillis = MODERN_ENTER_DELAY,
-            easing = LinearOutSlowInEasing,
+            easing = AURORA_EASING,
         ),
     ) + scaleIn(
-        initialScale = 0.95f,
+        initialScale = if (forward) 0.95f else 1.05f,
         animationSpec = tween(
             durationMillis = MODERN_ENTER_DURATION,
             delayMillis = MODERN_ENTER_DELAY,
-            easing = LinearOutSlowInEasing,
+            easing = AURORA_EASING,
+        ),
+    ) + slideInHorizontally(
+        initialOffsetX = { if (forward) slideDistance else -slideDistance },
+        animationSpec = tween(
+            durationMillis = MODERN_ENTER_DURATION,
+            delayMillis = MODERN_ENTER_DELAY,
+            easing = AURORA_EASING,
         ),
     )
     val exit = fadeOut(
         animationSpec = tween(
             durationMillis = MODERN_EXIT_DURATION,
-            easing = FastOutSlowInEasing,
+            easing = AURORA_EASING,
         ),
     ) + scaleOut(
-        targetScale = 1.02f,
+        targetScale = if (forward) 1.05f else 0.95f,
         animationSpec = tween(
             durationMillis = MODERN_EXIT_DURATION,
-            easing = FastOutSlowInEasing,
+            easing = AURORA_EASING,
+        ),
+    ) + slideOutHorizontally(
+        targetOffsetX = { if (forward) -slideDistance else slideDistance },
+        animationSpec = tween(
+            durationMillis = MODERN_EXIT_DURATION,
+            easing = AURORA_EASING,
         ),
     )
     return enter togetherWith exit
