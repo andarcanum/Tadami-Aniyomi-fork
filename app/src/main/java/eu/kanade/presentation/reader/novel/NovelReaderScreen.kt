@@ -3225,6 +3225,7 @@ private fun GeminiTranslationDialog(
                                                 tempPrivatePassword = ""
                                                 onAddLog("✅ $privateProviderLabel bridge unlocked")
                                             } else {
+                                                onAddLog("🔎 ${GeminiPrivateBridge.debugInfo()}")
                                                 onAddLog("❌ Invalid bridge password")
                                             }
                                         }

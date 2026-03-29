@@ -210,6 +210,7 @@ class NovelReaderScreenModel(
     private val progressPersistenceMutex = Mutex()
     private var pendingProgressPersistence: PendingProgressPersistence? = null
     private var progressPersistenceJob: Job? = null
+
     @Volatile
     private var progressPersistenceScheduled = false
     private val structuredJson = Json {
@@ -1335,7 +1336,7 @@ class NovelReaderScreenModel(
         hasGeminiTranslationCache = false
         isGeminiTranslating = true
         geminiTranslationProgress = 0
-            addGeminiLog("Gemini translation stopped because Gemini is disabled.")
+        addGeminiLog("Gemini translation stopped because Gemini is disabled.")
         updateContent(settings)
         geminiTranslationJob?.cancel()
         geminiTranslationJob = screenModelScope.launch {
