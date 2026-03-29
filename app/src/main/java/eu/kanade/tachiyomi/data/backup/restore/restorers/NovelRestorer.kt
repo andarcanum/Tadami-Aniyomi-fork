@@ -163,7 +163,15 @@ class NovelRestorer(
     }
 
     private fun NovelChapter.forComparison() =
-        this.copy(id = 0L, novelId = 0L, dateFetch = 0L, dateUpload = 0L, lastModifiedAt = 0L, version = 0L)
+        this.copy(
+            id = 0L,
+            novelId = 0L,
+            dateFetch = 0L,
+            dateUpload = 0L,
+            dateUploadRaw = null,
+            lastModifiedAt = 0L,
+            version = 0L,
+        )
 
     private suspend fun insertNewChapters(chapters: List<NovelChapter>) {
         handler.await(true) { db ->
@@ -180,6 +188,7 @@ class NovelRestorer(
                     chapter.sourceOrder,
                     chapter.dateFetch,
                     chapter.dateUpload,
+                    chapter.dateUploadRaw,
                     chapter.version,
                 )
             }
@@ -201,6 +210,7 @@ class NovelRestorer(
                     sourceOrder = null,
                     dateFetch = null,
                     dateUpload = null,
+                    dateUploadRaw = null,
                     chapterId = chapter.id,
                     version = chapter.version,
                     isSyncing = 0,

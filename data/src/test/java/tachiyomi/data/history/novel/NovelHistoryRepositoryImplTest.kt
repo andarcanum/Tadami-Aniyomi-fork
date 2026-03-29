@@ -83,6 +83,7 @@ class NovelHistoryRepositoryImplTest {
             sourceOrder = 0,
             dateFetch = 0,
             dateUpload = 10,
+            dateUploadRaw = null,
             version = 1,
         )
         chapterId = database.novel_chaptersQueries.selectLastInsertedRowId().executeAsOne()

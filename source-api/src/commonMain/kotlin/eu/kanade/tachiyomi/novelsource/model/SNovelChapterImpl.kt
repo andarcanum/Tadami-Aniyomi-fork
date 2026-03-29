@@ -10,6 +10,8 @@ class SNovelChapterImpl : SNovelChapter {
 
     override var date_upload: Long = 0
 
+    override var date_upload_raw: String? = null
+
     override var chapter_number: Float = 0f
 
     override var scanlator: String? = null

@@ -112,4 +112,24 @@ class NovelChapterRepositoryImplTest {
 
         repository.getChapterById(chapterId)?.read shouldBe true
     }
+
+    @Test
+    fun `add and get chapter preserves raw upload date`() = runTest {
+        val chapters = repository.addAllChapters(
+            listOf(
+                NovelChapter.create().copy(
+                    novelId = novelId,
+                    url = "/chapter-raw",
+                    name = "Chapter raw",
+                    chapterNumber = 3.0,
+                    dateUpload = 0,
+                    dateUploadRaw = "4 hours ago",
+                ),
+            ),
+        )
+
+        val stored = repository.getChapterById(chapters.first().id)
+
+        checkNotNull(stored).dateUploadRaw shouldBe "4 hours ago"
+    }
 }

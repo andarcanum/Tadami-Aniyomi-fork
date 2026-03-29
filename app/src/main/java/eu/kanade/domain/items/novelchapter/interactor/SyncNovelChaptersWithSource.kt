@@ -14,7 +14,6 @@ import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.model.toNovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.library.service.LibraryPreferences
-import java.lang.Long.max
 import java.time.Instant
 import java.time.ZonedDateTime
 import java.util.TreeSet
@@ -73,10 +72,6 @@ class SyncNovelChaptersWithSource(
             }
         }
 
-        // Used to not set upload date of older chapters
-        // to a higher value than newer chapters
-        var maxSeenUploadDate = 0L
-
         for (sourceChapter in sourceChapters) {
             var chapter = sourceChapter
 
@@ -91,14 +86,7 @@ class SyncNovelChaptersWithSource(
             val dbChapter = dbChapters.find { it.url == chapter.url }
 
             if (dbChapter == null) {
-                val toAddChapter = if (chapter.dateUpload == 0L) {
-                    val altDateUpload = if (maxSeenUploadDate == 0L) nowMillis else maxSeenUploadDate
-                    chapter.copy(dateUpload = altDateUpload)
-                } else {
-                    maxSeenUploadDate = max(maxSeenUploadDate, sourceChapter.dateUpload)
-                    chapter
-                }
-                newChapters.add(toAddChapter)
+                newChapters.add(chapter)
             } else {
                 if (shouldUpdateDbNovelChapter.await(dbChapter, chapter)) {
                     var toChangeChapter = dbChapter.copy(
@@ -109,6 +97,9 @@ class SyncNovelChaptersWithSource(
                     )
                     if (chapter.dateUpload != 0L) {
                         toChangeChapter = toChangeChapter.copy(dateUpload = chapter.dateUpload)
+                    }
+                    chapter.dateUploadRaw?.let {
+                        toChangeChapter = toChangeChapter.copy(dateUploadRaw = it)
                     }
                     updatedChapters.add(toChangeChapter)
                 }

@@ -37,4 +37,21 @@ class ShouldUpdateDbNovelChapterTest {
 
         result shouldBe true
     }
+
+    @Test
+    fun `returns true when raw upload date differs`() {
+        val base = NovelChapter.create().copy(
+            name = "Chapter 1",
+            scanlator = "Team",
+            dateUpload = 123L,
+            dateUploadRaw = "Jan 4",
+            chapterNumber = 1.0,
+            sourceOrder = 2,
+        )
+        val updated = base.copy(dateUploadRaw = "Jan 5")
+
+        val result = ShouldUpdateDbNovelChapter().await(base, updated)
+
+        result shouldBe true
+    }
 }

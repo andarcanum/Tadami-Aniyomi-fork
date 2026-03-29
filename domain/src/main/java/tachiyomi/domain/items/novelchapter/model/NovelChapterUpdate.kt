@@ -14,6 +14,7 @@ data class NovelChapterUpdate(
     val chapterNumber: Double? = null,
     val scanlator: String? = null,
     val version: Long? = null,
+    val dateUploadRaw: String? = null,
 )
 
 fun NovelChapter.toNovelChapterUpdate(): NovelChapterUpdate {
@@ -31,5 +32,6 @@ fun NovelChapter.toNovelChapterUpdate(): NovelChapterUpdate {
         chapterNumber,
         scanlator,
         version,
+        dateUploadRaw,
     )
 }

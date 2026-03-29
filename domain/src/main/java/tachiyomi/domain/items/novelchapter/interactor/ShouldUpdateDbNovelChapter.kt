@@ -8,6 +8,7 @@ class ShouldUpdateDbNovelChapter {
         return dbChapter.scanlator != sourceChapter.scanlator ||
             dbChapter.name != sourceChapter.name ||
             dbChapter.dateUpload != sourceChapter.dateUpload ||
+            dbChapter.dateUploadRaw != sourceChapter.dateUploadRaw ||
             dbChapter.chapterNumber != sourceChapter.chapterNumber ||
             dbChapter.sourceOrder != sourceChapter.sourceOrder
     }

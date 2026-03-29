@@ -8,6 +8,7 @@ fun NovelChapter.toSNovelChapter(): SNovelChapter {
         it.url = url
         it.name = name
         it.date_upload = dateUpload
+        it.date_upload_raw = dateUploadRaw
         it.chapter_number = chapterNumber.toFloat()
         it.scanlator = scanlator
     }
@@ -18,6 +19,7 @@ fun NovelChapter.copyFromSNovelChapter(sChapter: SNovelChapter): NovelChapter {
         name = sChapter.name,
         url = sChapter.url,
         dateUpload = sChapter.date_upload,
+        dateUploadRaw = sChapter.date_upload_raw?.trim()?.ifEmpty { null },
         chapterNumber = sChapter.chapter_number.toDouble(),
         scanlator = sChapter.scanlator?.ifBlank { null }?.trim(),
     )

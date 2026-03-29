@@ -953,9 +953,16 @@ fun NovelScreen(
                                                     MaterialTheme.colorScheme.onSurface
                                                 },
                                             )
-                                            if (chapter.dateUpload > 0) {
+                                            novelChapterDateText(
+                                                chapter = chapter,
+                                                parsedDateText = if (chapter.dateUpload > 0L) {
+                                                    relativeDateTimeText(chapter.dateUpload)
+                                                } else {
+                                                    null
+                                                },
+                                            )?.let { dateText ->
                                                 Text(
-                                                    text = relativeDateTimeText(chapter.dateUpload),
+                                                    text = dateText,
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 )
@@ -1196,9 +1203,16 @@ fun NovelScreen(
                                             MaterialTheme.colorScheme.onSurface
                                         },
                                     )
-                                    if (chapter.dateUpload > 0) {
+                                    novelChapterDateText(
+                                        chapter = chapter,
+                                        parsedDateText = if (chapter.dateUpload > 0L) {
+                                            relativeDateTimeText(chapter.dateUpload)
+                                        } else {
+                                            null
+                                        },
+                                    )?.let { dateText ->
                                         Text(
-                                            text = relativeDateTimeText(chapter.dateUpload),
+                                            text = dateText,
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -1399,9 +1413,16 @@ private fun NovelClassicChapterRow(
                             MaterialTheme.colorScheme.onSurface
                         },
                     )
-                    if (chapter.dateUpload > 0) {
+                    novelChapterDateText(
+                        chapter = chapter,
+                        parsedDateText = if (chapter.dateUpload > 0L) {
+                            relativeDateTimeText(chapter.dateUpload)
+                        } else {
+                            null
+                        },
+                    )?.let { dateText ->
                         Text(
-                            text = relativeDateTimeText(chapter.dateUpload),
+                            text = dateText,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

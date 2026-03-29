@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.components.relativeDateTimeText
 import eu.kanade.presentation.entries.manga.components.aurora.GlassmorphismCard
+import eu.kanade.presentation.entries.novel.novelChapterDateText
 import eu.kanade.presentation.entries.novel.novelSwipeAction
 import eu.kanade.presentation.entries.novel.novelSwipeActionThreshold
 import eu.kanade.presentation.theme.AuroraTheme
@@ -128,16 +129,21 @@ object NovelChapterCardCompactUi {
                             overflow = TextOverflow.Ellipsis,
                         )
                         Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = if (chapter.dateUpload > 0) {
+                        novelChapterDateText(
+                            chapter = chapter,
+                            parsedDateText = if (chapter.dateUpload > 0L) {
                                 relativeDateTimeText(chapter.dateUpload)
                             } else {
-                                stringResource(MR.strings.unknown)
+                                null
                             },
-                            color = colors.textSecondary,
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                        )
+                        )?.let { dateText ->
+                            Text(
+                                text = dateText,
+                                color = colors.textSecondary,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                            )
+                        }
                     }
 
                     if (!selectionMode) {

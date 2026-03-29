@@ -2,6 +2,7 @@ package tachiyomi.data.novel
 
 import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import org.junit.jupiter.api.Test
@@ -11,7 +12,7 @@ class NovelDatabaseMigrationTest {
 
     @Test
     fun `schema version increments for narrowed novel triggers`() {
-        NovelDatabase.Schema.version shouldBe 3L
+        NovelDatabase.Schema.version shouldBe 4L
     }
 
     @Test
@@ -25,8 +26,9 @@ class NovelDatabaseMigrationTest {
             newVersion = NovelDatabase.Schema.version,
         )
 
+        columnNames(driver, "novel_chapters") shouldContain "date_upload_raw"
         triggerSql(driver, "update_last_modified_at_novel_chapters") shouldContain
-            "AFTER UPDATE OF novel_id, url, name, scanlator, read, bookmark, last_page_read, chapter_number, source_order, date_fetch, date_upload ON novel_chapters"
+            "AFTER UPDATE OF novel_id, url, name, scanlator, read, bookmark, last_page_read, chapter_number, source_order, date_fetch, date_upload, date_upload_raw ON novel_chapters"
         triggerSql(driver, "update_last_modified_at_novels") shouldContain
             "AFTER UPDATE OF source, url, author, description, genre, title, status, thumbnail_url, favorite, last_update, next_update, initialized, viewer, chapter_flags, cover_last_modified, date_added, update_strategy, calculate_interval ON novels"
     }
@@ -135,6 +137,23 @@ class NovelDatabaseMigrationTest {
             binders = {
                 bindString(0, triggerName)
             },
+        ).value
+    }
+
+    private fun columnNames(driver: JdbcSqliteDriver, tableName: String): List<String> {
+        return driver.executeQuery(
+            identifier = null,
+            sql = "PRAGMA table_info($tableName)",
+            mapper = { cursor ->
+                QueryResult.Value(
+                    buildList {
+                        while (cursor.next().value) {
+                            add(cursor.getString(1).orEmpty())
+                        }
+                    },
+                )
+            },
+            parameters = 0,
         ).value
     }
 }

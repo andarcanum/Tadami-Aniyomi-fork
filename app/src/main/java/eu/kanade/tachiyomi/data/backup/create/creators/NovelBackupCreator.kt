@@ -4,7 +4,7 @@ import eu.kanade.tachiyomi.data.backup.create.BackupOptions
 import eu.kanade.tachiyomi.data.backup.models.BackupChapter
 import eu.kanade.tachiyomi.data.backup.models.BackupHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupNovel
-import eu.kanade.tachiyomi.data.backup.models.backupChapterMapper
+import eu.kanade.tachiyomi.data.backup.models.backupNovelChapterMapper
 import tachiyomi.data.handlers.novel.NovelDatabaseHandler
 import tachiyomi.domain.category.novel.repository.NovelCategoryRepository
 import tachiyomi.domain.entries.novel.model.Novel
@@ -36,7 +36,7 @@ class NovelBackupCreator(
                 db.novel_chaptersQueries.getChaptersByNovelId(
                     novelId = novel.id,
                     applyScanlatorFilter = 0, // false
-                    mapper = backupChapterMapper,
+                    mapper = backupNovelChapterMapper,
                 )
             }
                 .takeUnless(List<BackupChapter>::isEmpty)

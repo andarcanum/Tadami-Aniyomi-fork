@@ -89,6 +89,95 @@ class SyncNovelChaptersWithSourceTest {
         }
     }
 
+    @Test
+    fun `keeps raw upload date and does not fabricate parsed upload date`() {
+        runTest {
+            val repository = FakeNovelChapterRepository()
+            val updateNovel = mockk<eu.kanade.domain.entries.novel.interactor.UpdateNovel>()
+            val preferences = mockk<LibraryPreferences>()
+            val duplicatePref = mockk<Preference<Set<String>>>()
+
+            every { duplicatePref.get() } returns emptySet()
+            every { preferences.markDuplicateReadChapterAsRead() } returns duplicatePref
+            coEvery { updateNovel.await(any()) } returns true
+
+            val interactor = SyncNovelChaptersWithSource(
+                novelChapterRepository = repository,
+                shouldUpdateDbNovelChapter = ShouldUpdateDbNovelChapter(),
+                updateNovel = updateNovel,
+                libraryPreferences = preferences,
+            )
+
+            val novel = Novel.create().copy(id = 10L, title = "Novel")
+            val sChapter = SNovelChapter.create().apply {
+                url = "/chapter-raw"
+                name = "Chapter Raw"
+                date_upload = 0L
+                date_upload_raw = "Yesterday at 22:14"
+                chapter_number = 1f
+            }
+
+            interactor.await(
+                rawSourceChapters = listOf(sChapter),
+                novel = novel,
+                source = FakeNovelSource(),
+            )
+
+            repository.addedChapters.first().dateUpload shouldBe 0L
+            repository.addedChapters.first().dateUploadRaw shouldBe "Yesterday at 22:14"
+        }
+    }
+
+    @Test
+    fun `does not erase existing raw upload date with blank input`() {
+        runTest {
+            val existingChapter = NovelChapter.create().copy(
+                id = 1L,
+                novelId = 10L,
+                url = "/chapter-1",
+                name = "Chapter 1",
+                chapterNumber = 1.0,
+                sourceOrder = 0L,
+                dateUpload = 0L,
+                dateUploadRaw = "Yesterday",
+            )
+            val repository = FakeNovelChapterRepository().apply {
+                chapters = listOf(existingChapter)
+            }
+            val updateNovel = mockk<eu.kanade.domain.entries.novel.interactor.UpdateNovel>()
+            val preferences = mockk<LibraryPreferences>()
+            val duplicatePref = mockk<Preference<Set<String>>>()
+
+            every { duplicatePref.get() } returns emptySet()
+            every { preferences.markDuplicateReadChapterAsRead() } returns duplicatePref
+            coEvery { updateNovel.await(any()) } returns true
+
+            val interactor = SyncNovelChaptersWithSource(
+                novelChapterRepository = repository,
+                shouldUpdateDbNovelChapter = ShouldUpdateDbNovelChapter(),
+                updateNovel = updateNovel,
+                libraryPreferences = preferences,
+            )
+
+            val novel = Novel.create().copy(id = 10L, title = "Novel")
+            val sChapter = SNovelChapter.create().apply {
+                url = "/chapter-1"
+                name = "Chapter 1"
+                date_upload = 0L
+                date_upload_raw = " "
+                chapter_number = 1f
+            }
+
+            interactor.await(
+                rawSourceChapters = listOf(sChapter),
+                novel = novel,
+                source = FakeNovelSource(),
+            )
+
+            repository.updatedChapters.single().dateUploadRaw shouldBe "Yesterday"
+        }
+    }
+
     private class FakeNovelSource : NovelSource {
         override val id = 1L
         override val name = "Test"

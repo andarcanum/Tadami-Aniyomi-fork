@@ -12,6 +12,8 @@ interface SNovelChapter : Serializable {
 
     var date_upload: Long
 
+    var date_upload_raw: String?
+
     var chapter_number: Float
 
     var scanlator: String?
@@ -20,6 +22,7 @@ interface SNovelChapter : Serializable {
         name = other.name
         url = other.url
         date_upload = other.date_upload
+        date_upload_raw = other.date_upload_raw
         chapter_number = other.chapter_number
         scanlator = other.scanlator
     }
