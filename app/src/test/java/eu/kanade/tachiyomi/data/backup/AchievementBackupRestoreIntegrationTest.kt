@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.data.backup
 
+import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
@@ -41,7 +42,7 @@ import tachiyomi.db.achievement.AchievementsDatabase as SqlDelightAchievementsDa
  * - Data integrity after restore
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28])
+@Config(sdk = [30], application = Application::class)
 class AchievementBackupRestoreIntegrationTest {
 
     private lateinit var context: Context

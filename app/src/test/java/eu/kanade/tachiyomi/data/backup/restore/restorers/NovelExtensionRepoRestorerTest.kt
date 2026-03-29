@@ -21,6 +21,7 @@ class NovelExtensionRepoRestorerTest {
     @Test
     fun `restore inserts novel repo when no conflicts`() {
         runTest {
+            Class.forName("org.sqlite.JDBC")
             val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
             val database = createTestNovelDatabase(driver)
             val handler = FakeNovelDatabaseHandler(database)

@@ -317,6 +317,8 @@ dependencies {
 
     // Tests
     testImplementation(libs.bundles.test)
+    testRuntimeOnly(libs.junitVintageEngine)
+    testRuntimeOnly(libs.conscrypt.openjdk.uber)
     testImplementation(libs.okhttp.mockwebserver)
 
     // For detecting memory leaks; see https://square.github.io/leakcanary/
@@ -348,6 +350,12 @@ dependencies {
 
     // Lottie animations
     implementation(libs.lottie.compose)
+}
+
+configurations.configureEach {
+    if (name.endsWith("UnitTestRuntimeClasspath")) {
+        exclude(group = "org.conscrypt", module = "conscrypt-android")
+    }
 }
 
 androidComponents {

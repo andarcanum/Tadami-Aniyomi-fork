@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.data.backup.restore
 
+import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
@@ -19,7 +20,7 @@ import kotlin.test.assertTrue
 import tachiyomi.db.achievement.AchievementsDatabase as SqlDelightAchievementsDatabase
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28])
+@Config(sdk = [30], application = Application::class)
 class LegacyActivityDataMigratorTest {
 
     private lateinit var context: Context

@@ -51,14 +51,14 @@ jobs:
           python3 tools/ci/report-release-warnings.py build_release.log --enforce
 
       - name: Run unit tests
-        run: ./gradlew testReleaseUnitTest --stacktrace --console=plain
+        run: ./gradlew testDebugUnitTest --stacktrace --console=plain
 
       - name: Print unit test failures
         if: always()
         shell: bash
         run: |
           set -euo pipefail
-          results_dir="app/build/test-results/testReleaseUnitTest"
+          results_dir="app/build/test-results/testDebugUnitTest"
           if [ ! -d "$results_dir" ]; then
             echo "No test results directory found: $results_dir"
             exit 0
@@ -67,9 +67,9 @@ jobs:
           import glob
           import xml.etree.ElementTree as ET
 
-          files = sorted(glob.glob("app/build/test-results/testReleaseUnitTest/*.xml"))
+          files = sorted(glob.glob("app/build/test-results/testDebugUnitTest/*.xml"))
           if not files:
-              print("No JUnit XML files found in app/build/test-results/testReleaseUnitTest")
+              print("No JUnit XML files found in app/build/test-results/testDebugUnitTest")
               raise SystemExit(0)
 
           failures = []
@@ -110,8 +110,8 @@ jobs:
           name: unit-test-release-report-${{ github.sha }}
           if-no-files-found: warn
           path: |
-            app/build/reports/tests/testReleaseUnitTest
-            app/build/test-results/testReleaseUnitTest
+            app/build/reports/tests/testDebugUnitTest
+            app/build/test-results/testDebugUnitTest
 
       - name: Upload APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
