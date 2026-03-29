@@ -12,7 +12,7 @@
 ## User Experience (UX) Design
 - **Focused Experience:**
     - **Gestural Control:** Prioritize swipes and intuitive gestures over an abundance of buttons to keep the interface clean and immersive.
-    - **Spatial Depth:** Use depth-aware transitions (Scale + Alpha + Subtle Slide) to provide spatial awareness and an organic feel, enhancing the Modern transition mode.
+    - **Spatial Depth:** Use seamless, layered transitions (Alpha + Subtle Slide + Z-index) to provide spatial awareness and an organic feel, ensuring no gaps or flickering during Modern mode navigation.
     - **Progressive Disclosure:** Present high-level information first, allowing users to dive deeper into details only when needed. This reduces cognitive load and maintains focus.
 
 ## Accessibility

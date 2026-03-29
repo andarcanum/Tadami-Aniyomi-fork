@@ -23,3 +23,8 @@ This file tracks all major tracks for the project. Each track has its own detail
   *Link: [./tracks/fix_achievement_logic_20260130/](./tracks/fix_achievement_logic_20260130/)*
 - [ ] **Track: Redesign Glow Contour Text Block**
   *Link: [./tracks/glow_contour_text_design_20260314/](./tracks/glow_contour_text_design_20260314/)*
+
+---
+
+- [~] **Track: Seamless & Lightweight Modern Transitions (Remove Scale & Gap)**
+*Link: [./tracks/aurora_seamless_transitions_20260329/](./tracks/aurora_seamless_transitions_20260329/)*

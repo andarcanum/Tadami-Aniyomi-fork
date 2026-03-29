@@ -18,7 +18,7 @@ Tadami aims to be the premier Android application for anime and manga consumptio
 ## Key Features
 - **Unified Library:** A single, beautifully designed location for all anime and manga.
 - **Aurora Design System:** Implementation of the Aurora theme across all screens (Home, Details, Library, Player/Reader).
-- **Aurora Modern Transitions:** Depth-aware, direction-sensitive navigation transitions (Scale + Alpha + Subtle Slide) for a premium UI feel.
+- **Aurora Modern Transitions:** Seamless, depth-aware (through layering and z-index) navigation transitions (Alpha + Subtle Slide) for a lightweight and fluid UI feel.
 - **Extension Support:** Seamless integration with Aniyomi extensions.
 - **Tracking Integration:** Sync support for major platforms like MyAnimeList, AniList, Kitsu, and Shikimori.
 - **Customization:** Modern theming options including light/dark modes and player/reader specific settings.
