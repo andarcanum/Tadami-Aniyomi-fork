@@ -742,10 +742,6 @@ class MangaScreenModel(
         updateSuccessState { it.copy(scrollIndex = index, scrollOffset = offset) }
     }
 
-    fun saveScrollPosition(index: Int, offset: Int) {
-        updateSuccessState { it.copy(scrollIndex = index, scrollOffset = offset) }
-    }
-
     private fun getUnreadChapters(): List<Chapter> {
         val chapterItems = if (skipFiltered) filteredChapters.orEmpty() else allChapters.orEmpty()
         return chapterItems
