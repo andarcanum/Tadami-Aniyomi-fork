@@ -68,7 +68,7 @@ internal class NovelReaderChapterDiskCache(
                     input.readBytes().toString(Charsets.UTF_8)
                 }
             }.onSuccess {
-                file.setLastModified(System.currentTimeMillis())
+                touchFileLocked(file)
             }.onFailure {
                 file.delete()
             }.getOrNull()
@@ -97,7 +97,7 @@ internal class NovelReaderChapterDiskCache(
                 if (!tempFile.renameTo(file)) {
                     throw IOException("Failed to move chapter cache file into place")
                 }
-                file.setLastModified(System.currentTimeMillis())
+                touchFileLocked(file)
                 pruneLocked(config)
             }.onFailure {
                 tempFile.delete()
@@ -141,7 +141,9 @@ internal class NovelReaderChapterDiskCache(
     }
 
     private fun pruneLocked(config: NovelReaderChapterDiskCacheConfig) {
-        val files = chapterFilesLocked().sortedBy { it.lastModified() }.toMutableList()
+        val files = chapterFilesLocked()
+            .sortedWith(compareBy<File> { it.lastModified() }.thenBy { it.name })
+            .toMutableList()
         if (config.unlimited) return
 
         var totalBytes = files.sumOf { it.length().coerceAtLeast(0L) }
@@ -160,6 +162,15 @@ internal class NovelReaderChapterDiskCache(
 
     private fun fileFor(chapterId: Long): File {
         return File(directory, "$chapterId.gz")
+    }
+
+    private fun touchFileLocked(file: File) {
+        val now = System.currentTimeMillis()
+        val nextTimestamp = chapterFilesLocked()
+            .maxOfOrNull { it.lastModified() }
+            ?.let { maxExisting -> maxOf(now, maxExisting + 1L) }
+            ?: now
+        file.setLastModified(nextTimestamp)
     }
 
     private fun gzip(html: String): ByteArray {
