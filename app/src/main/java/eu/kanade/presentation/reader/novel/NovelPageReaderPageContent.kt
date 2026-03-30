@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
@@ -38,8 +39,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import coil3.compose.AsyncImage
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
+import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import kotlin.math.roundToInt
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
 
@@ -283,6 +286,16 @@ internal fun NovelPageReaderPageContent(
             nativeTextureStrengthPercent = nativeTextureStrengthPercent,
             surfaceColor = pageSurfaceColor,
         )
+        val imageBlock = contentPage.blocks.singleOrNull() as? NovelPageContentBlock.Image
+        if (imageBlock != null) {
+            NovelPageReaderImageBlock(
+                imageUrl = imageBlock.imageUrl,
+                contentDescription = imageBlock.contentDescription,
+                contentLayout = contentLayout,
+                bookBottomInset = bookBottomInset,
+            )
+            return@Box
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -345,10 +358,45 @@ internal fun NovelPageReaderPageContent(
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
+                        is NovelPageContentBlock.Image -> {
+                            NovelPageReaderImageBlock(
+                                imageUrl = block.imageUrl,
+                                contentDescription = block.contentDescription,
+                                contentLayout = contentLayout,
+                                bookBottomInset = bookBottomInset,
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun NovelPageReaderImageBlock(
+    imageUrl: String,
+    contentDescription: String?,
+    contentLayout: NovelPageReaderContentLayout,
+    bookBottomInset: Dp,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(contentLayout.textPadding)
+            .padding(bottom = bookBottomInset),
+        contentAlignment = Alignment.Center,
+    ) {
+        AsyncImage(
+            model = if (NovelPluginImage.isSupported(imageUrl)) {
+                NovelPluginImage(imageUrl)
+            } else {
+                imageUrl
+            },
+            contentDescription = contentDescription,
+            contentScale = ContentScale.Inside,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 

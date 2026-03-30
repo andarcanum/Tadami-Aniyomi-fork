@@ -582,7 +582,7 @@ fun NovelReaderScreen(
     }
     val shouldPaginatePageReader = shouldPaginateForPageReader(
         pageReaderEnabled = state.readerSettings.pageReader,
-        textBlocksCount = pageReaderTextBlocks.size,
+        contentBlocksCount = state.contentBlocks.size,
     )
     val pageReaderLayoutTextAlign = remember(
         state.readerSettings.textAlign,
@@ -649,30 +649,9 @@ fun NovelReaderScreen(
         richContentBlocks = state.richContentBlocks,
         richContentUnsupportedFeaturesDetected = state.richContentUnsupportedFeaturesDetected,
     )
-    val richPageReaderBlockTexts = remember(
+    val richPageReaderPagination = remember(
         state.chapter.id,
         state.richContentBlocks,
-        shouldPaginateRichForPageReader,
-        state.readerSettings.forceParagraphIndent,
-    ) {
-        if (!shouldPaginateRichForPageReader) {
-            emptyList()
-        } else {
-            state.richContentBlocks.map { block ->
-                buildRichPageReaderBlockText(
-                    block = block,
-                    forcedParagraphFirstLineIndentEm = if (state.readerSettings.forceParagraphIndent) {
-                        FORCED_PARAGRAPH_FIRST_LINE_INDENT_EM
-                    } else {
-                        null
-                    },
-                )
-            }.filter { it.text.text.isNotBlank() }
-        }
-    }
-    val richPageReaderPages: List<List<RichPageSlice>> = remember(
-        state.chapter.id,
-        richPageReaderBlockTexts,
         shouldPaginateRichForPageReader,
         state.readerSettings.fontSize,
         state.readerSettings.lineHeight,
@@ -687,41 +666,40 @@ fun NovelReaderScreen(
         statusBarTopPadding,
     ) {
         if (!shouldPaginateRichForPageReader) {
-            emptyList()
+            MixedRichPagePagination(blockTexts = emptyList(), pages = emptyList())
         } else {
-            if (richPageReaderBlockTexts.isEmpty()) {
-                emptyList()
-            } else {
-                val screenWidthPx = pageViewportSize.width.takeIf { it > 0 }
-                    ?: with(density) { configuration.screenWidthDp.dp.roundToPx() }
-                val screenHeightPx = pageViewportSize.height.takeIf { it > 0 }
-                    ?: with(density) { configuration.screenHeightDp.dp.roundToPx() }
-                val horizontalPaddingPx = with(density) { (state.readerSettings.margin.dp * 2).roundToPx() }
-                val topPaddingPx = with(density) { (contentPaddingPx + statusBarTopPadding).roundToPx() }
-                val bottomPaddingPx = with(density) { contentPaddingPx.roundToPx() }
-                val bookBottomInsetPx = with(density) {
-                    resolveNovelPageReaderBookBottomInset(
-                        density = this,
-                        fontSize = state.readerSettings.fontSize,
-                        lineHeight = state.readerSettings.lineHeight,
-                    ).roundToPx()
-                }
-                val pageFitSafetyPx = with(density) { 4.dp.roundToPx() }
-                val verticalPaddingPx = topPaddingPx + bottomPaddingPx + bookBottomInsetPx + pageFitSafetyPx
-                paginateRichPageBlocks(
-                    blockTexts = richPageReaderBlockTexts,
-                    paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() },
-                    widthPx = (screenWidthPx - horizontalPaddingPx).coerceAtLeast(1),
-                    heightPx = (screenHeightPx - verticalPaddingPx).coerceAtLeast(1),
-                    textSizePx = with(density) { state.readerSettings.fontSize.sp.toPx() },
-                    lineHeightMultiplier = state.readerSettings.lineHeight.coerceAtLeast(1f),
-                    typeface = composeTypeface,
-                    textAlign = pageReaderLayoutTextAlign,
-                    chapterTitle = state.chapter.name,
-                )
+            val screenWidthPx = pageViewportSize.width.takeIf { it > 0 }
+                ?: with(density) { configuration.screenWidthDp.dp.roundToPx() }
+            val screenHeightPx = pageViewportSize.height.takeIf { it > 0 }
+                ?: with(density) { configuration.screenHeightDp.dp.roundToPx() }
+            val horizontalPaddingPx = with(density) { (state.readerSettings.margin.dp * 2).roundToPx() }
+            val topPaddingPx = with(density) { (contentPaddingPx + statusBarTopPadding).roundToPx() }
+            val bottomPaddingPx = with(density) { contentPaddingPx.roundToPx() }
+            val bookBottomInsetPx = with(density) {
+                resolveNovelPageReaderBookBottomInset(
+                    density = this,
+                    fontSize = state.readerSettings.fontSize,
+                    lineHeight = state.readerSettings.lineHeight,
+                ).roundToPx()
             }
+            val pageFitSafetyPx = with(density) { 4.dp.roundToPx() }
+            val verticalPaddingPx = topPaddingPx + bottomPaddingPx + bookBottomInsetPx + pageFitSafetyPx
+            paginateMixedRichPageBlocks(
+                richBlocks = state.richContentBlocks,
+                paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() },
+                widthPx = (screenWidthPx - horizontalPaddingPx).coerceAtLeast(1),
+                heightPx = (screenHeightPx - verticalPaddingPx).coerceAtLeast(1),
+                textSizePx = with(density) { state.readerSettings.fontSize.sp.toPx() },
+                lineHeightMultiplier = state.readerSettings.lineHeight.coerceAtLeast(1f),
+                typeface = composeTypeface,
+                textAlign = pageReaderLayoutTextAlign,
+                forceParagraphIndent = state.readerSettings.forceParagraphIndent,
+                chapterTitle = state.chapter.name,
+            )
         }
     }
+    val richPageReaderBlockTexts = richPageReaderPagination.blockTexts
+    val richPageReaderPages = richPageReaderPagination.pages
     val usePageReader = shouldPaginatePageReader &&
         (
             pageReaderPages.isNotEmpty() || richPageReaderPages.isNotEmpty()

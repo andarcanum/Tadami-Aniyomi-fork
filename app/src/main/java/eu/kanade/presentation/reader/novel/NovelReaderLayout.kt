@@ -444,10 +444,18 @@ internal data class PlainPageSlice(
     val range: TextPageRange,
 )
 
-internal data class RichPageSlice(
-    val blockIndex: Int,
-    val range: TextPageRange,
-)
+internal sealed interface RichPageSlice {
+    data class Text(
+        val blockIndex: Int,
+        val range: TextPageRange,
+    ) : RichPageSlice
+
+    data class Image(
+        val sourceBlockIndex: Int,
+        val imageUrl: String,
+        val contentDescription: String?,
+    ) : RichPageSlice
+}
 
 internal data class PlainPageRenderBlock(
     val text: String,
@@ -489,6 +497,15 @@ internal sealed interface NovelPageContentBlock {
         val sourceTextAlign: NovelRichBlockTextAlign? = null,
         override val isChapterTitle: Boolean = false,
     ) : NovelPageContentBlock
+
+    data class Image(
+        val imageUrl: String,
+        val contentDescription: String?,
+    ) : NovelPageContentBlock {
+        override val spacingBeforePx: Int = 0
+        override val firstLineIndentEm: Float? = null
+        override val isChapterTitle: Boolean = false
+    }
 }
 
 internal data class NovelPageContentPage(
@@ -742,10 +759,12 @@ internal fun paginateRichPageBlocks(
     typeface: android.graphics.Typeface?,
     textAlign: ReaderTextAlign,
     chapterTitle: String? = null,
-): List<List<RichPageSlice>> {
+    allowChapterTitleBlock: Boolean = true,
+    blockIndexOffset: Int = 0,
+): List<List<RichPageSlice.Text>> {
     val safeHeight = heightPx.coerceAtLeast(1)
-    val pages = mutableListOf<MutableList<RichPageSlice>>()
-    var currentPage = mutableListOf<RichPageSlice>()
+    val pages = mutableListOf<MutableList<RichPageSlice.Text>>()
+    var currentPage = mutableListOf<RichPageSlice.Text>()
     var remainingHeight = safeHeight
 
     fun flushPage() {
@@ -758,7 +777,8 @@ internal fun paginateRichPageBlocks(
 
     blockTexts.forEachIndexed { blockIndex, blockText ->
         if (blockText.text.text.isBlank()) return@forEachIndexed
-        val isChapterTitle = blockIndex == 0 &&
+        val isChapterTitle = allowChapterTitleBlock &&
+            blockIndex == 0 &&
             chapterTitle != null &&
             isNativeChapterTitleText(blockText.text.text, chapterTitle)
         val firstLineIndentEm = if (isChapterTitle) null else blockText.firstLineIndentEm
@@ -830,7 +850,10 @@ internal fun paginateRichPageBlocks(
                     text = blockText.text.text.substring(range.start, range.endExclusive),
                     metrics = approximateMetrics,
                 ).coerceAtMost(safeHeight)
-                currentPage += RichPageSlice(blockIndex = blockIndex, range = range)
+                currentPage += RichPageSlice.Text(
+                    blockIndex = blockIndex + blockIndexOffset,
+                    range = range,
+                )
                 remainingHeight -= spacingBefore + sliceHeight
                 if (sliceIndex < blockPages.lastIndex || remainingHeight <= 0) {
                     flushPage()
@@ -877,7 +900,10 @@ internal fun paginateRichPageBlocks(
                 continue
             }
 
-            currentPage += RichPageSlice(blockIndex = blockIndex, range = slice.range)
+            currentPage += RichPageSlice.Text(
+                blockIndex = blockIndex + blockIndexOffset,
+                range = slice.range,
+            )
             remainingHeight -= spacingBefore + slice.heightPx
             startLine = slice.nextStartLine
             isFirstSliceOfBlock = false
@@ -890,6 +916,90 @@ internal fun paginateRichPageBlocks(
 
     flushPage()
     return pages
+}
+
+internal data class MixedRichPagePagination(
+    val blockTexts: List<RichPageBlockText>,
+    val pages: List<List<RichPageSlice>>,
+)
+
+internal fun paginateMixedRichPageBlocks(
+    richBlocks: List<NovelRichContentBlock>,
+    paragraphSpacingPx: Int,
+    widthPx: Int,
+    heightPx: Int,
+    textSizePx: Float,
+    lineHeightMultiplier: Float,
+    typeface: android.graphics.Typeface?,
+    textAlign: ReaderTextAlign,
+    forceParagraphIndent: Boolean,
+    chapterTitle: String? = null,
+): MixedRichPagePagination {
+    val allBlockTexts = mutableListOf<RichPageBlockText>()
+    val currentChunkTexts = mutableListOf<RichPageBlockText>()
+    val pages = mutableListOf<List<RichPageSlice>>()
+    var currentChunkStartIndex = 0
+    var currentChunkCanUseChapterTitle = true
+    var sawRenderableSourceBlock = false
+
+    fun flushCurrentChunk() {
+        if (currentChunkTexts.isEmpty()) return
+        pages += paginateRichPageBlocks(
+            blockTexts = currentChunkTexts.toList(),
+            paragraphSpacingPx = paragraphSpacingPx,
+            widthPx = widthPx,
+            heightPx = heightPx,
+            textSizePx = textSizePx,
+            lineHeightMultiplier = lineHeightMultiplier,
+            typeface = typeface,
+            textAlign = textAlign,
+            chapterTitle = chapterTitle,
+            allowChapterTitleBlock = currentChunkCanUseChapterTitle,
+            blockIndexOffset = currentChunkStartIndex,
+        )
+        currentChunkTexts.clear()
+        currentChunkCanUseChapterTitle = false
+    }
+
+    richBlocks.forEachIndexed { sourceBlockIndex, block ->
+        when (block) {
+            is NovelRichContentBlock.Image -> {
+                flushCurrentChunk()
+                pages += listOf(
+                    RichPageSlice.Image(
+                        sourceBlockIndex = sourceBlockIndex,
+                        imageUrl = block.url,
+                        contentDescription = block.alt,
+                    ),
+                )
+                sawRenderableSourceBlock = true
+            }
+            else -> {
+                val blockText = buildRichPageReaderBlockText(
+                    block = block,
+                    forcedParagraphFirstLineIndentEm = if (forceParagraphIndent) {
+                        FORCED_PARAGRAPH_FIRST_LINE_INDENT_EM
+                    } else {
+                        null
+                    },
+                )
+                if (blockText.text.text.isBlank()) return@forEachIndexed
+                if (currentChunkTexts.isEmpty()) {
+                    currentChunkStartIndex = allBlockTexts.size
+                    currentChunkCanUseChapterTitle = !sawRenderableSourceBlock
+                }
+                allBlockTexts += blockText
+                currentChunkTexts += blockText
+                sawRenderableSourceBlock = true
+            }
+        }
+    }
+
+    flushCurrentChunk()
+    return MixedRichPagePagination(
+        blockTexts = allBlockTexts,
+        pages = pages,
+    )
 }
 
 internal fun buildPlainPageRenderBlocks(
@@ -929,17 +1039,19 @@ internal fun buildPlainPageRenderBlocks(
 }
 
 internal fun buildRichPageRenderBlocks(
-    page: List<RichPageSlice>,
+    page: List<RichPageSlice.Text>,
     blockTexts: List<RichPageBlockText>,
     paragraphSpacingPx: Int,
     chapterTitle: String? = null,
+    allowChapterTitleBlock: Boolean = true,
 ): List<RichPageRenderBlock> {
     if (page.isEmpty()) return emptyList()
     return page.mapIndexed { index, slice ->
         val previousBlockIndex = page.getOrNull(index - 1)?.blockIndex
         val startsNewBlock = index > 0 && previousBlockIndex != slice.blockIndex
         val blockText = blockTexts[slice.blockIndex]
-        val isChapterTitle = chapterTitle != null &&
+        val isChapterTitle = allowChapterTitleBlock &&
+            chapterTitle != null &&
             slice.blockIndex == 0 &&
             slice.range.start == 0 &&
             isNativeChapterTitleText(blockText.text.text, chapterTitle)
@@ -965,22 +1077,35 @@ internal fun normalizePageReaderContentPages(
 ): List<NovelPageContentPage> {
     return if (useRichPageReader) {
         richPages.map { page ->
-            NovelPageContentPage(
-                blocks = buildRichPageRenderBlocks(
-                    page = page,
-                    blockTexts = richBlockTexts,
-                    paragraphSpacingPx = paragraphSpacingPx,
-                    chapterTitle = chapterTitle,
-                ).map { block ->
-                    NovelPageContentBlock.Rich(
-                        text = block.text,
-                        spacingBeforePx = block.spacingBeforePx,
-                        firstLineIndentEm = block.firstLineIndentEm,
-                        sourceTextAlign = block.sourceTextAlign,
-                        isChapterTitle = block.isChapterTitle,
-                    )
-                },
-            )
+            val imagePage = page.singleOrNull() as? RichPageSlice.Image
+            if (imagePage != null) {
+                NovelPageContentPage(
+                    blocks = listOf(
+                        NovelPageContentBlock.Image(
+                            imageUrl = imagePage.imageUrl,
+                            contentDescription = imagePage.contentDescription,
+                        ),
+                    ),
+                )
+            } else {
+                val textPage = page.filterIsInstance<RichPageSlice.Text>()
+                NovelPageContentPage(
+                    blocks = buildRichPageRenderBlocks(
+                        page = textPage,
+                        blockTexts = richBlockTexts,
+                        paragraphSpacingPx = paragraphSpacingPx,
+                        chapterTitle = chapterTitle,
+                    ).map { block ->
+                        NovelPageContentBlock.Rich(
+                            text = block.text,
+                            spacingBeforePx = block.spacingBeforePx,
+                            firstLineIndentEm = block.firstLineIndentEm,
+                            sourceTextAlign = block.sourceTextAlign,
+                            isChapterTitle = block.isChapterTitle,
+                        )
+                    },
+                )
+            }
         }
     } else {
         plainPages.map { page ->

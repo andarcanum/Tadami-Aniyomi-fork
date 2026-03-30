@@ -1307,11 +1307,11 @@ class NovelReaderUiVisibilityTest {
 
         val renderBlocks = buildRichPageRenderBlocks(
             page = listOf(
-                RichPageSlice(
+                RichPageSlice.Text(
                     blockIndex = 0,
                     range = TextPageRange(start = 0, endExclusive = "Chapter 12".length),
                 ),
-                RichPageSlice(
+                RichPageSlice.Text(
                     blockIndex = 1,
                     range = TextPageRange(start = 0, endExclusive = "First paragraph".length),
                 ),
@@ -1386,13 +1386,13 @@ class NovelReaderUiVisibilityTest {
             plainPages = emptyList(),
             richPages = listOf(
                 listOf(
-                    RichPageSlice(
+                    RichPageSlice.Text(
                         blockIndex = 0,
                         range = TextPageRange(start = 0, endExclusive = "Chapter 12".length),
                     ),
                 ),
                 listOf(
-                    RichPageSlice(
+                    RichPageSlice.Text(
                         blockIndex = 1,
                         range = TextPageRange(start = 0, endExclusive = "Quoted link".length),
                     ),
@@ -1418,6 +1418,62 @@ class NovelReaderUiVisibilityTest {
                 end = quotedBlock.text.length,
             ).any { it.item == "https://example.org" },
         )
+    }
+
+    @Test
+    fun `normalized page content preserves image pages between rich text pages`() {
+        val richBlockTexts = listOf(
+            buildRichPageReaderBlockText(
+                block = NovelRichContentBlock.Paragraph(
+                    segments = listOf(NovelRichTextSegment(text = "Before")),
+                ),
+            ),
+            buildRichPageReaderBlockText(
+                block = NovelRichContentBlock.Paragraph(
+                    segments = listOf(NovelRichTextSegment(text = "After")),
+                ),
+            ),
+        )
+
+        val contentPages = normalizePageReaderContentPages(
+            useRichPageReader = true,
+            plainPages = emptyList(),
+            richPages = listOf(
+                listOf(
+                    RichPageSlice.Text(
+                        blockIndex = 0,
+                        range = TextPageRange(start = 0, endExclusive = "Before".length),
+                    ),
+                ),
+                listOf(
+                    RichPageSlice.Image(
+                        sourceBlockIndex = 1,
+                        imageUrl = "https://example.org/image.jpg",
+                        contentDescription = "Cover art",
+                    ),
+                ),
+                listOf(
+                    RichPageSlice.Text(
+                        blockIndex = 1,
+                        range = TextPageRange(start = 0, endExclusive = "After".length),
+                    ),
+                ),
+            ),
+            plainTextBlocks = emptyList(),
+            richBlockTexts = richBlockTexts,
+            paragraphSpacingPx = 12,
+            forceParagraphIndent = false,
+            chapterTitle = "Before",
+        )
+
+        assertEquals(3, contentPages.size)
+        val firstBlock = contentPages[0].blocks.single() as NovelPageContentBlock.Rich
+        val imageBlock = contentPages[1].blocks.single() as NovelPageContentBlock.Image
+        val thirdBlock = contentPages[2].blocks.single() as NovelPageContentBlock.Rich
+        assertEquals("Before", firstBlock.text.text)
+        assertEquals("https://example.org/image.jpg", imageBlock.imageUrl)
+        assertEquals("Cover art", imageBlock.contentDescription)
+        assertEquals("After", thirdBlock.text.text)
     }
 
     @Test
@@ -1716,23 +1772,23 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `page reader depends on text blocks rather than image blocks`() {
+    fun `page reader depends on parsed content blocks`() {
         assertTrue(
             shouldPaginateForPageReader(
                 pageReaderEnabled = true,
-                textBlocksCount = 1,
+                contentBlocksCount = 1,
             ),
         )
         assertFalse(
             shouldPaginateForPageReader(
                 pageReaderEnabled = false,
-                textBlocksCount = 1,
+                contentBlocksCount = 1,
             ),
         )
         assertFalse(
             shouldPaginateForPageReader(
                 pageReaderEnabled = true,
-                textBlocksCount = 0,
+                contentBlocksCount = 0,
             ),
         )
     }
@@ -2592,7 +2648,7 @@ class NovelReaderUiVisibilityTest {
             plainPages = emptyList(),
             richPages = listOf(
                 listOf(
-                    RichPageSlice(
+                    RichPageSlice.Text(
                         blockIndex = 0,
                         range = TextPageRange(start = 0, endExclusive = "Chapter 12".length),
                     ),
@@ -2739,8 +2795,8 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `rich paged renderer allows mixed text and images but still blocks unsupported modes`() {
-        assertFalse(
+    fun `rich paged renderer allows image only and mixed rich chapters but still blocks unsupported modes`() {
+        assertTrue(
             shouldUseRichNativePageRenderer(
                 richNativeRendererExperimentalEnabled = true,
                 pageReaderEnabled = true,
