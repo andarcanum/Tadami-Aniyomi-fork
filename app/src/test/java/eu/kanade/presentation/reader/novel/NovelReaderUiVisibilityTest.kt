@@ -51,9 +51,9 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `background preset catalog exposes five unique built-ins`() {
-        assertTrue(novelReaderBackgroundPresets.size == 5)
-        assertTrue(novelReaderBackgroundPresets.map { it.id }.toSet().size == 5)
+    fun `background preset catalog exposes six unique built-ins`() {
+        assertTrue(novelReaderBackgroundPresets.size == 6)
+        assertTrue(novelReaderBackgroundPresets.map { it.id }.toSet().size == 6)
     }
 
     @Test
@@ -159,10 +159,10 @@ class NovelReaderUiVisibilityTest {
 
         val cards = buildNovelReaderBackgroundCards(customItems = customItems)
 
-        assertTrue(cards.size == 7)
-        assertTrue(cards.take(5).all { it.isBuiltIn })
-        assertTrue(cards.drop(5).all { !it.isBuiltIn })
-        assertTrue(cards.drop(5).map { it.id } == listOf("custom-1", "custom-2"))
+        assertTrue(cards.size == 8)
+        assertTrue(cards.take(6).all { it.isBuiltIn })
+        assertTrue(cards.drop(6).all { !it.isBuiltIn })
+        assertTrue(cards.drop(6).map { it.id } == listOf("custom-1", "custom-2"))
     }
 
     @Test

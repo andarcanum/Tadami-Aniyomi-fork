@@ -46,16 +46,17 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.widget.BasePreferenceWidget
 import eu.kanade.presentation.more.settings.widget.PrefsHorizontalPadding
 import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_AGED_PAGE_ID
+import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_AGED_PARCHMENT_ID
 import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_CRUMPLED_SHEET_ID
 import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_DARK_WOOD_ID
 import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_LINEN_PAPER_ID
 import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_NIGHT_VELVET_ID
 import eu.kanade.presentation.reader.novel.NovelReaderBackgroundCard
+import eu.kanade.presentation.reader.novel.NovelReaderCustomBackgroundCard
 import eu.kanade.presentation.reader.novel.NovelReaderFontOption
 import eu.kanade.presentation.reader.novel.NovelReaderFontSource
 import eu.kanade.presentation.reader.novel.areChapterSwipeControlsEnabled
@@ -112,7 +113,6 @@ import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import java.io.File
 import android.graphics.Color as AndroidColor
 
 object SettingsNovelReaderScreen : SearchableSettings {
@@ -1389,32 +1389,24 @@ private fun NovelReaderBackgroundCatalogRow(
                 } else {
                     selectedSource == NovelReaderBackgroundSource.CUSTOM && selectedCustomId == card.id
                 }
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (selected) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    },
-                    modifier = Modifier.clickable {
-                        if (card.isBuiltIn) {
-                            onSelectPreset(card.id)
+                if (card.isBuiltIn) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.primaryContainer
                         } else {
-                            val customItem = card.customItem ?: return@clickable
-                            onSelectCustom(customItem.id, customItem.absolutePath)
-                        }
-                    },
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .padding(6.dp)
-                            .size(
-                                width = 160.dp,
-                                height = if (card.isBuiltIn) 164.dp else 214.dp,
-                            ),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                        modifier = Modifier.clickable {
+                            onSelectPreset(card.id)
+                        },
                     ) {
-                        if (card.isBuiltIn) {
+                        Column(
+                            modifier = Modifier
+                                .padding(6.dp)
+                                .size(width = 160.dp, height = 164.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
                             val preset = card.preset ?: return@Column
                             Image(
                                 painter = painterResource(id = preset.imageResId),
@@ -1424,57 +1416,31 @@ private fun NovelReaderBackgroundCatalogRow(
                                     .fillMaxWidth()
                                     .size(height = 92.dp, width = 148.dp),
                             )
-                        } else {
-                            val custom = card.customItem ?: return@Column
-                            AsyncImage(
-                                model = File(custom.absolutePath),
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .size(height = 92.dp, width = 148.dp),
+                            Text(
+                                text = readerBackgroundPresetTitle(card.id),
+                                style = MaterialTheme.typography.labelLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = readerBackgroundPresetDescription(card.id),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
-                        Text(
-                            text = if (card.isBuiltIn) {
-                                readerBackgroundPresetTitle(card.id)
-                            } else {
-                                card.customItem?.displayName.orEmpty()
-                            },
-                            style = MaterialTheme.typography.labelLarge,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = if (card.isBuiltIn) {
-                                readerBackgroundPresetDescription(card.id)
-                            } else {
-                                card.customItem?.absolutePath.orEmpty()
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        if (!card.isBuiltIn) {
-                            val custom = card.customItem ?: return@Column
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                ReaderBackgroundActionChip(
-                                    label = stringResource(AYMR.strings.editor_action_rename),
-                                    onClick = { onRenameCustom(custom.id, custom.displayName) },
-                                )
-                                ReaderBackgroundActionChip(
-                                    label = stringResource(AYMR.strings.novel_reader_background_action_replace),
-                                    onClick = { onReplaceCustom(custom.id) },
-                                )
-                                ReaderBackgroundActionChip(
-                                    label = stringResource(AYMR.strings.editor_action_delete),
-                                    highlighted = true,
-                                    onClick = { onDeleteCustom(custom.id) },
-                                )
-                            }
-                        }
                     }
+                } else {
+                    val custom = card.customItem ?: return@items
+                    NovelReaderCustomBackgroundCard(
+                        customItem = custom,
+                        selected = selected,
+                        onSelect = { onSelectCustom(custom.id, custom.absolutePath) },
+                        onRename = { onRenameCustom(custom.id, custom.displayName) },
+                        onReplace = { onReplaceCustom(custom.id) },
+                        onDelete = { onDeleteCustom(custom.id) },
+                    )
                 }
             }
         }
@@ -1501,42 +1467,14 @@ private fun NovelReaderBackgroundCatalogRow(
 }
 
 @Composable
-private fun ReaderBackgroundActionChip(
-    label: String,
-    highlighted: Boolean = false,
-    onClick: () -> Unit,
-) {
-    Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = if (highlighted) {
-            MaterialTheme.colorScheme.errorContainer
-        } else {
-            MaterialTheme.colorScheme.secondaryContainer
-        },
-        modifier = Modifier.clickable(onClick = onClick),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (highlighted) {
-                MaterialTheme.colorScheme.onErrorContainer
-            } else {
-                MaterialTheme.colorScheme.onSecondaryContainer
-            },
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-        )
-    }
-}
-
-@Composable
 private fun readerBackgroundPresetTitle(presetId: String): String {
     return when (presetId) {
         NOVEL_READER_BACKGROUND_PRESET_LINEN_PAPER_ID ->
             stringResource(AYMR.strings.novel_reader_background_preset_linen_paper_title)
         NOVEL_READER_BACKGROUND_PRESET_AGED_PAGE_ID ->
             stringResource(AYMR.strings.novel_reader_background_preset_aged_page_title)
+        NOVEL_READER_BACKGROUND_PRESET_AGED_PARCHMENT_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_aged_parchment_title)
         NOVEL_READER_BACKGROUND_PRESET_CRUMPLED_SHEET_ID ->
             stringResource(AYMR.strings.novel_reader_background_preset_crumpled_sheet_title)
         NOVEL_READER_BACKGROUND_PRESET_NIGHT_VELVET_ID ->
@@ -1554,6 +1492,8 @@ private fun readerBackgroundPresetDescription(presetId: String): String {
             stringResource(AYMR.strings.novel_reader_background_preset_linen_paper_description)
         NOVEL_READER_BACKGROUND_PRESET_AGED_PAGE_ID ->
             stringResource(AYMR.strings.novel_reader_background_preset_aged_page_description)
+        NOVEL_READER_BACKGROUND_PRESET_AGED_PARCHMENT_ID ->
+            stringResource(AYMR.strings.novel_reader_background_preset_aged_parchment_description)
         NOVEL_READER_BACKGROUND_PRESET_CRUMPLED_SHEET_ID ->
             stringResource(AYMR.strings.novel_reader_background_preset_crumpled_sheet_description)
         NOVEL_READER_BACKGROUND_PRESET_NIGHT_VELVET_ID ->

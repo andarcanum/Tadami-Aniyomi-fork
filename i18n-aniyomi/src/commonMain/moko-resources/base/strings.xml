@@ -571,6 +571,8 @@
     <string name="novel_reader_background_preset_linen_paper_description">Soft warm paper texture for daytime reading.</string>
     <string name="novel_reader_background_preset_aged_page_title">Aged page</string>
     <string name="novel_reader_background_preset_aged_page_description">Classic worn page style with gentle contrast.</string>
+    <string name="novel_reader_background_preset_aged_parchment_title">Aged parchment</string>
+    <string name="novel_reader_background_preset_aged_parchment_description">Warm parchment with soft folds and a vintage tone.</string>
     <string name="novel_reader_background_preset_crumpled_sheet_title">Crumpled sheet</string>
     <string name="novel_reader_background_preset_crumpled_sheet_description">Light wrinkled paper look with subtle depth.</string>
     <string name="novel_reader_background_preset_night_velvet_title">Night velvet</string>

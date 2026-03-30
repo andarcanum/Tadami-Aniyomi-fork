@@ -36,6 +36,7 @@ data class NovelReaderBackgroundCard(
 
 const val NOVEL_READER_BACKGROUND_PRESET_LINEN_PAPER_ID = "linen_paper"
 const val NOVEL_READER_BACKGROUND_PRESET_AGED_PAGE_ID = "aged_page"
+const val NOVEL_READER_BACKGROUND_PRESET_AGED_PARCHMENT_ID = "aged_parchment"
 const val NOVEL_READER_BACKGROUND_PRESET_CRUMPLED_SHEET_ID = "crumpled_sheet"
 const val NOVEL_READER_BACKGROUND_PRESET_NIGHT_VELVET_ID = "night_velvet"
 const val NOVEL_READER_BACKGROUND_PRESET_DARK_WOOD_ID = "dark_wood"
@@ -49,6 +50,11 @@ val novelReaderBackgroundPresets: List<NovelReaderBackgroundPreset> = listOf(
     NovelReaderBackgroundPreset(
         id = NOVEL_READER_BACKGROUND_PRESET_AGED_PAGE_ID,
         imageResId = R.drawable.novel_bg_aged_page,
+        isDarkPreferred = false,
+    ),
+    NovelReaderBackgroundPreset(
+        id = NOVEL_READER_BACKGROUND_PRESET_AGED_PARCHMENT_ID,
+        imageResId = R.drawable.novel_bg_aged_parchment,
         isDarkPreferred = false,
     ),
     NovelReaderBackgroundPreset(

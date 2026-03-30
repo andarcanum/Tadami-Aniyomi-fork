@@ -657,14 +657,14 @@ class NovelReaderScreenModel(
         if (!hasProgressChanged) {
             val isSameInitialIndex = currentIndex == initialProgressIndex
             val isSamePersistedProgress = lastSavedProgress == resolvedPersistedProgress
-            if (isSameInitialIndex && isSamePersistedProgress) return
+            if (totalItems > 1 && isSameInitialIndex && isSamePersistedProgress) return
             hasProgressChanged = true
         }
         val readThreshold = when {
             totalItems == 100 -> 0.99f
             else -> 0.95f
         }
-        val reachedReadThreshold = totalItems > 1 &&
+        val reachedReadThreshold = totalItems == 1 ||
             ((currentIndex + 1).toFloat() / totalItems.toFloat()) >= readThreshold
         val shouldPersistRead = (lastSavedRead == true) || chapter.read || reachedReadThreshold
         val newProgress = if (shouldPersistRead) {

@@ -1435,6 +1435,8 @@
     <string name="novel_reader_background_preset_linen_paper_description">Мягкая тёплая бумажная текстура для дневного чтения.</string>
     <string name="novel_reader_background_preset_aged_page_title">Состаренный лист</string>
     <string name="novel_reader_background_preset_aged_page_description">Классический слегка потёртый лист с умеренным контрастом.</string>
+    <string name="novel_reader_background_preset_aged_parchment_title">Старый пергамент</string>
+    <string name="novel_reader_background_preset_aged_parchment_description">Тёплый состаренный пергамент с мягкими заломами и винтажным оттенком.</string>
     <string name="novel_reader_background_preset_crumpled_sheet_title">Мятая бумага</string>
     <string name="novel_reader_background_preset_crumpled_sheet_description">Светлая мятая фактура с лёгкой глубиной.</string>
     <string name="novel_reader_background_preset_night_velvet_title">Ночной бархат</string>
