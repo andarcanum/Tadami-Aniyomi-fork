@@ -51,9 +51,12 @@ jobs:
           python3 tools/ci/report-release-warnings.py build_release.log --enforce
 
       - name: Run unit tests
+        id: unit_tests
+        continue-on-error: true
         run: ./gradlew testDebugUnitTest --stacktrace --console=plain
 
       - name: Print unit test failures
+        id: unit_test_report
         if: always()
         shell: bash
         run: |
@@ -65,11 +68,14 @@ jobs:
           fi
           python3 - <<'PY'
           import glob
+          import os
           import xml.etree.ElementTree as ET
 
           files = sorted(glob.glob("app/build/test-results/testDebugUnitTest/*.xml"))
           if not files:
               print("No JUnit XML files found in app/build/test-results/testDebugUnitTest")
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+                  fh.write("failed=false\n")
               raise SystemExit(0)
 
           failures = []
@@ -95,13 +101,35 @@ jobs:
                   failures.append((classname, testname, detail))
 
           print(f"Unit test summary: tests={total_tests}, failures={total_failures}, errors={total_errors}")
+          summary_lines = [
+              "## Unit test summary",
+              f"- tests: {total_tests}",
+              f"- failures: {total_failures}",
+              f"- errors: {total_errors}",
+          ]
           if not failures:
               print("No failed tests found in JUnit XML.")
+              summary_lines.append("- failed tests: none")
           else:
               print("Failed tests:")
+              summary_lines.append("")
+              summary_lines.append("### Failed tests")
               for classname, testname, detail in failures:
                   print(f"- {classname} > {testname}: {detail}")
+                  summary_lines.append(f"- `{classname} > {testname}`: {detail}")
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:
+              fh.write("\n".join(summary_lines) + "\n")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"failed={'true' if failures or total_errors or total_failures else 'false'}\n")
           PY
+
+      - name: Fail job if unit tests failed
+        if: always() && steps.unit_test_report.outputs.failed == 'true'
+        shell: bash
+        run: |
+          echo "Unit tests failed. See the failed test list printed above and the workflow summary."
+          exit 1
 
       - name: Upload unit test reports
         if: always()
