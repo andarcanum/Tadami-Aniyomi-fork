@@ -52,4 +52,5 @@ val migrations: List<Migration>
         SetupNovelLibraryUpdateMigration(),
         CoalesceLibraryUpdateWorkersMigration(),
         NavigationTransitionModeMigration(),
+        DefaultChapterEpisodeSortNumberMigration(),
     )
