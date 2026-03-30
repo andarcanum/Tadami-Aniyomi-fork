@@ -72,6 +72,7 @@ import eu.kanade.domain.ui.model.HomeStreakCounterStyle
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.components.TabbedScreenAurora
 import eu.kanade.presentation.theme.AuroraColors
+import eu.kanade.presentation.theme.AuroraSurfaceLevel
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.util.Tab

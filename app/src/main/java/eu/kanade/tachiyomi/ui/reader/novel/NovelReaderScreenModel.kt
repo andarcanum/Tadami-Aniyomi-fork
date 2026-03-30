@@ -764,6 +764,37 @@ class NovelReaderScreenModel(
                     eventBus?.tryEmit(AchievementEvent.NovelCompleted(nextUpdate.novelId))
                 }
             }
+        }
+    }
+
+    private suspend fun flushPendingProgressPersistence() {
+        while (true) {
+            val nextUpdate = progressPersistenceMutex.withLock {
+                val next = pendingProgressPersistence ?: return
+                pendingProgressPersistence = null
+                next
+            }
+
+            novelChapterRepository.updateChapter(
+                NovelChapterUpdate(
+                    id = nextUpdate.chapterId,
+                    read = nextUpdate.read,
+                    lastPageRead = nextUpdate.lastPageRead,
+                ),
+            )
+
+            if (nextUpdate.emitReadEvent) {
+                eventBus?.tryEmit(
+                    AchievementEvent.NovelChapterRead(
+                        novelId = nextUpdate.novelId,
+                        chapterNumber = nextUpdate.chapterNumber,
+                    ),
+                )
+                if (nextUpdate.emitNovelCompleted) {
+                    eventBus?.tryEmit(AchievementEvent.NovelCompleted(nextUpdate.novelId))
+                }
+            }
+
             val now = System.currentTimeMillis()
             pendingHistoryReadDurationMs += nextUpdate.sessionReadDurationMs.coerceAtLeast(0L)
             if (nextUpdate.emitReadEvent) {

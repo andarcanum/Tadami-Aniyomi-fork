@@ -100,6 +100,23 @@ class NovelCoverFetcherTest {
     }
 
     @Test
+    fun `buildNovelCoverRequest adds plugin image headers and keeps site origin fallback`() {
+        val request = buildNovelCoverRequest(
+            url = "https://novel.tl/images/cover.jpg",
+            siteUrl = "https://novel.tl/",
+            pluginHeaders = mapOf(
+                "Accept" to "image/webp,image/*",
+                "Referer" to "https://cdn.example/plugin/",
+            ),
+            readFromNetwork = true,
+        )
+
+        assertEquals("image/webp,image/*", request.header("Accept"))
+        assertEquals("https://cdn.example/plugin/", request.header("Referer"))
+        assertEquals("https://novel.tl", request.header("Origin"))
+    }
+
+    @Test
     fun `buildNovelCoverRequest adds referer and origin from site url`() {
         val request = buildNovelCoverRequest(
             url = "https://novel.tl/images/cover.jpg",

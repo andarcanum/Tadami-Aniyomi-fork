@@ -922,6 +922,10 @@ class AnimeScreenModel(
         updateSuccessState { it.copy(scrollIndex = index, scrollOffset = offset) }
     }
 
+    fun saveScrollPosition(index: Int, offset: Int) {
+        updateSuccessState { it.copy(scrollIndex = index, scrollOffset = offset) }
+    }
+
     private fun getUnseenEpisodes(): List<Episode> {
         return successState?.processedEpisodes
             ?.filter { (episode, dlStatus) -> !episode.seen && dlStatus == AnimeDownload.State.NOT_DOWNLOADED }

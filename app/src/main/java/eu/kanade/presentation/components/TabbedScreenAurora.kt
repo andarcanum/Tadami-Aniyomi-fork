@@ -77,6 +77,8 @@ import eu.kanade.presentation.theme.AuroraColors
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
+import eu.kanade.presentation.theme.resolveAuroraBorderColor
+import eu.kanade.presentation.theme.resolveAuroraSelectionContainerColor
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
