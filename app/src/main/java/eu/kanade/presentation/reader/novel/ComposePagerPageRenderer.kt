@@ -10,8 +10,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -26,6 +28,8 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import kotlin.math.abs
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 internal data class ComposePagerTransitionSpec(
     val alpha: Float = 1f,
@@ -105,6 +109,32 @@ internal fun resolvePageReaderBoundaryChapterSwipeAction(
     }
 }
 
+private fun resolveComposePagerPageKey(
+    page: Int,
+    contentPageCount: Int,
+    hasPreviousChapter: Boolean,
+    hasNextChapter: Boolean,
+    useBoundaryPreview: Boolean,
+): Any {
+    if (!useBoundaryPreview) return "compose-content-$page"
+    val virtualPageCount = resolveComposePagerVirtualPageCount(
+        contentPageCount = contentPageCount,
+        hasPreviousChapter = hasPreviousChapter,
+        hasNextChapter = hasNextChapter,
+    )
+    return when {
+        hasPreviousChapter && page == 0 -> "compose-boundary-previous"
+        hasNextChapter && page == virtualPageCount - 1 -> "compose-boundary-next"
+        else -> "compose-content-${
+            resolveComposePagerActualPageIndex(
+                currentPage = page,
+                contentPageCount = contentPageCount,
+                hasPreviousChapter = hasPreviousChapter,
+            )
+        }"
+    }
+}
+
 @Composable
 internal fun ComposePagerPageRenderer(
     pagerState: PagerState,
@@ -125,6 +155,11 @@ internal fun ComposePagerPageRenderer(
     statusBarTopPadding: Dp,
     hasPreviousChapter: Boolean,
     hasNextChapter: Boolean,
+    previousChapterName: String?,
+    nextChapterName: String?,
+    previousChapterLabel: String,
+    nextChapterLabel: String,
+    boundaryChapterHint: String,
     onToggleUi: () -> Unit,
     onMoveBackward: () -> Unit,
     onMoveForward: () -> Unit,
@@ -132,46 +167,90 @@ internal fun ComposePagerPageRenderer(
     onOpenNextChapter: () -> Unit,
 ) {
     val density = LocalDensity.current
+    val useBoundaryPreview = shouldUseComposePagerBoundaryPreview(transitionStyle)
+    val contentPageCount = contentPages.size
     val latestToggleUi by rememberUpdatedState(onToggleUi)
     val latestMoveBackward by rememberUpdatedState(onMoveBackward)
     val latestMoveForward by rememberUpdatedState(onMoveForward)
     val latestOpenPreviousChapter by rememberUpdatedState(onOpenPreviousChapter)
     val latestOpenNextChapter by rememberUpdatedState(onOpenNextChapter)
+    val latestPreviousChapterName by rememberUpdatedState(previousChapterName)
+    val latestNextChapterName by rememberUpdatedState(nextChapterName)
+    val latestPreviousChapterLabel by rememberUpdatedState(previousChapterLabel)
+    val latestNextChapterLabel by rememberUpdatedState(nextChapterLabel)
+    val latestBoundaryChapterHint by rememberUpdatedState(boundaryChapterHint)
+    val latestHasPreviousChapter by rememberUpdatedState(hasPreviousChapter)
+    val latestHasNextChapter by rememberUpdatedState(hasNextChapter)
     val edgeSwipeThresholdPx = with(density) { 160.dp.toPx() }
-    HorizontalPager(
-        state = pagerState,
-        modifier = Modifier
-            .fillMaxSize()
-            .pointerInput(
-                pagerState,
-                contentPages.size,
-                edgeSwipeThresholdPx,
-                hasPreviousChapter,
-                hasNextChapter,
-            ) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    val pageAtGestureStart = pagerState.currentPage
-                    var currentPosition = down.position
 
-                    while (true) {
-                        val event = awaitPointerEvent(PointerEventPass.Final)
-                        val change = event.changes.firstOrNull { it.id == down.id }
-                            ?: event.changes.firstOrNull()
-                            ?: break
-                        currentPosition = change.position
-                        if (!change.pressed) break
-                    }
+    val boundarySwipeModifier = if (useBoundaryPreview) {
+        Modifier
+    } else {
+        Modifier.pointerInput(
+            pagerState,
+            contentPageCount,
+            edgeSwipeThresholdPx,
+            hasPreviousChapter,
+            hasNextChapter,
+        ) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                val pageAtGestureStart = pagerState.currentPage
+                var currentPosition = down.position
 
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Final)
+                    val change = event.changes.firstOrNull { it.id == down.id }
+                        ?: event.changes.firstOrNull()
+                        ?: break
+                    currentPosition = change.position
+                    if (!change.pressed) break
+                }
+
+                when (
+                    resolvePageReaderBoundaryChapterSwipeAction(
+                        currentPage = pageAtGestureStart,
+                        pageCount = contentPageCount,
+                        deltaX = currentPosition.x - down.position.x,
+                        deltaY = currentPosition.y - down.position.y,
+                        thresholdPx = edgeSwipeThresholdPx,
+                        hasPreviousChapter = hasPreviousChapter,
+                        hasNextChapter = hasNextChapter,
+                    )
+                ) {
+                    HorizontalChapterSwipeAction.PREVIOUS -> latestOpenPreviousChapter()
+                    HorizontalChapterSwipeAction.NEXT -> latestOpenNextChapter()
+                    HorizontalChapterSwipeAction.NONE -> Unit
+                }
+            }
+        }
+    }
+
+    if (useBoundaryPreview) {
+        LaunchedEffect(
+            pagerState,
+            contentPageCount,
+            hasPreviousChapter,
+            hasNextChapter,
+            transitionStyle,
+        ) {
+            snapshotFlow {
+                Triple(
+                    pagerState.currentPage,
+                    pagerState.currentPageOffsetFraction,
+                    pagerState.isScrollInProgress,
+                )
+            }
+                .distinctUntilChanged()
+                .collectLatest { (page, progress, isScrolling) ->
+                    if (isScrolling) return@collectLatest
                     when (
-                        resolvePageReaderBoundaryChapterSwipeAction(
-                            currentPage = pageAtGestureStart,
-                            pageCount = contentPages.size,
-                            deltaX = currentPosition.x - down.position.x,
-                            deltaY = currentPosition.y - down.position.y,
-                            thresholdPx = edgeSwipeThresholdPx,
-                            hasPreviousChapter = hasPreviousChapter,
-                            hasNextChapter = hasNextChapter,
+                        resolveComposePagerSettledBoundaryChapterTarget(
+                            currentPage = page,
+                            progress = progress,
+                            contentPageCount = contentPageCount,
+                            hasPreviousChapter = latestHasPreviousChapter,
+                            hasNextChapter = latestHasNextChapter,
                         )
                     ) {
                         HorizontalChapterSwipeAction.PREVIOUS -> latestOpenPreviousChapter()
@@ -179,7 +258,23 @@ internal fun ComposePagerPageRenderer(
                         HorizontalChapterSwipeAction.NONE -> Unit
                     }
                 }
-            }
+        }
+    }
+
+    HorizontalPager(
+        state = pagerState,
+        key = { page ->
+            resolveComposePagerPageKey(
+                page = page,
+                contentPageCount = contentPageCount,
+                hasPreviousChapter = hasPreviousChapter,
+                hasNextChapter = hasNextChapter,
+                useBoundaryPreview = useBoundaryPreview,
+            )
+        },
+        modifier = Modifier
+            .fillMaxSize()
+            .then(boundarySwipeModifier)
             .pointerInput(readerSettings.tapToScroll) {
                 detectTapGestures(
                     onTap = { offset ->
@@ -198,7 +293,39 @@ internal fun ComposePagerPageRenderer(
                 )
             },
     ) { page ->
-        val contentPage = contentPages.getOrElse(page) { NovelPageContentPage(emptyList()) }
+        val boundaryTarget = if (useBoundaryPreview) {
+            resolveComposePagerBoundaryChapterTarget(
+                currentPage = page,
+                contentPageCount = contentPageCount,
+                hasPreviousChapter = hasPreviousChapter,
+                hasNextChapter = hasNextChapter,
+            )
+        } else {
+            HorizontalChapterSwipeAction.NONE
+        }
+        val boundaryPreview = when (boundaryTarget) {
+            HorizontalChapterSwipeAction.PREVIOUS -> createNovelPageBoundaryPreviewData(
+                chapterLabel = latestPreviousChapterLabel,
+                chapterName = latestPreviousChapterName,
+                chapterHint = latestBoundaryChapterHint,
+            )
+            HorizontalChapterSwipeAction.NEXT -> createNovelPageBoundaryPreviewData(
+                chapterLabel = latestNextChapterLabel,
+                chapterName = latestNextChapterName,
+                chapterHint = latestBoundaryChapterHint,
+            )
+            HorizontalChapterSwipeAction.NONE -> null
+        }
+        val contentPage = if (boundaryPreview == null) {
+            val actualPage = resolveComposePagerActualPageIndex(
+                currentPage = page,
+                contentPageCount = contentPageCount,
+                hasPreviousChapter = hasPreviousChapter,
+            )
+            contentPages.getOrElse(actualPage) { NovelPageContentPage(emptyList()) }
+        } else {
+            NovelPageContentPage(emptyList())
+        }
         val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction)
         val transitionSpec = resolveComposePagerTransitionSpec(
             style = transitionStyle,
@@ -227,7 +354,6 @@ internal fun ComposePagerPageRenderer(
                     }
                 },
         ) {
-            // Internal page background (Required for 3D flip to rotate WITH the page)
             NovelAtmosphereBackground(
                 backgroundColor = textBackground,
                 backgroundTexture = backgroundTexture,
@@ -239,27 +365,38 @@ internal fun ComposePagerPageRenderer(
                 backgroundImageModel = backgroundImageModel,
             )
 
-            // Front face (text content)
-            NovelPageReaderPageContent(
-                contentPage = contentPage,
-                readerSettings = readerSettings,
-                textColor = textColor,
-                textBackground = textBackground,
-                backgroundTexture = backgroundTexture,
-                nativeTextureStrengthPercent = nativeTextureStrengthPercent,
-                textTypeface = textTypeface,
-                chapterTitleTypeface = chapterTitleTypeface,
-                chapterTitleTextColor = chapterTitleTextColor,
-                textShadowEnabled = readerSettings.textShadow,
-                textShadowColor = readerSettings.textShadowColor,
-                textShadowBlur = readerSettings.textShadowBlur,
-                textShadowX = readerSettings.textShadowX,
-                textShadowY = readerSettings.textShadowY,
-                contentPadding = contentPadding,
-                statusBarTopPadding = statusBarTopPadding,
-            )
+            if (boundaryPreview != null) {
+                NovelPageBoundaryPreviewContent(
+                    preview = boundaryPreview,
+                    textColor = textColor,
+                    chapterTitleTextColor = chapterTitleTextColor,
+                    textBackground = textBackground,
+                    contentPadding = contentPadding,
+                    statusBarTopPadding = statusBarTopPadding,
+                    textTypeface = textTypeface,
+                    chapterTitleTypeface = chapterTitleTypeface,
+                )
+            } else {
+                NovelPageReaderPageContent(
+                    contentPage = contentPage,
+                    readerSettings = readerSettings,
+                    textColor = textColor,
+                    textBackground = textBackground,
+                    backgroundTexture = backgroundTexture,
+                    nativeTextureStrengthPercent = nativeTextureStrengthPercent,
+                    textTypeface = textTypeface,
+                    chapterTitleTypeface = chapterTitleTypeface,
+                    chapterTitleTextColor = chapterTitleTextColor,
+                    textShadowEnabled = readerSettings.textShadow,
+                    textShadowColor = readerSettings.textShadowColor,
+                    textShadowBlur = readerSettings.textShadowBlur,
+                    textShadowX = readerSettings.textShadowX,
+                    textShadowY = readerSettings.textShadowY,
+                    contentPadding = contentPadding,
+                    statusBarTopPadding = statusBarTopPadding,
+                )
+            }
 
-            // Back face overlay: hide text and dim when rotated > 90 deg
             if (abs(transitionSpec.rotationY) > 90f) {
                 Box(
                     modifier = Modifier
@@ -284,7 +421,6 @@ internal fun ComposePagerPageRenderer(
                 }
             }
 
-            // Lighting shadow overlay during the flip
             if (transitionSpec.shadowAlpha > 0f) {
                 Box(
                     modifier = Modifier

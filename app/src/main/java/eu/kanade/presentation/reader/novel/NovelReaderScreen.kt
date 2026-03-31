@@ -742,6 +742,19 @@ fun NovelReaderScreen(
         )
     }
     val pageReaderItemsCount = pageReaderContentPages.size
+    val composePagerHasPreviousChapter = state.previousChapterId != null
+    val composePagerHasNextChapter = state.nextChapterId != null
+    val composePagerVirtualPageCount = remember(
+        pageReaderItemsCount,
+        composePagerHasPreviousChapter,
+        composePagerHasNextChapter,
+    ) {
+        resolveComposePagerVirtualPageCount(
+            contentPageCount = pageReaderItemsCount,
+            hasPreviousChapter = composePagerHasPreviousChapter,
+            hasNextChapter = composePagerHasNextChapter,
+        )
+    }
     val pageReaderChapterHandoffTarget = remember(state.chapter.id) {
         NovelReaderChapterHandoffPolicy.consumeInternalChapterHandoff()
     }
@@ -754,31 +767,61 @@ fun NovelReaderScreen(
         richContentUnsupportedFeaturesDetected = state.richContentUnsupportedFeaturesDetected,
     )
     val nativeScrollItemsCount = if (useRichNativeScroll) richScrollBlocks.size else scrollContentBlocks.size
-    val pagerState = rememberPagerState(
-        initialPage = resolveInitialPageReaderPage(
-            savedPageReaderProgress = state.lastSavedPageReaderProgress,
-            legacyLastSavedIndex = state.lastSavedIndex,
-            pageCount = pageReaderItemsCount.coerceAtLeast(1),
-            chapterHandoffTarget = pageReaderChapterHandoffTarget,
-        ),
-        pageCount = { pageReaderItemsCount.coerceAtLeast(1) },
+    val initialContentPage = resolveInitialPageReaderPage(
+        savedPageReaderProgress = state.lastSavedPageReaderProgress,
+        legacyLastSavedIndex = state.lastSavedIndex,
+        pageCount = pageReaderItemsCount.coerceAtLeast(1),
+        chapterHandoffTarget = pageReaderChapterHandoffTarget,
     )
-    var pageTurnCurrentPage by remember(state.chapter.id) {
-        mutableIntStateOf(pagerState.currentPage)
+    val initialPagerPage = if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
+        resolveComposePagerVirtualPageIndex(
+            actualPageIndex = initialContentPage,
+            hasPreviousChapter = composePagerHasPreviousChapter,
+        )
+    } else {
+        initialContentPage
     }
-    var pageTurnRequestedPage by remember(state.chapter.id) {
+    val pagerState = rememberPagerState(
+        initialPage = initialPagerPage,
+        pageCount = {
+            if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
+                composePagerVirtualPageCount.coerceAtLeast(1)
+            } else {
+                pageReaderItemsCount.coerceAtLeast(1)
+            }
+        },
+    )
+    LaunchedEffect(
+        pageReaderRendererRoute,
+        pageReaderItemsCount,
+        composePagerHasPreviousChapter,
+        composePagerHasNextChapter,
+        initialPagerPage,
+    ) {
+        if (pagerState.currentPage != initialPagerPage) {
+            pagerState.scrollToPage(initialPagerPage)
+        }
+    }
+    var pageTurnCurrentPage by remember(pageReaderRendererRoute, state.chapter.id) {
+        mutableIntStateOf(initialPagerPage)
+    }
+    var pageTurnRequestedPage by remember(pageReaderRendererRoute, state.chapter.id) {
         mutableIntStateOf(-1)
     }
     val pageReaderProgressPageIndex by remember(
         pageReaderRendererRoute,
         pagerState.currentPage,
         pageTurnCurrentPage,
+        composePagerHasPreviousChapter,
+        pageReaderItemsCount,
     ) {
         derivedStateOf {
             resolvePageReaderCurrentPage(
                 pageReaderRendererRoute = pageReaderRendererRoute,
                 pagerCurrentPage = pagerState.currentPage,
                 pageTurnCurrentPage = pageTurnCurrentPage,
+                composePagerContentPageCount = pageReaderItemsCount,
+                composePagerHasPreviousChapter = composePagerHasPreviousChapter,
             )
         }
     }
@@ -1197,7 +1240,12 @@ fun NovelReaderScreen(
                         contentPadding = contentPaddingPx,
                         statusBarTopPadding = statusBarTopPadding,
                         hasPreviousChapter = state.previousChapterId != null,
+                        previousChapterName = state.previousChapterName,
                         hasNextChapter = state.nextChapterId != null,
+                        nextChapterName = state.nextChapterName,
+                        previousChapterLabel = stringResource(MR.strings.action_previous_chapter),
+                        nextChapterLabel = stringResource(MR.strings.action_next_chapter),
+                        boundaryChapterHint = stringResource(MR.strings.reader_boundary_release_to_open),
                         onToggleUi = { onSetShowReaderUi(!showReaderUi) },
                         onMoveBackward = {
                             coroutineScope.launch {
@@ -2177,6 +2225,8 @@ fun NovelReaderScreen(
                         pageReaderRendererRoute = pageReaderRendererRoute,
                         pagerCurrentPage = pagerState.currentPage,
                         pageTurnCurrentPage = pageTurnCurrentPage,
+                        composePagerContentPageCount = pageReaderItemsCount,
+                        composePagerHasPreviousChapter = composePagerHasPreviousChapter,
                         seekbarItemsCount = seekbarItemsCount,
                         readingProgressPercent = readingProgressPercent,
                     )

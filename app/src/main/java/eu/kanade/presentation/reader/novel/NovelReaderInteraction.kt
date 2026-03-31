@@ -443,6 +443,86 @@ internal fun resolvePageTransitionEngine(
     }
 }
 
+internal fun shouldUseComposePagerBoundaryPreview(
+    style: NovelPageTransitionStyle,
+): Boolean {
+    return when (style) {
+        NovelPageTransitionStyle.SLIDE,
+        NovelPageTransitionStyle.DEPTH,
+        NovelPageTransitionStyle.BOOK_FLIP,
+        -> true
+        NovelPageTransitionStyle.INSTANT,
+        NovelPageTransitionStyle.BOOK,
+        NovelPageTransitionStyle.CURL,
+        -> false
+    }
+}
+
+internal fun resolveComposePagerVirtualPageCount(
+    contentPageCount: Int,
+    hasPreviousChapter: Boolean,
+    hasNextChapter: Boolean,
+): Int {
+    return contentPageCount.coerceAtLeast(1) +
+        (if (hasPreviousChapter) 1 else 0) +
+        (if (hasNextChapter) 1 else 0)
+}
+
+internal fun resolveComposePagerVirtualPageIndex(
+    actualPageIndex: Int,
+    hasPreviousChapter: Boolean,
+): Int {
+    return actualPageIndex.coerceAtLeast(0) + if (hasPreviousChapter) 1 else 0
+}
+
+internal fun resolveComposePagerActualPageIndex(
+    currentPage: Int,
+    contentPageCount: Int,
+    hasPreviousChapter: Boolean,
+): Int {
+    val safeContentPageCount = contentPageCount.coerceAtLeast(1)
+    val offset = if (hasPreviousChapter) 1 else 0
+    return (currentPage - offset).coerceIn(0, safeContentPageCount - 1)
+}
+
+internal fun resolveComposePagerBoundaryChapterTarget(
+    currentPage: Int,
+    contentPageCount: Int,
+    hasPreviousChapter: Boolean,
+    hasNextChapter: Boolean,
+): HorizontalChapterSwipeAction {
+    val virtualPageCount = resolveComposePagerVirtualPageCount(
+        contentPageCount = contentPageCount,
+        hasPreviousChapter = hasPreviousChapter,
+        hasNextChapter = hasNextChapter,
+    )
+    return when {
+        hasPreviousChapter && currentPage <= 0 -> HorizontalChapterSwipeAction.PREVIOUS
+        hasNextChapter && currentPage >= virtualPageCount - 1 -> HorizontalChapterSwipeAction.NEXT
+        else -> HorizontalChapterSwipeAction.NONE
+    }
+}
+
+internal fun resolveComposePagerSettledBoundaryChapterTarget(
+    currentPage: Int,
+    progress: Float,
+    contentPageCount: Int,
+    hasPreviousChapter: Boolean,
+    hasNextChapter: Boolean,
+): HorizontalChapterSwipeAction {
+    val boundaryTarget = resolveComposePagerBoundaryChapterTarget(
+        currentPage = currentPage,
+        contentPageCount = contentPageCount,
+        hasPreviousChapter = hasPreviousChapter,
+        hasNextChapter = hasNextChapter,
+    )
+    return if (boundaryTarget != HorizontalChapterSwipeAction.NONE && abs(progress) <= 0.001f) {
+        boundaryTarget
+    } else {
+        HorizontalChapterSwipeAction.NONE
+    }
+}
+
 internal fun resolveActivePageTransitionStyle(
     requestedStyle: NovelPageTransitionStyle,
     pageTurnRendererSupported: Boolean,
@@ -474,11 +554,19 @@ internal fun resolvePageReaderCurrentPage(
     pageReaderRendererRoute: NovelPageReaderRendererRoute?,
     pagerCurrentPage: Int,
     pageTurnCurrentPage: Int,
+    composePagerContentPageCount: Int,
+    composePagerHasPreviousChapter: Boolean,
 ): Int {
-    return if (pageReaderRendererRoute == NovelPageReaderRendererRoute.PAGE_TURN_RENDERER) {
-        resolvePageTurnRendererProgressPageIndex(pageTurnCurrentPage)
-    } else {
-        pagerCurrentPage.coerceAtLeast(0)
+    return when (pageReaderRendererRoute) {
+        NovelPageReaderRendererRoute.PAGE_TURN_RENDERER ->
+            resolvePageTurnRendererProgressPageIndex(pageTurnCurrentPage)
+        NovelPageReaderRendererRoute.COMPOSE_PAGER ->
+            resolveComposePagerActualPageIndex(
+                currentPage = pagerCurrentPage,
+                contentPageCount = composePagerContentPageCount,
+                hasPreviousChapter = composePagerHasPreviousChapter,
+            )
+        null -> pagerCurrentPage.coerceAtLeast(0)
     }
 }
 
@@ -489,6 +577,8 @@ internal fun resolveReaderVerticalSeekbarValue(
     pageReaderRendererRoute: NovelPageReaderRendererRoute?,
     pagerCurrentPage: Int,
     pageTurnCurrentPage: Int,
+    composePagerContentPageCount: Int,
+    composePagerHasPreviousChapter: Boolean,
     seekbarItemsCount: Int,
     readingProgressPercent: Int,
 ): Float {
@@ -505,6 +595,8 @@ internal fun resolveReaderVerticalSeekbarValue(
                 pageReaderRendererRoute = pageReaderRendererRoute,
                 pagerCurrentPage = pagerCurrentPage,
                 pageTurnCurrentPage = pageTurnCurrentPage,
+                composePagerContentPageCount = composePagerContentPageCount,
+                composePagerHasPreviousChapter = composePagerHasPreviousChapter,
             )
             current.toFloat() / max.toFloat()
         }

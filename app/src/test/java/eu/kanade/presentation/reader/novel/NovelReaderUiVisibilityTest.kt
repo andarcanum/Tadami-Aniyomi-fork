@@ -2197,6 +2197,16 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `compose pager boundary preview only enables slide depth and book flip`() {
+        assertTrue(shouldUseComposePagerBoundaryPreview(NovelPageTransitionStyle.SLIDE))
+        assertTrue(shouldUseComposePagerBoundaryPreview(NovelPageTransitionStyle.DEPTH))
+        assertTrue(shouldUseComposePagerBoundaryPreview(NovelPageTransitionStyle.BOOK_FLIP))
+        assertFalse(shouldUseComposePagerBoundaryPreview(NovelPageTransitionStyle.INSTANT))
+        assertFalse(shouldUseComposePagerBoundaryPreview(NovelPageTransitionStyle.BOOK))
+        assertFalse(shouldUseComposePagerBoundaryPreview(NovelPageTransitionStyle.CURL))
+    }
+
+    @Test
     fun `book and curl transition styles resolve to page turn engine`() {
         assertEquals(
             NovelPageTransitionEngine.PAGE_TURN_RENDERER,
@@ -2411,6 +2421,180 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `compose pager renderer adds virtual boundary pages when adjacent chapters exist`() {
+        assertEquals(
+            7,
+            resolveComposePagerVirtualPageCount(
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            6,
+            resolveComposePagerVirtualPageCount(
+                contentPageCount = 5,
+                hasPreviousChapter = false,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            5,
+            resolveComposePagerVirtualPageCount(
+                contentPageCount = 5,
+                hasPreviousChapter = false,
+                hasNextChapter = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `compose pager renderer maps actual pages into virtual indices`() {
+        assertEquals(
+            1,
+            resolveComposePagerVirtualPageIndex(
+                actualPageIndex = 0,
+                hasPreviousChapter = true,
+            ),
+        )
+        assertEquals(
+            4,
+            resolveComposePagerVirtualPageIndex(
+                actualPageIndex = 4,
+                hasPreviousChapter = false,
+            ),
+        )
+        assertEquals(
+            5,
+            resolveComposePagerVirtualPageIndex(
+                actualPageIndex = 4,
+                hasPreviousChapter = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `compose pager renderer maps virtual pages back to actual content pages`() {
+        assertEquals(
+            0,
+            resolveComposePagerActualPageIndex(
+                currentPage = 0,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+            ),
+        )
+        assertEquals(
+            0,
+            resolveComposePagerActualPageIndex(
+                currentPage = 1,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+            ),
+        )
+        assertEquals(
+            4,
+            resolveComposePagerActualPageIndex(
+                currentPage = 6,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `compose pager renderer round trips actual and virtual pages during resync`() {
+        val virtualPage = resolveComposePagerVirtualPageIndex(
+            actualPageIndex = 4,
+            hasPreviousChapter = true,
+        )
+
+        assertEquals(5, virtualPage)
+        assertEquals(
+            4,
+            resolveComposePagerActualPageIndex(
+                currentPage = virtualPage,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `compose pager renderer resolves chapter boundary targets from synthetic pages`() {
+        assertEquals(
+            HorizontalChapterSwipeAction.PREVIOUS,
+            resolveComposePagerBoundaryChapterTarget(
+                currentPage = 0,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            HorizontalChapterSwipeAction.NEXT,
+            resolveComposePagerBoundaryChapterTarget(
+                currentPage = 6,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            HorizontalChapterSwipeAction.NONE,
+            resolveComposePagerBoundaryChapterTarget(
+                currentPage = 3,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `compose pager renderer opens boundary chapter only after settle`() {
+        assertEquals(
+            HorizontalChapterSwipeAction.NONE,
+            resolveComposePagerSettledBoundaryChapterTarget(
+                currentPage = 0,
+                progress = -0.42f,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            HorizontalChapterSwipeAction.PREVIOUS,
+            resolveComposePagerSettledBoundaryChapterTarget(
+                currentPage = 0,
+                progress = 0f,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            HorizontalChapterSwipeAction.NONE,
+            resolveComposePagerSettledBoundaryChapterTarget(
+                currentPage = 6,
+                progress = 0.24f,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            HorizontalChapterSwipeAction.NEXT,
+            resolveComposePagerSettledBoundaryChapterTarget(
+                currentPage = 6,
+                progress = 0f,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+    }
+
+    @Test
     fun `page turn renderer resolves current page from curl state instead of pager state`() {
         assertEquals(
             6,
@@ -2418,6 +2602,8 @@ class NovelReaderUiVisibilityTest {
                 pageReaderRendererRoute = NovelPageReaderRendererRoute.PAGE_TURN_RENDERER,
                 pagerCurrentPage = 0,
                 pageTurnCurrentPage = 6,
+                composePagerContentPageCount = 5,
+                composePagerHasPreviousChapter = true,
             ),
         )
     }
@@ -2430,6 +2616,8 @@ class NovelReaderUiVisibilityTest {
                 pageReaderRendererRoute = NovelPageReaderRendererRoute.COMPOSE_PAGER,
                 pagerCurrentPage = 3,
                 pageTurnCurrentPage = 6,
+                composePagerContentPageCount = 5,
+                composePagerHasPreviousChapter = false,
             ),
         )
     }
@@ -2443,6 +2631,8 @@ class NovelReaderUiVisibilityTest {
             pageReaderRendererRoute = NovelPageReaderRendererRoute.PAGE_TURN_RENDERER,
             pagerCurrentPage = 0,
             pageTurnCurrentPage = 6,
+            composePagerContentPageCount = 5,
+            composePagerHasPreviousChapter = true,
             seekbarItemsCount = 11,
             readingProgressPercent = 60,
         )
