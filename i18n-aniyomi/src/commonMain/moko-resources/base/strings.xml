@@ -498,6 +498,7 @@
     <string name="novel_reader_page_turn_speed_normal">Normal</string>
     <string name="novel_reader_page_turn_speed_fast">Fast</string>
     <string name="novel_reader_page_turn_speed_faster">Faster</string>
+    <string name="novel_reader_book_flip_animation_speed">Book flip animation speed</string>
     <string name="novel_reader_page_turn_intensity">Turn intensity</string>
     <string name="novel_reader_page_turn_intensity_softer">Softer</string>
     <string name="novel_reader_page_turn_intensity_low">Low</string>

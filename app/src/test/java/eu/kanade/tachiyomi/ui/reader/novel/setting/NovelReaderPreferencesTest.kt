@@ -32,6 +32,7 @@ class NovelReaderPreferencesTest {
         prefs.preferWebViewRenderer().get() shouldBe false
         prefs.richNativeRendererExperimental().get() shouldBe true
         prefs.pageTransitionStyle().get() shouldBe NovelPageTransitionStyle.SLIDE
+        prefs.bookFlipAnimationSpeed().get() shouldBe NovelBookFlipAnimationSpeed.SLOW
         prefs.forceParagraphIndent().get() shouldBe true
         prefs.preserveSourceTextAlignInNative().get() shouldBe true
         prefs.paragraphSpacing().get() shouldBe 12
@@ -183,6 +184,7 @@ class NovelReaderPreferencesTest {
         prefs.geminiAutoTranslateEnglishSource().set(true)
         prefs.geminiPrefetchNextChapterTranslation().set(true)
         prefs.translationProvider().set(NovelTranslationProvider.AIRFORCE)
+        prefs.bookFlipAnimationSpeed().set(NovelBookFlipAnimationSpeed.SLOW)
         prefs.airforceBaseUrl().set("https://api.airforce")
         prefs.airforceApiKey().set("airforce-key")
         prefs.airforceModel().set("openai/gpt-4.1-mini")
@@ -228,6 +230,7 @@ class NovelReaderPreferencesTest {
         override?.autoScrollOffset shouldBe 480
         override?.prefetchNextChapter shouldBe true
         override?.pageTransitionStyle shouldBe NovelPageTransitionStyle.DEPTH
+        override?.bookFlipAnimationSpeed shouldBe NovelBookFlipAnimationSpeed.SLOW
         override?.pageTurnSpeed shouldBe NovelPageTurnSpeed.SLOW
         override?.pageTurnIntensity shouldBe NovelPageTurnIntensity.LOW
         override?.pageTurnShadowIntensity shouldBe NovelPageTurnShadowIntensity.HIGH
@@ -298,6 +301,7 @@ class NovelReaderPreferencesTest {
         prefs.autoScrollOffset().set(0)
         prefs.prefetchNextChapter().set(false)
         prefs.pageTransitionStyle().set(NovelPageTransitionStyle.SLIDE)
+        prefs.bookFlipAnimationSpeed().set(NovelBookFlipAnimationSpeed.FAST)
         prefs.pageTurnSpeed().set(NovelPageTurnSpeed.NORMAL)
         prefs.pageTurnIntensity().set(NovelPageTurnIntensity.MEDIUM)
         prefs.pageTurnShadowIntensity().set(NovelPageTurnShadowIntensity.MEDIUM)
@@ -367,6 +371,7 @@ class NovelReaderPreferencesTest {
                 autoScrollOffset = 240,
                 prefetchNextChapter = true,
                 pageTransitionStyle = NovelPageTransitionStyle.CURL,
+                bookFlipAnimationSpeed = NovelBookFlipAnimationSpeed.SLOW,
                 pageTurnSpeed = NovelPageTurnSpeed.FAST,
                 pageTurnIntensity = NovelPageTurnIntensity.HIGH,
                 pageTurnShadowIntensity = NovelPageTurnShadowIntensity.LOW,
@@ -435,6 +440,7 @@ class NovelReaderPreferencesTest {
         settings.autoScrollOffset shouldBe 240
         settings.prefetchNextChapter shouldBe true
         settings.pageTransitionStyle shouldBe NovelPageTransitionStyle.CURL
+        settings.bookFlipAnimationSpeed shouldBe NovelBookFlipAnimationSpeed.SLOW
         settings.pageTurnSpeed shouldBe NovelPageTurnSpeed.FAST
         settings.pageTurnIntensity shouldBe NovelPageTurnIntensity.HIGH
         settings.pageTurnShadowIntensity shouldBe NovelPageTurnShadowIntensity.LOW
@@ -489,9 +495,11 @@ class NovelReaderPreferencesTest {
     fun `settings flow skips duplicate emissions when source override masks global changes`() = runTest {
         val prefs = createPrefs()
         val sourceId = 123L
+        prefs.bookFlipAnimationSpeed().set(NovelBookFlipAnimationSpeed.NORMAL)
         prefs.enableSourceOverride(sourceId)
 
         val initialSettings = prefs.settingsFlow(sourceId).first()
+        initialSettings.bookFlipAnimationSpeed shouldBe NovelBookFlipAnimationSpeed.NORMAL
         val collectedDeferred = async {
             withTimeoutOrNull(100) {
                 prefs.settingsFlow(sourceId)

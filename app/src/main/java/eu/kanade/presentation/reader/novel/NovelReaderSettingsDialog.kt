@@ -67,6 +67,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderOverride
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
@@ -311,6 +312,31 @@ private fun GeneralTab(
                     )
                 },
             )
+            if (settings.pageTransitionStyle == NovelPageTransitionStyle.BOOK_FLIP) {
+                val bookFlipAnimationSpeedEntries = novelBookFlipAnimationSpeedEntries()
+                LnReaderSliderRow(
+                    label = stringResource(AYMR.strings.novel_reader_book_flip_animation_speed),
+                    valueText = { value ->
+                        resolveNovelPageTurnSliderLabel(
+                            value = resolveNovelBookFlipAnimationSpeedSliderValue(value.roundToInt()),
+                            entries = bookFlipAnimationSpeedEntries,
+                        )
+                    },
+                    committedValue = novelBookFlipAnimationSpeedSliderIndex(
+                        settings.bookFlipAnimationSpeed,
+                    ).toFloat(),
+                    range = 0f..(bookFlipAnimationSpeedEntries.size - 1).toFloat(),
+                    steps = bookFlipAnimationSpeedEntries.size - 2,
+                    onCommit = { value ->
+                        update(
+                            resolveNovelBookFlipAnimationSpeedSliderValue(value.roundToInt()),
+                            { o, v -> o.copy(bookFlipAnimationSpeed = v) },
+                            { preferences.bookFlipAnimationSpeed().set(it) },
+                            dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
+                        )
+                    },
+                )
+            }
             if (showPageTurnTuning) {
                 TextPreferenceWidget(
                     title = stringResource(AYMR.strings.novel_reader_page_turn_tuning),

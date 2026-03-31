@@ -324,6 +324,7 @@
     <string name="novel_reader_page_turn_speed_normal">Нормально</string>
     <string name="novel_reader_page_turn_speed_fast">Быстро</string>
     <string name="novel_reader_page_turn_speed_faster">Быстрее</string>
+    <string name="novel_reader_book_flip_animation_speed">Скорость анимации Book Flip</string>
     <string name="novel_reader_page_turn_intensity">Интенсивность перелистывания</string>
     <string name="novel_reader_page_turn_intensity_softer">Мягче</string>
     <string name="novel_reader_page_turn_intensity_low">Низкая</string>

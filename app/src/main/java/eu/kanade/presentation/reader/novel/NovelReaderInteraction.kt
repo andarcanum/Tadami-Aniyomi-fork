@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
 import eu.kanade.tachiyomi.ui.reader.novel.PageReaderProgress
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelBookFlipAnimationSpeed
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import kotlin.math.abs
@@ -528,4 +529,32 @@ internal fun resolveReaderTapAction(
     val inCenter = clampedTapX > leftBoundary && clampedTapX < rightBoundary
     if (inCenter || !tapToScrollEnabled) return ReaderTapAction.TOGGLE_UI
     return if (clampedTapX <= leftBoundary) ReaderTapAction.BACKWARD else ReaderTapAction.FORWARD
+}
+
+private const val BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_SLOW_MILLIS = 1500
+private const val BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_NORMAL_MILLIS = 1000
+private const val BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_FAST_MILLIS = 500
+
+internal fun resolveBookFlipPageAnimationDurationMillis(
+    transitionStyle: NovelPageTransitionStyle,
+    animationSpeed: NovelBookFlipAnimationSpeed,
+): Int? {
+    if (transitionStyle != NovelPageTransitionStyle.BOOK_FLIP) return null
+    return when (animationSpeed) {
+        NovelBookFlipAnimationSpeed.SLOW -> BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_SLOW_MILLIS
+        NovelBookFlipAnimationSpeed.NORMAL -> BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_NORMAL_MILLIS
+        NovelBookFlipAnimationSpeed.FAST -> BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_FAST_MILLIS
+    }
+}
+
+internal fun resolveBookFlipEdgeTapAnimationDurationMillis(
+    transitionStyle: NovelPageTransitionStyle,
+    animationSpeed: NovelBookFlipAnimationSpeed,
+    tapToScrollEnabled: Boolean,
+): Int? {
+    if (!tapToScrollEnabled) return null
+    return resolveBookFlipPageAnimationDurationMillis(
+        transitionStyle = transitionStyle,
+        animationSpeed = animationSpeed,
+    )
 }

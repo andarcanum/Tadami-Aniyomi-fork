@@ -31,6 +31,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnActivationZone
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnIntensity
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnShadowIntensity
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnSpeed
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelBookFlipAnimationSpeed
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
@@ -1953,6 +1954,89 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `book flip edge taps map speed presets to animation durations`() {
+        assertEquals(
+            500,
+            resolveBookFlipEdgeTapAnimationDurationMillis(
+                transitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
+                animationSpeed = NovelBookFlipAnimationSpeed.FAST,
+                tapToScrollEnabled = true,
+            ),
+        )
+        assertEquals(
+            1000,
+            resolveBookFlipEdgeTapAnimationDurationMillis(
+                transitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
+                animationSpeed = NovelBookFlipAnimationSpeed.NORMAL,
+                tapToScrollEnabled = true,
+            ),
+        )
+        assertEquals(
+            1500,
+            resolveBookFlipEdgeTapAnimationDurationMillis(
+                transitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
+                animationSpeed = NovelBookFlipAnimationSpeed.SLOW,
+                tapToScrollEnabled = true,
+            ),
+        )
+        assertNull(
+            resolveBookFlipEdgeTapAnimationDurationMillis(
+                transitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
+                animationSpeed = NovelBookFlipAnimationSpeed.FAST,
+                tapToScrollEnabled = false,
+            ),
+        )
+        assertNull(
+            resolveBookFlipEdgeTapAnimationDurationMillis(
+                transitionStyle = NovelPageTransitionStyle.SLIDE,
+                animationSpeed = NovelBookFlipAnimationSpeed.FAST,
+                tapToScrollEnabled = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `book flip page advances map speed presets to animation durations`() {
+        assertEquals(
+            500,
+            resolveBookFlipPageAnimationDurationMillis(
+                transitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
+                animationSpeed = NovelBookFlipAnimationSpeed.FAST,
+            ),
+        )
+        assertEquals(
+            1000,
+            resolveBookFlipPageAnimationDurationMillis(
+                transitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
+                animationSpeed = NovelBookFlipAnimationSpeed.NORMAL,
+            ),
+        )
+        assertEquals(
+            1500,
+            resolveBookFlipPageAnimationDurationMillis(
+                transitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
+                animationSpeed = NovelBookFlipAnimationSpeed.SLOW,
+            ),
+        )
+        assertNull(
+            resolveBookFlipPageAnimationDurationMillis(
+                transitionStyle = NovelPageTransitionStyle.SLIDE,
+                animationSpeed = NovelBookFlipAnimationSpeed.FAST,
+            ),
+        )
+    }
+
+    @Test
+    fun `book flip speed slider maps presets to positions`() {
+        assertEquals(0, novelBookFlipAnimationSpeedSliderIndex(NovelBookFlipAnimationSpeed.SLOW))
+        assertEquals(1, novelBookFlipAnimationSpeedSliderIndex(NovelBookFlipAnimationSpeed.NORMAL))
+        assertEquals(2, novelBookFlipAnimationSpeedSliderIndex(NovelBookFlipAnimationSpeed.FAST))
+        assertEquals(NovelBookFlipAnimationSpeed.SLOW, resolveNovelBookFlipAnimationSpeedSliderValue(0))
+        assertEquals(NovelBookFlipAnimationSpeed.NORMAL, resolveNovelBookFlipAnimationSpeedSliderValue(1))
+        assertEquals(NovelBookFlipAnimationSpeed.FAST, resolveNovelBookFlipAnimationSpeedSliderValue(2))
+    }
+
+    @Test
     fun `horizontal chapter swipe helper supports webview gestures`() {
         assertTrue(
             resolveHorizontalChapterSwipeAction(
@@ -2382,7 +2466,7 @@ class NovelReaderUiVisibilityTest {
         )
 
         assertTrue(bookPreset.curlAmount < curlPreset.curlAmount)
-        assertTrue(bookPreset.shadowAlpha < curlPreset.shadowAlpha)
+        assertTrue(bookPreset.shadowAlpha > curlPreset.shadowAlpha)
         assertTrue(bookPreset.backPageAlpha < curlPreset.backPageAlpha)
     }
 
@@ -2401,8 +2485,8 @@ class NovelReaderUiVisibilityTest {
             shadowIntensity = NovelPageTurnShadowIntensity.HIGH,
         )
 
-        assertTrue(slowPreset.animationDurationMillis - fastPreset.animationDurationMillis >= 240)
-        assertTrue(slowPreset.curlAmount < fastPreset.curlAmount)
+        assertTrue(slowPreset.animationDurationMillis - fastPreset.animationDurationMillis >= 360)
+        assertEquals(slowPreset.curlAmount, fastPreset.curlAmount)
         assertTrue(slowPreset.shadowAlpha < fastPreset.shadowAlpha)
     }
 
@@ -2518,8 +2602,8 @@ class NovelReaderUiVisibilityTest {
             shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
         )
 
-        assertEquals(780, slowerBookPreset.animationDurationMillis)
-        assertEquals(680, slowBookPreset.animationDurationMillis)
+        assertEquals(800, slowerBookPreset.animationDurationMillis)
+        assertEquals(700, slowBookPreset.animationDurationMillis)
         assertEquals(740, slowerCurlPreset.animationDurationMillis)
         assertEquals(640, slowCurlPreset.animationDurationMillis)
     }
@@ -2633,7 +2717,7 @@ class NovelReaderUiVisibilityTest {
             narrowConfig.dragPointerBehavior,
         )
         assertEquals(
-            PageCurlConfig.DragInteraction.PointerBehavior.Default,
+            PageCurlConfig.DragInteraction.PointerBehavior.PageEdge,
             wideConfig.dragPointerBehavior,
         )
         assertEquals(NovelPageTurnDragMode.START_END, curlConfig.dragMode)

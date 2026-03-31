@@ -18,6 +18,7 @@ import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -868,7 +869,12 @@ fun NovelReaderScreen(
     val coroutineScope = rememberCoroutineScope()
     val latestShowReaderUi by rememberUpdatedState(showReaderUi)
     val latestTapToScrollEnabled by rememberUpdatedState(state.readerSettings.tapToScroll)
-    suspend fun moveBackwardByReaderAction() {
+    val bookFlipPageAnimationDurationMillis = resolveBookFlipPageAnimationDurationMillis(
+        transitionStyle = activePageTransitionStyle,
+        animationSpeed = state.readerSettings.bookFlipAnimationSpeed,
+    )
+
+    suspend fun moveBackwardByReaderActionWithAnimation(pageAnimationDurationMillis: Int?) {
         if (showWebView) {
             val webView = webViewInstance
             if (webView != null && webView.canScrollVertically(-1)) {
@@ -880,7 +886,14 @@ fun NovelReaderScreen(
             val currentPage = pageReaderProgressPageIndex
             if (currentPage > 0) {
                 pageTurnCurrentPage = currentPage - 1
-                pagerState.animateScrollToPage(currentPage - 1)
+                if (pageAnimationDurationMillis != null) {
+                    pagerState.animateScrollToPage(
+                        currentPage - 1,
+                        animationSpec = tween(durationMillis = pageAnimationDurationMillis),
+                    )
+                } else {
+                    pagerState.animateScrollToPage(currentPage - 1)
+                }
             } else if (state.readerSettings.swipeToPrevChapter && state.previousChapterId != null) {
                 onOpenPreviousChapter?.invoke(state.previousChapterId)
             }
@@ -891,7 +904,7 @@ fun NovelReaderScreen(
         }
     }
 
-    suspend fun moveForwardByReaderAction() {
+    suspend fun moveForwardByReaderActionWithAnimation(pageAnimationDurationMillis: Int?) {
         if (showWebView) {
             val webView = webViewInstance
             if (webView != null && webView.canScrollVertically(1)) {
@@ -903,7 +916,14 @@ fun NovelReaderScreen(
             val currentPage = pageReaderProgressPageIndex
             if (currentPage < pageReaderItemsCount - 1) {
                 pageTurnCurrentPage = currentPage + 1
-                pagerState.animateScrollToPage(currentPage + 1)
+                if (pageAnimationDurationMillis != null) {
+                    pagerState.animateScrollToPage(
+                        currentPage + 1,
+                        animationSpec = tween(durationMillis = pageAnimationDurationMillis),
+                    )
+                } else {
+                    pagerState.animateScrollToPage(currentPage + 1)
+                }
             } else if (state.readerSettings.swipeToNextChapter && state.nextChapterId != null) {
                 onOpenNextChapter?.invoke(state.nextChapterId)
             }
@@ -912,6 +932,14 @@ fun NovelReaderScreen(
         } else if (state.readerSettings.swipeToNextChapter && state.nextChapterId != null) {
             onOpenNextChapter?.invoke(state.nextChapterId)
         }
+    }
+
+    suspend fun moveBackwardByReaderAction() {
+        moveBackwardByReaderActionWithAnimation(bookFlipPageAnimationDurationMillis)
+    }
+
+    suspend fun moveForwardByReaderAction() {
+        moveForwardByReaderActionWithAnimation(bookFlipPageAnimationDurationMillis)
     }
 
     fun handleVolumeKey(event: KeyEvent): Boolean {
@@ -1020,7 +1048,14 @@ fun NovelReaderScreen(
                 val currentPage = pageReaderProgressPageIndex
                 if (currentPage < pageReaderItemsCount - 1) {
                     pageTurnCurrentPage = currentPage + 1
-                    pagerState.animateScrollToPage(currentPage + 1)
+                    if (bookFlipPageAnimationDurationMillis != null) {
+                        pagerState.animateScrollToPage(
+                            currentPage + 1,
+                            animationSpec = tween(durationMillis = bookFlipPageAnimationDurationMillis),
+                        )
+                    } else {
+                        pagerState.animateScrollToPage(currentPage + 1)
+                    }
                 } else if (state.readerSettings.swipeToNextChapter && state.nextChapterId != null) {
                     autoScrollEnabled = false
                     onOpenNextChapter?.invoke(state.nextChapterId)
@@ -1164,8 +1199,20 @@ fun NovelReaderScreen(
                         hasPreviousChapter = state.previousChapterId != null,
                         hasNextChapter = state.nextChapterId != null,
                         onToggleUi = { onSetShowReaderUi(!showReaderUi) },
-                        onMoveBackward = { coroutineScope.launch { moveBackwardByReaderAction() } },
-                        onMoveForward = { coroutineScope.launch { moveForwardByReaderAction() } },
+                        onMoveBackward = {
+                            coroutineScope.launch {
+                            moveBackwardByReaderActionWithAnimation(
+                                bookFlipPageAnimationDurationMillis,
+                            )
+                        }
+                    },
+                    onMoveForward = {
+                        coroutineScope.launch {
+                            moveForwardByReaderActionWithAnimation(
+                                bookFlipPageAnimationDurationMillis,
+                            )
+                        }
+                    },
                         onOpenPreviousChapter = {
                             state.previousChapterId?.let { onOpenPreviousChapter?.invoke(it) }
                         },

@@ -56,6 +56,7 @@ data class NovelReaderSettings(
     val preferWebViewRenderer: Boolean,
     val richNativeRendererExperimental: Boolean,
     val pageTransitionStyle: NovelPageTransitionStyle = NovelPageTransitionStyle.SLIDE,
+    val bookFlipAnimationSpeed: NovelBookFlipAnimationSpeed = NovelBookFlipAnimationSpeed.SLOW,
     val pageTurnSpeed: NovelPageTurnSpeed = NovelPageTurnSpeed.NORMAL,
     val pageTurnIntensity: NovelPageTurnIntensity = NovelPageTurnIntensity.MEDIUM,
     val pageTurnShadowIntensity: NovelPageTurnShadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
@@ -173,6 +174,12 @@ enum class NovelPageTurnSpeed {
     FASTER,
 }
 
+enum class NovelBookFlipAnimationSpeed {
+    SLOW,
+    NORMAL,
+    FAST,
+}
+
 enum class NovelPageTurnIntensity {
     SOFTER,
     LOW,
@@ -266,6 +273,7 @@ data class NovelReaderOverride(
     val preferWebViewRenderer: Boolean? = null,
     val richNativeRendererExperimental: Boolean? = null,
     val pageTransitionStyle: NovelPageTransitionStyle? = null,
+    val bookFlipAnimationSpeed: NovelBookFlipAnimationSpeed? = null,
     val pageTurnSpeed: NovelPageTurnSpeed? = null,
     val pageTurnIntensity: NovelPageTurnIntensity? = null,
     val pageTurnShadowIntensity: NovelPageTurnShadowIntensity? = null,
@@ -428,6 +436,9 @@ class NovelReaderPreferences(
 
     fun pageTransitionStyle() =
         preferenceStore.getEnum("novel_reader_page_transition_style", NovelPageTransitionStyle.SLIDE)
+
+    fun bookFlipAnimationSpeed() =
+        preferenceStore.getEnum("novel_reader_book_flip_animation_speed", NovelBookFlipAnimationSpeed.SLOW)
 
     fun pageTurnSpeed() =
         preferenceStore.getEnum("novel_reader_page_turn_speed", NovelPageTurnSpeed.NORMAL)
@@ -655,6 +666,7 @@ class NovelReaderPreferences(
                 preferWebViewRenderer = preferWebViewRenderer().get(),
                 richNativeRendererExperimental = richNativeRendererExperimental().get(),
                 pageTransitionStyle = pageTransitionStyle().get(),
+                bookFlipAnimationSpeed = bookFlipAnimationSpeed().get(),
                 pageTurnSpeed = pageTurnSpeed().get(),
                 pageTurnIntensity = pageTurnIntensity().get(),
                 pageTurnShadowIntensity = pageTurnShadowIntensity().get(),
@@ -761,6 +773,7 @@ class NovelReaderPreferences(
             richNativeRendererExperimental =
             override?.richNativeRendererExperimental ?: richNativeRendererExperimental().get(),
             pageTransitionStyle = override?.pageTransitionStyle ?: pageTransitionStyle().get(),
+            bookFlipAnimationSpeed = override?.bookFlipAnimationSpeed ?: bookFlipAnimationSpeed().get(),
             pageTurnSpeed = override?.pageTurnSpeed ?: pageTurnSpeed().get(),
             pageTurnIntensity = override?.pageTurnIntensity ?: pageTurnIntensity().get(),
             pageTurnShadowIntensity =
@@ -905,6 +918,7 @@ class NovelReaderPreferences(
             preferWebViewRenderer().changes(),
             richNativeRendererExperimental().changes(),
             pageTransitionStyle().changes(),
+            bookFlipAnimationSpeed().changes(),
             pageTurnSpeed().changes(),
             pageTurnIntensity().changes(),
             pageTurnShadowIntensity().changes(),
@@ -925,18 +939,19 @@ class NovelReaderPreferences(
                 values[3] as Boolean,
                 values[4] as Boolean,
                 values[5] as NovelPageTransitionStyle,
-                values[6] as NovelPageTurnSpeed,
-                values[7] as NovelPageTurnIntensity,
-                values[8] as NovelPageTurnShadowIntensity,
-                values[9] as NovelPageTurnActivationZone,
-                values[10] as Boolean,
+                values[6] as NovelBookFlipAnimationSpeed,
+                values[7] as NovelPageTurnSpeed,
+                values[8] as NovelPageTurnIntensity,
+                values[9] as NovelPageTurnShadowIntensity,
+                values[10] as NovelPageTurnActivationZone,
                 values[11] as Boolean,
                 values[12] as Boolean,
                 values[13] as Boolean,
                 values[14] as Boolean,
-                values[15] as Int,
+                values[15] as Boolean,
                 values[16] as Int,
-                values[17] as Boolean,
+                values[17] as Int,
+                values[18] as Boolean,
             )
         }.distinctUntilChanged()
 
@@ -1098,6 +1113,7 @@ class NovelReaderPreferences(
                 richNativeRendererExperimental =
                 override?.richNativeRendererExperimental ?: navigation.richNativeRendererExperimental,
                 pageTransitionStyle = override?.pageTransitionStyle ?: navigation.pageTransitionStyle,
+                bookFlipAnimationSpeed = override?.bookFlipAnimationSpeed ?: navigation.bookFlipAnimationSpeed,
                 pageTurnSpeed = override?.pageTurnSpeed ?: navigation.pageTurnSpeed,
                 pageTurnIntensity = override?.pageTurnIntensity ?: navigation.pageTurnIntensity,
                 pageTurnShadowIntensity =
@@ -1205,6 +1221,7 @@ class NovelReaderPreferences(
         val preferWebViewRenderer: Boolean,
         val richNativeRendererExperimental: Boolean,
         val pageTransitionStyle: NovelPageTransitionStyle,
+        val bookFlipAnimationSpeed: NovelBookFlipAnimationSpeed,
         val pageTurnSpeed: NovelPageTurnSpeed,
         val pageTurnIntensity: NovelPageTurnIntensity,
         val pageTurnShadowIntensity: NovelPageTurnShadowIntensity,

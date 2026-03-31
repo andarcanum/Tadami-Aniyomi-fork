@@ -1,11 +1,18 @@
 package eu.kanade.presentation.reader.novel
 
 import androidx.compose.runtime.Composable
+import dev.icerock.moko.resources.StringResource
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelBookFlipAnimationSpeed
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentMapOf
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
+
+private data class NovelBookFlipAnimationSpeedOption(
+    val value: NovelBookFlipAnimationSpeed,
+    val labelRes: StringResource,
+)
 
 @Composable
 internal fun novelPageTransitionStyleEntries(): ImmutableMap<NovelPageTransitionStyle, String> {
@@ -31,4 +38,36 @@ internal fun novelPageTransitionStyleSubtitle(
     entries: Map<NovelPageTransitionStyle, String>,
 ): String {
     return entries[style].orEmpty()
+}
+
+private val novelBookFlipAnimationSpeedSliderOptions = listOf(
+    NovelBookFlipAnimationSpeedOption(
+        value = NovelBookFlipAnimationSpeed.SLOW,
+        labelRes = AYMR.strings.novel_reader_page_turn_speed_slow,
+    ),
+    NovelBookFlipAnimationSpeedOption(
+        value = NovelBookFlipAnimationSpeed.NORMAL,
+        labelRes = AYMR.strings.novel_reader_page_turn_speed_normal,
+    ),
+    NovelBookFlipAnimationSpeedOption(
+        value = NovelBookFlipAnimationSpeed.FAST,
+        labelRes = AYMR.strings.novel_reader_page_turn_speed_fast,
+    ),
+)
+
+internal fun novelBookFlipAnimationSpeedSliderIndex(speed: NovelBookFlipAnimationSpeed): Int {
+    return novelBookFlipAnimationSpeedSliderOptions.indexOfFirst { it.value == speed }.coerceAtLeast(0)
+}
+
+internal fun resolveNovelBookFlipAnimationSpeedSliderValue(index: Int): NovelBookFlipAnimationSpeed {
+    return novelBookFlipAnimationSpeedSliderOptions[index.coerceIn(0, novelBookFlipAnimationSpeedSliderOptions.lastIndex)].value
+}
+
+@Composable
+internal fun novelBookFlipAnimationSpeedEntries(): ImmutableMap<NovelBookFlipAnimationSpeed, String> {
+    return persistentMapOf(
+        NovelBookFlipAnimationSpeed.SLOW to stringResource(AYMR.strings.novel_reader_page_turn_speed_slow),
+        NovelBookFlipAnimationSpeed.NORMAL to stringResource(AYMR.strings.novel_reader_page_turn_speed_normal),
+        NovelBookFlipAnimationSpeed.FAST to stringResource(AYMR.strings.novel_reader_page_turn_speed_fast),
+    )
 }

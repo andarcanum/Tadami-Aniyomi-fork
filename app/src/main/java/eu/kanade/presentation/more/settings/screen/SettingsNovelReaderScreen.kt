@@ -69,6 +69,8 @@ import eu.kanade.presentation.reader.novel.importNovelReaderCustomFont
 import eu.kanade.presentation.reader.novel.intervalToAutoScrollSpeed
 import eu.kanade.presentation.reader.novel.novelPageTransitionStyleEntries
 import eu.kanade.presentation.reader.novel.novelPageTransitionStyleSubtitle
+import eu.kanade.presentation.reader.novel.novelBookFlipAnimationSpeedEntries
+import eu.kanade.presentation.reader.novel.novelBookFlipAnimationSpeedSliderIndex
 import eu.kanade.presentation.reader.novel.novelPageTurnIntensityEntries
 import eu.kanade.presentation.reader.novel.novelPageTurnIntensitySliderIndex
 import eu.kanade.presentation.reader.novel.novelPageTurnActivationZoneEntries
@@ -88,6 +90,7 @@ import eu.kanade.presentation.reader.novel.replaceNovelReaderCustomBackgroundIte
 import eu.kanade.presentation.reader.novel.resolveCustomBackgroundDeletion
 import eu.kanade.presentation.reader.novel.resolveNovelPageTurnIntensitySliderValue
 import eu.kanade.presentation.reader.novel.resolveNovelPageTurnActivationZoneSliderValue
+import eu.kanade.presentation.reader.novel.resolveNovelBookFlipAnimationSpeedSliderValue
 import eu.kanade.presentation.reader.novel.resolveNovelPageTurnShadowIntensitySliderValue
 import eu.kanade.presentation.reader.novel.resolveNovelPageTurnSliderLabel
 import eu.kanade.presentation.reader.novel.resolveNovelPageTurnSpeedSliderValue
@@ -709,6 +712,8 @@ object SettingsNovelReaderScreen : SearchableSettings {
         val pageReader by pageReaderPref.collectAsState()
         val pageTransitionStylePref = prefs.pageTransitionStyle()
         val pageTransitionStyle by pageTransitionStylePref.collectAsState()
+        val bookFlipAnimationSpeedPref = prefs.bookFlipAnimationSpeed()
+        val bookFlipAnimationSpeed by bookFlipAnimationSpeedPref.collectAsState()
         val pageTurnSpeedPref = prefs.pageTurnSpeed()
         val pageTurnSpeed by pageTurnSpeedPref.collectAsState()
         val pageTurnIntensityPref = prefs.pageTurnIntensity()
@@ -720,6 +725,7 @@ object SettingsNovelReaderScreen : SearchableSettings {
         val bionicReadingPref = prefs.bionicReading()
         val bionicReading by bionicReadingPref.collectAsState()
         val pageTransitionEntries = novelPageTransitionStyleEntries()
+        val bookFlipAnimationSpeedEntries = novelBookFlipAnimationSpeedEntries()
         val pageTurnSpeedEntries = novelPageTurnSpeedEntries()
         val pageTurnIntensityEntries = novelPageTurnIntensityEntries()
         val pageTurnShadowEntries = novelPageTurnShadowIntensityEntries()
@@ -867,6 +873,26 @@ object SettingsNovelReaderScreen : SearchableSettings {
                     enabled = pageReader,
                 ),
             )
+            if (pageReader && pageTransitionStyle == NovelPageTransitionStyle.BOOK_FLIP) {
+                add(
+                    Preference.PreferenceItem.SliderPreference(
+                        value = novelBookFlipAnimationSpeedSliderIndex(bookFlipAnimationSpeed),
+                        valueRange = 0..(bookFlipAnimationSpeedEntries.size - 1),
+                        title = stringResource(AYMR.strings.novel_reader_book_flip_animation_speed),
+                        subtitle = resolveNovelPageTurnSliderLabel(
+                            value = bookFlipAnimationSpeed,
+                            entries = bookFlipAnimationSpeedEntries,
+                        ),
+                        onValueChanged = { value ->
+                            bookFlipAnimationSpeedPref.set(
+                                resolveNovelBookFlipAnimationSpeedSliderValue(value),
+                            )
+                            true
+                        },
+                        enabled = pageReader,
+                    ),
+                )
+            }
             if (showPageTurnTuning) {
                 add(
                     Preference.PreferenceItem.TextPreference(
