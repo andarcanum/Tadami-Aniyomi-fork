@@ -3,8 +3,8 @@
 package eu.kanade.presentation.reader.novel
 
 import android.graphics.Typeface
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -14,7 +14,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -24,13 +27,20 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign as ComposeTextAlign
 import androidx.compose.ui.unit.Dp
@@ -54,8 +64,6 @@ import kotlin.math.abs
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import androidx.compose.material3.Text
-import androidx.compose.foundation.shape.RoundedCornerShape
 
 internal enum class NovelPageTurnDragMode {
     START_END,
@@ -180,9 +188,54 @@ private fun createPageTurnBoundaryPreviewData(
 ): PageTurnBoundaryPreviewData {
     return PageTurnBoundaryPreviewData(
         chapterLabel = chapterLabel,
-        chapterName = chapterName?.takeIf { it.isNotBlank() } ?: chapterLabel,
+        chapterName = (chapterName?.takeIf { it.isNotBlank() } ?: chapterLabel).trim(),
         chapterHint = chapterHint,
     )
+}
+
+@Composable
+private fun ChapterArtDivider(
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier.fillMaxWidth(0.65f).height(24.dp)) {
+        val width = size.width
+        val height = size.height
+        val midX = width / 2
+        val midY = height / 2
+        val gap = 24.dp.toPx()
+
+        val leftBrush = Brush.horizontalGradient(
+            0f to Color.Transparent,
+            midX - gap to color.copy(alpha = 0.55f)
+        )
+        val rightBrush = Brush.horizontalGradient(
+            midX + gap to color.copy(alpha = 0.55f),
+            width to Color.Transparent
+        )
+
+        drawLine(
+            brush = leftBrush,
+            start = Offset(0f, midY),
+            end = Offset(midX - gap, midY),
+            strokeWidth = 1.dp.toPx()
+        )
+        drawLine(
+            brush = rightBrush,
+            start = Offset(midX + gap, midY),
+            end = Offset(width, midY),
+            strokeWidth = 1.dp.toPx()
+        )
+
+        val path = Path().apply {
+            moveTo(midX, midY - 6.dp.toPx())
+            lineTo(midX + 6.dp.toPx(), midY)
+            lineTo(midX, midY + 6.dp.toPx())
+            lineTo(midX - 6.dp.toPx(), midY)
+            close()
+        }
+        drawPath(path, color.copy(alpha = 0.75f))
+    }
 }
 
 @Composable
@@ -191,101 +244,106 @@ private fun PageTurnBoundaryPreviewContent(
     textColor: Color,
     chapterTitleTextColor: Color,
     textBackground: Color,
-    pageSurfaceColor: Color?,
     contentPadding: Dp,
     statusBarTopPadding: Dp,
     textTypeface: Typeface?,
     chapterTitleTypeface: Typeface?,
 ) {
+    val labelColor = textColor.copy(alpha = 0.42f)
+    val hintColor = textColor.copy(alpha = 0.52f)
     val titleFontFamily = chapterTitleTypeface?.let { FontFamily(it) } ?: textTypeface?.let { FontFamily(it) }
     val bodyFontFamily = textTypeface?.let { FontFamily(it) }
-    val pageBaseColor = pageSurfaceColor ?: textBackground.copy(alpha = 0.12f)
-    val frameColor = lerp(pageBaseColor, textColor, 0.22f).copy(alpha = 0.42f)
-    val cardColor = lerp(pageBaseColor, textBackground, 0.34f).copy(alpha = if (pageSurfaceColor == null) 0.72f else 0.96f)
-    val labelColor = textColor.copy(alpha = 0.60f)
-    val hintColor = textColor.copy(alpha = 0.72f)
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(pageSurfaceColor ?: Color.Transparent)
-            .padding(
-                start = contentPadding,
-                end = contentPadding,
-                top = contentPadding + statusBarTopPadding,
-                bottom = contentPadding,
-            ),
-        contentAlignment = Alignment.Center,
+        modifier = Modifier.fillMaxSize()
     ) {
-        Box(
+        if (textBackground.luminance() > 0.05f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.02f),
+                                Color.Black.copy(alpha = 0.07f)
+                            ),
+                            radius = 2000f
+                        )
+                    )
+            )
+        }
+
+        Column(
             modifier = Modifier
-                .fillMaxWidth(0.84f)
-                .border(width = 1.dp, color = frameColor, shape = RoundedCornerShape(28.dp))
-                .background(cardColor, RoundedCornerShape(28.dp))
-                .padding(horizontal = 26.dp, vertical = 30.dp),
+                .fillMaxSize()
+                .padding(
+                    top = statusBarTopPadding + contentPadding * 2,
+                    bottom = contentPadding * 2,
+                    start = contentPadding,
+                    end = contentPadding
+                ),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
+            Text(
+                text = preview.chapterLabel.uppercase().map { "$it " }.joinToString("").trim(),
+                color = labelColor,
+                fontFamily = bodyFontFamily,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Light,
+                letterSpacing = 4.sp,
+                textAlign = ComposeTextAlign.Center,
+                modifier = Modifier.padding(top = 20.dp)
+            )
+
             Column(
-                modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth(0.85f)
             ) {
+                ChapterArtDivider(color = labelColor)
+                
+                Spacer(modifier = Modifier.height(36.dp))
+                
                 Text(
-                    text = preview.chapterLabel,
-                    color = labelColor,
-                    fontFamily = bodyFontFamily,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    letterSpacing = 1.6.sp,
+                    text = preview.chapterName,
+                    color = chapterTitleTextColor,
+                    fontFamily = titleFontFamily,
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 40.sp,
                     textAlign = ComposeTextAlign.Center,
+                    style = TextStyle(
+                        shadow = Shadow(
+                            color = Color.Black.copy(alpha = 0.12f),
+                            offset = Offset(0f, 2f),
+                            blurRadius = 4f
+                        )
+                    )
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+
+                Spacer(modifier = Modifier.height(36.dp))
+
+                ChapterArtDivider(color = labelColor)
+            }
+
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .border(
-                            width = 1.dp,
-                            color = frameColor.copy(alpha = 0.60f),
-                            shape = RoundedCornerShape(20.dp),
-                        )
-                        .padding(horizontal = 18.dp, vertical = 24.dp),
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.42f)
-                                .height(1.dp)
-                                .background(frameColor.copy(alpha = 0.55f)),
-                        )
-                        Spacer(modifier = Modifier.height(18.dp))
-                        Text(
-                            text = preview.chapterName,
-                            color = chapterTitleTextColor,
-                            fontFamily = titleFontFamily,
-                            fontSize = 30.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            lineHeight = 38.sp,
-                            textAlign = ComposeTextAlign.Center,
-                        )
-                        Spacer(modifier = Modifier.height(18.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.42f)
-                                .height(1.dp)
-                                .background(frameColor.copy(alpha = 0.55f)),
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(18.dp))
+                        .size(4.dp)
+                        .background(labelColor.copy(alpha = 0.35f), CircleShape)
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
                 Text(
                     text = preview.chapterHint,
                     color = hintColor,
                     fontFamily = bodyFontFamily,
                     fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontStyle = FontStyle.Italic,
                     textAlign = ComposeTextAlign.Center,
+                    modifier = Modifier.alpha(0.8f)
                 )
             }
         }
@@ -811,25 +869,22 @@ internal fun PageTurnPageRenderer(
                 preferCachedBitmap = !isBackgroundMode,
                 modifier = Modifier.fillMaxSize(),
             ) {
-                if (isBackgroundMode) {
-                    NovelAtmosphereBackground(
-                        backgroundColor = textBackground,
-                        backgroundTexture = pageTexture,
-                        nativeTextureStrengthPercent = pageTextureStrengthPercent,
-                        oledEdgeGradient = activeOledEdgeGradient,
-                        isDarkTheme = isDarkTheme,
-                        pageEdgeShadow = false,
-                        pageEdgeShadowAlpha = 0f,
-                        backgroundImageModel = backgroundImageModel,
-                    )
-                }
+                NovelAtmosphereBackground(
+                    backgroundColor = textBackground,
+                    backgroundTexture = pageTexture,
+                    nativeTextureStrengthPercent = pageTextureStrengthPercent,
+                    oledEdgeGradient = activeOledEdgeGradient,
+                    isDarkTheme = isDarkTheme,
+                    pageEdgeShadow = false,
+                    pageEdgeShadowAlpha = 0f,
+                    backgroundImageModel = backgroundImageModel,
+                )
                 if (boundaryPreview != null) {
                     PageTurnBoundaryPreviewContent(
                         preview = boundaryPreview,
                         textColor = textColor,
                         chapterTitleTextColor = chapterTitleTextColor,
                         textBackground = textBackground,
-                        pageSurfaceColor = pageSurfaceColor,
                         contentPadding = contentPadding,
                         statusBarTopPadding = statusBarTopPadding,
                         textTypeface = textTypeface,
