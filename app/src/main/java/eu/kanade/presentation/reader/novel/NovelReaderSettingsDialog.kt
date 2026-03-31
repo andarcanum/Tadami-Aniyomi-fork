@@ -200,6 +200,7 @@ private fun GeneralTab(
     val pageTurnSpeedEntries = novelPageTurnSpeedEntries()
     val pageTurnIntensityEntries = novelPageTurnIntensityEntries()
     val pageTurnShadowEntries = novelPageTurnShadowIntensityEntries()
+    val pageTurnActivationZoneEntries = novelPageTurnActivationZoneEntries()
     val showPageTurnTuning = shouldShowPageTurnTuningControls(
         pageReaderEnabled = settings.pageReader,
         style = settings.pageTransitionStyle,
@@ -317,9 +318,11 @@ private fun GeneralTab(
                         speed = settings.pageTurnSpeed,
                         intensity = settings.pageTurnIntensity,
                         shadowIntensity = settings.pageTurnShadowIntensity,
+                        activationZone = settings.pageTurnActivationZone,
                         speedEntries = pageTurnSpeedEntries,
                         intensityEntries = pageTurnIntensityEntries,
                         shadowEntries = pageTurnShadowEntries,
+                        activationZoneEntries = pageTurnActivationZoneEntries,
                     ),
                     widget = {
                         Icon(
@@ -394,6 +397,28 @@ private fun GeneralTab(
                                 resolveNovelPageTurnShadowIntensitySliderValue(value.roundToInt()),
                                 { o, v -> o.copy(pageTurnShadowIntensity = v) },
                                 { preferences.pageTurnShadowIntensity().set(it) },
+                                dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
+                            )
+                        },
+                    )
+                    LnReaderSliderRow(
+                        label = stringResource(AYMR.strings.novel_reader_page_turn_activation_zone),
+                        valueText = { value ->
+                            resolveNovelPageTurnSliderLabel(
+                                value = resolveNovelPageTurnActivationZoneSliderValue(value.roundToInt()),
+                                entries = pageTurnActivationZoneEntries,
+                            )
+                        },
+                        committedValue = novelPageTurnActivationZoneSliderIndex(
+                            settings.pageTurnActivationZone,
+                        ).toFloat(),
+                        range = 0f..(pageTurnActivationZoneEntries.size - 1).toFloat(),
+                        steps = pageTurnActivationZoneEntries.size - 2,
+                        onCommit = { value ->
+                            update(
+                                resolveNovelPageTurnActivationZoneSliderValue(value.roundToInt()),
+                                { o, v -> o.copy(pageTurnActivationZone = v) },
+                                { preferences.pageTurnActivationZone().set(it) },
                                 dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
                             )
                         },

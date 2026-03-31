@@ -164,6 +164,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
@@ -739,7 +740,7 @@ fun NovelReaderScreen(
         )
     }
     val pageReaderItemsCount = pageReaderContentPages.size
-    val isInternalChapterHandoff = remember(state.chapter.id) {
+    val pageReaderChapterHandoffTarget = remember(state.chapter.id) {
         NovelReaderChapterHandoffPolicy.consumeInternalChapterHandoff()
     }
     val useRichNativeScroll = shouldUseRichNativeScrollRenderer(
@@ -756,7 +757,7 @@ fun NovelReaderScreen(
             savedPageReaderProgress = state.lastSavedPageReaderProgress,
             legacyLastSavedIndex = state.lastSavedIndex,
             pageCount = pageReaderItemsCount.coerceAtLeast(1),
-            isInternalChapterHandoff = isInternalChapterHandoff,
+            chapterHandoffTarget = pageReaderChapterHandoffTarget,
         ),
         pageCount = { pageReaderItemsCount.coerceAtLeast(1) },
     )
@@ -1186,7 +1187,12 @@ fun NovelReaderScreen(
                         contentPadding = contentPaddingPx,
                         statusBarTopPadding = statusBarTopPadding,
                         hasPreviousChapter = state.previousChapterId != null,
+                        previousChapterName = state.previousChapterName,
                         hasNextChapter = state.nextChapterId != null,
+                        nextChapterName = state.nextChapterName,
+                        previousChapterLabel = stringResource(MR.strings.action_previous_chapter),
+                        nextChapterLabel = stringResource(MR.strings.action_next_chapter),
+                        boundaryChapterHint = stringResource(MR.strings.reader_boundary_release_to_open),
                         onToggleUi = { onSetShowReaderUi(!showReaderUi) },
                         requestedPage = pageTurnRequestedPage,
                         onRequestedPageConsumed = { pageTurnRequestedPage = -1 },

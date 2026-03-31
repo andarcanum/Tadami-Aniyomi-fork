@@ -363,11 +363,16 @@ internal fun resolveInitialPageReaderPage(
     savedPageReaderProgress: PageReaderProgress?,
     legacyLastSavedIndex: Int,
     pageCount: Int,
-    isInternalChapterHandoff: Boolean = false,
+    chapterHandoffTarget: NovelReaderPageReaderHandoffTarget = NovelReaderPageReaderHandoffTarget.SAVED,
 ): Int {
     val safePageCount = pageCount.coerceAtLeast(1)
     val lastPageIndex = safePageCount - 1
-    if (!shouldRestoreSavedPageReaderProgress(isInternalChapterHandoff)) return 0
+    when (chapterHandoffTarget) {
+        NovelReaderPageReaderHandoffTarget.START -> return 0
+        NovelReaderPageReaderHandoffTarget.END -> return lastPageIndex
+        NovelReaderPageReaderHandoffTarget.SAVED -> Unit
+    }
+    if (!shouldRestoreSavedPageReaderProgress(chapterHandoffTarget)) return 0
     val savedProgress = savedPageReaderProgress ?: return legacyLastSavedIndex.coerceIn(0, lastPageIndex)
     if (safePageCount == 1 || savedProgress.totalItems <= 1) return 0
     val sourceLastPageIndex = (savedProgress.totalItems - 1).coerceAtLeast(1)

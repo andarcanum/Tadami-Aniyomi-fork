@@ -59,6 +59,7 @@ data class NovelReaderSettings(
     val pageTurnSpeed: NovelPageTurnSpeed = NovelPageTurnSpeed.NORMAL,
     val pageTurnIntensity: NovelPageTurnIntensity = NovelPageTurnIntensity.MEDIUM,
     val pageTurnShadowIntensity: NovelPageTurnShadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+    val pageTurnActivationZone: NovelPageTurnActivationZone = NovelPageTurnActivationZone.WIDE,
     val verticalSeekbar: Boolean,
     val swipeToNextChapter: Boolean,
     val swipeToPrevChapter: Boolean,
@@ -187,6 +188,14 @@ enum class NovelPageTurnShadowIntensity {
     STRONGER,
 }
 
+enum class NovelPageTurnActivationZone {
+    NARROWER,
+    NARROW,
+    NORMAL,
+    WIDE,
+    WIDER,
+}
+
 enum class GeminiPromptMode {
     CLASSIC,
     ADULT_18,
@@ -259,6 +268,7 @@ data class NovelReaderOverride(
     val pageTurnSpeed: NovelPageTurnSpeed? = null,
     val pageTurnIntensity: NovelPageTurnIntensity? = null,
     val pageTurnShadowIntensity: NovelPageTurnShadowIntensity? = null,
+    val pageTurnActivationZone: NovelPageTurnActivationZone? = null,
     val verticalSeekbar: Boolean? = null,
     val swipeToNextChapter: Boolean? = null,
     val swipeToPrevChapter: Boolean? = null,
@@ -427,6 +437,9 @@ class NovelReaderPreferences(
     fun pageTurnShadowIntensity() =
         preferenceStore.getEnum("novel_reader_page_turn_shadow_intensity", NovelPageTurnShadowIntensity.MEDIUM)
 
+    fun pageTurnActivationZone() =
+        preferenceStore.getEnum("novel_reader_page_turn_activation_zone", NovelPageTurnActivationZone.WIDE)
+
     fun preserveSourceTextAlignInNative() =
         preferenceStore.getBoolean("novel_reader_preserve_source_text_align_in_native", true)
 
@@ -436,7 +449,7 @@ class NovelReaderPreferences(
 
     fun swipeToPrevChapter() = preferenceStore.getBoolean("novel_reader_swipe_to_prev_chapter", false)
 
-    fun tapToScroll() = preferenceStore.getBoolean("novel_reader_tap_to_scroll", false)
+    fun tapToScroll() = preferenceStore.getBoolean("novel_reader_tap_to_scroll", true)
 
     fun autoScroll() = preferenceStore.getBoolean("novel_reader_auto_scroll", false)
 
@@ -644,6 +657,7 @@ class NovelReaderPreferences(
                 pageTurnSpeed = pageTurnSpeed().get(),
                 pageTurnIntensity = pageTurnIntensity().get(),
                 pageTurnShadowIntensity = pageTurnShadowIntensity().get(),
+                pageTurnActivationZone = pageTurnActivationZone().get(),
                 verticalSeekbar = verticalSeekbar().get(),
                 swipeToNextChapter = swipeToNextChapter().get(),
                 swipeToPrevChapter = swipeToPrevChapter().get(),
@@ -750,6 +764,8 @@ class NovelReaderPreferences(
             pageTurnIntensity = override?.pageTurnIntensity ?: pageTurnIntensity().get(),
             pageTurnShadowIntensity =
             override?.pageTurnShadowIntensity ?: pageTurnShadowIntensity().get(),
+            pageTurnActivationZone =
+            override?.pageTurnActivationZone ?: pageTurnActivationZone().get(),
             verticalSeekbar = override?.verticalSeekbar ?: verticalSeekbar().get(),
             swipeToNextChapter = override?.swipeToNextChapter ?: swipeToNextChapter().get(),
             swipeToPrevChapter = override?.swipeToPrevChapter ?: swipeToPrevChapter().get(),
@@ -891,6 +907,7 @@ class NovelReaderPreferences(
             pageTurnSpeed().changes(),
             pageTurnIntensity().changes(),
             pageTurnShadowIntensity().changes(),
+            pageTurnActivationZone().changes(),
             verticalSeekbar().changes(),
             swipeToNextChapter().changes(),
             swipeToPrevChapter().changes(),
@@ -910,14 +927,15 @@ class NovelReaderPreferences(
                 values[6] as NovelPageTurnSpeed,
                 values[7] as NovelPageTurnIntensity,
                 values[8] as NovelPageTurnShadowIntensity,
-                values[9] as Boolean,
+                values[9] as NovelPageTurnActivationZone,
                 values[10] as Boolean,
                 values[11] as Boolean,
                 values[12] as Boolean,
                 values[13] as Boolean,
-                values[14] as Int,
+                values[14] as Boolean,
                 values[15] as Int,
-                values[16] as Boolean,
+                values[16] as Int,
+                values[17] as Boolean,
             )
         }.distinctUntilChanged()
 
@@ -1083,6 +1101,8 @@ class NovelReaderPreferences(
                 pageTurnIntensity = override?.pageTurnIntensity ?: navigation.pageTurnIntensity,
                 pageTurnShadowIntensity =
                 override?.pageTurnShadowIntensity ?: navigation.pageTurnShadowIntensity,
+                pageTurnActivationZone =
+                override?.pageTurnActivationZone ?: navigation.pageTurnActivationZone,
                 verticalSeekbar = override?.verticalSeekbar ?: navigation.verticalSeekbar,
                 swipeToNextChapter = override?.swipeToNextChapter ?: navigation.swipeToNextChapter,
                 swipeToPrevChapter = override?.swipeToPrevChapter ?: navigation.swipeToPrevChapter,
@@ -1187,6 +1207,7 @@ class NovelReaderPreferences(
         val pageTurnSpeed: NovelPageTurnSpeed,
         val pageTurnIntensity: NovelPageTurnIntensity,
         val pageTurnShadowIntensity: NovelPageTurnShadowIntensity,
+        val pageTurnActivationZone: NovelPageTurnActivationZone,
         val verticalSeekbar: Boolean,
         val swipeToNextChapter: Boolean,
         val swipeToPrevChapter: Boolean,

@@ -27,6 +27,7 @@
     <string name="action_open_in_browser">Открыть в браузере</string>
     <string name="action_pause">Пауза</string>
     <string name="action_previous_chapter">Предыдущая глава</string>
+    <string name="reader_boundary_release_to_open">Отпустите, чтобы открыть</string>
     <string name="action_remove">Удалить</string>
     <string name="action_remove_bookmark">Удалить закладку</string>
     <string name="action_rename_category">Переименовать категорию</string>

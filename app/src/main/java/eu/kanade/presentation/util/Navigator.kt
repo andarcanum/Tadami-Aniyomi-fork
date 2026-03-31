@@ -29,6 +29,7 @@ import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.transitions.ScreenTransitionContent
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.NavStyle
+import eu.kanade.presentation.reader.novel.NovelReaderSystemUiSession
 import eu.kanade.tachiyomi.util.system.animatorDurationScale
 import eu.kanade.tachiyomi.util.system.powerManager
 import kotlinx.coroutines.CoroutineName
@@ -101,19 +102,29 @@ fun DefaultNavigatorScreenTransition(
     ScreenTransition(
         navigator = navigator,
         transition = {
-            when (resolvedMode) {
-                ResolvedNavigationTransitionMode.NONE -> EnterTransition.None togetherWith ExitTransition.None
-                ResolvedNavigationTransitionMode.LEGACY -> {
-                    materialSharedAxisX(
-                        forward = navigator.lastEvent != StackEvent.Pop,
-                        slideDistance = slideDistance,
-                    )
-                }
-                ResolvedNavigationTransitionMode.MODERN -> {
-                    modernSharedAxisX(
-                        forward = navigator.lastEvent != StackEvent.Pop,
-                        slideDistance = modernSlideDistance,
-                    )
+            if (
+                shouldSuppressTransitionForInternalChapterReplace(
+                    initialScreen = initialState,
+                    targetScreen = targetState,
+                    internalChapterReplacePending = NovelReaderSystemUiSession.isInternalChapterReplacePending(),
+                )
+            ) {
+                EnterTransition.None togetherWith ExitTransition.None
+            } else {
+                when (resolvedMode) {
+                    ResolvedNavigationTransitionMode.NONE -> EnterTransition.None togetherWith ExitTransition.None
+                    ResolvedNavigationTransitionMode.LEGACY -> {
+                        materialSharedAxisX(
+                            forward = navigator.lastEvent != StackEvent.Pop,
+                            slideDistance = slideDistance,
+                        )
+                    }
+                    ResolvedNavigationTransitionMode.MODERN -> {
+                        modernSharedAxisX(
+                            forward = navigator.lastEvent != StackEvent.Pop,
+                            slideDistance = modernSlideDistance,
+                        )
+                    }
                 }
             }
         },

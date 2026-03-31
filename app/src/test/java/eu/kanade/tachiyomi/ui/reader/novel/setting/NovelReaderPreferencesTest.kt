@@ -51,7 +51,7 @@ class NovelReaderPreferencesTest {
         prefs.verticalSeekbar().get() shouldBe true
         prefs.swipeToNextChapter().get() shouldBe false
         prefs.swipeToPrevChapter().get() shouldBe false
-        prefs.tapToScroll().get() shouldBe false
+        prefs.tapToScroll().get() shouldBe true
         prefs.autoScroll().get() shouldBe false
         prefs.autoScrollInterval().get() shouldBe 10
         prefs.autoScrollOffset().get() shouldBe 0
@@ -67,6 +67,7 @@ class NovelReaderPreferencesTest {
         prefs.pageTurnSpeed().get() shouldBe NovelPageTurnSpeed.NORMAL
         prefs.pageTurnIntensity().get() shouldBe NovelPageTurnIntensity.MEDIUM
         prefs.pageTurnShadowIntensity().get() shouldBe NovelPageTurnShadowIntensity.MEDIUM
+        prefs.pageTurnActivationZone().get() shouldBe NovelPageTurnActivationZone.WIDE
         prefs.geminiTemperature().get() shouldBe 0.7f
         prefs.geminiReasoningEffort().get() shouldBe "minimal"
         prefs.geminiBudgetTokens().get() shouldBe 8192
@@ -103,10 +104,12 @@ class NovelReaderPreferencesTest {
         prefs.pageTurnSpeed().set(NovelPageTurnSpeed.FAST)
         prefs.pageTurnIntensity().set(NovelPageTurnIntensity.HIGH)
         prefs.pageTurnShadowIntensity().set(NovelPageTurnShadowIntensity.LOW)
+        prefs.pageTurnActivationZone().set(NovelPageTurnActivationZone.NARROW)
 
         prefs.pageTurnSpeed().get() shouldBe NovelPageTurnSpeed.FAST
         prefs.pageTurnIntensity().get() shouldBe NovelPageTurnIntensity.HIGH
         prefs.pageTurnShadowIntensity().get() shouldBe NovelPageTurnShadowIntensity.LOW
+        prefs.pageTurnActivationZone().get() shouldBe NovelPageTurnActivationZone.NARROW
     }
 
     @Test
@@ -116,10 +119,12 @@ class NovelReaderPreferencesTest {
         prefs.pageTurnSpeed().set(NovelPageTurnSpeed.SLOWER)
         prefs.pageTurnIntensity().set(NovelPageTurnIntensity.SOFTER)
         prefs.pageTurnShadowIntensity().set(NovelPageTurnShadowIntensity.STRONGER)
+        prefs.pageTurnActivationZone().set(NovelPageTurnActivationZone.WIDER)
 
         prefs.pageTurnSpeed().get() shouldBe NovelPageTurnSpeed.SLOWER
         prefs.pageTurnIntensity().get() shouldBe NovelPageTurnIntensity.SOFTER
         prefs.pageTurnShadowIntensity().get() shouldBe NovelPageTurnShadowIntensity.STRONGER
+        prefs.pageTurnActivationZone().get() shouldBe NovelPageTurnActivationZone.WIDER
     }
 
     @Test
@@ -157,6 +162,7 @@ class NovelReaderPreferencesTest {
         prefs.pageTurnSpeed().set(NovelPageTurnSpeed.SLOW)
         prefs.pageTurnIntensity().set(NovelPageTurnIntensity.LOW)
         prefs.pageTurnShadowIntensity().set(NovelPageTurnShadowIntensity.HIGH)
+        prefs.pageTurnActivationZone().set(NovelPageTurnActivationZone.NARROWER)
         prefs.bionicReading().set(true)
         prefs.geminiApiKey().set("test-key")
         prefs.geminiModel().set("gemini-2.5-pro")
@@ -225,6 +231,7 @@ class NovelReaderPreferencesTest {
         override?.pageTurnSpeed shouldBe NovelPageTurnSpeed.SLOW
         override?.pageTurnIntensity shouldBe NovelPageTurnIntensity.LOW
         override?.pageTurnShadowIntensity shouldBe NovelPageTurnShadowIntensity.HIGH
+        override?.pageTurnActivationZone shouldBe NovelPageTurnActivationZone.NARROWER
         override?.bionicReading shouldBe true
         override?.geminiApiKey shouldBe "test-key"
         override?.geminiModel shouldBe "gemini-2.5-pro"
@@ -294,6 +301,7 @@ class NovelReaderPreferencesTest {
         prefs.pageTurnSpeed().set(NovelPageTurnSpeed.NORMAL)
         prefs.pageTurnIntensity().set(NovelPageTurnIntensity.MEDIUM)
         prefs.pageTurnShadowIntensity().set(NovelPageTurnShadowIntensity.MEDIUM)
+        prefs.pageTurnActivationZone().set(NovelPageTurnActivationZone.WIDE)
         prefs.bionicReading().set(false)
         prefs.geminiApiKey().set("")
         prefs.geminiModel().set("gemini-3.1-flash-lite-preview")
@@ -362,6 +370,7 @@ class NovelReaderPreferencesTest {
                 pageTurnSpeed = NovelPageTurnSpeed.FAST,
                 pageTurnIntensity = NovelPageTurnIntensity.HIGH,
                 pageTurnShadowIntensity = NovelPageTurnShadowIntensity.LOW,
+                pageTurnActivationZone = NovelPageTurnActivationZone.WIDER,
                 bionicReading = true,
                 geminiApiKey = "override-key",
                 geminiModel = "gemini-2.5-pro",
@@ -429,6 +438,7 @@ class NovelReaderPreferencesTest {
         settings.pageTurnSpeed shouldBe NovelPageTurnSpeed.FAST
         settings.pageTurnIntensity shouldBe NovelPageTurnIntensity.HIGH
         settings.pageTurnShadowIntensity shouldBe NovelPageTurnShadowIntensity.LOW
+        settings.pageTurnActivationZone shouldBe NovelPageTurnActivationZone.WIDER
         settings.bionicReading shouldBe true
         settings.geminiApiKey shouldBe "override-key"
         settings.geminiModel shouldBe "gemini-2.5-pro"

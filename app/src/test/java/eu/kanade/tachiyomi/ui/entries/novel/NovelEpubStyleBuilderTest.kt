@@ -6,6 +6,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnActivationZone
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
@@ -111,6 +112,7 @@ class NovelEpubStyleBuilderTest {
         textShadowY: Float = 0f,
         pageEdgeShadow: Boolean = false,
         pageEdgeShadowAlpha: Float = 0.25f,
+        pageTurnActivationZone: NovelPageTurnActivationZone = NovelPageTurnActivationZone.WIDE,
         theme: NovelReaderTheme = NovelReaderTheme.DARK,
         backgroundColor: String = "#101010",
         textColor: String = "#EFEFEF",
@@ -161,6 +163,7 @@ class NovelEpubStyleBuilderTest {
             autoScrollInterval = 10,
             autoScrollOffset = 0,
             prefetchNextChapter = false,
+            pageTurnActivationZone = pageTurnActivationZone,
             fullScreenMode = true,
             keepScreenOn = false,
             showScrollPercentage = true,

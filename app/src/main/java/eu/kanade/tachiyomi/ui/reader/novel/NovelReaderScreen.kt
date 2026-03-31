@@ -11,6 +11,7 @@ import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.reader.novel.NovelReaderChapterHandoffPolicy
+import eu.kanade.presentation.reader.novel.NovelReaderPageReaderHandoffTarget
 import eu.kanade.presentation.reader.novel.NovelReaderScreen
 import eu.kanade.presentation.reader.novel.NovelReaderSystemUiSession
 import eu.kanade.presentation.reader.novel.SystemUIController
@@ -100,7 +101,9 @@ class NovelReaderScreen(
                     coroutineScope.launch {
                         screenModel.awaitPendingProgressPersistence()
                         NovelReaderSystemUiSession.markInternalChapterReplace()
-                        NovelReaderChapterHandoffPolicy.markInternalChapterHandoff()
+                        NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
+                            NovelReaderPageReaderHandoffTarget.END,
+                        )
                         navigator.replace(NovelReaderScreen(previousChapterId))
                     }
                 },
@@ -108,7 +111,9 @@ class NovelReaderScreen(
                     coroutineScope.launch {
                         screenModel.awaitPendingProgressPersistence()
                         NovelReaderSystemUiSession.markInternalChapterReplace()
-                        NovelReaderChapterHandoffPolicy.markInternalChapterHandoff()
+                        NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
+                            NovelReaderPageReaderHandoffTarget.START,
+                        )
                         navigator.replace(NovelReaderScreen(nextChapterId))
                     }
                 },

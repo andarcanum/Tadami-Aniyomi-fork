@@ -496,14 +496,19 @@ class NovelReaderScreenModel(
         }
         val chapterNavigation = chapterOrderList.let { chapters ->
             val index = chapters.indexOfFirst { it.id == chapter.id }
-            val previousChapterId = chapters.getOrNull(index - 1)?.id
-            val nextChapterId = chapters.getOrNull(index + 1)?.id
-            previousChapterId to nextChapterId
+            val previousChapter = chapters.getOrNull(index - 1)
+            val nextChapter = chapters.getOrNull(index + 1)
+            ChapterNavigation(
+                previousChapterId = previousChapter?.id,
+                previousChapterName = previousChapter?.name,
+                nextChapterId = nextChapter?.id,
+                nextChapterName = nextChapter?.name,
+            )
         }
         maybeEnsureJaomixAdjacentPage(
             chapter = chapter,
-            previousChapterId = chapterNavigation.first,
-            nextChapterId = chapterNavigation.second,
+            previousChapterId = chapterNavigation.previousChapterId,
+            nextChapterId = chapterNavigation.nextChapterId,
             settings = settings,
         )
         val pluginCss = customCss
@@ -580,8 +585,10 @@ class NovelReaderScreenModel(
             lastSavedScrollOffsetPx = lastSavedScrollOffsetPx,
             lastSavedWebProgressPercent = lastSavedWebProgressPercent,
             lastSavedPageReaderProgress = decodedPageReaderProgress,
-            previousChapterId = chapterNavigation.first,
-            nextChapterId = chapterNavigation.second,
+            previousChapterId = chapterNavigation.previousChapterId,
+            previousChapterName = chapterNavigation.previousChapterName,
+            nextChapterId = chapterNavigation.nextChapterId,
+            nextChapterName = chapterNavigation.nextChapterName,
             chapterWebUrl = chapterWebUrl,
             isGeminiTranslating = isGeminiTranslating,
             geminiTranslationProgress = geminiTranslationProgress,
@@ -2625,7 +2632,9 @@ class NovelReaderScreenModel(
             val lastSavedWebProgressPercent: Int,
             val lastSavedPageReaderProgress: PageReaderProgress? = null,
             val previousChapterId: Long?,
+            val previousChapterName: String? = null,
             val nextChapterId: Long?,
+            val nextChapterName: String? = null,
             val chapterWebUrl: String?,
             val isGeminiTranslating: Boolean = false,
             val geminiTranslationProgress: Int = 0,
@@ -2670,6 +2679,12 @@ class NovelReaderScreenModel(
             )
         }
     }
+    private data class ChapterNavigation(
+        val previousChapterId: Long?,
+        val previousChapterName: String?,
+        val nextChapterId: Long?,
+        val nextChapterName: String?,
+    )
     companion object {
         private const val JAOMIX_PAGE_SOURCE_ORDER_STRIDE = 1_000L
         private const val MAX_DEEPSEEK_CONCURRENCY = 32

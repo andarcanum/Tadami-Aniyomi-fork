@@ -12,12 +12,12 @@ class NovelReaderChapterHandoffPolicyTest {
     }
 
     @Test
-    fun `internal chapter handoff suppresses saved page restore once`() {
-        NovelReaderChapterHandoffPolicy.markInternalChapterHandoff()
+    fun `internal chapter handoff exposes page reader target once`() {
+        NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(NovelReaderPageReaderHandoffTarget.END)
 
-        shouldRestoreSavedPageReaderProgress(isInternalChapterHandoff = true) shouldBe false
-        NovelReaderChapterHandoffPolicy.consumeInternalChapterHandoff() shouldBe true
-        NovelReaderChapterHandoffPolicy.consumeInternalChapterHandoff() shouldBe false
-        shouldRestoreSavedPageReaderProgress(isInternalChapterHandoff = false) shouldBe true
+        shouldRestoreSavedPageReaderProgress(NovelReaderPageReaderHandoffTarget.END) shouldBe false
+        NovelReaderChapterHandoffPolicy.consumeInternalChapterHandoff() shouldBe NovelReaderPageReaderHandoffTarget.END
+        NovelReaderChapterHandoffPolicy.consumeInternalChapterHandoff() shouldBe NovelReaderPageReaderHandoffTarget.SAVED
+        shouldRestoreSavedPageReaderProgress(NovelReaderPageReaderHandoffTarget.SAVED) shouldBe true
     }
 }

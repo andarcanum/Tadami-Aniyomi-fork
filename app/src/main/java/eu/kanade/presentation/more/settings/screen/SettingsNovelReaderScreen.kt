@@ -71,6 +71,8 @@ import eu.kanade.presentation.reader.novel.novelPageTransitionStyleEntries
 import eu.kanade.presentation.reader.novel.novelPageTransitionStyleSubtitle
 import eu.kanade.presentation.reader.novel.novelPageTurnIntensityEntries
 import eu.kanade.presentation.reader.novel.novelPageTurnIntensitySliderIndex
+import eu.kanade.presentation.reader.novel.novelPageTurnActivationZoneEntries
+import eu.kanade.presentation.reader.novel.novelPageTurnActivationZoneSliderIndex
 import eu.kanade.presentation.reader.novel.novelPageTurnShadowIntensityEntries
 import eu.kanade.presentation.reader.novel.novelPageTurnShadowIntensitySliderIndex
 import eu.kanade.presentation.reader.novel.novelPageTurnSpeedEntries
@@ -85,6 +87,7 @@ import eu.kanade.presentation.reader.novel.renameNovelReaderCustomBackgroundItem
 import eu.kanade.presentation.reader.novel.replaceNovelReaderCustomBackgroundItem
 import eu.kanade.presentation.reader.novel.resolveCustomBackgroundDeletion
 import eu.kanade.presentation.reader.novel.resolveNovelPageTurnIntensitySliderValue
+import eu.kanade.presentation.reader.novel.resolveNovelPageTurnActivationZoneSliderValue
 import eu.kanade.presentation.reader.novel.resolveNovelPageTurnShadowIntensitySliderValue
 import eu.kanade.presentation.reader.novel.resolveNovelPageTurnSliderLabel
 import eu.kanade.presentation.reader.novel.resolveNovelPageTurnSpeedSliderValue
@@ -712,12 +715,15 @@ object SettingsNovelReaderScreen : SearchableSettings {
         val pageTurnIntensity by pageTurnIntensityPref.collectAsState()
         val pageTurnShadowIntensityPref = prefs.pageTurnShadowIntensity()
         val pageTurnShadowIntensity by pageTurnShadowIntensityPref.collectAsState()
+        val pageTurnActivationZonePref = prefs.pageTurnActivationZone()
+        val pageTurnActivationZone by pageTurnActivationZonePref.collectAsState()
         val bionicReadingPref = prefs.bionicReading()
         val bionicReading by bionicReadingPref.collectAsState()
         val pageTransitionEntries = novelPageTransitionStyleEntries()
         val pageTurnSpeedEntries = novelPageTurnSpeedEntries()
         val pageTurnIntensityEntries = novelPageTurnIntensityEntries()
         val pageTurnShadowEntries = novelPageTurnShadowIntensityEntries()
+        val pageTurnActivationZoneEntries = novelPageTurnActivationZoneEntries()
         val showPageTurnTuning = shouldShowPageTurnTuningControls(
             pageReaderEnabled = pageReader,
             style = pageTransitionStyle,
@@ -869,9 +875,11 @@ object SettingsNovelReaderScreen : SearchableSettings {
                             speed = pageTurnSpeed,
                             intensity = pageTurnIntensity,
                             shadowIntensity = pageTurnShadowIntensity,
+                            activationZone = pageTurnActivationZone,
                             speedEntries = pageTurnSpeedEntries,
                             intensityEntries = pageTurnIntensityEntries,
                             shadowEntries = pageTurnShadowEntries,
+                            activationZoneEntries = pageTurnActivationZoneEntries,
                         ),
                         onClick = {
                             pageTurnTuningExpanded = !pageTurnTuningExpanded
@@ -931,6 +939,23 @@ object SettingsNovelReaderScreen : SearchableSettings {
                             onValueChanged = { value ->
                                 pageTurnShadowIntensityPref.set(
                                     resolveNovelPageTurnShadowIntensitySliderValue(value),
+                                )
+                                true
+                            },
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.SliderPreference(
+                            value = novelPageTurnActivationZoneSliderIndex(pageTurnActivationZone),
+                            title = stringResource(AYMR.strings.novel_reader_page_turn_activation_zone),
+                            subtitle = resolveNovelPageTurnSliderLabel(
+                                value = pageTurnActivationZone,
+                                entries = pageTurnActivationZoneEntries,
+                            ),
+                            valueRange = 0..(pageTurnActivationZoneEntries.size - 1),
+                            onValueChanged = { value ->
+                                pageTurnActivationZonePref.set(
+                                    resolveNovelPageTurnActivationZoneSliderValue(value),
                                 )
                                 true
                             },

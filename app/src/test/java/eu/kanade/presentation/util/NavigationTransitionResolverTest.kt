@@ -50,4 +50,19 @@ class NavigationTransitionResolverTest {
             isPowerSaveMode = false,
         ) shouldBe ResolvedNavigationTransitionMode.LEGACY
     }
+
+    @Test
+    fun `internal novel chapter replace suppresses navigator transition`() {
+        resolveShouldSuppressTransitionForInternalChapterReplace(
+            initialIsNovelReader = true,
+            targetIsNovelReader = true,
+            internalChapterReplacePending = true,
+        ) shouldBe true
+
+        resolveShouldSuppressTransitionForInternalChapterReplace(
+            initialIsNovelReader = true,
+            targetIsNovelReader = true,
+            internalChapterReplacePending = false,
+        ) shouldBe false
+    }
 }

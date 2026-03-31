@@ -27,6 +27,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.encodeNativeScrollProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodePageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodeWebScrollProgressPercent
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnActivationZone
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnIntensity
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnShadowIntensity
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnSpeed
@@ -34,6 +35,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.wewox.pagecurl.ExperimentalPageCurlApi
+import eu.wewox.pagecurl.config.PageCurlConfig
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -2212,6 +2214,119 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `page turn renderer adds virtual boundary pages when adjacent chapters exist`() {
+        assertEquals(
+            7,
+            resolvePageTurnRendererVirtualPageCount(
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            6,
+            resolvePageTurnRendererVirtualPageCount(
+                contentPageCount = 5,
+                hasPreviousChapter = false,
+                hasNextChapter = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn renderer maps actual pages into virtual curl indices`() {
+        assertEquals(
+            1,
+            resolvePageTurnRendererVirtualPageIndex(
+                actualPageIndex = 0,
+                hasPreviousChapter = true,
+            ),
+        )
+        assertEquals(
+            4,
+            resolvePageTurnRendererVirtualPageIndex(
+                actualPageIndex = 4,
+                hasPreviousChapter = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn renderer resolves chapter boundary targets from synthetic pages`() {
+        assertEquals(
+            HorizontalChapterSwipeAction.PREVIOUS,
+            resolvePageTurnRendererBoundaryChapterTarget(
+                currentPage = 0,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            HorizontalChapterSwipeAction.NEXT,
+            resolvePageTurnRendererBoundaryChapterTarget(
+                currentPage = 6,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            HorizontalChapterSwipeAction.NONE,
+            resolvePageTurnRendererBoundaryChapterTarget(
+                currentPage = 3,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn renderer opens boundary chapter only after curl settles`() {
+        assertEquals(
+            HorizontalChapterSwipeAction.NONE,
+            resolvePageTurnRendererSettledBoundaryChapterTarget(
+                currentPage = 0,
+                progress = -0.42f,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            HorizontalChapterSwipeAction.PREVIOUS,
+            resolvePageTurnRendererSettledBoundaryChapterTarget(
+                currentPage = 0,
+                progress = 0f,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            HorizontalChapterSwipeAction.NONE,
+            resolvePageTurnRendererSettledBoundaryChapterTarget(
+                currentPage = 6,
+                progress = 0.24f,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            HorizontalChapterSwipeAction.NEXT,
+            resolvePageTurnRendererSettledBoundaryChapterTarget(
+                currentPage = 6,
+                progress = 0f,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+    }
+
+    @Test
     fun `page turn renderer resolves current page from curl state instead of pager state`() {
         assertEquals(
             6,
@@ -2313,6 +2428,17 @@ class NovelReaderUiVisibilityTest {
             NovelPageTurnShadowIntensity.STRONGER,
             resolveNovelPageTurnShadowIntensitySliderValue(4),
         )
+
+        assertEquals(0, novelPageTurnActivationZoneSliderIndex(NovelPageTurnActivationZone.NARROWER))
+        assertEquals(
+            NovelPageTurnActivationZone.NARROWER,
+            resolveNovelPageTurnActivationZoneSliderValue(0),
+        )
+        assertEquals(4, novelPageTurnActivationZoneSliderIndex(NovelPageTurnActivationZone.WIDER))
+        assertEquals(
+            NovelPageTurnActivationZone.WIDER,
+            resolveNovelPageTurnActivationZoneSliderValue(4),
+        )
     }
 
     @Test
@@ -2324,6 +2450,20 @@ class NovelReaderUiVisibilityTest {
                 speedLabel = "Slower",
                 intensityLabel = "Stronger",
                 shadowLabel = "Softer",
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn tuning summary text includes activation zone label`() {
+        assertEquals(
+            "Slower speed | Stronger intensity | Softer shadow | Wider zone",
+            resolveNovelPageTurnTuningSummaryText(
+                format = "%1\$s speed | %2\$s intensity | %3\$s shadow | %4\$s zone",
+                speedLabel = "Slower",
+                intensityLabel = "Stronger",
+                shadowLabel = "Softer",
+                activationZoneLabel = "Wider",
             ),
         )
     }
@@ -2454,12 +2594,24 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `page turn renderer config maps book and curl to distinct drag profiles`() {
-        val bookConfig = resolveNovelPageTurnRendererConfig(
+    @OptIn(ExperimentalPageCurlApi::class)
+    fun `page turn renderer config maps book and curl to tuned drag profiles`() {
+        val narrowConfig = resolveNovelPageTurnRendererConfig(
             style = NovelPageTransitionStyle.BOOK,
             speed = NovelPageTurnSpeed.NORMAL,
             intensity = NovelPageTurnIntensity.MEDIUM,
             shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.NARROWER,
+            textBackground = Color(0xFFF8F2E7),
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+        val wideConfig = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.BOOK,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.WIDER,
             textBackground = Color(0xFFF8F2E7),
             canMoveBackward = true,
             canMoveForward = true,
@@ -2469,16 +2621,106 @@ class NovelReaderUiVisibilityTest {
             speed = NovelPageTurnSpeed.NORMAL,
             intensity = NovelPageTurnIntensity.MEDIUM,
             shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.WIDER,
             textBackground = Color(0xFFF8F2E7),
             canMoveBackward = true,
             canMoveForward = true,
         )
 
-        assertEquals(NovelPageTurnDragMode.START_END, bookConfig.dragMode)
-        assertEquals(NovelPageTurnDragMode.GESTURE, curlConfig.dragMode)
-        assertTrue(bookConfig.dragActivationEdgeFraction < curlConfig.dragActivationEdgeFraction)
-        assertTrue(bookConfig.shadowRadiusDp < curlConfig.shadowRadiusDp)
-        assertTrue(bookConfig.preset.curlAmount < curlConfig.preset.curlAmount)
+        assertEquals(NovelPageTurnDragMode.START_END, narrowConfig.dragMode)
+        assertEquals(
+            PageCurlConfig.DragInteraction.PointerBehavior.PageEdge,
+            narrowConfig.dragPointerBehavior,
+        )
+        assertEquals(
+            PageCurlConfig.DragInteraction.PointerBehavior.Default,
+            wideConfig.dragPointerBehavior,
+        )
+        assertEquals(NovelPageTurnDragMode.START_END, curlConfig.dragMode)
+        assertEquals(0.20f, narrowConfig.dragActivationEdgeFraction, 0.0001f)
+        assertEquals(0.40f, wideConfig.dragActivationEdgeFraction, 0.0001f)
+        assertEquals(0.40f, curlConfig.dragActivationEdgeFraction, 0.0001f)
+        assertTrue(narrowConfig.dragActivationEdgeFraction < wideConfig.dragActivationEdgeFraction)
+        assertTrue(narrowConfig.dragTargetReachFraction < wideConfig.dragTargetReachFraction)
+        assertTrue(wideConfig.dragTargetReachFraction < curlConfig.dragTargetReachFraction)
+    }
+
+    @Test
+    fun `page turn renderer activation zone scales to explicit edge widths for book and curl`() {
+        val narrowBookConfig = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.BOOK,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.NARROWER,
+            textBackground = Color(0xFFF8F2E7),
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+        val normalBookConfig = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.BOOK,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.NORMAL,
+            textBackground = Color(0xFFF8F2E7),
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+        val widerBookConfig = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.BOOK,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.WIDER,
+            textBackground = Color(0xFFF8F2E7),
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+        val narrowCurlConfig = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.CURL,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.NARROWER,
+            textBackground = Color(0xFFF8F2E7),
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+        val normalCurlConfig = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.CURL,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.NORMAL,
+            textBackground = Color(0xFFF8F2E7),
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+        val wideCurlConfig = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.CURL,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.WIDER,
+            textBackground = Color(0xFFF8F2E7),
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+
+        assertEquals(0.20f, narrowBookConfig.dragActivationEdgeFraction, 0.0001f)
+        assertEquals(0.30f, normalBookConfig.dragActivationEdgeFraction, 0.0001f)
+        assertEquals(0.40f, widerBookConfig.dragActivationEdgeFraction, 0.0001f)
+        assertEquals(0.20f, narrowCurlConfig.dragActivationEdgeFraction, 0.0001f)
+        assertEquals(0.30f, normalCurlConfig.dragActivationEdgeFraction, 0.0001f)
+        assertEquals(0.40f, wideCurlConfig.dragActivationEdgeFraction, 0.0001f)
+        assertEquals(NovelPageTurnDragMode.START_END, widerBookConfig.dragMode)
+        assertEquals(NovelPageTurnDragMode.START_END, narrowCurlConfig.dragMode)
+        assertEquals(NovelPageTurnDragMode.START_END, wideCurlConfig.dragMode)
+        assertTrue(narrowBookConfig.dragTargetReachFraction > narrowBookConfig.dragActivationEdgeFraction)
+        assertTrue(widerBookConfig.dragTargetReachFraction > widerBookConfig.dragActivationEdgeFraction)
+        assertTrue(narrowCurlConfig.dragActivationEdgeFraction < wideCurlConfig.dragActivationEdgeFraction)
+        assertTrue(narrowCurlConfig.dragTargetReachFraction < wideCurlConfig.dragTargetReachFraction)
     }
 
     @Test
@@ -2488,6 +2730,7 @@ class NovelReaderUiVisibilityTest {
             speed = NovelPageTurnSpeed.NORMAL,
             intensity = NovelPageTurnIntensity.MEDIUM,
             shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.WIDE,
             textBackground = Color.White,
             canMoveBackward = true,
             canMoveForward = true,
@@ -2504,6 +2747,7 @@ class NovelReaderUiVisibilityTest {
             speed = NovelPageTurnSpeed.NORMAL,
             intensity = NovelPageTurnIntensity.MEDIUM,
             shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.WIDE,
             textBackground = Color.White,
             canMoveBackward = true,
             canMoveForward = true,
@@ -2522,6 +2766,7 @@ class NovelReaderUiVisibilityTest {
             speed = NovelPageTurnSpeed.FAST,
             intensity = NovelPageTurnIntensity.HIGH,
             shadowIntensity = NovelPageTurnShadowIntensity.LOW,
+            activationZone = NovelPageTurnActivationZone.WIDE,
             textBackground = Color(0xFF171717),
             canMoveBackward = false,
             canMoveForward = true,
@@ -2575,6 +2820,7 @@ class NovelReaderUiVisibilityTest {
             speed = NovelPageTurnSpeed.NORMAL,
             intensity = NovelPageTurnIntensity.MEDIUM,
             shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.WIDE,
             textBackground = Color(0xFFF8F2E7),
             canMoveBackward = true,
             canMoveForward = true,
@@ -2586,6 +2832,7 @@ class NovelReaderUiVisibilityTest {
                 speed = NovelPageTurnSpeed.NORMAL,
                 intensity = NovelPageTurnIntensity.MEDIUM,
                 shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+                activationZone = NovelPageTurnActivationZone.WIDE,
                 textBackground = Color(0xFFF8F2E7),
                 canMoveBackward = true,
                 canMoveForward = true,
@@ -3004,6 +3251,32 @@ class NovelReaderUiVisibilityTest {
                 savedPageReaderProgress = PageReaderProgress(index = 9, totalItems = 10),
                 legacyLastSavedIndex = 0,
                 pageCount = 3,
+            ),
+        )
+    }
+
+    @Test
+    fun `page reader backward chapter handoff starts from last page`() {
+        assertEquals(
+            6,
+            resolveInitialPageReaderPage(
+                savedPageReaderProgress = PageReaderProgress(index = 0, totalItems = 1),
+                legacyLastSavedIndex = 0,
+                pageCount = 7,
+                chapterHandoffTarget = NovelReaderPageReaderHandoffTarget.END,
+            ),
+        )
+    }
+
+    @Test
+    fun `page reader forward chapter handoff starts from first page`() {
+        assertEquals(
+            0,
+            resolveInitialPageReaderPage(
+                savedPageReaderProgress = PageReaderProgress(index = 5, totalItems = 6),
+                legacyLastSavedIndex = 5,
+                pageCount = 7,
+                chapterHandoffTarget = NovelReaderPageReaderHandoffTarget.START,
             ),
         )
     }
