@@ -434,6 +434,7 @@ internal fun resolvePageTransitionEngine(
         NovelPageTransitionStyle.INSTANT,
         NovelPageTransitionStyle.SLIDE,
         NovelPageTransitionStyle.DEPTH,
+        NovelPageTransitionStyle.BOOK_FLIP,
         -> NovelPageTransitionEngine.COMPOSE_PAGER
         NovelPageTransitionStyle.BOOK,
         NovelPageTransitionStyle.CURL,

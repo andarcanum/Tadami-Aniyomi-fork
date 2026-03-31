@@ -148,6 +148,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.encodeNativeScrollProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodePageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodeWebScrollProgressPercent
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
@@ -1057,20 +1058,22 @@ fun NovelReaderScreen(
             .fillMaxSize()
             .onSizeChanged { pageViewportSize = it },
     ) {
-        NovelAtmosphereBackground(
-            backgroundColor = textBackground,
-            backgroundTexture = activeBackgroundTexture,
-            nativeTextureStrengthPercent = if (isBackgroundMode) {
-                0
-            } else {
-                state.readerSettings.nativeTextureStrengthPercent
-            },
-            oledEdgeGradient = activeOledEdgeGradient,
-            isDarkTheme = isDarkTheme,
-            pageEdgeShadow = state.readerSettings.pageEdgeShadow,
-            pageEdgeShadowAlpha = state.readerSettings.pageEdgeShadowAlpha,
-            backgroundImageModel = if (isBackgroundMode) backgroundImageModel else null,
-        )
+        if (activePageTransitionStyle != NovelPageTransitionStyle.BOOK_FLIP) {
+            NovelAtmosphereBackground(
+                backgroundColor = textBackground,
+                backgroundTexture = activeBackgroundTexture,
+                nativeTextureStrengthPercent = if (isBackgroundMode) {
+                    0
+                } else {
+                    state.readerSettings.nativeTextureStrengthPercent
+                },
+                oledEdgeGradient = activeOledEdgeGradient,
+                isDarkTheme = isDarkTheme,
+                pageEdgeShadow = state.readerSettings.pageEdgeShadow,
+                pageEdgeShadowAlpha = state.readerSettings.pageEdgeShadowAlpha,
+                backgroundImageModel = if (isBackgroundMode) backgroundImageModel else null,
+            )
+        }
         // Контент главы занимает весь экран; padding уже учтён в contentPadding.
         androidx.compose.foundation.layout.Box(
             modifier = Modifier.fillMaxSize(),
@@ -1151,6 +1154,9 @@ fun NovelReaderScreen(
                         chapterTitleTextColor = chapterTitleTextColor,
                         backgroundTexture = state.readerSettings.backgroundTexture,
                         nativeTextureStrengthPercent = state.readerSettings.nativeTextureStrengthPercent,
+                        backgroundImageModel = if (isBackgroundMode) backgroundImageModel else null,
+                        activeOledEdgeGradient = activeOledEdgeGradient,
+                        isDarkTheme = isDarkTheme,
                         textTypeface = composeTypeface,
                         chapterTitleTypeface = chapterTitleTypeface,
                         contentPadding = contentPaddingPx,

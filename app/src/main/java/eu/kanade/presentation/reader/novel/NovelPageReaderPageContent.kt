@@ -281,11 +281,13 @@ internal fun NovelPageReaderPageContent(
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.TopStart,
     ) {
-        NovelPageSurfaceBackground(
-            backgroundTexture = backgroundTexture,
-            nativeTextureStrengthPercent = nativeTextureStrengthPercent,
-            surfaceColor = pageSurfaceColor,
-        )
+        if (pageSurfaceColor != Color.Transparent) {
+            NovelPageSurfaceBackground(
+                backgroundTexture = backgroundTexture,
+                nativeTextureStrengthPercent = nativeTextureStrengthPercent,
+                surfaceColor = pageSurfaceColor,
+            )
+        }
         val imageBlock = contentPage.blocks.singleOrNull() as? NovelPageContentBlock.Image
         if (imageBlock != null) {
             NovelPageReaderImageBlock(

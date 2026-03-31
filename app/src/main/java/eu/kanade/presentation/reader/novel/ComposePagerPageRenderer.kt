@@ -1,9 +1,11 @@
 package eu.kanade.presentation.reader.novel
 
 import android.graphics.Typeface
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
@@ -12,12 +14,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
@@ -27,6 +31,11 @@ internal data class ComposePagerTransitionSpec(
     val alpha: Float = 1f,
     val scale: Float = 1f,
     val translationXFraction: Float = 0f,
+    val rotationY: Float = 0f,
+    val pivotXFraction: Float = 0.5f,
+    val cameraDistance: Float = 8f,
+    val shadowAlpha: Float = 0f,
+    val zIndex: Float = 0f,
     val cancelPagerMotion: Boolean = false,
     val hideOffscreenPages: Boolean = false,
 )
@@ -47,9 +56,30 @@ internal fun resolveComposePagerTransitionSpec(
             scale = (1f - (clampedAbsOffset * 0.08f)).coerceIn(0.92f, 1f),
             translationXFraction = (-pageOffset * 0.12f).coerceIn(-0.12f, 0.12f),
         )
-        NovelPageTransitionStyle.BOOK,
-        NovelPageTransitionStyle.CURL,
-        -> ComposePagerTransitionSpec()
+        NovelPageTransitionStyle.BOOK_FLIP -> {
+            if (pageOffset > 0f && pageOffset <= 1f) {
+                // Page rotating (around left edge)
+                ComposePagerTransitionSpec(
+                    rotationY = -180f * pageOffset,
+                    pivotXFraction = 0f,
+                    cameraDistance = 15f,
+                    cancelPagerMotion = true,
+                    shadowAlpha = (abs(0.5f - pageOffset) * -0.6f + 0.3f).coerceIn(0f, 0.3f),
+                    zIndex = 1f - pageOffset
+                )
+            } else if (pageOffset <= 0f && pageOffset >= -1f) {
+                // Page underneath
+                ComposePagerTransitionSpec(
+                    cancelPagerMotion = true,
+                    zIndex = 0f
+                )
+            } else {
+                ComposePagerTransitionSpec(
+                    hideOffscreenPages = true
+                )
+            }
+        }
+        else -> ComposePagerTransitionSpec()
     }
 }
 
@@ -86,6 +116,9 @@ internal fun ComposePagerPageRenderer(
     chapterTitleTextColor: Color,
     backgroundTexture: NovelReaderBackgroundTexture,
     nativeTextureStrengthPercent: Int,
+    backgroundImageModel: Any?,
+    activeOledEdgeGradient: Boolean,
+    isDarkTheme: Boolean,
     textTypeface: Typeface?,
     chapterTitleTypeface: Typeface?,
     contentPadding: Dp,
@@ -171,26 +204,12 @@ internal fun ComposePagerPageRenderer(
             style = transitionStyle,
             pageOffset = pageOffset,
         )
-        NovelPageReaderPageContent(
-            contentPage = contentPage,
-            readerSettings = readerSettings,
-            textColor = textColor,
-            textBackground = textBackground,
-            backgroundTexture = backgroundTexture,
-            nativeTextureStrengthPercent = nativeTextureStrengthPercent,
-            textTypeface = textTypeface,
-            chapterTitleTypeface = chapterTitleTypeface,
-            chapterTitleTextColor = chapterTitleTextColor,
-            textShadowEnabled = readerSettings.textShadow,
-            textShadowColor = readerSettings.textShadowColor,
-            textShadowBlur = readerSettings.textShadowBlur,
-            textShadowX = readerSettings.textShadowX,
-            textShadowY = readerSettings.textShadowY,
-            contentPadding = contentPadding,
-            statusBarTopPadding = statusBarTopPadding,
+        Box(
             modifier = Modifier
                 .fillMaxSize()
+                .zIndex(transitionSpec.zIndex)
                 .graphicsLayer {
+                    val densityLayer = this
                     alpha = if (transitionSpec.hideOffscreenPages && abs(pageOffset) > 0.5f) {
                         0f
                     } else {
@@ -198,12 +217,81 @@ internal fun ComposePagerPageRenderer(
                     }
                     scaleX = transitionSpec.scale
                     scaleY = transitionSpec.scale
+                    rotationY = transitionSpec.rotationY
+                    cameraDistance = transitionSpec.cameraDistance * densityLayer.density
+                    transformOrigin = TransformOrigin(transitionSpec.pivotXFraction, 0.5f)
                     translationX = size.width * if (transitionSpec.cancelPagerMotion) {
                         pageOffset
                     } else {
                         transitionSpec.translationXFraction
                     }
                 },
-        )
+        ) {
+            // Internal page background (Required for 3D flip to rotate WITH the page)
+            NovelAtmosphereBackground(
+                backgroundColor = textBackground,
+                backgroundTexture = backgroundTexture,
+                nativeTextureStrengthPercent = nativeTextureStrengthPercent,
+                oledEdgeGradient = activeOledEdgeGradient,
+                isDarkTheme = isDarkTheme,
+                pageEdgeShadow = false,
+                pageEdgeShadowAlpha = 0f,
+                backgroundImageModel = backgroundImageModel,
+            )
+
+            // Front face (text content)
+            NovelPageReaderPageContent(
+                contentPage = contentPage,
+                readerSettings = readerSettings,
+                textColor = textColor,
+                textBackground = textBackground,
+                backgroundTexture = backgroundTexture,
+                nativeTextureStrengthPercent = nativeTextureStrengthPercent,
+                textTypeface = textTypeface,
+                chapterTitleTypeface = chapterTitleTypeface,
+                chapterTitleTextColor = chapterTitleTextColor,
+                textShadowEnabled = readerSettings.textShadow,
+                textShadowColor = readerSettings.textShadowColor,
+                textShadowBlur = readerSettings.textShadowBlur,
+                textShadowX = readerSettings.textShadowX,
+                textShadowY = readerSettings.textShadowY,
+                contentPadding = contentPadding,
+                statusBarTopPadding = statusBarTopPadding,
+            )
+
+            // Back face overlay: hide text and dim when rotated > 90 deg
+            if (abs(transitionSpec.rotationY) > 90f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { rotationY = 180f }
+                ) {
+                    NovelAtmosphereBackground(
+                        backgroundColor = textBackground,
+                        backgroundTexture = backgroundTexture,
+                        nativeTextureStrengthPercent = nativeTextureStrengthPercent,
+                        oledEdgeGradient = activeOledEdgeGradient,
+                        isDarkTheme = isDarkTheme,
+                        pageEdgeShadow = false,
+                        pageEdgeShadowAlpha = 0f,
+                        backgroundImageModel = backgroundImageModel,
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.15f))
+                    )
+                }
+            }
+
+            // Lighting shadow overlay during the flip
+            if (transitionSpec.shadowAlpha > 0f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = transitionSpec.shadowAlpha))
+                )
+            }
+        }
     }
 }

@@ -162,6 +162,7 @@ enum class NovelPageTransitionStyle {
     DEPTH,
     BOOK,
     CURL,
+    BOOK_FLIP,
 }
 
 enum class NovelPageTurnSpeed {

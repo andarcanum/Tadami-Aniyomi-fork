@@ -20,6 +20,8 @@ internal fun novelPageTransitionStyleEntries(): ImmutableMap<NovelPageTransition
             stringResource(AYMR.strings.novel_reader_page_transition_style_book),
         NovelPageTransitionStyle.CURL to
             stringResource(AYMR.strings.novel_reader_page_transition_style_curl),
+        NovelPageTransitionStyle.BOOK_FLIP to
+            "Book Flip (3D - EXPERIMENTAL)",
     )
 }
 

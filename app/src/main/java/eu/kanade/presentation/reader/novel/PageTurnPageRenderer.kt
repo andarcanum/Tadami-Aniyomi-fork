@@ -106,6 +106,7 @@ internal fun resolvePageTurnRendererFallbackStyle(
         NovelPageTransitionStyle.INSTANT,
         NovelPageTransitionStyle.SLIDE,
         NovelPageTransitionStyle.DEPTH,
+        NovelPageTransitionStyle.BOOK_FLIP,
         -> requestedStyle
     }
 }
@@ -376,15 +377,15 @@ internal fun resolveNovelPageTurnRendererConfig(
     }
     // Keep the center band narrow so left-side taps still feel like page turns.
     val centerTapWidth = 0.20f
-    val shadowRadiusDp = if (isCurl) {
-        18f + (preset.shadowAlpha * 24f)
-    } else {
-        14f + (preset.shadowAlpha * 18f)
+    val shadowRadiusDp = when (style) {
+        NovelPageTransitionStyle.CURL -> 18f + (preset.shadowAlpha * 24f)
+        NovelPageTransitionStyle.BOOK -> 22f + (preset.shadowAlpha * 32f)
+        else -> 14f + (preset.shadowAlpha * 18f)
     }
-    val shadowOffsetXDp = if (isCurl) {
-        4f + (preset.curlAmount * 8f)
-    } else {
-        3f + (preset.curlAmount * 5f)
+    val shadowOffsetXDp = when (style) {
+        NovelPageTransitionStyle.CURL -> 4f + (preset.curlAmount * 8f)
+        NovelPageTransitionStyle.BOOK -> 2f + (preset.curlAmount * 4f)
+        else -> 3f + (preset.curlAmount * 5f)
     }
 
     return NovelPageTurnRendererConfig(
@@ -392,7 +393,11 @@ internal fun resolveNovelPageTurnRendererConfig(
         preset = preset,
         // Curl should honor the configured activation zone as a moving drag threshold.
         dragMode = NovelPageTurnDragMode.START_END,
-        dragPointerBehavior = pointerBehavior,
+        dragPointerBehavior = if (style == NovelPageTransitionStyle.BOOK) {
+            PageCurlConfig.DragInteraction.PointerBehavior.PageEdge
+        } else {
+            pointerBehavior
+        },
         dragActivationEdgeFraction = edgeFraction,
         dragTargetReachFraction = dragTargetReach,
         centerTapWidthFraction = centerTapWidth,
