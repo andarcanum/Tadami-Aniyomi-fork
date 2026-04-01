@@ -97,6 +97,28 @@ class NovelSelectedTextTranslationScreenModelTest {
     }
 
     @Test
+    fun `disabled selection does not expose translation ui or request translation`() {
+        runBlocking {
+            val provider = ScriptedSelectedTextTranslationProvider()
+            val screenModel = trackedNovelReaderScreenModel(
+                selectedTextTranslationProvider = provider,
+                selectedTextTranslationEnabled = false,
+            )
+
+            awaitLoaded(screenModel)
+
+            screenModel.updateSelectedTextSelection(selectedTextSelection())
+            screenModel.translateSelectedText()
+            yield()
+
+            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            state.selectedTextTranslationSelection shouldBe null
+            state.selectedTextTranslationUiState shouldBe NovelSelectedTextTranslationUiState.Idle
+            provider.requests shouldBe emptyList()
+        }
+    }
+
+    @Test
     fun `translate action enters loading and success states`() {
         runBlocking {
             val deferred = CompletableDeferred<NovelSelectedTextTranslationProviderOutcome>()
@@ -348,6 +370,7 @@ class NovelSelectedTextTranslationScreenModelTest {
 
     private fun trackedNovelReaderScreenModel(
         selectedTextTranslationProvider: NovelSelectedTextTranslationProvider,
+        selectedTextTranslationEnabled: Boolean = true,
     ): NovelReaderScreenModel {
         val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
         val chapter = NovelChapter.create().copy(
@@ -365,7 +388,9 @@ class NovelSelectedTextTranslationScreenModelTest {
             sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
             pluginStorage = FakeNovelPluginStorage(emptyList()),
             historyRepository = null,
-            novelReaderPreferences = createNovelReaderPreferences(),
+            novelReaderPreferences = createNovelReaderPreferences(
+                selectedTextTranslationEnabled = selectedTextTranslationEnabled,
+            ),
             isSystemDark = { false },
             geminiTranslationService = geminiTranslationService,
             airforceTranslationService = airforceTranslationService,
@@ -380,13 +405,16 @@ class NovelSelectedTextTranslationScreenModelTest {
         return model
     }
 
-    private fun createNovelReaderPreferences(): NovelReaderPreferences {
+    private fun createNovelReaderPreferences(
+        selectedTextTranslationEnabled: Boolean = true,
+    ): NovelReaderPreferences {
         return NovelReaderPreferences(
             preferenceStore = ReactivePreferenceStore(),
             json = Json { encodeDefaults = true },
         ).also { prefs ->
             prefs.cacheReadChapters().set(false)
             prefs.cacheReadChaptersUnlimited().set(false)
+            prefs.selectedTextTranslationEnabled().set(selectedTextTranslationEnabled)
         }
     }
 

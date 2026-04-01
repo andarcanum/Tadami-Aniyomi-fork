@@ -303,6 +303,7 @@ private class NovelPageReaderTextView constructor(
     private val onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit,
     private var onPlainTap: ((Float, Float) -> Unit)?,
     private val touchHandlingEnabled: Boolean,
+    selectionInteractionEnabled: Boolean,
 ) : TextView(context) {
     private val touchSlopPx = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
     private val longPressTimeoutMillis = ViewConfiguration.getLongPressTimeout().toLong()
@@ -313,12 +314,11 @@ private class NovelPageReaderTextView constructor(
     private var latestY = 0f
     private var selectionPromotionScheduled = false
     private var selectionPromotedByLongPress = false
-    private var selectionHighlightSpan: BackgroundColorSpan? = null
-    private var selectionHighlightStart: Int = -1
-    private var selectionHighlightEnd: Int = -1
+    private var selectionInteractionEnabled = selectionInteractionEnabled
     private val selectionPromotionRunnable = Runnable {
         selectionPromotionScheduled = false
         if (
+            selectionInteractionEnabled &&
             NovelReaderSelectionGestureArbiter.shouldPromoteSelectionCandidate(
                 elapsedMillis = SystemClock.uptimeMillis() - gestureStartUptimeMillis,
                 movedDistancePx = currentGestureDistancePx(),
@@ -334,12 +334,23 @@ private class NovelPageReaderTextView constructor(
     }
 
     init {
-        setTextIsSelectable(touchHandlingEnabled)
+        updateSelectionInteractionEnabled(selectionInteractionEnabled)
         isClickable = false
-        isLongClickable = touchHandlingEnabled
+    }
+
+    fun updateSelectionInteractionEnabled(enabled: Boolean) {
+        selectionInteractionEnabled = enabled && touchHandlingEnabled
+        setTextIsSelectable(selectionInteractionEnabled)
+        isLongClickable = selectionInteractionEnabled
+        if (!selectionInteractionEnabled) {
+            clearSelectionPromotion()
+            selectionPromotedByLongPress = false
+            clearSelection()
+        }
     }
 
     override fun onSelectionChanged(selStart: Int, selEnd: Int) {
+        if (!selectionInteractionEnabled) return
         super.onSelectionChanged(selStart, selEnd)
         publishSelection(selStart, selEnd)
     }
@@ -357,14 +368,24 @@ private class NovelPageReaderTextView constructor(
                 latestX = event.x
                 latestY = event.y
                 selectionPromotedByLongPress = false
+                if (selectionInteractionEnabled) {
+                    clearSelection()
+                    scheduleSelectionPromotion()
+                }
             }
             MotionEvent.ACTION_MOVE -> {
                 latestX = event.x
                 latestY = event.y
+                if (selectionInteractionEnabled && currentGestureDistancePx() > touchSlopPx) {
+                    clearSelectionPromotion()
+                }
             }
             MotionEvent.ACTION_UP -> {
                 latestX = event.x
                 latestY = event.y
+                if (selectionInteractionEnabled) {
+                    clearSelectionPromotion()
+                }
                 val plainTapEligible = NovelReaderSelectionGestureArbiter.shouldHandlePlainTap(
                     elapsedMillis = event.eventTime - gestureStartUptimeMillis,
                     movedDistancePx = currentGestureDistancePx(),
@@ -386,17 +407,25 @@ private class NovelPageReaderTextView constructor(
                 }
                 return handledBySuper
             }
+            MotionEvent.ACTION_CANCEL -> {
+                if (selectionInteractionEnabled) {
+                    clearSelection()
+                    clearSelectionPromotion()
+                }
+                selectionPromotedByLongPress = false
+                return handledBySuper
+            }
         }
         return handledBySuper
     }
 
     fun selectWordAt(x: Float, y: Float): Boolean {
+        if (!selectionInteractionEnabled) return false
         val spannable = text as? Spannable ?: return false
         val selectionRange = resolveWordSelectionRangeAt(x, y) ?: return false
         val selectionStart = selectionRange.first
         val selectionEnd = selectionRange.last + 1
         Selection.setSelection(spannable, selectionStart, selectionEnd)
-        applySelectionHighlight(selectionStart, selectionEnd)
         publishSelection(selectionStart, selectionEnd)
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
         return true
@@ -465,31 +494,11 @@ private class NovelPageReaderTextView constructor(
     }
 
     private fun hasActiveSelection(): Boolean {
+        if (!selectionInteractionEnabled) return false
         val spannable = text as? Spannable ?: return false
         val start = Selection.getSelectionStart(spannable)
         val end = Selection.getSelectionEnd(spannable)
         return start >= 0 && end >= 0 && start != end
-    }
-
-    private fun applySelectionHighlight(selStart: Int, selEnd: Int) {
-        clearSelectionHighlight()
-        val spannable = text as? Spannable ?: return
-        val color = android.graphics.Color.argb(60, 66, 133, 244)
-        val highlightSpan = BackgroundColorSpan(color)
-        spannable.setSpan(highlightSpan, selStart, selEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        selectionHighlightSpan = highlightSpan
-        selectionHighlightStart = selStart
-        selectionHighlightEnd = selEnd
-    }
-
-    private fun clearSelectionHighlight() {
-        val spannable = text as? Spannable ?: return
-        selectionHighlightSpan?.let {
-            spannable.removeSpan(it)
-        }
-        selectionHighlightSpan = null
-        selectionHighlightStart = -1
-        selectionHighlightEnd = -1
     }
 
     private fun clearSelection() {
@@ -503,12 +512,12 @@ private class NovelPageReaderTextView constructor(
     }
 
     private fun promoteSelectionFromGesture(): Boolean {
+        if (!selectionInteractionEnabled) return false
         val spannable = text as? Spannable ?: return false
         val selectionRange = resolveWordSelectionRangeAt(latestX, latestY) ?: return false
         val selectionStart = selectionRange.first
         val selectionEnd = selectionRange.last + 1
         Selection.setSelection(spannable, selectionStart, selectionEnd)
-        applySelectionHighlight(selectionStart, selectionEnd)
         publishSelection(selectionStart, selectionEnd)
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
         return true
@@ -801,6 +810,7 @@ internal fun NovelPageReaderTextBlock(
         textColor = blockTextColor,
         backgroundColor = textBackground,
     )
+    val selectionInteractionEnabled = touchHandlingEnabled && readerSettings.selectedTextTranslationEnabled
     AndroidView(
         modifier = modifier,
         factory = { context ->
@@ -811,6 +821,7 @@ internal fun NovelPageReaderTextBlock(
                 onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                 onPlainTap = onPlainTap,
                 touchHandlingEnabled = touchHandlingEnabled,
+                selectionInteractionEnabled = selectionInteractionEnabled,
             ).apply {
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -834,6 +845,7 @@ internal fun NovelPageReaderTextBlock(
         },
         update = { textView ->
             textView.updatePlainTapHandler(onPlainTap)
+            textView.updateSelectionInteractionEnabled(selectionInteractionEnabled)
             val renderedText = text.text
             if (textView.text?.toString() != renderedText) {
                 textView.text = buildNovelPageReaderSpannableText(

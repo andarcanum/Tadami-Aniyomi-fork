@@ -485,6 +485,9 @@ class NovelReaderScreenModel(
         }
     }
     private fun updateContent(settings: NovelReaderSettings) {
+        if (!settings.selectedTextTranslationEnabled) {
+            clearSelectedTextTranslationSelection(refreshUi = false)
+        }
         val html = rawHtml ?: return
         val novel = currentNovel ?: return
         val chapter = currentChapter ?: return
@@ -1349,6 +1352,11 @@ class NovelReaderScreenModel(
         }
     }
     fun updateSelectedTextSelection(selection: NovelSelectedTextSelection?) {
+        val currentSettings = (mutableState.value as? State.Success)?.readerSettings
+        if (currentSettings != null && !currentSettings.selectedTextTranslationEnabled) {
+            clearSelectedTextTranslationSelection(refreshUi = false)
+            return
+        }
         selectedTextTranslationJob?.cancel()
         selectedTextTranslationJob = null
         selectedTextTranslationSelection = selection
@@ -1428,20 +1436,22 @@ class NovelReaderScreenModel(
     }
 
     fun dismissSelectedTextTranslation() {
-        selectedTextTranslationJob?.cancel()
-        selectedTextTranslationJob = null
-        selectedTextTranslationSelection = null
-        selectedTextTranslationUiState = NovelSelectedTextTranslationUiState.Idle
-        refreshSelectedTextTranslationUi()
+        clearSelectedTextTranslationSelection()
     }
 
     fun resetSelectedTextTranslationForChapter() {
+        clearSelectedTextTranslationSelection()
+        selectedTextTranslationSessionCache.clear()
+    }
+
+    private fun clearSelectedTextTranslationSelection(refreshUi: Boolean = true) {
         selectedTextTranslationJob?.cancel()
         selectedTextTranslationJob = null
         selectedTextTranslationSelection = null
         selectedTextTranslationUiState = NovelSelectedTextTranslationUiState.Idle
-        selectedTextTranslationSessionCache.clear()
-        refreshSelectedTextTranslationUi()
+        if (refreshUi) {
+            refreshSelectedTextTranslationUi()
+        }
     }
 
     private fun refreshSelectedTextTranslationUi() {
