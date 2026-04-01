@@ -483,21 +483,8 @@ private fun GeneralTab(
                 )
             },
         )
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_volume_buttons),
-            subtitle = stringResource(AYMR.strings.novel_reader_volume_buttons_summary),
-            checked = settings.useVolumeButtons,
-            onCheckedChanged = {
-                update(it, { o, v -> o.copy(useVolumeButtons = v) }, { preferences.useVolumeButtons().set(it) })
-            },
-        )
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_vertical_seekbar),
-            checked = settings.verticalSeekbar,
-            onCheckedChanged = {
-                update(it, { o, v -> o.copy(verticalSeekbar = v) }, { preferences.verticalSeekbar().set(it) })
-            },
-        )
+        SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_gestures))
+
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_swipe_gestures),
             subtitle = stringResource(AYMR.strings.novel_reader_swipe_gestures_summary),
@@ -537,33 +524,51 @@ private fun GeneralTab(
                 update(it, { o, v -> o.copy(tapToScroll = v) }, { preferences.tapToScroll().set(it) })
             },
         )
-        LnReaderSliderRow(
-            label = stringResource(AYMR.strings.novel_reader_auto_scroll_speed),
-            valueText = { it.roundToInt().toString() },
-            committedValue = intervalToAutoScrollSpeed(settings.autoScrollInterval).toFloat(),
-            range = 1f..100f,
-            steps = 98,
-            enabled = true,
-            onCommit = {
-                val speed = it.roundToInt().coerceIn(1, 100)
-                update(
-                    autoScrollSpeedToInterval(speed),
-                    { o, v -> o.copy(autoScrollInterval = v) },
-                    { preferences.autoScrollInterval().set(it) },
-                )
+
+        SettingsSectionHeader(
+            title = stringResource(AYMR.strings.novel_reader_selected_text_translation_section),
+        )
+        if (overrideEnabled) {
+            Text(
+                text = stringResource(AYMR.strings.novel_reader_selected_text_translation_global_only_summary),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        SwitchPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_selected_text_translation_enabled),
+            checked = settings.selectedTextTranslationEnabled,
+            onCheckedChanged = { preferences.selectedTextTranslationEnabled().set(it) },
+        )
+        EditTextPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_selected_text_translation_target_language),
+            subtitle = "%s",
+            icon = null,
+            value = settings.selectedTextTranslationTargetLanguage,
+            onConfirm = {
+                preferences.selectedTextTranslationTargetLanguage().set(it)
+                true
+            },
+            singleLine = true,
+            canBeBlank = false,
+            formatSubtitle = false,
+        )
+
+        SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_advanced))
+
+        SwitchPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_volume_buttons),
+            subtitle = stringResource(AYMR.strings.novel_reader_volume_buttons_summary),
+            checked = settings.useVolumeButtons,
+            onCheckedChanged = {
+                update(it, { o, v -> o.copy(useVolumeButtons = v) }, { preferences.useVolumeButtons().set(it) })
             },
         )
-        LnReaderSliderRow(
-            label = stringResource(AYMR.strings.novel_reader_auto_scroll_offset),
-            valueText = { it.roundToInt().toString() },
-            committedValue = settings.autoScrollOffset.toFloat(),
-            range = 0f..2000f,
-            steps = 1999,
-            enabled = true,
-            onCommit = {
-                update(it.roundToInt(), { o, v ->
-                    o.copy(autoScrollOffset = v)
-                }, { preferences.autoScrollOffset().set(it) })
+        SwitchPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_vertical_seekbar),
+            checked = settings.verticalSeekbar,
+            onCheckedChanged = {
+                update(it, { o, v -> o.copy(verticalSeekbar = v) }, { preferences.verticalSeekbar().set(it) })
             },
         )
         SwitchPreferenceWidget(
@@ -639,38 +644,35 @@ private fun GeneralTab(
                 update(it, { o, v -> o.copy(bionicReading = v) }, { preferences.bionicReading().set(it) })
             },
         )
-
-        SettingsSectionHeader(
-            title = stringResource(AYMR.strings.novel_reader_selected_text_translation_section),
-        )
-        if (overrideEnabled) {
-            Text(
-                text = stringResource(AYMR.strings.novel_reader_selected_text_translation_global_only_summary),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_selected_text_translation_enabled),
-            checked = settings.selectedTextTranslationEnabled,
-            onCheckedChanged = { preferences.selectedTextTranslationEnabled().set(it) },
-        )
-        EditTextPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_selected_text_translation_target_language),
-            subtitle = "%s",
-            icon = null,
-            value = settings.selectedTextTranslationTargetLanguage,
-            onConfirm = {
-                preferences.selectedTextTranslationTargetLanguage().set(it)
-                true
+        LnReaderSliderRow(
+            label = stringResource(AYMR.strings.novel_reader_auto_scroll_speed),
+            valueText = { it.roundToInt().toString() },
+            committedValue = intervalToAutoScrollSpeed(settings.autoScrollInterval).toFloat(),
+            range = 1f..100f,
+            steps = 98,
+            enabled = true,
+            onCommit = {
+                val speed = it.roundToInt().coerceIn(1, 100)
+                update(
+                    autoScrollSpeedToInterval(speed),
+                    { o, v -> o.copy(autoScrollInterval = v) },
+                    { preferences.autoScrollInterval().set(it) },
+                )
             },
-            singleLine = true,
-            canBeBlank = false,
-            formatSubtitle = false,
         )
-
-        SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_advanced))
-
+        LnReaderSliderRow(
+            label = stringResource(AYMR.strings.novel_reader_auto_scroll_offset),
+            valueText = { it.roundToInt().toString() },
+            committedValue = settings.autoScrollOffset.toFloat(),
+            range = 0f..2000f,
+            steps = 1999,
+            enabled = true,
+            onCommit = {
+                update(it.roundToInt(), { o, v ->
+                    o.copy(autoScrollOffset = v)
+                }, { preferences.autoScrollOffset().set(it) })
+            },
+        )
         EditTextPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_custom_css),
             subtitle = stringResource(AYMR.strings.novel_reader_custom_css_hint),

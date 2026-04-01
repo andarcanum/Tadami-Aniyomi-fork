@@ -344,9 +344,9 @@
     <string name="novel_reader_page_turn_activation_zone_normal">Нормальная</string>
     <string name="novel_reader_page_turn_activation_zone_wide">Широкая</string>
     <string name="novel_reader_page_turn_activation_zone_wider">Шире</string>
-    <string name="novel_reader_prefer_webview_renderer">Предпочитать WebView-рендерер</string>
+    <string name="novel_reader_prefer_webview_renderer">Webview режим</string>
     <string name="novel_reader_prefer_webview_renderer_summary">По умолчанию открывать главу в WebView. Отключите, чтобы вернуться к нативному рендереру.</string>
-    <string name="novel_reader_rich_native_renderer_experimental">Расширенный нативный рендер (экспериментально)</string>
+    <string name="novel_reader_rich_native_renderer_experimental">Нативный рендер расширенный</string>
     <string name="novel_reader_rich_native_renderer_experimental_summary">Сохранять базовые HTML-стили в нативном ридере с автоматическим переходом в WebView для неподдерживаемого содержимого.</string>
     <string name="novel_reader_renderer_disabled_page_mode_summary">Недоступно, пока включён постраничный режим.</string>
     <string name="novel_reader_renderer_disabled_webview_summary">Недоступно, пока глава открыта в WebView.</string>
@@ -449,9 +449,10 @@
     <string name="label_manga_sources">Доступные источники</string>
     <string name="label_anime_sources">Доступные источники</string>
     <string name="label_novel_sources">Источники ранобэ</string>
-    <string name="novel_reader_section_reading_behavior">Поведение чтения</string>
+    <string name="novel_reader_section_reading_behavior">Режим чтения</string>
+    <string name="novel_reader_section_gestures">Настройка жестов</string>
     <string name="novel_reader_section_translation">Перевод</string>
-    <string name="novel_reader_section_advanced">Дополнительно</string>
+    <string name="novel_reader_section_advanced">Дополнительные настройки</string>
     <string name="novel_reader_section_typography">Типографика</string>
     <string name="novel_reader_section_appearance">Оформление</string>
     <string name="novel_reader_section_backgrounds">Фоны</string>

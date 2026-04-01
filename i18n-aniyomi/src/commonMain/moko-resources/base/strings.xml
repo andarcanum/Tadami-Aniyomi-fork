@@ -439,9 +439,10 @@
     <string name="novel_reader_advanced">Advanced</string>
     <string name="novel_reader_tab_general">General</string>
     <string name="novel_reader_tab_reading">Reading</string>
-    <string name="novel_reader_section_reading_behavior">Reading behavior</string>
+    <string name="novel_reader_section_reading_behavior">Reading mode</string>
+    <string name="novel_reader_section_gestures">Gesture settings</string>
     <string name="novel_reader_section_translation">Translation</string>
-    <string name="novel_reader_section_advanced">Advanced</string>
+    <string name="novel_reader_section_advanced">Additional settings</string>
     <string name="novel_reader_section_typography">Typography</string>
     <string name="novel_reader_section_appearance">Appearance</string>
     <string name="novel_reader_section_backgrounds">Backgrounds</string>
@@ -518,9 +519,9 @@
     <string name="novel_reader_page_turn_activation_zone_normal">Normal</string>
     <string name="novel_reader_page_turn_activation_zone_wide">Wide</string>
     <string name="novel_reader_page_turn_activation_zone_wider">Wider</string>
-    <string name="novel_reader_prefer_webview_renderer">Prefer WebView renderer</string>
+    <string name="novel_reader_prefer_webview_renderer">WebView mode</string>
     <string name="novel_reader_prefer_webview_renderer_summary">Open chapter in WebView by default. Disable to use native renderer.</string>
-    <string name="novel_reader_rich_native_renderer_experimental">Use rich native rendering (experimental)</string>
+    <string name="novel_reader_rich_native_renderer_experimental">Enhanced native renderer</string>
     <string name="novel_reader_rich_native_renderer_experimental_summary">Preserve common HTML styles in the native renderer with automatic WebView fallback for unsupported content.</string>
     <string name="novel_reader_renderer_disabled_page_mode_summary">Unavailable while Page mode is enabled.</string>
     <string name="novel_reader_renderer_disabled_webview_summary">Unavailable while the chapter is currently opened in WebView.</string>
