@@ -1,40 +1,34 @@
 package eu.kanade.presentation.reader.novel
 
+import android.graphics.Typeface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
-import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichTextSegment
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichTextStyle
+import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextRenderer
+import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextSelection
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import android.graphics.Color as AndroidColor
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
@@ -110,34 +104,23 @@ private fun parseNovelRichCssColor(value: String?): Color? {
     }
 }
 
-@Composable
-private fun NovelRichAnnotatedText(
-    text: AnnotatedString,
-    style: TextStyle,
-    modifier: Modifier = Modifier,
-    onLinkClick: (String) -> Unit,
-) {
-    val hasLinkAnnotations = remember(text) {
-        text.length > 0 && text.getStringAnnotations(tag = "URL", start = 0, end = text.length).isNotEmpty()
-    }
-    if (!hasLinkAnnotations) {
-        Text(
-            text = text,
-            style = style,
-            modifier = modifier,
+private fun resolveNativeReaderTextAlign(
+    globalTextAlign: ReaderTextAlign,
+    preserveSourceTextAlignInNative: Boolean,
+    sourceTextAlign: eu.kanade.tachiyomi.ui.reader.novel.NovelRichBlockTextAlign? = null,
+): ReaderTextAlign {
+    return when (
+        resolveNativeTextAlign(
+            globalTextAlign = globalTextAlign,
+            preserveSourceTextAlignInNative = preserveSourceTextAlignInNative,
+            sourceTextAlign = sourceTextAlign,
         )
-        return
+    ) {
+        TextAlign.Center -> ReaderTextAlign.CENTER
+        TextAlign.End -> ReaderTextAlign.RIGHT
+        TextAlign.Justify -> ReaderTextAlign.JUSTIFY
+        else -> ReaderTextAlign.LEFT
     }
-
-    @Suppress("DEPRECATION")
-    ClickableText(
-        text = text,
-        style = style,
-        modifier = modifier,
-        onClick = { offset ->
-            resolveNovelRichLinkAtCharOffset(text, offset)?.let(onLinkClick)
-        },
-    )
 }
 
 @Composable
@@ -153,48 +136,15 @@ internal fun NovelRichNativeScrollItem(
     statusBarTopPadding: androidx.compose.ui.unit.Dp,
     textColor: Color,
     backgroundColor: Color,
-    fontSize: Int,
-    lineHeight: Float,
-    composeFontFamily: FontFamily?,
-    chapterTitleFontFamily: FontFamily?,
+    readerSettings: NovelReaderSettings,
+    textTypeface: Typeface?,
+    chapterTitleTypeface: Typeface?,
     paragraphSpacing: androidx.compose.ui.unit.Dp,
-    textAlign: ReaderTextAlign,
-    forceParagraphIndent: Boolean,
-    preserveSourceTextAlignInNative: Boolean,
-    forceBoldText: Boolean,
-    forceItalicText: Boolean,
-    textShadow: Boolean,
-    textShadowColor: String,
-    textShadowBlur: Float,
-    textShadowX: Float,
-    textShadowY: Float,
+    selectionSessionIdProvider: () -> Long,
+    onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit,
+    onPlainTap: ((Float, Float) -> Unit)? = null,
 ) {
     val context = LocalContext.current
-    val textShadowImpl = remember(
-        textShadow,
-        textShadowColor,
-        textShadowBlur,
-        textShadowX,
-        textShadowY,
-        textColor,
-        backgroundColor,
-    ) {
-        if (textShadow) {
-            val customColor = parseReaderColor(textShadowColor)
-            val shadowColor = resolveAutoReaderShadowColor(
-                customShadowColor = customColor,
-                textColor = textColor,
-                backgroundColor = backgroundColor,
-            )
-            Shadow(
-                color = shadowColor,
-                offset = Offset(textShadowX, textShadowY),
-                blurRadius = textShadowBlur,
-            )
-        } else {
-            null
-        }
-    }
     val onLinkClick: (String) -> Unit = { rawUrl ->
         val resolvedUrl = resolveNovelReaderLinkUrl(
             rawUrl = rawUrl,
@@ -216,31 +166,14 @@ internal fun NovelRichNativeScrollItem(
         is NovelRichContentBlock.Paragraph -> {
             val text = buildNovelRichAnnotatedString(block.segments)
             val isChapterTitle = index == 0 && isNativeChapterTitleText(text.text, chapterTitle)
-            val paragraphStyle = MaterialTheme.typography.bodyLarge.copy(
-                color = textColor,
-                fontSize = if (isChapterTitle) (fontSize * 1.12f).sp else fontSize.sp,
-                lineHeight = if (isChapterTitle) (lineHeight * 1.08f).em else lineHeight.em,
-                fontFamily = if (isChapterTitle) chapterTitleFontFamily ?: composeFontFamily else composeFontFamily,
-                fontWeight = if (isChapterTitle) {
-                    FontWeight.SemiBold
-                } else if (forceBoldText) {
-                    FontWeight.Bold
-                } else {
-                    FontWeight.Normal
-                },
-                fontStyle = if (forceItalicText) FontStyle.Italic else FontStyle.Normal,
-                shadow = textShadowImpl,
-            ).withOptionalTextAlign(
-                resolveNativeTextAlign(
-                    globalTextAlign = textAlign,
-                    preserveSourceTextAlignInNative = preserveSourceTextAlignInNative,
-                    sourceTextAlign = block.textAlign,
-                ),
-            ).withOptionalFirstLineIndentEm(
-                resolveNativeFirstLineIndentEm(
-                    forceParagraphIndent = forceParagraphIndent && !isChapterTitle,
-                    sourceFirstLineIndentEm = block.firstLineIndentEm,
-                ),
+            val resolvedTextAlign = resolveNativeReaderTextAlign(
+                globalTextAlign = readerSettings.textAlign,
+                preserveSourceTextAlignInNative = readerSettings.preserveSourceTextAlignInNative,
+                sourceTextAlign = block.textAlign,
+            )
+            val resolvedFirstLineIndentEm = resolveNativeFirstLineIndentEm(
+                forceParagraphIndent = readerSettings.forceParagraphIndent && !isChapterTitle,
+                sourceFirstLineIndentEm = block.firstLineIndentEm,
             )
             if (isChapterTitle) {
                 Column(
@@ -249,10 +182,28 @@ internal fun NovelRichNativeScrollItem(
                         bottom = if (index == lastIndex) 0.dp else 18.dp,
                     ),
                 ) {
-                    NovelRichAnnotatedText(
+                    NovelPageReaderTextBlock(
                         text = text,
-                        style = paragraphStyle.copy(color = MaterialTheme.colorScheme.primary),
-                        onLinkClick = onLinkClick,
+                        isChapterTitle = true,
+                        firstLineIndentEm = null,
+                        readerSettings = readerSettings,
+                        textColor = textColor,
+                        textBackground = backgroundColor,
+                        textAlign = resolvedTextAlign,
+                        textTypeface = textTypeface,
+                        chapterTitleTypeface = chapterTitleTypeface,
+                        chapterTitleTextColor = MaterialTheme.colorScheme.primary,
+                        textShadowEnabled = readerSettings.textShadow,
+                        textShadowColor = readerSettings.textShadowColor,
+                        textShadowBlur = readerSettings.textShadowBlur,
+                        textShadowX = readerSettings.textShadowX,
+                        textShadowY = readerSettings.textShadowY,
+                        selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
+                        selectionSessionIdProvider = selectionSessionIdProvider,
+                        onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+                        onPlainTap = onPlainTap,
+                        onUrlClick = onLinkClick,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                     Box(
                         modifier = Modifier
@@ -263,14 +214,31 @@ internal fun NovelRichNativeScrollItem(
                     )
                 }
             } else {
-                NovelRichAnnotatedText(
+                NovelPageReaderTextBlock(
                     text = text,
-                    style = paragraphStyle,
+                    isChapterTitle = false,
+                    firstLineIndentEm = resolvedFirstLineIndentEm,
+                    readerSettings = readerSettings,
+                    textColor = textColor,
+                    textBackground = backgroundColor,
+                    textAlign = resolvedTextAlign,
+                    textTypeface = textTypeface,
+                    chapterTitleTypeface = chapterTitleTypeface,
+                    chapterTitleTextColor = MaterialTheme.colorScheme.primary,
+                    textShadowEnabled = readerSettings.textShadow,
+                    textShadowColor = readerSettings.textShadowColor,
+                    textShadowBlur = readerSettings.textShadowBlur,
+                    textShadowX = readerSettings.textShadowX,
+                    textShadowY = readerSettings.textShadowY,
+                    selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
+                    selectionSessionIdProvider = selectionSessionIdProvider,
+                    onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+                    onPlainTap = onPlainTap,
+                    onUrlClick = onLinkClick,
                     modifier = Modifier.padding(
                         top = if (index == 0) statusBarTopPadding else 0.dp,
                         bottom = if (index == lastIndex) 0.dp else paragraphSpacing,
                     ),
-                    onLinkClick = onLinkClick,
                 )
             }
         }
@@ -281,55 +249,73 @@ internal fun NovelRichNativeScrollItem(
                 3 -> 1.13f
                 else -> 1.08f
             }
-            NovelRichAnnotatedText(
+            NovelPageReaderTextBlock(
                 text = buildNovelRichAnnotatedString(block.segments),
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    color = textColor,
-                    fontSize = (fontSize * headingScale).sp,
-                    lineHeight = (lineHeight * 1.1f).em,
-                    fontFamily = composeFontFamily,
-                    fontWeight = if (forceBoldText) FontWeight.Bold else FontWeight.SemiBold,
-                    fontStyle = if (forceItalicText) FontStyle.Italic else FontStyle.Normal,
-                    shadow = textShadowImpl,
-                ).withOptionalTextAlign(
-                    resolveNativeTextAlign(
-                        globalTextAlign = textAlign,
-                        preserveSourceTextAlignInNative = preserveSourceTextAlignInNative,
-                        sourceTextAlign = block.textAlign,
-                    ),
+                isChapterTitle = false,
+                firstLineIndentEm = null,
+                readerSettings = readerSettings,
+                textColor = textColor,
+                textBackground = backgroundColor,
+                textAlign = resolveNativeReaderTextAlign(
+                    globalTextAlign = readerSettings.textAlign,
+                    preserveSourceTextAlignInNative = readerSettings.preserveSourceTextAlignInNative,
+                    sourceTextAlign = block.textAlign,
                 ),
+                textTypeface = textTypeface,
+                chapterTitleTypeface = chapterTitleTypeface,
+                chapterTitleTextColor = MaterialTheme.colorScheme.primary,
+                textShadowEnabled = readerSettings.textShadow,
+                textShadowColor = readerSettings.textShadowColor,
+                textShadowBlur = readerSettings.textShadowBlur,
+                textShadowX = readerSettings.textShadowX,
+                textShadowY = readerSettings.textShadowY,
+                fontSizeMultiplier = headingScale,
+                lineHeightMultiplier = 1.1f,
+                baseTypefaceStyle = Typeface.BOLD,
+                selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
+                selectionSessionIdProvider = selectionSessionIdProvider,
+                onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+                onPlainTap = onPlainTap,
+                onUrlClick = onLinkClick,
                 modifier = Modifier.padding(
                     top = if (index == 0) statusBarTopPadding else 4.dp,
                     bottom = if (index == lastIndex) 0.dp else paragraphSpacing + 2.dp,
                 ),
-                onLinkClick = onLinkClick,
             )
         }
         is NovelRichContentBlock.BlockQuote -> {
-            NovelRichAnnotatedText(
+            NovelPageReaderTextBlock(
                 text = buildNovelRichAnnotatedString(block.segments),
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    color = textColor.copy(alpha = 0.92f),
-                    fontSize = fontSize.sp,
-                    lineHeight = lineHeight.em,
-                    fontFamily = composeFontFamily,
-                    fontWeight = if (forceBoldText) FontWeight.Bold else FontWeight.Normal,
-                    fontStyle = if (forceItalicText) FontStyle.Italic else FontStyle.Normal,
-                    shadow = textShadowImpl,
-                ).withOptionalTextAlign(
-                    resolveNativeTextAlign(
-                        globalTextAlign = textAlign,
-                        preserveSourceTextAlignInNative = preserveSourceTextAlignInNative,
-                        sourceTextAlign = block.textAlign,
-                    ),
+                isChapterTitle = false,
+                firstLineIndentEm = null,
+                readerSettings = readerSettings,
+                textColor = textColor,
+                textBackground = backgroundColor,
+                textAlign = resolveNativeReaderTextAlign(
+                    globalTextAlign = readerSettings.textAlign,
+                    preserveSourceTextAlignInNative = readerSettings.preserveSourceTextAlignInNative,
+                    sourceTextAlign = block.textAlign,
                 ),
+                textTypeface = textTypeface,
+                chapterTitleTypeface = chapterTitleTypeface,
+                chapterTitleTextColor = MaterialTheme.colorScheme.primary,
+                textShadowEnabled = readerSettings.textShadow,
+                textShadowColor = readerSettings.textShadowColor,
+                textShadowBlur = readerSettings.textShadowBlur,
+                textShadowX = readerSettings.textShadowX,
+                textShadowY = readerSettings.textShadowY,
+                textColorOverride = textColor.copy(alpha = 0.92f),
+                selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
+                selectionSessionIdProvider = selectionSessionIdProvider,
+                onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+                onPlainTap = onPlainTap,
+                onUrlClick = onLinkClick,
                 modifier = Modifier
                     .padding(
                         top = if (index == 0) statusBarTopPadding else 0.dp,
                         bottom = if (index == lastIndex) 0.dp else paragraphSpacing,
                     )
                     .padding(start = 12.dp),
-                onLinkClick = onLinkClick,
             )
         }
         NovelRichContentBlock.HorizontalRule -> {

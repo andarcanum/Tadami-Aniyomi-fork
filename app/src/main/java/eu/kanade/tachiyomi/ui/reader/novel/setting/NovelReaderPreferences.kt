@@ -84,6 +84,10 @@ data class NovelReaderSettings(
     val customCSS: String,
     val customJS: String,
 
+    // Selected text translation
+    val selectedTextTranslationEnabled: Boolean = true,
+    val selectedTextTranslationTargetLanguage: String = "Russian",
+
     // Gemini Translation
     val geminiEnabled: Boolean = false,
     val geminiApiKey: String = "",
@@ -500,6 +504,12 @@ class NovelReaderPreferences(
 
     fun customJS() = preferenceStore.getString("novel_reader_custom_js", "")
 
+    fun selectedTextTranslationEnabled() =
+        preferenceStore.getBoolean("novel_reader_selected_text_translation_enabled", true)
+
+    fun selectedTextTranslationTargetLanguage() =
+        preferenceStore.getString("novel_reader_selected_text_translation_target_language", "Russian")
+
     // Gemini Translation
     fun geminiEnabled() = preferenceStore.getBoolean("novel_reader_gemini_enabled", false)
 
@@ -798,6 +808,10 @@ class NovelReaderPreferences(
             bionicReading = override?.bionicReading ?: bionicReading().get(),
             customCSS = override?.customCSS ?: customCSS().get(),
             customJS = override?.customJS ?: customJS().get(),
+            selectedTextTranslationEnabled =
+            selectedTextTranslationEnabled().get(),
+            selectedTextTranslationTargetLanguage =
+            selectedTextTranslationTargetLanguage().get(),
             geminiEnabled = geminiEnabled().get(),
             geminiApiKey = override?.geminiApiKey ?: geminiApiKey().get(),
             geminiModel = override?.geminiModel ?: geminiModel().get(),
@@ -980,8 +994,15 @@ class NovelReaderPreferences(
         val advancedFlow = combine(
             customCSS().changes(),
             customJS().changes(),
-        ) { customCSS, customJS ->
-            AdvancedSettings(customCSS, customJS)
+            selectedTextTranslationEnabled().changes(),
+            selectedTextTranslationTargetLanguage().changes(),
+        ) { values: Array<Any?> ->
+            AdvancedSettings(
+                customCSS = values[0] as String,
+                customJS = values[1] as String,
+                selectedTextTranslationEnabled = values[2] as Boolean,
+                selectedTextTranslationTargetLanguage = values[3] as String,
+            )
         }.distinctUntilChanged()
 
         val geminiFlow = combine(
@@ -1138,6 +1159,8 @@ class NovelReaderPreferences(
                 bionicReading = override?.bionicReading ?: accessibility.bionicReading,
                 customCSS = override?.customCSS ?: advanced.customCSS,
                 customJS = override?.customJS ?: advanced.customJS,
+                selectedTextTranslationEnabled = advanced.selectedTextTranslationEnabled,
+                selectedTextTranslationTargetLanguage = advanced.selectedTextTranslationTargetLanguage,
                 geminiEnabled = gemini.enabled,
                 geminiApiKey = override?.geminiApiKey ?: gemini.apiKey,
                 geminiModel = override?.geminiModel ?: gemini.model,
@@ -1250,6 +1273,8 @@ class NovelReaderPreferences(
     private data class AdvancedSettings(
         val customCSS: String,
         val customJS: String,
+        val selectedTextTranslationEnabled: Boolean,
+        val selectedTextTranslationTargetLanguage: String,
     )
 
     private data class GeminiSettings(

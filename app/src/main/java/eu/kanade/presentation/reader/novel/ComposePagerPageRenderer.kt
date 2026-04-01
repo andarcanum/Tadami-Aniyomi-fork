@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextSelection
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
@@ -165,6 +166,9 @@ internal fun ComposePagerPageRenderer(
     onMoveForward: () -> Unit,
     onOpenPreviousChapter: () -> Unit,
     onOpenNextChapter: () -> Unit,
+    onTextTap: (Float, Float) -> Unit = { _, _ -> onToggleUi() },
+    selectionSessionIdProvider: () -> Long = { 0L },
+    onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit = {},
 ) {
     val density = LocalDensity.current
     val useBoundaryPreview = shouldUseComposePagerBoundaryPreview(transitionStyle)
@@ -278,17 +282,7 @@ internal fun ComposePagerPageRenderer(
             .pointerInput(readerSettings.tapToScroll) {
                 detectTapGestures(
                     onTap = { offset ->
-                        when (
-                            resolveReaderTapAction(
-                                tapX = offset.x,
-                                width = size.width.toFloat(),
-                                tapToScrollEnabled = readerSettings.tapToScroll,
-                            )
-                        ) {
-                            ReaderTapAction.TOGGLE_UI -> latestToggleUi()
-                            ReaderTapAction.BACKWARD -> latestMoveBackward()
-                            ReaderTapAction.FORWARD -> latestMoveForward()
-                        }
+                        onTextTap(offset.x, size.width.toFloat())
                     },
                 )
             },
@@ -394,6 +388,9 @@ internal fun ComposePagerPageRenderer(
                     textShadowY = readerSettings.textShadowY,
                     contentPadding = contentPadding,
                     statusBarTopPadding = statusBarTopPadding,
+                    selectionSessionIdProvider = selectionSessionIdProvider,
+                    onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+                    onPlainTap = onTextTap,
                 )
             }
 

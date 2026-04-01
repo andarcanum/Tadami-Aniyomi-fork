@@ -1139,6 +1139,22 @@ object SettingsNovelReaderScreen : SearchableSettings {
             "Gemini Private"
         }
         val items = mutableListOf<Preference.PreferenceItem<out Any>>(
+            Preference.PreferenceItem.TextPreference(
+                title = stringResource(AYMR.strings.novel_reader_selected_text_translation_section),
+                subtitle = stringResource(
+                    AYMR.strings.novel_reader_selected_text_translation_global_only_summary,
+                ),
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                preference = prefs.selectedTextTranslationEnabled(),
+                title = stringResource(AYMR.strings.novel_reader_selected_text_translation_enabled),
+            ),
+            Preference.PreferenceItem.EditTextInfoPreference(
+                preference = prefs.selectedTextTranslationTargetLanguage(),
+                dialogSubtitle = null,
+                title = stringResource(AYMR.strings.novel_reader_selected_text_translation_target_language),
+                subtitle = "%s",
+            ),
             Preference.PreferenceItem.ListPreference(
                 preference = translationProviderPref,
                 entries = persistentMapOf(

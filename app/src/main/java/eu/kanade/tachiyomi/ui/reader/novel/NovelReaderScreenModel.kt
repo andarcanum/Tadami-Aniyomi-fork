@@ -32,7 +32,12 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationCacheEntry
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleUnofficialSelectedTextTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationProvider
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationProviderOutcome
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationRequest
+import eu.kanade.tachiyomi.ui.reader.novel.translation.buildNovelSelectedTextTranslationRequestKey
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePresets
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationParams
@@ -165,6 +170,14 @@ class NovelReaderScreenModel(
             json = json,
         )
     },
+    private val selectedTextTranslationProvider: NovelSelectedTextTranslationProvider = run {
+        val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
+        val json = Injekt.get<Json>()
+        GoogleUnofficialSelectedTextTranslationProvider(
+            client = networkHelper.client,
+            json = json,
+        )
+    },
 ) : StateScreenModel<NovelReaderScreenModel.State>(State.Loading) {
     private var settingsJob: Job? = null
     private var rawHtml: String? = null
@@ -207,6 +220,11 @@ class NovelReaderScreenModel(
     private var deepSeekModelIds: List<String> = emptyList()
     private var isDeepSeekModelsLoading: Boolean = false
     private var isTestingDeepSeekConnection: Boolean = false
+    private var selectedTextTranslationSelection: NovelSelectedTextSelection? = null
+    private var selectedTextTranslationUiState: NovelSelectedTextTranslationUiState =
+        NovelSelectedTextTranslationUiState.Idle
+    private var selectedTextTranslationJob: Job? = null
+    private val selectedTextTranslationSessionCache = NovelSelectedTextTranslationSessionCache()
     private val progressPersistenceMutex = Mutex()
     private var pendingProgressPersistence: PendingProgressPersistence? = null
     private var progressPersistenceJob: Job? = null
@@ -294,6 +312,7 @@ class NovelReaderScreenModel(
         isTestingOpenRouterConnection = false
         isDeepSeekModelsLoading = false
         isTestingDeepSeekConnection = false
+        resetSelectedTextTranslationForChapter()
         lastSavedProgress = chapter.lastPageRead
         lastSavedRead = chapter.read
         val savedNativeProgress = decodeNativeScrollProgress(chapter.lastPageRead)
@@ -590,6 +609,8 @@ class NovelReaderScreenModel(
             nextChapterId = chapterNavigation.nextChapterId,
             nextChapterName = chapterNavigation.nextChapterName,
             chapterWebUrl = chapterWebUrl,
+            selectedTextTranslationSelection = selectedTextTranslationSelection,
+            selectedTextTranslationUiState = selectedTextTranslationUiState,
             isGeminiTranslating = isGeminiTranslating,
             geminiTranslationProgress = geminiTranslationProgress,
             isGeminiTranslationVisible = geminiVisibleInUi,
@@ -1006,6 +1027,7 @@ class NovelReaderScreenModel(
         nextChapterPrefetchJob?.cancel()
         nextChapterGeminiPrefetchJob?.cancel()
         geminiTranslationJob?.cancel()
+        selectedTextTranslationJob?.cancel()
         super.onDispose()
     }
     fun addGeminiLog(message: String) {
@@ -1325,6 +1347,106 @@ class NovelReaderScreenModel(
         } else {
             setGlobal()
         }
+    }
+    fun updateSelectedTextSelection(selection: NovelSelectedTextSelection?) {
+        selectedTextTranslationJob?.cancel()
+        selectedTextTranslationJob = null
+        selectedTextTranslationSelection = selection
+        selectedTextTranslationUiState = if (selection == null) {
+            NovelSelectedTextTranslationUiState.Idle
+        } else {
+            NovelSelectedTextTranslationUiState.SelectionAvailable(selection)
+        }
+        refreshSelectedTextTranslationUi()
+    }
+
+    fun translateSelectedText() {
+        val selection = selectedTextTranslationSelection ?: return
+        val currentState = mutableState.value as? State.Success ?: return
+        val settings = currentState.readerSettings
+        if (!settings.selectedTextTranslationEnabled) return
+        if (selectedTextTranslationJob?.isActive == true) return
+
+        val request = NovelSelectedTextTranslationRequest(
+            selectedText = selection.text,
+            targetLanguage = settings.selectedTextTranslationTargetLanguage,
+        )
+        val cacheKey = buildNovelSelectedTextTranslationRequestKey(
+            providerFingerprint = selectedTextTranslationProvider.fingerprint,
+            request = request,
+        )
+        selectedTextTranslationSessionCache.get(cacheKey)?.let { cached ->
+            selectedTextTranslationUiState = NovelSelectedTextTranslationUiState.Result(
+                selection = selection,
+                translationResult = cached,
+            )
+            refreshSelectedTextTranslationUi()
+            return
+        }
+
+        selectedTextTranslationUiState = NovelSelectedTextTranslationUiState.Translating(selection)
+        refreshSelectedTextTranslationUi()
+        selectedTextTranslationJob?.cancel()
+        selectedTextTranslationJob = screenModelScope.launch {
+            val outcome = selectedTextTranslationProvider.translate(request)
+            if (isNovelSelectedTextTranslationResponseStale(selectedTextTranslationSelection, selection.sessionId)) {
+                return@launch
+            }
+            when (outcome) {
+                is NovelSelectedTextTranslationProviderOutcome.Success -> {
+                    selectedTextTranslationSessionCache.put(cacheKey, outcome.result)
+                    selectedTextTranslationUiState = NovelSelectedTextTranslationUiState.Result(
+                        selection = selection,
+                        translationResult = outcome.result,
+                    )
+                }
+                is NovelSelectedTextTranslationProviderOutcome.Unavailable -> {
+                    selectedTextTranslationUiState = when (outcome.reason) {
+                        is NovelSelectedTextTranslationErrorReason.Cooldown,
+                        NovelSelectedTextTranslationErrorReason.EmptySelection,
+                        NovelSelectedTextTranslationErrorReason.TooLongSelection,
+                        NovelSelectedTextTranslationErrorReason.WebViewUnavailable,
+                        is NovelSelectedTextTranslationErrorReason.BackendUnavailable -> {
+                            NovelSelectedTextTranslationUiState.Unavailable(outcome.reason)
+                        }
+                        is NovelSelectedTextTranslationErrorReason.NetworkFailure,
+                        NovelSelectedTextTranslationErrorReason.ParserFailure -> {
+                            NovelSelectedTextTranslationUiState.Error(
+                                selection = selection,
+                                reason = outcome.reason,
+                            )
+                        }
+                    }
+                }
+            }
+            refreshSelectedTextTranslationUi()
+        }
+    }
+
+    fun retrySelectedTextTranslation() {
+        translateSelectedText()
+    }
+
+    fun dismissSelectedTextTranslation() {
+        selectedTextTranslationJob?.cancel()
+        selectedTextTranslationJob = null
+        selectedTextTranslationSelection = null
+        selectedTextTranslationUiState = NovelSelectedTextTranslationUiState.Idle
+        refreshSelectedTextTranslationUi()
+    }
+
+    fun resetSelectedTextTranslationForChapter() {
+        selectedTextTranslationJob?.cancel()
+        selectedTextTranslationJob = null
+        selectedTextTranslationSelection = null
+        selectedTextTranslationUiState = NovelSelectedTextTranslationUiState.Idle
+        selectedTextTranslationSessionCache.clear()
+        refreshSelectedTextTranslationUi()
+    }
+
+    private fun refreshSelectedTextTranslationUi() {
+        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
+        updateContent(settings)
     }
     fun startGeminiTranslation() {
         if (isGeminiTranslating) return
@@ -2636,6 +2758,9 @@ class NovelReaderScreenModel(
             val nextChapterId: Long?,
             val nextChapterName: String? = null,
             val chapterWebUrl: String?,
+            val selectedTextTranslationSelection: NovelSelectedTextSelection? = null,
+            val selectedTextTranslationUiState: NovelSelectedTextTranslationUiState =
+                NovelSelectedTextTranslationUiState.Idle,
             val isGeminiTranslating: Boolean = false,
             val geminiTranslationProgress: Int = 0,
             val isGeminiTranslationVisible: Boolean = false,

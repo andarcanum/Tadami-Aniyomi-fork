@@ -97,6 +97,10 @@ class NovelReaderScreen(
                 onSetDeepSeekModel = screenModel::setDeepSeekModel,
                 onRefreshDeepSeekModels = screenModel::refreshDeepSeekModels,
                 onTestDeepSeekConnection = screenModel::testDeepSeekConnection,
+                onSelectedTextSelectionChanged = screenModel::updateSelectedTextSelection,
+                onTranslateSelectedText = screenModel::translateSelectedText,
+                onRetrySelectedTextTranslation = screenModel::retrySelectedTextTranslation,
+                onDismissSelectedTextTranslation = screenModel::dismissSelectedTextTranslation,
                 onOpenPreviousChapter = { previousChapterId ->
                     coroutineScope.launch {
                         screenModel.awaitPendingProgressPersistence()

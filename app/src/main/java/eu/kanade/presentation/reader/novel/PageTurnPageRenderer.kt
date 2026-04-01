@@ -23,6 +23,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -48,6 +49,7 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextSelection
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnActivationZone
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnIntensity
@@ -64,6 +66,7 @@ import kotlin.math.abs
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 internal enum class NovelPageTurnDragMode {
     START_END,
@@ -92,6 +95,8 @@ internal data class NovelPageTurnRendererConfig(
 internal enum class PageTurnCustomTapAction {
     NONE,
     TOGGLE_UI,
+    MOVE_PREVIOUS_PAGE,
+    MOVE_NEXT_PAGE,
     OPEN_PREVIOUS_CHAPTER,
     OPEN_NEXT_CHAPTER,
 }
@@ -290,14 +295,22 @@ internal fun resolvePageTurnCustomTapAction(
     val safeTapX = tapXFraction.coerceIn(0f, 1f)
     val centerStart = ((1f - centerTapWidthFraction) / 2f).coerceIn(0.15f, 0.4f)
     val centerEnd = (centerStart + centerTapWidthFraction).coerceIn(0.6f, 0.85f)
-    val isFirstPage = currentPage <= 0
-    val isLastPage = currentPage >= pageCount - 1
     return when {
         safeTapX in centerStart..centerEnd -> PageTurnCustomTapAction.TOGGLE_UI
-        tapToScrollEnabled && safeTapX < centerStart && isFirstPage && hasPreviousChapter ->
-            PageTurnCustomTapAction.OPEN_PREVIOUS_CHAPTER
-        tapToScrollEnabled && safeTapX > centerEnd && isLastPage && hasNextChapter ->
-            PageTurnCustomTapAction.OPEN_NEXT_CHAPTER
+        tapToScrollEnabled && safeTapX < centerStart -> {
+            when {
+                currentPage <= 0 && hasPreviousChapter -> PageTurnCustomTapAction.OPEN_PREVIOUS_CHAPTER
+                currentPage > 0 -> PageTurnCustomTapAction.MOVE_PREVIOUS_PAGE
+                else -> PageTurnCustomTapAction.NONE
+            }
+        }
+        tapToScrollEnabled && safeTapX > centerEnd -> {
+            when {
+                currentPage >= pageCount - 1 && hasNextChapter -> PageTurnCustomTapAction.OPEN_NEXT_CHAPTER
+                currentPage < pageCount - 1 -> PageTurnCustomTapAction.MOVE_NEXT_PAGE
+                else -> PageTurnCustomTapAction.NONE
+            }
+        }
         else -> PageTurnCustomTapAction.NONE
     }
 }
@@ -386,6 +399,9 @@ internal fun PageTurnPageRenderer(
     onMoveForward: () -> Unit,
     onOpenPreviousChapter: () -> Unit,
     onOpenNextChapter: () -> Unit,
+    onTextTap: (Float, Float) -> Unit = { _, _ -> onToggleUi() },
+    selectionSessionIdProvider: () -> Long = { 0L },
+    onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit = {},
 ) {
     val safeContentPages = remember(contentPages) {
         contentPages.ifEmpty { listOf(NovelPageContentPage(emptyList())) }
@@ -412,6 +428,7 @@ internal fun PageTurnPageRenderer(
         contentPageCount = actualPageCount,
         hasPreviousChapter = hasPreviousChapter,
     )
+    val tapCoroutineScope = rememberCoroutineScope()
     val rendererConfig = remember(
         transitionStyle,
         readerSettings.pageTurnSpeed,
@@ -471,6 +488,18 @@ internal fun PageTurnPageRenderer(
             ) {
                 PageTurnCustomTapAction.TOGGLE_UI -> {
                     latestToggleUi()
+                    true
+                }
+                PageTurnCustomTapAction.MOVE_PREVIOUS_PAGE -> {
+                    tapCoroutineScope.launch {
+                        pageCurlState.prev()
+                    }
+                    true
+                }
+                PageTurnCustomTapAction.MOVE_NEXT_PAGE -> {
+                    tapCoroutineScope.launch {
+                        pageCurlState.next()
+                    }
                     true
                 }
                 PageTurnCustomTapAction.OPEN_PREVIOUS_CHAPTER -> {
@@ -696,7 +725,7 @@ internal fun PageTurnPageRenderer(
             NovelPageTurnSnapshotRenderer(
                 snapshotKey = pageSnapshotKey,
                 snapshotCache = snapshotCache,
-                preferCachedBitmap = !isBackgroundMode,
+                preferCachedBitmap = false,
                 modifier = Modifier.fillMaxSize(),
             ) {
                 NovelAtmosphereBackground(
@@ -739,6 +768,10 @@ internal fun PageTurnPageRenderer(
                         textShadowY = readerSettings.textShadowY,
                         contentPadding = contentPadding,
                         statusBarTopPadding = statusBarTopPadding,
+                        selectionSessionIdProvider = selectionSessionIdProvider,
+                        onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+                        onPlainTap = onTextTap,
+                        touchHandlingEnabled = false,
                     )
                 }
             }

@@ -77,6 +77,8 @@ class NovelReaderPreferencesTest {
         prefs.geminiAutoTranslateEnglishSource().get() shouldBe false
         prefs.geminiPrefetchNextChapterTranslation().get() shouldBe false
         prefs.geminiStylePreset().get() shouldBe NovelTranslationStylePreset.PROFESSIONAL
+        prefs.selectedTextTranslationEnabled().get() shouldBe true
+        prefs.selectedTextTranslationTargetLanguage().get() shouldBe "Russian"
         prefs.translationProvider().get() shouldBe NovelTranslationProvider.GEMINI
         prefs.airforceBaseUrl().get() shouldBe "https://api.airforce"
         prefs.airforceApiKey().get() shouldBe ""
@@ -183,6 +185,8 @@ class NovelReaderPreferencesTest {
         prefs.geminiPromptModifiers().set("modifiers")
         prefs.geminiAutoTranslateEnglishSource().set(true)
         prefs.geminiPrefetchNextChapterTranslation().set(true)
+        prefs.selectedTextTranslationEnabled().set(false)
+        prefs.selectedTextTranslationTargetLanguage().set("English")
         prefs.translationProvider().set(NovelTranslationProvider.AIRFORCE)
         prefs.bookFlipAnimationSpeed().set(NovelBookFlipAnimationSpeed.SLOW)
         prefs.airforceBaseUrl().set("https://api.airforce")
@@ -325,6 +329,8 @@ class NovelReaderPreferencesTest {
         prefs.geminiPromptModifiers().set("")
         prefs.geminiAutoTranslateEnglishSource().set(false)
         prefs.geminiPrefetchNextChapterTranslation().set(false)
+        prefs.selectedTextTranslationEnabled().set(false)
+        prefs.selectedTextTranslationTargetLanguage().set("English")
         prefs.translationProvider().set(NovelTranslationProvider.GEMINI)
         prefs.airforceBaseUrl().set("https://api.airforce")
         prefs.airforceApiKey().set("")
@@ -446,6 +452,8 @@ class NovelReaderPreferencesTest {
         settings.pageTurnShadowIntensity shouldBe NovelPageTurnShadowIntensity.LOW
         settings.pageTurnActivationZone shouldBe NovelPageTurnActivationZone.WIDER
         settings.bionicReading shouldBe true
+        settings.selectedTextTranslationEnabled shouldBe false
+        settings.selectedTextTranslationTargetLanguage shouldBe "English"
         settings.geminiApiKey shouldBe "override-key"
         settings.geminiModel shouldBe "gemini-2.5-pro"
         settings.geminiBatchSize shouldBe 20

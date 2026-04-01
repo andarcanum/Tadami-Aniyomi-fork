@@ -1996,6 +1996,69 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `reader tap dispatcher routes left edge taps to backward action`() {
+        var toggled = 0
+        var backward = 0
+        var forward = 0
+
+        val action = dispatchReaderTapAction(
+            tapX = 10f,
+            width = 100f,
+            tapToScrollEnabled = true,
+            onToggleUi = { toggled += 1 },
+            onBackward = { backward += 1 },
+            onForward = { forward += 1 },
+        )
+
+        assertEquals(ReaderTapAction.BACKWARD, action)
+        assertEquals(0, toggled)
+        assertEquals(1, backward)
+        assertEquals(0, forward)
+    }
+
+    @Test
+    fun `reader tap dispatcher routes center taps to ui toggle`() {
+        var toggled = 0
+        var backward = 0
+        var forward = 0
+
+        val action = dispatchReaderTapAction(
+            tapX = 50f,
+            width = 100f,
+            tapToScrollEnabled = true,
+            onToggleUi = { toggled += 1 },
+            onBackward = { backward += 1 },
+            onForward = { forward += 1 },
+        )
+
+        assertEquals(ReaderTapAction.TOGGLE_UI, action)
+        assertEquals(1, toggled)
+        assertEquals(0, backward)
+        assertEquals(0, forward)
+    }
+
+    @Test
+    fun `reader tap dispatcher routes right edge taps to forward action`() {
+        var toggled = 0
+        var backward = 0
+        var forward = 0
+
+        val action = dispatchReaderTapAction(
+            tapX = 90f,
+            width = 100f,
+            tapToScrollEnabled = true,
+            onToggleUi = { toggled += 1 },
+            onBackward = { backward += 1 },
+            onForward = { forward += 1 },
+        )
+
+        assertEquals(ReaderTapAction.FORWARD, action)
+        assertEquals(0, toggled)
+        assertEquals(0, backward)
+        assertEquals(1, forward)
+    }
+
+    @Test
     fun `book flip page advances map speed presets to animation durations`() {
         assertEquals(
             500,
@@ -3098,6 +3161,70 @@ class NovelReaderUiVisibilityTest {
                 hasPreviousChapter = true,
                 hasNextChapter = true,
                 tapToScrollEnabled = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn custom tap action moves to previous page from the left edge`() {
+        assertEquals(
+            PageTurnCustomTapAction.MOVE_PREVIOUS_PAGE,
+            resolvePageTurnCustomTapAction(
+                tapXFraction = 0.05f,
+                currentPage = 1,
+                pageCount = 3,
+                centerTapWidthFraction = 0.2f,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+                tapToScrollEnabled = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn custom tap action moves to next page from the right edge`() {
+        assertEquals(
+            PageTurnCustomTapAction.MOVE_NEXT_PAGE,
+            resolvePageTurnCustomTapAction(
+                tapXFraction = 0.95f,
+                currentPage = 1,
+                pageCount = 3,
+                centerTapWidthFraction = 0.2f,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+                tapToScrollEnabled = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn custom tap action opens previous chapter only at first page edge`() {
+        assertEquals(
+            PageTurnCustomTapAction.OPEN_PREVIOUS_CHAPTER,
+            resolvePageTurnCustomTapAction(
+                tapXFraction = 0.05f,
+                currentPage = 0,
+                pageCount = 3,
+                centerTapWidthFraction = 0.2f,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+                tapToScrollEnabled = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn custom tap action opens next chapter only at last page edge`() {
+        assertEquals(
+            PageTurnCustomTapAction.OPEN_NEXT_CHAPTER,
+            resolvePageTurnCustomTapAction(
+                tapXFraction = 0.95f,
+                currentPage = 2,
+                pageCount = 3,
+                centerTapWidthFraction = 0.2f,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+                tapToScrollEnabled = true,
             ),
         )
     }

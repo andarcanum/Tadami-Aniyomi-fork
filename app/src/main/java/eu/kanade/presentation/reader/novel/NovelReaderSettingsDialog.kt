@@ -73,7 +73,6 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
-import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPrivateBridge
 import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.padding
@@ -162,8 +161,6 @@ private fun GeneralTab(
     preferences: NovelReaderPreferences,
     onDismissRequest: () -> Unit,
 ) {
-    var showGeminiSettings by remember { mutableStateOf(false) }
-
     fun <T> update(
         value: T,
         copyOverride: (NovelReaderOverride, T) -> NovelReaderOverride,
@@ -643,188 +640,34 @@ private fun GeneralTab(
             },
         )
 
-        SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_translation))
-
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { showGeminiSettings = !showGeminiSettings },
-        ) {
+        SettingsSectionHeader(
+            title = stringResource(AYMR.strings.novel_reader_selected_text_translation_section),
+        )
+        if (overrideEnabled) {
             Text(
-                text = if (showGeminiSettings) {
-                    stringResource(AYMR.strings.novel_reader_ai_translator_hide)
-                } else {
-                    stringResource(AYMR.strings.novel_reader_ai_translator_show)
-                },
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                style = MaterialTheme.typography.labelLarge,
+                text = stringResource(AYMR.strings.novel_reader_selected_text_translation_global_only_summary),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        if (showGeminiSettings) {
-            val privateProviderLabel = if (GeminiPrivateBridge.isInstalled()) {
-                GeminiPrivateBridge.providerLabel()
-            } else {
-                "Gemini Private"
-            }
-            Text(
-                text = stringResource(AYMR.strings.novel_reader_translation_provider),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(
-                    NovelTranslationProvider.GEMINI to
-                        stringResource(AYMR.strings.novel_reader_translation_provider_gemini),
-                    NovelTranslationProvider.GEMINI_PRIVATE to privateProviderLabel,
-                    NovelTranslationProvider.OPENROUTER to
-                        stringResource(AYMR.strings.novel_reader_translation_provider_openrouter),
-                    NovelTranslationProvider.DEEPSEEK to
-                        stringResource(AYMR.strings.novel_reader_translation_provider_deepseek),
-                ).forEach { option ->
-                    val selected = settings.translationProvider == option.first
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (selected) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant
-                        },
-                        modifier = Modifier.clickable {
-                            update(
-                                option.first,
-                                { o, v -> o.copy(translationProvider = v) },
-                                { preferences.translationProvider().set(it) },
-                            )
-                        },
-                    ) {
-                        Text(
-                            text = if (selected) "* ${option.second}" else option.second,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                    }
-                }
-            }
-            SwitchPreferenceWidget(
-                title = stringResource(AYMR.strings.novel_reader_translation_auto_english_title),
-                subtitle = stringResource(AYMR.strings.novel_reader_translation_auto_english_summary),
-                checked = settings.geminiAutoTranslateEnglishSource,
-                onCheckedChanged = {
-                    update(
-                        it,
-                        { o, v -> o.copy(geminiAutoTranslateEnglishSource = v) },
-                        { preferences.geminiAutoTranslateEnglishSource().set(it) },
-                    )
-                },
-            )
-            SwitchPreferenceWidget(
-                title = stringResource(AYMR.strings.novel_reader_translation_prefetch_next_title),
-                subtitle = stringResource(AYMR.strings.novel_reader_translation_prefetch_next_summary),
-                checked = settings.geminiPrefetchNextChapterTranslation,
-                onCheckedChanged = {
-                    update(
-                        it,
-                        { o, v -> o.copy(geminiPrefetchNextChapterTranslation = v) },
-                        { preferences.geminiPrefetchNextChapterTranslation().set(it) },
-                    )
-                },
-            )
-            if (settings.translationProvider == NovelTranslationProvider.OPENROUTER) {
-                EditTextPreferenceWidget(
-                    title = stringResource(AYMR.strings.novel_reader_openrouter_base_url),
-                    subtitle = "%s",
-                    icon = null,
-                    value = settings.openRouterBaseUrl,
-                    onConfirm = {
-                        update(
-                            it,
-                            { o, v -> o.copy(openRouterBaseUrl = v) },
-                            { preferences.openRouterBaseUrl().set(it) },
-                        )
-                        true
-                    },
-                    canBeBlank = false,
-                )
-                EditTextPreferenceWidget(
-                    title = stringResource(AYMR.strings.novel_reader_openrouter_api_key),
-                    subtitle = "%s",
-                    icon = null,
-                    value = settings.openRouterApiKey,
-                    onConfirm = {
-                        update(
-                            it,
-                            { o, v -> o.copy(openRouterApiKey = v) },
-                            { preferences.openRouterApiKey().set(it) },
-                        )
-                        true
-                    },
-                    canBeBlank = false,
-                )
-                EditTextPreferenceWidget(
-                    title = stringResource(AYMR.strings.novel_reader_openrouter_model),
-                    subtitle = "%s",
-                    icon = null,
-                    value = settings.openRouterModel,
-                    onConfirm = {
-                        update(
-                            it,
-                            { o, v -> o.copy(openRouterModel = v) },
-                            { preferences.openRouterModel().set(it) },
-                        )
-                        true
-                    },
-                    canBeBlank = false,
-                )
-            }
-            if (settings.translationProvider == NovelTranslationProvider.DEEPSEEK) {
-                EditTextPreferenceWidget(
-                    title = stringResource(AYMR.strings.novel_reader_deepseek_base_url),
-                    subtitle = "%s",
-                    icon = null,
-                    value = settings.deepSeekBaseUrl,
-                    onConfirm = {
-                        update(
-                            it,
-                            { o, v -> o.copy(deepSeekBaseUrl = v) },
-                            { preferences.deepSeekBaseUrl().set(it) },
-                        )
-                        true
-                    },
-                    canBeBlank = false,
-                )
-                EditTextPreferenceWidget(
-                    title = stringResource(AYMR.strings.novel_reader_deepseek_api_key),
-                    subtitle = "%s",
-                    icon = null,
-                    value = settings.deepSeekApiKey,
-                    onConfirm = {
-                        update(
-                            it,
-                            { o, v -> o.copy(deepSeekApiKey = v) },
-                            { preferences.deepSeekApiKey().set(it) },
-                        )
-                        true
-                    },
-                    canBeBlank = false,
-                )
-                EditTextPreferenceWidget(
-                    title = stringResource(AYMR.strings.novel_reader_deepseek_model),
-                    subtitle = "%s",
-                    icon = null,
-                    value = settings.deepSeekModel,
-                    onConfirm = {
-                        update(
-                            it,
-                            { o, v -> o.copy(deepSeekModel = v) },
-                            { preferences.deepSeekModel().set(it) },
-                        )
-                        true
-                    },
-                    canBeBlank = false,
-                )
-            }
-        }
+        SwitchPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_selected_text_translation_enabled),
+            checked = settings.selectedTextTranslationEnabled,
+            onCheckedChanged = { preferences.selectedTextTranslationEnabled().set(it) },
+        )
+        EditTextPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_selected_text_translation_target_language),
+            subtitle = "%s",
+            icon = null,
+            value = settings.selectedTextTranslationTargetLanguage,
+            onConfirm = {
+                preferences.selectedTextTranslationTargetLanguage().set(it)
+                true
+            },
+            singleLine = true,
+            canBeBlank = false,
+            formatSubtitle = false,
+        )
 
         SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_advanced))
 

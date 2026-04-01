@@ -36,6 +36,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -50,6 +51,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -71,10 +73,15 @@ import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -120,6 +127,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.text.AnnotatedString
@@ -144,6 +152,10 @@ import eu.kanade.presentation.components.TabbedDialog
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelPluginImageResolver
+import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextRenderer
+import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextSelection
+import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationErrorReason
+import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationUiState
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreenModel
 import eu.kanade.tachiyomi.ui.reader.novel.encodeNativeScrollProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodePageReaderProgress
@@ -229,8 +241,15 @@ fun NovelReaderScreen(
     onOpenNextChapter: ((Long) -> Unit)? = null,
     showReaderUi: Boolean,
     onSetShowReaderUi: (Boolean) -> Unit,
+    onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit = {},
+    onTranslateSelectedText: () -> Unit = {},
+    onRetrySelectedTextTranslation: () -> Unit = onTranslateSelectedText,
+    onDismissSelectedTextTranslation: () -> Unit = {},
 ) {
     var showSettings by remember { mutableStateOf(false) }
+    var selectedTextSelectionSessionId by remember(state.chapter.id) {
+        mutableIntStateOf(0)
+    }
     var showWebView by remember(
         state.chapter.id,
         state.readerSettings.preferWebViewRenderer,
@@ -245,6 +264,12 @@ fun NovelReaderScreen(
                 richContentUnsupportedFeaturesDetected = state.richContentUnsupportedFeaturesDetected,
             ),
         )
+    }
+    val nextSelectedTextSelectionSessionId = remember(state.chapter.id) {
+        {
+            selectedTextSelectionSessionId += 1
+            selectedTextSelectionSessionId.toLong()
+        }
     }
     LaunchedEffect(
         state.chapter.id,
@@ -309,6 +334,7 @@ fun NovelReaderScreen(
     }
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
+    val viewConfiguration = LocalViewConfiguration.current
     val batteryLevel by rememberBatteryLevel(context)
     val timeText by rememberCurrentTimeText(context)
     val missingCustomBackgroundMessage =
@@ -927,15 +953,24 @@ fun NovelReaderScreen(
             }
         } else if (usePageReader) {
             val currentPage = pageReaderProgressPageIndex
-            if (currentPage > 0) {
-                pageTurnCurrentPage = currentPage - 1
+            val currentVirtualPage = resolveComposePagerVirtualPageIndex(
+                actualPageIndex = currentPage,
+                hasPreviousChapter = composePagerHasPreviousChapter,
+            )
+            if (currentVirtualPage > 0) {
+                val targetVirtualPage = currentVirtualPage - 1
+                pageTurnCurrentPage = resolveComposePagerActualPageIndex(
+                    currentPage = targetVirtualPage,
+                    contentPageCount = pageReaderItemsCount,
+                    hasPreviousChapter = composePagerHasPreviousChapter,
+                )
                 if (pageAnimationDurationMillis != null) {
                     pagerState.animateScrollToPage(
-                        currentPage - 1,
+                        targetVirtualPage,
                         animationSpec = tween(durationMillis = pageAnimationDurationMillis),
                     )
                 } else {
-                    pagerState.animateScrollToPage(currentPage - 1)
+                    pagerState.animateScrollToPage(targetVirtualPage)
                 }
             } else if (state.readerSettings.swipeToPrevChapter && state.previousChapterId != null) {
                 onOpenPreviousChapter?.invoke(state.previousChapterId)
@@ -957,15 +992,25 @@ fun NovelReaderScreen(
             }
         } else if (usePageReader) {
             val currentPage = pageReaderProgressPageIndex
-            if (currentPage < pageReaderItemsCount - 1) {
-                pageTurnCurrentPage = currentPage + 1
+            val currentVirtualPage = resolveComposePagerVirtualPageIndex(
+                actualPageIndex = currentPage,
+                hasPreviousChapter = composePagerHasPreviousChapter,
+            )
+            val virtualLastPage = composePagerVirtualPageCount - 1
+            if (currentVirtualPage < virtualLastPage) {
+                val targetVirtualPage = currentVirtualPage + 1
+                pageTurnCurrentPage = resolveComposePagerActualPageIndex(
+                    currentPage = targetVirtualPage,
+                    contentPageCount = pageReaderItemsCount,
+                    hasPreviousChapter = composePagerHasPreviousChapter,
+                )
                 if (pageAnimationDurationMillis != null) {
                     pagerState.animateScrollToPage(
-                        currentPage + 1,
+                        targetVirtualPage,
                         animationSpec = tween(durationMillis = pageAnimationDurationMillis),
                     )
                 } else {
-                    pagerState.animateScrollToPage(currentPage + 1)
+                    pagerState.animateScrollToPage(targetVirtualPage)
                 }
             } else if (state.readerSettings.swipeToNextChapter && state.nextChapterId != null) {
                 onOpenNextChapter?.invoke(state.nextChapterId)
@@ -983,6 +1028,17 @@ fun NovelReaderScreen(
 
     suspend fun moveForwardByReaderAction() {
         moveForwardByReaderActionWithAnimation(bookFlipPageAnimationDurationMillis)
+    }
+
+    val latestReaderShortTapHandler by rememberUpdatedState<(Float, Float) -> Unit> { tapX, width ->
+        dispatchReaderTapAction(
+            tapX = tapX,
+            width = width,
+            tapToScrollEnabled = latestTapToScrollEnabled,
+            onToggleUi = { onSetShowReaderUi(!latestShowReaderUi) },
+            onBackward = { coroutineScope.launch { moveBackwardByReaderAction() } },
+            onForward = { coroutineScope.launch { moveForwardByReaderAction() } },
+        )
     }
 
     fun handleVolumeKey(event: KeyEvent): Boolean {
@@ -1270,6 +1326,9 @@ fun NovelReaderScreen(
                             state.previousChapterId?.let { onOpenPreviousChapter?.invoke(it) }
                         },
                         onOpenNextChapter = { state.nextChapterId?.let { onOpenNextChapter?.invoke(it) } },
+                        onTextTap = { tapX, width -> latestReaderShortTapHandler(tapX, width) },
+                        selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
+                        onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                     )
                 } else if (pageReaderRendererRoute == NovelPageReaderRendererRoute.PAGE_TURN_RENDERER) {
                     PageTurnPageRenderer(
@@ -1309,6 +1368,9 @@ fun NovelReaderScreen(
                             state.previousChapterId?.let { onOpenPreviousChapter?.invoke(it) }
                         },
                         onOpenNextChapter = { state.nextChapterId?.let { onOpenNextChapter?.invoke(it) } },
+                        onTextTap = { tapX, width -> latestReaderShortTapHandler(tapX, width) },
+                        selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
+                        onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                     )
                 } else {
                     // Scroll Mode (СЂРµР¶РёРј РїСЂРѕРєСЂСѓС‚РєРё, РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ)
@@ -1322,25 +1384,15 @@ fun NovelReaderScreen(
                                 state.nextChapterId,
                                 nativeScrollItemsCount,
                             ) {
-                                detectTapGestures(
-                                    onTap = { offset ->
-                                        when (
-                                            resolveReaderTapAction(
-                                                tapX = offset.x,
-                                                width = size.width.toFloat(),
-                                                tapToScrollEnabled = latestTapToScrollEnabled,
-                                            )
-                                        ) {
-                                            ReaderTapAction.TOGGLE_UI -> onSetShowReaderUi(!latestShowReaderUi)
-                                            ReaderTapAction.BACKWARD -> coroutineScope.launch {
-                                                moveBackwardByReaderAction()
-                                            }
-                                            ReaderTapAction.FORWARD -> coroutineScope.launch {
-                                                moveForwardByReaderAction()
-                                            }
-                                        }
-                                    },
-                                )
+                                awaitEachGesture {
+                                    val down = awaitFirstDown(requireUnconsumed = true)
+                                    val up = waitForUpOrCancellation() ?: return@awaitEachGesture
+                                    val elapsedMillis = up.uptimeMillis - down.uptimeMillis
+                                    if (elapsedMillis >= viewConfiguration.longPressTimeoutMillis) {
+                                        return@awaitEachGesture
+                                    }
+                                    latestReaderShortTapHandler(up.position.x, size.width.toFloat())
+                                }
                             }
                             .then(
                                 if (state.readerSettings.swipeGestures) {
@@ -1478,22 +1530,13 @@ fun NovelReaderScreen(
                                     statusBarTopPadding = statusBarTopPadding,
                                     textColor = textColor,
                                     backgroundColor = textBackground,
-                                    fontSize = state.readerSettings.fontSize,
-                                    lineHeight = state.readerSettings.lineHeight,
-                                    composeFontFamily = composeFontFamily,
-                                    chapterTitleFontFamily = chapterTitleFontFamily,
+                                    readerSettings = state.readerSettings,
+                                    textTypeface = composeTypeface,
+                                    chapterTitleTypeface = chapterTitleTypeface,
                                     paragraphSpacing = paragraphSpacing,
-                                    textAlign = state.readerSettings.textAlign,
-                                    forceParagraphIndent = state.readerSettings.forceParagraphIndent,
-                                    preserveSourceTextAlignInNative =
-                                    state.readerSettings.preserveSourceTextAlignInNative,
-                                    forceBoldText = state.readerSettings.forceBoldText,
-                                    forceItalicText = state.readerSettings.forceItalicText,
-                                    textShadow = state.readerSettings.textShadow,
-                                    textShadowColor = state.readerSettings.textShadowColor,
-                                    textShadowBlur = state.readerSettings.textShadowBlur,
-                                    textShadowX = state.readerSettings.textShadowX,
-                                    textShadowY = state.readerSettings.textShadowY,
+                                    selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
+                                    onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+                                    onPlainTap = { tapX, width -> latestReaderShortTapHandler(tapX, width) },
                                 )
                             }
                         } else {
@@ -1507,66 +1550,6 @@ fun NovelReaderScreen(
                                         } else {
                                             AnnotatedString(block.text)
                                         }
-                                        val baseStyle = MaterialTheme.typography.bodyLarge.copy(
-                                            color = textColor,
-                                            fontSize = if (isChapterTitle) {
-                                                (state.readerSettings.fontSize * 1.12f).sp
-                                            } else {
-                                                state.readerSettings.fontSize.sp
-                                            },
-                                            lineHeight = if (isChapterTitle) {
-                                                (state.readerSettings.lineHeight * 1.08f).em
-                                            } else {
-                                                state.readerSettings.lineHeight.em
-                                            },
-                                            fontFamily = if (isChapterTitle) {
-                                                chapterTitleFontFamily ?: composeFontFamily
-                                            } else {
-                                                composeFontFamily
-                                            },
-                                            fontWeight = if (isChapterTitle) {
-                                                FontWeight.SemiBold
-                                            } else if (state.readerSettings.forceBoldText) {
-                                                FontWeight.Bold
-                                            } else {
-                                                FontWeight.Normal
-                                            },
-                                            fontStyle = if (state.readerSettings.forceItalicText) {
-                                                FontStyle.Italic
-                                            } else {
-                                                FontStyle.Normal
-                                            },
-                                            shadow = if (state.readerSettings.textShadow) {
-                                                val customColor = parseReaderColor(state.readerSettings.textShadowColor)
-                                                val shadowColor = resolveAutoReaderShadowColor(
-                                                    customShadowColor = customColor,
-                                                    textColor = textColor,
-                                                    backgroundColor = textBackground,
-                                                )
-                                                Shadow(
-                                                    color = shadowColor,
-                                                    blurRadius = state.readerSettings.textShadowBlur,
-                                                    offset = androidx.compose.ui.geometry.Offset(
-                                                        x = state.readerSettings.textShadowX,
-                                                        y = state.readerSettings.textShadowY,
-                                                    ),
-                                                )
-                                            } else {
-                                                null
-                                            },
-                                        ).withOptionalTextAlign(
-                                            resolveNativeTextAlign(
-                                                globalTextAlign = state.readerSettings.textAlign,
-                                                preserveSourceTextAlignInNative =
-                                                state.readerSettings.preserveSourceTextAlignInNative,
-                                            ),
-                                        ).withOptionalFirstLineIndentEm(
-                                            if (state.readerSettings.forceParagraphIndent && !isChapterTitle) {
-                                                FORCED_PARAGRAPH_FIRST_LINE_INDENT_EM
-                                            } else {
-                                                null
-                                            },
-                                        )
                                         if (isChapterTitle) {
                                             Column(
                                                 modifier = Modifier.padding(
@@ -1578,11 +1561,27 @@ fun NovelReaderScreen(
                                                     },
                                                 ),
                                             ) {
-                                                Text(
+                                                NovelPageReaderTextBlock(
                                                     text = textContent,
-                                                    style = baseStyle.copy(
-                                                        color = MaterialTheme.colorScheme.primary,
-                                                    ),
+                                                    isChapterTitle = true,
+                                                    firstLineIndentEm = null,
+                                                    readerSettings = state.readerSettings,
+                                                    textColor = textColor,
+                                                    textBackground = textBackground,
+                                                    textAlign = state.readerSettings.textAlign,
+                                                    textTypeface = composeTypeface,
+                                                    chapterTitleTypeface = chapterTitleTypeface,
+                                                    chapterTitleTextColor = MaterialTheme.colorScheme.primary,
+                                                    textShadowEnabled = state.readerSettings.textShadow,
+                                                    textShadowColor = state.readerSettings.textShadowColor,
+                                                    textShadowBlur = state.readerSettings.textShadowBlur,
+                                                    textShadowX = state.readerSettings.textShadowX,
+                                                    textShadowY = state.readerSettings.textShadowY,
+                                                    selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
+                                                    selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
+                                                    onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+                                                    onPlainTap = { tapX, width -> latestReaderShortTapHandler(tapX, width) },
+                                                    modifier = Modifier.fillMaxWidth(),
                                                 )
                                                 Box(
                                                     modifier = Modifier
@@ -1591,13 +1590,34 @@ fun NovelReaderScreen(
                                                         .height(1.dp)
                                                         .background(
                                                             MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
-                                                        ),
+                                                    ),
                                                 )
                                             }
                                         } else {
-                                            Text(
+                                            NovelPageReaderTextBlock(
                                                 text = textContent,
-                                                style = baseStyle,
+                                                isChapterTitle = false,
+                                                firstLineIndentEm = if (state.readerSettings.forceParagraphIndent) {
+                                                    FORCED_PARAGRAPH_FIRST_LINE_INDENT_EM
+                                                } else {
+                                                    null
+                                                },
+                                                readerSettings = state.readerSettings,
+                                                textColor = textColor,
+                                                textBackground = textBackground,
+                                                textAlign = state.readerSettings.textAlign,
+                                                textTypeface = composeTypeface,
+                                                chapterTitleTypeface = chapterTitleTypeface,
+                                                chapterTitleTextColor = MaterialTheme.colorScheme.primary,
+                                                textShadowEnabled = state.readerSettings.textShadow,
+                                                textShadowColor = state.readerSettings.textShadowColor,
+                                                textShadowBlur = state.readerSettings.textShadowBlur,
+                                                textShadowX = state.readerSettings.textShadowX,
+                                                textShadowY = state.readerSettings.textShadowY,
+                                                selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
+                                                selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
+                                                onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+                                                onPlainTap = { tapX, width -> latestReaderShortTapHandler(tapX, width) },
                                                 modifier = Modifier.padding(
                                                     top = if (index == 0) statusBarTopPadding else 0.dp,
                                                     bottom = if (index == scrollContentBlocks.lastIndex) {
@@ -2632,6 +2652,14 @@ fun NovelReaderScreen(
                 )
             }
         }
+
+        SelectedTextTranslationOverlay(
+            state = state,
+            onTranslate = onTranslateSelectedText,
+            onRetry = onRetrySelectedTextTranslation,
+            onDismiss = onDismissSelectedTextTranslation,
+            modifier = Modifier.align(Alignment.BottomEnd),
+        )
 
         // Settings dialog
         if (showSettings) {
@@ -4469,6 +4497,192 @@ private fun rememberCurrentTimeText(context: Context): State<String> {
     }
 
     return timeState
+}
+
+@Composable
+private fun SelectedTextTranslationOverlay(
+    state: NovelReaderScreenModel.State.Success,
+    onTranslate: () -> Unit,
+    onRetry: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val selection = state.selectedTextTranslationSelection
+    val translationState = state.selectedTextTranslationUiState
+
+    if (selection == null && translationState is NovelSelectedTextTranslationUiState.Idle) {
+        return
+    }
+
+    Column(
+        modifier = modifier
+            .padding(16.dp)
+            .widthIn(max = 360.dp),
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        when (translationState) {
+            is NovelSelectedTextTranslationUiState.SelectionAvailable -> {
+                FloatingActionButton(
+                    onClick = onTranslate,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Translate,
+                        contentDescription = stringResource(
+                            AYMR.strings.novel_reader_selected_text_translation_action_translate,
+                        ),
+                    )
+                }
+            }
+            is NovelSelectedTextTranslationUiState.Translating -> {
+                SelectedTextTranslationCard(
+                    title = stringResource(AYMR.strings.novel_reader_selected_text_translation_loading),
+                    subtitle = selection?.text,
+                    onDismiss = onDismiss,
+                    trailingContent = {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    },
+                )
+            }
+            is NovelSelectedTextTranslationUiState.Result -> {
+                SelectedTextTranslationCard(
+                    title = selection?.text,
+                    subtitle = translationState.translationResult.translation,
+                    onDismiss = onDismiss,
+                )
+            }
+            is NovelSelectedTextTranslationUiState.Error -> {
+                SelectedTextTranslationCard(
+                    title = selection?.text,
+                    subtitle = translationErrorMessage(translationState.reason),
+                    onDismiss = onDismiss,
+                    actionLabel = stringResource(
+                        AYMR.strings.novel_reader_selected_text_translation_action_retry,
+                    ),
+                    onAction = onRetry,
+                )
+            }
+            is NovelSelectedTextTranslationUiState.Unavailable -> {
+                SelectedTextTranslationCard(
+                    title = selection?.text,
+                    subtitle = translationErrorMessage(translationState.reason),
+                    onDismiss = onDismiss,
+                    actionLabel = stringResource(
+                        AYMR.strings.novel_reader_selected_text_translation_action_retry,
+                    ),
+                    onAction = onRetry,
+                )
+            }
+            NovelSelectedTextTranslationUiState.Idle -> {
+                if (selection != null) {
+                    FloatingActionButton(
+                        onClick = onTranslate,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Translate,
+                            contentDescription = stringResource(
+                                AYMR.strings.novel_reader_selected_text_translation_action_translate,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SelectedTextTranslationCard(
+    title: String?,
+    subtitle: String?,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+    trailingContent: @Composable (() -> Unit)? = null,
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(16.dp)
+                .widthIn(max = 328.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = title?.takeIf { it.isNotBlank() }
+                        ?: stringResource(AYMR.strings.novel_reader_selected_text_translation_action_translate),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (trailingContent != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    trailingContent()
+                }
+            }
+            if (!subtitle.isNullOrBlank()) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (actionLabel != null && onAction != null) {
+                    TextButton(onClick = onAction) {
+                        Text(actionLabel)
+                    }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(AYMR.strings.novel_reader_selected_text_translation_action_close))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun translationErrorMessage(reason: NovelSelectedTextTranslationErrorReason): String {
+    return when (reason) {
+        NovelSelectedTextTranslationErrorReason.EmptySelection,
+        NovelSelectedTextTranslationErrorReason.TooLongSelection,
+        NovelSelectedTextTranslationErrorReason.ParserFailure,
+        NovelSelectedTextTranslationErrorReason.WebViewUnavailable -> {
+            stringResource(AYMR.strings.novel_reader_selected_text_translation_unavailable)
+        }
+        is NovelSelectedTextTranslationErrorReason.BackendUnavailable -> {
+            reason.message?.takeIf { it.isNotBlank() }
+                ?: stringResource(AYMR.strings.novel_reader_selected_text_translation_unavailable)
+        }
+        is NovelSelectedTextTranslationErrorReason.NetworkFailure -> {
+            reason.message?.takeIf { it.isNotBlank() }
+                ?: stringResource(AYMR.strings.novel_reader_selected_text_translation_unavailable)
+        }
+        is NovelSelectedTextTranslationErrorReason.Cooldown -> {
+            "${stringResource(AYMR.strings.novel_reader_selected_text_translation_unavailable)} (${reason.remainingSeconds}s)"
+        }
+    }
 }
 
 @Composable

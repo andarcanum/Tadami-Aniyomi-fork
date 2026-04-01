@@ -630,6 +630,27 @@ internal fun resolveReaderTapAction(
     return if (clampedTapX <= leftBoundary) ReaderTapAction.BACKWARD else ReaderTapAction.FORWARD
 }
 
+internal fun dispatchReaderTapAction(
+    tapX: Float,
+    width: Float,
+    tapToScrollEnabled: Boolean,
+    onToggleUi: () -> Unit,
+    onBackward: () -> Unit,
+    onForward: () -> Unit,
+): ReaderTapAction {
+    return resolveReaderTapAction(
+        tapX = tapX,
+        width = width,
+        tapToScrollEnabled = tapToScrollEnabled,
+    ).also { action ->
+        when (action) {
+            ReaderTapAction.TOGGLE_UI -> onToggleUi()
+            ReaderTapAction.BACKWARD -> onBackward()
+            ReaderTapAction.FORWARD -> onForward()
+        }
+    }
+}
+
 private const val BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_SLOW_MILLIS = 1500
 private const val BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_NORMAL_MILLIS = 1000
 private const val BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_FAST_MILLIS = 500

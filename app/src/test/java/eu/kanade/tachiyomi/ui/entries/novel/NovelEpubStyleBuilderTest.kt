@@ -118,6 +118,8 @@ class NovelEpubStyleBuilderTest {
         textColor: String = "#EFEFEF",
         customCSS: String = "",
         customJS: String = "",
+        selectedTextTranslationEnabled: Boolean = true,
+        selectedTextTranslationTargetLanguage: String = "Russian",
     ): NovelReaderSettings {
         return NovelReaderSettings(
             fontSize = fontSize,
@@ -174,6 +176,8 @@ class NovelEpubStyleBuilderTest {
             bionicReading = false,
             customCSS = customCSS,
             customJS = customJS,
+            selectedTextTranslationEnabled = selectedTextTranslationEnabled,
+            selectedTextTranslationTargetLanguage = selectedTextTranslationTargetLanguage,
         )
     }
 }
