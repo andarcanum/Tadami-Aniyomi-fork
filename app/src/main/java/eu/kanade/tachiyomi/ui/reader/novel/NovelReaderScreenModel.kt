@@ -597,7 +597,7 @@ class NovelReaderScreenModel(
             novel = novel,
             chapter = chapter,
             html = displayContent,
-            enableJs = !pluginJs.isNullOrBlank(),
+            enableJs = !pluginJs.isNullOrBlank() || settings.selectedTextTranslationEnabled,
             readerSettings = settings,
             contentBlocks = displayContentBlocks,
             textBlocks = displayTextBlocks,

@@ -1901,6 +1901,10 @@ fun NovelReaderScreen(
                             alpha = if (shouldHideWebViewUntilReveal) 0f else 1f
                             settings.javaScriptEnabled = shouldEnableJavaScriptInReaderWebView(state.enableJs)
                             settings.domStorageEnabled = false
+                            registerWebReaderSelectionBridge(
+                                selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
+                                onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+                            )
 
                             webViewClient = factoryWebViewClient
                             setOnScrollChangeListener { view, _, scrollY, _, _ ->
@@ -1928,6 +1932,10 @@ fun NovelReaderScreen(
                         webViewInstance = webView
                         webView.setBackgroundColor(backgroundColor)
                         webView.settings.javaScriptEnabled = shouldEnableJavaScriptInReaderWebView(state.enableJs)
+                        webView.registerWebReaderSelectionBridge(
+                            selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
+                            onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+                        )
                         val minWebSwipeDistancePx = minVerticalChapterSwipeDistancePx
                         val webSwipeHorizontalTolerancePx = verticalChapterSwipeHorizontalTolerancePx
                         val minWebSwipeHoldDurationMillis = minVerticalChapterSwipeHoldDurationMillis

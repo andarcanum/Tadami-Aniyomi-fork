@@ -4048,6 +4048,19 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `initial webview html injects selection tracking script`() {
+        val html = "<html><head><title>t</title></head><body><p>Hello</p></body></html>"
+
+        val result = buildInitialWebReaderHtml(
+            rawHtml = html,
+            readerCss = "body { color: red; }",
+        )
+
+        assertTrue(result.contains("selectionchange"))
+        assertTrue(result.contains("an-reader-selection"))
+    }
+
+    @Test
     fun `initial webview html can skip bootstrap reveal when reveal is unnecessary`() {
         val html = "<html><head><title>t</title></head><body><p>Hello</p></body></html>"
 

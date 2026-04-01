@@ -1,6 +1,7 @@
 package eu.kanade.presentation.reader.novel
 
 import android.content.Context
+import android.webkit.JavascriptInterface
 import android.os.Build
 import android.os.SystemClock
 import android.webkit.WebResourceResponse
@@ -10,6 +11,9 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.core.content.res.ResourcesCompat
+import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextAnchor
+import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextRenderer
+import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextSelection
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
@@ -26,6 +30,8 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
 
 internal const val WEB_READER_STYLE_ELEMENT_ID = "__an_reader_style__"
 internal const val WEB_READER_BOOTSTRAP_STYLE_ELEMENT_ID = "__an_reader_bootstrap_style__"
+internal const val WEB_READER_SELECTION_SCRIPT_ELEMENT_ID = "__an-reader-selection__"
+internal const val WEB_READER_SELECTION_BRIDGE_NAME = "__an_reader_selection_bridge__"
 internal const val FORCED_PARAGRAPH_FIRST_LINE_INDENT_EM = 2f
 private const val EARLY_WEBVIEW_REVEAL_IMAGE_THRESHOLD = 6
 
@@ -51,6 +57,11 @@ internal fun buildInitialWebReaderHtml(
             append(buildWebReaderBootstrapCss())
             append("</style>")
         }
+        append("<script id=\"")
+        append(WEB_READER_SELECTION_SCRIPT_ELEMENT_ID)
+        append("\">")
+        append(buildWebReaderSelectionJavascript())
+        append("</script>")
     }
     return injectHtmlFragmentIntoHead(rawHtml, injection)
 }
@@ -61,6 +72,129 @@ internal fun escapeCssForInlineStyleTag(css: String): String {
 
 private fun buildWebReaderBootstrapCss(): String {
     return "html, body { visibility: hidden !important; }"
+}
+
+internal fun buildWebReaderSelectionJavascript(
+    bridgeName: String = WEB_READER_SELECTION_BRIDGE_NAME,
+): String {
+    return """
+        (function() {
+            const bridge = window['$bridgeName'];
+            if (!bridge) return;
+            let lastPayload = '';
+
+            const clearSelection = () => {
+                if (!lastPayload) return;
+                lastPayload = '';
+                bridge.onSelectionCleared();
+            };
+
+            const publishSelection = () => {
+                const selection = window.getSelection ? window.getSelection() : null;
+                if (!selection || selection.rangeCount === 0) {
+                    clearSelection();
+                    return;
+                }
+
+                const text = selection.toString();
+                if (!text || !text.trim()) {
+                    clearSelection();
+                    return;
+                }
+
+                const range = selection.getRangeAt(0);
+                const rect = range.getBoundingClientRect();
+                if (!rect) {
+                    clearSelection();
+                    return;
+                }
+
+                const payload = JSON.stringify({
+                    text: text,
+                    left: rect.left,
+                    top: rect.top,
+                    right: rect.right,
+                    bottom: rect.bottom,
+                });
+                if (payload === lastPayload) return;
+                lastPayload = payload;
+                bridge.onSelectionChanged(payload);
+            };
+
+            const schedulePublish = () => {
+                if (window.requestAnimationFrame) {
+                    window.requestAnimationFrame(publishSelection);
+                } else {
+                    setTimeout(publishSelection, 0);
+                }
+            };
+
+            document.addEventListener('selectionchange', schedulePublish, true);
+            document.addEventListener('pointerup', schedulePublish, true);
+            document.addEventListener('mouseup', schedulePublish, true);
+            document.addEventListener('keyup', schedulePublish, true);
+            document.addEventListener('touchend', schedulePublish, true);
+        })();
+    """.trimIndent()
+}
+
+internal class NovelReaderSelectionBridge(
+    private val view: WebView,
+    private val selectionSessionIdProvider: () -> Long,
+    private val onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit,
+) {
+    @JavascriptInterface
+    fun onSelectionChanged(payloadJson: String) {
+        val payload = runCatching { JSONObject(payloadJson) }.getOrNull() ?: run {
+            onSelectionCleared()
+            return
+        }
+        val selectedText = payload.optString("text").orEmpty()
+        val selection = if (selectedText.isBlank()) {
+            null
+        } else {
+            val locationOnScreen = IntArray(2)
+            view.getLocationOnScreen(locationOnScreen)
+            NovelSelectedTextSelection(
+                sessionId = selectionSessionIdProvider(),
+                renderer = NovelSelectedTextRenderer.WEBVIEW,
+                text = selectedText,
+                anchor = NovelSelectedTextAnchor(
+                    leftPx = locationOnScreen[0] + payload.optDouble("left").toInt(),
+                    topPx = locationOnScreen[1] + payload.optDouble("top").toInt(),
+                    rightPx = locationOnScreen[0] + payload.optDouble("right").toInt(),
+                    bottomPx = locationOnScreen[1] + payload.optDouble("bottom").toInt(),
+                ),
+            )
+        }
+        view.post {
+            onSelectedTextSelectionChanged(selection)
+        }
+    }
+
+    @JavascriptInterface
+    fun onSelectionCleared() {
+        view.post {
+            onSelectedTextSelectionChanged(null)
+        }
+    }
+}
+
+internal fun WebView.registerWebReaderSelectionBridge(
+    selectionSessionIdProvider: () -> Long,
+    onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit,
+) {
+    runCatching {
+        removeJavascriptInterface(WEB_READER_SELECTION_BRIDGE_NAME)
+    }
+    addJavascriptInterface(
+        NovelReaderSelectionBridge(
+            view = this,
+            selectionSessionIdProvider = selectionSessionIdProvider,
+            onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+        ),
+        WEB_READER_SELECTION_BRIDGE_NAME,
+    )
 }
 
 internal fun shouldUseEarlyWebViewReveal(rawHtml: String): Boolean {
