@@ -3145,6 +3145,7 @@ class NovelReaderUiVisibilityTest {
                 hasPreviousChapter = true,
                 hasNextChapter = true,
                 tapToScrollEnabled = false,
+                animateBoundaryTransition = false,
             ),
         )
     }
@@ -3161,6 +3162,7 @@ class NovelReaderUiVisibilityTest {
                 hasPreviousChapter = true,
                 hasNextChapter = true,
                 tapToScrollEnabled = false,
+                animateBoundaryTransition = false,
             ),
         )
     }
@@ -3177,6 +3179,7 @@ class NovelReaderUiVisibilityTest {
                 hasPreviousChapter = true,
                 hasNextChapter = true,
                 tapToScrollEnabled = true,
+                animateBoundaryTransition = false,
             ),
         )
     }
@@ -3193,6 +3196,7 @@ class NovelReaderUiVisibilityTest {
                 hasPreviousChapter = true,
                 hasNextChapter = true,
                 tapToScrollEnabled = true,
+                animateBoundaryTransition = false,
             ),
         )
     }
@@ -3209,6 +3213,7 @@ class NovelReaderUiVisibilityTest {
                 hasPreviousChapter = true,
                 hasNextChapter = true,
                 tapToScrollEnabled = true,
+                animateBoundaryTransition = false,
             ),
         )
     }
@@ -3225,6 +3230,41 @@ class NovelReaderUiVisibilityTest {
                 hasPreviousChapter = true,
                 hasNextChapter = true,
                 tapToScrollEnabled = true,
+                animateBoundaryTransition = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn custom tap action animates boundary transition on previous chapter edge when enabled`() {
+        assertEquals(
+            PageTurnCustomTapAction.MOVE_PREVIOUS_PAGE,
+            resolvePageTurnCustomTapAction(
+                tapXFraction = 0.05f,
+                currentPage = 0,
+                pageCount = 3,
+                centerTapWidthFraction = 0.2f,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+                tapToScrollEnabled = true,
+                animateBoundaryTransition = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn custom tap action animates boundary transition on next chapter edge when enabled`() {
+        assertEquals(
+            PageTurnCustomTapAction.MOVE_NEXT_PAGE,
+            resolvePageTurnCustomTapAction(
+                tapXFraction = 0.95f,
+                currentPage = 2,
+                pageCount = 3,
+                centerTapWidthFraction = 0.2f,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+                tapToScrollEnabled = true,
+                animateBoundaryTransition = true,
             ),
         )
     }

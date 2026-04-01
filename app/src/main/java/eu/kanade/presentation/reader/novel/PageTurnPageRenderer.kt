@@ -101,6 +101,16 @@ internal enum class PageTurnCustomTapAction {
     OPEN_NEXT_CHAPTER,
 }
 
+internal enum class PageTurnChapterNavigationDirection {
+    PREVIOUS,
+    NEXT,
+}
+
+internal data class PageTurnChapterNavigationRequest(
+    val direction: PageTurnChapterNavigationDirection,
+    val token: Long,
+)
+
 internal fun resolvePageTurnRendererFallbackStyle(
     requestedStyle: NovelPageTransitionStyle,
 ): NovelPageTransitionStyle {
@@ -290,6 +300,7 @@ internal fun resolvePageTurnCustomTapAction(
     hasPreviousChapter: Boolean,
     hasNextChapter: Boolean,
     tapToScrollEnabled: Boolean,
+    animateBoundaryTransition: Boolean,
 ): PageTurnCustomTapAction {
     if (pageCount <= 0) return PageTurnCustomTapAction.NONE
     val safeTapX = tapXFraction.coerceIn(0f, 1f)
@@ -299,14 +310,26 @@ internal fun resolvePageTurnCustomTapAction(
         safeTapX in centerStart..centerEnd -> PageTurnCustomTapAction.TOGGLE_UI
         tapToScrollEnabled && safeTapX < centerStart -> {
             when {
-                currentPage <= 0 && hasPreviousChapter -> PageTurnCustomTapAction.OPEN_PREVIOUS_CHAPTER
+                currentPage <= 0 && hasPreviousChapter -> {
+                    if (animateBoundaryTransition) {
+                        PageTurnCustomTapAction.MOVE_PREVIOUS_PAGE
+                    } else {
+                        PageTurnCustomTapAction.OPEN_PREVIOUS_CHAPTER
+                    }
+                }
                 currentPage > 0 -> PageTurnCustomTapAction.MOVE_PREVIOUS_PAGE
                 else -> PageTurnCustomTapAction.NONE
             }
         }
         tapToScrollEnabled && safeTapX > centerEnd -> {
             when {
-                currentPage >= pageCount - 1 && hasNextChapter -> PageTurnCustomTapAction.OPEN_NEXT_CHAPTER
+                currentPage >= pageCount - 1 && hasNextChapter -> {
+                    if (animateBoundaryTransition) {
+                        PageTurnCustomTapAction.MOVE_NEXT_PAGE
+                    } else {
+                        PageTurnCustomTapAction.OPEN_NEXT_CHAPTER
+                    }
+                }
                 currentPage < pageCount - 1 -> PageTurnCustomTapAction.MOVE_NEXT_PAGE
                 else -> PageTurnCustomTapAction.NONE
             }
@@ -399,6 +422,8 @@ internal fun PageTurnPageRenderer(
     onMoveForward: () -> Unit,
     onOpenPreviousChapter: () -> Unit,
     onOpenNextChapter: () -> Unit,
+    chapterNavigationRequest: PageTurnChapterNavigationRequest? = null,
+    onChapterNavigationRequestConsumed: () -> Unit = {},
     onTextTap: (Float, Float) -> Unit = { _, _ -> onToggleUi() },
     selectionSessionIdProvider: () -> Long = { 0L },
     onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit = {},
@@ -460,6 +485,8 @@ internal fun PageTurnPageRenderer(
     val latestCurrentPageChange by rememberUpdatedState(onCurrentPageChange)
     val latestOpenPreviousChapter by rememberUpdatedState(onOpenPreviousChapter)
     val latestOpenNextChapter by rememberUpdatedState(onOpenNextChapter)
+    val latestChapterNavigationRequest by rememberUpdatedState(chapterNavigationRequest)
+    val latestChapterNavigationRequestConsumed by rememberUpdatedState(onChapterNavigationRequestConsumed)
     val latestRendererConfig by rememberUpdatedState(rendererConfig)
     val latestPageCount by rememberUpdatedState(safeContentPages.size)
     val latestHasPreviousChapter by rememberUpdatedState(hasPreviousChapter)
@@ -484,6 +511,7 @@ internal fun PageTurnPageRenderer(
                     hasPreviousChapter = latestHasPreviousChapter,
                     hasNextChapter = latestHasNextChapter,
                     tapToScrollEnabled = latestTapToScrollEnabled,
+                    animateBoundaryTransition = transitionStyle == NovelPageTransitionStyle.CURL,
                 )
             ) {
                 PageTurnCustomTapAction.TOGGLE_UI -> {
@@ -776,5 +804,27 @@ internal fun PageTurnPageRenderer(
                 }
             }
         }
+    }
+
+    LaunchedEffect(latestChapterNavigationRequest, transitionStyle) {
+        val request = latestChapterNavigationRequest ?: return@LaunchedEffect
+        if (transitionStyle != NovelPageTransitionStyle.CURL) {
+            latestChapterNavigationRequestConsumed()
+            return@LaunchedEffect
+        }
+
+        when (request.direction) {
+            PageTurnChapterNavigationDirection.PREVIOUS -> {
+                tapCoroutineScope.launch {
+                    pageCurlState.prev()
+                }
+            }
+            PageTurnChapterNavigationDirection.NEXT -> {
+                tapCoroutineScope.launch {
+                    pageCurlState.next()
+                }
+            }
+        }
+        latestChapterNavigationRequestConsumed()
     }
 }

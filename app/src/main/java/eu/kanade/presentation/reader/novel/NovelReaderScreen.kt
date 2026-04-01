@@ -835,6 +835,12 @@ fun NovelReaderScreen(
     var pageTurnRequestedPage by remember(pageReaderRendererRoute, state.chapter.id) {
         mutableIntStateOf(-1)
     }
+    var pageTurnChapterNavigationRequest by remember(pageReaderRendererRoute, state.chapter.id) {
+        mutableStateOf<PageTurnChapterNavigationRequest?>(null)
+    }
+    var pageTurnChapterNavigationRequestToken by remember(pageReaderRendererRoute, state.chapter.id) {
+        mutableStateOf(0L)
+    }
     val pageReaderProgressPageIndex by remember(
         pageReaderRendererRoute,
         pagerState.currentPage,
@@ -944,6 +950,14 @@ fun NovelReaderScreen(
         animationSpeed = state.readerSettings.bookFlipAnimationSpeed,
     )
 
+    fun requestPageTurnChapterNavigation(direction: PageTurnChapterNavigationDirection) {
+        pageTurnChapterNavigationRequestToken += 1L
+        pageTurnChapterNavigationRequest = PageTurnChapterNavigationRequest(
+            direction = direction,
+            token = pageTurnChapterNavigationRequestToken,
+        )
+    }
+
     suspend fun moveBackwardByReaderActionWithAnimation(pageAnimationDurationMillis: Int?) {
         if (showWebView) {
             val webView = webViewInstance
@@ -953,28 +967,35 @@ fun NovelReaderScreen(
                 onOpenPreviousChapter?.invoke(state.previousChapterId)
             }
         } else if (usePageReader) {
-            val currentPage = pageReaderProgressPageIndex
-            val currentVirtualPage = resolveComposePagerVirtualPageIndex(
-                actualPageIndex = currentPage,
-                hasPreviousChapter = composePagerHasPreviousChapter,
-            )
-            if (currentVirtualPage > 0) {
-                val targetVirtualPage = currentVirtualPage - 1
-                pageTurnCurrentPage = resolveComposePagerActualPageIndex(
-                    currentPage = targetVirtualPage,
-                    contentPageCount = pageReaderItemsCount,
+            if (
+                pageReaderRendererRoute == NovelPageReaderRendererRoute.PAGE_TURN_RENDERER &&
+                activePageTransitionStyle == NovelPageTransitionStyle.CURL
+            ) {
+                requestPageTurnChapterNavigation(PageTurnChapterNavigationDirection.PREVIOUS)
+            } else {
+                val currentPage = pageReaderProgressPageIndex
+                val currentVirtualPage = resolveComposePagerVirtualPageIndex(
+                    actualPageIndex = currentPage,
                     hasPreviousChapter = composePagerHasPreviousChapter,
                 )
-                if (pageAnimationDurationMillis != null) {
-                    pagerState.animateScrollToPage(
-                        targetVirtualPage,
-                        animationSpec = tween(durationMillis = pageAnimationDurationMillis),
+                if (currentVirtualPage > 0) {
+                    val targetVirtualPage = currentVirtualPage - 1
+                    pageTurnCurrentPage = resolveComposePagerActualPageIndex(
+                        currentPage = targetVirtualPage,
+                        contentPageCount = pageReaderItemsCount,
+                        hasPreviousChapter = composePagerHasPreviousChapter,
                     )
-                } else {
-                    pagerState.animateScrollToPage(targetVirtualPage)
+                    if (pageAnimationDurationMillis != null) {
+                        pagerState.animateScrollToPage(
+                            targetVirtualPage,
+                            animationSpec = tween(durationMillis = pageAnimationDurationMillis),
+                        )
+                    } else {
+                        pagerState.animateScrollToPage(targetVirtualPage)
+                    }
+                } else if (state.readerSettings.swipeToPrevChapter && state.previousChapterId != null) {
+                    onOpenPreviousChapter?.invoke(state.previousChapterId)
                 }
-            } else if (state.readerSettings.swipeToPrevChapter && state.previousChapterId != null) {
-                onOpenPreviousChapter?.invoke(state.previousChapterId)
             }
         } else if (textListState.canScrollBackward) {
             textListState.scrollBy(-tapScrollStepPx)
@@ -992,29 +1013,36 @@ fun NovelReaderScreen(
                 onOpenNextChapter?.invoke(state.nextChapterId)
             }
         } else if (usePageReader) {
-            val currentPage = pageReaderProgressPageIndex
-            val currentVirtualPage = resolveComposePagerVirtualPageIndex(
-                actualPageIndex = currentPage,
-                hasPreviousChapter = composePagerHasPreviousChapter,
-            )
-            val virtualLastPage = composePagerVirtualPageCount - 1
-            if (currentVirtualPage < virtualLastPage) {
-                val targetVirtualPage = currentVirtualPage + 1
-                pageTurnCurrentPage = resolveComposePagerActualPageIndex(
-                    currentPage = targetVirtualPage,
-                    contentPageCount = pageReaderItemsCount,
+            if (
+                pageReaderRendererRoute == NovelPageReaderRendererRoute.PAGE_TURN_RENDERER &&
+                activePageTransitionStyle == NovelPageTransitionStyle.CURL
+            ) {
+                requestPageTurnChapterNavigation(PageTurnChapterNavigationDirection.NEXT)
+            } else {
+                val currentPage = pageReaderProgressPageIndex
+                val currentVirtualPage = resolveComposePagerVirtualPageIndex(
+                    actualPageIndex = currentPage,
                     hasPreviousChapter = composePagerHasPreviousChapter,
                 )
-                if (pageAnimationDurationMillis != null) {
-                    pagerState.animateScrollToPage(
-                        targetVirtualPage,
-                        animationSpec = tween(durationMillis = pageAnimationDurationMillis),
+                val virtualLastPage = composePagerVirtualPageCount - 1
+                if (currentVirtualPage < virtualLastPage) {
+                    val targetVirtualPage = currentVirtualPage + 1
+                    pageTurnCurrentPage = resolveComposePagerActualPageIndex(
+                        currentPage = targetVirtualPage,
+                        contentPageCount = pageReaderItemsCount,
+                        hasPreviousChapter = composePagerHasPreviousChapter,
                     )
-                } else {
-                    pagerState.animateScrollToPage(targetVirtualPage)
+                    if (pageAnimationDurationMillis != null) {
+                        pagerState.animateScrollToPage(
+                            targetVirtualPage,
+                            animationSpec = tween(durationMillis = pageAnimationDurationMillis),
+                        )
+                    } else {
+                        pagerState.animateScrollToPage(targetVirtualPage)
+                    }
+                } else if (state.readerSettings.swipeToNextChapter && state.nextChapterId != null) {
+                    onOpenNextChapter?.invoke(state.nextChapterId)
                 }
-            } else if (state.readerSettings.swipeToNextChapter && state.nextChapterId != null) {
-                onOpenNextChapter?.invoke(state.nextChapterId)
             }
         } else if (textListState.canScrollForward) {
             textListState.scrollBy(tapScrollStepPx)
@@ -1147,18 +1175,10 @@ fun NovelReaderScreen(
                 if (showReaderUi || showWebView || !autoScrollEnabled) continue
                 val currentPage = pageReaderProgressPageIndex
                 if (currentPage < pageReaderItemsCount - 1) {
-                    pageTurnCurrentPage = currentPage + 1
-                    if (bookFlipPageAnimationDurationMillis != null) {
-                        pagerState.animateScrollToPage(
-                            currentPage + 1,
-                            animationSpec = tween(durationMillis = bookFlipPageAnimationDurationMillis),
-                        )
-                    } else {
-                        pagerState.animateScrollToPage(currentPage + 1)
-                    }
+                    moveForwardByReaderActionWithAnimation(bookFlipPageAnimationDurationMillis)
                 } else if (state.readerSettings.swipeToNextChapter && state.nextChapterId != null) {
                     autoScrollEnabled = false
-                    onOpenNextChapter?.invoke(state.nextChapterId)
+                    moveForwardByReaderActionWithAnimation(bookFlipPageAnimationDurationMillis)
                 } else {
                     autoScrollEnabled = false
                 }
@@ -1369,6 +1389,10 @@ fun NovelReaderScreen(
                             state.previousChapterId?.let { onOpenPreviousChapter?.invoke(it) }
                         },
                         onOpenNextChapter = { state.nextChapterId?.let { onOpenNextChapter?.invoke(it) } },
+                        chapterNavigationRequest = pageTurnChapterNavigationRequest,
+                        onChapterNavigationRequestConsumed = {
+                            pageTurnChapterNavigationRequest = null
+                        },
                         onTextTap = { tapX, width -> latestReaderShortTapHandler(tapX, width) },
                         selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
                         onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
