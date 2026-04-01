@@ -489,6 +489,7 @@
     <string name="novel_reader_page_transition_style_depth">Depth</string>
     <string name="novel_reader_page_transition_style_book">Book</string>
     <string name="novel_reader_page_transition_style_curl">Curl</string>
+    <string name="novel_reader_page_transition_style_book_flip">Book Flip</string>
     <string name="novel_reader_page_transition_style_page_turn_fallback">%1$s • currently falls back to %2$s visuals</string>
     <string name="novel_reader_page_turn_tuning">Page turn tuning</string>
     <string name="novel_reader_page_turn_tuning_summary_format">%1$s speed • %2$s intensity • %3$s shadow • %4$s activation zone</string>

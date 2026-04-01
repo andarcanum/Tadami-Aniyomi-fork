@@ -3,6 +3,8 @@ package eu.kanade.tachiyomi.ui.reader.novel.setting
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
@@ -10,6 +12,8 @@ import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.CoroutineScope
+import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.preference.getEnum
 import uy.kohesive.injekt.Injekt
@@ -348,6 +352,7 @@ class NovelReaderPreferences(
     init {
         migrateLegacyParagraphSpacingIfNeeded()
         migrateLegacyBackgroundSelectionIfNeeded()
+        migrateLegacyPageTransitionStyleIfNeeded()
     }
 
     // Display
@@ -438,8 +443,31 @@ class NovelReaderPreferences(
     fun richNativeRendererExperimental() =
         preferenceStore.getBoolean("novel_reader_rich_native_renderer_experimental", true)
 
-    fun pageTransitionStyle() =
-        preferenceStore.getEnum("novel_reader_page_transition_style", NovelPageTransitionStyle.SLIDE)
+    fun pageTransitionStyle(): Preference<NovelPageTransitionStyle> {
+        val preference = preferenceStore.getEnum(
+            "novel_reader_page_transition_style",
+            NovelPageTransitionStyle.SLIDE,
+        )
+        return object : Preference<NovelPageTransitionStyle> by preference {
+            override fun get(): NovelPageTransitionStyle {
+                val current = preference.get()
+                val normalized = current.normalizeLegacyPageTransitionStyle()
+                if (normalized != current) {
+                    preference.set(normalized)
+                }
+                return normalized
+            }
+
+            override fun set(value: NovelPageTransitionStyle) {
+                preference.set(value.normalizeLegacyPageTransitionStyle())
+            }
+
+            override fun changes() = preference.changes().map { it.normalizeLegacyPageTransitionStyle() }
+
+            override fun stateIn(scope: CoroutineScope) =
+                changes().stateIn(scope, kotlinx.coroutines.flow.SharingStarted.Eagerly, get())
+        }
+    }
 
     fun bookFlipAnimationSpeed() =
         preferenceStore.getEnum("novel_reader_book_flip_animation_speed", NovelBookFlipAnimationSpeed.SLOW)
@@ -615,7 +643,7 @@ class NovelReaderPreferences(
         if (override == null) {
             updated.remove(sourceId)
         } else {
-            updated[sourceId] = override
+            updated[sourceId] = override.normalizeLegacyPageTransitionStyle()
         }
         sourceOverrides().set(updated)
     }
@@ -636,6 +664,25 @@ class NovelReaderPreferences(
             } else {
                 value
             }
+        }
+        if (hasChanges) {
+            sourceOverrides().set(migrated)
+        }
+    }
+
+    fun migrateLegacyPageTransitionStyleIfNeeded() {
+        if (pageTransitionStyle().get() == NovelPageTransitionStyle.BOOK) {
+            pageTransitionStyle().set(NovelPageTransitionStyle.CURL)
+        }
+
+        val overrides = sourceOverrides().get()
+        var hasChanges = false
+        val migrated = overrides.mapValues { (_, value) ->
+            val normalized = value.normalizeLegacyPageTransitionStyle()
+            if (normalized != value) {
+                hasChanges = true
+            }
+            normalized
         }
         if (hasChanges) {
             sourceOverrides().set(migrated)
@@ -1336,5 +1383,21 @@ private fun resolveLegacyParagraphSpacingDp(rawValue: String): Int {
         NovelReaderParagraphSpacing.COMPACT.name -> 8
         NovelReaderParagraphSpacing.SPACIOUS.name -> 16
         else -> NovelReaderPreferences.DEFAULT_PARAGRAPH_SPACING_DP
+    }
+}
+
+private fun NovelPageTransitionStyle.normalizeLegacyPageTransitionStyle(): NovelPageTransitionStyle {
+    return if (this == NovelPageTransitionStyle.BOOK) {
+        NovelPageTransitionStyle.CURL
+    } else {
+        this
+    }
+}
+
+private fun NovelReaderOverride.normalizeLegacyPageTransitionStyle(): NovelReaderOverride {
+    return if (pageTransitionStyle == NovelPageTransitionStyle.BOOK) {
+        copy(pageTransitionStyle = NovelPageTransitionStyle.CURL)
+    } else {
+        this
     }
 }

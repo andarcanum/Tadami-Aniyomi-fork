@@ -97,7 +97,34 @@ class NovelReaderPreferencesTest {
 
         prefs.pageTransitionStyle().set(NovelPageTransitionStyle.BOOK)
 
-        prefs.pageTransitionStyle().get() shouldBe NovelPageTransitionStyle.BOOK
+        prefs.pageTransitionStyle().get() shouldBe NovelPageTransitionStyle.CURL
+    }
+
+    @Test
+    fun `legacy book transition style migrates to curl`() {
+        val prefs = createPrefs()
+
+        prefs.pageTransitionStyle().set(NovelPageTransitionStyle.BOOK)
+
+        prefs.migrateLegacyPageTransitionStyleIfNeeded()
+
+        prefs.pageTransitionStyle().get() shouldBe NovelPageTransitionStyle.CURL
+    }
+
+    @Test
+    fun `legacy book transition style in source overrides migrates to curl`() {
+        val prefs = createPrefs()
+        val sourceId = 123L
+
+        prefs.sourceOverrides().set(
+            mapOf(
+                sourceId to NovelReaderOverride(pageTransitionStyle = NovelPageTransitionStyle.BOOK),
+            ),
+        )
+
+        prefs.migrateLegacyPageTransitionStyleIfNeeded()
+
+        prefs.getSourceOverride(sourceId)?.pageTransitionStyle shouldBe NovelPageTransitionStyle.CURL
     }
 
     @Test

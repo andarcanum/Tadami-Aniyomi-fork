@@ -314,7 +314,8 @@
     <string name="novel_reader_page_transition_style_slide">Сдвиг</string>
     <string name="novel_reader_page_transition_style_depth">Глубина</string>
     <string name="novel_reader_page_transition_style_book">Книга</string>
-    <string name="novel_reader_page_transition_style_curl">Curl</string>
+    <string name="novel_reader_page_transition_style_curl">Изгиб</string>
+    <string name="novel_reader_page_transition_style_book_flip">Переворот</string>
     <string name="novel_reader_page_transition_style_page_turn_fallback">%1$s • пока использует визуал %2$s</string>
     <string name="novel_reader_page_turn_tuning">Тонкая настройка перелистывания</string>
     <string name="novel_reader_page_turn_tuning_summary_format">Скорость: %1$s • Интенсивность: %2$s • Тени: %3$s • Зона: %4$s</string>

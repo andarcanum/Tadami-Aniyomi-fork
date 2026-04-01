@@ -23,12 +23,10 @@ internal fun novelPageTransitionStyleEntries(): ImmutableMap<NovelPageTransition
             stringResource(AYMR.strings.novel_reader_page_transition_style_slide),
         NovelPageTransitionStyle.DEPTH to
             stringResource(AYMR.strings.novel_reader_page_transition_style_depth),
-        NovelPageTransitionStyle.BOOK to
-            stringResource(AYMR.strings.novel_reader_page_transition_style_book),
         NovelPageTransitionStyle.CURL to
             stringResource(AYMR.strings.novel_reader_page_transition_style_curl),
         NovelPageTransitionStyle.BOOK_FLIP to
-            "Book Flip (3D - EXPERIMENTAL)",
+            stringResource(AYMR.strings.novel_reader_page_transition_style_book_flip),
     )
 }
 
@@ -37,7 +35,12 @@ internal fun novelPageTransitionStyleSubtitle(
     style: NovelPageTransitionStyle,
     entries: Map<NovelPageTransitionStyle, String>,
 ): String {
-    return entries[style].orEmpty()
+    val normalizedStyle = if (style == NovelPageTransitionStyle.BOOK) {
+        NovelPageTransitionStyle.CURL
+    } else {
+        style
+    }
+    return entries[normalizedStyle].orEmpty()
 }
 
 private val novelBookFlipAnimationSpeedSliderOptions = listOf(
