@@ -301,6 +301,7 @@ fun NovelReaderScreen(
     var autoScrollExpanded by remember(state.chapter.id) { mutableStateOf(false) }
     var showGeminiDialog by remember(state.chapter.id) { mutableStateOf(false) }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
+    val shouldHideWebViewUntilReveal = state.enableJs
     var webProgressPercent by remember(state.chapter.id) {
         mutableIntStateOf(state.lastSavedWebProgressPercent.coerceIn(0, 100))
     }
@@ -1750,19 +1751,158 @@ fun NovelReaderScreen(
                 val initialFactoryWebViewHtml = buildInitialWebReaderHtml(
                     rawHtml = state.html,
                     readerCss = initialReaderCss,
+                    hideUntilReveal = shouldHideWebViewUntilReveal,
                 )
 
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = { context ->
+                        val factoryShouldEarlyReveal = shouldUseEarlyWebViewReveal(state.html)
+                        val factoryWebViewClient = object : WebViewClient() {
+                            private var hasEarlyRevealedPage = false
+
+                            override fun onPageCommitVisible(view: WebView?, url: String?) {
+                                super.onPageCommitVisible(view, url)
+                                if (!factoryShouldEarlyReveal || hasEarlyRevealedPage) return
+                                hasEarlyRevealedPage = true
+                                view?.revealReaderDocumentAndWebView(shouldHideWebViewUntilReveal)
+                            }
+
+                            override fun shouldInterceptRequest(
+                                view: WebView?,
+                                request: WebResourceRequest?,
+                            ): WebResourceResponse? {
+                                val requestUrl = request?.url?.toString().orEmpty()
+                                resolveReaderBackgroundWebResourceResponse(
+                                    requestUrl = requestUrl,
+                                    context = context,
+                                    selection = backgroundSelection,
+                                )?.let { response ->
+                                    return response
+                                }
+                                resolveReaderFontWebResourceResponse(
+                                    requestUrl = requestUrl,
+                                    selectedFont = selectedReaderFont,
+                                )?.let { response ->
+                                    return response
+                                }
+                                if (!NovelPluginImage.isSupported(requestUrl)) {
+                                    return super.shouldInterceptRequest(view, request)
+                                }
+
+                                val image = NovelPluginImageResolver.resolveBlocking(requestUrl)
+                                    ?: return super.shouldInterceptRequest(view, request)
+                                return WebResourceResponse(
+                                    image.mimeType,
+                                    null,
+                                    ByteArrayInputStream(image.bytes),
+                                )
+                            }
+
+                            override fun onPageFinished(view: WebView?, url: String?) {
+                                view?.applyReaderCss(
+                                    fontFaceCss = initialFontFaceCss,
+                                    paddingTop = initialPaddingTop,
+                                    paddingBottom = initialPaddingBottom,
+                                    paddingHorizontal = initialPaddingHorizontal,
+                                    fontSizePx = state.readerSettings.fontSize,
+                                    lineHeightMultiplier = state.readerSettings.lineHeight,
+                                    paragraphSpacingPx = state.readerSettings.paragraphSpacing,
+                                    textAlignCss = initialCssTextAlign,
+                                    firstLineIndentCss = initialCssFirstLineIndent,
+                                    textColorHex = colorToCssHex(textColor),
+                                    backgroundHex = colorToCssHex(textBackground),
+                                    appearanceMode = state.readerSettings.appearanceMode,
+                                    backgroundTexture = activeBackgroundTexture,
+                                    oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
+                                    backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
+                                    fontFamilyName = initialSelectedFontFamily,
+                                    customCss = state.readerSettings.customCSS,
+                                    textShadowCss = initialTextShadowCss,
+                                    forceBoldText = state.readerSettings.forceBoldText,
+                                    forceItalicText = state.readerSettings.forceItalicText,
+                                    bionicReadingEnabled = state.readerSettings.bionicReading,
+                                )
+                                appliedWebCssFingerprint = buildWebReaderCssFingerprint(
+                                    chapterId = state.chapter.id,
+                                    paddingTop = initialPaddingTop,
+                                    paddingBottom = initialPaddingBottom,
+                                    paddingHorizontal = initialPaddingHorizontal,
+                                    fontSizePx = state.readerSettings.fontSize,
+                                    lineHeightMultiplier = state.readerSettings.lineHeight,
+                                    paragraphSpacingPx = state.readerSettings.paragraphSpacing,
+                                    textAlignCss = initialCssTextAlign,
+                                    firstLineIndentCss = initialCssFirstLineIndent,
+                                    textColorHex = colorToCssHex(textColor),
+                                    backgroundHex = colorToCssHex(textBackground),
+                                    appearanceMode = state.readerSettings.appearanceMode,
+                                    backgroundTexture = activeBackgroundTexture,
+                                    oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
+                                    backgroundImageIdentity = if (isBackgroundMode) backgroundModeIdentity else null,
+                                    fontFamilyName = initialSelectedFontFamily,
+                                    customCss = state.readerSettings.customCSS,
+                                    textShadowCss = initialTextShadowCss,
+                                    forceBoldText = state.readerSettings.forceBoldText,
+                                    forceItalicText = state.readerSettings.forceItalicText,
+                                )
+
+                                if (state.readerSettings.customJS.isNotEmpty()) {
+                                    view?.evaluateJavascript(
+                                        """
+                                        (function() {
+                                            ${state.readerSettings.customJS}
+                                        })();
+                                        """.trimIndent(),
+                                        null,
+                                    )
+                                }
+
+                                if (shouldRestoreWebScroll) {
+                                    view?.restoreWebViewScroll(
+                                        progressPercent = state.lastSavedWebProgressPercent.coerceIn(0, 100),
+                                        onComplete = {
+                                            shouldRestoreWebScroll = false
+                                            val settledProgress = view.resolveCurrentWebViewProgressPercent()
+                                            if (shouldDispatchWebProgressUpdate(
+                                                    false,
+                                                    settledProgress,
+                                                    webProgressPercent,
+                                                )
+                                            ) {
+                                                webProgressPercent = settledProgress
+                                                onReadingProgress(
+                                                    settledProgress,
+                                                    100,
+                                                    encodeWebScrollProgressPercent(settledProgress),
+                                                )
+                                            }
+                                            view.revealReaderDocumentAndWebView(shouldHideWebViewUntilReveal)
+                                        },
+                                    )
+                                } else {
+                                    val settledProgress = view?.resolveCurrentWebViewProgressPercent()
+                                        ?: webProgressPercent
+                                    if (shouldDispatchWebProgressUpdate(false, settledProgress, webProgressPercent)) {
+                                        webProgressPercent = settledProgress
+                                        onReadingProgress(
+                                            settledProgress,
+                                            100,
+                                            encodeWebScrollProgressPercent(settledProgress),
+                                        )
+                                    }
+                                    view?.revealReaderDocumentAndWebView(shouldHideWebViewUntilReveal)
+                                }
+                            }
+                        }
+
                         WebView(context).apply {
                             webViewInstance = this
                             setBackgroundColor(backgroundColor)
-                            alpha = 0f
+                            alpha = if (shouldHideWebViewUntilReveal) 0f else 1f
                             settings.javaScriptEnabled = shouldEnableJavaScriptInReaderWebView(state.enableJs)
                             settings.domStorageEnabled = false
 
-                            webViewClient = object : WebViewClient() {}
+                            webViewClient = factoryWebViewClient
                             setOnScrollChangeListener { view, _, scrollY, _, _ ->
                                 val webView = view as? WebView ?: return@setOnScrollChangeListener
                                 if (!shouldTrackWebViewProgress(shouldRestoreWebScroll)) {
@@ -1987,6 +2127,7 @@ fun NovelReaderScreen(
                         val initialWebViewHtml = buildInitialWebReaderHtml(
                             rawHtml = state.html,
                             readerCss = currentReaderCss,
+                            hideUntilReveal = shouldHideWebViewUntilReveal,
                         )
                         val shouldEarlyRevealWebView = shouldUseEarlyWebViewReveal(state.html)
                         webView.webViewClient = object : WebViewClient() {
@@ -1996,7 +2137,7 @@ fun NovelReaderScreen(
                                 super.onPageCommitVisible(view, url)
                                 if (!shouldEarlyRevealWebView || hasEarlyRevealedPage) return
                                 hasEarlyRevealedPage = true
-                                view?.revealReaderDocumentAndWebView()
+                                view?.revealReaderDocumentAndWebView(shouldHideWebViewUntilReveal)
                             }
 
                             override fun shouldInterceptRequest(
@@ -2071,9 +2212,9 @@ fun NovelReaderScreen(
                                     view?.restoreWebViewScroll(
                                         progressPercent = currentRestoreProgress,
                                         onComplete = {
-                                            shouldRestoreWebScroll = false
-                                            val settledProgress = view.resolveCurrentWebViewProgressPercent()
-                                            if (shouldDispatchWebProgressUpdate(
+                                    shouldRestoreWebScroll = false
+                                    val settledProgress = view.resolveCurrentWebViewProgressPercent()
+                                    if (shouldDispatchWebProgressUpdate(
                                                     false,
                                                     settledProgress,
                                                     webProgressPercent,
@@ -2083,10 +2224,10 @@ fun NovelReaderScreen(
                                                 onReadingProgress(
                                                     settledProgress,
                                                     100,
-                                                    encodeWebScrollProgressPercent(settledProgress),
-                                                )
-                                            }
-                                            view.revealReaderDocumentAndWebView()
+                                            encodeWebScrollProgressPercent(settledProgress),
+                                        )
+                                    }
+                                            view.revealReaderDocumentAndWebView(shouldHideWebViewUntilReveal)
                                         },
                                     )
                                 } else {
@@ -2100,7 +2241,7 @@ fun NovelReaderScreen(
                                             encodeWebScrollProgressPercent(settledProgress),
                                         )
                                     }
-                                    view?.revealReaderDocumentAndWebView()
+                                    view?.revealReaderDocumentAndWebView(shouldHideWebViewUntilReveal)
                                 }
                             }
                         }
@@ -2109,7 +2250,7 @@ fun NovelReaderScreen(
                             shouldRestoreWebScroll = true
                             appliedWebCssFingerprint = null
                             webView.animate().cancel()
-                            webView.alpha = 0f
+                            webView.alpha = if (shouldHideWebViewUntilReveal) 0f else 1f
                             webView.loadDataWithBaseURL(baseUrl, initialWebViewHtml, "text/html", "utf-8", null)
                             webView.tag = state.html
                         } else if (appliedWebCssFingerprint != styleFingerprint) {

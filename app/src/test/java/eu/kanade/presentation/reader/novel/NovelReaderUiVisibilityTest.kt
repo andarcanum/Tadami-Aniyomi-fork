@@ -4048,6 +4048,21 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `initial webview html can skip bootstrap reveal when reveal is unnecessary`() {
+        val html = "<html><head><title>t</title></head><body><p>Hello</p></body></html>"
+
+        val result = buildInitialWebReaderHtml(
+            rawHtml = html,
+            readerCss = "body { color: red; }",
+            hideUntilReveal = false,
+        )
+
+        assertTrue(result.contains("__an_reader_style__"))
+        assertFalse(result.contains("__an_reader_bootstrap_style__"))
+        assertTrue(result.contains("<p>Hello</p>"))
+    }
+
+    @Test
     fun `initial webview html escapes closing style sequences in css`() {
         val html = "<html><head></head><body></body></html>"
 

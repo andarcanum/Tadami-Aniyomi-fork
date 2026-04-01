@@ -36,6 +36,7 @@ internal val novelWordRegex = Regex("""[\p{L}\p{N}']+""")
 internal fun buildInitialWebReaderHtml(
     rawHtml: String,
     readerCss: String,
+    hideUntilReveal: Boolean = true,
 ): String {
     val injection = buildString {
         append("<style id=\"")
@@ -43,11 +44,13 @@ internal fun buildInitialWebReaderHtml(
         append("\">")
         append(escapeCssForInlineStyleTag(readerCss))
         append("</style>")
-        append("<style id=\"")
-        append(WEB_READER_BOOTSTRAP_STYLE_ELEMENT_ID)
-        append("\">")
-        append(buildWebReaderBootstrapCss())
-        append("</style>")
+        if (hideUntilReveal) {
+            append("<style id=\"")
+            append(WEB_READER_BOOTSTRAP_STYLE_ELEMENT_ID)
+            append("\">")
+            append(buildWebReaderBootstrapCss())
+            append("</style>")
+        }
     }
     return injectHtmlFragmentIntoHead(rawHtml, injection)
 }
@@ -126,7 +129,12 @@ internal fun WebView.restoreWebViewScroll(
     post { attemptRestore(0) }
 }
 
-internal fun WebView.revealReaderDocumentAndWebView() {
+internal fun WebView.revealReaderDocumentAndWebView(hideUntilReveal: Boolean = true) {
+    if (!hideUntilReveal) {
+        animate().cancel()
+        alpha = 1f
+        return
+    }
     evaluateJavascript(
         """
         (function() {
