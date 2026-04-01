@@ -534,6 +534,13 @@ internal fun resolveActivePageTransitionStyle(
     return requestedStyle
 }
 
+internal fun shouldShowNovelAtmosphereBackground(
+    usePageReader: Boolean,
+    activePageTransitionStyle: NovelPageTransitionStyle,
+): Boolean {
+    return !usePageReader || activePageTransitionStyle != NovelPageTransitionStyle.BOOK_FLIP
+}
+
 internal enum class NovelPageReaderRendererRoute {
     COMPOSE_PAGER,
     PAGE_TURN_RENDERER,

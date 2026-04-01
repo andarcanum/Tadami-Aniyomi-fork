@@ -2244,6 +2244,22 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `native scroll still shows atmosphere background for book flip style`() {
+        assertTrue(
+            shouldShowNovelAtmosphereBackground(
+                usePageReader = false,
+                activePageTransitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
+            ),
+        )
+        assertFalse(
+            shouldShowNovelAtmosphereBackground(
+                usePageReader = true,
+                activePageTransitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
+            ),
+        )
+    }
+
+    @Test
     fun `page reader routes compose transition styles through compose pager renderer`() {
         assertEquals(
             NovelPageReaderRendererRoute.COMPOSE_PAGER,

@@ -1136,7 +1136,12 @@ fun NovelReaderScreen(
             .fillMaxSize()
             .onSizeChanged { pageViewportSize = it },
     ) {
-        if (activePageTransitionStyle != NovelPageTransitionStyle.BOOK_FLIP) {
+        if (
+            shouldShowNovelAtmosphereBackground(
+                usePageReader = usePageReader,
+                activePageTransitionStyle = activePageTransitionStyle,
+            )
+        ) {
             NovelAtmosphereBackground(
                 backgroundColor = textBackground,
                 backgroundTexture = activeBackgroundTexture,
