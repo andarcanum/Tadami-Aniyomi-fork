@@ -26,12 +26,12 @@ import eu.kanade.tachiyomi.ui.reader.novel.decodePageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodeNativeScrollProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodePageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodeWebScrollProgressPercent
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelBookFlipAnimationSpeed
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnActivationZone
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnIntensity
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnShadowIntensity
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnSpeed
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelBookFlipAnimationSpeed
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture

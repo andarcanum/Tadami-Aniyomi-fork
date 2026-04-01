@@ -1,12 +1,12 @@
 package eu.kanade.tachiyomi.ui.entries.novel
 
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnActivationZone
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnActivationZone
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe

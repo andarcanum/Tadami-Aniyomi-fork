@@ -6,13 +6,13 @@ import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
+import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationErrorReason
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationService
-import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationErrorReason
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationProviderOutcome
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationRequest
@@ -92,7 +92,9 @@ class NovelSelectedTextTranslationScreenModelTest {
 
             val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
             state.selectedTextTranslationSelection shouldBe selection
-            state.selectedTextTranslationUiState.shouldBeInstanceOf<NovelSelectedTextTranslationUiState.SelectionAvailable>()
+            state.selectedTextTranslationUiState.shouldBeInstanceOf<
+                NovelSelectedTextTranslationUiState.SelectionAvailable,
+                >()
         }
     }
 
@@ -165,7 +167,9 @@ class NovelSelectedTextTranslationScreenModelTest {
             }
 
             val success = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
-            val resultState = success.selectedTextTranslationUiState.shouldBeInstanceOf<NovelSelectedTextTranslationUiState.Result>()
+            val resultState = success.selectedTextTranslationUiState.shouldBeInstanceOf<
+                NovelSelectedTextTranslationUiState.Result,
+                >()
             resultState.translationResult.translation shouldBe "Привет"
             provider.requests.size shouldBe 1
         }
@@ -275,7 +279,11 @@ class NovelSelectedTextTranslationScreenModelTest {
             screenModel.updateSelectedTextSelection(selection)
             screenModel.translateSelectedText()
             withTimeout(1_000) {
-                while (screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>().selectedTextTranslationUiState !is NovelSelectedTextTranslationUiState.Result) {
+                while (
+                    screenModel.state.value
+                        .shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+                        .selectedTextTranslationUiState !is NovelSelectedTextTranslationUiState.Result
+                ) {
                     yield()
                 }
             }
@@ -332,7 +340,9 @@ class NovelSelectedTextTranslationScreenModelTest {
 
     private class ScriptedSelectedTextTranslationProvider(
         override val fingerprint: String = "google-unofficial-test",
-        private val onTranslate: suspend NovelSelectedTextTranslationProvider.(NovelSelectedTextTranslationRequest) -> NovelSelectedTextTranslationProviderOutcome = {
+        private val onTranslate: suspend NovelSelectedTextTranslationProvider.(
+            NovelSelectedTextTranslationRequest,
+        ) -> NovelSelectedTextTranslationProviderOutcome = {
             NovelSelectedTextTranslationProviderOutcome.Success(
                 result = eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationResult(
                     translation = "Привет",

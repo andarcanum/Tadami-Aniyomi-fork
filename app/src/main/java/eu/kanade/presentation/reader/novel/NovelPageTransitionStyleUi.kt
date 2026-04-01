@@ -63,7 +63,12 @@ internal fun novelBookFlipAnimationSpeedSliderIndex(speed: NovelBookFlipAnimatio
 }
 
 internal fun resolveNovelBookFlipAnimationSpeedSliderValue(index: Int): NovelBookFlipAnimationSpeed {
-    return novelBookFlipAnimationSpeedSliderOptions[index.coerceIn(0, novelBookFlipAnimationSpeedSliderOptions.lastIndex)].value
+    return novelBookFlipAnimationSpeedSliderOptions[
+        index.coerceIn(
+            0,
+            novelBookFlipAnimationSpeedSliderOptions.lastIndex,
+        ),
+    ].value
 }
 
 @Composable

@@ -75,13 +75,13 @@ import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -116,7 +116,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.ImageShader
 import androidx.compose.ui.graphics.ShaderBrush
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
@@ -127,18 +126,15 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -152,11 +148,11 @@ import eu.kanade.presentation.components.TabbedDialog
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelPluginImageResolver
+import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreenModel
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextRenderer
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextSelection
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationErrorReason
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationUiState
-import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreenModel
 import eu.kanade.tachiyomi.ui.reader.novel.encodeNativeScrollProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodePageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodeWebScrollProgressPercent
@@ -1331,18 +1327,18 @@ fun NovelReaderScreen(
                         onToggleUi = { onSetShowReaderUi(!showReaderUi) },
                         onMoveBackward = {
                             coroutineScope.launch {
-                            moveBackwardByReaderActionWithAnimation(
-                                bookFlipPageAnimationDurationMillis,
-                            )
-                        }
-                    },
-                    onMoveForward = {
-                        coroutineScope.launch {
-                            moveForwardByReaderActionWithAnimation(
-                                bookFlipPageAnimationDurationMillis,
-                            )
-                        }
-                    },
+                                moveBackwardByReaderActionWithAnimation(
+                                    bookFlipPageAnimationDurationMillis,
+                                )
+                            }
+                        },
+                        onMoveForward = {
+                            coroutineScope.launch {
+                                moveForwardByReaderActionWithAnimation(
+                                    bookFlipPageAnimationDurationMillis,
+                                )
+                            }
+                        },
                         onOpenPreviousChapter = {
                             state.previousChapterId?.let { onOpenPreviousChapter?.invoke(it) }
                         },
@@ -1605,7 +1601,9 @@ fun NovelReaderScreen(
                                                     selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
                                                     selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
                                                     onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
-                                                    onPlainTap = { tapX, width -> latestReaderShortTapHandler(tapX, width) },
+                                                    onPlainTap = { tapX, width ->
+                                                        latestReaderShortTapHandler(tapX, width)
+                                                    },
                                                     modifier = Modifier.fillMaxWidth(),
                                                 )
                                                 Box(
@@ -1615,7 +1613,7 @@ fun NovelReaderScreen(
                                                         .height(1.dp)
                                                         .background(
                                                             MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
-                                                    ),
+                                                        ),
                                                 )
                                             }
                                         } else {
@@ -1642,7 +1640,9 @@ fun NovelReaderScreen(
                                                 selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
                                                 selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
                                                 onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
-                                                onPlainTap = { tapX, width -> latestReaderShortTapHandler(tapX, width) },
+                                                onPlainTap = { tapX, width ->
+                                                    latestReaderShortTapHandler(tapX, width)
+                                                },
                                                 modifier = Modifier.padding(
                                                     top = if (index == 0) statusBarTopPadding else 0.dp,
                                                     bottom = if (index == scrollContentBlocks.lastIndex) {
@@ -2244,9 +2244,9 @@ fun NovelReaderScreen(
                                     view?.restoreWebViewScroll(
                                         progressPercent = currentRestoreProgress,
                                         onComplete = {
-                                    shouldRestoreWebScroll = false
-                                    val settledProgress = view.resolveCurrentWebViewProgressPercent()
-                                    if (shouldDispatchWebProgressUpdate(
+                                            shouldRestoreWebScroll = false
+                                            val settledProgress = view.resolveCurrentWebViewProgressPercent()
+                                            if (shouldDispatchWebProgressUpdate(
                                                     false,
                                                     settledProgress,
                                                     webProgressPercent,
@@ -2256,9 +2256,9 @@ fun NovelReaderScreen(
                                                 onReadingProgress(
                                                     settledProgress,
                                                     100,
-                                            encodeWebScrollProgressPercent(settledProgress),
-                                        )
-                                    }
+                                                    encodeWebScrollProgressPercent(settledProgress),
+                                                )
+                                            }
                                             view.revealReaderDocumentAndWebView(shouldHideWebViewUntilReveal)
                                         },
                                     )
@@ -4841,7 +4841,8 @@ private fun translationErrorMessage(reason: NovelSelectedTextTranslationErrorRea
         NovelSelectedTextTranslationErrorReason.EmptySelection,
         NovelSelectedTextTranslationErrorReason.TooLongSelection,
         NovelSelectedTextTranslationErrorReason.ParserFailure,
-        NovelSelectedTextTranslationErrorReason.WebViewUnavailable -> {
+        NovelSelectedTextTranslationErrorReason.WebViewUnavailable,
+        -> {
             stringResource(AYMR.strings.novel_reader_selected_text_translation_unavailable)
         }
         is NovelSelectedTextTranslationErrorReason.BackendUnavailable -> {
@@ -4853,7 +4854,9 @@ private fun translationErrorMessage(reason: NovelSelectedTextTranslationErrorRea
                 ?: stringResource(AYMR.strings.novel_reader_selected_text_translation_unavailable)
         }
         is NovelSelectedTextTranslationErrorReason.Cooldown -> {
-            "${stringResource(AYMR.strings.novel_reader_selected_text_translation_unavailable)} (${reason.remainingSeconds}s)"
+            "${stringResource(
+                AYMR.strings.novel_reader_selected_text_translation_unavailable,
+            )} (${reason.remainingSeconds}s)"
         }
     }
 }

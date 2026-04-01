@@ -3,21 +3,11 @@
 package eu.kanade.presentation.reader.novel
 
 import android.graphics.Typeface
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.PagerState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -26,29 +16,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign as ComposeTextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextSelection
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnActivationZone
@@ -62,11 +40,10 @@ import eu.wewox.pagecurl.config.PageCurlConfig
 import eu.wewox.pagecurl.config.rememberPageCurlConfig
 import eu.wewox.pagecurl.page.PageCurl
 import eu.wewox.pagecurl.page.rememberPageCurlState
-import kotlin.math.abs
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 internal enum class NovelPageTurnDragMode {
     START_END,
@@ -355,7 +332,7 @@ internal fun createPageTurnTapInteraction(
 private fun createPageTurnDragInteraction(
     config: NovelPageTurnRendererConfig,
 ): PageCurlConfig.DragInteraction {
-        return when (config.dragMode) {
+    return when (config.dragMode) {
         NovelPageTurnDragMode.START_END -> {
             val edge = config.dragActivationEdgeFraction
             val reach = config.dragTargetReachFraction
@@ -681,7 +658,7 @@ internal fun PageTurnPageRenderer(
                 HorizontalChapterSwipeAction.PREVIOUS,
                 HorizontalChapterSwipeAction.NEXT,
                 -> {
-                createNovelPageBoundaryPreviewData(
+                    createNovelPageBoundaryPreviewData(
                         chapterLabel = if (page <= 0) {
                             previousChapterLabel
                         } else {
@@ -767,7 +744,7 @@ internal fun PageTurnPageRenderer(
                     backgroundImageModel = backgroundImageModel,
                 )
                 if (boundaryPreview != null) {
-            NovelPageBoundaryPreviewContent(
+                    NovelPageBoundaryPreviewContent(
                         preview = boundaryPreview,
                         textColor = textColor,
                         chapterTitleTextColor = chapterTitleTextColor,

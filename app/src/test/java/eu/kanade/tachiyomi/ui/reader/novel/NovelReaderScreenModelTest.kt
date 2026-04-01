@@ -4,6 +4,7 @@ import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSourc
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginPackage
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoEntry
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
+import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
@@ -57,11 +58,10 @@ import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.source.novel.model.StubNovelSource
 import tachiyomi.domain.source.novel.service.NovelSourceManager
-import java.util.Collections
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.fullType
 import uy.kohesive.injekt.api.get
-import eu.kanade.tachiyomi.network.NetworkHelper
+import java.util.Collections
 
 class NovelReaderScreenModelTest {
     private val activeScreenModels = mutableListOf<NovelReaderScreenModel>()

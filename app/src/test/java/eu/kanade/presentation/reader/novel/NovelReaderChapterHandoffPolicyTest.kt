@@ -17,7 +17,8 @@ class NovelReaderChapterHandoffPolicyTest {
 
         shouldRestoreSavedPageReaderProgress(NovelReaderPageReaderHandoffTarget.END) shouldBe false
         NovelReaderChapterHandoffPolicy.consumeInternalChapterHandoff() shouldBe NovelReaderPageReaderHandoffTarget.END
-        NovelReaderChapterHandoffPolicy.consumeInternalChapterHandoff() shouldBe NovelReaderPageReaderHandoffTarget.SAVED
+        NovelReaderChapterHandoffPolicy.consumeInternalChapterHandoff() shouldBe
+            NovelReaderPageReaderHandoffTarget.SAVED
         shouldRestoreSavedPageReaderProgress(NovelReaderPageReaderHandoffTarget.SAVED) shouldBe true
     }
 }

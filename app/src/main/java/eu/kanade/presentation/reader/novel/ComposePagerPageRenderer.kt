@@ -28,9 +28,9 @@ import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextSelection
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
-import kotlin.math.abs
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlin.math.abs
 
 internal data class ComposePagerTransitionSpec(
     val alpha: Float = 1f,
@@ -70,17 +70,17 @@ internal fun resolveComposePagerTransitionSpec(
                     cameraDistance = 15f,
                     cancelPagerMotion = true,
                     shadowAlpha = (abs(0.5f - pageOffset) * -0.6f + 0.3f).coerceIn(0f, 0.3f),
-                    zIndex = 1f - pageOffset
+                    zIndex = 1f - pageOffset,
                 )
             } else if (pageOffset <= 0f && pageOffset >= -1f) {
                 // Page underneath
                 ComposePagerTransitionSpec(
                     cancelPagerMotion = true,
-                    zIndex = 0f
+                    zIndex = 0f,
                 )
             } else {
                 ComposePagerTransitionSpec(
-                    hideOffscreenPages = true
+                    hideOffscreenPages = true,
                 )
             }
         }
@@ -126,13 +126,14 @@ private fun resolveComposePagerPageKey(
     return when {
         hasPreviousChapter && page == 0 -> "compose-boundary-previous"
         hasNextChapter && page == virtualPageCount - 1 -> "compose-boundary-next"
-        else -> "compose-content-${
-            resolveComposePagerActualPageIndex(
-                currentPage = page,
-                contentPageCount = contentPageCount,
-                hasPreviousChapter = hasPreviousChapter,
-            )
-        }"
+        else ->
+            "compose-content-${
+                resolveComposePagerActualPageIndex(
+                    currentPage = page,
+                    contentPageCount = contentPageCount,
+                    hasPreviousChapter = hasPreviousChapter,
+                )
+            }"
     }
 }
 
@@ -398,7 +399,7 @@ internal fun ComposePagerPageRenderer(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .graphicsLayer { rotationY = 180f }
+                        .graphicsLayer { rotationY = 180f },
                 ) {
                     NovelAtmosphereBackground(
                         backgroundColor = textBackground,
@@ -413,7 +414,7 @@ internal fun ComposePagerPageRenderer(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.15f))
+                            .background(Color.Black.copy(alpha = 0.15f)),
                     )
                 }
             }
@@ -422,7 +423,7 @@ internal fun ComposePagerPageRenderer(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = transitionSpec.shadowAlpha))
+                        .background(Color.Black.copy(alpha = transitionSpec.shadowAlpha)),
                 )
             }
         }

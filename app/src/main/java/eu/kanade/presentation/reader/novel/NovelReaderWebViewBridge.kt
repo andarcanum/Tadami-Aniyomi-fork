@@ -1,9 +1,9 @@
 package eu.kanade.presentation.reader.novel
 
 import android.content.Context
-import android.webkit.JavascriptInterface
 import android.os.Build
 import android.os.SystemClock
+import android.webkit.JavascriptInterface
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import androidx.compose.ui.graphics.Color

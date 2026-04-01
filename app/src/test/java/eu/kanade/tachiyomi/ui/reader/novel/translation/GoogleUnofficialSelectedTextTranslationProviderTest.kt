@@ -1,7 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.novel.translation
 
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationErrorReason
-import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import kotlinx.coroutines.test.runTest
@@ -156,12 +155,14 @@ class GoogleUnofficialSelectedTextTranslationProviderTest {
         )
         val attempts = AtomicInteger(0)
         val client = OkHttpClient.Builder()
-            .addInterceptor(Interceptor { chain ->
-                if (attempts.getAndIncrement() == 0) {
-                    throw IOException("socket closed")
-                }
-                chain.proceed(chain.request())
-            })
+            .addInterceptor(
+                Interceptor { chain ->
+                    if (attempts.getAndIncrement() == 0) {
+                        throw IOException("socket closed")
+                    }
+                    chain.proceed(chain.request())
+                },
+            )
             .build()
         val provider = GoogleUnofficialSelectedTextTranslationProvider(
             client = client,

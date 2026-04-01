@@ -37,11 +37,11 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDis
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationProviderOutcome
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationRequest
-import eu.kanade.tachiyomi.ui.reader.novel.translation.buildNovelSelectedTextTranslationRequestKey
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePresets
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.buildNovelSelectedTextTranslationRequestKey
 import eu.kanade.tachiyomi.ui.reader.novel.translation.formatGeminiThrowableForLog
 import eu.kanade.tachiyomi.util.system.isNightMode
 import kotlinx.coroutines.CancellationException
@@ -1414,11 +1414,13 @@ class NovelReaderScreenModel(
                         NovelSelectedTextTranslationErrorReason.EmptySelection,
                         NovelSelectedTextTranslationErrorReason.TooLongSelection,
                         NovelSelectedTextTranslationErrorReason.WebViewUnavailable,
-                        is NovelSelectedTextTranslationErrorReason.BackendUnavailable -> {
+                        is NovelSelectedTextTranslationErrorReason.BackendUnavailable,
+                        -> {
                             NovelSelectedTextTranslationUiState.Unavailable(outcome.reason)
                         }
                         is NovelSelectedTextTranslationErrorReason.NetworkFailure,
-                        NovelSelectedTextTranslationErrorReason.ParserFailure -> {
+                        NovelSelectedTextTranslationErrorReason.ParserFailure,
+                        -> {
                             NovelSelectedTextTranslationUiState.Error(
                                 selection = selection,
                                 reason = outcome.reason,

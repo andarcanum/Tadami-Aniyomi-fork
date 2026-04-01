@@ -3,6 +3,7 @@ package eu.kanade.presentation.reader.novel
 import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.icu.text.BreakIterator
 import android.os.Build
 import android.os.SystemClock
 import android.text.Layout
@@ -15,7 +16,6 @@ import android.text.style.BackgroundColorSpan
 import android.text.style.ClickableSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.LeadingMarginSpan
-import android.icu.text.BreakIterator
 import android.text.style.StrikethroughSpan
 import android.text.style.StyleSpan
 import android.text.style.UnderlineSpan
@@ -56,10 +56,9 @@ import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextRenderer
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextSelection
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
+import java.util.Locale
 import kotlin.math.hypot
 import kotlin.math.roundToInt
-import java.util.Locale
-import kotlinx.coroutines.delay
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
 
 internal data class NovelPageReaderContentLayout(
@@ -579,7 +578,6 @@ private class NovelPageReaderTextView constructor(
         val offset = currentLayout.getOffsetForHorizontal(line, x).coerceIn(0, spannable.length - 1)
         return spannable.getSpans(offset, offset + 1, ClickableSpan::class.java).lastOrNull()
     }
-
 }
 
 @Composable

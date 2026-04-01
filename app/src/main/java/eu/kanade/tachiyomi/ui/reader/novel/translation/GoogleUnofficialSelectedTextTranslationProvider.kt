@@ -2,18 +2,15 @@ package eu.kanade.tachiyomi.ui.reader.novel.translation
 
 import eu.kanade.tachiyomi.extension.novel.normalizeNovelLang
 import eu.kanade.tachiyomi.network.await
+import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationCacheKey
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationErrorReason
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationResult
-import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationCacheKey
 import eu.kanade.tachiyomi.ui.reader.novel.normalizeNovelSelectedText
 import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Request.Builder
-import okhttp3.RequestBody
-import okhttp3.Response
-import java.io.IOException
 import java.util.Locale
 
 internal class GoogleUnofficialSelectedTextTranslationProvider(

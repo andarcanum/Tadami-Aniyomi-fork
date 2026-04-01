@@ -1,8 +1,8 @@
 package eu.kanade.tachiyomi.ui.reader.novel.translation
 
+import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationCacheKey
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationErrorReason
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationResult
-import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationCacheKey
 import eu.kanade.tachiyomi.ui.reader.novel.buildNovelSelectedTextTranslationCacheKey
 import eu.kanade.tachiyomi.ui.reader.novel.normalizeNovelSelectedText
 
