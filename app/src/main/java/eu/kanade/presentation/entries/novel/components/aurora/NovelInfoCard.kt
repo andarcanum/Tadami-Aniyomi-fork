@@ -22,7 +22,10 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,6 +65,7 @@ fun NovelInfoCard(
     val normalizedDescription = remember(novel.description) {
         normalizeNovelDescription(novel.description)
     }
+    var hasDescriptionOverflow by remember(normalizedDescription) { mutableStateOf(false) }
     val normalizedGenres = remember(novel.genre) {
         val seen = LinkedHashSet<String>()
         novel.genre.orEmpty()
@@ -135,7 +139,9 @@ fun NovelInfoCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Top,
                 ) {
-                    SelectionContainer {
+                    SelectionContainer(
+                        modifier = Modifier.weight(1f),
+                    ) {
                         Text(
                             text = normalizedDescription ?: stringResource(AYMR.strings.aurora_no_description),
                             color = colors.textPrimary.copy(alpha = 0.9f),
@@ -143,11 +149,15 @@ fun NovelInfoCard(
                             lineHeight = 22.sp,
                             maxLines = if (descriptionExpanded) Int.MAX_VALUE else 5,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
+                            onTextLayout = { textLayoutResult ->
+                                if (textLayoutResult.hasVisualOverflow) {
+                                    hasDescriptionOverflow = true
+                                }
+                            },
                         )
                     }
 
-                    if ((normalizedDescription?.length ?: 0) > 200) {
+                    if (shouldShowNovelDescriptionToggle(hasDescriptionOverflow, descriptionExpanded)) {
                         Icon(
                             imageVector = if (descriptionExpanded) {
                                 Icons.Filled.KeyboardArrowUp
@@ -217,6 +227,13 @@ fun NovelInfoCard(
             }
         }
     }
+}
+
+internal fun shouldShowNovelDescriptionToggle(
+    hasDescriptionOverflow: Boolean,
+    descriptionExpanded: Boolean,
+): Boolean {
+    return hasDescriptionOverflow || descriptionExpanded
 }
 
 @Composable
