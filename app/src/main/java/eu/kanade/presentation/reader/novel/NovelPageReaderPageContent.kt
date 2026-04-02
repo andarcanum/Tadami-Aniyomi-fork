@@ -38,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -250,6 +251,55 @@ private class NovelPageReaderUrlClickableSpan(
 
     override fun updateDrawState(ds: TextPaint) {
         Unit
+    }
+}
+
+internal data class NovelPageReaderTextViewMetrics(
+    val textSizePx: Float,
+    val lineSpacingMultiplier: Float,
+    val typeface: Typeface?,
+    val textAlign: ReaderTextAlign,
+    val shadow: Shadow?,
+)
+
+internal fun resolveNovelPageReaderTextViewMetrics(
+    textSizePx: Float,
+    lineSpacingMultiplier: Float,
+    typeface: Typeface?,
+    textAlign: ReaderTextAlign,
+    shadow: Shadow?,
+): NovelPageReaderTextViewMetrics {
+    return NovelPageReaderTextViewMetrics(
+        textSizePx = textSizePx,
+        lineSpacingMultiplier = lineSpacingMultiplier,
+        typeface = typeface,
+        textAlign = textAlign,
+        shadow = shadow,
+    )
+}
+
+internal fun applyNovelPageReaderTextViewMetrics(
+    textView: TextView,
+    metrics: NovelPageReaderTextViewMetrics,
+) {
+    textView.setTextSize(TypedValue.COMPLEX_UNIT_PX, metrics.textSizePx)
+    textView.setLineSpacing(0f, metrics.lineSpacingMultiplier)
+    textView.typeface = metrics.typeface
+    textView.gravity = resolveNovelPageReaderTextGravity(metrics.textAlign)
+    metrics.shadow?.let { resolvedShadow ->
+        textView.setShadowLayer(
+            resolvedShadow.blurRadius,
+            resolvedShadow.offset.x,
+            resolvedShadow.offset.y,
+            resolvedShadow.color.toArgb(),
+        )
+    } ?: textView.setShadowLayer(0f, 0f, 0f, Color.Transparent.toArgb())
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        textView.justificationMode = if (metrics.textAlign == ReaderTextAlign.JUSTIFY) {
+            Layout.JUSTIFICATION_MODE_INTER_WORD
+        } else {
+            Layout.JUSTIFICATION_MODE_NONE
+        }
     }
 }
 
@@ -808,6 +858,13 @@ internal fun NovelPageReaderTextBlock(
         textColor = blockTextColor,
         backgroundColor = textBackground,
     )
+    val blockTextViewMetrics = resolveNovelPageReaderTextViewMetrics(
+        textSizePx = blockTextSizePx,
+        lineSpacingMultiplier = blockLineSpacingMultiplier,
+        typeface = blockTypeface,
+        textAlign = textAlign,
+        shadow = blockTextShadow,
+    )
     val selectionInteractionEnabled = touchHandlingEnabled && readerSettings.selectedTextTranslationEnabled
     AndroidView(
         modifier = modifier,
@@ -820,7 +877,7 @@ internal fun NovelPageReaderTextBlock(
                 onPlainTap = onPlainTap,
                 touchHandlingEnabled = touchHandlingEnabled,
                 selectionInteractionEnabled = selectionInteractionEnabled,
-            ).apply {
+                ).apply {
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -828,22 +885,13 @@ internal fun NovelPageReaderTextBlock(
                 setPadding(0, 0, 0, 0)
                 includeFontPadding = false
                 setTextColor(blockTextColor.toArgb())
-                setTextSize(TypedValue.COMPLEX_UNIT_PX, blockTextSizePx)
-                setLineSpacing(0f, blockLineSpacingMultiplier)
-                typeface = blockTypeface
-                gravity = resolveNovelPageReaderTextGravity(textAlign)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    justificationMode = if (textAlign == ReaderTextAlign.JUSTIFY) {
-                        Layout.JUSTIFICATION_MODE_INTER_WORD
-                    } else {
-                        Layout.JUSTIFICATION_MODE_NONE
-                    }
-                }
+                applyNovelPageReaderTextViewMetrics(textView = this, metrics = blockTextViewMetrics)
             }
         },
         update = { textView ->
             textView.updatePlainTapHandler(onPlainTap)
             textView.updateSelectionInteractionEnabled(selectionInteractionEnabled)
+            applyNovelPageReaderTextViewMetrics(textView = textView, metrics = blockTextViewMetrics)
             val renderedText = text.text
             if (textView.text?.toString() != renderedText) {
                 textView.text = buildNovelPageReaderSpannableText(
@@ -860,25 +908,6 @@ internal fun NovelPageReaderTextBlock(
                 )
             }
             textView.setTextColor(blockTextColor.toArgb())
-            textView.setTextSize(TypedValue.COMPLEX_UNIT_PX, blockTextSizePx)
-            textView.setLineSpacing(0f, blockLineSpacingMultiplier)
-            textView.typeface = blockTypeface
-            textView.gravity = resolveNovelPageReaderTextGravity(textAlign)
-            blockTextShadow?.let { shadow ->
-                textView.setShadowLayer(
-                    shadow.blurRadius,
-                    shadow.offset.x,
-                    shadow.offset.y,
-                    shadow.color.toArgb(),
-                )
-            } ?: textView.setShadowLayer(0f, 0f, 0f, Color.Transparent.toArgb())
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                textView.justificationMode = if (textAlign == ReaderTextAlign.JUSTIFY) {
-                    Layout.JUSTIFICATION_MODE_INTER_WORD
-                } else {
-                    Layout.JUSTIFICATION_MODE_NONE
-                }
-            }
         },
     )
 }

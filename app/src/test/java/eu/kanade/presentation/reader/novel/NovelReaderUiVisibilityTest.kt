@@ -965,44 +965,32 @@ class NovelReaderUiVisibilityTest {
     fun `paged plain renderer uses exact paragraph spacing when packing pages`() {
         val textBlocks = listOf("First paragraph", "Second paragraph")
 
-        val compactPages = resolvePageReaderBlocks(
-            shouldPaginate = true,
+        val compactPages = paginatePlainPageBlocks(
             textBlocks = textBlocks,
-            paragraphSpacingDp = 0,
-        ) { blocks, paragraphSpacingPx ->
-            paginatePlainPageBlocks(
-                textBlocks = blocks,
-                paragraphSpacingPx = paragraphSpacingPx,
-                widthPx = 600,
-                heightPx = 76,
-                textSizePx = 20f,
-                lineHeightMultiplier = 1.2f,
-                typeface = null,
-                textAlign = ReaderTextAlign.LEFT,
-            ).map { page ->
-                page.joinToString("\n") { slice ->
-                    blocks[slice.blockIndex].substring(slice.range.start, slice.range.endExclusive)
-                }
+            paragraphSpacingPx = 0,
+            widthPx = 600,
+            heightPx = 76,
+            textSizePx = 20f,
+            lineHeightMultiplier = 1.2f,
+            typeface = null,
+            textAlign = ReaderTextAlign.LEFT,
+        ).map { page ->
+            page.joinToString("\n") { slice ->
+                textBlocks[slice.blockIndex].substring(slice.range.start, slice.range.endExclusive)
             }
         }
-        val spacedPages = resolvePageReaderBlocks(
-            shouldPaginate = true,
+        val spacedPages = paginatePlainPageBlocks(
             textBlocks = textBlocks,
-            paragraphSpacingDp = 32,
-        ) { blocks, paragraphSpacingPx ->
-            paginatePlainPageBlocks(
-                textBlocks = blocks,
-                paragraphSpacingPx = paragraphSpacingPx,
-                widthPx = 600,
-                heightPx = 76,
-                textSizePx = 20f,
-                lineHeightMultiplier = 1.2f,
-                typeface = null,
-                textAlign = ReaderTextAlign.LEFT,
-            ).map { page ->
-                page.joinToString("\n") { slice ->
-                    blocks[slice.blockIndex].substring(slice.range.start, slice.range.endExclusive)
-                }
+            paragraphSpacingPx = 64,
+            widthPx = 600,
+            heightPx = 76,
+            textSizePx = 20f,
+            lineHeightMultiplier = 1.2f,
+            typeface = null,
+            textAlign = ReaderTextAlign.LEFT,
+        ).map { page ->
+            page.joinToString("\n") { slice ->
+                textBlocks[slice.blockIndex].substring(slice.range.start, slice.range.endExclusive)
             }
         }
 
@@ -1058,6 +1046,42 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `plain paged renderer keeps paragraph continuation on the current page`() {
+        val textBlocks = listOf(
+            "A",
+            "Long paragraph ".repeat(50).trim(),
+        )
+
+        val pages = paginatePlainPageBlocks(
+            textBlocks = textBlocks,
+            paragraphSpacingPx = 32,
+            widthPx = 260,
+            heightPx = 1000,
+            textSizePx = 24f,
+            lineHeightMultiplier = 1.2f,
+            typeface = null,
+            textAlign = ReaderTextAlign.LEFT,
+            forceParagraphIndent = false,
+        )
+
+        assertTrue(pages.size > 1)
+        assertTrue(pages.first().any { it.blockIndex == 1 })
+        assertTrue(pages.drop(1).first().first().blockIndex == 1)
+        assertTrue(pages.drop(1).first().first().range.start > 0)
+        assertPlainPageSliceCoverage(textBlocks = textBlocks, pages = pages)
+
+        val continuationBlocks = buildPlainPageRenderBlocks(
+            page = pages.drop(1).first(),
+            textBlocks = textBlocks,
+            paragraphSpacingPx = 32,
+            forceParagraphIndent = true,
+        )
+
+        assertEquals(0, continuationBlocks.first().spacingBeforePx)
+        assertNull(continuationBlocks.first().firstLineIndentEm)
+    }
+
+    @Test
     fun `rich paged renderer uses exact paragraph spacing when packing pages`() {
         val richBlocks = listOf(
             NovelRichContentBlock.Paragraph(
@@ -1094,7 +1118,7 @@ class NovelReaderUiVisibilityTest {
         }
         val spacedPages = paginateRichPageBlocks(
             blockTexts = blockTexts,
-            paragraphSpacingPx = 32,
+            paragraphSpacingPx = 64,
             widthPx = 600,
             heightPx = 76,
             textSizePx = 20f,
@@ -1169,6 +1193,48 @@ class NovelReaderUiVisibilityTest {
         )
         assertEquals(0, renderBlocks.first().spacingBeforePx)
         assertEquals(null, renderBlocks.first().firstLineIndentEm)
+    }
+
+    @Test
+    fun `rich paged renderer keeps paragraph continuation on the current page`() {
+        val blockTexts = listOf(
+            buildRichPageReaderBlockText(
+                block = NovelRichContentBlock.Paragraph(
+                    segments = listOf(NovelRichTextSegment(text = "A")),
+                ),
+            ),
+            buildRichPageReaderBlockText(
+                block = NovelRichContentBlock.Paragraph(
+                    segments = listOf(NovelRichTextSegment(text = "Long paragraph ".repeat(50).trim())),
+                ),
+            ),
+        )
+
+        val pages = paginateRichPageBlocks(
+            blockTexts = blockTexts,
+            paragraphSpacingPx = 32,
+            widthPx = 260,
+            heightPx = 1000,
+            textSizePx = 24f,
+            lineHeightMultiplier = 1.2f,
+            typeface = null,
+            textAlign = ReaderTextAlign.LEFT,
+        )
+
+        assertTrue(pages.size > 1)
+        assertTrue(pages.first().any { it.blockIndex == 1 })
+        assertTrue(pages.drop(1).first().first().blockIndex == 1)
+        assertTrue(pages.drop(1).first().first().range.start > 0)
+        assertRichPageSliceCoverage(blockTexts = blockTexts, pages = pages)
+
+        val continuationBlocks = buildRichPageRenderBlocks(
+            page = pages.drop(1).first(),
+            blockTexts = blockTexts,
+            paragraphSpacingPx = 32,
+        )
+
+        assertEquals(0, continuationBlocks.first().spacingBeforePx)
+        assertNull(continuationBlocks.first().firstLineIndentEm)
     }
 
     @Test
@@ -2959,6 +3025,23 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `page reader text block metrics helper exists for both view paths`() {
+        val metrics = resolveNovelPageReaderTextViewMetrics(
+            textSizePx = 24f,
+            lineSpacingMultiplier = 1.25f,
+            typeface = Typeface.MONOSPACE,
+            textAlign = ReaderTextAlign.LEFT,
+            shadow = null,
+        )
+
+        assertEquals(24f, metrics.textSizePx)
+        assertEquals(1.25f, metrics.lineSpacingMultiplier)
+        assertEquals(Typeface.MONOSPACE, metrics.typeface)
+        assertEquals(ReaderTextAlign.LEFT, metrics.textAlign)
+        assertEquals(null, metrics.shadow)
+    }
+
+    @Test
     @OptIn(ExperimentalPageCurlApi::class)
     fun `page turn renderer config maps book and curl to tuned drag profiles`() {
         val narrowConfig = resolveNovelPageTurnRendererConfig(
@@ -4622,5 +4705,48 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `webview bionic script is empty when disabled`() {
         assertTrue(buildWebReaderBionicJavascript(enabled = false).isBlank())
+    }
+}
+
+private fun assertPlainPageSliceCoverage(
+    textBlocks: List<String>,
+    pages: List<List<PlainPageSlice>>,
+) {
+    textBlocks.forEachIndexed { blockIndex, expectedText ->
+        val slices = pages.flatten()
+            .filter { it.blockIndex == blockIndex }
+            .sortedBy { it.range.start }
+        var cursor = 0
+        slices.forEach { slice ->
+            assertEquals(cursor, slice.range.start)
+            assertTrue(slice.range.endExclusive > slice.range.start)
+            cursor = slice.range.endExclusive
+        }
+        assertEquals(expectedText.length, cursor)
+        assertEquals(expectedText, slices.joinToString(separator = "") { slice ->
+            expectedText.substring(slice.range.start, slice.range.endExclusive)
+        })
+    }
+}
+
+private fun assertRichPageSliceCoverage(
+    blockTexts: List<RichPageBlockText>,
+    pages: List<List<RichPageSlice.Text>>,
+) {
+    blockTexts.forEachIndexed { blockIndex, expectedBlock ->
+        val expectedText = expectedBlock.text.text
+        val slices = pages.flatten()
+            .filter { it.blockIndex == blockIndex }
+            .sortedBy { it.range.start }
+        var cursor = 0
+        slices.forEach { slice ->
+            assertEquals(cursor, slice.range.start)
+            assertTrue(slice.range.endExclusive > slice.range.start)
+            cursor = slice.range.endExclusive
+        }
+        assertEquals(expectedText.length, cursor)
+        assertEquals(expectedText, slices.joinToString(separator = "") { slice ->
+            expectedText.substring(slice.range.start, slice.range.endExclusive)
+        })
     }
 }
