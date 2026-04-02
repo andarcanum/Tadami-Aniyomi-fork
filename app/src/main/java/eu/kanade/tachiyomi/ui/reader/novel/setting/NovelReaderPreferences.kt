@@ -533,7 +533,7 @@ class NovelReaderPreferences(
     fun customJS() = preferenceStore.getString("novel_reader_custom_js", "")
 
     fun selectedTextTranslationEnabled() =
-        preferenceStore.getBoolean("novel_reader_selected_text_translation_enabled", true)
+        preferenceStore.getBoolean("novel_reader_selected_text_translation_enabled", false)
 
     fun selectedTextTranslationTargetLanguage() =
         preferenceStore.getString("novel_reader_selected_text_translation_target_language", "Russian")

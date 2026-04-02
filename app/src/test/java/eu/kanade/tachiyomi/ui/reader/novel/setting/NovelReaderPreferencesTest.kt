@@ -77,7 +77,7 @@ class NovelReaderPreferencesTest {
         prefs.geminiAutoTranslateEnglishSource().get() shouldBe false
         prefs.geminiPrefetchNextChapterTranslation().get() shouldBe false
         prefs.geminiStylePreset().get() shouldBe NovelTranslationStylePreset.PROFESSIONAL
-        prefs.selectedTextTranslationEnabled().get() shouldBe true
+        prefs.selectedTextTranslationEnabled().get() shouldBe false
         prefs.selectedTextTranslationTargetLanguage().get() shouldBe "Russian"
         prefs.translationProvider().get() shouldBe NovelTranslationProvider.GEMINI
         prefs.airforceBaseUrl().get() shouldBe "https://api.airforce"
