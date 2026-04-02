@@ -7,6 +7,7 @@
 ## Fix
 
 Added a custom page-curl animation block that uses the preset duration for both edge taps and curl chapter handoff.
+Follow-up: curl intensity now also deepens the fold midpoint and adjusts the back-page tone, so the setting is visibly distinct.
 
 ## Verification
 
