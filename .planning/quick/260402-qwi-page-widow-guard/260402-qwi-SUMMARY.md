@@ -2,12 +2,12 @@
 
 ## Root Cause
 
-`a503894f1` removed the guard that skipped starting a block on the current page when that block would fit on a fresh page. That let the last paragraph line get packed against the bottom edge instead of moving cleanly to the next page.
+My first fix overcorrected by moving whole blocks to the next page. The actual requirement is to keep pagination line-level: fill the page as much as possible, then let overflow lines continue on the next page.
 
 ## Fix
 
-Restored the fit guard in both plain and rich page pagination paths.
-Added regression tests that prove a whole block stays together when it fits on the next page.
+Removed the whole-block fit guard and kept the existing line-level slice pagination.
+Kept regression coverage for paragraph continuation and page assembly.
 
 ## Verification
 

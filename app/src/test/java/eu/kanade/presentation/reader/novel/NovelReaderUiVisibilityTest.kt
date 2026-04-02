@@ -1238,62 +1238,6 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `plain paged renderer moves a whole block to the next page when it fits there`() {
-        val textBlocks = listOf(
-            "Intro",
-            "First line\nSecond line",
-        )
-
-        val pages = paginatePlainPageBlocks(
-            textBlocks = textBlocks,
-            paragraphSpacingPx = 0,
-            widthPx = 600,
-            heightPx = 55,
-            textSizePx = 20f,
-            lineHeightMultiplier = 1.2f,
-            typeface = null,
-            textAlign = ReaderTextAlign.LEFT,
-        )
-
-        assertEquals(2, pages.size)
-        assertEquals(listOf(0), pages.first().map { it.blockIndex }.distinct())
-        assertEquals(listOf(1), pages.drop(1).first().map { it.blockIndex }.distinct())
-        assertPlainPageSliceCoverage(textBlocks = textBlocks, pages = pages)
-    }
-
-    @Test
-    fun `rich paged renderer moves a whole block to the next page when it fits there`() {
-        val blockTexts = listOf(
-            buildRichPageReaderBlockText(
-                block = NovelRichContentBlock.Paragraph(
-                    segments = listOf(NovelRichTextSegment(text = "Intro")),
-                ),
-            ),
-            buildRichPageReaderBlockText(
-                block = NovelRichContentBlock.Paragraph(
-                    segments = listOf(NovelRichTextSegment(text = "First line\nSecond line")),
-                ),
-            ),
-        )
-
-        val pages = paginateRichPageBlocks(
-            blockTexts = blockTexts,
-            paragraphSpacingPx = 0,
-            widthPx = 600,
-            heightPx = 55,
-            textSizePx = 20f,
-            lineHeightMultiplier = 1.2f,
-            typeface = null,
-            textAlign = ReaderTextAlign.LEFT,
-        )
-
-        assertEquals(2, pages.size)
-        assertEquals(listOf(0), pages.first().map { it.blockIndex }.distinct())
-        assertEquals(listOf(1), pages.drop(1).first().map { it.blockIndex }.distinct())
-        assertRichPageSliceCoverage(blockTexts = blockTexts, pages = pages)
-    }
-
-    @Test
     fun `plain paged page assembly preserves paragraph boundaries`() {
         val page = paginatePlainPageBlocks(
             textBlocks = listOf("First paragraph", "Second paragraph"),
