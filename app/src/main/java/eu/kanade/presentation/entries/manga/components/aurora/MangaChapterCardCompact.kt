@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
@@ -45,6 +46,8 @@ import coil3.request.crossfade
 import eu.kanade.presentation.components.relativeDateTimeText
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.components.resolveAuroraCoverModel
+import eu.kanade.presentation.entries.components.aurora.AURORA_DIMMED_ITEM_ALPHA
+import eu.kanade.presentation.entries.components.aurora.AURORA_NEW_ITEM_HIGHLIGHT_ALPHA
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadAction
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadIndicator
 import eu.kanade.presentation.theme.AuroraTheme
@@ -64,6 +67,7 @@ fun MangaChapterCardCompact(
     manga: Manga,
     item: ChapterList.Item,
     selected: Boolean,
+    isNew: Boolean,
     isAnyChapterSelected: Boolean,
     chapterSwipeStartAction: LibraryPreferences.ChapterSwipeAction,
     chapterSwipeEndAction: LibraryPreferences.ChapterSwipeAction,
@@ -77,6 +81,12 @@ fun MangaChapterCardCompact(
     val context = LocalContext.current
     val chapter = item.chapter
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
+    val cardAlpha = if (chapter.read) AURORA_DIMMED_ITEM_ALPHA else 1f
+    val cardTint = if (isNew && !chapter.read) {
+        colors.accent.copy(alpha = AURORA_NEW_ITEM_HIGHLIGHT_ALPHA)
+    } else {
+        null
+    }
     val startSwipeAction = auroraMangaSwipeAction(
         action = chapterSwipeStartAction,
         read = chapter.read,
@@ -94,23 +104,19 @@ fun MangaChapterCardCompact(
         onSwipe = { onChapterSwipe(chapterSwipeEndAction) },
     )
 
-    // Adjust opacity for read chapters
-    val contentAlpha = if (chapter.read) 0.45f else 1f
-
     val chapterCard: @Composable () -> Unit = {
         GlassmorphismCard(
-            modifier = modifier,
+            modifier = modifier.alpha(cardAlpha),
             cornerRadius = 16.dp,
             verticalPadding = 4.dp,
             innerPadding = 12.dp,
+            overlayColor = cardTint,
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        if (selected) colors.accent.copy(alpha = 0.16f) else Color.Transparent,
-                    )
+                    .background(if (selected) colors.accent.copy(alpha = 0.16f) else Color.Transparent)
                     .combinedClickable(
                         onClick = { onChapterClicked(chapter) },
                         onLongClick = onLongClick,
@@ -140,17 +146,8 @@ fun MangaChapterCardCompact(
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.size(40.dp),
-                        alpha = contentAlpha,
+                        alpha = 1f,
                     )
-
-                    // Dark overlay for read chapters
-                    if (chapter.read) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .background(Color.Black.copy(alpha = 0.5f)),
-                        )
-                    }
                 }
 
                 // Chapter info
@@ -158,14 +155,14 @@ fun MangaChapterCardCompact(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Text(
-                        text = chapter.name,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = colors.textPrimary.copy(alpha = contentAlpha),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                        Text(
+                            text = chapter.name,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
 
                     // Meta info row
                     Row(
@@ -175,7 +172,7 @@ fun MangaChapterCardCompact(
                         Icon(
                             Icons.Outlined.Schedule,
                             contentDescription = null,
-                            tint = colors.textSecondary.copy(alpha = contentAlpha),
+                            tint = colors.textSecondary,
                             modifier = Modifier.size(12.dp),
                         )
 
@@ -185,7 +182,7 @@ fun MangaChapterCardCompact(
                         Text(
                             text = uploadDateText,
                             fontSize = 12.sp,
-                            color = colors.textSecondary.copy(alpha = contentAlpha),
+                            color = colors.textSecondary,
                         )
                     }
 

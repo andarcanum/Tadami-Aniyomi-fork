@@ -77,6 +77,7 @@ import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.track.novel.interactor.GetNovelTracks
 import tachiyomi.domain.track.novel.model.NovelTrack
 import tachiyomi.i18n.aniyomi.AYMR
+import eu.kanade.tachiyomi.ui.entries.mergeNewItemIds
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
@@ -455,6 +456,21 @@ class NovelScreenModel(
         }
     }
 
+    private fun updateNewChapterIds(
+        addedIds: Iterable<Long> = emptyList(),
+        clearedIds: Iterable<Long> = emptyList(),
+    ) {
+        updateSuccessState { successState ->
+            successState.copy(
+                newChapterIds = mergeNewItemIds(
+                    existingNewItemIds = successState.newChapterIds,
+                    addedItemIds = addedIds,
+                    clearedItemIds = clearedIds,
+                ),
+            )
+        }
+    }
+
     private fun notifyQueueStarted(addedCount: Int) {
         if (addedCount <= 0) return
         val app = application ?: return
@@ -717,11 +733,17 @@ class NovelScreenModel(
                     "WebView login after fetch: chapters=0, descriptionBlank=true"
             }
         }
-        syncNovelChaptersWithSource.await(
+        val newChapters = syncNovelChaptersWithSource.await(
             rawSourceChapters = sourceChapters,
             novel = state.novel,
             source = state.source,
             manualFetch = manualFetch,
+        )
+        updateNewChapterIds(
+            addedIds = newChapters.asSequence()
+                .filterNot { it.read }
+                .map { it.id }
+                .toList(),
         )
     }
 
@@ -795,13 +817,19 @@ class NovelScreenModel(
         }
 
         if (pageChapters.isNotEmpty()) {
-            syncNovelChaptersWithSource.await(
+            val newChapters = syncNovelChaptersWithSource.await(
                 rawSourceChapters = pageChapters,
                 novel = state.novel,
                 source = state.source,
                 manualFetch = manualFetch,
                 retainMissingChapters = true,
                 sourceOrderOffset = (pageResult.page - 1L) * JAOMIX_PAGE_SOURCE_ORDER_STRIDE,
+            )
+            updateNewChapterIds(
+                addedIds = newChapters.asSequence()
+                    .filterNot { it.read }
+                    .map { it.id }
+                    .toList(),
             )
         }
 
@@ -888,6 +916,9 @@ class NovelScreenModel(
                     lastPageRead = if (newRead) 0L else chapter.lastPageRead,
                 ),
             )
+            if (newRead) {
+                updateNewChapterIds(clearedIds = listOf(chapterId))
+            }
             if (shouldEmitReadEvent) {
                 eventBus?.tryEmit(
                     AchievementEvent.NovelChapterRead(
@@ -941,6 +972,9 @@ class NovelScreenModel(
                     )
                 },
             )
+            if (markRead) {
+                updateNewChapterIds(clearedIds = chapters.map { it.id })
+            }
             if (chaptersBecomingRead.isNotEmpty()) {
                 chaptersBecomingRead.forEach { chapter ->
                     eventBus?.tryEmit(
@@ -1031,6 +1065,9 @@ class NovelScreenModel(
             .toList()
         screenModelScope.launchIO {
             novelChapterRepository.updateAllChapters(updates)
+            if (markRead) {
+                updateNewChapterIds(clearedIds = selected.toList())
+            }
             if (chaptersToMarkRead.isNotEmpty()) {
                 chaptersToMarkRead.forEach { chapter ->
                     eventBus?.tryEmit(
@@ -1431,6 +1468,7 @@ class NovelScreenModel(
             val scanlatorChapterCounts: Map<String, Int>,
             val excludedScanlators: Set<String>,
             val downloadedOnly: Boolean = false,
+            val newChapterIds: Set<Long> = emptySet(),
             val isRefreshingData: Boolean,
             val dialog: Dialog?,
             val trackingCount: Int = 0,

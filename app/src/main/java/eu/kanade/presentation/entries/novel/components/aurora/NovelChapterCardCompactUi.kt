@@ -26,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
@@ -34,6 +35,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.components.relativeDateTimeText
+import eu.kanade.presentation.entries.components.aurora.AURORA_DIMMED_ITEM_ALPHA
+import eu.kanade.presentation.entries.components.aurora.AURORA_NEW_ITEM_HIGHLIGHT_ALPHA
 import eu.kanade.presentation.entries.manga.components.aurora.GlassmorphismCard
 import eu.kanade.presentation.entries.novel.novelChapterDateText
 import eu.kanade.presentation.entries.novel.novelSwipeAction
@@ -56,6 +59,7 @@ object NovelChapterCardCompactUi {
         displayNumber: Int? = null,
         titleOverride: String? = null,
         selected: Boolean,
+        isNew: Boolean,
         selectionMode: Boolean,
         onClick: () -> Unit,
         onLongClick: () -> Unit,
@@ -71,6 +75,12 @@ object NovelChapterCardCompactUi {
     ) {
         val colors = AuroraTheme.colors
         val chapterDisplayNumber = displayNumber?.toDouble() ?: chapter.chapterNumber
+        val cardAlpha = if (chapter.read) AURORA_DIMMED_ITEM_ALPHA else 1f
+        val cardTint = if (isNew && !chapter.read) {
+            colors.accent.copy(alpha = AURORA_NEW_ITEM_HIGHLIGHT_ALPHA)
+        } else {
+            null
+        }
         val title = titleOverride ?: when (novel.displayMode) {
             Novel.CHAPTER_DISPLAY_NUMBER -> stringResource(
                 MR.strings.display_mode_chapter,
@@ -83,18 +93,17 @@ object NovelChapterCardCompactUi {
 
         val chapterCard: @Composable () -> Unit = {
             GlassmorphismCard(
-                modifier = modifier,
+                modifier = modifier.alpha(cardAlpha),
                 cornerRadius = 16.dp,
                 verticalPadding = 2.dp,
                 innerPadding = 8.dp,
+                overlayColor = cardTint,
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(
-                            if (selected) colors.accent.copy(alpha = 0.16f) else Color.Transparent,
-                        )
+                        .background(if (selected) colors.accent.copy(alpha = 0.16f) else Color.Transparent)
                         .combinedClickable(
                             onClick = onClick,
                             onLongClick = onLongClick,
@@ -107,7 +116,7 @@ object NovelChapterCardCompactUi {
                         modifier = Modifier
                             .size(34.dp)
                             .clip(CircleShape)
-                            .background(colors.accent.copy(alpha = if (chapter.read) 0.12f else 0.24f)),
+                            .background(colors.accent.copy(alpha = 0.24f)),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
@@ -122,7 +131,7 @@ object NovelChapterCardCompactUi {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = title,
-                            color = if (chapter.read) colors.textSecondary else colors.textPrimary,
+                            color = colors.textPrimary,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 2,
