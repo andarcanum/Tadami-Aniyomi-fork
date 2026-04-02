@@ -231,7 +231,10 @@ internal fun resolveNovelPageTurnRendererConfig(
         centerTapWidthFraction = centerTapWidth,
         shadowRadiusDp = shadowRadiusDp,
         shadowOffsetXDp = shadowOffsetXDp,
-        backPageColor = resolveNovelPageTurnBackPageColor(textBackground),
+        backPageColor = resolveNovelPageTurnBackPageColor(
+            textBackground = textBackground,
+            backPageAlpha = preset.backPageAlpha,
+        ),
         shadowColor = Color.Black,
         dragBackwardEnabled = canMoveBackward,
         dragForwardEnabled = canMoveForward,
@@ -278,6 +281,7 @@ private fun NovelPageTurnActivationZone.pointerBehavior(): PageCurlConfig.DragIn
 
 private fun resolveNovelPageTurnBackPageColor(
     textBackground: Color,
+    backPageAlpha: Float,
 ): Color {
     val isLightBackground = textBackground.luminance() >= 0.65f
     val parchmentTone = if (isLightBackground) {
@@ -285,11 +289,16 @@ private fun resolveNovelPageTurnBackPageColor(
     } else {
         Color(0xFF2F2418)
     }
+    val parchmentBlend = if (isLightBackground) {
+        (0.68f + (backPageAlpha * 0.30f)).coerceIn(0.70f, 0.92f)
+    } else {
+        (0.22f + (backPageAlpha * 0.18f)).coerceIn(0.16f, 0.36f)
+    }
 
     return lerp(
         start = textBackground,
         stop = parchmentTone,
-        fraction = if (isLightBackground) 0.82f else 0.28f,
+        fraction = parchmentBlend,
     )
 }
 
@@ -390,21 +399,13 @@ private fun createPageTurnDragInteraction(
 private fun createPageTurnAnimation(
     animationDurationMillis: Int,
     forward: Boolean,
+    curlAmount: Float,
 ): suspend Animatable<Edge, AnimationVector4D>.(Size) -> Unit {
     val timing = resolvePageTurnAnimationTiming(animationDurationMillis)
     return { size ->
-        val startEdge = Edge(
-            top = Offset(0f, 0f),
-            bottom = Offset(0f, size.height),
-        )
-        val middleEdge = Edge(
-            top = Offset(size.width, size.height / 2f),
-            bottom = Offset(size.width / 2f, size.height),
-        )
-        val endEdge = Edge(
-            top = Offset(size.width, size.height),
-            bottom = Offset(size.width, size.height),
-        )
+        val startEdge = size.startEdge()
+        val middleEdge = resolvePageTurnCurlMidEdge(size, forward, curlAmount)
+        val endEdge = size.endEdge()
         animateTo(
             targetValue = if (forward) startEdge else endEdge,
             animationSpec = keyframes {
@@ -419,6 +420,44 @@ private fun createPageTurnAnimation(
             },
         )
     }
+}
+
+internal fun resolvePageTurnCurlMidEdge(
+    size: Size,
+    forward: Boolean,
+    curlAmount: Float,
+): Edge {
+    val normalizedCurl = ((curlAmount - 0.28f) / 0.64f).coerceIn(0f, 1f)
+    val topX = size.width * (0.94f - (0.16f * normalizedCurl))
+    val topY = size.height * (0.18f + (0.04f * normalizedCurl))
+    val bottomX = size.width * (0.56f - (0.18f * normalizedCurl))
+    val bottomY = size.height * (0.98f - (0.02f * normalizedCurl))
+
+    return if (forward) {
+        Edge(
+            top = Offset(topX.coerceIn(0f, size.width), topY.coerceIn(0f, size.height)),
+            bottom = Offset(bottomX.coerceIn(0f, size.width), bottomY.coerceIn(0f, size.height)),
+        )
+    } else {
+        Edge(
+            top = Offset((size.width - topX).coerceIn(0f, size.width), topY.coerceIn(0f, size.height)),
+            bottom = Offset((size.width - bottomX).coerceIn(0f, size.width), bottomY.coerceIn(0f, size.height)),
+        )
+    }
+}
+
+private fun Size.startEdge(): Edge {
+    return Edge(
+        top = Offset(0f, 0f),
+        bottom = Offset(0f, height),
+    )
+}
+
+private fun Size.endEdge(): Edge {
+    return Edge(
+        top = Offset(width, height),
+        bottom = Offset(width, height),
+    )
 }
 
 @Composable
@@ -559,6 +598,7 @@ internal fun PageTurnPageRenderer(
                             createPageTurnAnimation(
                                 animationDurationMillis = latestRendererConfig.preset.animationDurationMillis,
                                 forward = false,
+                                curlAmount = latestRendererConfig.preset.curlAmount,
                             ),
                         )
                     }
@@ -570,6 +610,7 @@ internal fun PageTurnPageRenderer(
                             createPageTurnAnimation(
                                 animationDurationMillis = latestRendererConfig.preset.animationDurationMillis,
                                 forward = true,
+                                curlAmount = latestRendererConfig.preset.curlAmount,
                             ),
                         )
                     }
@@ -865,6 +906,7 @@ internal fun PageTurnPageRenderer(
                         createPageTurnAnimation(
                             animationDurationMillis = latestRendererConfig.preset.animationDurationMillis,
                             forward = false,
+                            curlAmount = latestRendererConfig.preset.curlAmount,
                         ),
                     )
                 }
@@ -875,6 +917,7 @@ internal fun PageTurnPageRenderer(
                         createPageTurnAnimation(
                             animationDurationMillis = latestRendererConfig.preset.animationDurationMillis,
                             forward = true,
+                            curlAmount = latestRendererConfig.preset.curlAmount,
                         ),
                     )
                 }

@@ -3125,6 +3125,64 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `page turn intensity shifts the curl back page tone`() {
+        val softerConfig = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.CURL,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.SOFTER,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.WIDE,
+            textBackground = Color.White,
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+        val strongerConfig = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.CURL,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.STRONGER,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.WIDE,
+            textBackground = Color.White,
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+
+        assertNotEquals(softerConfig.backPageColor, strongerConfig.backPageColor)
+        assertTrue(
+            strongerConfig.backPageColor.luminance() < softerConfig.backPageColor.luminance(),
+            "expected stronger intensity to deepen the back-page tone",
+        )
+    }
+
+    @Test
+    fun `page turn stronger intensity shifts curl midpoint deeper`() {
+        val size = androidx.compose.ui.geometry.Size(1000f, 1600f)
+        val softerMidEdge = resolvePageTurnCurlMidEdge(
+            size = size,
+            forward = true,
+            curlAmount = resolveNovelPageTurnPreset(
+                style = NovelPageTransitionStyle.CURL,
+                speed = NovelPageTurnSpeed.NORMAL,
+                intensity = NovelPageTurnIntensity.SOFTER,
+                shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            ).curlAmount,
+        )
+        val strongerMidEdge = resolvePageTurnCurlMidEdge(
+            size = size,
+            forward = true,
+            curlAmount = resolveNovelPageTurnPreset(
+                style = NovelPageTransitionStyle.CURL,
+                speed = NovelPageTurnSpeed.NORMAL,
+                intensity = NovelPageTurnIntensity.STRONGER,
+                shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            ).curlAmount,
+        )
+
+        assertTrue(strongerMidEdge.top.x < softerMidEdge.top.x)
+        assertTrue(strongerMidEdge.bottom.x < softerMidEdge.bottom.x)
+    }
+
+    @Test
     fun `page turn renderer config disables unavailable turn directions without losing center tap`() {
         val config = resolveNovelPageTurnRendererConfig(
             style = NovelPageTransitionStyle.CURL,
