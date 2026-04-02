@@ -3,6 +3,9 @@
 package eu.kanade.presentation.reader.novel
 
 import android.graphics.Typeface
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector4D
+import androidx.compose.animation.core.keyframes
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -17,7 +20,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.lerp
@@ -38,6 +43,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.wewox.pagecurl.ExperimentalPageCurlApi
 import eu.wewox.pagecurl.config.PageCurlConfig
 import eu.wewox.pagecurl.config.rememberPageCurlConfig
+import eu.wewox.pagecurl.page.Edge
 import eu.wewox.pagecurl.page.PageCurl
 import eu.wewox.pagecurl.page.rememberPageCurlState
 import kotlinx.coroutines.flow.collectLatest
@@ -67,6 +73,11 @@ internal data class NovelPageTurnRendererConfig(
     val tapBackwardEnabled: Boolean,
     val tapForwardEnabled: Boolean,
     val tapCustomEnabled: Boolean,
+)
+
+internal data class PageTurnAnimationTiming(
+    val durationMillis: Int,
+    val midpointMillis: Int,
 )
 
 internal enum class PageTurnCustomTapAction {
@@ -230,6 +241,19 @@ internal fun resolveNovelPageTurnRendererConfig(
     )
 }
 
+internal fun resolvePageTurnAnimationTiming(durationMillis: Int): PageTurnAnimationTiming {
+    val safeDurationMillis = durationMillis.coerceAtLeast(1)
+    val midpointMillis = if (safeDurationMillis == 1) {
+        0
+    } else {
+        (safeDurationMillis / 3).coerceIn(1, safeDurationMillis - 1)
+    }
+    return PageTurnAnimationTiming(
+        durationMillis = safeDurationMillis,
+        midpointMillis = midpointMillis,
+    )
+}
+
 private fun NovelPageTurnActivationZone.dragActivationEdgeFraction(): Float {
     return when (this) {
         NovelPageTurnActivationZone.NARROWER -> 0.20f
@@ -360,6 +384,40 @@ private fun createPageTurnDragInteraction(
                 ),
             )
         }
+    }
+}
+
+private fun createPageTurnAnimation(
+    animationDurationMillis: Int,
+    forward: Boolean,
+): suspend Animatable<Edge, AnimationVector4D>.(Size) -> Unit {
+    val timing = resolvePageTurnAnimationTiming(animationDurationMillis)
+    return { size ->
+        val startEdge = Edge(
+            top = Offset(0f, 0f),
+            bottom = Offset(0f, size.height),
+        )
+        val middleEdge = Edge(
+            top = Offset(size.width, size.height / 2f),
+            bottom = Offset(size.width / 2f, size.height),
+        )
+        val endEdge = Edge(
+            top = Offset(size.width, size.height),
+            bottom = Offset(size.width, size.height),
+        )
+        animateTo(
+            targetValue = if (forward) startEdge else endEdge,
+            animationSpec = keyframes {
+                durationMillis = timing.durationMillis
+                if (forward) {
+                    endEdge at 0
+                    middleEdge at timing.midpointMillis
+                } else {
+                    startEdge at 0
+                    middleEdge at (timing.durationMillis - timing.midpointMillis)
+                }
+            },
+        )
     }
 }
 
@@ -497,13 +555,23 @@ internal fun PageTurnPageRenderer(
                 }
                 PageTurnCustomTapAction.MOVE_PREVIOUS_PAGE -> {
                     tapCoroutineScope.launch {
-                        pageCurlState.prev()
+                        pageCurlState.prev(
+                            createPageTurnAnimation(
+                                animationDurationMillis = latestRendererConfig.preset.animationDurationMillis,
+                                forward = false,
+                            ),
+                        )
                     }
                     true
                 }
                 PageTurnCustomTapAction.MOVE_NEXT_PAGE -> {
                     tapCoroutineScope.launch {
-                        pageCurlState.next()
+                        pageCurlState.next(
+                            createPageTurnAnimation(
+                                animationDurationMillis = latestRendererConfig.preset.animationDurationMillis,
+                                forward = true,
+                            ),
+                        )
                     }
                     true
                 }
@@ -793,12 +861,22 @@ internal fun PageTurnPageRenderer(
         when (request.direction) {
             PageTurnChapterNavigationDirection.PREVIOUS -> {
                 tapCoroutineScope.launch {
-                    pageCurlState.prev()
+                    pageCurlState.prev(
+                        createPageTurnAnimation(
+                            animationDurationMillis = latestRendererConfig.preset.animationDurationMillis,
+                            forward = false,
+                        ),
+                    )
                 }
             }
             PageTurnChapterNavigationDirection.NEXT -> {
                 tapCoroutineScope.launch {
-                    pageCurlState.next()
+                    pageCurlState.next(
+                        createPageTurnAnimation(
+                            animationDurationMillis = latestRendererConfig.preset.animationDurationMillis,
+                            forward = true,
+                        ),
+                    )
                 }
             }
         }

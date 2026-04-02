@@ -2878,6 +2878,18 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `page turn animation timing follows preset duration`() {
+        assertEquals(
+            PageTurnAnimationTiming(durationMillis = 800, midpointMillis = 266),
+            resolvePageTurnAnimationTiming(800),
+        )
+        assertEquals(
+            PageTurnAnimationTiming(durationMillis = 640, midpointMillis = 213),
+            resolvePageTurnAnimationTiming(640),
+        )
+    }
+
+    @Test
     fun `page turn softer and low intensity use the updated stronger offsets`() {
         val softerPreset = resolveNovelPageTurnPreset(
             style = NovelPageTransitionStyle.CURL,
