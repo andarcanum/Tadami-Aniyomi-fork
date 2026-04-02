@@ -14,3 +14,7 @@ Follow-up: curl intensity now also deepens the fold midpoint and adjusts the bac
 - `./gradlew compileDebugKotlin`
 - `./gradlew :app:testDebugUnitTest --tests "eu.kanade.presentation.reader.novel.NovelReaderUiVisibilityTest"`
 - `./gradlew assembleDebug`
+
+## Follow-up
+
+Selected text translation now defaults to off for new and unset preferences, while explicit user choices remain unchanged.
