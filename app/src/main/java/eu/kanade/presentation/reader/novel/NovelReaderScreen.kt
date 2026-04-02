@@ -4890,10 +4890,10 @@ internal fun SystemUIController(
                 captured = capturedSystemBarsState.value,
                 current = insetsController.captureReaderSystemBarsState(),
             )
+            insetsController.restoreReaderSystemBarsState(restoredState)
             if (shouldRestoreSystemBarsOnDispose(isInternalChapterReplace = internalChapterReplace)) {
                 insetsController.show(WindowInsetsCompat.Type.systemBars())
             }
-            insetsController.restoreReaderSystemBarsState(restoredState)
             if (!internalChapterReplace) {
                 NovelReaderSystemUiSession.clear()
             }

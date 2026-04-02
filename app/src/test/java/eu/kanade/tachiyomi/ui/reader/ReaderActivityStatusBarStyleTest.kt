@@ -36,5 +36,11 @@ class ReaderActivityStatusBarStyleTest {
             fullscreen = false,
             defaultLightStatusBars = true,
         ) shouldBe true
+
+        resolveReaderLightStatusBars(
+            menuVisible = false,
+            fullscreen = false,
+            defaultLightStatusBars = false,
+        ) shouldBe false
     }
 }

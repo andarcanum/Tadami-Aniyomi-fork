@@ -346,7 +346,7 @@
     <string name="novel_reader_page_turn_activation_zone_wider">Шире</string>
     <string name="novel_reader_prefer_webview_renderer">Webview режим</string>
     <string name="novel_reader_prefer_webview_renderer_summary">По умолчанию открывать главу в WebView. Отключите, чтобы вернуться к нативному рендереру.</string>
-    <string name="novel_reader_rich_native_renderer_experimental">Нативный рендер расширенный</string>
+    <string name="novel_reader_rich_native_renderer_experimental">Расширенный нативный режим(рекомендуется)</string>
     <string name="novel_reader_rich_native_renderer_experimental_summary">Сохранять базовые HTML-стили в нативном ридере с автоматическим переходом в WebView для неподдерживаемого содержимого.</string>
     <string name="novel_reader_renderer_disabled_page_mode_summary">Недоступно, пока включён постраничный режим.</string>
     <string name="novel_reader_renderer_disabled_webview_summary">Недоступно, пока глава открыта в WebView.</string>
