@@ -589,6 +589,10 @@ internal fun paginatePlainPageBlocks(
                 textAlign = textAlign,
                 firstLineIndentPx = firstLineIndentPx,
             )
+            val blockHeight = measureApproximateTextHeight(
+                text = text,
+                metrics = approximateMetrics,
+            )
             blockPages.forEachIndexed { sliceIndex, range ->
                 val spacingBefore = if (currentPage.isNotEmpty() && sliceIndex == 0) {
                     paragraphSpacingPx.coerceAtLeast(0)
@@ -596,6 +600,14 @@ internal fun paginatePlainPageBlocks(
                     0
                 }
                 if (remainingHeight <= spacingBefore) {
+                    flushPage()
+                }
+                if (
+                    currentPage.isNotEmpty() &&
+                    sliceIndex == 0 &&
+                    blockHeight <= safeHeight &&
+                    blockHeight + spacingBefore > remainingHeight
+                ) {
                     flushPage()
                 }
                 val sliceHeight = measureApproximateTextHeight(
@@ -611,6 +623,7 @@ internal fun paginatePlainPageBlocks(
             return@forEachIndexed
         }
 
+        val blockHeight = resolveStaticLayoutHeight(layout)
         var startLine = 0
         var isFirstSliceOfBlock = true
 
@@ -622,6 +635,16 @@ internal fun paginatePlainPageBlocks(
             }
 
             if (remainingHeight <= spacingBefore) {
+                flushPage()
+                continue
+            }
+
+            if (
+                currentPage.isNotEmpty() &&
+                isFirstSliceOfBlock &&
+                blockHeight <= safeHeight &&
+                blockHeight + spacingBefore > remainingHeight
+            ) {
                 flushPage()
                 continue
             }
@@ -815,6 +838,14 @@ internal fun paginateRichPageBlocks(
                 if (remainingHeight <= spacingBefore) {
                     flushPage()
                 }
+                if (
+                    currentPage.isNotEmpty() &&
+                    sliceIndex == 0 &&
+                    blockHeight <= safeHeight &&
+                    blockHeight + spacingBefore > remainingHeight
+                ) {
+                    flushPage()
+                }
                 val sliceHeight = measureApproximateTextHeight(
                     text = blockText.text.text.substring(range.start, range.endExclusive),
                     metrics = approximateMetrics,
@@ -831,6 +862,7 @@ internal fun paginateRichPageBlocks(
             return@forEachIndexed
         }
 
+        val blockHeight = resolveStaticLayoutHeight(layout)
         var startLine = 0
         var isFirstSliceOfBlock = true
 
@@ -842,6 +874,16 @@ internal fun paginateRichPageBlocks(
             }
 
             if (remainingHeight <= spacingBefore) {
+                flushPage()
+                continue
+            }
+
+            if (
+                currentPage.isNotEmpty() &&
+                isFirstSliceOfBlock &&
+                blockHeight <= safeHeight &&
+                blockHeight + spacingBefore > remainingHeight
+            ) {
                 flushPage()
                 continue
             }
