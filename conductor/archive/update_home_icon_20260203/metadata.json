@@ -1,0 +1,8 @@
+{
+  "track_id": "update_home_icon_20260203",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-02-03T00:00:00Z",
+  "updated_at": "2026-02-03T00:00:00Z",
+  "description": "Redesign the Home icon in the navigation bar to match the style of other icons (Browse, Updates, History) and add a 'Filled vs Outlined' animation when active/inactive."
+}
