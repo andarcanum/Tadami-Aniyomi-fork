@@ -899,43 +899,36 @@ fun MangaScreenAuroraImpl(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false },
                     ) {
-                        AuroraEntryDropdownMenuItem(
-                            text = stringResource(MR.strings.action_webview_refresh),
-                            onClick = {
-                                onRefresh()
-                                showMenu = false
-                            },
-                        )
-                        AuroraEntryDropdownMenuItem(
-                            text = autoJumpToNextLabel,
-                            onClick = {
-                                onToggleAutoJumpToNext()
-                                showMenu = false
-                            },
-                        )
-                        if (globalSearchQuery != null) {
+                        resolveMangaAuroraOverflowActions(
+                            hasGlobalSearch = globalSearchQuery != null,
+                            hasShare = onShareClicked != null,
+                            hasSettings = onSettingsClicked != null,
+                            hasMigrate = onMigrateClicked != null,
+                        ).forEach { action ->
                             AuroraEntryDropdownMenuItem(
-                                text = stringResource(MR.strings.action_global_search),
-                                onClick = {
-                                    onSearch(globalSearchQuery, true)
-                                    showMenu = false
+                                text = when (action) {
+                                    AuroraMangaOverflowAction.Refresh ->
+                                        stringResource(MR.strings.action_webview_refresh)
+                                    AuroraMangaOverflowAction.AutoJump ->
+                                        autoJumpToNextLabel
+                                    AuroraMangaOverflowAction.GlobalSearch ->
+                                        stringResource(MR.strings.action_global_search)
+                                    AuroraMangaOverflowAction.Share ->
+                                        stringResource(MR.strings.action_share)
+                                    AuroraMangaOverflowAction.Settings ->
+                                        stringResource(MR.strings.action_settings)
+                                    AuroraMangaOverflowAction.Migrate ->
+                                        stringResource(MR.strings.action_migrate)
                                 },
-                            )
-                        }
-                        if (onShareClicked != null) {
-                            AuroraEntryDropdownMenuItem(
-                                text = stringResource(MR.strings.action_share),
                                 onClick = {
-                                    onShareClicked()
-                                    showMenu = false
-                                },
-                            )
-                        }
-                        if (onSettingsClicked != null) {
-                            AuroraEntryDropdownMenuItem(
-                                text = stringResource(MR.strings.action_settings),
-                                onClick = {
-                                    onSettingsClicked()
+                                    when (action) {
+                                        AuroraMangaOverflowAction.Refresh -> onRefresh()
+                                        AuroraMangaOverflowAction.AutoJump -> onToggleAutoJumpToNext()
+                                        AuroraMangaOverflowAction.GlobalSearch -> onSearch(globalSearchQuery!!, true)
+                                        AuroraMangaOverflowAction.Share -> onShareClicked!!()
+                                        AuroraMangaOverflowAction.Settings -> onSettingsClicked!!()
+                                        AuroraMangaOverflowAction.Migrate -> onMigrateClicked!!()
+                                    }
                                     showMenu = false
                                 },
                             )
@@ -1033,6 +1026,31 @@ internal fun shouldAutoExpandAuroraChaptersListForFastScroll(
         chaptersExpanded = chaptersExpanded,
         totalChapters = totalChapters,
     )
+}
+
+internal enum class AuroraMangaOverflowAction {
+    Refresh,
+    AutoJump,
+    GlobalSearch,
+    Share,
+    Settings,
+    Migrate,
+}
+
+internal fun resolveMangaAuroraOverflowActions(
+    hasGlobalSearch: Boolean,
+    hasShare: Boolean,
+    hasSettings: Boolean,
+    hasMigrate: Boolean,
+): List<AuroraMangaOverflowAction> {
+    return buildList {
+        add(AuroraMangaOverflowAction.Refresh)
+        add(AuroraMangaOverflowAction.AutoJump)
+        if (hasGlobalSearch) add(AuroraMangaOverflowAction.GlobalSearch)
+        if (hasShare) add(AuroraMangaOverflowAction.Share)
+        if (hasSettings) add(AuroraMangaOverflowAction.Settings)
+        if (hasMigrate) add(AuroraMangaOverflowAction.Migrate)
+    }
 }
 
 @Composable

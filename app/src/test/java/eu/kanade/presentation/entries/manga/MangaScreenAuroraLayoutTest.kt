@@ -18,4 +18,14 @@ class MangaScreenAuroraLayoutTest {
         shouldUseMangaAuroraPaneScopedFastScroller(useTwoPaneLayout = false) shouldBe false
         shouldUseMangaAuroraPaneScopedFastScroller(useTwoPaneLayout = true) shouldBe true
     }
+
+    @Test
+    fun `aurora manga overflow actions include migrate when callback is available`() {
+        resolveMangaAuroraOverflowActions(
+            hasGlobalSearch = true,
+            hasShare = true,
+            hasSettings = true,
+            hasMigrate = true,
+        ).contains(AuroraMangaOverflowAction.Migrate) shouldBe true
+    }
 }

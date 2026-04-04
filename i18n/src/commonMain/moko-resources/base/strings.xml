@@ -890,6 +890,14 @@
     <string name="migration_help_guide">Source migration guide</string>
     <string name="migration_dialog_what_to_include">Select data to include</string>
     <string name="migration_selection_prompt">Select a source to migrate from</string>
+    <string name="migration_selected_sources">Selected</string>
+    <string name="migration_available_sources">Available</string>
+    <string name="migration_extra_search_query">Extra search query</string>
+    <string name="migration_hide_unmatched">Hide unmatched</string>
+    <string name="migration_hide_without_updates">Hide without updates</string>
+    <string name="migration_deep_search_mode">Deep search mode</string>
+    <string name="migration_prioritize_by_chapters">Prioritize by chapters</string>
+    <string name="migration_advanced_options_warning">Advanced options may reduce search quality.</string>
     <string name="migrate">Migrate</string>
     <!-- Make a copy (noun) when migrating. Don't use for copying to clipboard. -->
     <string name="copy">Copy</string>

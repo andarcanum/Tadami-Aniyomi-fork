@@ -32,9 +32,13 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.NewLabel
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.SwapCalls
 import androidx.compose.material.icons.outlined.RemoveDone
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.Icon
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -298,6 +302,7 @@ fun LibraryBottomActionMenu(
     onDownloadClicked: ((DownloadAction) -> Unit)?,
     onOpenDownloadDialog: (() -> Unit)? = null,
     onTranslatedDownloadClicked: (() -> Unit)? = null,
+    onMigrateClicked: (() -> Unit)? = null,
     onDeleteClicked: () -> Unit,
     isManga: Boolean,
     modifier: Modifier = Modifier,
@@ -317,7 +322,7 @@ fun LibraryBottomActionMenu(
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
             val haptic = LocalHapticFeedback.current
-            val confirm = remember { mutableStateListOf(false, false, false, false, false, false) }
+            val confirm = remember { mutableStateListOf(false, false, false, false, false, false, false) }
             var resetJob: Job? = remember { null }
             val onLongClickItem: (Int) -> Unit = { toConfirmIndex ->
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -394,13 +399,49 @@ fun LibraryBottomActionMenu(
                         onClick = onTranslatedDownloadClicked,
                     )
                 }
-                Button(
-                    title = stringResource(MR.strings.action_delete),
-                    icon = Icons.Outlined.Delete,
-                    toConfirm = confirm[5],
-                    onLongClick = { onLongClickItem(5) },
-                    onClick = onDeleteClicked,
-                )
+                if (onDownloadClicked == null) {
+                    if (onMigrateClicked != null) {
+                        Button(
+                            title = stringResource(MR.strings.action_migrate),
+                            icon = Icons.Outlined.SwapCalls,
+                            toConfirm = confirm[5],
+                            onLongClick = { onLongClickItem(5) },
+                            onClick = onMigrateClicked,
+                        )
+                    }
+                    Button(
+                        title = stringResource(MR.strings.action_delete),
+                        icon = Icons.Outlined.Delete,
+                        toConfirm = confirm[6],
+                        onLongClick = { onLongClickItem(6) },
+                        onClick = onDeleteClicked,
+                    )
+                } else {
+                    var overflowMenuOpen by remember { mutableStateOf(false) }
+                    Button(
+                        title = stringResource(MR.strings.label_more),
+                        icon = Icons.Outlined.MoreVert,
+                        toConfirm = false,
+                        onLongClick = {},
+                        onClick = { overflowMenuOpen = true },
+                    ) {
+                        DropdownMenu(
+                            expanded = overflowMenuOpen,
+                            onDismissRequest = { overflowMenuOpen = false },
+                        ) {
+                            if (onMigrateClicked != null) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(MR.strings.action_migrate)) },
+                                    onClick = onMigrateClicked,
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text(stringResource(MR.strings.action_delete)) },
+                                onClick = onDeleteClicked,
+                            )
+                        }
+                    }
+                }
             }
         }
     }

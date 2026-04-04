@@ -37,6 +37,18 @@ class SourcePreferences(
         SetMigrateSorting.Direction.ASCENDING,
     )
 
+    fun migrationFlags() = preferenceStore.getInt("migrate_flags", Int.MAX_VALUE)
+
+    fun migrationSources() = preferenceStore.getStringSet("migration_sources", emptySet())
+
+    fun migrationHideUnmatched() = preferenceStore.getBoolean("migration_hide_unmatched", false)
+
+    fun migrationHideWithoutUpdates() = preferenceStore.getBoolean("migration_hide_without_updates", false)
+
+    fun migrationDeepSearchMode() = preferenceStore.getBoolean("migration_deep_search_mode", false)
+
+    fun migrationPrioritizeByChapters() = preferenceStore.getBoolean("migration_prioritize_by_chapters", false)
+
     fun animeExtensionRepos() = preferenceStore.getStringSet("anime_extension_repos", emptySet())
 
     fun mangaExtensionRepos() = preferenceStore.getStringSet("extension_repos", emptySet())

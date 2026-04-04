@@ -266,6 +266,14 @@
     <string name="copied_to_clipboard">Скопировано в буфер обмена:
 \n%1$s</string>
     <string name="migration_dialog_what_to_include">Какие данные перенести</string>
+    <string name="migration_selected_sources">Выбрано</string>
+    <string name="migration_available_sources">Доступные</string>
+    <string name="migration_extra_search_query">Дополнительный поисковый запрос</string>
+    <string name="migration_hide_unmatched">Скрывать неподходящие</string>
+    <string name="migration_hide_without_updates">Скрывать без обновлений</string>
+    <string name="migration_deep_search_mode">Глубокий режим поиска</string>
+    <string name="migration_prioritize_by_chapters">Приоритет по главам</string>
+    <string name="migration_advanced_options_warning">Расширенные параметры могут снизить качество поиска.</string>
     <string name="migrate">Перенести</string>
     <string name="copy">Копировать</string>
     <string name="ext_trust">Надёжное</string>
