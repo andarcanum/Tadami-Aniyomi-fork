@@ -637,7 +637,10 @@ class NovelReaderPreferences(
 
     fun googleTranslationSourceLang() = preferenceStore.getString("novel_reader_google_translation_source_lang", "auto")
 
-    fun googleTranslationTargetLang() = preferenceStore.getString("novel_reader_google_translation_target_lang", "Russian")
+    fun googleTranslationTargetLang() = preferenceStore.getString(
+        "novel_reader_google_translation_target_lang",
+        "Russian",
+    )
 
     fun googleTranslationAutoStart() = preferenceStore.getBoolean("novel_reader_google_translation_auto_start", false)
 
@@ -1282,8 +1285,10 @@ class NovelReaderPreferences(
                 deepSeekApiKey = override?.deepSeekApiKey ?: gemini.deepSeekApiKey,
                 deepSeekModel = override?.deepSeekModel ?: gemini.deepSeekModel,
                 googleTranslationEnabled = override?.googleTranslationEnabled ?: gemini.googleTranslationEnabled,
-                googleTranslationSourceLang = override?.googleTranslationSourceLang ?: gemini.googleTranslationSourceLang,
-                googleTranslationTargetLang = override?.googleTranslationTargetLang ?: gemini.googleTranslationTargetLang,
+                googleTranslationSourceLang =
+                override?.googleTranslationSourceLang ?: gemini.googleTranslationSourceLang,
+                googleTranslationTargetLang =
+                override?.googleTranslationTargetLang ?: gemini.googleTranslationTargetLang,
                 googleTranslationAutoStart = override?.googleTranslationAutoStart ?: gemini.googleTranslationAutoStart,
             )
         }.distinctUntilChanged()

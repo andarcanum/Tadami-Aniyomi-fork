@@ -439,14 +439,14 @@ fun MangaScreenAuroraImpl(
                                     contentType = { "chapter" },
                                 ) { item ->
                                     if (item is ChapterList.Item) {
-                                            MangaChapterCardCompact(
-                                                manga = manga,
-                                                item = item,
-                                                selected = item.selected,
-                                                isNew = item.chapter.id in state.newChapterIds,
-                                                isAnyChapterSelected = isAnyChapterSelected,
-                                                chapterSwipeStartAction = chapterSwipeStartAction,
-                                                chapterSwipeEndAction = chapterSwipeEndAction,
+                                        MangaChapterCardCompact(
+                                            manga = manga,
+                                            item = item,
+                                            selected = item.selected,
+                                            isNew = item.chapter.id in state.newChapterIds,
+                                            isAnyChapterSelected = isAnyChapterSelected,
+                                            chapterSwipeStartAction = chapterSwipeStartAction,
+                                            chapterSwipeEndAction = chapterSwipeEndAction,
                                             onChapterClicked = {
                                                 when (
                                                     resolveAuroraChapterClickAction(

@@ -2,20 +2,19 @@ package eu.kanade.domain.entries.manga.interactor
 
 import eu.kanade.domain.entries.manga.model.hasCustomCover
 import eu.kanade.domain.entries.manga.model.toSManga
+import eu.kanade.domain.items.chapter.interactor.SyncChaptersWithSource
 import eu.kanade.tachiyomi.data.cache.MangaCoverCache
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
 import eu.kanade.tachiyomi.data.track.EnhancedMangaTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.source.MangaSource
 import eu.kanade.tachiyomi.source.model.SChapter
-import eu.kanade.domain.items.chapter.interactor.SyncChaptersWithSource
 import tachiyomi.domain.category.manga.interactor.GetMangaCategories
 import tachiyomi.domain.category.manga.interactor.SetMangaCategories
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.entries.manga.model.MangaUpdate
 import tachiyomi.domain.items.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.items.chapter.interactor.UpdateChapter
-import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.items.chapter.model.toChapterUpdate
 import tachiyomi.domain.source.manga.service.MangaSourceManager
 import tachiyomi.domain.track.manga.interactor.GetMangaTracks
@@ -77,7 +76,9 @@ class MigrateMangaUseCase(
         val migrateChapters = eu.kanade.tachiyomi.ui.browse.manga.migration.MangaMigrationFlags.hasChapters(flags)
         val migrateCategories = eu.kanade.tachiyomi.ui.browse.manga.migration.MangaMigrationFlags.hasCategories(flags)
         val migrateCustomCover = eu.kanade.tachiyomi.ui.browse.manga.migration.MangaMigrationFlags.hasCustomCover(flags)
-        val deleteDownloaded = eu.kanade.tachiyomi.ui.browse.manga.migration.MangaMigrationFlags.hasDeleteDownloaded(flags)
+        val deleteDownloaded = eu.kanade.tachiyomi.ui.browse.manga.migration.MangaMigrationFlags.hasDeleteDownloaded(
+            flags,
+        )
 
         try {
             syncChaptersWithSource.await(sourceChapters, newManga, newSource)

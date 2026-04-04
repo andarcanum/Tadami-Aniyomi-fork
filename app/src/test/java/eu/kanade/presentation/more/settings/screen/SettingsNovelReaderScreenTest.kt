@@ -32,12 +32,15 @@ class SettingsNovelReaderScreenTest {
         )
         geminiEnabledSettings.single { it.key == NovelReaderDisplaySettingKey.GeminiPromptMode }.enabled shouldBe true
         geminiEnabledSettings.single { it.key == NovelReaderDisplaySettingKey.GeminiPromptMode }.visible shouldBe true
-        geminiEnabledSettings.single { it.key == NovelReaderDisplaySettingKey.GoogleTranslateEnabled }.enabled shouldBe false
-        geminiEnabledSettings.single { it.key == NovelReaderDisplaySettingKey.GoogleTranslateEnabled }.subtitle shouldBe "Google subtitle"
+        geminiEnabledSettings.single { it.key == NovelReaderDisplaySettingKey.GoogleTranslateEnabled }.enabled shouldBe
+            false
+        geminiEnabledSettings.single { it.key == NovelReaderDisplaySettingKey.GoogleTranslateEnabled }.subtitle shouldBe
+            "Google subtitle"
 
         googleEnabledSettings.single { it.key == NovelReaderDisplaySettingKey.GeminiEnabled }.enabled shouldBe false
         googleEnabledSettings.single { it.key == NovelReaderDisplaySettingKey.GeminiPromptMode }.enabled shouldBe false
         googleEnabledSettings.single { it.key == NovelReaderDisplaySettingKey.GeminiPromptMode }.visible shouldBe false
-        googleEnabledSettings.single { it.key == NovelReaderDisplaySettingKey.GoogleTranslateEnabled }.enabled shouldBe true
+        googleEnabledSettings.single { it.key == NovelReaderDisplaySettingKey.GoogleTranslateEnabled }.enabled shouldBe
+            true
     }
 }

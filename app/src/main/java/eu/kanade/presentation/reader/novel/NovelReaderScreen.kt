@@ -83,8 +83,8 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -2615,20 +2615,25 @@ fun NovelReaderScreen(
                     }
                     val googleQuickActionDescription = when {
                         state.isGoogleTranslating -> stringResource(AYMR.strings.novel_reader_google_translate_stop)
-                        hasGoogleResult && state.isGoogleTranslationVisible -> stringResource(AYMR.strings.novel_reader_google_translate_original)
+                        hasGoogleResult && state.isGoogleTranslationVisible -> stringResource(
+                            AYMR.strings.novel_reader_google_translate_original,
+                        )
                         hasGoogleResult -> stringResource(AYMR.strings.novel_reader_google_translate_translated)
                         else -> stringResource(AYMR.strings.novel_reader_google_translate_start)
                     }
                     val googleQuickActionContainerColor = when {
                         state.isGoogleTranslating -> MaterialTheme.colorScheme.errorContainer
-                        hasGoogleResult && state.isGoogleTranslationVisible -> MaterialTheme.colorScheme.tertiaryContainer
+                        hasGoogleResult && state.isGoogleTranslationVisible ->
+                            MaterialTheme.colorScheme.tertiaryContainer
                         hasGoogleResult -> MaterialTheme.colorScheme.secondaryContainer
                         else -> MaterialTheme.colorScheme.primaryContainer
                     }
                     val googleQuickActionContentColor = when {
                         state.isGoogleTranslating -> MaterialTheme.colorScheme.onErrorContainer
-                        hasGoogleResult && state.isGoogleTranslationVisible -> MaterialTheme.colorScheme.onTertiaryContainer
-                        hasGoogleResult -> MaterialTheme.colorScheme.onSecondaryContainer
+                        hasGoogleResult && state.isGoogleTranslationVisible ->
+                            MaterialTheme.colorScheme.onTertiaryContainer
+                        hasGoogleResult ->
+                            MaterialTheme.colorScheme.onSecondaryContainer
                         else -> MaterialTheme.colorScheme.onPrimaryContainer
                     }
 
@@ -2969,7 +2974,13 @@ fun NovelReaderScreen(
                             Icon(
                                 imageVector = Icons.Outlined.Translate,
                                 contentDescription = stringResource(AYMR.strings.novel_reader_google_translate),
-                                tint = if (state.isGoogleTranslating || state.hasGoogleTranslationCache) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+                                tint = if (state.isGoogleTranslating ||
+                                    state.hasGoogleTranslationCache
+                                ) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    LocalContentColor.current
+                                },
                             )
                         }
                     }

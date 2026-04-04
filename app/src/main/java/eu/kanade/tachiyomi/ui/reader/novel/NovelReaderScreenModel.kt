@@ -33,10 +33,10 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationCacheEntry
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationService
-import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleUnofficialSelectedTextTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationSessionCache
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleUnofficialSelectedTextTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationProviderOutcome
@@ -52,11 +52,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
@@ -72,14 +72,12 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import logcat.LogPriority
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Node
 import org.jsoup.nodes.TextNode
 import tachiyomi.core.common.util.system.logcat
-import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.data.achievement.handler.AchievementEventBus
 import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.domain.entries.novel.interactor.GetNovel
@@ -1743,8 +1741,10 @@ class NovelReaderScreenModel(
         addGoogleLog(
             "Start: chapter=${currentChapter?.id ?: -1}, textBlocks=${baseTextBlocks.size}, source=${settings.googleTranslationSourceLang}, target=${settings.googleTranslationTargetLang}, backend=simple, autoStart=${settings.googleTranslationAutoStart}",
         )
+        val firstText = baseTextBlocks.firstOrNull()
+        val firstTextPreview = firstText?.take(80)?.replace('\n', ' ') ?: ""
         addGoogleLog(
-            "Sample: firstTextLen=${baseTextBlocks.firstOrNull()?.length ?: 0}, firstTextPreview=${baseTextBlocks.firstOrNull()?.take(80)?.replace('\n', ' ') ?: ""}",
+            "Sample: firstTextLen=${firstText?.length ?: 0}, firstTextPreview=$firstTextPreview",
         )
 
         val params = GoogleTranslationParams(
@@ -1778,7 +1778,9 @@ class NovelReaderScreenModel(
                     }
                 }.toMap()
                 addGoogleLog(
-                    "Finished: translatedSegments=${results.values.count { it.isNotBlank() }}/$baseTextBlocks.size, rateLimited=false",
+                    "Finished: translatedSegments=${results.values.count {
+                        it.isNotBlank()
+                    }}/$baseTextBlocks.size, rateLimited=false",
                 )
                 googleTranslatedByIndex = results
                 val chapter = currentChapter
@@ -1845,8 +1847,10 @@ class NovelReaderScreenModel(
         if (chapter != null) {
             googleSessionCache.remove(
                 chapterId = chapter.id,
-                sourceLang = (mutableState.value as? State.Success)?.readerSettings?.googleTranslationSourceLang ?: "auto",
-                targetLang = (mutableState.value as? State.Success)?.readerSettings?.googleTranslationTargetLang ?: "Russian",
+                sourceLang =
+                (mutableState.value as? State.Success)?.readerSettings?.googleTranslationSourceLang ?: "auto",
+                targetLang =
+                (mutableState.value as? State.Success)?.readerSettings?.googleTranslationTargetLang ?: "Russian",
             )
         }
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
@@ -2044,9 +2048,11 @@ class NovelReaderScreenModel(
                 }
             }
         }
-        addGoogleLog(
-            "Applied to rich content blocks: replaced=$replacedCount/${blocks.count { it is NovelRichContentBlock.BlockQuote || it is NovelRichContentBlock.Heading || it is NovelRichContentBlock.Paragraph }}",
-        )
+        val richContentBlockCount = blocks.count {
+            it is NovelRichContentBlock.BlockQuote || it is NovelRichContentBlock.Heading ||
+                it is NovelRichContentBlock.Paragraph
+        }
+        addGoogleLog("Applied to rich content blocks: replaced=$replacedCount/$richContentBlockCount")
         return updated
     }
     private fun buildRawHtmlFromContentBlocks(blocks: List<ContentBlock>): String {

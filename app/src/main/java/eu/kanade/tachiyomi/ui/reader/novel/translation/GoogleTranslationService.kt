@@ -16,7 +16,6 @@ import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.util.concurrent.TimeUnit
 
 class GoogleTranslationService(
     private val client: OkHttpClient,
@@ -98,7 +97,9 @@ class GoogleTranslationService(
             chunks.mapIndexed { chunkIndex, chunk ->
                 async {
                     onLog?.invoke(
-                        "Simple chunk ${chunkIndex + 1}/${chunks.size}: paragraphs=${chunk.size}, chars=${chunk.sumOf { it.second.length }}",
+                        "Simple chunk ${chunkIndex + 1}/${chunks.size}: paragraphs=${chunk.size}, chars=${chunk.sumOf {
+                            it.second.length
+                        }}",
                     )
                     val wrappedRequest = chunk.joinToString("\n\n") { (index, text) -> "[$index]\n$text" }
                     val translatedBody = translateSingle(
@@ -108,7 +109,9 @@ class GoogleTranslationService(
                     )
 
                     if (translatedBody == null) {
-                        onLog?.invoke("Simple chunk ${chunkIndex + 1}/${chunks.size}: chunk request failed, falling back")
+                        onLog?.invoke(
+                            "Simple chunk ${chunkIndex + 1}/${chunks.size}: chunk request failed, falling back",
+                        )
                         fallbackChunk(
                             chunk = chunk,
                             sourceLanguage = normalizedSource,
@@ -143,7 +146,9 @@ class GoogleTranslationService(
                             applied += 1
                         }
                     }
-                    onLog?.invoke("Simple chunk ${chunkIndex + 1}/${chunks.size} applied: translated=$applied/${chunk.size}")
+                    onLog?.invoke(
+                        "Simple chunk ${chunkIndex + 1}/${chunks.size} applied: translated=$applied/${chunk.size}",
+                    )
                 }
             }.awaitAll()
         }

@@ -129,12 +129,12 @@ fun MigrationListScreenContent(
             FastScrollLazyColumn(contentPadding = contentPadding + topSmallPaddingValues) {
                 items(items, key = { it.manga.id }) { item ->
                     Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .animateItemFastScroll(this)
-                                .padding(
-                                    start = MaterialTheme.padding.medium,
-                                    end = MaterialTheme.padding.small,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .animateItemFastScroll(this)
+                            .padding(
+                                start = MaterialTheme.padding.medium,
+                                end = MaterialTheme.padding.small,
                             )
                             .height(IntrinsicSize.Min),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -285,7 +285,7 @@ private fun MigrationListItemResult(
                         .widthIn(max = 150.dp)
                         .fillMaxSize()
                         .padding(4.dp),
-                    ) {
+                ) {
                     Image(
                         painter = rememberThemeAwareCoverErrorPainter(),
                         contentDescription = null,

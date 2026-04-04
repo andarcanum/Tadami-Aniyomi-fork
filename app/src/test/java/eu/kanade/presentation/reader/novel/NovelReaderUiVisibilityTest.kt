@@ -4779,9 +4779,12 @@ private fun assertPlainPageSliceCoverage(
             cursor = slice.range.endExclusive
         }
         assertEquals(expectedText.length, cursor)
-        assertEquals(expectedText, slices.joinToString(separator = "") { slice ->
-            expectedText.substring(slice.range.start, slice.range.endExclusive)
-        })
+        assertEquals(
+            expectedText,
+            slices.joinToString(separator = "") { slice ->
+                expectedText.substring(slice.range.start, slice.range.endExclusive)
+            },
+        )
     }
 }
 
@@ -4801,8 +4804,11 @@ private fun assertRichPageSliceCoverage(
             cursor = slice.range.endExclusive
         }
         assertEquals(expectedText.length, cursor)
-        assertEquals(expectedText, slices.joinToString(separator = "") { slice ->
-            expectedText.substring(slice.range.start, slice.range.endExclusive)
-        })
+        assertEquals(
+            expectedText,
+            slices.joinToString(separator = "") { slice ->
+                expectedText.substring(slice.range.start, slice.range.endExclusive)
+            },
+        )
     }
 }

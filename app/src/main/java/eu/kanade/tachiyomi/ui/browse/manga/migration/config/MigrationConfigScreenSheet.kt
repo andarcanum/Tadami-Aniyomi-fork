@@ -28,19 +28,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.util.fastForEach
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.presentation.components.AdaptiveSheet
 import tachiyomi.core.common.preference.Preference
-import tachiyomi.core.common.preference.toggle
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.Button
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.theme.active
 import tachiyomi.presentation.core.theme.header
 import tachiyomi.presentation.core.util.collectAsState
-import tachiyomi.i18n.aniyomi.AYMR
 
 private const val CHAPTERS = 0b00001
 private const val CATEGORIES = 0b00010
@@ -146,23 +144,23 @@ fun MigrationConfigScreenSheet(
                 )
             }
             HorizontalDivider()
-                Button(
-                    onClick = {
-                        val cleanedExtraSearchQuery = extraSearchQuery.trim().ifBlank { null }
-                        onStartMigration(cleanedExtraSearchQuery)
-                    },
+            Button(
+                onClick = {
+                    val cleanedExtraSearchQuery = extraSearchQuery.trim().ifBlank { null }
+                    onStartMigration(cleanedExtraSearchQuery)
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(
                         horizontal = MaterialTheme.padding.medium,
                         vertical = MaterialTheme.padding.small,
                     ),
-                ) {
-                    Text(text = stringResource(AYMR.strings.action_continue))
-                }
+            ) {
+                Text(text = stringResource(AYMR.strings.action_continue))
             }
         }
     }
+}
 
 @Composable
 private fun MigrationFlagChip(

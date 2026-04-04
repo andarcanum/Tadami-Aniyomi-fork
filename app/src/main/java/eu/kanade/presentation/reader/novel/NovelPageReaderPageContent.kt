@@ -880,7 +880,7 @@ internal fun NovelPageReaderTextBlock(
                 onPlainTap = onPlainTap,
                 touchHandlingEnabled = touchHandlingEnabled,
                 selectionInteractionEnabled = selectionInteractionEnabled,
-                ).apply {
+            ).apply {
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT,

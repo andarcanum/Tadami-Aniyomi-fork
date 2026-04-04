@@ -42,9 +42,9 @@ import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -75,7 +75,6 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 import kotlinx.collections.immutable.persistentListOf
-import kotlinx.collections.immutable.persistentMapOf
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
@@ -562,7 +561,9 @@ private fun GeneralTab(
             title = stringResource(AYMR.strings.novel_reader_google_translate_enable),
             checked = settings.googleTranslationEnabled,
             onCheckedChanged = {
-                update(it, { o, v -> o.copy(googleTranslationEnabled = v) }, { preferences.googleTranslationEnabled().set(it) })
+                update(it, { o, v ->
+                    o.copy(googleTranslationEnabled = v)
+                }, { preferences.googleTranslationEnabled().set(it) })
             },
         )
 
@@ -572,7 +573,9 @@ private fun GeneralTab(
             icon = null,
             value = settings.googleTranslationSourceLang,
             onConfirm = {
-                update(it, { o, v -> o.copy(googleTranslationSourceLang = v) }, { preferences.googleTranslationSourceLang().set(it) })
+                update(it, { o, v ->
+                    o.copy(googleTranslationSourceLang = v)
+                }, { preferences.googleTranslationSourceLang().set(it) })
                 true
             },
             singleLine = true,
@@ -586,7 +589,9 @@ private fun GeneralTab(
             icon = null,
             value = settings.googleTranslationTargetLang,
             onConfirm = {
-                update(it, { o, v -> o.copy(googleTranslationTargetLang = v) }, { preferences.googleTranslationTargetLang().set(it) })
+                update(it, { o, v ->
+                    o.copy(googleTranslationTargetLang = v)
+                }, { preferences.googleTranslationTargetLang().set(it) })
                 true
             },
             singleLine = true,
@@ -598,7 +603,9 @@ private fun GeneralTab(
             title = stringResource(AYMR.strings.novel_reader_google_translate_auto_start),
             checked = settings.googleTranslationAutoStart,
             onCheckedChanged = {
-                update(it, { o, v -> o.copy(googleTranslationAutoStart = v) }, { preferences.googleTranslationAutoStart().set(it) })
+                update(it, { o, v ->
+                    o.copy(googleTranslationAutoStart = v)
+                }, { preferences.googleTranslationAutoStart().set(it) })
             },
         )
 
@@ -1869,7 +1876,9 @@ private fun ReaderFontSection(
                                         IconButton(onClick = { onRemoveImported(option) }) {
                                             Icon(
                                                 imageVector = Icons.Filled.DeleteOutline,
-                                                contentDescription = stringResource(AYMR.strings.novel_reader_font_remove),
+                                                contentDescription = stringResource(
+                                                    AYMR.strings.novel_reader_font_remove,
+                                                ),
                                             )
                                         }
                                     }

@@ -2,10 +2,8 @@ package eu.kanade.tachiyomi.ui.browse.manga.migration.config
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -15,14 +13,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Deselect
 import androidx.compose.material.icons.outlined.SelectAll
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -36,7 +34,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.util.fastForEachIndexed
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -47,10 +44,8 @@ import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.ui.browse.manga.migration.list.MigrationListScreen
 import eu.kanade.tachiyomi.ui.browse.manga.migration.search.MigrateMangaSearchScreen
 import kotlinx.collections.immutable.persistentListOf
-import sh.calvin.reorderable.ReorderableCollectionItemScope
-import sh.calvin.reorderable.ReorderableItem
-import sh.calvin.reorderable.ReorderableLazyListState
-import sh.calvin.reorderable.rememberReorderableLazyListState
+import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.FastScrollLazyColumn
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.components.material.padding
@@ -58,10 +53,8 @@ import tachiyomi.presentation.core.components.material.topSmallPaddingValues
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.LoadingScreen
 import tachiyomi.presentation.core.theme.header
-import tachiyomi.presentation.core.util.shouldExpandFAB
 import tachiyomi.presentation.core.util.plus
-import tachiyomi.i18n.MR
-import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.presentation.core.util.shouldExpandFAB
 
 class MigrationConfigScreen(private val mangaIds: Collection<Long>) : Screen() {
 
@@ -109,12 +102,16 @@ class MigrationConfigScreen(private val mangaIds: Collection<Long>) : Screen() {
                                 AppBar.Action(
                                     title = stringResource(MR.strings.action_select_all),
                                     icon = Icons.Outlined.SelectAll,
-                                    onClick = { screenModel.toggleSelection(MigrationConfigScreenModel.SelectionConfig.All) },
+                                    onClick = {
+                                        screenModel.toggleSelection(MigrationConfigScreenModel.SelectionConfig.All)
+                                    },
                                 ),
                                 AppBar.Action(
                                     title = stringResource(MR.strings.action_select_inverse),
                                     icon = Icons.Outlined.Deselect,
-                                    onClick = { screenModel.toggleSelection(MigrationConfigScreenModel.SelectionConfig.None) },
+                                    onClick = {
+                                        screenModel.toggleSelection(MigrationConfigScreenModel.SelectionConfig.None)
+                                    },
                                 ),
                             ),
                         )
@@ -210,7 +207,7 @@ class MigrationConfigScreen(private val mangaIds: Collection<Long>) : Screen() {
         ElevatedCard(
             shape = shape,
             modifier = Modifier
-                .padding(horizontal = MaterialTheme.padding.medium)
+                .padding(horizontal = MaterialTheme.padding.medium),
         ) {
             ListItem(
                 headlineContent = {
