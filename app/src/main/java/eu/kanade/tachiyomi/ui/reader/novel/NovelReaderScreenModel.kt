@@ -33,6 +33,9 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationCacheEnt
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleUnofficialSelectedTextTranslationProvider
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationParams
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationSessionCache
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationProviderOutcome
@@ -48,6 +51,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -211,6 +215,22 @@ class NovelReaderScreenModel(
     private var isGeminiTranslationVisible: Boolean = false
     private var hasGeminiTranslationCache: Boolean = false
     private var geminiLogs: List<String> = emptyList()
+
+    // Google Translation
+    private var googleTranslationJob: Job? = null
+    private var googleTranslatedByIndex: Map<Int, String> = emptyMap()
+    private var isGoogleTranslating: Boolean = false
+    private var googleTranslationProgress: Int = 0
+    private var isGoogleTranslationVisible: Boolean = false
+    private var hasGoogleTranslationCache: Boolean = false
+    private var googleLogs: List<String> = emptyList()
+    private var googleRateLimited: Boolean = false
+    private val googleTranslationService = GoogleTranslationService(
+        client = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>().client,
+        json = Json { ignoreUnknownKeys = true },
+    )
+    private val googleSessionCache = GoogleTranslationSessionCache()
+
     private var airforceModelIds: List<String> = emptyList()
     private var isAirforceModelsLoading: Boolean = false
     private var isTestingAirforceConnection: Boolean = false
@@ -362,11 +382,13 @@ class NovelReaderScreenModel(
                     skippedInitialEmission = true
                     updateContent(settings)
                     maybeAutoStartGeminiTranslation(settings)
+                    maybeAutoStartGoogleTranslation()
                 }
         }
         saveHistorySnapshot(chapter.id, sessionReadDurationMs = 0L)
         updateContent(initialSettings)
         maybeAutoStartGeminiTranslation(initialSettings)
+        maybeAutoStartGoogleTranslation()
         when (initialSettings.translationProvider) {
             NovelTranslationProvider.GEMINI -> Unit
             NovelTranslationProvider.GEMINI_PRIVATE -> Unit
@@ -619,6 +641,11 @@ class NovelReaderScreenModel(
             isGeminiTranslationVisible = geminiVisibleInUi,
             hasGeminiTranslationCache = geminiCacheAvailableInUi,
             geminiLogs = geminiLogs,
+            isGoogleTranslating = isGoogleTranslating,
+            googleTranslationProgress = googleTranslationProgress,
+            isGoogleTranslationVisible = isGoogleTranslationVisible,
+            hasGoogleTranslationCache = hasGoogleTranslationCache,
+            googleLogs = googleLogs,
             airforceModelIds = airforceModelIds,
             isAirforceModelsLoading = isAirforceModelsLoading,
             isTestingAirforceConnection = isTestingAirforceConnection,
@@ -1664,6 +1691,193 @@ class NovelReaderScreenModel(
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         updateContent(settings)
     }
+
+    // Google Translation
+    fun startGoogleTranslation() {
+        if (isGoogleTranslating) return
+        val currentState = mutableState.value as? State.Success ?: return
+        val settings = currentState.readerSettings
+        if (!settings.googleTranslationEnabled) {
+            addGoogleLog("Google Translate is disabled.")
+            updateContent(settings)
+            return
+        }
+
+        if (isGeminiTranslating) {
+            addGoogleLog("Cannot start: Gemini translation is active.")
+            updateContent(settings)
+            return
+        }
+
+        val baseTextBlocks = parsedTextBlocks.orEmpty()
+        if (baseTextBlocks.isEmpty()) return
+
+        val params = GoogleTranslationParams(
+            sourceLang = settings.googleTranslationSourceLang,
+            targetLang = settings.googleTranslationTargetLang,
+        )
+
+        googleTranslatedByIndex = emptyMap()
+        isGoogleTranslationVisible = false
+        hasGoogleTranslationCache = false
+        isGoogleTranslating = true
+        googleTranslationProgress = 0
+        googleLogs = emptyList()
+        googleRateLimited = false
+        updateContent(settings)
+
+        googleTranslationJob = screenModelScope.launch {
+            val results = mutableMapOf<Int, String>()
+            val batchSize = 50
+            val indexedBlocks = baseTextBlocks.mapIndexed { index, text -> index to text }
+            val chunks = indexedBlocks.chunked(batchSize)
+            val totalSegments = indexedBlocks.size
+            var completedSegments = 0
+
+            for (chunk in chunks) {
+                if (googleRateLimited || !coroutineContext.isActive) break
+
+                val segmentIndices = chunk.map { it.first }
+                val segmentTexts = chunk.map { it.second }
+
+                when (val outcome = googleTranslationService.translateBatch(
+                    segments = segmentTexts,
+                    params = params,
+                    onLog = { log ->
+                        googleLogs = googleLogs + log
+                        updateContent(settings)
+                    },
+                )) {
+                    is GoogleTranslationService.TranslateOutcome.Success -> {
+                        segmentIndices.forEachIndexed { i, originalIndex ->
+                            outcome.results[i]?.let { results[originalIndex] = it }
+                        }
+                        completedSegments += segmentTexts.size
+                        googleTranslationProgress = (completedSegments * 100) / totalSegments
+                        updateContent(settings)
+                    }
+                    is GoogleTranslationService.TranslateOutcome.RateLimited -> {
+                        googleRateLimited = true
+                        googleLogs = googleLogs + "Rate limited (HTTP 429). Tap Resume to retry."
+                        updateContent(settings)
+                        break
+                    }
+                    is GoogleTranslationService.TranslateOutcome.Error -> {
+                        googleLogs = googleLogs + "Error: ${outcome.message}"
+                        updateContent(settings)
+                    }
+                }
+            }
+
+            googleTranslatedByIndex = results
+            val chapter = currentChapter
+            if (chapter != null) {
+                googleSessionCache.put(
+                    chapterId = chapter.id,
+                    sourceLang = params.sourceLang,
+                    targetLang = params.targetLang,
+                    translatedByIndex = results,
+                )
+            }
+            hasGoogleTranslationCache = results.isNotEmpty()
+            isGoogleTranslating = false
+            if (!googleRateLimited) {
+                googleTranslationProgress = 100
+            }
+
+            if (results.isNotEmpty()) {
+                isGoogleTranslationVisible = true
+                applyGoogleTranslationToContentBlocks(settings)
+            }
+            updateContent(settings)
+        }
+    }
+
+    fun stopGoogleTranslation() {
+        googleTranslationJob?.cancel()
+        googleTranslationJob = null
+        isGoogleTranslating = false
+        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
+        updateContent(settings)
+    }
+
+    fun resumeGoogleTranslation() {
+        if (!googleRateLimited) return
+        googleRateLimited = false
+        startGoogleTranslation()
+    }
+
+    fun toggleGoogleTranslationVisibility() {
+        if (googleTranslatedByIndex.isEmpty()) return
+        isGoogleTranslationVisible = !isGoogleTranslationVisible
+        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
+        updateContent(settings)
+    }
+
+    fun clearGoogleTranslation() {
+        val chapter = currentChapter ?: return
+        googleTranslationJob?.cancel()
+        googleTranslationJob = null
+        googleTranslatedByIndex = emptyMap()
+        isGoogleTranslating = false
+        isGoogleTranslationVisible = false
+        googleTranslationProgress = 0
+        hasGoogleTranslationCache = false
+        googleLogs = emptyList()
+        googleRateLimited = false
+        if (chapter != null) {
+            googleSessionCache.remove(
+                chapterId = chapter.id,
+                sourceLang = (mutableState.value as? State.Success)?.readerSettings?.googleTranslationSourceLang ?: "auto",
+                targetLang = (mutableState.value as? State.Success)?.readerSettings?.googleTranslationTargetLang ?: "Russian",
+            )
+        }
+        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
+        updateContent(settings)
+    }
+
+    private fun restoreGoogleTranslationFromSessionCache(settings: NovelReaderSettings) {
+        val chapter = currentChapter ?: return
+        val cached = googleSessionCache.get(
+            chapterId = chapter.id,
+            sourceLang = settings.googleTranslationSourceLang,
+            targetLang = settings.googleTranslationTargetLang,
+        )
+        if (cached != null && cached.isNotEmpty()) {
+            googleTranslatedByIndex = cached
+            hasGoogleTranslationCache = true
+            isGoogleTranslationVisible = true
+            applyGoogleTranslationToContentBlocks(settings)
+        }
+    }
+
+    fun maybeAutoStartGoogleTranslation() {
+        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
+        if (!settings.googleTranslationEnabled || !settings.googleTranslationAutoStart) return
+        if (isGeminiTranslating || isGeminiTranslationVisible) return
+        restoreGoogleTranslationFromSessionCache(settings)
+        if (!hasGoogleTranslationCache) {
+            startGoogleTranslation()
+        }
+    }
+
+    private fun applyGoogleTranslationToContentBlocks(settings: NovelReaderSettings) {
+        if (googleTranslatedByIndex.isEmpty()) return
+        val blocks = (mutableState.value as? State.Success)?.contentBlocks ?: return
+        val updated = blocks.mapIndexed { index, block ->
+            if (block is ContentBlock.Text && googleTranslatedByIndex.containsKey(index)) {
+                ContentBlock.Text(googleTranslatedByIndex[index]!!)
+            } else {
+                block
+            }
+        }
+        mutableState.value = (mutableState.value as? State.Success)?.copy(contentBlocks = updated) ?: return
+    }
+
+    private fun addGoogleLog(message: String) {
+        googleLogs = googleLogs + message
+    }
+
     private fun restoreGeminiTranslationFromCache(
         chapterId: Long,
         settings: NovelReaderSettings,
@@ -2778,6 +2992,11 @@ class NovelReaderScreenModel(
             val isGeminiTranslationVisible: Boolean = false,
             val hasGeminiTranslationCache: Boolean = false,
             val geminiLogs: List<String> = emptyList(),
+            val isGoogleTranslating: Boolean = false,
+            val googleTranslationProgress: Int = 0,
+            val isGoogleTranslationVisible: Boolean = false,
+            val hasGoogleTranslationCache: Boolean = false,
+            val googleLogs: List<String> = emptyList(),
             val airforceModelIds: List<String> = emptyList(),
             val isAirforceModelsLoading: Boolean = false,
             val isTestingAirforceConnection: Boolean = false,
