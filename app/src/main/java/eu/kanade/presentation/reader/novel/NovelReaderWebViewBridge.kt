@@ -214,9 +214,9 @@ internal fun shouldEnableJavaScriptInReaderWebView(
     return pluginRequestsJavaScript
 }
 
+@Suppress("DEPRECATION")
 internal fun WebView.resolveWebViewContentHeightPx(): Int {
     val childHeight = getChildAt(0)?.height ?: 0
-    @Suppress("DEPRECATION")
     val scaledContentHeight = (contentHeight * scale).roundToInt()
     return maxOf(childHeight, scaledContentHeight)
 }

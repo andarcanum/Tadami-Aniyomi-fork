@@ -115,10 +115,10 @@ class AppLanguageScreen : Screen() {
             eventType = parser.next()
         }
 
-        langs.sortBy { it.displayName }
-        langs.add(0, Language("", context.stringResource(MR.strings.label_default), null))
-
-        return langs.toImmutableList()
+        val uniqueLangs = langs.distinctBy { it.langTag }.sortedBy { it.displayName }
+        return uniqueLangs.toMutableList().apply {
+            add(0, Language("", context.stringResource(MR.strings.label_default), null))
+        }.toImmutableList()
     }
 
     private data class Language(
