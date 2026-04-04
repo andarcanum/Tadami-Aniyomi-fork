@@ -233,6 +233,11 @@ fun NovelReaderScreen(
     onSetDeepSeekModel: (String) -> Unit = {},
     onRefreshDeepSeekModels: () -> Unit = {},
     onTestDeepSeekConnection: () -> Unit = {},
+    onStartGoogleTranslation: () -> Unit = {},
+    onStopGoogleTranslation: () -> Unit = {},
+    onResumeGoogleTranslation: () -> Unit = {},
+    onToggleGoogleTranslationVisibility: () -> Unit = {},
+    onClearGoogleTranslation: () -> Unit = {},
     onOpenPreviousChapter: ((Long) -> Unit)? = null,
     onOpenNextChapter: ((Long) -> Unit)? = null,
     showReaderUi: Boolean,
@@ -296,6 +301,7 @@ fun NovelReaderScreen(
     }
     var autoScrollExpanded by remember(state.chapter.id) { mutableStateOf(false) }
     var showGeminiDialog by remember(state.chapter.id) { mutableStateOf(false) }
+    var showGoogleDialog by remember(state.chapter.id) { mutableStateOf(false) }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     val shouldHideWebViewUntilReveal = state.enableJs
     var webProgressPercent by remember(state.chapter.id) {
@@ -353,8 +359,25 @@ fun NovelReaderScreen(
                 preferredId = customBackgroundId,
             )
         }
-        readNovelReaderCustomBackgroundItems(context)
+
+        if (showGoogleDialog && state.readerSettings.googleTranslationEnabled) {
+            GoogleTranslationDialog(
+                readerSettings = state.readerSettings,
+                isTranslating = state.isGoogleTranslating,
+                translationProgress = state.googleTranslationProgress,
+                isVisible = state.isGoogleTranslationVisible,
+                hasCache = state.hasGoogleTranslationCache,
+                logs = state.googleLogs,
+                onStart = onStartGoogleTranslation,
+                onStop = onStopGoogleTranslation,
+                onResume = onResumeGoogleTranslation,
+                onToggleVisibility = onToggleGoogleTranslationVisibility,
+                onClear = onClearGoogleTranslation,
+                onDismiss = { showGoogleDialog = false },
+            )
+        }
     }
+}
     val customBackgroundExists = remember(
         customBackgroundId,
         customBackgroundPath,
@@ -2529,6 +2552,80 @@ fun NovelReaderScreen(
                         }
                     }
                 }
+                if (state.readerSettings.googleTranslationEnabled) {
+                    val hasGoogleResult = state.hasGoogleTranslationCache || state.googleTranslationProgress == 100
+                    val googleQuickActionIcon = when {
+                        state.isGoogleTranslating -> Icons.Outlined.Pause
+                        hasGoogleResult && state.isGoogleTranslationVisible -> Icons.Outlined.Public
+                        else -> Icons.Outlined.PlayArrow
+                    }
+                    val googleQuickActionDescription = when {
+                        state.isGoogleTranslating -> stringResource(AYMR.strings.novel_reader_google_translate_stop)
+                        hasGoogleResult && state.isGoogleTranslationVisible -> stringResource(AYMR.strings.novel_reader_google_translate_original)
+                        hasGoogleResult -> stringResource(AYMR.strings.novel_reader_google_translate_translated)
+                        else -> stringResource(AYMR.strings.novel_reader_google_translate_start)
+                    }
+                    val googleQuickActionContainerColor = when {
+                        state.isGoogleTranslating -> MaterialTheme.colorScheme.errorContainer
+                        hasGoogleResult && state.isGoogleTranslationVisible -> MaterialTheme.colorScheme.tertiaryContainer
+                        hasGoogleResult -> MaterialTheme.colorScheme.secondaryContainer
+                        else -> MaterialTheme.colorScheme.primaryContainer
+                    }
+                    val googleQuickActionContentColor = when {
+                        state.isGoogleTranslating -> MaterialTheme.colorScheme.onErrorContainer
+                        hasGoogleResult && state.isGoogleTranslationVisible -> MaterialTheme.colorScheme.onTertiaryContainer
+                        hasGoogleResult -> MaterialTheme.colorScheme.onSecondaryContainer
+                        else -> MaterialTheme.colorScheme.onPrimaryContainer
+                    }
+
+                    Column(
+                        modifier = Modifier.padding(bottom = 6.dp),
+                        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = googleQuickActionContainerColor,
+                            contentColor = googleQuickActionContentColor,
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
+                            ),
+                            tonalElevation = 2.dp,
+                            shadowElevation = 2.dp,
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clickable {
+                                    when {
+                                        state.isGoogleTranslating -> onStopGoogleTranslation()
+                                        hasGoogleResult -> onToggleGoogleTranslationVisibility()
+                                        else -> onStartGoogleTranslation()
+                                    }
+                                },
+                        ) {
+                            androidx.compose.foundation.layout.Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = androidx.compose.ui.Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = googleQuickActionIcon,
+                                    contentDescription = googleQuickActionDescription,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        }
+
+                        if (state.isGoogleTranslating) {
+                            LinearProgressIndicator(
+                                progress = { state.googleTranslationProgress.coerceIn(0, 100) / 100f },
+                                modifier = Modifier
+                                    .size(width = 24.dp, height = 3.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                            )
+                        }
+                    }
+                }
                 LnReaderVerticalSeekbar(
                     progress = seekbarValue,
                     topLabel = pageRailTopLabel,
@@ -2810,6 +2907,15 @@ fun NovelReaderScreen(
                                     stringResource(AYMR.strings.novel_reader_gemini_button)
                                 },
                                 style = MaterialTheme.typography.labelLarge,
+                            )
+                        }
+                    }
+                    if (state.readerSettings.googleTranslationEnabled) {
+                        IconButton(onClick = { showGoogleDialog = true }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Translate,
+                                contentDescription = stringResource(AYMR.strings.novel_reader_google_translate),
+                                tint = if (state.isGoogleTranslating || state.hasGoogleTranslationCache) MaterialTheme.colorScheme.primary else LocalContentColor.current,
                             )
                         }
                     }
