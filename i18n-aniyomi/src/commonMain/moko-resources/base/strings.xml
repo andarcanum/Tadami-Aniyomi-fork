@@ -1465,4 +1465,20 @@
     <string name="action_disable_auto_jump_next_episode">Disable auto-jump to next episode</string>
     <string name="action_enable_auto_jump_next_chapter">Enable auto-jump to next chapter</string>
     <string name="action_disable_auto_jump_next_chapter">Disable auto-jump to next chapter</string>
+    <string name="novel_reader_google_translate">Google Translate</string>
+    <string name="novel_reader_google_translate_source">Source language</string>
+    <string name="novel_reader_google_translate_target">Target language</string>
+    <string name="novel_reader_google_translate_enable">Enable Google Translate</string>
+    <string name="novel_reader_google_translate_auto_start">Auto-translate on chapter load</string>
+    <string name="novel_reader_google_translate_start">Start Translation</string>
+    <string name="novel_reader_google_translate_stop">Stop Translation</string>
+    <string name="novel_reader_google_translate_resume">Resume Translation</string>
+    <string name="novel_reader_google_translate_switch_confirm">Switch to %1$s? Current %2$s translation will be lost</string>
+    <string name="novel_reader_google_translate_disable_other_first">Disable %1$s translator first</string>
+    <string name="novel_reader_google_translate_original">Original</string>
+    <string name="novel_reader_google_translate_translated">Translation</string>
+    <string name="novel_reader_google_translate_clear">Clear Translation</string>
+    <string name="novel_reader_google_translate_progress">Translating: %1$d%%</string>
+    <string name="novel_reader_google_translate_rate_limited">Rate limited. Tap Resume to retry.</string>
+    <string name="novel_reader_google_translate_error">Translation error: %1$s</string>
 </resources>

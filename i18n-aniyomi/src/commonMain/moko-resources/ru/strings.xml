@@ -1503,4 +1503,20 @@
     <string name="action_disable_auto_jump_next_episode">Выключить автопрыжок к следующему эпизоду</string>
     <string name="action_enable_auto_jump_next_chapter">Включить автопрыжок к следующей главе</string>
     <string name="action_disable_auto_jump_next_chapter">Выключить автопрыжок к следующей главе</string>
+    <string name="novel_reader_google_translate">Google Переводчик</string>
+    <string name="novel_reader_google_translate_source">Язык источника</string>
+    <string name="novel_reader_google_translate_target">Язык перевода</string>
+    <string name="novel_reader_google_translate_enable">Включить Google Переводчик</string>
+    <string name="novel_reader_google_translate_auto_start">Автоперевод при загрузке главы</string>
+    <string name="novel_reader_google_translate_start">Начать перевод</string>
+    <string name="novel_reader_google_translate_stop">Остановить перевод</string>
+    <string name="novel_reader_google_translate_resume">Продолжить перевод</string>
+    <string name="novel_reader_google_translate_switch_confirm">Переключиться на %1$s? Текущий перевод %2$s будет потерян</string>
+    <string name="novel_reader_google_translate_disable_other_first">Сначала выключите переводчик %1$s</string>
+    <string name="novel_reader_google_translate_original">Оригинал</string>
+    <string name="novel_reader_google_translate_translated">Перевод</string>
+    <string name="novel_reader_google_translate_clear">Очистить перевод</string>
+    <string name="novel_reader_google_translate_progress">Перевод: %1$d%%</string>
+    <string name="novel_reader_google_translate_rate_limited">Ограничение частоты. Нажмите Продолжить для повтора.</string>
+    <string name="novel_reader_google_translate_error">Ошибка перевода: %1$s</string>
 </resources>
