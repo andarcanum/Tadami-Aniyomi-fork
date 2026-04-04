@@ -551,7 +551,7 @@ private fun GeneralTab(
             },
             singleLine = true,
             canBeBlank = false,
-            formatSubtitle = false,
+            formatSubtitle = true,
         )
 
         SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_advanced))
