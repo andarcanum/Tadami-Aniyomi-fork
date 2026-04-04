@@ -126,6 +126,12 @@ data class NovelReaderSettings(
     val deepSeekBaseUrl: String = "https://api.deepseek.com",
     val deepSeekApiKey: String = "",
     val deepSeekModel: String = "deepseek-chat",
+
+    // Google Translation
+    val googleTranslationEnabled: Boolean = false,
+    val googleTranslationSourceLang: String = "auto",
+    val googleTranslationTargetLang: String = "Russian",
+    val googleTranslationAutoStart: Boolean = false,
 )
 
 enum class NovelReaderTheme {
@@ -343,6 +349,12 @@ data class NovelReaderOverride(
     val deepSeekBaseUrl: String? = null,
     val deepSeekApiKey: String? = null,
     val deepSeekModel: String? = null,
+
+    // Google Translation
+    val googleTranslationEnabled: Boolean? = null,
+    val googleTranslationSourceLang: String? = null,
+    val googleTranslationTargetLang: String? = null,
+    val googleTranslationAutoStart: Boolean? = null,
 )
 
 class NovelReaderPreferences(
@@ -620,6 +632,15 @@ class NovelReaderPreferences(
 
     fun deepSeekModel() = preferenceStore.getString("novel_reader_deepseek_model", "deepseek-chat")
 
+    // Google Translation
+    fun googleTranslationEnabled() = preferenceStore.getBoolean("novel_reader_google_translation_enabled", false)
+
+    fun googleTranslationSourceLang() = preferenceStore.getString("novel_reader_google_translation_source_lang", "auto")
+
+    fun googleTranslationTargetLang() = preferenceStore.getString("novel_reader_google_translation_target_lang", "Russian")
+
+    fun googleTranslationAutoStart() = preferenceStore.getBoolean("novel_reader_google_translation_auto_start", false)
+
     // EPUB export
     fun epubExportLocation() = preferenceStore.getString("novel_epub_export_location", "")
 
@@ -777,6 +798,10 @@ class NovelReaderPreferences(
                 deepSeekBaseUrl = deepSeekBaseUrl().get(),
                 deepSeekApiKey = deepSeekApiKey().get(),
                 deepSeekModel = deepSeekModel().get(),
+                googleTranslationEnabled = googleTranslationEnabled().get(),
+                googleTranslationSourceLang = googleTranslationSourceLang().get(),
+                googleTranslationTargetLang = googleTranslationTargetLang().get(),
+                googleTranslationAutoStart = googleTranslationAutoStart().get(),
             ),
         )
     }
@@ -896,6 +921,10 @@ class NovelReaderPreferences(
             deepSeekBaseUrl = override?.deepSeekBaseUrl ?: deepSeekBaseUrl().get(),
             deepSeekApiKey = override?.deepSeekApiKey ?: deepSeekApiKey().get(),
             deepSeekModel = override?.deepSeekModel ?: deepSeekModel().get(),
+            googleTranslationEnabled = override?.googleTranslationEnabled ?: googleTranslationEnabled().get(),
+            googleTranslationSourceLang = override?.googleTranslationSourceLang ?: googleTranslationSourceLang().get(),
+            googleTranslationTargetLang = override?.googleTranslationTargetLang ?: googleTranslationTargetLang().get(),
+            googleTranslationAutoStart = override?.googleTranslationAutoStart ?: googleTranslationAutoStart().get(),
         )
     }
 
@@ -1086,6 +1115,10 @@ class NovelReaderPreferences(
             deepSeekBaseUrl().changes(),
             deepSeekApiKey().changes(),
             deepSeekModel().changes(),
+            googleTranslationEnabled().changes(),
+            googleTranslationSourceLang().changes(),
+            googleTranslationTargetLang().changes(),
+            googleTranslationAutoStart().changes(),
         ) { values: Array<Any?> ->
             GeminiSettings(
                 enabled = values[0] as Boolean,
@@ -1121,6 +1154,10 @@ class NovelReaderPreferences(
                 deepSeekBaseUrl = values[30] as String,
                 deepSeekApiKey = values[31] as String,
                 deepSeekModel = values[32] as String,
+                googleTranslationEnabled = values[33] as Boolean,
+                googleTranslationSourceLang = values[34] as String,
+                googleTranslationTargetLang = values[35] as String,
+                googleTranslationAutoStart = values[36] as Boolean,
             )
         }.distinctUntilChanged()
 
@@ -1358,6 +1395,10 @@ class NovelReaderPreferences(
         val deepSeekBaseUrl: String,
         val deepSeekApiKey: String,
         val deepSeekModel: String,
+        val googleTranslationEnabled: Boolean,
+        val googleTranslationSourceLang: String,
+        val googleTranslationTargetLang: String,
+        val googleTranslationAutoStart: Boolean,
     )
 
     companion object {
