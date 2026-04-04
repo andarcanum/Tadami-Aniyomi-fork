@@ -1222,6 +1222,28 @@ object SettingsNovelReaderScreen : SearchableSettings {
             )
         }
 
+        // Google Translate
+        items += Preference.PreferenceItem.Switch(
+            preference = prefs.googleTranslationEnabled(),
+            title = stringResource(AYMR.strings.novel_reader_google_translate_enable),
+        )
+        items += Preference.PreferenceItem.EditTextInfoPreference(
+            preference = prefs.googleTranslationSourceLang(),
+            dialogSubtitle = null,
+            title = stringResource(AYMR.strings.novel_reader_google_translate_source),
+            subtitle = "%s",
+        )
+        items += Preference.PreferenceItem.EditTextInfoPreference(
+            preference = prefs.googleTranslationTargetLang(),
+            dialogSubtitle = null,
+            title = stringResource(AYMR.strings.novel_reader_google_translate_target),
+            subtitle = "%s",
+        )
+        items += Preference.PreferenceItem.Switch(
+            preference = prefs.googleTranslationAutoStart(),
+            title = stringResource(AYMR.strings.novel_reader_google_translate_auto_start),
+        )
+
         items += Preference.PreferenceItem.MultiLineEditTextPreference(
             preference = prefs.customCSS(),
             title = stringResource(AYMR.strings.novel_reader_custom_css),
