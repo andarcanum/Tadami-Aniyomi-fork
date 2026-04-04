@@ -96,6 +96,7 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import eu.kanade.tachiyomi.ui.browse.manga.migration.config.MigrationConfigScreen
+import eu.kanade.tachiyomi.ui.browse.novel.migration.search.MigrateNovelSearchScreen
 import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.manga.MangaLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
@@ -788,6 +789,13 @@ data object AnimeLibraryTab : Tab {
                             onMarkAsUnviewedClicked = { novelScreenModel?.markReadSelection(false) },
                             onDownloadClicked = null,
                             onOpenDownloadDialog = { showNovelBatchDownloadDialog = true },
+                            onMigrateClicked = {
+                                val selectionIds = novelState.selection.map { it.novel.id }
+                                novelScreenModel?.clearSelection()
+                                if (selectionIds.size == 1) {
+                                    navigator.push(MigrateNovelSearchScreen(selectionIds.single()))
+                                }
+                            }.takeIf { novelState.selection.size == 1 },
                             onTranslatedDownloadClicked = {
                                 showNovelTranslatedDownloadDialog = true
                             }.takeIf { isNovelTranslatorEnabled },
