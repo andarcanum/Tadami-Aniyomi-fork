@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelJsSource
 import eu.kanade.tachiyomi.extension.novel.runtime.resolveUrl
+import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelSiteSource
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
@@ -71,12 +72,14 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import logcat.LogPriority
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Node
 import org.jsoup.nodes.TextNode
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.data.achievement.handler.AchievementEventBus
 import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.domain.entries.novel.interactor.GetNovel
@@ -182,6 +185,10 @@ class NovelReaderScreenModel(
             json = json,
         )
     },
+    private val googleTranslationService: GoogleTranslationService = run {
+        val networkHelper = Injekt.get<NetworkHelper>()
+        GoogleTranslationService(client = networkHelper.client)
+    },
 ) : StateScreenModel<NovelReaderScreenModel.State>(State.Loading) {
     private var settingsJob: Job? = null
     private var rawHtml: String? = null
@@ -225,10 +232,6 @@ class NovelReaderScreenModel(
     private var hasGoogleTranslationCache: Boolean = false
     private var googleLogs: List<String> = emptyList()
     private var googleRateLimited: Boolean = false
-    private val googleTranslationService = GoogleTranslationService(
-        client = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>().client,
-        json = Json { ignoreUnknownKeys = true },
-    )
     private val googleSessionCache = GoogleTranslationSessionCache()
 
     private var airforceModelIds: List<String> = emptyList()
@@ -523,6 +526,8 @@ class NovelReaderScreenModel(
         }
         val geminiVisibleInUi = settings.geminiEnabled && isGeminiTranslationVisible
         val geminiCacheAvailableInUi = settings.geminiEnabled && hasGeminiTranslationCache
+        val googleVisibleInUi = settings.googleTranslationEnabled && isGoogleTranslationVisible
+        val googleCacheAvailableInUi = settings.googleTranslationEnabled && hasGoogleTranslationCache
         val decodedNativeProgress = decodeNativeScrollProgress(chapter.lastPageRead)
         val decodedWebProgressPercent = decodeWebScrollProgressPercent(chapter.lastPageRead)
         val decodedPageReaderProgress = decodePageReaderProgress(chapter.lastPageRead)
@@ -592,28 +597,40 @@ class NovelReaderScreenModel(
                     )
                 }
                 .also { parsedRichContentResult = it }
-        val displayContentBlocks = if (geminiVisibleInUi) {
-            applyGeminiTranslationToContentBlocks(baseContentBlocks)
-        } else {
-            baseContentBlocks
+        val displayContentBlocks = when {
+            geminiVisibleInUi -> applyGeminiTranslationToContentBlocks(baseContentBlocks)
+            googleVisibleInUi -> applyGoogleTranslationToContentBlocks(baseContentBlocks)
+            else -> baseContentBlocks
+        }
+        if (googleVisibleInUi) {
+            addGoogleLog(
+                "Apply UI: baseBlocks=${baseContentBlocks.size}, textBlocks=${parsedTextBlocks.orEmpty().size}, translatedSegments=${googleTranslatedByIndex.size}, visible=$googleVisibleInUi",
+            )
         }
         val displayTextBlocks = displayContentBlocks
             .filterIsInstance<ContentBlock.Text>()
             .map { it.text }
         val displayRichBlocks = if (geminiVisibleInUi) {
             applyGeminiTranslationToRichContentBlocks(richContentResult.blocks)
+        } else if (googleVisibleInUi) {
+            applyGoogleTranslationToRichContentBlocks(richContentResult.blocks)
         } else {
             richContentResult.blocks
         }
-        val displayContent = if (geminiVisibleInUi && geminiTranslatedByIndex.isNotEmpty()) {
-            normalizeHtml(
+        val displayContent = when {
+            geminiVisibleInUi && geminiTranslatedByIndex.isNotEmpty() -> normalizeHtml(
                 rawHtml = buildRawHtmlFromContentBlocks(displayContentBlocks),
                 settings = settings,
                 customCss = pluginCss,
                 customJs = pluginJs,
             )
-        } else {
-            baseContent
+            googleVisibleInUi && googleTranslatedByIndex.isNotEmpty() -> normalizeHtml(
+                rawHtml = buildRawHtmlFromContentBlocks(displayContentBlocks),
+                settings = settings,
+                customCss = pluginCss,
+                customJs = pluginJs,
+            )
+            else -> baseContent
         }
         mutableState.value = State.Success(
             novel = novel,
@@ -643,8 +660,8 @@ class NovelReaderScreenModel(
             geminiLogs = geminiLogs,
             isGoogleTranslating = isGoogleTranslating,
             googleTranslationProgress = googleTranslationProgress,
-            isGoogleTranslationVisible = isGoogleTranslationVisible,
-            hasGoogleTranslationCache = hasGoogleTranslationCache,
+            isGoogleTranslationVisible = googleVisibleInUi,
+            hasGoogleTranslationCache = googleCacheAvailableInUi,
             googleLogs = googleLogs,
             airforceModelIds = airforceModelIds,
             isAirforceModelsLoading = isAirforceModelsLoading,
@@ -1168,6 +1185,18 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.OPENROUTER -> refreshOpenRouterModels()
             NovelTranslationProvider.DEEPSEEK -> refreshDeepSeekModels()
         }
+    }
+    fun setGoogleTranslationEnabled(value: Boolean) {
+        novelReaderPreferences.googleTranslationEnabled().set(value)
+    }
+    fun setGoogleTranslationAutoStart(value: Boolean) {
+        novelReaderPreferences.googleTranslationAutoStart().set(value)
+    }
+    fun setGoogleTranslationSourceLang(value: String) {
+        novelReaderPreferences.googleTranslationSourceLang().set(value)
+    }
+    fun setGoogleTranslationTargetLang(value: String) {
+        novelReaderPreferences.googleTranslationTargetLang().set(value)
     }
     fun setAirforceBaseUrl(value: String) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.airforceBaseUrl().set(value) },
@@ -1711,6 +1740,12 @@ class NovelReaderScreenModel(
 
         val baseTextBlocks = parsedTextBlocks.orEmpty()
         if (baseTextBlocks.isEmpty()) return
+        addGoogleLog(
+            "Start: chapter=${currentChapter?.id ?: -1}, textBlocks=${baseTextBlocks.size}, source=${settings.googleTranslationSourceLang}, target=${settings.googleTranslationTargetLang}, backend=simple, autoStart=${settings.googleTranslationAutoStart}",
+        )
+        addGoogleLog(
+            "Sample: firstTextLen=${baseTextBlocks.firstOrNull()?.length ?: 0}, firstTextPreview=${baseTextBlocks.firstOrNull()?.take(80)?.replace('\n', ' ') ?: ""}",
+        )
 
         val params = GoogleTranslationParams(
             sourceLang = settings.googleTranslationSourceLang,
@@ -1727,69 +1762,50 @@ class NovelReaderScreenModel(
         updateContent(settings)
 
         googleTranslationJob = screenModelScope.launch {
-            val results = mutableMapOf<Int, String>()
-            val batchSize = 50
-            val indexedBlocks = baseTextBlocks.mapIndexed { index, text -> index to text }
-            val chunks = indexedBlocks.chunked(batchSize)
-            val totalSegments = indexedBlocks.size
-            var completedSegments = 0
-
-            for (chunk in chunks) {
-                if (googleRateLimited || !coroutineContext.isActive) break
-
-                val segmentIndices = chunk.map { it.first }
-                val segmentTexts = chunk.map { it.second }
-
-                when (val outcome = googleTranslationService.translateBatch(
-                    segments = segmentTexts,
+            try {
+                val response = googleTranslationService.translateBatch(
+                    texts = baseTextBlocks,
                     params = params,
                     onLog = { log ->
-                        googleLogs = googleLogs + log
+                        addGoogleLog(log)
+                        updateGoogleProgressFromLog(log)
                         updateContent(settings)
                     },
-                )) {
-                    is GoogleTranslationService.TranslateOutcome.Success -> {
-                        segmentIndices.forEachIndexed { i, originalIndex ->
-                            outcome.results[i]?.let { results[originalIndex] = it }
-                        }
-                        completedSegments += segmentTexts.size
-                        googleTranslationProgress = (completedSegments * 100) / totalSegments
-                        updateContent(settings)
-                    }
-                    is GoogleTranslationService.TranslateOutcome.RateLimited -> {
-                        googleRateLimited = true
-                        googleLogs = googleLogs + "Rate limited (HTTP 429). Tap Resume to retry."
-                        updateContent(settings)
-                        break
-                    }
-                    is GoogleTranslationService.TranslateOutcome.Error -> {
-                        googleLogs = googleLogs + "Error: ${outcome.message}"
-                        updateContent(settings)
-                    }
-                }
-            }
-
-            googleTranslatedByIndex = results
-            val chapter = currentChapter
-            if (chapter != null) {
-                googleSessionCache.put(
-                    chapterId = chapter.id,
-                    sourceLang = params.sourceLang,
-                    targetLang = params.targetLang,
-                    translatedByIndex = results,
                 )
-            }
-            hasGoogleTranslationCache = results.isNotEmpty()
-            isGoogleTranslating = false
-            if (!googleRateLimited) {
+                val results = baseTextBlocks.mapIndexedNotNull { index, text ->
+                    response.translatedByText[text]?.takeIf { it.isNotBlank() }?.let { translated ->
+                        index to translated
+                    }
+                }.toMap()
+                addGoogleLog(
+                    "Finished: translatedSegments=${results.values.count { it.isNotBlank() }}/$baseTextBlocks.size, rateLimited=false",
+                )
+                googleTranslatedByIndex = results
+                val chapter = currentChapter
+                if (chapter != null) {
+                    googleSessionCache.put(
+                        chapterId = chapter.id,
+                        sourceLang = params.sourceLang,
+                        targetLang = params.targetLang,
+                        translatedByIndex = results,
+                    )
+                }
+                hasGoogleTranslationCache = results.isNotEmpty()
+                isGoogleTranslating = false
                 googleTranslationProgress = 100
+                if (results.isNotEmpty()) {
+                    isGoogleTranslationVisible = true
+                }
+                updateContent(settings)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                addGoogleLog("Simple translation failed: ${error.message ?: error::class.java.simpleName}")
+                googleRateLimited = false
+                isGoogleTranslating = false
+                googleTranslationProgress = 0
+                updateContent(settings)
             }
-
-            if (results.isNotEmpty()) {
-                isGoogleTranslationVisible = true
-                applyGoogleTranslationToContentBlocks(settings)
-            }
-            updateContent(settings)
         }
     }
 
@@ -1804,6 +1820,7 @@ class NovelReaderScreenModel(
     fun resumeGoogleTranslation() {
         if (!googleRateLimited) return
         googleRateLimited = false
+        addGoogleLog("Resume requested: restarting Google translation")
         startGoogleTranslation()
     }
 
@@ -1847,7 +1864,10 @@ class NovelReaderScreenModel(
             googleTranslatedByIndex = cached
             hasGoogleTranslationCache = true
             isGoogleTranslationVisible = true
-            applyGoogleTranslationToContentBlocks(settings)
+            addGoogleLog(
+                "Restored session cache: segments=${cached.size}, source=${settings.googleTranslationSourceLang}, target=${settings.googleTranslationTargetLang}, backend=simple",
+            )
+            updateContent(settings)
         }
     }
 
@@ -1861,21 +1881,44 @@ class NovelReaderScreenModel(
         }
     }
 
-    private fun applyGoogleTranslationToContentBlocks(settings: NovelReaderSettings) {
-        if (googleTranslatedByIndex.isEmpty()) return
-        val blocks = (mutableState.value as? State.Success)?.contentBlocks ?: return
-        val updated = blocks.mapIndexed { index, block ->
-            if (block is ContentBlock.Text && googleTranslatedByIndex.containsKey(index)) {
-                ContentBlock.Text(googleTranslatedByIndex[index]!!)
-            } else {
-                block
+    private fun applyGoogleTranslationToContentBlocks(blocks: List<ContentBlock>): List<ContentBlock> {
+        if (googleTranslatedByIndex.isEmpty()) return blocks
+        var textIndex = 0
+        var replacedCount = 0
+        val updated = blocks.map { block ->
+            when (block) {
+                is ContentBlock.Image -> block
+                is ContentBlock.Text -> {
+                    val translated = googleTranslatedByIndex[textIndex]
+                    textIndex += 1
+                    if (translated.isNullOrBlank()) {
+                        block
+                    } else {
+                        replacedCount += 1
+                        ContentBlock.Text(translated)
+                    }
+                }
             }
         }
-        mutableState.value = (mutableState.value as? State.Success)?.copy(contentBlocks = updated) ?: return
+        addGoogleLog(
+            "Applied to content blocks: replaced=$replacedCount/${blocks.count { it is ContentBlock.Text }}",
+        )
+        return updated
     }
 
     private fun addGoogleLog(message: String) {
-        googleLogs = googleLogs + message
+        val text = message.trim()
+        if (text.isBlank()) return
+        googleLogs = (listOf(text) + googleLogs).take(100)
+        logcat(LogPriority.DEBUG) { "[GoogleTranslate] $text" }
+    }
+
+    private fun updateGoogleProgressFromLog(message: String) {
+        val match = Regex("""Simple chunk (\d+)/(\d+)""").find(message) ?: return
+        val current = match.groupValues[1].toIntOrNull() ?: return
+        val total = match.groupValues[2].toIntOrNull()?.takeIf { it > 0 } ?: return
+        val progress = (current * 100) / total
+        googleTranslationProgress = maxOf(googleTranslationProgress, progress.coerceIn(0, 99))
     }
 
     private fun restoreGeminiTranslationFromCache(
@@ -1957,6 +2000,54 @@ class NovelReaderScreenModel(
                 }
             }
         }
+    }
+
+    private fun applyGoogleTranslationToRichContentBlocks(
+        blocks: List<NovelRichContentBlock>,
+    ): List<NovelRichContentBlock> {
+        if (!isGoogleTranslationVisible || googleTranslatedByIndex.isEmpty()) return blocks
+        var textIndex = 0
+        var replacedCount = 0
+        val updated = blocks.map { block ->
+            when (block) {
+                is NovelRichContentBlock.BlockQuote -> {
+                    val replacement = googleTranslatedByIndex[textIndex]
+                    textIndex += 1
+                    if (replacement.isNullOrBlank()) {
+                        block
+                    } else {
+                        replacedCount += 1
+                        block.copy(segments = listOf(NovelRichTextSegment(replacement)))
+                    }
+                }
+                is NovelRichContentBlock.Heading -> {
+                    val replacement = googleTranslatedByIndex[textIndex]
+                    textIndex += 1
+                    if (replacement.isNullOrBlank()) {
+                        block
+                    } else {
+                        replacedCount += 1
+                        block.copy(segments = listOf(NovelRichTextSegment(replacement)))
+                    }
+                }
+                is NovelRichContentBlock.Image -> block
+                is NovelRichContentBlock.HorizontalRule -> block
+                is NovelRichContentBlock.Paragraph -> {
+                    val replacement = googleTranslatedByIndex[textIndex]
+                    textIndex += 1
+                    if (replacement.isNullOrBlank()) {
+                        block
+                    } else {
+                        replacedCount += 1
+                        block.copy(segments = listOf(NovelRichTextSegment(replacement)))
+                    }
+                }
+            }
+        }
+        addGoogleLog(
+            "Applied to rich content blocks: replaced=$replacedCount/${blocks.count { it is NovelRichContentBlock.BlockQuote || it is NovelRichContentBlock.Heading || it is NovelRichContentBlock.Paragraph }}",
+        )
+        return updated
     }
     private fun buildRawHtmlFromContentBlocks(blocks: List<ContentBlock>): String {
         return buildString {

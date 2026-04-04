@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -698,76 +699,78 @@ internal fun NovelPageReaderPageContent(
             Column(
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                contentPage.blocks.forEach { block ->
-                    if (block.spacingBeforePx > 0) {
-                        Spacer(
-                            modifier = Modifier.height(
-                                with(density) { block.spacingBeforePx.toDp() },
-                            ),
-                        )
-                    }
-                    when (block) {
-                        is NovelPageContentBlock.Plain -> {
-                            NovelPageReaderTextBlock(
-                                text = if (readerSettings.bionicReading) {
-                                    toBionicText(block.text)
-                                } else {
-                                    AnnotatedString(block.text)
-                                },
-                                isChapterTitle = block.isChapterTitle,
-                                firstLineIndentEm = block.firstLineIndentEm,
-                                readerSettings = readerSettings,
-                                textColor = textColor,
-                                textBackground = textBackground,
-                                textAlign = readerSettings.textAlign,
-                                textTypeface = textTypeface,
-                                chapterTitleTypeface = chapterTitleTypeface,
-                                chapterTitleTextColor = chapterTitleTextColor,
-                                textShadowEnabled = readerSettings.textShadow,
-                                textShadowColor = readerSettings.textShadowColor,
-                                textShadowBlur = readerSettings.textShadowBlur,
-                                textShadowX = readerSettings.textShadowX,
-                                textShadowY = readerSettings.textShadowY,
-                                selectionRenderer = selectionRenderer,
-                                selectionSessionIdProvider = selectionSessionIdProvider,
-                                onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
-                                onPlainTap = onPlainTap,
-                                touchHandlingEnabled = touchHandlingEnabled,
-                                modifier = Modifier.fillMaxWidth(),
+                contentPage.blocks.forEachIndexed { index, block ->
+                    key(index, block) {
+                        if (block.spacingBeforePx > 0) {
+                            Spacer(
+                                modifier = Modifier.height(
+                                    with(density) { block.spacingBeforePx.toDp() },
+                                ),
                             )
                         }
-                        is NovelPageContentBlock.Rich -> {
-                            NovelPageReaderTextBlock(
-                                text = block.text,
-                                isChapterTitle = block.isChapterTitle,
-                                firstLineIndentEm = block.firstLineIndentEm,
-                                readerSettings = readerSettings,
-                                textColor = textColor,
-                                textBackground = textBackground,
-                                textAlign = readerSettings.textAlign,
-                                textTypeface = textTypeface,
-                                chapterTitleTypeface = chapterTitleTypeface,
-                                chapterTitleTextColor = chapterTitleTextColor,
-                                textShadowEnabled = readerSettings.textShadow,
-                                textShadowColor = readerSettings.textShadowColor,
-                                textShadowBlur = readerSettings.textShadowBlur,
-                                textShadowX = readerSettings.textShadowX,
-                                textShadowY = readerSettings.textShadowY,
-                                selectionRenderer = selectionRenderer,
-                                selectionSessionIdProvider = selectionSessionIdProvider,
-                                onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
-                                onPlainTap = onPlainTap,
-                                touchHandlingEnabled = touchHandlingEnabled,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
-                        is NovelPageContentBlock.Image -> {
-                            NovelPageReaderImageBlock(
-                                imageUrl = block.imageUrl,
-                                contentDescription = block.contentDescription,
-                                contentLayout = contentLayout,
-                                bookBottomInset = bookBottomInset,
-                            )
+                        when (block) {
+                            is NovelPageContentBlock.Plain -> {
+                                NovelPageReaderTextBlock(
+                                    text = if (readerSettings.bionicReading) {
+                                        toBionicText(block.text)
+                                    } else {
+                                        AnnotatedString(block.text)
+                                    },
+                                    isChapterTitle = block.isChapterTitle,
+                                    firstLineIndentEm = block.firstLineIndentEm,
+                                    readerSettings = readerSettings,
+                                    textColor = textColor,
+                                    textBackground = textBackground,
+                                    textAlign = readerSettings.textAlign,
+                                    textTypeface = textTypeface,
+                                    chapterTitleTypeface = chapterTitleTypeface,
+                                    chapterTitleTextColor = chapterTitleTextColor,
+                                    textShadowEnabled = readerSettings.textShadow,
+                                    textShadowColor = readerSettings.textShadowColor,
+                                    textShadowBlur = readerSettings.textShadowBlur,
+                                    textShadowX = readerSettings.textShadowX,
+                                    textShadowY = readerSettings.textShadowY,
+                                    selectionRenderer = selectionRenderer,
+                                    selectionSessionIdProvider = selectionSessionIdProvider,
+                                    onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+                                    onPlainTap = onPlainTap,
+                                    touchHandlingEnabled = touchHandlingEnabled,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                            is NovelPageContentBlock.Rich -> {
+                                NovelPageReaderTextBlock(
+                                    text = block.text,
+                                    isChapterTitle = block.isChapterTitle,
+                                    firstLineIndentEm = block.firstLineIndentEm,
+                                    readerSettings = readerSettings,
+                                    textColor = textColor,
+                                    textBackground = textBackground,
+                                    textAlign = readerSettings.textAlign,
+                                    textTypeface = textTypeface,
+                                    chapterTitleTypeface = chapterTitleTypeface,
+                                    chapterTitleTextColor = chapterTitleTextColor,
+                                    textShadowEnabled = readerSettings.textShadow,
+                                    textShadowColor = readerSettings.textShadowColor,
+                                    textShadowBlur = readerSettings.textShadowBlur,
+                                    textShadowX = readerSettings.textShadowX,
+                                    textShadowY = readerSettings.textShadowY,
+                                    selectionRenderer = selectionRenderer,
+                                    selectionSessionIdProvider = selectionSessionIdProvider,
+                                    onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+                                    onPlainTap = onPlainTap,
+                                    touchHandlingEnabled = touchHandlingEnabled,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                            is NovelPageContentBlock.Image -> {
+                                NovelPageReaderImageBlock(
+                                    imageUrl = block.imageUrl,
+                                    contentDescription = block.contentDescription,
+                                    contentLayout = contentLayout,
+                                    bookBottomInset = bookBottomInset,
+                                )
+                            }
                         }
                     }
                 }

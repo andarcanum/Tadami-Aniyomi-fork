@@ -10,6 +10,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.PreviewLightDark
@@ -26,6 +27,7 @@ fun TextPreferenceWidget(
     subtitle: String? = null,
     icon: ImageVector? = null,
     iconTint: Color = Color.Unspecified,
+    enabled: Boolean = true,
     widget: @Composable (() -> Unit)? = null,
     onPreferenceClick: (() -> Unit)? = null,
     onPreferenceLongClick: (() -> Unit)? = null,
@@ -33,7 +35,7 @@ fun TextPreferenceWidget(
     val isAurora = LocalSettingsUiStyle.current == SettingsUiStyle.Aurora
     val resolvedIconTint = if (iconTint == Color.Unspecified) settingsAccentColor() else iconTint
     BasePreferenceWidget(
-        modifier = modifier,
+        modifier = modifier.alpha(if (enabled) 1f else 0.6f),
         title = title,
         subcomponent = if (!subtitle.isNullOrBlank()) {
             {
@@ -60,7 +62,7 @@ fun TextPreferenceWidget(
         } else {
             null
         },
-        onClick = onPreferenceClick,
+        onClick = if (enabled) onPreferenceClick else null,
         onLongClick = onPreferenceLongClick,
         widget = widget,
     )

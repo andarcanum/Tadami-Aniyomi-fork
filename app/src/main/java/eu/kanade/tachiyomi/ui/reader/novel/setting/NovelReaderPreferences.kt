@@ -1281,6 +1281,10 @@ class NovelReaderPreferences(
                 deepSeekBaseUrl = override?.deepSeekBaseUrl ?: gemini.deepSeekBaseUrl,
                 deepSeekApiKey = override?.deepSeekApiKey ?: gemini.deepSeekApiKey,
                 deepSeekModel = override?.deepSeekModel ?: gemini.deepSeekModel,
+                googleTranslationEnabled = override?.googleTranslationEnabled ?: gemini.googleTranslationEnabled,
+                googleTranslationSourceLang = override?.googleTranslationSourceLang ?: gemini.googleTranslationSourceLang,
+                googleTranslationTargetLang = override?.googleTranslationTargetLang ?: gemini.googleTranslationTargetLang,
+                googleTranslationAutoStart = override?.googleTranslationAutoStart ?: gemini.googleTranslationAutoStart,
             )
         }.distinctUntilChanged()
     }

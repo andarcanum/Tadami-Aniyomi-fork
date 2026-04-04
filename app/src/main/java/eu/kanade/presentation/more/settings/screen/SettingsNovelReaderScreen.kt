@@ -121,6 +121,47 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import android.graphics.Color as AndroidColor
 
+internal enum class NovelReaderDisplaySettingKey {
+    GeminiEnabled,
+    GeminiPromptMode,
+    GoogleTranslateEnabled,
+}
+
+internal data class NovelReaderDisplayTopSettingSpec(
+    val key: NovelReaderDisplaySettingKey,
+    val title: String,
+    val subtitle: String? = null,
+    val enabled: Boolean = true,
+    val visible: Boolean = true,
+)
+
+internal fun novelReaderDisplayTopSettingSpecs(
+    geminiEnabled: Boolean,
+    googleTranslateEnabled: Boolean,
+    geminiEnabledTitle: String,
+    geminiPromptModeTitle: String,
+    googleTranslateEnabledTitle: String,
+    googleTranslateEnabledSubtitle: String?,
+): List<NovelReaderDisplayTopSettingSpec> = listOf(
+    NovelReaderDisplayTopSettingSpec(
+        key = NovelReaderDisplaySettingKey.GeminiEnabled,
+        title = geminiEnabledTitle,
+        enabled = !googleTranslateEnabled,
+    ),
+    NovelReaderDisplayTopSettingSpec(
+        key = NovelReaderDisplaySettingKey.GeminiPromptMode,
+        title = geminiPromptModeTitle,
+        enabled = geminiEnabled && !googleTranslateEnabled,
+        visible = geminiEnabled,
+    ),
+    NovelReaderDisplayTopSettingSpec(
+        key = NovelReaderDisplaySettingKey.GoogleTranslateEnabled,
+        title = googleTranslateEnabledTitle,
+        subtitle = googleTranslateEnabledSubtitle,
+        enabled = !geminiEnabled,
+    ),
+)
+
 object SettingsNovelReaderScreen : SearchableSettings {
 
     @ReadOnlyComposable
@@ -165,10 +206,11 @@ object SettingsNovelReaderScreen : SearchableSettings {
         val textShadowYPref = prefs.textShadowY()
         val textShadowY by textShadowYPref.collectAsState()
         val geminiEnabled by prefs.geminiEnabled().collectAsState()
+        val googleTranslationEnabled by prefs.googleTranslationEnabled().collectAsState()
         val fontImportFailedMessage = stringResource(AYMR.strings.novel_reader_font_import_failed)
         val surfaceStrategy = remember { resolveNovelReaderSettingsSurfaceStrategy() }
         var fontCatalogVersion by remember { mutableIntStateOf(0) }
-        val readerFontCatalog = remember(fontCatalogVersion, selectedFontFamily) {
+        val readerFontCatalog = remember(fontCatalogVersion) {
             buildNovelReaderFontCatalog(context)
         }
         val fontPicker = rememberLauncherForActivityResult(
@@ -188,14 +230,25 @@ object SettingsNovelReaderScreen : SearchableSettings {
         } else {
             stringResource(AYMR.strings.novel_reader_global_settings_quick_dialog_summary)
         }
+        val displayTopSettings = novelReaderDisplayTopSettingSpecs(
+            geminiEnabled = geminiEnabled,
+            googleTranslateEnabled = googleTranslationEnabled,
+            geminiEnabledTitle = stringResource(AYMR.strings.novel_reader_gemini_enabled),
+            geminiPromptModeTitle = stringResource(AYMR.strings.novel_reader_gemini_prompt_mode),
+            googleTranslateEnabledTitle = stringResource(AYMR.strings.novel_reader_google_translate_enable),
+            googleTranslateEnabledSubtitle = stringResource(
+                AYMR.strings.novel_reader_google_translate_enable_summary,
+            ),
+        )
 
         return Preference.PreferenceGroup(
             title = stringResource(AYMR.strings.novel_reader_display),
             preferenceItems = persistentListOf(
                 Preference.PreferenceItem.SwitchPreference(
                     preference = prefs.geminiEnabled(),
-                    title = stringResource(AYMR.strings.novel_reader_gemini_enabled),
+                    title = displayTopSettings[0].title,
                     subtitle = stringResource(AYMR.strings.novel_reader_gemini_enabled_summary),
+                    enabled = displayTopSettings[0].enabled,
                 ),
                 Preference.PreferenceItem.ListPreference(
                     preference = prefs.geminiPromptMode(),
@@ -205,8 +258,15 @@ object SettingsNovelReaderScreen : SearchableSettings {
                         ),
                         GeminiPromptMode.ADULT_18 to stringResource(AYMR.strings.novel_reader_gemini_prompt_mode_adult),
                     ),
-                    title = stringResource(AYMR.strings.novel_reader_gemini_prompt_mode),
-                    enabled = geminiEnabled,
+                    title = displayTopSettings[1].title,
+                    enabled = displayTopSettings[1].enabled,
+                    visible = displayTopSettings[1].visible,
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = prefs.googleTranslationEnabled(),
+                    title = displayTopSettings[2].title,
+                    subtitle = displayTopSettings[2].subtitle,
+                    enabled = displayTopSettings[2].enabled,
                 ),
                 Preference.PreferenceItem.SliderPreference(
                     value = fontSize,
@@ -1222,11 +1282,6 @@ object SettingsNovelReaderScreen : SearchableSettings {
             )
         }
 
-        // Google Translate
-        items += Preference.PreferenceItem.SwitchPreference(
-            preference = prefs.googleTranslationEnabled(),
-            title = stringResource(AYMR.strings.novel_reader_google_translate_enable),
-        )
         items += Preference.PreferenceItem.EditTextInfoPreference(
             preference = prefs.googleTranslationSourceLang(),
             dialogSubtitle = null,
@@ -1243,7 +1298,6 @@ object SettingsNovelReaderScreen : SearchableSettings {
             preference = prefs.googleTranslationAutoStart(),
             title = stringResource(AYMR.strings.novel_reader_google_translate_auto_start),
         )
-
         items += Preference.PreferenceItem.MultiLineEditTextPreference(
             preference = prefs.customCSS(),
             title = stringResource(AYMR.strings.novel_reader_custom_css),

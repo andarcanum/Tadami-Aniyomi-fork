@@ -5,7 +5,7 @@ data class GoogleTranslationParams(
     val targetLang: String,
 )
 
-data class GoogleTranslationResult(
-    val translatedByIndex: Map<Int, String>,
+data class GoogleTranslationBatchResponse(
+    val translatedByText: Map<String, String>,
     val detectedSourceLanguage: String? = null,
 )

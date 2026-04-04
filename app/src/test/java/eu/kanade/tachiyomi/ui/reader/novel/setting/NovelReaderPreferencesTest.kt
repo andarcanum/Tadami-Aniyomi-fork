@@ -569,6 +569,41 @@ class NovelReaderPreferencesTest {
         collectedDeferred.await() shouldBe null
     }
 
+    @Test
+    fun `settings flow keeps google translation settings when renderer changes`() = runTest {
+        val prefs = createPrefs()
+        val sourceId = 123L
+
+        prefs.googleTranslationEnabled().set(true)
+        prefs.googleTranslationSourceLang().set("English")
+        prefs.googleTranslationTargetLang().set("Russian")
+        prefs.googleTranslationAutoStart().set(true)
+
+        val initialSettings = prefs.settingsFlow(sourceId).first()
+        initialSettings.googleTranslationEnabled shouldBe true
+        initialSettings.googleTranslationSourceLang shouldBe "English"
+        initialSettings.googleTranslationTargetLang shouldBe "Russian"
+        initialSettings.googleTranslationAutoStart shouldBe true
+
+        val updatedSettingsDeferred = async {
+            withTimeoutOrNull(1_000) {
+                prefs.settingsFlow(sourceId)
+                    .drop(1)
+                    .first()
+            }
+        }
+        runCurrent()
+
+        prefs.preferWebViewRenderer().set(true)
+
+        val updatedSettings = updatedSettingsDeferred.await()
+        updatedSettings?.preferWebViewRenderer shouldBe true
+        updatedSettings?.googleTranslationEnabled shouldBe true
+        updatedSettings?.googleTranslationSourceLang shouldBe "English"
+        updatedSettings?.googleTranslationTargetLang shouldBe "Russian"
+        updatedSettings?.googleTranslationAutoStart shouldBe true
+    }
+
     private class FakePreferenceStore : PreferenceStore {
         private val strings = mutableMapOf<String, Preference<String>>()
         private val longs = mutableMapOf<String, Preference<Long>>()

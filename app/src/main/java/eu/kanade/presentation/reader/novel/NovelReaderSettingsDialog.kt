@@ -44,6 +44,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -74,6 +75,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
@@ -785,7 +787,7 @@ private fun ReadingTab(
     var renameTarget by remember { mutableStateOf<NovelReaderCustomBackgroundItem?>(null) }
     var renameInput by remember { mutableStateOf("") }
     var pendingReplaceCustomId by remember { mutableStateOf<String?>(null) }
-    val readerFontCatalog = remember(fontCatalogVersion, settings.fontFamily) {
+    val readerFontCatalog = remember(fontCatalogVersion) {
         buildNovelReaderFontCatalog(context)
     }
 
@@ -1708,7 +1710,7 @@ private fun FontExamplesRow(
             style = MaterialTheme.typography.bodyMedium,
         )
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(builtInFonts) { option ->
+            items(builtInFonts, key = { it.id }) { option ->
                 val fontFamily = option.fontResId?.let { FontFamily(Font(it)) }
                 val isSelected = option.id == selected
                 Surface(
@@ -1834,40 +1836,42 @@ private fun ReaderFontSection(
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     fonts.forEach { option ->
-                        val typeface = remember(option.id) { loadNovelReaderTypeface(context, option) }
-                        val fontFamily = remember(option.id, typeface) {
-                            resolveNovelReaderComposeFontFamily(option, typeface)
-                        }
-                        val isSelected = option.id == selected
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = if (isSelected) {
-                                MaterialTheme.colorScheme.primaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceVariant
-                            },
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onSelect(option.id) }
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
+                        key(option.id) {
+                            val typeface = remember(option.id) { loadNovelReaderTypeface(context, option) }
+                            val fontFamily = remember(option.id, typeface) {
+                                resolveNovelReaderComposeFontFamily(option, typeface)
+                            }
+                            val isSelected = option.id == selected
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (isSelected) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                },
                             ) {
-                                Text(
-                                    text = option.label,
-                                    style = MaterialTheme.typography.labelLarge.copy(fontFamily = fontFamily),
-                                    modifier = Modifier.weight(1f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                if (option.source == NovelReaderFontSource.USER_IMPORTED) {
-                                    IconButton(onClick = { onRemoveImported(option) }) {
-                                        Icon(
-                                            imageVector = Icons.Filled.DeleteOutline,
-                                            contentDescription = stringResource(AYMR.strings.novel_reader_font_remove),
-                                        )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onSelect(option.id) }
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = option.label,
+                                        style = MaterialTheme.typography.labelLarge.copy(fontFamily = fontFamily),
+                                        modifier = Modifier.weight(1f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    if (option.source == NovelReaderFontSource.USER_IMPORTED) {
+                                        IconButton(onClick = { onRemoveImported(option) }) {
+                                            Icon(
+                                                imageVector = Icons.Filled.DeleteOutline,
+                                                contentDescription = stringResource(AYMR.strings.novel_reader_font_remove),
+                                            )
+                                        }
                                     }
                                 }
                             }

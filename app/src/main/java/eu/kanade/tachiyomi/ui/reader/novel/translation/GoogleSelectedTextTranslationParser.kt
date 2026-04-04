@@ -7,7 +7,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 internal data class GoogleSelectedTextTranslationParsedPayload(
-    val translation: String,
+    val translations: List<String>,
     val detectedSourceLanguage: String? = null,
 )
 
@@ -21,20 +21,18 @@ internal object GoogleSelectedTextTranslationParser {
             json.parseToJsonElement(rawBody.trim())
         }.getOrNull() as? JsonArray ?: return null
 
-        val translation = payload
-            .firstOrNull()
-            .asArrayOrNull()
-            ?.flatMap { segment ->
-                segment.asArrayOrNull()
+        val translationBlocks = payload.getOrNull(0).asArrayOrNull() ?: return null
+
+        val translations = translationBlocks
+            .mapNotNull { element ->
+                element.asArrayOrNull()
                     ?.firstOrNull()
                     .asStringOrNull()
-                    .let { text -> text?.takeIf { it.isNotBlank() }?.let(::listOf).orEmpty() }
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
             }
-            ?.joinToString(separator = "")
-            ?.trim()
-            .orEmpty()
-
-        if (translation.isBlank()) return null
+            .takeIf { it.isNotEmpty() }
+            ?: return null
 
         val detectedSourceLanguage = payload
             .getOrNull(2)
@@ -43,7 +41,7 @@ internal object GoogleSelectedTextTranslationParser {
             ?.takeIf { it.isNotBlank() }
 
         return GoogleSelectedTextTranslationParsedPayload(
-            translation = translation,
+            translations = translations,
             detectedSourceLanguage = detectedSourceLanguage,
         )
     }

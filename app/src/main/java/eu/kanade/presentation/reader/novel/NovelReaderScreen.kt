@@ -84,6 +84,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -185,6 +186,16 @@ import java.io.File
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
+private enum class TranslationKind {
+    Gemini,
+    Google,
+}
+
+private data class TranslationSwitchRequest(
+    val from: TranslationKind,
+    val to: TranslationKind,
+)
+
 @Composable
 fun NovelReaderScreen(
     state: NovelReaderScreenModel.State.Success,
@@ -238,6 +249,10 @@ fun NovelReaderScreen(
     onResumeGoogleTranslation: () -> Unit = {},
     onToggleGoogleTranslationVisibility: () -> Unit = {},
     onClearGoogleTranslation: () -> Unit = {},
+    onSetGoogleTranslationEnabled: (Boolean) -> Unit = {},
+    onSetGoogleTranslationAutoStart: (Boolean) -> Unit = {},
+    onSetGoogleTranslationSourceLang: (String) -> Unit = {},
+    onSetGoogleTranslationTargetLang: (String) -> Unit = {},
     onOpenPreviousChapter: ((Long) -> Unit)? = null,
     onOpenNextChapter: ((Long) -> Unit)? = null,
     showReaderUi: Boolean,
@@ -302,6 +317,9 @@ fun NovelReaderScreen(
     var autoScrollExpanded by remember(state.chapter.id) { mutableStateOf(false) }
     var showGeminiDialog by remember(state.chapter.id) { mutableStateOf(false) }
     var showGoogleDialog by remember(state.chapter.id) { mutableStateOf(false) }
+    var translationSwitchRequest by remember(state.chapter.id) {
+        mutableStateOf<TranslationSwitchRequest?>(null)
+    }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     val shouldHideWebViewUntilReveal = state.enableJs
     var webProgressPercent by remember(state.chapter.id) {
@@ -340,6 +358,52 @@ fun NovelReaderScreen(
     val viewConfiguration = LocalViewConfiguration.current
     val batteryLevel by rememberBatteryLevel(context)
     val timeText by rememberCurrentTimeText(context)
+    val geminiTranslationLabel = stringResource(AYMR.strings.novel_reader_gemini_button)
+    val googleTranslationLabel = stringResource(AYMR.strings.novel_reader_google_translate)
+    val disableGeminiForGoogleMessage = stringResource(
+        AYMR.strings.novel_reader_google_translate_disable_other_first,
+        geminiTranslationLabel,
+    )
+    val disableGoogleForGeminiMessage = stringResource(
+        AYMR.strings.novel_reader_google_translate_disable_other_first,
+        googleTranslationLabel,
+    )
+    fun requestGoogleTranslationStart() {
+        when {
+            state.isGeminiTranslating -> {
+                Toast.makeText(
+                    context,
+                    disableGeminiForGoogleMessage,
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+            state.isGeminiTranslationVisible || state.hasGeminiTranslationCache -> {
+                translationSwitchRequest = TranslationSwitchRequest(
+                    from = TranslationKind.Gemini,
+                    to = TranslationKind.Google,
+                )
+            }
+            else -> onStartGoogleTranslation()
+        }
+    }
+    fun requestGeminiTranslationStart() {
+        when {
+            state.isGoogleTranslating -> {
+                Toast.makeText(
+                    context,
+                    disableGoogleForGeminiMessage,
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+            state.isGoogleTranslationVisible || state.hasGoogleTranslationCache -> {
+                translationSwitchRequest = TranslationSwitchRequest(
+                    from = TranslationKind.Google,
+                    to = TranslationKind.Gemini,
+                )
+            }
+            else -> onStartGeminiTranslation()
+        }
+    }
     val missingCustomBackgroundMessage =
         stringResource(AYMR.strings.novel_reader_background_custom_missing_fallback)
     val customBackgroundId = state.readerSettings.customBackgroundId
@@ -360,24 +424,8 @@ fun NovelReaderScreen(
             )
         }
 
-        if (showGoogleDialog && state.readerSettings.googleTranslationEnabled) {
-            GoogleTranslationDialog(
-                readerSettings = state.readerSettings,
-                isTranslating = state.isGoogleTranslating,
-                translationProgress = state.googleTranslationProgress,
-                isVisible = state.isGoogleTranslationVisible,
-                hasCache = state.hasGoogleTranslationCache,
-                logs = state.googleLogs,
-                onStart = onStartGoogleTranslation,
-                onStop = onStopGoogleTranslation,
-                onResume = onResumeGoogleTranslation,
-                onToggleVisibility = onToggleGoogleTranslationVisibility,
-                onClear = onClearGoogleTranslation,
-                onDismiss = { showGoogleDialog = false },
-            )
-        }
+        readNovelReaderCustomBackgroundItems(context)
     }
-}
     val customBackgroundExists = remember(
         customBackgroundId,
         customBackgroundPath,
@@ -522,7 +570,7 @@ fun NovelReaderScreen(
             Toast.makeText(context, missingCustomBackgroundMessage, Toast.LENGTH_SHORT).show()
         }
     }
-    val readerFontCatalog = remember(state.readerSettings.fontFamily) {
+    val readerFontCatalog = remember(context) {
         buildNovelReaderFontCatalog(context)
     }
     val selectedReaderFont = remember(state.readerSettings.fontFamily, readerFontCatalog) {
@@ -1561,7 +1609,10 @@ fun NovelReaderScreen(
                         ),
                     ) {
                         if (useRichNativeScroll) {
-                            itemsIndexed(richScrollBlocks) { index, block ->
+                            itemsIndexed(
+                                richScrollBlocks,
+                                key = { index, block -> "rich-$index-${block.hashCode()}" },
+                            ) { index, block ->
                                 NovelRichNativeScrollItem(
                                     block = block,
                                     index = index,
@@ -1584,7 +1635,10 @@ fun NovelReaderScreen(
                                 )
                             }
                         } else {
-                            itemsIndexed(scrollContentBlocks) { index, block ->
+                            itemsIndexed(
+                                scrollContentBlocks,
+                                key = { index, block -> "plain-$index-${block.hashCode()}" },
+                            ) { index, block ->
                                 when (block) {
                                     is NovelReaderScreenModel.ContentBlock.Text -> {
                                         val isChapterTitle = index == 0 &&
@@ -2525,7 +2579,7 @@ fun NovelReaderScreen(
                                     when {
                                         state.isGeminiTranslating -> onStopGeminiTranslation()
                                         hasTranslationResult -> onToggleGeminiTranslationVisibility()
-                                        else -> onStartGeminiTranslation()
+                                        else -> requestGeminiTranslationStart()
                                     }
                                 },
                         ) {
@@ -2599,7 +2653,7 @@ fun NovelReaderScreen(
                                     when {
                                         state.isGoogleTranslating -> onStopGoogleTranslation()
                                         hasGoogleResult -> onToggleGoogleTranslationVisibility()
-                                        else -> onStartGoogleTranslation()
+                                        else -> requestGoogleTranslationStart()
                                     }
                                 },
                         ) {
@@ -2957,7 +3011,7 @@ fun NovelReaderScreen(
                 isVisible = state.isGeminiTranslationVisible,
                 hasCache = state.hasGeminiTranslationCache,
                 logs = state.geminiLogs,
-                onStart = onStartGeminiTranslation,
+                onStart = { requestGeminiTranslationStart() },
                 onStop = onStopGeminiTranslation,
                 onToggleVisibility = onToggleGeminiTranslationVisibility,
                 onClear = onClearGeminiTranslation,
@@ -3009,6 +3063,69 @@ fun NovelReaderScreen(
                 isDeepSeekModelsLoading = state.isDeepSeekModelsLoading,
                 isTestingDeepSeekConnection = state.isTestingDeepSeekConnection,
                 onDismiss = { showGeminiDialog = false },
+            )
+        }
+        if (showGoogleDialog && state.readerSettings.googleTranslationEnabled) {
+            GoogleTranslationDialog(
+                readerSettings = state.readerSettings,
+                isTranslating = state.isGoogleTranslating,
+                translationProgress = state.googleTranslationProgress,
+                isVisible = state.isGoogleTranslationVisible,
+                hasCache = state.hasGoogleTranslationCache,
+                onStart = { requestGoogleTranslationStart() },
+                onStop = onStopGoogleTranslation,
+                onResume = onResumeGoogleTranslation,
+                onToggleVisibility = onToggleGoogleTranslationVisibility,
+                onClear = onClearGoogleTranslation,
+                onSetAutoStart = onSetGoogleTranslationAutoStart,
+                onSetSourceLang = onSetGoogleTranslationSourceLang,
+                onSetTargetLang = onSetGoogleTranslationTargetLang,
+                onDismiss = { showGoogleDialog = false },
+            )
+        }
+        if (translationSwitchRequest != null) {
+            val switchRequest = translationSwitchRequest!!
+            val fromLabel = when (switchRequest.from) {
+                TranslationKind.Gemini -> "Gemini"
+                TranslationKind.Google -> stringResource(AYMR.strings.novel_reader_google_translate)
+            }
+            val toLabel = when (switchRequest.to) {
+                TranslationKind.Gemini -> "Gemini"
+                TranslationKind.Google -> stringResource(AYMR.strings.novel_reader_google_translate)
+            }
+            AlertDialog(
+                onDismissRequest = { translationSwitchRequest = null },
+                title = {
+                    Text(
+                        text = stringResource(
+                            AYMR.strings.novel_reader_google_translate_switch_confirm,
+                            toLabel,
+                            fromLabel,
+                        ),
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            when (switchRequest.from) {
+                                TranslationKind.Gemini -> onClearGeminiTranslation()
+                                TranslationKind.Google -> onClearGoogleTranslation()
+                            }
+                            translationSwitchRequest = null
+                            when (switchRequest.to) {
+                                TranslationKind.Gemini -> onStartGeminiTranslation()
+                                TranslationKind.Google -> onStartGoogleTranslation()
+                            }
+                        },
+                    ) {
+                        Text(text = "Switch")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { translationSwitchRequest = null }) {
+                        Text(text = "Cancel")
+                    }
+                },
             )
         }
     }

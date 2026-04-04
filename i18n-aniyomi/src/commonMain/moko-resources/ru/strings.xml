@@ -1506,7 +1506,11 @@
     <string name="novel_reader_google_translate">Google Переводчик</string>
     <string name="novel_reader_google_translate_source">Язык источника</string>
     <string name="novel_reader_google_translate_target">Язык перевода</string>
-    <string name="novel_reader_google_translate_enable">Включить Google Переводчик</string>
+    <string name="novel_reader_google_translate_send_mode">Режим отправки</string>
+    <string name="novel_reader_google_translate_send_mode_current">Как сейчас</string>
+    <string name="novel_reader_google_translate_send_mode_whole_text">Целиком</string>
+    <string name="novel_reader_google_translate_enable">Включить Google переводчик</string>
+    <string name="novel_reader_google_translate_enable_summary">Показывает элементы Google переводчика в ридере ранобэ (Google меню и кнопку над слайдером)</string>
     <string name="novel_reader_google_translate_auto_start">Автоперевод при загрузке главы</string>
     <string name="novel_reader_google_translate_start">Начать перевод</string>
     <string name="novel_reader_google_translate_stop">Остановить перевод</string>
@@ -1517,6 +1521,11 @@
     <string name="novel_reader_google_translate_translated">Перевод</string>
     <string name="novel_reader_google_translate_clear">Очистить перевод</string>
     <string name="novel_reader_google_translate_progress">Перевод: %1$d%%</string>
+    <string name="novel_reader_google_translate_backend_simple">Движок: Google Переводчик (Простой)</string>
+    <string name="novel_reader_google_translate_show_translation">Показать перевод</string>
+    <string name="novel_reader_google_translate_hide_translation">Скрыть перевод</string>
+    <string name="novel_reader_google_translate_retranslate">Перевести заново</string>
+    <string name="novel_reader_google_translate_log">Лог:</string>
     <string name="novel_reader_google_translate_rate_limited">Ограничение частоты. Нажмите Продолжить для повтора.</string>
     <string name="novel_reader_google_translate_error">Ошибка перевода: %1$s</string>
 </resources>

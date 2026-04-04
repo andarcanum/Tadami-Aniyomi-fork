@@ -1468,7 +1468,11 @@
     <string name="novel_reader_google_translate">Google Translate</string>
     <string name="novel_reader_google_translate_source">Source language</string>
     <string name="novel_reader_google_translate_target">Target language</string>
+    <string name="novel_reader_google_translate_send_mode">Send mode</string>
+    <string name="novel_reader_google_translate_send_mode_current">As is</string>
+    <string name="novel_reader_google_translate_send_mode_whole_text">Whole text</string>
     <string name="novel_reader_google_translate_enable">Enable Google Translate</string>
+    <string name="novel_reader_google_translate_enable_summary">Shows Google Translate controls in novel reader (Google menu and quick button above seekbar)</string>
     <string name="novel_reader_google_translate_auto_start">Auto-translate on chapter load</string>
     <string name="novel_reader_google_translate_start">Start Translation</string>
     <string name="novel_reader_google_translate_stop">Stop Translation</string>
@@ -1479,6 +1483,11 @@
     <string name="novel_reader_google_translate_translated">Translation</string>
     <string name="novel_reader_google_translate_clear">Clear Translation</string>
     <string name="novel_reader_google_translate_progress">Translating: %1$d%%</string>
+    <string name="novel_reader_google_translate_backend_simple">Backend: Google Translate (Simple)</string>
+    <string name="novel_reader_google_translate_show_translation">Show Translation</string>
+    <string name="novel_reader_google_translate_hide_translation">Hide Translation</string>
+    <string name="novel_reader_google_translate_retranslate">Re-translate</string>
+    <string name="novel_reader_google_translate_log">Log:</string>
     <string name="novel_reader_google_translate_rate_limited">Rate limited. Tap Resume to retry.</string>
     <string name="novel_reader_google_translate_error">Translation error: %1$s</string>
 </resources>

@@ -95,7 +95,7 @@ internal class GoogleUnofficialSelectedTextTranslationProvider(
             clearState(requestKey)
             return NovelSelectedTextTranslationProviderOutcome.Success(
                 result = NovelSelectedTextTranslationResult(
-                    translation = parsed.translation,
+                    translation = parsed.translations.joinToString(separator = "").trim(),
                     detectedSourceLanguage = parsed.detectedSourceLanguage,
                     providerFingerprint = fingerprint,
                 ),
