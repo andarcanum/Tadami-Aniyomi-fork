@@ -2049,7 +2049,8 @@ class NovelReaderScreenModel(
             }
         }
         val richContentBlockCount = blocks.count {
-            it is NovelRichContentBlock.BlockQuote || it is NovelRichContentBlock.Heading ||
+            it is NovelRichContentBlock.BlockQuote ||
+                it is NovelRichContentBlock.Heading ||
                 it is NovelRichContentBlock.Paragraph
         }
         addGoogleLog("Applied to rich content blocks: replaced=$replacedCount/$richContentBlockCount")
