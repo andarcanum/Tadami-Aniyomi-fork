@@ -554,6 +554,52 @@ private fun GeneralTab(
             formatSubtitle = true,
         )
 
+        SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_google_translate))
+
+        SwitchPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_google_translate_enable),
+            checked = settings.googleTranslationEnabled,
+            onCheckedChanged = {
+                update(it, { o, v -> o.copy(googleTranslationEnabled = v) }, { preferences.googleTranslationEnabled().set(it) })
+            },
+        )
+
+        EditTextPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_google_translate_source),
+            subtitle = "%s",
+            icon = null,
+            value = settings.googleTranslationSourceLang,
+            onConfirm = {
+                update(it, { o, v -> o.copy(googleTranslationSourceLang = v) }, { preferences.googleTranslationSourceLang().set(it) })
+                true
+            },
+            singleLine = true,
+            canBeBlank = false,
+            formatSubtitle = true,
+        )
+
+        EditTextPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_google_translate_target),
+            subtitle = "%s",
+            icon = null,
+            value = settings.googleTranslationTargetLang,
+            onConfirm = {
+                update(it, { o, v -> o.copy(googleTranslationTargetLang = v) }, { preferences.googleTranslationTargetLang().set(it) })
+                true
+            },
+            singleLine = true,
+            canBeBlank = false,
+            formatSubtitle = true,
+        )
+
+        SwitchPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_google_translate_auto_start),
+            checked = settings.googleTranslationAutoStart,
+            onCheckedChanged = {
+                update(it, { o, v -> o.copy(googleTranslationAutoStart = v) }, { preferences.googleTranslationAutoStart().set(it) })
+            },
+        )
+
         SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_advanced))
 
         SwitchPreferenceWidget(
