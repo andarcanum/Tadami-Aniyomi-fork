@@ -1844,15 +1844,13 @@ class NovelReaderScreenModel(
         hasGoogleTranslationCache = false
         googleLogs = emptyList()
         googleRateLimited = false
-        if (chapter != null) {
-            googleSessionCache.remove(
-                chapterId = chapter.id,
-                sourceLang =
-                (mutableState.value as? State.Success)?.readerSettings?.googleTranslationSourceLang ?: "auto",
-                targetLang =
-                (mutableState.value as? State.Success)?.readerSettings?.googleTranslationTargetLang ?: "Russian",
-            )
-        }
+        googleSessionCache.remove(
+            chapterId = chapter.id,
+            sourceLang =
+            (mutableState.value as? State.Success)?.readerSettings?.googleTranslationSourceLang ?: "auto",
+            targetLang =
+            (mutableState.value as? State.Success)?.readerSettings?.googleTranslationTargetLang ?: "Russian",
+        )
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         updateContent(settings)
     }
