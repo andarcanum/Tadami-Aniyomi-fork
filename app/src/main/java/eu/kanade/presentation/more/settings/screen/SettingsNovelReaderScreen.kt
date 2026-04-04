@@ -1223,7 +1223,7 @@ object SettingsNovelReaderScreen : SearchableSettings {
         }
 
         // Google Translate
-        items += Preference.PreferenceItem.Switch(
+        items += Preference.PreferenceItem.SwitchPreference(
             preference = prefs.googleTranslationEnabled(),
             title = stringResource(AYMR.strings.novel_reader_google_translate_enable),
         )
@@ -1239,7 +1239,7 @@ object SettingsNovelReaderScreen : SearchableSettings {
             title = stringResource(AYMR.strings.novel_reader_google_translate_target),
             subtitle = "%s",
         )
-        items += Preference.PreferenceItem.Switch(
+        items += Preference.PreferenceItem.SwitchPreference(
             preference = prefs.googleTranslationAutoStart(),
             title = stringResource(AYMR.strings.novel_reader_google_translate_auto_start),
         )
