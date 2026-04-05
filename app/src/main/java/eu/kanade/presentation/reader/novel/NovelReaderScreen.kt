@@ -1761,7 +1761,10 @@ fun NovelReaderScreen(
                     }
                 }
             } else {
-                val backgroundColor = textBackground.toArgb()
+                val backgroundColor = resolveReaderWebViewBackgroundColor(
+                    isBackgroundMode = isBackgroundMode,
+                    backgroundColor = textBackground,
+                )
                 val baseUrl = remember(state.chapterWebUrl) {
                     state.chapterWebUrl
                 }

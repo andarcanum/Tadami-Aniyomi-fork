@@ -5,6 +5,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
@@ -63,6 +64,16 @@ class NovelReaderUiVisibilityTest {
     fun `background mode resolves dark text on bright backgrounds`() {
         val textColor = resolveReaderTextColorForBackgroundMode(averageLuminance = 0.82f)
         assertTrue(textColor.luminance() < 0.5f)
+    }
+
+    @Test
+    fun `background mode keeps webview background transparent`() {
+        val backgroundColor = resolveReaderWebViewBackgroundColor(
+            isBackgroundMode = true,
+            backgroundColor = Color.White,
+        )
+
+        assertEquals(Color.Transparent.toArgb(), backgroundColor)
     }
 
     @Test

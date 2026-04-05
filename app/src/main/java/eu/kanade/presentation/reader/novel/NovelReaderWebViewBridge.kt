@@ -8,6 +8,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.core.content.res.ResourcesCompat
@@ -819,6 +820,17 @@ internal fun resolveReaderTextColorForBackgroundMode(averageLuminance: Float): C
         Color(0xFF111111)
     } else {
         Color(0xFFEDEDED)
+    }
+}
+
+internal fun resolveReaderWebViewBackgroundColor(
+    isBackgroundMode: Boolean,
+    backgroundColor: Color,
+): Int {
+    return if (isBackgroundMode) {
+        Color.Transparent.toArgb()
+    } else {
+        backgroundColor.toArgb()
     }
 }
 

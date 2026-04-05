@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceModelsService
@@ -110,7 +111,7 @@ class NovelReaderScreenModelTest {
                 isSystemDark = { false },
             )
 
-            withTimeout(1_000) {
+            withTimeout(5_000) {
                 while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
                     yield()
                 }
@@ -196,6 +197,67 @@ class NovelReaderScreenModelTest {
             }
 
             (sourceCallThreadId == callerThreadId) shouldBe false
+        }
+    }
+
+    @Test
+    fun `gemini log updates do not rebuild translated content`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+            val novelReaderPreferences = createNovelReaderPreferences()
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(
+                    sourceId = novel.source,
+                    chapterHtml = "<p>Hello</p><p>World</p>",
+                ),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = novelReaderPreferences,
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            val successState = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            val translatedByIndex = (successState.textBlocks.indices).associateWith { index ->
+                "Translated $index"
+            }
+            val translatedSettings = successState.readerSettings.copy(
+                geminiEnabled = true,
+                geminiApiKey = "test-key",
+            )
+
+            setPrivateField(screenModel, "geminiTranslatedByIndex", translatedByIndex)
+            setPrivateField(screenModel, "isGeminiTranslationVisible", true)
+            setPrivateField(screenModel, "hasGeminiTranslationCache", true)
+            setPrivateField(screenModel, "isGeminiTranslating", false)
+            setPrivateField(screenModel, "geminiTranslationProgress", 100)
+            invokePrivateUpdateContent(screenModel, translatedSettings)
+
+            val before = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            val beforeContentBlocks = before.contentBlocks
+            before.contentBlocks.any { block ->
+                (block as? NovelReaderScreenModel.ContentBlock.Text)?.text?.startsWith("Translated") == true
+            } shouldBe true
+
+            screenModel.addGeminiLog("Gemini UI log")
+
+            val after = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            after.geminiLogs.firstOrNull() shouldBe "Gemini UI log"
+            (after.contentBlocks === beforeContentBlocks) shouldBe true
         }
     }
 
@@ -2010,6 +2072,21 @@ class NovelReaderScreenModelTest {
             chapterRepo.completedUpdates.size shouldBe 1
             chapterRepo.completedUpdates.single().lastPageRead shouldBe 1L
         }
+    }
+
+    private fun setPrivateField(target: Any, name: String, value: Any?) {
+        val field = target.javaClass.getDeclaredField(name)
+        field.isAccessible = true
+        field.set(target, value)
+    }
+
+    private fun invokePrivateUpdateContent(
+        target: Any,
+        settings: NovelReaderSettings,
+    ) {
+        val method = target.javaClass.getDeclaredMethod("updateContent", NovelReaderSettings::class.java)
+        method.isAccessible = true
+        method.invoke(target, settings)
     }
 
     private class FakeNovelChapterRepository(

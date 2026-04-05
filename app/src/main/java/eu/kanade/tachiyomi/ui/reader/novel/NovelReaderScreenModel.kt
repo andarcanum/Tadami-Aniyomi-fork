@@ -1079,13 +1079,11 @@ class NovelReaderScreenModel(
         val text = message.trim()
         if (text.isBlank()) return
         geminiLogs = (listOf(text) + geminiLogs).take(100)
-        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
-        updateContent(settings)
+        refreshGeminiUiState()
     }
     fun clearGeminiLogs() {
         geminiLogs = emptyList()
-        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
-        updateContent(settings)
+        refreshGeminiUiState()
     }
     fun clearAllGeminiTranslationCache() {
         NovelReaderTranslationDiskCacheStore.clear()
@@ -1093,8 +1091,7 @@ class NovelReaderScreenModel(
         val chapter = currentChapter ?: return
         if (NovelReaderTranslationDiskCacheStore.get(chapter.id) == null) {
             hasGeminiTranslationCache = false
-            val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
-            updateContent(settings)
+            refreshGeminiUiState()
         }
     }
     fun setGeminiApiKey(value: String) = updateGeminiSetting(
@@ -1514,6 +1511,16 @@ class NovelReaderScreenModel(
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         updateContent(settings)
     }
+    private fun refreshGeminiUiState() {
+        val state = mutableState.value as? State.Success ?: return
+        mutableState.value = state.copy(
+            isGeminiTranslating = isGeminiTranslating,
+            geminiTranslationProgress = geminiTranslationProgress,
+            isGeminiTranslationVisible = isGeminiTranslationVisible,
+            hasGeminiTranslationCache = hasGeminiTranslationCache,
+            geminiLogs = geminiLogs,
+        )
+    }
     fun startGeminiTranslation() {
         if (isGeminiTranslating) return
         val currentState = mutableState.value as? State.Success ?: return
@@ -1535,7 +1542,6 @@ class NovelReaderScreenModel(
         isGeminiTranslating = true
         geminiTranslationProgress = 0
         addGeminiLog("Gemini translation stopped because Gemini is disabled.")
-        updateContent(settings)
         geminiTranslationJob?.cancel()
         geminiTranslationJob = screenModelScope.launch {
             val translated = mutableMapOf<Int, String>()
