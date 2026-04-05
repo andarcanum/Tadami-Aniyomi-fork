@@ -41,6 +41,18 @@ class CloudflareInterceptorTest {
     }
 
     @Test
+    fun `cloudflareChallengeUrlFor switches image accept requests to domain root`() {
+        val request = Request.Builder()
+            .url("https://novel.tl/api/site/v2/graphql")
+            .addHeader("Accept", "image/avif,image/webp,image/*,*/*;q=0.8")
+            .build()
+
+        val challengeUrl = cloudflareChallengeUrlFor(request)
+
+        assertEquals("https://novel.tl/", challengeUrl)
+    }
+
+    @Test
     fun `cloudflareChallengeUrlFor switches static files to domain root`() {
         val request = Request.Builder()
             .url("https://example.com/assets/app.css?v=42")
