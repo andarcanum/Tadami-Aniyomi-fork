@@ -142,7 +142,9 @@ class NovelReaderScreenModelTest {
                 getNovel = GetNovel(FakeNovelRepository(novel)),
                 sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
                 pluginStorage = FakeNovelPluginStorage(emptyList()),
-                novelReaderPreferences = createNovelReaderPreferences(),
+                novelReaderPreferences = createNovelReaderPreferences(
+                    selectedTextTranslationEnabled = true,
+                ),
                 isSystemDark = { false },
             )
 
@@ -2115,7 +2117,9 @@ class NovelReaderScreenModelTest {
         }
     }
 
-    private fun createNovelReaderPreferences(): NovelReaderPreferences {
+    private fun createNovelReaderPreferences(
+        selectedTextTranslationEnabled: Boolean = false,
+    ): NovelReaderPreferences {
         return NovelReaderPreferences(
             preferenceStore = ReactivePreferenceStore(),
             json = Json { encodeDefaults = true },
@@ -2123,6 +2127,7 @@ class NovelReaderScreenModelTest {
             // Unit tests run without Android Application in Injekt; avoid touching disk cache store.
             prefs.cacheReadChapters().set(false)
             prefs.cacheReadChaptersUnlimited().set(false)
+            prefs.selectedTextTranslationEnabled().set(selectedTextTranslationEnabled)
         }
     }
 
