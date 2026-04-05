@@ -39,6 +39,7 @@ import com.tadami.aurora.BuildConfig
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.components.WarningBanner
+import eu.kanade.tachiyomi.util.system.sanitizeCloudflareRequestHeaders
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.util.system.WebViewUtil
 import eu.kanade.tachiyomi.util.system.getHtml

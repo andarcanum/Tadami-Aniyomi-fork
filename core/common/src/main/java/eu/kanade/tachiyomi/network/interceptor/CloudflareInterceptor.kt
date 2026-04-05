@@ -11,6 +11,8 @@ import android.widget.Toast
 import androidx.core.content.ContextCompat
 import eu.kanade.tachiyomi.network.AndroidCookieJar
 import eu.kanade.tachiyomi.util.system.isOutdated
+import eu.kanade.tachiyomi.util.system.sanitizeCloudflareRequestHeaders
+import eu.kanade.tachiyomi.util.system.WebViewUtil
 import eu.kanade.tachiyomi.util.system.toast
 import okhttp3.Cookie
 import okhttp3.Interceptor
@@ -78,7 +80,11 @@ class CloudflareInterceptor(
         var isWebViewOutdated = false
 
         val challengeUrl = cloudflareChallengeUrlFor(originalRequest)
-        val headers = parseHeaders(originalRequest.headers)
+        val headers = sanitizeCloudflareRequestHeaders(
+            requestHeaders = parseHeaders(originalRequest.headers),
+            contextPackageName = context.packageName,
+            spoofedPackageName = WebViewUtil.spoofedPackageName(context),
+        )
 
         executor.execute {
             val createdWebView = createWebView(originalRequest)

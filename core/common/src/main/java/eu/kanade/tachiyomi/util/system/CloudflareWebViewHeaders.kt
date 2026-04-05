@@ -1,4 +1,4 @@
-package eu.kanade.presentation.webview
+package eu.kanade.tachiyomi.util.system
 
 import java.util.Locale
 
@@ -7,7 +7,7 @@ private val cloudflareBlockedHeaders = setOf(
     "sec-ch-ua-full-version-list",
 )
 
-internal fun sanitizeCloudflareRequestHeaders(
+fun sanitizeCloudflareRequestHeaders(
     requestHeaders: Map<String, String>,
     contextPackageName: String,
     spoofedPackageName: String,

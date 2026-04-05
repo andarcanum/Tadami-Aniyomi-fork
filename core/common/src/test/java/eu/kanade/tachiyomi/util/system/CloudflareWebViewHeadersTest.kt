@@ -1,4 +1,4 @@
-package eu.kanade.presentation.webview
+package eu.kanade.tachiyomi.util.system
 
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
