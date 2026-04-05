@@ -42,6 +42,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,6 +64,7 @@ import eu.kanade.presentation.more.settings.widget.EditTextPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.ListPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.SwitchPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
@@ -72,7 +74,6 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
-import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPrivateBridge
 import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.padding
@@ -161,8 +162,6 @@ private fun GeneralTab(
     preferences: NovelReaderPreferences,
     onDismissRequest: () -> Unit,
 ) {
-    var showGeminiSettings by remember { mutableStateOf(false) }
-
     fun <T> update(
         value: T,
         copyOverride: (NovelReaderOverride, T) -> NovelReaderOverride,
@@ -200,6 +199,7 @@ private fun GeneralTab(
     val pageTurnSpeedEntries = novelPageTurnSpeedEntries()
     val pageTurnIntensityEntries = novelPageTurnIntensityEntries()
     val pageTurnShadowEntries = novelPageTurnShadowIntensityEntries()
+    val pageTurnActivationZoneEntries = novelPageTurnActivationZoneEntries()
     val showPageTurnTuning = shouldShowPageTurnTuningControls(
         pageReaderEnabled = settings.pageReader,
         style = settings.pageTransitionStyle,
@@ -310,6 +310,31 @@ private fun GeneralTab(
                     )
                 },
             )
+            if (settings.pageTransitionStyle == NovelPageTransitionStyle.BOOK_FLIP) {
+                val bookFlipAnimationSpeedEntries = novelBookFlipAnimationSpeedEntries()
+                LnReaderSliderRow(
+                    label = stringResource(AYMR.strings.novel_reader_book_flip_animation_speed),
+                    valueText = { value ->
+                        resolveNovelPageTurnSliderLabel(
+                            value = resolveNovelBookFlipAnimationSpeedSliderValue(value.roundToInt()),
+                            entries = bookFlipAnimationSpeedEntries,
+                        )
+                    },
+                    committedValue = novelBookFlipAnimationSpeedSliderIndex(
+                        settings.bookFlipAnimationSpeed,
+                    ).toFloat(),
+                    range = 0f..(bookFlipAnimationSpeedEntries.size - 1).toFloat(),
+                    steps = bookFlipAnimationSpeedEntries.size - 2,
+                    onCommit = { value ->
+                        update(
+                            resolveNovelBookFlipAnimationSpeedSliderValue(value.roundToInt()),
+                            { o, v -> o.copy(bookFlipAnimationSpeed = v) },
+                            { preferences.bookFlipAnimationSpeed().set(it) },
+                            dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
+                        )
+                    },
+                )
+            }
             if (showPageTurnTuning) {
                 TextPreferenceWidget(
                     title = stringResource(AYMR.strings.novel_reader_page_turn_tuning),
@@ -317,9 +342,11 @@ private fun GeneralTab(
                         speed = settings.pageTurnSpeed,
                         intensity = settings.pageTurnIntensity,
                         shadowIntensity = settings.pageTurnShadowIntensity,
+                        activationZone = settings.pageTurnActivationZone,
                         speedEntries = pageTurnSpeedEntries,
                         intensityEntries = pageTurnIntensityEntries,
                         shadowEntries = pageTurnShadowEntries,
+                        activationZoneEntries = pageTurnActivationZoneEntries,
                     ),
                     widget = {
                         Icon(
@@ -398,6 +425,28 @@ private fun GeneralTab(
                             )
                         },
                     )
+                    LnReaderSliderRow(
+                        label = stringResource(AYMR.strings.novel_reader_page_turn_activation_zone),
+                        valueText = { value ->
+                            resolveNovelPageTurnSliderLabel(
+                                value = resolveNovelPageTurnActivationZoneSliderValue(value.roundToInt()),
+                                entries = pageTurnActivationZoneEntries,
+                            )
+                        },
+                        committedValue = novelPageTurnActivationZoneSliderIndex(
+                            settings.pageTurnActivationZone,
+                        ).toFloat(),
+                        range = 0f..(pageTurnActivationZoneEntries.size - 1).toFloat(),
+                        steps = pageTurnActivationZoneEntries.size - 2,
+                        onCommit = { value ->
+                            update(
+                                resolveNovelPageTurnActivationZoneSliderValue(value.roundToInt()),
+                                { o, v -> o.copy(pageTurnActivationZone = v) },
+                                { preferences.pageTurnActivationZone().set(it) },
+                                dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
+                            )
+                        },
+                    )
                 }
             }
         }
@@ -435,21 +484,8 @@ private fun GeneralTab(
                 )
             },
         )
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_volume_buttons),
-            subtitle = stringResource(AYMR.strings.novel_reader_volume_buttons_summary),
-            checked = settings.useVolumeButtons,
-            onCheckedChanged = {
-                update(it, { o, v -> o.copy(useVolumeButtons = v) }, { preferences.useVolumeButtons().set(it) })
-            },
-        )
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_vertical_seekbar),
-            checked = settings.verticalSeekbar,
-            onCheckedChanged = {
-                update(it, { o, v -> o.copy(verticalSeekbar = v) }, { preferences.verticalSeekbar().set(it) })
-            },
-        )
+        SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_gestures))
+
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_swipe_gestures),
             subtitle = stringResource(AYMR.strings.novel_reader_swipe_gestures_summary),
@@ -489,33 +525,105 @@ private fun GeneralTab(
                 update(it, { o, v -> o.copy(tapToScroll = v) }, { preferences.tapToScroll().set(it) })
             },
         )
-        LnReaderSliderRow(
-            label = stringResource(AYMR.strings.novel_reader_auto_scroll_speed),
-            valueText = { it.roundToInt().toString() },
-            committedValue = intervalToAutoScrollSpeed(settings.autoScrollInterval).toFloat(),
-            range = 1f..100f,
-            steps = 98,
-            enabled = true,
-            onCommit = {
-                val speed = it.roundToInt().coerceIn(1, 100)
-                update(
-                    autoScrollSpeedToInterval(speed),
-                    { o, v -> o.copy(autoScrollInterval = v) },
-                    { preferences.autoScrollInterval().set(it) },
-                )
+
+        SettingsSectionHeader(
+            title = stringResource(AYMR.strings.novel_reader_selected_text_translation_section),
+        )
+        if (overrideEnabled) {
+            Text(
+                text = stringResource(AYMR.strings.novel_reader_selected_text_translation_global_only_summary),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        SwitchPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_selected_text_translation_enabled),
+            checked = settings.selectedTextTranslationEnabled,
+            onCheckedChanged = { preferences.selectedTextTranslationEnabled().set(it) },
+        )
+        EditTextPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_selected_text_translation_target_language),
+            subtitle = "%s",
+            icon = null,
+            value = settings.selectedTextTranslationTargetLanguage,
+            onConfirm = {
+                preferences.selectedTextTranslationTargetLanguage().set(it)
+                true
+            },
+            singleLine = true,
+            canBeBlank = false,
+            formatSubtitle = true,
+        )
+
+        SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_google_translate))
+
+        SwitchPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_google_translate_enable),
+            checked = settings.googleTranslationEnabled,
+            onCheckedChanged = {
+                update(it, { o, v ->
+                    o.copy(googleTranslationEnabled = v)
+                }, { preferences.googleTranslationEnabled().set(it) })
             },
         )
-        LnReaderSliderRow(
-            label = stringResource(AYMR.strings.novel_reader_auto_scroll_offset),
-            valueText = { it.roundToInt().toString() },
-            committedValue = settings.autoScrollOffset.toFloat(),
-            range = 0f..2000f,
-            steps = 1999,
-            enabled = true,
-            onCommit = {
-                update(it.roundToInt(), { o, v ->
-                    o.copy(autoScrollOffset = v)
-                }, { preferences.autoScrollOffset().set(it) })
+
+        EditTextPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_google_translate_source),
+            subtitle = "%s",
+            icon = null,
+            value = settings.googleTranslationSourceLang,
+            onConfirm = {
+                update(it, { o, v ->
+                    o.copy(googleTranslationSourceLang = v)
+                }, { preferences.googleTranslationSourceLang().set(it) })
+                true
+            },
+            singleLine = true,
+            canBeBlank = false,
+            formatSubtitle = true,
+        )
+
+        EditTextPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_google_translate_target),
+            subtitle = "%s",
+            icon = null,
+            value = settings.googleTranslationTargetLang,
+            onConfirm = {
+                update(it, { o, v ->
+                    o.copy(googleTranslationTargetLang = v)
+                }, { preferences.googleTranslationTargetLang().set(it) })
+                true
+            },
+            singleLine = true,
+            canBeBlank = false,
+            formatSubtitle = true,
+        )
+
+        SwitchPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_google_translate_auto_start),
+            checked = settings.googleTranslationAutoStart,
+            onCheckedChanged = {
+                update(it, { o, v ->
+                    o.copy(googleTranslationAutoStart = v)
+                }, { preferences.googleTranslationAutoStart().set(it) })
+            },
+        )
+
+        SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_advanced))
+
+        SwitchPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_volume_buttons),
+            subtitle = stringResource(AYMR.strings.novel_reader_volume_buttons_summary),
+            checked = settings.useVolumeButtons,
+            onCheckedChanged = {
+                update(it, { o, v -> o.copy(useVolumeButtons = v) }, { preferences.useVolumeButtons().set(it) })
+            },
+        )
+        SwitchPreferenceWidget(
+            title = stringResource(AYMR.strings.novel_reader_vertical_seekbar),
+            checked = settings.verticalSeekbar,
+            onCheckedChanged = {
+                update(it, { o, v -> o.copy(verticalSeekbar = v) }, { preferences.verticalSeekbar().set(it) })
             },
         )
         SwitchPreferenceWidget(
@@ -591,192 +699,35 @@ private fun GeneralTab(
                 update(it, { o, v -> o.copy(bionicReading = v) }, { preferences.bionicReading().set(it) })
             },
         )
-
-        SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_translation))
-
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { showGeminiSettings = !showGeminiSettings },
-        ) {
-            Text(
-                text = if (showGeminiSettings) {
-                    stringResource(AYMR.strings.novel_reader_ai_translator_hide)
-                } else {
-                    stringResource(AYMR.strings.novel_reader_ai_translator_show)
-                },
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                style = MaterialTheme.typography.labelLarge,
-            )
-        }
-        if (showGeminiSettings) {
-            val privateProviderLabel = if (GeminiPrivateBridge.isInstalled()) {
-                GeminiPrivateBridge.providerLabel()
-            } else {
-                "Gemini Private"
-            }
-            Text(
-                text = stringResource(AYMR.strings.novel_reader_translation_provider),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(
-                    NovelTranslationProvider.GEMINI to
-                        stringResource(AYMR.strings.novel_reader_translation_provider_gemini),
-                    NovelTranslationProvider.GEMINI_PRIVATE to privateProviderLabel,
-                    NovelTranslationProvider.OPENROUTER to
-                        stringResource(AYMR.strings.novel_reader_translation_provider_openrouter),
-                    NovelTranslationProvider.DEEPSEEK to
-                        stringResource(AYMR.strings.novel_reader_translation_provider_deepseek),
-                ).forEach { option ->
-                    val selected = settings.translationProvider == option.first
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (selected) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant
-                        },
-                        modifier = Modifier.clickable {
-                            update(
-                                option.first,
-                                { o, v -> o.copy(translationProvider = v) },
-                                { preferences.translationProvider().set(it) },
-                            )
-                        },
-                    ) {
-                        Text(
-                            text = if (selected) "* ${option.second}" else option.second,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                    }
-                }
-            }
-            SwitchPreferenceWidget(
-                title = stringResource(AYMR.strings.novel_reader_translation_auto_english_title),
-                subtitle = stringResource(AYMR.strings.novel_reader_translation_auto_english_summary),
-                checked = settings.geminiAutoTranslateEnglishSource,
-                onCheckedChanged = {
-                    update(
-                        it,
-                        { o, v -> o.copy(geminiAutoTranslateEnglishSource = v) },
-                        { preferences.geminiAutoTranslateEnglishSource().set(it) },
-                    )
-                },
-            )
-            SwitchPreferenceWidget(
-                title = stringResource(AYMR.strings.novel_reader_translation_prefetch_next_title),
-                subtitle = stringResource(AYMR.strings.novel_reader_translation_prefetch_next_summary),
-                checked = settings.geminiPrefetchNextChapterTranslation,
-                onCheckedChanged = {
-                    update(
-                        it,
-                        { o, v -> o.copy(geminiPrefetchNextChapterTranslation = v) },
-                        { preferences.geminiPrefetchNextChapterTranslation().set(it) },
-                    )
-                },
-            )
-            if (settings.translationProvider == NovelTranslationProvider.OPENROUTER) {
-                EditTextPreferenceWidget(
-                    title = stringResource(AYMR.strings.novel_reader_openrouter_base_url),
-                    subtitle = "%s",
-                    icon = null,
-                    value = settings.openRouterBaseUrl,
-                    onConfirm = {
-                        update(
-                            it,
-                            { o, v -> o.copy(openRouterBaseUrl = v) },
-                            { preferences.openRouterBaseUrl().set(it) },
-                        )
-                        true
-                    },
-                    canBeBlank = false,
+        LnReaderSliderRow(
+            label = stringResource(AYMR.strings.novel_reader_auto_scroll_speed),
+            valueText = { it.roundToInt().toString() },
+            committedValue = intervalToAutoScrollSpeed(settings.autoScrollInterval).toFloat(),
+            range = 1f..100f,
+            steps = 98,
+            enabled = true,
+            onCommit = {
+                val speed = it.roundToInt().coerceIn(1, 100)
+                update(
+                    autoScrollSpeedToInterval(speed),
+                    { o, v -> o.copy(autoScrollInterval = v) },
+                    { preferences.autoScrollInterval().set(it) },
                 )
-                EditTextPreferenceWidget(
-                    title = stringResource(AYMR.strings.novel_reader_openrouter_api_key),
-                    subtitle = "%s",
-                    icon = null,
-                    value = settings.openRouterApiKey,
-                    onConfirm = {
-                        update(
-                            it,
-                            { o, v -> o.copy(openRouterApiKey = v) },
-                            { preferences.openRouterApiKey().set(it) },
-                        )
-                        true
-                    },
-                    canBeBlank = false,
-                )
-                EditTextPreferenceWidget(
-                    title = stringResource(AYMR.strings.novel_reader_openrouter_model),
-                    subtitle = "%s",
-                    icon = null,
-                    value = settings.openRouterModel,
-                    onConfirm = {
-                        update(
-                            it,
-                            { o, v -> o.copy(openRouterModel = v) },
-                            { preferences.openRouterModel().set(it) },
-                        )
-                        true
-                    },
-                    canBeBlank = false,
-                )
-            }
-            if (settings.translationProvider == NovelTranslationProvider.DEEPSEEK) {
-                EditTextPreferenceWidget(
-                    title = stringResource(AYMR.strings.novel_reader_deepseek_base_url),
-                    subtitle = "%s",
-                    icon = null,
-                    value = settings.deepSeekBaseUrl,
-                    onConfirm = {
-                        update(
-                            it,
-                            { o, v -> o.copy(deepSeekBaseUrl = v) },
-                            { preferences.deepSeekBaseUrl().set(it) },
-                        )
-                        true
-                    },
-                    canBeBlank = false,
-                )
-                EditTextPreferenceWidget(
-                    title = stringResource(AYMR.strings.novel_reader_deepseek_api_key),
-                    subtitle = "%s",
-                    icon = null,
-                    value = settings.deepSeekApiKey,
-                    onConfirm = {
-                        update(
-                            it,
-                            { o, v -> o.copy(deepSeekApiKey = v) },
-                            { preferences.deepSeekApiKey().set(it) },
-                        )
-                        true
-                    },
-                    canBeBlank = false,
-                )
-                EditTextPreferenceWidget(
-                    title = stringResource(AYMR.strings.novel_reader_deepseek_model),
-                    subtitle = "%s",
-                    icon = null,
-                    value = settings.deepSeekModel,
-                    onConfirm = {
-                        update(
-                            it,
-                            { o, v -> o.copy(deepSeekModel = v) },
-                            { preferences.deepSeekModel().set(it) },
-                        )
-                        true
-                    },
-                    canBeBlank = false,
-                )
-            }
-        }
-
-        SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_advanced))
-
+            },
+        )
+        LnReaderSliderRow(
+            label = stringResource(AYMR.strings.novel_reader_auto_scroll_offset),
+            valueText = { it.roundToInt().toString() },
+            committedValue = settings.autoScrollOffset.toFloat(),
+            range = 0f..2000f,
+            steps = 1999,
+            enabled = true,
+            onCommit = {
+                update(it.roundToInt(), { o, v ->
+                    o.copy(autoScrollOffset = v)
+                }, { preferences.autoScrollOffset().set(it) })
+            },
+        )
         EditTextPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_custom_css),
             subtitle = stringResource(AYMR.strings.novel_reader_custom_css_hint),
@@ -843,7 +794,7 @@ private fun ReadingTab(
     var renameTarget by remember { mutableStateOf<NovelReaderCustomBackgroundItem?>(null) }
     var renameInput by remember { mutableStateOf("") }
     var pendingReplaceCustomId by remember { mutableStateOf<String?>(null) }
-    val readerFontCatalog = remember(fontCatalogVersion, settings.fontFamily) {
+    val readerFontCatalog = remember(fontCatalogVersion) {
         buildNovelReaderFontCatalog(context)
     }
 
@@ -1766,7 +1717,7 @@ private fun FontExamplesRow(
             style = MaterialTheme.typography.bodyMedium,
         )
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(builtInFonts) { option ->
+            items(builtInFonts, key = { it.id }) { option ->
                 val fontFamily = option.fontResId?.let { FontFamily(Font(it)) }
                 val isSelected = option.id == selected
                 Surface(
@@ -1892,40 +1843,44 @@ private fun ReaderFontSection(
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     fonts.forEach { option ->
-                        val typeface = remember(option.id) { loadNovelReaderTypeface(context, option) }
-                        val fontFamily = remember(option.id, typeface) {
-                            resolveNovelReaderComposeFontFamily(option, typeface)
-                        }
-                        val isSelected = option.id == selected
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = if (isSelected) {
-                                MaterialTheme.colorScheme.primaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceVariant
-                            },
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onSelect(option.id) }
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
+                        key(option.id) {
+                            val typeface = remember(option.id) { loadNovelReaderTypeface(context, option) }
+                            val fontFamily = remember(option.id, typeface) {
+                                resolveNovelReaderComposeFontFamily(option, typeface)
+                            }
+                            val isSelected = option.id == selected
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (isSelected) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                },
                             ) {
-                                Text(
-                                    text = option.label,
-                                    style = MaterialTheme.typography.labelLarge.copy(fontFamily = fontFamily),
-                                    modifier = Modifier.weight(1f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                if (option.source == NovelReaderFontSource.USER_IMPORTED) {
-                                    IconButton(onClick = { onRemoveImported(option) }) {
-                                        Icon(
-                                            imageVector = Icons.Filled.DeleteOutline,
-                                            contentDescription = stringResource(AYMR.strings.novel_reader_font_remove),
-                                        )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onSelect(option.id) }
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = option.label,
+                                        style = MaterialTheme.typography.labelLarge.copy(fontFamily = fontFamily),
+                                        modifier = Modifier.weight(1f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    if (option.source == NovelReaderFontSource.USER_IMPORTED) {
+                                        IconButton(onClick = { onRemoveImported(option) }) {
+                                            Icon(
+                                                imageVector = Icons.Filled.DeleteOutline,
+                                                contentDescription = stringResource(
+                                                    AYMR.strings.novel_reader_font_remove,
+                                                ),
+                                            )
+                                        }
                                     }
                                 }
                             }

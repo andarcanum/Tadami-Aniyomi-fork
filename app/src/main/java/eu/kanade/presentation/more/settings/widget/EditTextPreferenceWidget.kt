@@ -45,6 +45,7 @@ fun EditTextPreferenceWidget(
     formatSubtitle: Boolean = true,
     validate: (String) -> Boolean = { true },
     errorMessage: @Composable ((String) -> String)? = null,
+    enabled: Boolean = true,
 ) {
     var isDialogShown by remember { mutableStateOf(false) }
 
@@ -52,10 +53,11 @@ fun EditTextPreferenceWidget(
         title = title,
         subtitle = if (formatSubtitle) subtitle?.format(value) else subtitle,
         icon = icon,
+        enabled = enabled,
         onPreferenceClick = { isDialogShown = true },
     )
 
-    if (isDialogShown) {
+    if (isDialogShown && enabled) {
         val scope = rememberCoroutineScope()
         val onDismissRequest = { isDialogShown = false }
         val accentColor = settingsAccentColor()

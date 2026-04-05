@@ -3,6 +3,7 @@ package eu.kanade.presentation.reader.novel
 import androidx.compose.runtime.Composable
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnActivationZone
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnIntensity
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnShadowIntensity
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnSpeed
@@ -85,6 +86,29 @@ private val novelPageTurnShadowIntensitySliderOptions = listOf(
     ),
 )
 
+private val novelPageTurnActivationZoneSliderOptions = listOf(
+    NovelPageTurnSliderOption(
+        value = NovelPageTurnActivationZone.NARROWER,
+        labelRes = AYMR.strings.novel_reader_page_turn_activation_zone_narrower,
+    ),
+    NovelPageTurnSliderOption(
+        value = NovelPageTurnActivationZone.NARROW,
+        labelRes = AYMR.strings.novel_reader_page_turn_activation_zone_narrow,
+    ),
+    NovelPageTurnSliderOption(
+        value = NovelPageTurnActivationZone.NORMAL,
+        labelRes = AYMR.strings.novel_reader_page_turn_activation_zone_normal,
+    ),
+    NovelPageTurnSliderOption(
+        value = NovelPageTurnActivationZone.WIDE,
+        labelRes = AYMR.strings.novel_reader_page_turn_activation_zone_wide,
+    ),
+    NovelPageTurnSliderOption(
+        value = NovelPageTurnActivationZone.WIDER,
+        labelRes = AYMR.strings.novel_reader_page_turn_activation_zone_wider,
+    ),
+)
+
 internal fun shouldShowPageTurnTuningControls(
     pageReaderEnabled: Boolean,
     style: NovelPageTransitionStyle,
@@ -120,6 +144,16 @@ internal fun <T> resolveNovelPageTurnSliderLabel(
     entries: Map<T, String>,
 ): String {
     return entries[value].orEmpty()
+}
+
+internal fun resolveNovelPageTurnTuningSummaryText(
+    format: String,
+    speedLabel: String,
+    intensityLabel: String,
+    shadowLabel: String,
+    activationZoneLabel: String,
+): String {
+    return format.format(speedLabel, intensityLabel, shadowLabel, activationZoneLabel)
 }
 
 internal fun resolveNovelPageTurnTuningSummaryText(
@@ -174,19 +208,35 @@ internal fun novelPageTurnShadowIntensityEntries(): ImmutableMap<NovelPageTurnSh
     return resolveSliderEntries(novelPageTurnShadowIntensitySliderOptions)
 }
 
+internal fun novelPageTurnActivationZoneSliderIndex(zone: NovelPageTurnActivationZone): Int {
+    return resolveSliderIndex(novelPageTurnActivationZoneSliderOptions, zone)
+}
+
+internal fun resolveNovelPageTurnActivationZoneSliderValue(index: Int): NovelPageTurnActivationZone {
+    return resolveSliderValue(novelPageTurnActivationZoneSliderOptions, index)
+}
+
+@Composable
+internal fun novelPageTurnActivationZoneEntries(): ImmutableMap<NovelPageTurnActivationZone, String> {
+    return resolveSliderEntries(novelPageTurnActivationZoneSliderOptions)
+}
+
 @Composable
 internal fun novelPageTurnTuningSummary(
     speed: NovelPageTurnSpeed,
     intensity: NovelPageTurnIntensity,
     shadowIntensity: NovelPageTurnShadowIntensity,
+    activationZone: NovelPageTurnActivationZone,
     speedEntries: Map<NovelPageTurnSpeed, String>,
     intensityEntries: Map<NovelPageTurnIntensity, String>,
     shadowEntries: Map<NovelPageTurnShadowIntensity, String>,
+    activationZoneEntries: Map<NovelPageTurnActivationZone, String>,
 ): String {
     return resolveNovelPageTurnTuningSummaryText(
         format = stringResource(AYMR.strings.novel_reader_page_turn_tuning_summary_format),
         speedLabel = resolveNovelPageTurnSliderLabel(speed, speedEntries),
         intensityLabel = resolveNovelPageTurnSliderLabel(intensity, intensityEntries),
         shadowLabel = resolveNovelPageTurnSliderLabel(shadowIntensity, shadowEntries),
+        activationZoneLabel = resolveNovelPageTurnSliderLabel(activationZone, activationZoneEntries),
     )
 }

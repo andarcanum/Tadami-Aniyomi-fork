@@ -1,0 +1,8 @@
+{
+  "track_id": "hide_camera_icon_20260203",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-02-03T00:00:00Z",
+  "updated_at": "2026-02-03T00:00:00Z",
+  "description": "Hide the camera icon on the Home screen avatar once a custom user avatar has been set."
+}

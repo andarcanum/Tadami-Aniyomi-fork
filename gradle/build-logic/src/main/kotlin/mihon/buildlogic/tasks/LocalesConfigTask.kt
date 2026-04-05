@@ -32,6 +32,7 @@ fun Project.getLocalesConfigTask(
                         .replace("-r", "-")
                         .replace("+", "-")
                 }
+                .distinct()
                 .sorted()
                 .joinToString("\n") { "|   <locale android:name=\"$it\"/>" }
 

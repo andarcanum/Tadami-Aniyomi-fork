@@ -41,6 +41,7 @@ fun <T> ListPreferenceWidget(
     icon: ImageVector?,
     entries: Map<out T, String>,
     entryTextStyle: (@Composable (key: T) -> TextStyle?)? = null,
+    enabled: Boolean = true,
     onValueChange: (T) -> Unit,
 ) {
     var isDialogShown by remember { mutableStateOf(false) }
@@ -49,10 +50,11 @@ fun <T> ListPreferenceWidget(
         title = title,
         subtitle = subtitle,
         icon = icon,
+        enabled = enabled,
         onPreferenceClick = { isDialogShown = true },
     )
 
-    if (isDialogShown) {
+    if (isDialogShown && enabled) {
         val accentColor = settingsAccentColor()
         AlertDialog(
             onDismissRequest = { isDialogShown = false },

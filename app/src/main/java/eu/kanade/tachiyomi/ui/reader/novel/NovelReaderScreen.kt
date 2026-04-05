@@ -11,6 +11,7 @@ import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.reader.novel.NovelReaderChapterHandoffPolicy
+import eu.kanade.presentation.reader.novel.NovelReaderPageReaderHandoffTarget
 import eu.kanade.presentation.reader.novel.NovelReaderScreen
 import eu.kanade.presentation.reader.novel.NovelReaderSystemUiSession
 import eu.kanade.presentation.reader.novel.SystemUIController
@@ -96,11 +97,26 @@ class NovelReaderScreen(
                 onSetDeepSeekModel = screenModel::setDeepSeekModel,
                 onRefreshDeepSeekModels = screenModel::refreshDeepSeekModels,
                 onTestDeepSeekConnection = screenModel::testDeepSeekConnection,
+                onStartGoogleTranslation = screenModel::startGoogleTranslation,
+                onStopGoogleTranslation = screenModel::stopGoogleTranslation,
+                onResumeGoogleTranslation = screenModel::resumeGoogleTranslation,
+                onToggleGoogleTranslationVisibility = screenModel::toggleGoogleTranslationVisibility,
+                onClearGoogleTranslation = screenModel::clearGoogleTranslation,
+                onSetGoogleTranslationEnabled = screenModel::setGoogleTranslationEnabled,
+                onSetGoogleTranslationAutoStart = screenModel::setGoogleTranslationAutoStart,
+                onSetGoogleTranslationSourceLang = screenModel::setGoogleTranslationSourceLang,
+                onSetGoogleTranslationTargetLang = screenModel::setGoogleTranslationTargetLang,
+                onSelectedTextSelectionChanged = screenModel::updateSelectedTextSelection,
+                onTranslateSelectedText = screenModel::translateSelectedText,
+                onRetrySelectedTextTranslation = screenModel::retrySelectedTextTranslation,
+                onDismissSelectedTextTranslation = screenModel::dismissSelectedTextTranslation,
                 onOpenPreviousChapter = { previousChapterId ->
                     coroutineScope.launch {
                         screenModel.awaitPendingProgressPersistence()
                         NovelReaderSystemUiSession.markInternalChapterReplace()
-                        NovelReaderChapterHandoffPolicy.markInternalChapterHandoff()
+                        NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
+                            NovelReaderPageReaderHandoffTarget.END,
+                        )
                         navigator.replace(NovelReaderScreen(previousChapterId))
                     }
                 },
@@ -108,7 +124,9 @@ class NovelReaderScreen(
                     coroutineScope.launch {
                         screenModel.awaitPendingProgressPersistence()
                         NovelReaderSystemUiSession.markInternalChapterReplace()
-                        NovelReaderChapterHandoffPolicy.markInternalChapterHandoff()
+                        NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
+                            NovelReaderPageReaderHandoffTarget.START,
+                        )
                         navigator.replace(NovelReaderScreen(nextChapterId))
                     }
                 },

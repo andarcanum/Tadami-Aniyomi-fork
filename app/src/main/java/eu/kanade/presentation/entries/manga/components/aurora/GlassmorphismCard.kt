@@ -9,6 +9,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraDetailCardBackgroundColors
@@ -22,17 +24,19 @@ fun GlassmorphismCard(
     horizontalPadding: Dp = 16.dp,
     verticalPadding: Dp = 0.dp,
     innerPadding: Dp = 16.dp,
+    overlayColor: Color? = null,
     content: @Composable () -> Unit,
 ) {
     val colors = AuroraTheme.colors
     val bgColors = resolveAuroraDetailCardBackgroundColors(colors)
     val borderColors = resolveAuroraDetailCardBorderColors(colors)
+    val tintedBgColors = overlayColor?.let { tintAuroraCardBackgroundColors(bgColors, it) } ?: bgColors
 
     Box(
         modifier = modifier
             .padding(horizontal = horizontalPadding, vertical = verticalPadding)
             .clip(RoundedCornerShape(cornerRadius))
-            .background(brush = Brush.linearGradient(colors = bgColors))
+            .background(brush = Brush.linearGradient(colors = tintedBgColors))
             .border(
                 width = 1.dp,
                 brush = Brush.linearGradient(colors = borderColors),
@@ -41,5 +45,14 @@ fun GlassmorphismCard(
             .padding(innerPadding),
     ) {
         content()
+    }
+}
+
+internal fun tintAuroraCardBackgroundColors(
+    backgroundColors: List<Color>,
+    overlayColor: Color,
+): List<Color> {
+    return backgroundColors.map { backgroundColor ->
+        overlayColor.compositeOver(backgroundColor)
     }
 }

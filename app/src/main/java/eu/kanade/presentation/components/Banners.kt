@@ -25,11 +25,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.compose.ui.util.fastMap
 import androidx.compose.ui.util.fastMaxBy
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import dev.icerock.moko.resources.StringResource
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -65,9 +68,13 @@ fun AppStateBanners(
     indexing: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val density = LocalDensity.current
-    val mainInsets = WindowInsets.statusBars
-    val mainInsetsTop = mainInsets.getTop(density)
+    val view = LocalView.current
+    val rootInsets = ViewCompat.getRootWindowInsets(view)
+    val mainInsetsTop = rootInsets
+        ?.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.statusBars())
+        ?.top
+        ?: rootInsets?.getInsets(WindowInsetsCompat.Type.statusBars())?.top
+        ?: 0
     SubcomposeLayout(modifier = modifier) { constraints ->
         val indexingPlaceable = subcompose(0) {
             AnimatedVisibility(
@@ -76,7 +83,7 @@ fun AppStateBanners(
                 exit = shrinkVertically(),
             ) {
                 IndexingDownloadBanner(
-                    modifier = Modifier.windowInsetsPadding(mainInsets),
+                    modifier = Modifier.windowInsetsPadding(WindowInsets(top = mainInsetsTop)),
                 )
             }
         }.fastMap { it.measure(constraints) }

@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.entries.novel
 
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnActivationZone
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
@@ -111,11 +112,14 @@ class NovelEpubStyleBuilderTest {
         textShadowY: Float = 0f,
         pageEdgeShadow: Boolean = false,
         pageEdgeShadowAlpha: Float = 0.25f,
+        pageTurnActivationZone: NovelPageTurnActivationZone = NovelPageTurnActivationZone.WIDE,
         theme: NovelReaderTheme = NovelReaderTheme.DARK,
         backgroundColor: String = "#101010",
         textColor: String = "#EFEFEF",
         customCSS: String = "",
         customJS: String = "",
+        selectedTextTranslationEnabled: Boolean = true,
+        selectedTextTranslationTargetLanguage: String = "Russian",
     ): NovelReaderSettings {
         return NovelReaderSettings(
             fontSize = fontSize,
@@ -161,6 +165,7 @@ class NovelEpubStyleBuilderTest {
             autoScrollInterval = 10,
             autoScrollOffset = 0,
             prefetchNextChapter = false,
+            pageTurnActivationZone = pageTurnActivationZone,
             fullScreenMode = true,
             keepScreenOn = false,
             showScrollPercentage = true,
@@ -171,6 +176,8 @@ class NovelEpubStyleBuilderTest {
             bionicReading = false,
             customCSS = customCSS,
             customJS = customJS,
+            selectedTextTranslationEnabled = selectedTextTranslationEnabled,
+            selectedTextTranslationTargetLanguage = selectedTextTranslationTargetLanguage,
         )
     }
 }

@@ -31,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
@@ -48,6 +49,8 @@ import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.entries.anime.components.EpisodeDownloadAction
 import eu.kanade.presentation.entries.anime.components.EpisodeDownloadIndicator
+import eu.kanade.presentation.entries.components.aurora.AURORA_DIMMED_ITEM_ALPHA
+import eu.kanade.presentation.entries.components.aurora.AURORA_NEW_ITEM_HIGHLIGHT_ALPHA
 import eu.kanade.presentation.entries.manga.components.aurora.GlassmorphismCard
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
@@ -70,6 +73,7 @@ fun AnimeEpisodeCardCompact(
     anime: Anime,
     item: EpisodeList.Item,
     selected: Boolean,
+    isNew: Boolean,
     isAnyEpisodeSelected: Boolean,
     episodeSwipeStartAction: LibraryPreferences.EpisodeSwipeAction,
     episodeSwipeEndAction: LibraryPreferences.EpisodeSwipeAction,
@@ -83,6 +87,12 @@ fun AnimeEpisodeCardCompact(
     val context = LocalContext.current
     val episode = item.episode
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
+    val cardAlpha = if (episode.seen) AURORA_DIMMED_ITEM_ALPHA else 1f
+    val cardTint = if (isNew && !episode.seen) {
+        colors.accent.copy(alpha = AURORA_NEW_ITEM_HIGHLIGHT_ALPHA)
+    } else {
+        null
+    }
     val startSwipeAction = auroraAnimeSwipeAction(
         action = episodeSwipeStartAction,
         seen = episode.seen,
@@ -102,23 +112,19 @@ fun AnimeEpisodeCardCompact(
         onSwipe = { onEpisodeSwipe(episodeSwipeEndAction) },
     )
 
-    // Adjust opacity for seen episodes
-    val contentAlpha = if (episode.seen) 0.45f else 1f
-
     val episodeCard: @Composable () -> Unit = {
         GlassmorphismCard(
-            modifier = modifier,
+            modifier = modifier.alpha(cardAlpha),
             cornerRadius = 16.dp,
             verticalPadding = 4.dp,
             innerPadding = 12.dp,
+            overlayColor = cardTint,
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        if (selected) colors.accent.copy(alpha = 0.16f) else Color.Transparent,
-                    )
+                    .background(if (selected) colors.accent.copy(alpha = 0.16f) else Color.Transparent)
                     .combinedClickable(
                         onClick = onClick,
                         onLongClick = onLongClick,
@@ -148,17 +154,8 @@ fun AnimeEpisodeCardCompact(
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.size(40.dp),
-                        alpha = contentAlpha,
+                        alpha = 1f,
                     )
-
-                    // Dark overlay for seen episodes
-                    if (episode.seen) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .background(Color.Black.copy(alpha = 0.5f)),
-                        )
-                    }
                 }
 
                 // Episode info
@@ -170,7 +167,7 @@ fun AnimeEpisodeCardCompact(
                         text = episode.name,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = colors.textPrimary.copy(alpha = contentAlpha),
+                        color = colors.textPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -183,7 +180,7 @@ fun AnimeEpisodeCardCompact(
                         Icon(
                             Icons.Outlined.Schedule,
                             contentDescription = null,
-                            tint = colors.textSecondary.copy(alpha = contentAlpha),
+                            tint = colors.textSecondary,
                             modifier = Modifier.size(12.dp),
                         )
 
@@ -210,7 +207,7 @@ fun AnimeEpisodeCardCompact(
                         Text(
                             text = uploadDateText,
                             fontSize = 12.sp,
-                            color = colors.textSecondary.copy(alpha = contentAlpha),
+                            color = colors.textSecondary,
                         )
                     }
 

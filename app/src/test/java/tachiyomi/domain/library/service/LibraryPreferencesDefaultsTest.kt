@@ -3,6 +3,8 @@ package tachiyomi.domain.library.service
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import tachiyomi.core.common.preference.InMemoryPreferenceStore
+import tachiyomi.domain.entries.anime.model.Anime
+import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.library.anime.model.AnimeLibrarySort
 import tachiyomi.domain.library.manga.model.MangaLibrarySort
 import tachiyomi.domain.library.model.AuroraLibraryCardStyle
@@ -19,10 +21,12 @@ class LibraryPreferencesDefaultsTest {
             type = AnimeLibrarySort.Type.LastSeen,
             direction = AnimeLibrarySort.Direction.Descending,
         )
+        prefs.sortEpisodeBySourceOrNumber().get() shouldBe Anime.EPISODE_SORTING_NUMBER
         prefs.mangaSortingMode().get() shouldBe MangaLibrarySort(
             type = MangaLibrarySort.Type.LastRead,
             direction = MangaLibrarySort.Direction.Descending,
         )
+        prefs.sortChapterBySourceOrNumber().get() shouldBe Manga.CHAPTER_SORTING_NUMBER
         prefs.novelSortingMode().get() shouldBe NovelLibrarySort(
             type = NovelLibrarySort.Type.LastRead,
             direction = NovelLibrarySort.Direction.Descending,

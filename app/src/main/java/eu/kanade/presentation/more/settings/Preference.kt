@@ -25,6 +25,7 @@ import tachiyomi.core.common.preference.Preference as PreferenceData
 sealed class Preference {
     abstract val title: String
     abstract val enabled: Boolean
+    open val visible: Boolean = true
 
     sealed class PreferenceItem<T> : Preference() {
         abstract val subtitle: String?
@@ -86,6 +87,7 @@ sealed class Preference {
                 { v, e -> subtitle?.format(e[v]) },
             override val icon: ImageVector? = null,
             override val enabled: Boolean = true,
+            override val visible: Boolean = true,
             override val onValueChanged: suspend (value: T) -> Boolean = { true },
         ) : PreferenceItem<T>() {
             internal fun internalSet(value: Any) = preference.set(value as T)

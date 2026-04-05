@@ -42,6 +42,7 @@ import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.source.ConfigurableSource
 import eu.kanade.tachiyomi.source.MangaSource
+import eu.kanade.tachiyomi.ui.entries.mergeNewItemIds
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.chapter.getNextUnread
 import eu.kanade.tachiyomi.util.removeCovers
@@ -585,6 +586,21 @@ class MangaScreenModel(
         }
     }
 
+    private fun updateNewChapterIds(
+        addedIds: Iterable<Long> = emptyList(),
+        clearedIds: Iterable<Long> = emptyList(),
+    ) {
+        updateSuccessState { successState ->
+            successState.copy(
+                newChapterIds = mergeNewItemIds(
+                    existingNewItemIds = successState.newChapterIds,
+                    addedItemIds = addedIds,
+                    clearedItemIds = clearedIds,
+                ),
+            )
+        }
+    }
+
     private fun List<Chapter>.toChapterListItems(manga: Manga): List<ChapterList.Item> {
         val isLocal = manga.isLocal()
         return map { chapter ->
@@ -637,6 +653,13 @@ class MangaScreenModel(
                 if (manualFetch) {
                     downloadNewChapters(newChapters)
                 }
+
+                updateNewChapterIds(
+                    addedIds = newChapters.asSequence()
+                        .filterNot { it.read }
+                        .map { it.id }
+                        .toList(),
+                )
             }
         } catch (e: Throwable) {
             val formattedMessage = e.formattedMessage(context)
@@ -851,6 +874,10 @@ class MangaScreenModel(
                 read = read,
                 chapters = chapters.toTypedArray(),
             )
+
+            if (read) {
+                updateNewChapterIds(clearedIds = chapters.map { it.id })
+            }
 
             if (!read || successState?.hasLoggedInTrackers == false || autoTrackState == AutoTrackState.NEVER) {
                 return@launchIO
@@ -1264,6 +1291,7 @@ class MangaScreenModel(
             val scanlatorChapterCounts: Map<String, Int>,
             val excludedScanlators: Set<String>,
             val downloadedOnly: Boolean = false,
+            val newChapterIds: Set<Long> = emptySet(),
             val trackingCount: Int = 0,
             val hasLoggedInTrackers: Boolean = false,
             val isRefreshingData: Boolean = false,

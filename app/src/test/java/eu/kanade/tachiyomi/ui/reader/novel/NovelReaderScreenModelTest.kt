@@ -4,6 +4,7 @@ import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSourc
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginPackage
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoEntry
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
+import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
@@ -19,6 +20,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,6 +37,7 @@ import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import kotlinx.serialization.json.Json
+import okhttp3.OkHttpClient
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
@@ -55,6 +58,9 @@ import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.source.novel.model.StubNovelSource
 import tachiyomi.domain.source.novel.service.NovelSourceManager
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.fullType
+import uy.kohesive.injekt.api.get
 import java.util.Collections
 
 class NovelReaderScreenModelTest {
@@ -115,6 +121,41 @@ class NovelReaderScreenModelTest {
             state.html.contains("Hello") shouldBe true
             state.lastSavedIndex shouldBe 0
             Unit
+        }
+    }
+
+    @Test
+    fun `webview javascript stays enabled for selected text translation`() {
+        runBlocking {
+            ensureReaderScreenModelDependencies()
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = createNovelReaderPreferences(
+                    selectedTextTranslationEnabled = true,
+                ),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            state.enableJs shouldBe true
         }
     }
 
@@ -2076,7 +2117,9 @@ class NovelReaderScreenModelTest {
         }
     }
 
-    private fun createNovelReaderPreferences(): NovelReaderPreferences {
+    private fun createNovelReaderPreferences(
+        selectedTextTranslationEnabled: Boolean = false,
+    ): NovelReaderPreferences {
         return NovelReaderPreferences(
             preferenceStore = ReactivePreferenceStore(),
             json = Json { encodeDefaults = true },
@@ -2084,6 +2127,7 @@ class NovelReaderScreenModelTest {
             // Unit tests run without Android Application in Injekt; avoid touching disk cache store.
             prefs.cacheReadChapters().set(false)
             prefs.cacheReadChaptersUnlimited().set(false)
+            prefs.selectedTextTranslationEnabled().set(selectedTextTranslationEnabled)
         }
     }
 
@@ -2097,6 +2141,7 @@ class NovelReaderScreenModelTest {
         isSystemDark: () -> Boolean,
         historyRepository: NovelHistoryRepository = FakeNovelHistoryRepository(),
     ): NovelReaderScreenModel {
+        ensureReaderScreenModelDependencies()
         return NovelReaderScreenModel(
             chapterId = chapterId,
             novelChapterRepository = novelChapterRepository,
@@ -2115,6 +2160,19 @@ class NovelReaderScreenModelTest {
             deepSeekTranslationService = deepSeekTranslationService,
             deepSeekModelsService = deepSeekModelsService,
         ).also(activeScreenModels::add)
+    }
+
+    private fun ensureReaderScreenModelDependencies() {
+        runCatching { Injekt.get<NetworkHelper>() }
+            .getOrElse {
+                val networkHelper = mockk<NetworkHelper>()
+                every { networkHelper.client } returns OkHttpClient()
+                Injekt.addSingleton(fullType<NetworkHelper>(), networkHelper)
+            }
+        runCatching { Injekt.get<Json>() }
+            .getOrElse {
+                Injekt.addSingleton(fullType<Json>(), Json { encodeDefaults = true })
+            }
     }
 
     private class ReactivePreferenceStore : PreferenceStore {

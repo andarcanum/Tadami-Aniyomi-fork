@@ -99,7 +99,9 @@ import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.manga.MangaLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
 import eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch.GlobalAnimeSearchScreen
+import eu.kanade.tachiyomi.ui.browse.manga.migration.config.MigrationConfigScreen
 import eu.kanade.tachiyomi.ui.browse.manga.source.globalsearch.GlobalMangaSearchScreen
+import eu.kanade.tachiyomi.ui.browse.novel.migration.search.MigrateNovelSearchScreen
 import eu.kanade.tachiyomi.ui.category.CategoriesTab
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreen
@@ -768,6 +770,13 @@ data object AnimeLibraryTab : Tab {
                             onMarkAsUnviewedClicked = { mangaScreenModel.markReadSelection(false) },
                             onDownloadClicked = mangaScreenModel::runDownloadActionSelection
                                 .takeIf { mangaState.selection.fastAll { !it.manga.isLocal() } },
+                            onMigrateClicked = {
+                                val selectionIds = mangaState.selection.map { it.manga.id }
+                                mangaScreenModel.clearSelection()
+                                if (selectionIds.isNotEmpty()) {
+                                    navigator.push(MigrationConfigScreen(selectionIds))
+                                }
+                            },
                             onDeleteClicked = mangaScreenModel::openDeleteMangaDialog,
                             isManga = true,
                         )
@@ -780,6 +789,13 @@ data object AnimeLibraryTab : Tab {
                             onMarkAsUnviewedClicked = { novelScreenModel?.markReadSelection(false) },
                             onDownloadClicked = null,
                             onOpenDownloadDialog = { showNovelBatchDownloadDialog = true },
+                            onMigrateClicked = {
+                                val selectionIds = novelState.selection.map { it.novel.id }
+                                novelScreenModel?.clearSelection()
+                                if (selectionIds.size == 1) {
+                                    navigator.push(MigrateNovelSearchScreen(selectionIds.single()))
+                                }
+                            }.takeIf { novelState.selection.size == 1 },
                             onTranslatedDownloadClicked = {
                                 showNovelTranslatedDownloadDialog = true
                             }.takeIf { isNovelTranslatorEnabled },

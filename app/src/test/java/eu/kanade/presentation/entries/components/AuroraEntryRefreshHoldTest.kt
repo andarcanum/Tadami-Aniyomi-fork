@@ -40,4 +40,22 @@ class AuroraEntryRefreshHoldTest {
         shouldResetAuroraEntryHoldRefreshLatch(distanceFraction = 0.06f) shouldBe true
         shouldResetAuroraEntryHoldRefreshLatch(distanceFraction = 0.25f) shouldBe false
     }
+
+    @Test
+    fun `refresh trigger is allowed only when not already in progress or triggered for current pull`() {
+        shouldTriggerAuroraEntryRefresh(
+            refreshing = false,
+            hasTriggeredForCurrentPull = false,
+        ) shouldBe true
+
+        shouldTriggerAuroraEntryRefresh(
+            refreshing = true,
+            hasTriggeredForCurrentPull = false,
+        ) shouldBe false
+
+        shouldTriggerAuroraEntryRefresh(
+            refreshing = false,
+            hasTriggeredForCurrentPull = true,
+        ) shouldBe false
+    }
 }

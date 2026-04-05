@@ -67,8 +67,12 @@ import eu.kanade.presentation.reader.novel.ensureLegacyNovelReaderBackgroundItem
 import eu.kanade.presentation.reader.novel.importNovelReaderCustomBackgroundItem
 import eu.kanade.presentation.reader.novel.importNovelReaderCustomFont
 import eu.kanade.presentation.reader.novel.intervalToAutoScrollSpeed
+import eu.kanade.presentation.reader.novel.novelBookFlipAnimationSpeedEntries
+import eu.kanade.presentation.reader.novel.novelBookFlipAnimationSpeedSliderIndex
 import eu.kanade.presentation.reader.novel.novelPageTransitionStyleEntries
 import eu.kanade.presentation.reader.novel.novelPageTransitionStyleSubtitle
+import eu.kanade.presentation.reader.novel.novelPageTurnActivationZoneEntries
+import eu.kanade.presentation.reader.novel.novelPageTurnActivationZoneSliderIndex
 import eu.kanade.presentation.reader.novel.novelPageTurnIntensityEntries
 import eu.kanade.presentation.reader.novel.novelPageTurnIntensitySliderIndex
 import eu.kanade.presentation.reader.novel.novelPageTurnShadowIntensityEntries
@@ -84,6 +88,8 @@ import eu.kanade.presentation.reader.novel.removeNovelReaderCustomFont
 import eu.kanade.presentation.reader.novel.renameNovelReaderCustomBackgroundItem
 import eu.kanade.presentation.reader.novel.replaceNovelReaderCustomBackgroundItem
 import eu.kanade.presentation.reader.novel.resolveCustomBackgroundDeletion
+import eu.kanade.presentation.reader.novel.resolveNovelBookFlipAnimationSpeedSliderValue
+import eu.kanade.presentation.reader.novel.resolveNovelPageTurnActivationZoneSliderValue
 import eu.kanade.presentation.reader.novel.resolveNovelPageTurnIntensitySliderValue
 import eu.kanade.presentation.reader.novel.resolveNovelPageTurnShadowIntensitySliderValue
 import eu.kanade.presentation.reader.novel.resolveNovelPageTurnSliderLabel
@@ -114,6 +120,47 @@ import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import android.graphics.Color as AndroidColor
+
+internal enum class NovelReaderDisplaySettingKey {
+    GeminiEnabled,
+    GeminiPromptMode,
+    GoogleTranslateEnabled,
+}
+
+internal data class NovelReaderDisplayTopSettingSpec(
+    val key: NovelReaderDisplaySettingKey,
+    val title: String,
+    val subtitle: String? = null,
+    val enabled: Boolean = true,
+    val visible: Boolean = true,
+)
+
+internal fun novelReaderDisplayTopSettingSpecs(
+    geminiEnabled: Boolean,
+    googleTranslateEnabled: Boolean,
+    geminiEnabledTitle: String,
+    geminiPromptModeTitle: String,
+    googleTranslateEnabledTitle: String,
+    googleTranslateEnabledSubtitle: String?,
+): List<NovelReaderDisplayTopSettingSpec> = listOf(
+    NovelReaderDisplayTopSettingSpec(
+        key = NovelReaderDisplaySettingKey.GeminiEnabled,
+        title = geminiEnabledTitle,
+        enabled = !googleTranslateEnabled,
+    ),
+    NovelReaderDisplayTopSettingSpec(
+        key = NovelReaderDisplaySettingKey.GeminiPromptMode,
+        title = geminiPromptModeTitle,
+        enabled = geminiEnabled && !googleTranslateEnabled,
+        visible = geminiEnabled,
+    ),
+    NovelReaderDisplayTopSettingSpec(
+        key = NovelReaderDisplaySettingKey.GoogleTranslateEnabled,
+        title = googleTranslateEnabledTitle,
+        subtitle = googleTranslateEnabledSubtitle,
+        enabled = !geminiEnabled,
+    ),
+)
 
 object SettingsNovelReaderScreen : SearchableSettings {
 
@@ -159,10 +206,11 @@ object SettingsNovelReaderScreen : SearchableSettings {
         val textShadowYPref = prefs.textShadowY()
         val textShadowY by textShadowYPref.collectAsState()
         val geminiEnabled by prefs.geminiEnabled().collectAsState()
+        val googleTranslationEnabled by prefs.googleTranslationEnabled().collectAsState()
         val fontImportFailedMessage = stringResource(AYMR.strings.novel_reader_font_import_failed)
         val surfaceStrategy = remember { resolveNovelReaderSettingsSurfaceStrategy() }
         var fontCatalogVersion by remember { mutableIntStateOf(0) }
-        val readerFontCatalog = remember(fontCatalogVersion, selectedFontFamily) {
+        val readerFontCatalog = remember(fontCatalogVersion) {
             buildNovelReaderFontCatalog(context)
         }
         val fontPicker = rememberLauncherForActivityResult(
@@ -182,14 +230,25 @@ object SettingsNovelReaderScreen : SearchableSettings {
         } else {
             stringResource(AYMR.strings.novel_reader_global_settings_quick_dialog_summary)
         }
+        val displayTopSettings = novelReaderDisplayTopSettingSpecs(
+            geminiEnabled = geminiEnabled,
+            googleTranslateEnabled = googleTranslationEnabled,
+            geminiEnabledTitle = stringResource(AYMR.strings.novel_reader_gemini_enabled),
+            geminiPromptModeTitle = stringResource(AYMR.strings.novel_reader_gemini_prompt_mode),
+            googleTranslateEnabledTitle = stringResource(AYMR.strings.novel_reader_google_translate_enable),
+            googleTranslateEnabledSubtitle = stringResource(
+                AYMR.strings.novel_reader_google_translate_enable_summary,
+            ),
+        )
 
         return Preference.PreferenceGroup(
             title = stringResource(AYMR.strings.novel_reader_display),
             preferenceItems = persistentListOf(
                 Preference.PreferenceItem.SwitchPreference(
                     preference = prefs.geminiEnabled(),
-                    title = stringResource(AYMR.strings.novel_reader_gemini_enabled),
+                    title = displayTopSettings[0].title,
                     subtitle = stringResource(AYMR.strings.novel_reader_gemini_enabled_summary),
+                    enabled = displayTopSettings[0].enabled,
                 ),
                 Preference.PreferenceItem.ListPreference(
                     preference = prefs.geminiPromptMode(),
@@ -199,8 +258,15 @@ object SettingsNovelReaderScreen : SearchableSettings {
                         ),
                         GeminiPromptMode.ADULT_18 to stringResource(AYMR.strings.novel_reader_gemini_prompt_mode_adult),
                     ),
-                    title = stringResource(AYMR.strings.novel_reader_gemini_prompt_mode),
-                    enabled = geminiEnabled,
+                    title = displayTopSettings[1].title,
+                    enabled = displayTopSettings[1].enabled,
+                    visible = displayTopSettings[1].visible,
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = prefs.googleTranslationEnabled(),
+                    title = displayTopSettings[2].title,
+                    subtitle = displayTopSettings[2].subtitle,
+                    enabled = displayTopSettings[2].enabled,
                 ),
                 Preference.PreferenceItem.SliderPreference(
                     value = fontSize,
@@ -706,18 +772,24 @@ object SettingsNovelReaderScreen : SearchableSettings {
         val pageReader by pageReaderPref.collectAsState()
         val pageTransitionStylePref = prefs.pageTransitionStyle()
         val pageTransitionStyle by pageTransitionStylePref.collectAsState()
+        val bookFlipAnimationSpeedPref = prefs.bookFlipAnimationSpeed()
+        val bookFlipAnimationSpeed by bookFlipAnimationSpeedPref.collectAsState()
         val pageTurnSpeedPref = prefs.pageTurnSpeed()
         val pageTurnSpeed by pageTurnSpeedPref.collectAsState()
         val pageTurnIntensityPref = prefs.pageTurnIntensity()
         val pageTurnIntensity by pageTurnIntensityPref.collectAsState()
         val pageTurnShadowIntensityPref = prefs.pageTurnShadowIntensity()
         val pageTurnShadowIntensity by pageTurnShadowIntensityPref.collectAsState()
+        val pageTurnActivationZonePref = prefs.pageTurnActivationZone()
+        val pageTurnActivationZone by pageTurnActivationZonePref.collectAsState()
         val bionicReadingPref = prefs.bionicReading()
         val bionicReading by bionicReadingPref.collectAsState()
         val pageTransitionEntries = novelPageTransitionStyleEntries()
+        val bookFlipAnimationSpeedEntries = novelBookFlipAnimationSpeedEntries()
         val pageTurnSpeedEntries = novelPageTurnSpeedEntries()
         val pageTurnIntensityEntries = novelPageTurnIntensityEntries()
         val pageTurnShadowEntries = novelPageTurnShadowIntensityEntries()
+        val pageTurnActivationZoneEntries = novelPageTurnActivationZoneEntries()
         val showPageTurnTuning = shouldShowPageTurnTuningControls(
             pageReaderEnabled = pageReader,
             style = pageTransitionStyle,
@@ -861,6 +933,26 @@ object SettingsNovelReaderScreen : SearchableSettings {
                     enabled = pageReader,
                 ),
             )
+            if (pageReader && pageTransitionStyle == NovelPageTransitionStyle.BOOK_FLIP) {
+                add(
+                    Preference.PreferenceItem.SliderPreference(
+                        value = novelBookFlipAnimationSpeedSliderIndex(bookFlipAnimationSpeed),
+                        valueRange = 0..(bookFlipAnimationSpeedEntries.size - 1),
+                        title = stringResource(AYMR.strings.novel_reader_book_flip_animation_speed),
+                        subtitle = resolveNovelPageTurnSliderLabel(
+                            value = bookFlipAnimationSpeed,
+                            entries = bookFlipAnimationSpeedEntries,
+                        ),
+                        onValueChanged = { value ->
+                            bookFlipAnimationSpeedPref.set(
+                                resolveNovelBookFlipAnimationSpeedSliderValue(value),
+                            )
+                            true
+                        },
+                        enabled = pageReader,
+                    ),
+                )
+            }
             if (showPageTurnTuning) {
                 add(
                     Preference.PreferenceItem.TextPreference(
@@ -869,9 +961,11 @@ object SettingsNovelReaderScreen : SearchableSettings {
                             speed = pageTurnSpeed,
                             intensity = pageTurnIntensity,
                             shadowIntensity = pageTurnShadowIntensity,
+                            activationZone = pageTurnActivationZone,
                             speedEntries = pageTurnSpeedEntries,
                             intensityEntries = pageTurnIntensityEntries,
                             shadowEntries = pageTurnShadowEntries,
+                            activationZoneEntries = pageTurnActivationZoneEntries,
                         ),
                         onClick = {
                             pageTurnTuningExpanded = !pageTurnTuningExpanded
@@ -931,6 +1025,23 @@ object SettingsNovelReaderScreen : SearchableSettings {
                             onValueChanged = { value ->
                                 pageTurnShadowIntensityPref.set(
                                     resolveNovelPageTurnShadowIntensitySliderValue(value),
+                                )
+                                true
+                            },
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.SliderPreference(
+                            value = novelPageTurnActivationZoneSliderIndex(pageTurnActivationZone),
+                            title = stringResource(AYMR.strings.novel_reader_page_turn_activation_zone),
+                            subtitle = resolveNovelPageTurnSliderLabel(
+                                value = pageTurnActivationZone,
+                                entries = pageTurnActivationZoneEntries,
+                            ),
+                            valueRange = 0..(pageTurnActivationZoneEntries.size - 1),
+                            onValueChanged = { value ->
+                                pageTurnActivationZonePref.set(
+                                    resolveNovelPageTurnActivationZoneSliderValue(value),
                                 )
                                 true
                             },
@@ -1088,6 +1199,22 @@ object SettingsNovelReaderScreen : SearchableSettings {
             "Gemini Private"
         }
         val items = mutableListOf<Preference.PreferenceItem<out Any>>(
+            Preference.PreferenceItem.TextPreference(
+                title = stringResource(AYMR.strings.novel_reader_selected_text_translation_section),
+                subtitle = stringResource(
+                    AYMR.strings.novel_reader_selected_text_translation_global_only_summary,
+                ),
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                preference = prefs.selectedTextTranslationEnabled(),
+                title = stringResource(AYMR.strings.novel_reader_selected_text_translation_enabled),
+            ),
+            Preference.PreferenceItem.EditTextInfoPreference(
+                preference = prefs.selectedTextTranslationTargetLanguage(),
+                dialogSubtitle = null,
+                title = stringResource(AYMR.strings.novel_reader_selected_text_translation_target_language),
+                subtitle = "%s",
+            ),
             Preference.PreferenceItem.ListPreference(
                 preference = translationProviderPref,
                 entries = persistentMapOf(
@@ -1155,6 +1282,22 @@ object SettingsNovelReaderScreen : SearchableSettings {
             )
         }
 
+        items += Preference.PreferenceItem.EditTextInfoPreference(
+            preference = prefs.googleTranslationSourceLang(),
+            dialogSubtitle = null,
+            title = stringResource(AYMR.strings.novel_reader_google_translate_source),
+            subtitle = "%s",
+        )
+        items += Preference.PreferenceItem.EditTextInfoPreference(
+            preference = prefs.googleTranslationTargetLang(),
+            dialogSubtitle = null,
+            title = stringResource(AYMR.strings.novel_reader_google_translate_target),
+            subtitle = "%s",
+        )
+        items += Preference.PreferenceItem.SwitchPreference(
+            preference = prefs.googleTranslationAutoStart(),
+            title = stringResource(AYMR.strings.novel_reader_google_translate_auto_start),
+        )
         items += Preference.PreferenceItem.MultiLineEditTextPreference(
             preference = prefs.customCSS(),
             title = stringResource(AYMR.strings.novel_reader_custom_css),

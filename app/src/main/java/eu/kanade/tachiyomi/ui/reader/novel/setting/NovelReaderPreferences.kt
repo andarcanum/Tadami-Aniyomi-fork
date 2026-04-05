@@ -1,8 +1,11 @@
 package eu.kanade.tachiyomi.ui.reader.novel.setting
 
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
@@ -10,6 +13,7 @@ import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.preference.getEnum
 import uy.kohesive.injekt.Injekt
@@ -56,9 +60,11 @@ data class NovelReaderSettings(
     val preferWebViewRenderer: Boolean,
     val richNativeRendererExperimental: Boolean,
     val pageTransitionStyle: NovelPageTransitionStyle = NovelPageTransitionStyle.SLIDE,
+    val bookFlipAnimationSpeed: NovelBookFlipAnimationSpeed = NovelBookFlipAnimationSpeed.SLOW,
     val pageTurnSpeed: NovelPageTurnSpeed = NovelPageTurnSpeed.NORMAL,
     val pageTurnIntensity: NovelPageTurnIntensity = NovelPageTurnIntensity.MEDIUM,
     val pageTurnShadowIntensity: NovelPageTurnShadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+    val pageTurnActivationZone: NovelPageTurnActivationZone = NovelPageTurnActivationZone.WIDE,
     val verticalSeekbar: Boolean,
     val swipeToNextChapter: Boolean,
     val swipeToPrevChapter: Boolean,
@@ -81,6 +87,10 @@ data class NovelReaderSettings(
     // Advanced
     val customCSS: String,
     val customJS: String,
+
+    // Selected text translation
+    val selectedTextTranslationEnabled: Boolean = true,
+    val selectedTextTranslationTargetLanguage: String = "Russian",
 
     // Gemini Translation
     val geminiEnabled: Boolean = false,
@@ -116,6 +126,12 @@ data class NovelReaderSettings(
     val deepSeekBaseUrl: String = "https://api.deepseek.com",
     val deepSeekApiKey: String = "",
     val deepSeekModel: String = "deepseek-chat",
+
+    // Google Translation
+    val googleTranslationEnabled: Boolean = false,
+    val googleTranslationSourceLang: String = "auto",
+    val googleTranslationTargetLang: String = "Russian",
+    val googleTranslationAutoStart: Boolean = false,
 )
 
 enum class NovelReaderTheme {
@@ -161,6 +177,7 @@ enum class NovelPageTransitionStyle {
     DEPTH,
     BOOK,
     CURL,
+    BOOK_FLIP,
 }
 
 enum class NovelPageTurnSpeed {
@@ -169,6 +186,12 @@ enum class NovelPageTurnSpeed {
     NORMAL,
     FAST,
     FASTER,
+}
+
+enum class NovelBookFlipAnimationSpeed {
+    SLOW,
+    NORMAL,
+    FAST,
 }
 
 enum class NovelPageTurnIntensity {
@@ -185,6 +208,14 @@ enum class NovelPageTurnShadowIntensity {
     MEDIUM,
     HIGH,
     STRONGER,
+}
+
+enum class NovelPageTurnActivationZone {
+    NARROWER,
+    NARROW,
+    NORMAL,
+    WIDE,
+    WIDER,
 }
 
 enum class GeminiPromptMode {
@@ -256,9 +287,11 @@ data class NovelReaderOverride(
     val preferWebViewRenderer: Boolean? = null,
     val richNativeRendererExperimental: Boolean? = null,
     val pageTransitionStyle: NovelPageTransitionStyle? = null,
+    val bookFlipAnimationSpeed: NovelBookFlipAnimationSpeed? = null,
     val pageTurnSpeed: NovelPageTurnSpeed? = null,
     val pageTurnIntensity: NovelPageTurnIntensity? = null,
     val pageTurnShadowIntensity: NovelPageTurnShadowIntensity? = null,
+    val pageTurnActivationZone: NovelPageTurnActivationZone? = null,
     val verticalSeekbar: Boolean? = null,
     val swipeToNextChapter: Boolean? = null,
     val swipeToPrevChapter: Boolean? = null,
@@ -316,6 +349,12 @@ data class NovelReaderOverride(
     val deepSeekBaseUrl: String? = null,
     val deepSeekApiKey: String? = null,
     val deepSeekModel: String? = null,
+
+    // Google Translation
+    val googleTranslationEnabled: Boolean? = null,
+    val googleTranslationSourceLang: String? = null,
+    val googleTranslationTargetLang: String? = null,
+    val googleTranslationAutoStart: Boolean? = null,
 )
 
 class NovelReaderPreferences(
@@ -325,6 +364,7 @@ class NovelReaderPreferences(
     init {
         migrateLegacyParagraphSpacingIfNeeded()
         migrateLegacyBackgroundSelectionIfNeeded()
+        migrateLegacyPageTransitionStyleIfNeeded()
     }
 
     // Display
@@ -415,8 +455,34 @@ class NovelReaderPreferences(
     fun richNativeRendererExperimental() =
         preferenceStore.getBoolean("novel_reader_rich_native_renderer_experimental", true)
 
-    fun pageTransitionStyle() =
-        preferenceStore.getEnum("novel_reader_page_transition_style", NovelPageTransitionStyle.SLIDE)
+    fun pageTransitionStyle(): Preference<NovelPageTransitionStyle> {
+        val preference = preferenceStore.getEnum(
+            "novel_reader_page_transition_style",
+            NovelPageTransitionStyle.SLIDE,
+        )
+        return object : Preference<NovelPageTransitionStyle> by preference {
+            override fun get(): NovelPageTransitionStyle {
+                val current = preference.get()
+                val normalized = current.normalizeLegacyPageTransitionStyle()
+                if (normalized != current) {
+                    preference.set(normalized)
+                }
+                return normalized
+            }
+
+            override fun set(value: NovelPageTransitionStyle) {
+                preference.set(value.normalizeLegacyPageTransitionStyle())
+            }
+
+            override fun changes() = preference.changes().map { it.normalizeLegacyPageTransitionStyle() }
+
+            override fun stateIn(scope: CoroutineScope) =
+                changes().stateIn(scope, kotlinx.coroutines.flow.SharingStarted.Eagerly, get())
+        }
+    }
+
+    fun bookFlipAnimationSpeed() =
+        preferenceStore.getEnum("novel_reader_book_flip_animation_speed", NovelBookFlipAnimationSpeed.SLOW)
 
     fun pageTurnSpeed() =
         preferenceStore.getEnum("novel_reader_page_turn_speed", NovelPageTurnSpeed.NORMAL)
@@ -427,6 +493,9 @@ class NovelReaderPreferences(
     fun pageTurnShadowIntensity() =
         preferenceStore.getEnum("novel_reader_page_turn_shadow_intensity", NovelPageTurnShadowIntensity.MEDIUM)
 
+    fun pageTurnActivationZone() =
+        preferenceStore.getEnum("novel_reader_page_turn_activation_zone", NovelPageTurnActivationZone.WIDE)
+
     fun preserveSourceTextAlignInNative() =
         preferenceStore.getBoolean("novel_reader_preserve_source_text_align_in_native", true)
 
@@ -436,7 +505,7 @@ class NovelReaderPreferences(
 
     fun swipeToPrevChapter() = preferenceStore.getBoolean("novel_reader_swipe_to_prev_chapter", false)
 
-    fun tapToScroll() = preferenceStore.getBoolean("novel_reader_tap_to_scroll", false)
+    fun tapToScroll() = preferenceStore.getBoolean("novel_reader_tap_to_scroll", true)
 
     fun autoScroll() = preferenceStore.getBoolean("novel_reader_auto_scroll", false)
 
@@ -474,6 +543,12 @@ class NovelReaderPreferences(
     fun customCSS() = preferenceStore.getString("novel_reader_custom_css", "")
 
     fun customJS() = preferenceStore.getString("novel_reader_custom_js", "")
+
+    fun selectedTextTranslationEnabled() =
+        preferenceStore.getBoolean("novel_reader_selected_text_translation_enabled", false)
+
+    fun selectedTextTranslationTargetLanguage() =
+        preferenceStore.getString("novel_reader_selected_text_translation_target_language", "Russian")
 
     // Gemini Translation
     fun geminiEnabled() = preferenceStore.getBoolean("novel_reader_gemini_enabled", false)
@@ -557,6 +632,18 @@ class NovelReaderPreferences(
 
     fun deepSeekModel() = preferenceStore.getString("novel_reader_deepseek_model", "deepseek-chat")
 
+    // Google Translation
+    fun googleTranslationEnabled() = preferenceStore.getBoolean("novel_reader_google_translation_enabled", false)
+
+    fun googleTranslationSourceLang() = preferenceStore.getString("novel_reader_google_translation_source_lang", "auto")
+
+    fun googleTranslationTargetLang() = preferenceStore.getString(
+        "novel_reader_google_translation_target_lang",
+        "Russian",
+    )
+
+    fun googleTranslationAutoStart() = preferenceStore.getBoolean("novel_reader_google_translation_auto_start", false)
+
     // EPUB export
     fun epubExportLocation() = preferenceStore.getString("novel_epub_export_location", "")
 
@@ -580,7 +667,7 @@ class NovelReaderPreferences(
         if (override == null) {
             updated.remove(sourceId)
         } else {
-            updated[sourceId] = override
+            updated[sourceId] = override.normalizeLegacyPageTransitionStyle()
         }
         sourceOverrides().set(updated)
     }
@@ -601,6 +688,25 @@ class NovelReaderPreferences(
             } else {
                 value
             }
+        }
+        if (hasChanges) {
+            sourceOverrides().set(migrated)
+        }
+    }
+
+    fun migrateLegacyPageTransitionStyleIfNeeded() {
+        if (pageTransitionStyle().get() == NovelPageTransitionStyle.BOOK) {
+            pageTransitionStyle().set(NovelPageTransitionStyle.CURL)
+        }
+
+        val overrides = sourceOverrides().get()
+        var hasChanges = false
+        val migrated = overrides.mapValues { (_, value) ->
+            val normalized = value.normalizeLegacyPageTransitionStyle()
+            if (normalized != value) {
+                hasChanges = true
+            }
+            normalized
         }
         if (hasChanges) {
             sourceOverrides().set(migrated)
@@ -641,9 +747,11 @@ class NovelReaderPreferences(
                 preferWebViewRenderer = preferWebViewRenderer().get(),
                 richNativeRendererExperimental = richNativeRendererExperimental().get(),
                 pageTransitionStyle = pageTransitionStyle().get(),
+                bookFlipAnimationSpeed = bookFlipAnimationSpeed().get(),
                 pageTurnSpeed = pageTurnSpeed().get(),
                 pageTurnIntensity = pageTurnIntensity().get(),
                 pageTurnShadowIntensity = pageTurnShadowIntensity().get(),
+                pageTurnActivationZone = pageTurnActivationZone().get(),
                 verticalSeekbar = verticalSeekbar().get(),
                 swipeToNextChapter = swipeToNextChapter().get(),
                 swipeToPrevChapter = swipeToPrevChapter().get(),
@@ -693,6 +801,10 @@ class NovelReaderPreferences(
                 deepSeekBaseUrl = deepSeekBaseUrl().get(),
                 deepSeekApiKey = deepSeekApiKey().get(),
                 deepSeekModel = deepSeekModel().get(),
+                googleTranslationEnabled = googleTranslationEnabled().get(),
+                googleTranslationSourceLang = googleTranslationSourceLang().get(),
+                googleTranslationTargetLang = googleTranslationTargetLang().get(),
+                googleTranslationAutoStart = googleTranslationAutoStart().get(),
             ),
         )
     }
@@ -746,10 +858,13 @@ class NovelReaderPreferences(
             richNativeRendererExperimental =
             override?.richNativeRendererExperimental ?: richNativeRendererExperimental().get(),
             pageTransitionStyle = override?.pageTransitionStyle ?: pageTransitionStyle().get(),
+            bookFlipAnimationSpeed = override?.bookFlipAnimationSpeed ?: bookFlipAnimationSpeed().get(),
             pageTurnSpeed = override?.pageTurnSpeed ?: pageTurnSpeed().get(),
             pageTurnIntensity = override?.pageTurnIntensity ?: pageTurnIntensity().get(),
             pageTurnShadowIntensity =
             override?.pageTurnShadowIntensity ?: pageTurnShadowIntensity().get(),
+            pageTurnActivationZone =
+            override?.pageTurnActivationZone ?: pageTurnActivationZone().get(),
             verticalSeekbar = override?.verticalSeekbar ?: verticalSeekbar().get(),
             swipeToNextChapter = override?.swipeToNextChapter ?: swipeToNextChapter().get(),
             swipeToPrevChapter = override?.swipeToPrevChapter ?: swipeToPrevChapter().get(),
@@ -768,6 +883,10 @@ class NovelReaderPreferences(
             bionicReading = override?.bionicReading ?: bionicReading().get(),
             customCSS = override?.customCSS ?: customCSS().get(),
             customJS = override?.customJS ?: customJS().get(),
+            selectedTextTranslationEnabled =
+            selectedTextTranslationEnabled().get(),
+            selectedTextTranslationTargetLanguage =
+            selectedTextTranslationTargetLanguage().get(),
             geminiEnabled = geminiEnabled().get(),
             geminiApiKey = override?.geminiApiKey ?: geminiApiKey().get(),
             geminiModel = override?.geminiModel ?: geminiModel().get(),
@@ -805,6 +924,10 @@ class NovelReaderPreferences(
             deepSeekBaseUrl = override?.deepSeekBaseUrl ?: deepSeekBaseUrl().get(),
             deepSeekApiKey = override?.deepSeekApiKey ?: deepSeekApiKey().get(),
             deepSeekModel = override?.deepSeekModel ?: deepSeekModel().get(),
+            googleTranslationEnabled = override?.googleTranslationEnabled ?: googleTranslationEnabled().get(),
+            googleTranslationSourceLang = override?.googleTranslationSourceLang ?: googleTranslationSourceLang().get(),
+            googleTranslationTargetLang = override?.googleTranslationTargetLang ?: googleTranslationTargetLang().get(),
+            googleTranslationAutoStart = override?.googleTranslationAutoStart ?: googleTranslationAutoStart().get(),
         )
     }
 
@@ -888,9 +1011,11 @@ class NovelReaderPreferences(
             preferWebViewRenderer().changes(),
             richNativeRendererExperimental().changes(),
             pageTransitionStyle().changes(),
+            bookFlipAnimationSpeed().changes(),
             pageTurnSpeed().changes(),
             pageTurnIntensity().changes(),
             pageTurnShadowIntensity().changes(),
+            pageTurnActivationZone().changes(),
             verticalSeekbar().changes(),
             swipeToNextChapter().changes(),
             swipeToPrevChapter().changes(),
@@ -907,17 +1032,19 @@ class NovelReaderPreferences(
                 values[3] as Boolean,
                 values[4] as Boolean,
                 values[5] as NovelPageTransitionStyle,
-                values[6] as NovelPageTurnSpeed,
-                values[7] as NovelPageTurnIntensity,
-                values[8] as NovelPageTurnShadowIntensity,
-                values[9] as Boolean,
-                values[10] as Boolean,
+                values[6] as NovelBookFlipAnimationSpeed,
+                values[7] as NovelPageTurnSpeed,
+                values[8] as NovelPageTurnIntensity,
+                values[9] as NovelPageTurnShadowIntensity,
+                values[10] as NovelPageTurnActivationZone,
                 values[11] as Boolean,
                 values[12] as Boolean,
                 values[13] as Boolean,
-                values[14] as Int,
-                values[15] as Int,
-                values[16] as Boolean,
+                values[14] as Boolean,
+                values[15] as Boolean,
+                values[16] as Int,
+                values[17] as Int,
+                values[18] as Boolean,
             )
         }.distinctUntilChanged()
 
@@ -946,8 +1073,15 @@ class NovelReaderPreferences(
         val advancedFlow = combine(
             customCSS().changes(),
             customJS().changes(),
-        ) { customCSS, customJS ->
-            AdvancedSettings(customCSS, customJS)
+            selectedTextTranslationEnabled().changes(),
+            selectedTextTranslationTargetLanguage().changes(),
+        ) { values: Array<Any?> ->
+            AdvancedSettings(
+                customCSS = values[0] as String,
+                customJS = values[1] as String,
+                selectedTextTranslationEnabled = values[2] as Boolean,
+                selectedTextTranslationTargetLanguage = values[3] as String,
+            )
         }.distinctUntilChanged()
 
         val geminiFlow = combine(
@@ -984,6 +1118,10 @@ class NovelReaderPreferences(
             deepSeekBaseUrl().changes(),
             deepSeekApiKey().changes(),
             deepSeekModel().changes(),
+            googleTranslationEnabled().changes(),
+            googleTranslationSourceLang().changes(),
+            googleTranslationTargetLang().changes(),
+            googleTranslationAutoStart().changes(),
         ) { values: Array<Any?> ->
             GeminiSettings(
                 enabled = values[0] as Boolean,
@@ -1019,6 +1157,10 @@ class NovelReaderPreferences(
                 deepSeekBaseUrl = values[30] as String,
                 deepSeekApiKey = values[31] as String,
                 deepSeekModel = values[32] as String,
+                googleTranslationEnabled = values[33] as Boolean,
+                googleTranslationSourceLang = values[34] as String,
+                googleTranslationTargetLang = values[35] as String,
+                googleTranslationAutoStart = values[36] as Boolean,
             )
         }.distinctUntilChanged()
 
@@ -1079,10 +1221,13 @@ class NovelReaderPreferences(
                 richNativeRendererExperimental =
                 override?.richNativeRendererExperimental ?: navigation.richNativeRendererExperimental,
                 pageTransitionStyle = override?.pageTransitionStyle ?: navigation.pageTransitionStyle,
+                bookFlipAnimationSpeed = override?.bookFlipAnimationSpeed ?: navigation.bookFlipAnimationSpeed,
                 pageTurnSpeed = override?.pageTurnSpeed ?: navigation.pageTurnSpeed,
                 pageTurnIntensity = override?.pageTurnIntensity ?: navigation.pageTurnIntensity,
                 pageTurnShadowIntensity =
                 override?.pageTurnShadowIntensity ?: navigation.pageTurnShadowIntensity,
+                pageTurnActivationZone =
+                override?.pageTurnActivationZone ?: navigation.pageTurnActivationZone,
                 verticalSeekbar = override?.verticalSeekbar ?: navigation.verticalSeekbar,
                 swipeToNextChapter = override?.swipeToNextChapter ?: navigation.swipeToNextChapter,
                 swipeToPrevChapter = override?.swipeToPrevChapter ?: navigation.swipeToPrevChapter,
@@ -1101,6 +1246,8 @@ class NovelReaderPreferences(
                 bionicReading = override?.bionicReading ?: accessibility.bionicReading,
                 customCSS = override?.customCSS ?: advanced.customCSS,
                 customJS = override?.customJS ?: advanced.customJS,
+                selectedTextTranslationEnabled = advanced.selectedTextTranslationEnabled,
+                selectedTextTranslationTargetLanguage = advanced.selectedTextTranslationTargetLanguage,
                 geminiEnabled = gemini.enabled,
                 geminiApiKey = override?.geminiApiKey ?: gemini.apiKey,
                 geminiModel = override?.geminiModel ?: gemini.model,
@@ -1137,6 +1284,12 @@ class NovelReaderPreferences(
                 deepSeekBaseUrl = override?.deepSeekBaseUrl ?: gemini.deepSeekBaseUrl,
                 deepSeekApiKey = override?.deepSeekApiKey ?: gemini.deepSeekApiKey,
                 deepSeekModel = override?.deepSeekModel ?: gemini.deepSeekModel,
+                googleTranslationEnabled = override?.googleTranslationEnabled ?: gemini.googleTranslationEnabled,
+                googleTranslationSourceLang =
+                override?.googleTranslationSourceLang ?: gemini.googleTranslationSourceLang,
+                googleTranslationTargetLang =
+                override?.googleTranslationTargetLang ?: gemini.googleTranslationTargetLang,
+                googleTranslationAutoStart = override?.googleTranslationAutoStart ?: gemini.googleTranslationAutoStart,
             )
         }.distinctUntilChanged()
     }
@@ -1184,9 +1337,11 @@ class NovelReaderPreferences(
         val preferWebViewRenderer: Boolean,
         val richNativeRendererExperimental: Boolean,
         val pageTransitionStyle: NovelPageTransitionStyle,
+        val bookFlipAnimationSpeed: NovelBookFlipAnimationSpeed,
         val pageTurnSpeed: NovelPageTurnSpeed,
         val pageTurnIntensity: NovelPageTurnIntensity,
         val pageTurnShadowIntensity: NovelPageTurnShadowIntensity,
+        val pageTurnActivationZone: NovelPageTurnActivationZone,
         val verticalSeekbar: Boolean,
         val swipeToNextChapter: Boolean,
         val swipeToPrevChapter: Boolean,
@@ -1211,6 +1366,8 @@ class NovelReaderPreferences(
     private data class AdvancedSettings(
         val customCSS: String,
         val customJS: String,
+        val selectedTextTranslationEnabled: Boolean,
+        val selectedTextTranslationTargetLanguage: String,
     )
 
     private data class GeminiSettings(
@@ -1247,6 +1404,10 @@ class NovelReaderPreferences(
         val deepSeekBaseUrl: String,
         val deepSeekApiKey: String,
         val deepSeekModel: String,
+        val googleTranslationEnabled: Boolean,
+        val googleTranslationSourceLang: String,
+        val googleTranslationTargetLang: String,
+        val googleTranslationAutoStart: Boolean,
     )
 
     companion object {
@@ -1272,5 +1433,21 @@ private fun resolveLegacyParagraphSpacingDp(rawValue: String): Int {
         NovelReaderParagraphSpacing.COMPACT.name -> 8
         NovelReaderParagraphSpacing.SPACIOUS.name -> 16
         else -> NovelReaderPreferences.DEFAULT_PARAGRAPH_SPACING_DP
+    }
+}
+
+private fun NovelPageTransitionStyle.normalizeLegacyPageTransitionStyle(): NovelPageTransitionStyle {
+    return if (this == NovelPageTransitionStyle.BOOK) {
+        NovelPageTransitionStyle.CURL
+    } else {
+        this
+    }
+}
+
+private fun NovelReaderOverride.normalizeLegacyPageTransitionStyle(): NovelReaderOverride {
+    return if (pageTransitionStyle == NovelPageTransitionStyle.BOOK) {
+        copy(pageTransitionStyle = NovelPageTransitionStyle.CURL)
+    } else {
+        this
     }
 }

@@ -27,6 +27,13 @@ internal fun resolveNovelPageTurnPreset(
             shadowAlpha = 0.38f,
             backPageAlpha = 0.32f,
         )
+        NovelPageTransitionStyle.BOOK -> NovelPageTurnPreset(
+            style = style,
+            animationDurationMillis = 440,
+            curlAmount = 0.18f,
+            shadowAlpha = 0.52f,
+            backPageAlpha = 0.16f,
+        )
         else -> NovelPageTurnPreset(
             style = style,
             animationDurationMillis = 420,

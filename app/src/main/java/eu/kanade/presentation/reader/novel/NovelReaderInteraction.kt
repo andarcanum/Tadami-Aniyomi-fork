@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
 import eu.kanade.tachiyomi.ui.reader.novel.PageReaderProgress
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelBookFlipAnimationSpeed
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import kotlin.math.abs
@@ -363,11 +364,16 @@ internal fun resolveInitialPageReaderPage(
     savedPageReaderProgress: PageReaderProgress?,
     legacyLastSavedIndex: Int,
     pageCount: Int,
-    isInternalChapterHandoff: Boolean = false,
+    chapterHandoffTarget: NovelReaderPageReaderHandoffTarget = NovelReaderPageReaderHandoffTarget.SAVED,
 ): Int {
     val safePageCount = pageCount.coerceAtLeast(1)
     val lastPageIndex = safePageCount - 1
-    if (!shouldRestoreSavedPageReaderProgress(isInternalChapterHandoff)) return 0
+    when (chapterHandoffTarget) {
+        NovelReaderPageReaderHandoffTarget.START -> return 0
+        NovelReaderPageReaderHandoffTarget.END -> return lastPageIndex
+        NovelReaderPageReaderHandoffTarget.SAVED -> Unit
+    }
+    if (!shouldRestoreSavedPageReaderProgress(chapterHandoffTarget)) return 0
     val savedProgress = savedPageReaderProgress ?: return legacyLastSavedIndex.coerceIn(0, lastPageIndex)
     if (safePageCount == 1 || savedProgress.totalItems <= 1) return 0
     val sourceLastPageIndex = (savedProgress.totalItems - 1).coerceAtLeast(1)
@@ -429,10 +435,91 @@ internal fun resolvePageTransitionEngine(
         NovelPageTransitionStyle.INSTANT,
         NovelPageTransitionStyle.SLIDE,
         NovelPageTransitionStyle.DEPTH,
+        NovelPageTransitionStyle.BOOK_FLIP,
         -> NovelPageTransitionEngine.COMPOSE_PAGER
         NovelPageTransitionStyle.BOOK,
         NovelPageTransitionStyle.CURL,
         -> NovelPageTransitionEngine.PAGE_TURN_RENDERER
+    }
+}
+
+internal fun shouldUseComposePagerBoundaryPreview(
+    style: NovelPageTransitionStyle,
+): Boolean {
+    return when (style) {
+        NovelPageTransitionStyle.SLIDE,
+        NovelPageTransitionStyle.DEPTH,
+        NovelPageTransitionStyle.BOOK_FLIP,
+        -> true
+        NovelPageTransitionStyle.INSTANT,
+        NovelPageTransitionStyle.BOOK,
+        NovelPageTransitionStyle.CURL,
+        -> false
+    }
+}
+
+internal fun resolveComposePagerVirtualPageCount(
+    contentPageCount: Int,
+    hasPreviousChapter: Boolean,
+    hasNextChapter: Boolean,
+): Int {
+    return contentPageCount.coerceAtLeast(1) +
+        (if (hasPreviousChapter) 1 else 0) +
+        (if (hasNextChapter) 1 else 0)
+}
+
+internal fun resolveComposePagerVirtualPageIndex(
+    actualPageIndex: Int,
+    hasPreviousChapter: Boolean,
+): Int {
+    return actualPageIndex.coerceAtLeast(0) + if (hasPreviousChapter) 1 else 0
+}
+
+internal fun resolveComposePagerActualPageIndex(
+    currentPage: Int,
+    contentPageCount: Int,
+    hasPreviousChapter: Boolean,
+): Int {
+    val safeContentPageCount = contentPageCount.coerceAtLeast(1)
+    val offset = if (hasPreviousChapter) 1 else 0
+    return (currentPage - offset).coerceIn(0, safeContentPageCount - 1)
+}
+
+internal fun resolveComposePagerBoundaryChapterTarget(
+    currentPage: Int,
+    contentPageCount: Int,
+    hasPreviousChapter: Boolean,
+    hasNextChapter: Boolean,
+): HorizontalChapterSwipeAction {
+    val virtualPageCount = resolveComposePagerVirtualPageCount(
+        contentPageCount = contentPageCount,
+        hasPreviousChapter = hasPreviousChapter,
+        hasNextChapter = hasNextChapter,
+    )
+    return when {
+        hasPreviousChapter && currentPage <= 0 -> HorizontalChapterSwipeAction.PREVIOUS
+        hasNextChapter && currentPage >= virtualPageCount - 1 -> HorizontalChapterSwipeAction.NEXT
+        else -> HorizontalChapterSwipeAction.NONE
+    }
+}
+
+internal fun resolveComposePagerSettledBoundaryChapterTarget(
+    currentPage: Int,
+    progress: Float,
+    contentPageCount: Int,
+    hasPreviousChapter: Boolean,
+    hasNextChapter: Boolean,
+): HorizontalChapterSwipeAction {
+    val boundaryTarget = resolveComposePagerBoundaryChapterTarget(
+        currentPage = currentPage,
+        contentPageCount = contentPageCount,
+        hasPreviousChapter = hasPreviousChapter,
+        hasNextChapter = hasNextChapter,
+    )
+    return if (boundaryTarget != HorizontalChapterSwipeAction.NONE && abs(progress) <= 0.001f) {
+        boundaryTarget
+    } else {
+        HorizontalChapterSwipeAction.NONE
     }
 }
 
@@ -445,6 +532,13 @@ internal fun resolveActivePageTransitionStyle(
         return NovelPageTransitionStyle.SLIDE
     }
     return requestedStyle
+}
+
+internal fun shouldShowNovelAtmosphereBackground(
+    usePageReader: Boolean,
+    activePageTransitionStyle: NovelPageTransitionStyle,
+): Boolean {
+    return !usePageReader || activePageTransitionStyle != NovelPageTransitionStyle.BOOK_FLIP
 }
 
 internal enum class NovelPageReaderRendererRoute {
@@ -467,11 +561,19 @@ internal fun resolvePageReaderCurrentPage(
     pageReaderRendererRoute: NovelPageReaderRendererRoute?,
     pagerCurrentPage: Int,
     pageTurnCurrentPage: Int,
+    composePagerContentPageCount: Int,
+    composePagerHasPreviousChapter: Boolean,
 ): Int {
-    return if (pageReaderRendererRoute == NovelPageReaderRendererRoute.PAGE_TURN_RENDERER) {
-        resolvePageTurnRendererProgressPageIndex(pageTurnCurrentPage)
-    } else {
-        pagerCurrentPage.coerceAtLeast(0)
+    return when (pageReaderRendererRoute) {
+        NovelPageReaderRendererRoute.PAGE_TURN_RENDERER ->
+            resolvePageTurnRendererProgressPageIndex(pageTurnCurrentPage)
+        NovelPageReaderRendererRoute.COMPOSE_PAGER ->
+            resolveComposePagerActualPageIndex(
+                currentPage = pagerCurrentPage,
+                contentPageCount = composePagerContentPageCount,
+                hasPreviousChapter = composePagerHasPreviousChapter,
+            )
+        null -> pagerCurrentPage.coerceAtLeast(0)
     }
 }
 
@@ -482,6 +584,8 @@ internal fun resolveReaderVerticalSeekbarValue(
     pageReaderRendererRoute: NovelPageReaderRendererRoute?,
     pagerCurrentPage: Int,
     pageTurnCurrentPage: Int,
+    composePagerContentPageCount: Int,
+    composePagerHasPreviousChapter: Boolean,
     seekbarItemsCount: Int,
     readingProgressPercent: Int,
 ): Float {
@@ -498,6 +602,8 @@ internal fun resolveReaderVerticalSeekbarValue(
                 pageReaderRendererRoute = pageReaderRendererRoute,
                 pagerCurrentPage = pagerCurrentPage,
                 pageTurnCurrentPage = pageTurnCurrentPage,
+                composePagerContentPageCount = composePagerContentPageCount,
+                composePagerHasPreviousChapter = composePagerHasPreviousChapter,
             )
             current.toFloat() / max.toFloat()
         }
@@ -522,4 +628,53 @@ internal fun resolveReaderTapAction(
     val inCenter = clampedTapX > leftBoundary && clampedTapX < rightBoundary
     if (inCenter || !tapToScrollEnabled) return ReaderTapAction.TOGGLE_UI
     return if (clampedTapX <= leftBoundary) ReaderTapAction.BACKWARD else ReaderTapAction.FORWARD
+}
+
+internal fun dispatchReaderTapAction(
+    tapX: Float,
+    width: Float,
+    tapToScrollEnabled: Boolean,
+    onToggleUi: () -> Unit,
+    onBackward: () -> Unit,
+    onForward: () -> Unit,
+): ReaderTapAction {
+    return resolveReaderTapAction(
+        tapX = tapX,
+        width = width,
+        tapToScrollEnabled = tapToScrollEnabled,
+    ).also { action ->
+        when (action) {
+            ReaderTapAction.TOGGLE_UI -> onToggleUi()
+            ReaderTapAction.BACKWARD -> onBackward()
+            ReaderTapAction.FORWARD -> onForward()
+        }
+    }
+}
+
+private const val BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_SLOW_MILLIS = 1500
+private const val BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_NORMAL_MILLIS = 1000
+private const val BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_FAST_MILLIS = 500
+
+internal fun resolveBookFlipPageAnimationDurationMillis(
+    transitionStyle: NovelPageTransitionStyle,
+    animationSpeed: NovelBookFlipAnimationSpeed,
+): Int? {
+    if (transitionStyle != NovelPageTransitionStyle.BOOK_FLIP) return null
+    return when (animationSpeed) {
+        NovelBookFlipAnimationSpeed.SLOW -> BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_SLOW_MILLIS
+        NovelBookFlipAnimationSpeed.NORMAL -> BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_NORMAL_MILLIS
+        NovelBookFlipAnimationSpeed.FAST -> BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_FAST_MILLIS
+    }
+}
+
+internal fun resolveBookFlipEdgeTapAnimationDurationMillis(
+    transitionStyle: NovelPageTransitionStyle,
+    animationSpeed: NovelBookFlipAnimationSpeed,
+    tapToScrollEnabled: Boolean,
+): Int? {
+    if (!tapToScrollEnabled) return null
+    return resolveBookFlipPageAnimationDurationMillis(
+        transitionStyle = transitionStyle,
+        animationSpeed = animationSpeed,
+    )
 }

@@ -43,6 +43,7 @@ import eu.kanade.tachiyomi.data.track.EnhancedAnimeTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.ui.entries.anime.track.AnimeTrackItem
+import eu.kanade.tachiyomi.ui.entries.mergeNewItemIds
 import eu.kanade.tachiyomi.ui.player.PlaybackPlayerPreference
 import eu.kanade.tachiyomi.ui.player.PlaybackSelectionPreferences
 import eu.kanade.tachiyomi.ui.player.settings.GesturePreferences
@@ -690,6 +691,21 @@ class AnimeScreenModel(
         }
     }
 
+    private fun updateNewEpisodeIds(
+        addedIds: Iterable<Long> = emptyList(),
+        clearedIds: Iterable<Long> = emptyList(),
+    ) {
+        updateSuccessState { successState ->
+            successState.copy(
+                newEpisodeIds = mergeNewItemIds(
+                    existingNewItemIds = successState.newEpisodeIds,
+                    addedItemIds = addedIds,
+                    clearedItemIds = clearedIds,
+                ),
+            )
+        }
+    }
+
     private fun List<Episode>.toEpisodeListItems(anime: Anime): List<EpisodeList.Item> {
         val isLocal = anime.isLocal()
         return map { episode ->
@@ -775,6 +791,13 @@ class AnimeScreenModel(
         if (manualFetch) {
             downloadNewEpisodes(newEpisodes)
         }
+
+        updateNewEpisodeIds(
+            addedIds = newEpisodes.asSequence()
+                .filterNot { it.seen }
+                .map { it.id }
+                .toList(),
+        )
     }
 
     private suspend fun fetchSeasonsFromSource(manualFetch: Boolean = false) {
@@ -1036,6 +1059,10 @@ class AnimeScreenModel(
                 seen = seen,
                 episodes = episodes.toTypedArray(),
             )
+
+            if (seen) {
+                updateNewEpisodeIds(clearedIds = episodes.map { it.id })
+            }
 
             if (!seen || successState?.hasLoggedInTrackers == false || autoTrackState == AutoTrackState.NEVER) {
                 return@launchIO
@@ -1910,6 +1937,7 @@ class AnimeScreenModel(
             val episodes: List<EpisodeList.Item>,
             val seasons: List<AnimeSeasonItem>,
             val downloadedOnly: Boolean = false,
+            val newEpisodeIds: Set<Long> = emptySet(),
             val trackingCount: Int = 0,
             val hasLoggedInTrackers: Boolean = false,
             val isRefreshingData: Boolean = false,

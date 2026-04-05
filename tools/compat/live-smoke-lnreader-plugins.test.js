@@ -544,6 +544,64 @@ test('runLiveSmoke aggregates failure codes once per plugin per code', async () 
   assert.equal(result.failureCodes.request_failed, 1);
 });
 
+test('runLiveSmokeForPlugin surfaces a late 429 as request_failed', async () => {
+  const plugin = {
+    id: 'demo',
+    site: 'https://example.org',
+  };
+  const scriptText = `
+    exports.default = {
+      popularNovels() {},
+      searchNovels() {},
+      parseNovel() {},
+      parseChapter() {}
+    };
+  `;
+
+  let requestCount = 0;
+  const fetcher = async (url) => {
+    requestCount += 1;
+
+    if (url === 'https://example.org') {
+      return makeResponse({
+        text: '<html><body>ok</body></html>',
+        headers: { 'content-type': 'text/html' },
+      });
+    }
+    if (url.startsWith('https://example.org/search/autocomplete')) {
+      return makeResponse({
+        json: [{ url: '/book/1', title_one: 'Novel', title_two: '' }],
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (url === 'https://example.org/book/1') {
+      return makeResponse({
+        ok: false,
+        status: 429,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    throw new Error(`Unexpected URL ${url}`);
+  };
+
+  const result = await runLiveSmokeForPlugin({
+    plugin,
+    scriptText,
+    fetcher,
+  });
+
+  assert.equal(requestCount, 3);
+  assert.equal(result.stages.popular.status, 'pass');
+  assert.equal(result.stages.search.status, 'pass');
+  assert.equal(result.stages.novel.status, 'fail');
+  assert.equal(result.stages.novel.code, 'request_failed');
+  assert.equal(result.stages.novel.httpStatus, 429);
+  assert.equal(result.stages.chapters.status, 'skip');
+  assert.equal(result.stages.chapters.code, 'novel_unavailable');
+  assert.equal(result.stages.chapterText.status, 'skip');
+  assert.equal(result.stages.chapterText.code, 'chapters_unavailable');
+});
+
 test('runLiveSmoke filters by langs and ids', async () => {
   const tempDir = mkTmpDir('live-smoke-filter');
   const enRoot = path.join(tempDir, '.js', 'plugins', 'english');

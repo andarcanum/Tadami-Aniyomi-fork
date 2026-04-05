@@ -40,6 +40,7 @@ import eu.kanade.presentation.library.manga.MangaLibrarySettingsDialog
 import eu.kanade.presentation.more.onboarding.GETTING_STARTED_URL
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.data.library.manga.MangaLibraryUpdateJob
+import eu.kanade.tachiyomi.ui.browse.manga.migration.config.MigrationConfigScreen
 import eu.kanade.tachiyomi.ui.browse.manga.source.globalsearch.GlobalMangaSearchScreen
 import eu.kanade.tachiyomi.ui.category.CategoriesTab
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreen
@@ -183,6 +184,16 @@ data object MangaLibraryTab : Tab {
                     onMarkAsUnviewedClicked = { screenModel.markReadSelection(false) },
                     onDownloadClicked = screenModel::runDownloadActionSelection
                         .takeIf { state.selection.fastAll { !it.manga.isLocal() } },
+                    onMigrateClicked = {
+                        val selectionIds = state.selection.map { it.manga.id }
+                        screenModel.clearSelection()
+                        when (val route = resolveMangaLibraryMigrationRoute(selectionIds)) {
+                            is MangaLibraryMigrationRoute.Config -> {
+                                navigator.push(MigrationConfigScreen(route.mangaIds))
+                            }
+                            MangaLibraryMigrationRoute.None -> Unit
+                        }
+                    },
                     onDeleteClicked = screenModel::openDeleteMangaDialog,
                     isManga = true,
                 )

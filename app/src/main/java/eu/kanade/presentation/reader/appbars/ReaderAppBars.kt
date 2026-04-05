@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -320,7 +321,7 @@ fun ReaderAppBars(
             ) + fadeOut(animationSpec = panelFadeSpec),
         ) {
             Column(
-                modifier = Modifier,
+                modifier = Modifier.navigationBarsPadding(),
                 verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
             ) {
                 if (showNavigator) {

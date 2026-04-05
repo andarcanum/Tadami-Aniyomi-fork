@@ -39,6 +39,13 @@ internal fun shouldResetAuroraEntryHoldRefreshLatch(distanceFraction: Float): Bo
     return distanceFraction <= AURORA_ENTRY_HOLD_REFRESH_RESET_THRESHOLD
 }
 
+internal fun shouldTriggerAuroraEntryRefresh(
+    refreshing: Boolean,
+    hasTriggeredForCurrentPull: Boolean,
+): Boolean {
+    return !refreshing && !hasTriggeredForCurrentPull
+}
+
 internal fun normalizeAuroraGlobalSearchQuery(title: String): String? {
     return title.trim().takeIf { it.isNotEmpty() }
 }
@@ -57,6 +64,22 @@ fun AuroraEntryHoldToRefresh(
     val pullRefreshState = rememberPullToRefreshState()
     val haptic = LocalHapticFeedback.current
     var hasTriggeredForCurrentPull by remember { mutableStateOf(false) }
+
+    fun triggerRefresh(playHapticFeedback: Boolean) {
+        if (!shouldTriggerAuroraEntryRefresh(
+                refreshing = refreshing,
+                hasTriggeredForCurrentPull = hasTriggeredForCurrentPull,
+            )
+        ) {
+            return
+        }
+
+        hasTriggeredForCurrentPull = true
+        if (playHapticFeedback) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
+        onRefresh()
+    }
 
     LaunchedEffect(
         enabled,
@@ -92,9 +115,7 @@ fun AuroraEntryHoldToRefresh(
             return@LaunchedEffect
         }
 
-        hasTriggeredForCurrentPull = true
-        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-        onRefresh()
+        triggerRefresh(playHapticFeedback = true)
     }
 
     val colors = AuroraTheme.colors
@@ -104,7 +125,7 @@ fun AuroraEntryHoldToRefresh(
             state = pullRefreshState,
             isRefreshing = refreshing,
             enabled = enabled,
-            onRefresh = {},
+            onRefresh = { triggerRefresh(playHapticFeedback = false) },
         ),
     ) {
         content()

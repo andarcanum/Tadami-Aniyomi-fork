@@ -26,7 +26,9 @@ import eu.kanade.tachiyomi.ui.reader.novel.decodePageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodeNativeScrollProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodePageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodeWebScrollProgressPercent
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelBookFlipAnimationSpeed
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnActivationZone
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnIntensity
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnShadowIntensity
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnSpeed
@@ -34,6 +36,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.wewox.pagecurl.ExperimentalPageCurlApi
+import eu.wewox.pagecurl.config.PageCurlConfig
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -962,44 +965,32 @@ class NovelReaderUiVisibilityTest {
     fun `paged plain renderer uses exact paragraph spacing when packing pages`() {
         val textBlocks = listOf("First paragraph", "Second paragraph")
 
-        val compactPages = resolvePageReaderBlocks(
-            shouldPaginate = true,
+        val compactPages = paginatePlainPageBlocks(
             textBlocks = textBlocks,
-            paragraphSpacingDp = 0,
-        ) { blocks, paragraphSpacingPx ->
-            paginatePlainPageBlocks(
-                textBlocks = blocks,
-                paragraphSpacingPx = paragraphSpacingPx,
-                widthPx = 600,
-                heightPx = 76,
-                textSizePx = 20f,
-                lineHeightMultiplier = 1.2f,
-                typeface = null,
-                textAlign = ReaderTextAlign.LEFT,
-            ).map { page ->
-                page.joinToString("\n") { slice ->
-                    blocks[slice.blockIndex].substring(slice.range.start, slice.range.endExclusive)
-                }
+            paragraphSpacingPx = 0,
+            widthPx = 600,
+            heightPx = 76,
+            textSizePx = 20f,
+            lineHeightMultiplier = 1.2f,
+            typeface = null,
+            textAlign = ReaderTextAlign.LEFT,
+        ).map { page ->
+            page.joinToString("\n") { slice ->
+                textBlocks[slice.blockIndex].substring(slice.range.start, slice.range.endExclusive)
             }
         }
-        val spacedPages = resolvePageReaderBlocks(
-            shouldPaginate = true,
+        val spacedPages = paginatePlainPageBlocks(
             textBlocks = textBlocks,
-            paragraphSpacingDp = 32,
-        ) { blocks, paragraphSpacingPx ->
-            paginatePlainPageBlocks(
-                textBlocks = blocks,
-                paragraphSpacingPx = paragraphSpacingPx,
-                widthPx = 600,
-                heightPx = 76,
-                textSizePx = 20f,
-                lineHeightMultiplier = 1.2f,
-                typeface = null,
-                textAlign = ReaderTextAlign.LEFT,
-            ).map { page ->
-                page.joinToString("\n") { slice ->
-                    blocks[slice.blockIndex].substring(slice.range.start, slice.range.endExclusive)
-                }
+            paragraphSpacingPx = 64,
+            widthPx = 600,
+            heightPx = 76,
+            textSizePx = 20f,
+            lineHeightMultiplier = 1.2f,
+            typeface = null,
+            textAlign = ReaderTextAlign.LEFT,
+        ).map { page ->
+            page.joinToString("\n") { slice ->
+                textBlocks[slice.blockIndex].substring(slice.range.start, slice.range.endExclusive)
             }
         }
 
@@ -1055,6 +1046,42 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `plain paged renderer keeps paragraph continuation on the current page`() {
+        val textBlocks = listOf(
+            "A",
+            "Long paragraph ".repeat(50).trim(),
+        )
+
+        val pages = paginatePlainPageBlocks(
+            textBlocks = textBlocks,
+            paragraphSpacingPx = 32,
+            widthPx = 260,
+            heightPx = 1000,
+            textSizePx = 24f,
+            lineHeightMultiplier = 1.2f,
+            typeface = null,
+            textAlign = ReaderTextAlign.LEFT,
+            forceParagraphIndent = false,
+        )
+
+        assertTrue(pages.size > 1)
+        assertTrue(pages.first().any { it.blockIndex == 1 })
+        assertTrue(pages.drop(1).first().first().blockIndex == 1)
+        assertTrue(pages.drop(1).first().first().range.start > 0)
+        assertPlainPageSliceCoverage(textBlocks = textBlocks, pages = pages)
+
+        val continuationBlocks = buildPlainPageRenderBlocks(
+            page = pages.drop(1).first(),
+            textBlocks = textBlocks,
+            paragraphSpacingPx = 32,
+            forceParagraphIndent = true,
+        )
+
+        assertEquals(0, continuationBlocks.first().spacingBeforePx)
+        assertNull(continuationBlocks.first().firstLineIndentEm)
+    }
+
+    @Test
     fun `rich paged renderer uses exact paragraph spacing when packing pages`() {
         val richBlocks = listOf(
             NovelRichContentBlock.Paragraph(
@@ -1091,7 +1118,7 @@ class NovelReaderUiVisibilityTest {
         }
         val spacedPages = paginateRichPageBlocks(
             blockTexts = blockTexts,
-            paragraphSpacingPx = 32,
+            paragraphSpacingPx = 64,
             widthPx = 600,
             heightPx = 76,
             textSizePx = 20f,
@@ -1166,6 +1193,104 @@ class NovelReaderUiVisibilityTest {
         )
         assertEquals(0, renderBlocks.first().spacingBeforePx)
         assertEquals(null, renderBlocks.first().firstLineIndentEm)
+    }
+
+    @Test
+    fun `rich paged renderer keeps paragraph continuation on the current page`() {
+        val blockTexts = listOf(
+            buildRichPageReaderBlockText(
+                block = NovelRichContentBlock.Paragraph(
+                    segments = listOf(NovelRichTextSegment(text = "A")),
+                ),
+            ),
+            buildRichPageReaderBlockText(
+                block = NovelRichContentBlock.Paragraph(
+                    segments = listOf(NovelRichTextSegment(text = "Long paragraph ".repeat(50).trim())),
+                ),
+            ),
+        )
+
+        val pages = paginateRichPageBlocks(
+            blockTexts = blockTexts,
+            paragraphSpacingPx = 32,
+            widthPx = 260,
+            heightPx = 1000,
+            textSizePx = 24f,
+            lineHeightMultiplier = 1.2f,
+            typeface = null,
+            textAlign = ReaderTextAlign.LEFT,
+        )
+
+        assertTrue(pages.size > 1)
+        assertTrue(pages.first().any { it.blockIndex == 1 })
+        assertTrue(pages.drop(1).first().first().blockIndex == 1)
+        assertTrue(pages.drop(1).first().first().range.start > 0)
+        assertRichPageSliceCoverage(blockTexts = blockTexts, pages = pages)
+
+        val continuationBlocks = buildRichPageRenderBlocks(
+            page = pages.drop(1).first(),
+            blockTexts = blockTexts,
+            paragraphSpacingPx = 32,
+        )
+
+        assertEquals(0, continuationBlocks.first().spacingBeforePx)
+        assertNull(continuationBlocks.first().firstLineIndentEm)
+    }
+
+    @Test
+    fun `plain paged renderer moves a whole block to the next page when it fits there`() {
+        val textBlocks = listOf(
+            "Intro",
+            "First line\nSecond line",
+        )
+
+        val pages = paginatePlainPageBlocks(
+            textBlocks = textBlocks,
+            paragraphSpacingPx = 0,
+            widthPx = 600,
+            heightPx = 55,
+            textSizePx = 20f,
+            lineHeightMultiplier = 1.2f,
+            typeface = null,
+            textAlign = ReaderTextAlign.LEFT,
+        )
+
+        assertEquals(2, pages.size)
+        assertEquals(listOf(0), pages.first().map { it.blockIndex }.distinct())
+        assertEquals(listOf(1), pages.drop(1).first().map { it.blockIndex }.distinct())
+        assertPlainPageSliceCoverage(textBlocks = textBlocks, pages = pages)
+    }
+
+    @Test
+    fun `rich paged renderer moves a whole block to the next page when it fits there`() {
+        val blockTexts = listOf(
+            buildRichPageReaderBlockText(
+                block = NovelRichContentBlock.Paragraph(
+                    segments = listOf(NovelRichTextSegment(text = "Intro")),
+                ),
+            ),
+            buildRichPageReaderBlockText(
+                block = NovelRichContentBlock.Paragraph(
+                    segments = listOf(NovelRichTextSegment(text = "First line\nSecond line")),
+                ),
+            ),
+        )
+
+        val pages = paginateRichPageBlocks(
+            blockTexts = blockTexts,
+            paragraphSpacingPx = 0,
+            widthPx = 600,
+            heightPx = 55,
+            textSizePx = 20f,
+            lineHeightMultiplier = 1.2f,
+            typeface = null,
+            textAlign = ReaderTextAlign.LEFT,
+        )
+
+        assertEquals(2, pages.size)
+        assertEquals(listOf(0), pages.first().map { it.blockIndex }.distinct())
+        assertEquals(listOf(1), pages.drop(1).first().map { it.blockIndex }.distinct())
+        assertRichPageSliceCoverage(blockTexts = blockTexts, pages = pages)
     }
 
     @Test
@@ -1951,6 +2076,152 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `book flip edge taps map speed presets to animation durations`() {
+        assertEquals(
+            500,
+            resolveBookFlipEdgeTapAnimationDurationMillis(
+                transitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
+                animationSpeed = NovelBookFlipAnimationSpeed.FAST,
+                tapToScrollEnabled = true,
+            ),
+        )
+        assertEquals(
+            1000,
+            resolveBookFlipEdgeTapAnimationDurationMillis(
+                transitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
+                animationSpeed = NovelBookFlipAnimationSpeed.NORMAL,
+                tapToScrollEnabled = true,
+            ),
+        )
+        assertEquals(
+            1500,
+            resolveBookFlipEdgeTapAnimationDurationMillis(
+                transitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
+                animationSpeed = NovelBookFlipAnimationSpeed.SLOW,
+                tapToScrollEnabled = true,
+            ),
+        )
+        assertNull(
+            resolveBookFlipEdgeTapAnimationDurationMillis(
+                transitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
+                animationSpeed = NovelBookFlipAnimationSpeed.FAST,
+                tapToScrollEnabled = false,
+            ),
+        )
+        assertNull(
+            resolveBookFlipEdgeTapAnimationDurationMillis(
+                transitionStyle = NovelPageTransitionStyle.SLIDE,
+                animationSpeed = NovelBookFlipAnimationSpeed.FAST,
+                tapToScrollEnabled = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `reader tap dispatcher routes left edge taps to backward action`() {
+        var toggled = 0
+        var backward = 0
+        var forward = 0
+
+        val action = dispatchReaderTapAction(
+            tapX = 10f,
+            width = 100f,
+            tapToScrollEnabled = true,
+            onToggleUi = { toggled += 1 },
+            onBackward = { backward += 1 },
+            onForward = { forward += 1 },
+        )
+
+        assertEquals(ReaderTapAction.BACKWARD, action)
+        assertEquals(0, toggled)
+        assertEquals(1, backward)
+        assertEquals(0, forward)
+    }
+
+    @Test
+    fun `reader tap dispatcher routes center taps to ui toggle`() {
+        var toggled = 0
+        var backward = 0
+        var forward = 0
+
+        val action = dispatchReaderTapAction(
+            tapX = 50f,
+            width = 100f,
+            tapToScrollEnabled = true,
+            onToggleUi = { toggled += 1 },
+            onBackward = { backward += 1 },
+            onForward = { forward += 1 },
+        )
+
+        assertEquals(ReaderTapAction.TOGGLE_UI, action)
+        assertEquals(1, toggled)
+        assertEquals(0, backward)
+        assertEquals(0, forward)
+    }
+
+    @Test
+    fun `reader tap dispatcher routes right edge taps to forward action`() {
+        var toggled = 0
+        var backward = 0
+        var forward = 0
+
+        val action = dispatchReaderTapAction(
+            tapX = 90f,
+            width = 100f,
+            tapToScrollEnabled = true,
+            onToggleUi = { toggled += 1 },
+            onBackward = { backward += 1 },
+            onForward = { forward += 1 },
+        )
+
+        assertEquals(ReaderTapAction.FORWARD, action)
+        assertEquals(0, toggled)
+        assertEquals(0, backward)
+        assertEquals(1, forward)
+    }
+
+    @Test
+    fun `book flip page advances map speed presets to animation durations`() {
+        assertEquals(
+            500,
+            resolveBookFlipPageAnimationDurationMillis(
+                transitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
+                animationSpeed = NovelBookFlipAnimationSpeed.FAST,
+            ),
+        )
+        assertEquals(
+            1000,
+            resolveBookFlipPageAnimationDurationMillis(
+                transitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
+                animationSpeed = NovelBookFlipAnimationSpeed.NORMAL,
+            ),
+        )
+        assertEquals(
+            1500,
+            resolveBookFlipPageAnimationDurationMillis(
+                transitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
+                animationSpeed = NovelBookFlipAnimationSpeed.SLOW,
+            ),
+        )
+        assertNull(
+            resolveBookFlipPageAnimationDurationMillis(
+                transitionStyle = NovelPageTransitionStyle.SLIDE,
+                animationSpeed = NovelBookFlipAnimationSpeed.FAST,
+            ),
+        )
+    }
+
+    @Test
+    fun `book flip speed slider maps presets to positions`() {
+        assertEquals(0, novelBookFlipAnimationSpeedSliderIndex(NovelBookFlipAnimationSpeed.SLOW))
+        assertEquals(1, novelBookFlipAnimationSpeedSliderIndex(NovelBookFlipAnimationSpeed.NORMAL))
+        assertEquals(2, novelBookFlipAnimationSpeedSliderIndex(NovelBookFlipAnimationSpeed.FAST))
+        assertEquals(NovelBookFlipAnimationSpeed.SLOW, resolveNovelBookFlipAnimationSpeedSliderValue(0))
+        assertEquals(NovelBookFlipAnimationSpeed.NORMAL, resolveNovelBookFlipAnimationSpeedSliderValue(1))
+        assertEquals(NovelBookFlipAnimationSpeed.FAST, resolveNovelBookFlipAnimationSpeedSliderValue(2))
+    }
+
+    @Test
     fun `horizontal chapter swipe helper supports webview gestures`() {
         assertTrue(
             resolveHorizontalChapterSwipeAction(
@@ -2111,6 +2382,16 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `compose pager boundary preview only enables slide depth and book flip`() {
+        assertTrue(shouldUseComposePagerBoundaryPreview(NovelPageTransitionStyle.SLIDE))
+        assertTrue(shouldUseComposePagerBoundaryPreview(NovelPageTransitionStyle.DEPTH))
+        assertTrue(shouldUseComposePagerBoundaryPreview(NovelPageTransitionStyle.BOOK_FLIP))
+        assertFalse(shouldUseComposePagerBoundaryPreview(NovelPageTransitionStyle.INSTANT))
+        assertFalse(shouldUseComposePagerBoundaryPreview(NovelPageTransitionStyle.BOOK))
+        assertFalse(shouldUseComposePagerBoundaryPreview(NovelPageTransitionStyle.CURL))
+    }
+
+    @Test
     fun `book and curl transition styles resolve to page turn engine`() {
         assertEquals(
             NovelPageTransitionEngine.PAGE_TURN_RENDERER,
@@ -2143,6 +2424,22 @@ class NovelReaderUiVisibilityTest {
             resolveActivePageTransitionStyle(
                 requestedStyle = NovelPageTransitionStyle.DEPTH,
                 pageTurnRendererSupported = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `native scroll still shows atmosphere background for book flip style`() {
+        assertTrue(
+            shouldShowNovelAtmosphereBackground(
+                usePageReader = false,
+                activePageTransitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
+            ),
+        )
+        assertFalse(
+            shouldShowNovelAtmosphereBackground(
+                usePageReader = true,
+                activePageTransitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
             ),
         )
     }
@@ -2212,6 +2509,293 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `page turn renderer adds virtual boundary pages when adjacent chapters exist`() {
+        assertEquals(
+            7,
+            resolvePageTurnRendererVirtualPageCount(
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            6,
+            resolvePageTurnRendererVirtualPageCount(
+                contentPageCount = 5,
+                hasPreviousChapter = false,
+                hasNextChapter = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn renderer maps actual pages into virtual curl indices`() {
+        assertEquals(
+            1,
+            resolvePageTurnRendererVirtualPageIndex(
+                actualPageIndex = 0,
+                hasPreviousChapter = true,
+            ),
+        )
+        assertEquals(
+            4,
+            resolvePageTurnRendererVirtualPageIndex(
+                actualPageIndex = 4,
+                hasPreviousChapter = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn renderer resolves chapter boundary targets from synthetic pages`() {
+        assertEquals(
+            HorizontalChapterSwipeAction.PREVIOUS,
+            resolvePageTurnRendererBoundaryChapterTarget(
+                currentPage = 0,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            HorizontalChapterSwipeAction.NEXT,
+            resolvePageTurnRendererBoundaryChapterTarget(
+                currentPage = 6,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            HorizontalChapterSwipeAction.NONE,
+            resolvePageTurnRendererBoundaryChapterTarget(
+                currentPage = 3,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn renderer opens boundary chapter only after curl settles`() {
+        assertEquals(
+            HorizontalChapterSwipeAction.NONE,
+            resolvePageTurnRendererSettledBoundaryChapterTarget(
+                currentPage = 0,
+                progress = -0.42f,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            HorizontalChapterSwipeAction.PREVIOUS,
+            resolvePageTurnRendererSettledBoundaryChapterTarget(
+                currentPage = 0,
+                progress = 0f,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            HorizontalChapterSwipeAction.NONE,
+            resolvePageTurnRendererSettledBoundaryChapterTarget(
+                currentPage = 6,
+                progress = 0.24f,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            HorizontalChapterSwipeAction.NEXT,
+            resolvePageTurnRendererSettledBoundaryChapterTarget(
+                currentPage = 6,
+                progress = 0f,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `compose pager renderer adds virtual boundary pages when adjacent chapters exist`() {
+        assertEquals(
+            7,
+            resolveComposePagerVirtualPageCount(
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            6,
+            resolveComposePagerVirtualPageCount(
+                contentPageCount = 5,
+                hasPreviousChapter = false,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            5,
+            resolveComposePagerVirtualPageCount(
+                contentPageCount = 5,
+                hasPreviousChapter = false,
+                hasNextChapter = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `compose pager renderer maps actual pages into virtual indices`() {
+        assertEquals(
+            1,
+            resolveComposePagerVirtualPageIndex(
+                actualPageIndex = 0,
+                hasPreviousChapter = true,
+            ),
+        )
+        assertEquals(
+            4,
+            resolveComposePagerVirtualPageIndex(
+                actualPageIndex = 4,
+                hasPreviousChapter = false,
+            ),
+        )
+        assertEquals(
+            5,
+            resolveComposePagerVirtualPageIndex(
+                actualPageIndex = 4,
+                hasPreviousChapter = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `compose pager renderer maps virtual pages back to actual content pages`() {
+        assertEquals(
+            0,
+            resolveComposePagerActualPageIndex(
+                currentPage = 0,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+            ),
+        )
+        assertEquals(
+            0,
+            resolveComposePagerActualPageIndex(
+                currentPage = 1,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+            ),
+        )
+        assertEquals(
+            4,
+            resolveComposePagerActualPageIndex(
+                currentPage = 6,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `compose pager renderer round trips actual and virtual pages during resync`() {
+        val virtualPage = resolveComposePagerVirtualPageIndex(
+            actualPageIndex = 4,
+            hasPreviousChapter = true,
+        )
+
+        assertEquals(5, virtualPage)
+        assertEquals(
+            4,
+            resolveComposePagerActualPageIndex(
+                currentPage = virtualPage,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `compose pager renderer resolves chapter boundary targets from synthetic pages`() {
+        assertEquals(
+            HorizontalChapterSwipeAction.PREVIOUS,
+            resolveComposePagerBoundaryChapterTarget(
+                currentPage = 0,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            HorizontalChapterSwipeAction.NEXT,
+            resolveComposePagerBoundaryChapterTarget(
+                currentPage = 6,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            HorizontalChapterSwipeAction.NONE,
+            resolveComposePagerBoundaryChapterTarget(
+                currentPage = 3,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `compose pager renderer opens boundary chapter only after settle`() {
+        assertEquals(
+            HorizontalChapterSwipeAction.NONE,
+            resolveComposePagerSettledBoundaryChapterTarget(
+                currentPage = 0,
+                progress = -0.42f,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            HorizontalChapterSwipeAction.PREVIOUS,
+            resolveComposePagerSettledBoundaryChapterTarget(
+                currentPage = 0,
+                progress = 0f,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            HorizontalChapterSwipeAction.NONE,
+            resolveComposePagerSettledBoundaryChapterTarget(
+                currentPage = 6,
+                progress = 0.24f,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+        assertEquals(
+            HorizontalChapterSwipeAction.NEXT,
+            resolveComposePagerSettledBoundaryChapterTarget(
+                currentPage = 6,
+                progress = 0f,
+                contentPageCount = 5,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+            ),
+        )
+    }
+
+    @Test
     fun `page turn renderer resolves current page from curl state instead of pager state`() {
         assertEquals(
             6,
@@ -2219,6 +2803,8 @@ class NovelReaderUiVisibilityTest {
                 pageReaderRendererRoute = NovelPageReaderRendererRoute.PAGE_TURN_RENDERER,
                 pagerCurrentPage = 0,
                 pageTurnCurrentPage = 6,
+                composePagerContentPageCount = 5,
+                composePagerHasPreviousChapter = true,
             ),
         )
     }
@@ -2231,6 +2817,8 @@ class NovelReaderUiVisibilityTest {
                 pageReaderRendererRoute = NovelPageReaderRendererRoute.COMPOSE_PAGER,
                 pagerCurrentPage = 3,
                 pageTurnCurrentPage = 6,
+                composePagerContentPageCount = 5,
+                composePagerHasPreviousChapter = false,
             ),
         )
     }
@@ -2244,6 +2832,8 @@ class NovelReaderUiVisibilityTest {
             pageReaderRendererRoute = NovelPageReaderRendererRoute.PAGE_TURN_RENDERER,
             pagerCurrentPage = 0,
             pageTurnCurrentPage = 6,
+            composePagerContentPageCount = 5,
+            composePagerHasPreviousChapter = true,
             seekbarItemsCount = 11,
             readingProgressPercent = 60,
         )
@@ -2267,7 +2857,7 @@ class NovelReaderUiVisibilityTest {
         )
 
         assertTrue(bookPreset.curlAmount < curlPreset.curlAmount)
-        assertTrue(bookPreset.shadowAlpha < curlPreset.shadowAlpha)
+        assertTrue(bookPreset.shadowAlpha > curlPreset.shadowAlpha)
         assertTrue(bookPreset.backPageAlpha < curlPreset.backPageAlpha)
     }
 
@@ -2286,8 +2876,8 @@ class NovelReaderUiVisibilityTest {
             shadowIntensity = NovelPageTurnShadowIntensity.HIGH,
         )
 
-        assertTrue(slowPreset.animationDurationMillis - fastPreset.animationDurationMillis >= 240)
-        assertTrue(slowPreset.curlAmount < fastPreset.curlAmount)
+        assertTrue(slowPreset.animationDurationMillis - fastPreset.animationDurationMillis >= 360)
+        assertEquals(slowPreset.curlAmount, fastPreset.curlAmount)
         assertTrue(slowPreset.shadowAlpha < fastPreset.shadowAlpha)
     }
 
@@ -2313,6 +2903,17 @@ class NovelReaderUiVisibilityTest {
             NovelPageTurnShadowIntensity.STRONGER,
             resolveNovelPageTurnShadowIntensitySliderValue(4),
         )
+
+        assertEquals(0, novelPageTurnActivationZoneSliderIndex(NovelPageTurnActivationZone.NARROWER))
+        assertEquals(
+            NovelPageTurnActivationZone.NARROWER,
+            resolveNovelPageTurnActivationZoneSliderValue(0),
+        )
+        assertEquals(4, novelPageTurnActivationZoneSliderIndex(NovelPageTurnActivationZone.WIDER))
+        assertEquals(
+            NovelPageTurnActivationZone.WIDER,
+            resolveNovelPageTurnActivationZoneSliderValue(4),
+        )
     }
 
     @Test
@@ -2324,6 +2925,20 @@ class NovelReaderUiVisibilityTest {
                 speedLabel = "Slower",
                 intensityLabel = "Stronger",
                 shadowLabel = "Softer",
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn tuning summary text includes activation zone label`() {
+        assertEquals(
+            "Slower speed | Stronger intensity | Softer shadow | Wider zone",
+            resolveNovelPageTurnTuningSummaryText(
+                format = "%1\$s speed | %2\$s intensity | %3\$s shadow | %4\$s zone",
+                speedLabel = "Slower",
+                intensityLabel = "Stronger",
+                shadowLabel = "Softer",
+                activationZoneLabel = "Wider",
             ),
         )
     }
@@ -2378,10 +2993,22 @@ class NovelReaderUiVisibilityTest {
             shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
         )
 
-        assertEquals(780, slowerBookPreset.animationDurationMillis)
-        assertEquals(680, slowBookPreset.animationDurationMillis)
+        assertEquals(800, slowerBookPreset.animationDurationMillis)
+        assertEquals(700, slowBookPreset.animationDurationMillis)
         assertEquals(740, slowerCurlPreset.animationDurationMillis)
         assertEquals(640, slowCurlPreset.animationDurationMillis)
+    }
+
+    @Test
+    fun `page turn animation timing follows preset duration`() {
+        assertEquals(
+            PageTurnAnimationTiming(durationMillis = 800, midpointMillis = 266),
+            resolvePageTurnAnimationTiming(800),
+        )
+        assertEquals(
+            PageTurnAnimationTiming(durationMillis = 640, midpointMillis = 213),
+            resolvePageTurnAnimationTiming(640),
+        )
     }
 
     @Test
@@ -2454,12 +3081,41 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `page turn renderer config maps book and curl to distinct drag profiles`() {
-        val bookConfig = resolveNovelPageTurnRendererConfig(
+    fun `page reader text block metrics helper exists for both view paths`() {
+        val metrics = resolveNovelPageReaderTextViewMetrics(
+            textSizePx = 24f,
+            lineSpacingMultiplier = 1.25f,
+            typeface = Typeface.MONOSPACE,
+            textAlign = ReaderTextAlign.LEFT,
+            shadow = null,
+        )
+
+        assertEquals(24f, metrics.textSizePx)
+        assertEquals(1.25f, metrics.lineSpacingMultiplier)
+        assertEquals(Typeface.MONOSPACE, metrics.typeface)
+        assertEquals(ReaderTextAlign.LEFT, metrics.textAlign)
+        assertEquals(null, metrics.shadow)
+    }
+
+    @Test
+    @OptIn(ExperimentalPageCurlApi::class)
+    fun `page turn renderer config maps book and curl to tuned drag profiles`() {
+        val narrowConfig = resolveNovelPageTurnRendererConfig(
             style = NovelPageTransitionStyle.BOOK,
             speed = NovelPageTurnSpeed.NORMAL,
             intensity = NovelPageTurnIntensity.MEDIUM,
             shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.NARROWER,
+            textBackground = Color(0xFFF8F2E7),
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+        val wideConfig = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.BOOK,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.WIDER,
             textBackground = Color(0xFFF8F2E7),
             canMoveBackward = true,
             canMoveForward = true,
@@ -2469,16 +3125,106 @@ class NovelReaderUiVisibilityTest {
             speed = NovelPageTurnSpeed.NORMAL,
             intensity = NovelPageTurnIntensity.MEDIUM,
             shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.WIDER,
             textBackground = Color(0xFFF8F2E7),
             canMoveBackward = true,
             canMoveForward = true,
         )
 
-        assertEquals(NovelPageTurnDragMode.START_END, bookConfig.dragMode)
-        assertEquals(NovelPageTurnDragMode.GESTURE, curlConfig.dragMode)
-        assertTrue(bookConfig.dragActivationEdgeFraction < curlConfig.dragActivationEdgeFraction)
-        assertTrue(bookConfig.shadowRadiusDp < curlConfig.shadowRadiusDp)
-        assertTrue(bookConfig.preset.curlAmount < curlConfig.preset.curlAmount)
+        assertEquals(NovelPageTurnDragMode.START_END, narrowConfig.dragMode)
+        assertEquals(
+            PageCurlConfig.DragInteraction.PointerBehavior.PageEdge,
+            narrowConfig.dragPointerBehavior,
+        )
+        assertEquals(
+            PageCurlConfig.DragInteraction.PointerBehavior.PageEdge,
+            wideConfig.dragPointerBehavior,
+        )
+        assertEquals(NovelPageTurnDragMode.START_END, curlConfig.dragMode)
+        assertEquals(0.20f, narrowConfig.dragActivationEdgeFraction, 0.0001f)
+        assertEquals(0.40f, wideConfig.dragActivationEdgeFraction, 0.0001f)
+        assertEquals(0.40f, curlConfig.dragActivationEdgeFraction, 0.0001f)
+        assertTrue(narrowConfig.dragActivationEdgeFraction < wideConfig.dragActivationEdgeFraction)
+        assertTrue(narrowConfig.dragTargetReachFraction < wideConfig.dragTargetReachFraction)
+        assertTrue(wideConfig.dragTargetReachFraction < curlConfig.dragTargetReachFraction)
+    }
+
+    @Test
+    fun `page turn renderer activation zone scales to explicit edge widths for book and curl`() {
+        val narrowBookConfig = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.BOOK,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.NARROWER,
+            textBackground = Color(0xFFF8F2E7),
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+        val normalBookConfig = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.BOOK,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.NORMAL,
+            textBackground = Color(0xFFF8F2E7),
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+        val widerBookConfig = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.BOOK,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.WIDER,
+            textBackground = Color(0xFFF8F2E7),
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+        val narrowCurlConfig = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.CURL,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.NARROWER,
+            textBackground = Color(0xFFF8F2E7),
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+        val normalCurlConfig = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.CURL,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.NORMAL,
+            textBackground = Color(0xFFF8F2E7),
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+        val wideCurlConfig = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.CURL,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.WIDER,
+            textBackground = Color(0xFFF8F2E7),
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+
+        assertEquals(0.20f, narrowBookConfig.dragActivationEdgeFraction, 0.0001f)
+        assertEquals(0.30f, normalBookConfig.dragActivationEdgeFraction, 0.0001f)
+        assertEquals(0.40f, widerBookConfig.dragActivationEdgeFraction, 0.0001f)
+        assertEquals(0.20f, narrowCurlConfig.dragActivationEdgeFraction, 0.0001f)
+        assertEquals(0.30f, normalCurlConfig.dragActivationEdgeFraction, 0.0001f)
+        assertEquals(0.40f, wideCurlConfig.dragActivationEdgeFraction, 0.0001f)
+        assertEquals(NovelPageTurnDragMode.START_END, widerBookConfig.dragMode)
+        assertEquals(NovelPageTurnDragMode.START_END, narrowCurlConfig.dragMode)
+        assertEquals(NovelPageTurnDragMode.START_END, wideCurlConfig.dragMode)
+        assertTrue(narrowBookConfig.dragTargetReachFraction > narrowBookConfig.dragActivationEdgeFraction)
+        assertTrue(widerBookConfig.dragTargetReachFraction > widerBookConfig.dragActivationEdgeFraction)
+        assertTrue(narrowCurlConfig.dragActivationEdgeFraction < wideCurlConfig.dragActivationEdgeFraction)
+        assertTrue(narrowCurlConfig.dragTargetReachFraction < wideCurlConfig.dragTargetReachFraction)
     }
 
     @Test
@@ -2488,6 +3234,7 @@ class NovelReaderUiVisibilityTest {
             speed = NovelPageTurnSpeed.NORMAL,
             intensity = NovelPageTurnIntensity.MEDIUM,
             shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.WIDE,
             textBackground = Color.White,
             canMoveBackward = true,
             canMoveForward = true,
@@ -2504,6 +3251,7 @@ class NovelReaderUiVisibilityTest {
             speed = NovelPageTurnSpeed.NORMAL,
             intensity = NovelPageTurnIntensity.MEDIUM,
             shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.WIDE,
             textBackground = Color.White,
             canMoveBackward = true,
             canMoveForward = true,
@@ -2516,12 +3264,71 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `page turn intensity shifts the curl back page tone`() {
+        val softerConfig = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.CURL,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.SOFTER,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.WIDE,
+            textBackground = Color.White,
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+        val strongerConfig = resolveNovelPageTurnRendererConfig(
+            style = NovelPageTransitionStyle.CURL,
+            speed = NovelPageTurnSpeed.NORMAL,
+            intensity = NovelPageTurnIntensity.STRONGER,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.WIDE,
+            textBackground = Color.White,
+            canMoveBackward = true,
+            canMoveForward = true,
+        )
+
+        assertNotEquals(softerConfig.backPageColor, strongerConfig.backPageColor)
+        assertTrue(
+            strongerConfig.backPageColor.luminance() < softerConfig.backPageColor.luminance(),
+            "expected stronger intensity to deepen the back-page tone",
+        )
+    }
+
+    @Test
+    fun `page turn stronger intensity shifts curl midpoint deeper`() {
+        val size = androidx.compose.ui.geometry.Size(1000f, 1600f)
+        val softerMidEdge = resolvePageTurnCurlMidEdge(
+            size = size,
+            forward = true,
+            curlAmount = resolveNovelPageTurnPreset(
+                style = NovelPageTransitionStyle.CURL,
+                speed = NovelPageTurnSpeed.NORMAL,
+                intensity = NovelPageTurnIntensity.SOFTER,
+                shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            ).curlAmount,
+        )
+        val strongerMidEdge = resolvePageTurnCurlMidEdge(
+            size = size,
+            forward = true,
+            curlAmount = resolveNovelPageTurnPreset(
+                style = NovelPageTransitionStyle.CURL,
+                speed = NovelPageTurnSpeed.NORMAL,
+                intensity = NovelPageTurnIntensity.STRONGER,
+                shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            ).curlAmount,
+        )
+
+        assertTrue(strongerMidEdge.top.x < softerMidEdge.top.x)
+        assertTrue(strongerMidEdge.bottom.x < softerMidEdge.bottom.x)
+    }
+
+    @Test
     fun `page turn renderer config disables unavailable turn directions without losing center tap`() {
         val config = resolveNovelPageTurnRendererConfig(
             style = NovelPageTransitionStyle.CURL,
             speed = NovelPageTurnSpeed.FAST,
             intensity = NovelPageTurnIntensity.HIGH,
             shadowIntensity = NovelPageTurnShadowIntensity.LOW,
+            activationZone = NovelPageTurnActivationZone.WIDE,
             textBackground = Color(0xFF171717),
             canMoveBackward = false,
             canMoveForward = true,
@@ -2547,6 +3354,7 @@ class NovelReaderUiVisibilityTest {
                 hasPreviousChapter = true,
                 hasNextChapter = true,
                 tapToScrollEnabled = false,
+                animateBoundaryTransition = false,
             ),
         )
     }
@@ -2563,6 +3371,109 @@ class NovelReaderUiVisibilityTest {
                 hasPreviousChapter = true,
                 hasNextChapter = true,
                 tapToScrollEnabled = false,
+                animateBoundaryTransition = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn custom tap action moves to previous page from the left edge`() {
+        assertEquals(
+            PageTurnCustomTapAction.MOVE_PREVIOUS_PAGE,
+            resolvePageTurnCustomTapAction(
+                tapXFraction = 0.05f,
+                currentPage = 1,
+                pageCount = 3,
+                centerTapWidthFraction = 0.2f,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+                tapToScrollEnabled = true,
+                animateBoundaryTransition = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn custom tap action moves to next page from the right edge`() {
+        assertEquals(
+            PageTurnCustomTapAction.MOVE_NEXT_PAGE,
+            resolvePageTurnCustomTapAction(
+                tapXFraction = 0.95f,
+                currentPage = 1,
+                pageCount = 3,
+                centerTapWidthFraction = 0.2f,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+                tapToScrollEnabled = true,
+                animateBoundaryTransition = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn custom tap action opens previous chapter only at first page edge`() {
+        assertEquals(
+            PageTurnCustomTapAction.OPEN_PREVIOUS_CHAPTER,
+            resolvePageTurnCustomTapAction(
+                tapXFraction = 0.05f,
+                currentPage = 0,
+                pageCount = 3,
+                centerTapWidthFraction = 0.2f,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+                tapToScrollEnabled = true,
+                animateBoundaryTransition = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn custom tap action opens next chapter only at last page edge`() {
+        assertEquals(
+            PageTurnCustomTapAction.OPEN_NEXT_CHAPTER,
+            resolvePageTurnCustomTapAction(
+                tapXFraction = 0.95f,
+                currentPage = 2,
+                pageCount = 3,
+                centerTapWidthFraction = 0.2f,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+                tapToScrollEnabled = true,
+                animateBoundaryTransition = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn custom tap action animates boundary transition on previous chapter edge when enabled`() {
+        assertEquals(
+            PageTurnCustomTapAction.MOVE_PREVIOUS_PAGE,
+            resolvePageTurnCustomTapAction(
+                tapXFraction = 0.05f,
+                currentPage = 0,
+                pageCount = 3,
+                centerTapWidthFraction = 0.2f,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+                tapToScrollEnabled = true,
+                animateBoundaryTransition = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn custom tap action animates boundary transition on next chapter edge when enabled`() {
+        assertEquals(
+            PageTurnCustomTapAction.MOVE_NEXT_PAGE,
+            resolvePageTurnCustomTapAction(
+                tapXFraction = 0.95f,
+                currentPage = 2,
+                pageCount = 3,
+                centerTapWidthFraction = 0.2f,
+                hasPreviousChapter = true,
+                hasNextChapter = true,
+                tapToScrollEnabled = true,
+                animateBoundaryTransition = true,
             ),
         )
     }
@@ -2575,6 +3486,7 @@ class NovelReaderUiVisibilityTest {
             speed = NovelPageTurnSpeed.NORMAL,
             intensity = NovelPageTurnIntensity.MEDIUM,
             shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+            activationZone = NovelPageTurnActivationZone.WIDE,
             textBackground = Color(0xFFF8F2E7),
             canMoveBackward = true,
             canMoveForward = true,
@@ -2586,6 +3498,7 @@ class NovelReaderUiVisibilityTest {
                 speed = NovelPageTurnSpeed.NORMAL,
                 intensity = NovelPageTurnIntensity.MEDIUM,
                 shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+                activationZone = NovelPageTurnActivationZone.WIDE,
                 textBackground = Color(0xFFF8F2E7),
                 canMoveBackward = true,
                 canMoveForward = true,
@@ -3009,6 +3922,32 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `page reader backward chapter handoff starts from last page`() {
+        assertEquals(
+            6,
+            resolveInitialPageReaderPage(
+                savedPageReaderProgress = PageReaderProgress(index = 0, totalItems = 1),
+                legacyLastSavedIndex = 0,
+                pageCount = 7,
+                chapterHandoffTarget = NovelReaderPageReaderHandoffTarget.END,
+            ),
+        )
+    }
+
+    @Test
+    fun `page reader forward chapter handoff starts from first page`() {
+        assertEquals(
+            0,
+            resolveInitialPageReaderPage(
+                savedPageReaderProgress = PageReaderProgress(index = 5, totalItems = 6),
+                legacyLastSavedIndex = 5,
+                pageCount = 7,
+                chapterHandoffTarget = NovelReaderPageReaderHandoffTarget.START,
+            ),
+        )
+    }
+
+    @Test
     fun `page reader progress also normalizes native list restore when reopening in scroll mode`() {
         assertEquals(
             8,
@@ -3354,6 +4293,34 @@ class NovelReaderUiVisibilityTest {
         assertTrue(result.contains("__an_reader_style__"))
         assertTrue(result.contains("__an_reader_bootstrap_style__"))
         assertTrue(result.indexOf("__an_reader_style__") < result.indexOf("</head>"))
+        assertTrue(result.contains("<p>Hello</p>"))
+    }
+
+    @Test
+    fun `initial webview html injects selection tracking script`() {
+        val html = "<html><head><title>t</title></head><body><p>Hello</p></body></html>"
+
+        val result = buildInitialWebReaderHtml(
+            rawHtml = html,
+            readerCss = "body { color: red; }",
+        )
+
+        assertTrue(result.contains("selectionchange"))
+        assertTrue(result.contains("an-reader-selection"))
+    }
+
+    @Test
+    fun `initial webview html can skip bootstrap reveal when reveal is unnecessary`() {
+        val html = "<html><head><title>t</title></head><body><p>Hello</p></body></html>"
+
+        val result = buildInitialWebReaderHtml(
+            rawHtml = html,
+            readerCss = "body { color: red; }",
+            hideUntilReveal = false,
+        )
+
+        assertTrue(result.contains("__an_reader_style__"))
+        assertFalse(result.contains("__an_reader_bootstrap_style__"))
         assertTrue(result.contains("<p>Hello</p>"))
     }
 
@@ -3794,5 +4761,54 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `webview bionic script is empty when disabled`() {
         assertTrue(buildWebReaderBionicJavascript(enabled = false).isBlank())
+    }
+}
+
+private fun assertPlainPageSliceCoverage(
+    textBlocks: List<String>,
+    pages: List<List<PlainPageSlice>>,
+) {
+    textBlocks.forEachIndexed { blockIndex, expectedText ->
+        val slices = pages.flatten()
+            .filter { it.blockIndex == blockIndex }
+            .sortedBy { it.range.start }
+        var cursor = 0
+        slices.forEach { slice ->
+            assertEquals(cursor, slice.range.start)
+            assertTrue(slice.range.endExclusive > slice.range.start)
+            cursor = slice.range.endExclusive
+        }
+        assertEquals(expectedText.length, cursor)
+        assertEquals(
+            expectedText,
+            slices.joinToString(separator = "") { slice ->
+                expectedText.substring(slice.range.start, slice.range.endExclusive)
+            },
+        )
+    }
+}
+
+private fun assertRichPageSliceCoverage(
+    blockTexts: List<RichPageBlockText>,
+    pages: List<List<RichPageSlice.Text>>,
+) {
+    blockTexts.forEachIndexed { blockIndex, expectedBlock ->
+        val expectedText = expectedBlock.text.text
+        val slices = pages.flatten()
+            .filter { it.blockIndex == blockIndex }
+            .sortedBy { it.range.start }
+        var cursor = 0
+        slices.forEach { slice ->
+            assertEquals(cursor, slice.range.start)
+            assertTrue(slice.range.endExclusive > slice.range.start)
+            cursor = slice.range.endExclusive
+        }
+        assertEquals(expectedText.length, cursor)
+        assertEquals(
+            expectedText,
+            slices.joinToString(separator = "") { slice ->
+                expectedText.substring(slice.range.start, slice.range.endExclusive)
+            },
+        )
     }
 }

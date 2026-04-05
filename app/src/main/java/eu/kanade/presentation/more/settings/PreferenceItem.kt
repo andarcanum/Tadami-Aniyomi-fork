@@ -46,10 +46,10 @@ fun StatusWrapper(
     highlightKey: String?,
     content: @Composable () -> Unit,
 ) {
-    val enabled = item.enabled
+    val visible = item.visible
     val highlighted = item.title == highlightKey
     AnimatedVisibility(
-        visible = enabled,
+        visible = visible,
         enter = expandVertically() + fadeIn(),
         exit = shrinkVertically() + fadeOut(),
         content = {
@@ -82,6 +82,7 @@ internal fun PreferenceItem(
                         subtitle = item.subtitle,
                         icon = item.icon,
                         checked = value,
+                        enabled = item.enabled,
                         onCheckedChanged = { newValue ->
                             scope.launch {
                                 if (item.onValueChanged(newValue)) {
@@ -129,6 +130,7 @@ internal fun PreferenceItem(
                         subtitle = item.internalSubtitleProvider(value, item.entries),
                         icon = item.icon,
                         entries = item.entries,
+                        enabled = item.enabled,
                         onValueChange = { newValue ->
                             scope.launch {
                                 if (item.internalOnValueChanged(newValue!!)) {
@@ -167,6 +169,7 @@ internal fun PreferenceItem(
                         title = item.title,
                         subtitle = item.subtitle,
                         icon = item.icon,
+                        enabled = item.enabled,
                         widget = item.widget,
                         onPreferenceClick = item.onClick,
                     )
@@ -178,6 +181,7 @@ internal fun PreferenceItem(
                         subtitle = item.subtitle,
                         icon = item.icon,
                         value = values,
+                        enabled = item.enabled,
                         onConfirm = {
                             val accepted = item.onValueChanged(it)
                             if (accepted) item.preference.set(it)
@@ -192,6 +196,7 @@ internal fun PreferenceItem(
                         subtitle = item.subtitle,
                         icon = item.icon,
                         value = values,
+                        enabled = item.enabled,
                         onConfirm = {
                             val accepted = item.onValueChanged(it)
                             if (accepted) item.preference.set(it)
@@ -226,6 +231,7 @@ internal fun PreferenceItem(
                         dialogSubtitle = item.dialogSubtitle,
                         icon = item.icon,
                         value = values,
+                        enabled = item.enabled,
                         onConfirm = {
                             val accepted = item.onValueChanged(it)
                             if (accepted) item.preference.set(it)

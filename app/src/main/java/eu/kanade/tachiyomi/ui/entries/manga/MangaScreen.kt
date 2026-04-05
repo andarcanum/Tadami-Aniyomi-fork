@@ -181,7 +181,7 @@ class MangaScreen(
             },
             onMigrateClicked = {
                 navigator.push(MigrateMangaSearchScreen(successState.manga.id))
-            }.takeIf { successState.manga.favorite },
+            }.takeIf { shouldExposeMangaMigrationAction(successState.manga.id) },
             onMultiBookmarkClicked = screenModel::bookmarkChapters,
             onMultiMarkAsReadClicked = screenModel::markChaptersRead,
             onMarkPreviousAsReadClicked = screenModel::markPreviousChapterRead,
@@ -439,6 +439,10 @@ class MangaScreen(
             context.copyToClipboard(url, url)
         }
     }
+}
+
+internal fun shouldExposeMangaMigrationAction(mangaId: Long): Boolean {
+    return mangaId > 0L
 }
 
 internal fun normalizeMangaWebUrl(url: String): String {
