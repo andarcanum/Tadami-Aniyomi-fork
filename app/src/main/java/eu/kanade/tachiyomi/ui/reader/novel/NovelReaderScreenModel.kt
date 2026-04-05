@@ -5,6 +5,9 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.entries.novel.model.toSNovel
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.domain.items.novelchapter.model.toSNovelChapter
+import eu.kanade.tachiyomi.data.prefetch.AllowAllContentPrefetchEnvironment
+import eu.kanade.tachiyomi.data.prefetch.AndroidContentPrefetchEnvironment
+import eu.kanade.tachiyomi.data.prefetch.ContentPrefetchService
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelJsSource
@@ -188,6 +191,13 @@ class NovelReaderScreenModel(
         GoogleTranslationService(client = networkHelper.client)
     },
 ) : StateScreenModel<NovelReaderScreenModel.State>(State.Loading) {
+    private val contentPrefetchService = ContentPrefetchService(
+        environment = runCatching {
+            AndroidContentPrefetchEnvironment(Injekt.get<Application>())
+        }.getOrElse {
+            AllowAllContentPrefetchEnvironment
+        },
+    )
     private var settingsJob: Job? = null
     private var rawHtml: String? = null
     private var currentNovel: Novel? = null
@@ -282,20 +292,13 @@ class NovelReaderScreenModel(
         val html = try {
             val cacheReadChapters = novelReaderPreferences.cacheReadChapters().get()
             withContext(Dispatchers.IO) {
-                novelDownloadManager.getDownloadedChapterText(novel, chapter.id)
-                    ?: cacheReadChapters.takeIf { it }?.let { NovelReaderChapterDiskCacheStore.get(chapter.id) }
-                    ?: NovelReaderChapterPrefetchCache.get(chapter.id)
-                        ?.also { prefetchedHtml ->
-                            if (cacheReadChapters) {
-                                NovelReaderChapterDiskCacheStore.put(chapter.id, prefetchedHtml)
-                            }
-                        }
-                    ?: source.getChapterText(chapter.toSNovelChapter())
-                        .also { fetchedHtml ->
-                            if (cacheReadChapters) {
-                                NovelReaderChapterDiskCacheStore.put(chapter.id, fetchedHtml)
-                            }
-                        }
+                contentPrefetchService.resolveNovelChapterText(
+                    novel = novel,
+                    chapter = chapter,
+                    source = source,
+                    downloadManager = novelDownloadManager,
+                    cacheReadChapters = cacheReadChapters,
+                )
             }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e) { "Failed to load novel chapter text" }
@@ -407,21 +410,18 @@ class NovelReaderScreenModel(
         source: eu.kanade.tachiyomi.novelsource.NovelSource,
     ) {
         val nextChapter = findNextChapter(currentChapter) ?: return
-        if (NovelReaderChapterPrefetchCache.contains(nextChapter.id)) {
-            return
-        }
         nextChapterPrefetchJob?.cancel()
         nextChapterPrefetchJob = screenModelScope.launch(Dispatchers.IO) {
             runCatching {
-                val cacheReadChapters = novelReaderPreferences.cacheReadChapters().get()
-                if (novelDownloadManager.getDownloadedChapterText(novel, nextChapter.id) != null) return@runCatching
-                if (cacheReadChapters && NovelReaderChapterDiskCacheStore.contains(nextChapter.id)) return@runCatching
-                if (NovelReaderChapterPrefetchCache.contains(nextChapter.id)) return@runCatching
-                val nextHtml = source.getChapterText(nextChapter.toSNovelChapter())
-                NovelReaderChapterPrefetchCache.put(nextChapter.id, nextHtml)
-                if (cacheReadChapters) {
-                    NovelReaderChapterDiskCacheStore.put(nextChapter.id, nextHtml)
-                }
+                val state = mutableState.value as? State.Success ?: return@runCatching
+                contentPrefetchService.prefetchNovelChapterText(
+                    prefetchEnabled = state.readerSettings.prefetchNextChapter,
+                    novel = novel,
+                    chapter = nextChapter,
+                    source = source,
+                    downloadManager = novelDownloadManager,
+                    cacheReadChapters = novelReaderPreferences.cacheReadChapters().get(),
+                )
             }.onFailure { error ->
                 logcat(LogPriority.WARN, error) { "Failed to prefetch next novel chapter" }
             }

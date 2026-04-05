@@ -668,6 +668,7 @@ private fun AnimeScreenSmallImpl(
                             doSearch = onSearch,
                             modifier = Modifier.ignorePadding(offsetGridPaddingPx),
                             resolvedCoverUrl = resolvedCoverUrl,
+                            resolvedCoverUrlFallback = state.animeMetadata?.coverUrlFallback,
                         )
                     }
 
@@ -1058,6 +1059,7 @@ fun AnimeScreenLargeImpl(
                                 onCoverClick = onCoverClicked,
                                 doSearch = onSearch,
                                 resolvedCoverUrl = resolvedCoverUrl,
+                                resolvedCoverUrlFallback = state.animeMetadata?.coverUrlFallback,
                             )
                             AnimeActionRow(
                                 favorite = state.anime.favorite,

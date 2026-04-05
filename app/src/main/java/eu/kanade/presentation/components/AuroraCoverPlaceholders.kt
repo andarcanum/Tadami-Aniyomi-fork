@@ -55,6 +55,34 @@ fun themeAwareCoverFallbackResId(
 }
 
 fun resolveAuroraCoverModel(data: Any?): Any? {
+    return resolveAuroraCoverModelCandidate(data)
+}
+
+internal data class AuroraPosterModelPair(
+    val primary: Any?,
+    val fallback: Any?,
+)
+
+internal fun resolveAuroraPosterModelPair(
+    primary: Any?,
+    fallback: Any? = null,
+): AuroraPosterModelPair {
+    return AuroraPosterModelPair(
+        primary = resolveAuroraCoverModelCandidate(primary),
+        fallback = resolveAuroraCoverModelCandidate(fallback),
+    )
+}
+
+internal fun shouldApplyAuroraPosterTrim(url: String?): Boolean {
+    if (url.isNullOrBlank()) {
+        return false
+    }
+    val normalized = url.substringBefore('?').substringBefore('#').lowercase()
+    val extension = normalized.substringAfterLast('.', missingDelimiterValue = "")
+    return extension !in setOf("gif", "webp", "apng", "avif")
+}
+
+private fun resolveAuroraCoverModelCandidate(data: Any?): Any? {
     return when (data) {
         null -> null
         is String -> data.takeIf { it.isNotBlank() }

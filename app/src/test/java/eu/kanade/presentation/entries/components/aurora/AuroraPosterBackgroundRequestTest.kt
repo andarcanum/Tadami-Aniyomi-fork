@@ -2,6 +2,9 @@ package eu.kanade.presentation.entries.components.aurora
 
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
+import eu.kanade.presentation.components.resolveAuroraPosterModelPair
+import eu.kanade.presentation.components.shouldApplyAuroraPosterTrim
+import tachiyomi.domain.entries.manga.model.MangaCover
 
 class AuroraPosterBackgroundRequestTest {
 
@@ -42,5 +45,28 @@ class AuroraPosterBackgroundRequestTest {
 
         spec.blurWidthPx shouldBe 1
         spec.blurHeightPx shouldBe 1
+    }
+
+    @Test
+    fun `aurora poster model pair keeps primary and fallback candidates`() {
+        val primary = MangaCover(
+            mangaId = 7L,
+            sourceId = 9L,
+            isMangaFavorite = true,
+            url = "https://example.org/primary.jpg",
+            lastModified = 1234L,
+        )
+        val fallback = "https://example.org/fallback.jpg"
+
+        val pair = resolveAuroraPosterModelPair(primary, fallback)
+
+        pair.primary shouldBe primary
+        pair.fallback shouldBe fallback
+    }
+
+    @Test
+    fun `aurora poster trim policy skips animated images`() {
+        shouldApplyAuroraPosterTrim("https://example.org/static.jpg") shouldBe true
+        shouldApplyAuroraPosterTrim("https://example.org/animated.webp") shouldBe false
     }
 }

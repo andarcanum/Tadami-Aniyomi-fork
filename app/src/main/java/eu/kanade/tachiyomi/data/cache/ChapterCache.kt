@@ -6,6 +6,7 @@ import com.jakewharton.disklrucache.DiskLruCache
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import eu.kanade.tachiyomi.util.storage.saveTo
+import eu.kanade.tachiyomi.ui.reader.loader.dedupeByStableIdentity
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import logcat.LogPriority
@@ -66,9 +67,16 @@ class ChapterCache(
         // Get the key for the chapter.
         val key = DiskUtil.hashKeyForDisk(getKey(chapter))
 
-        // Convert JSON string to list of objects. Throws an exception if snapshot is null
-        return diskCache.get(key).use {
-            json.decodeFromString(it.getString(0))
+        // Convert JSON string to list of objects, but tolerate bad or missing cache entries.
+        return runCatching {
+            diskCache.get(key).use { snapshot ->
+                snapshot?.getString(0)?.let { cachedValue ->
+                    json.decodeFromString<List<Page>>(cachedValue).dedupeByStableIdentity()
+                }.orEmpty()
+            }
+        }.getOrElse {
+            logcat(LogPriority.WARN, it) { "Failed to read page list from cache" }
+            emptyList()
         }
     }
 
@@ -80,7 +88,7 @@ class ChapterCache(
      */
     fun putPageListToCache(chapter: Chapter, pages: List<Page>) {
         // Convert list of pages to json string.
-        val cachedValue = json.encodeToString(pages)
+        val cachedValue = json.encodeToString(pages.dedupeByStableIdentity())
 
         // Initialize the editor (edits the values for an entry).
         var editor: DiskLruCache.Editor? = null
@@ -169,6 +177,10 @@ class ChapterCache(
             }
         }
         return deletedFiles
+    }
+
+    fun close() {
+        diskCache.close()
     }
 
     /**

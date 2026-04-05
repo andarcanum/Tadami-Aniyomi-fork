@@ -70,13 +70,24 @@ internal class HttpPageLoader(
      * otherwise fallbacks to network.
      */
     override suspend fun getPages(): List<ReaderPage> {
-        val pages = try {
-            chapterCache.getPageListFromCache(chapter.chapter.toDomainChapter()!!)
-        } catch (e: Throwable) {
-            if (e is CancellationException) {
-                throw e
+        val cachedPages = chapterCache
+            .getPageListFromCache(chapter.chapter.toDomainChapter()!!)
+            .dedupeByStableIdentity()
+        val pages = if (cachedPages.isNotEmpty()) {
+            cachedPages
+        } else {
+            try {
+                source.getPageList(chapter.chapter).dedupeByStableIdentity()
+            } catch (e: Throwable) {
+                if (e is CancellationException) {
+                    throw e
+                }
+                if (cachedPages.isNotEmpty()) {
+                    cachedPages
+                } else {
+                    throw e
+                }
             }
-            source.getPageList(chapter.chapter)
         }
         return pages.mapIndexed { index, page ->
             // Don't trust sources and use our own indexing

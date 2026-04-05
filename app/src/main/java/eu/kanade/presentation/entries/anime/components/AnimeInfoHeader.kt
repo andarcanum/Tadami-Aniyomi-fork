@@ -84,11 +84,12 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.tadami.aurora.R
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
-import eu.kanade.presentation.components.DropdownMenu
 import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
+import eu.kanade.presentation.components.DropdownMenu
 import eu.kanade.presentation.entries.components.DotSeparatorText
 import eu.kanade.presentation.entries.components.ItemCover
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
+import eu.kanade.tachiyomi.data.coil.AuroraPosterRequest
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.data.coil.staticBlur
 import eu.kanade.tachiyomi.data.coil.useBackground
@@ -118,6 +119,7 @@ fun AnimeInfoBox(
     onCoverClick: () -> Unit,
     doSearch: (query: String, global: Boolean) -> Unit,
     resolvedCoverUrl: String?,
+    resolvedCoverUrlFallback: String? = null,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier) {
@@ -128,10 +130,17 @@ fun AnimeInfoBox(
         )
         val blurRadiusPx = with(LocalDensity.current) { 4.dp.roundToPx() }
         val fallbackPainter = rememberThemeAwareCoverErrorPainter(variant = AuroraCoverPlaceholderVariant.Wide)
-        if (resolvedCoverUrl != null) {
+        val posterRequest = remember(resolvedCoverUrl, resolvedCoverUrlFallback) {
+            AuroraPosterRequest(
+                primaryUrl = resolvedCoverUrl,
+                fallbackUrl = resolvedCoverUrlFallback,
+            )
+        }
+        val posterModel = posterRequest.primaryUrl ?: posterRequest.fallbackUrl
+        if (posterModel != null) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
-                    .data(resolvedCoverUrl)
+                    .data(posterRequest)
                     .useBackground(true)
                     .crossfade(true)
                     .staticBlur(blurRadiusPx, intensityFactor = 0.6f)
@@ -171,6 +180,7 @@ fun AnimeInfoBox(
                     sourceName = sourceName,
                     isStubSource = isStubSource,
                     coverUrl = resolvedCoverUrl,
+                    coverUrlFallback = resolvedCoverUrlFallback,
                     onCoverClick = onCoverClick,
                     doSearch = doSearch,
                 )
@@ -181,6 +191,7 @@ fun AnimeInfoBox(
                     sourceName = sourceName,
                     isStubSource = isStubSource,
                     coverUrl = resolvedCoverUrl,
+                    coverUrlFallback = resolvedCoverUrlFallback,
                     onCoverClick = onCoverClick,
                     doSearch = doSearch,
                 )
@@ -387,6 +398,7 @@ private fun AnimeAndSourceTitlesLarge(
     sourceName: String,
     isStubSource: Boolean,
     coverUrl: String?,
+    coverUrlFallback: String? = null,
     onCoverClick: () -> Unit,
     doSearch: (query: String, global: Boolean) -> Unit,
 ) {
@@ -400,7 +412,7 @@ private fun AnimeAndSourceTitlesLarge(
             ItemCover.Book(
                 modifier = Modifier.fillMaxWidth(0.65f),
                 data = ImageRequest.Builder(LocalContext.current)
-                    .data(coverUrl)
+                    .data(AuroraPosterRequest(coverUrl, coverUrlFallback))
                     .crossfade(true)
                     .build(),
                 contentDescription = stringResource(MR.strings.manga_cover),
@@ -433,6 +445,7 @@ private fun AnimeAndSourceTitlesSmall(
     sourceName: String,
     isStubSource: Boolean,
     coverUrl: String?,
+    coverUrlFallback: String? = null,
     onCoverClick: () -> Unit,
     doSearch: (query: String, global: Boolean) -> Unit,
 ) {
@@ -449,7 +462,7 @@ private fun AnimeAndSourceTitlesSmall(
                     .sizeIn(maxWidth = 100.dp)
                     .align(Alignment.Top),
                 data = ImageRequest.Builder(LocalContext.current)
-                    .data(coverUrl)
+                    .data(AuroraPosterRequest(coverUrl, coverUrlFallback))
                     .crossfade(true)
                     .build(),
                 contentDescription = stringResource(MR.strings.manga_cover),
