@@ -32,11 +32,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.domain.metadata.model.MetadataLoadError
+import eu.kanade.presentation.entries.components.displayFormat
+import eu.kanade.presentation.entries.components.displayScore
+import eu.kanade.presentation.entries.components.displayStatus
+import eu.kanade.presentation.entries.components.isCompleted
 import eu.kanade.presentation.entries.manga.components.aurora.GlassmorphismCard
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.animesource.model.SAnime
-import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreenModel
 import tachiyomi.domain.entries.anime.model.Anime
+import tachiyomi.domain.metadata.model.ExternalMetadata
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import java.time.Instant
@@ -86,9 +91,9 @@ fun AnimeInfoCard(
     modifier: Modifier = Modifier,
     statsRequester: BringIntoViewRequester? = null,
     // Metadata integration (supports both Anilist and Shikimori)
-    animeMetadata: AnimeScreenModel.AnimeMetadataData? = null,
+    animeMetadata: ExternalMetadata? = null,
     isMetadataLoading: Boolean = false,
-    metadataError: AnimeScreenModel.MetadataError? = null,
+    metadataError: MetadataLoadError? = null,
     onRetryMetadata: () -> Unit = {},
     onLoginClick: () -> Unit = {},
 ) {
@@ -135,10 +140,10 @@ fun AnimeInfoCard(
                 StatItem(
                     value = when {
                         isMetadataLoading -> "..."
-                        metadataError == AnimeScreenModel.MetadataError.NotAuthenticated -> stringResource(
+                        metadataError == MetadataLoadError.NotAuthenticated -> stringResource(
                             MR.strings.not_applicable,
                         )
-                        else -> animeMetadata?.score?.let { String.format("%.1f", it) }
+                        else -> animeMetadata?.displayScore()
                             ?: stringResource(MR.strings.not_applicable)
                     },
                     label = "РЕЙТИНГ",
@@ -153,10 +158,10 @@ fun AnimeInfoCard(
                 StatItem(
                     value = when {
                         isMetadataLoading -> "..."
-                        metadataError == AnimeScreenModel.MetadataError.NotAuthenticated -> stringResource(
+                        metadataError == MetadataLoadError.NotAuthenticated -> stringResource(
                             MR.strings.not_applicable,
                         )
-                        else -> animeMetadata?.format?.uppercase() ?: stringResource(MR.strings.not_applicable)
+                        else -> animeMetadata?.displayFormat() ?: stringResource(MR.strings.not_applicable)
                     },
                     label = "ТИП",
                     modifier = if (isCompleted) Modifier else Modifier.weight(1f),
@@ -170,10 +175,10 @@ fun AnimeInfoCard(
                 StatItem(
                     value = when {
                         isMetadataLoading -> "..."
-                        metadataError == AnimeScreenModel.MetadataError.NotAuthenticated -> {
+                        metadataError == MetadataLoadError.NotAuthenticated -> {
                             AnimeStatusFormatter.formatStatus(anime.status)
                         }
-                        else -> animeMetadata?.formattedStatus ?: AnimeStatusFormatter.formatStatus(anime.status)
+                        else -> animeMetadata?.displayStatus() ?: AnimeStatusFormatter.formatStatus(anime.status)
                     },
                     label = "СТАТУС",
                     modifier = if (isCompleted) Modifier else Modifier.weight(1f),
@@ -300,7 +305,7 @@ private fun StatItem(
     label: String,
     modifier: Modifier = Modifier,
     isLoading: Boolean = false,
-    error: AnimeScreenModel.MetadataError? = null,
+    error: MetadataLoadError? = null,
     onRetry: () -> Unit = {},
     onLoginClick: () -> Unit = {},
 ) {
@@ -317,13 +322,17 @@ private fun StatItem(
         ) {
             Text(
                 text = value,
+                modifier = Modifier.weight(1f, fill = false),
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false,
             )
 
             // Show retry icon for NetworkError
-            if (error == AnimeScreenModel.MetadataError.NetworkError) {
+            if (error == MetadataLoadError.NetworkError) {
                 Spacer(modifier = Modifier.padding(start = 4.dp))
                 Icon(
                     imageVector = Icons.Filled.Refresh,
@@ -336,7 +345,7 @@ private fun StatItem(
             }
 
             // Show info icon for Disabled (user not logged in) - clickable
-            if (error == AnimeScreenModel.MetadataError.NotAuthenticated && !isLoading) {
+            if (error == MetadataLoadError.NotAuthenticated && !isLoading) {
                 Spacer(modifier = Modifier.padding(start = 4.dp))
                 Icon(
                     imageVector = Icons.Filled.Info,

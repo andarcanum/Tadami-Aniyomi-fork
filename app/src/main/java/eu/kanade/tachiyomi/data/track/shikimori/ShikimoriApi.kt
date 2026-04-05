@@ -135,6 +135,12 @@ class ShikimoriApi(
                 authClient.newCall(GET(url.toString()))
                     .awaitSuccess()
                     .parseAs<List<SMEntry>>()
+                    .prioritizeExactMatch(search)
+                    .onEach { entry ->
+                        logcat(LogPriority.DEBUG) {
+                            "Shikimori manga search query='$search' result=${entry.describeForLog()}"
+                        }
+                    }
                     .map { it.toMangaTrack(trackId) }
             }
         }
@@ -151,6 +157,12 @@ class ShikimoriApi(
                 authClient.newCall(GET(url.toString()))
                     .awaitSuccess()
                     .parseAs<List<SMEntry>>()
+                    .prioritizeExactMatch(search)
+                    .onEach { entry ->
+                        logcat(LogPriority.DEBUG) {
+                            "Shikimori anime search query='$search' result=${entry.describeForLog()}"
+                        }
+                    }
                     .map { it.toAnimeTrack(trackId) }
             }
         }
@@ -159,6 +171,19 @@ class ShikimoriApi(
     suspend fun getAnimeById(id: Long): SMEntry {
         return withIOContext {
             val url = "$API_URL/animes".toUri().buildUpon()
+                .appendPath(id.toString())
+                .build()
+            with(json) {
+                authClient.newCall(GET(url.toString()))
+                    .awaitSuccess()
+                    .parseAs()
+            }
+        }
+    }
+
+    suspend fun getMangaById(id: Long): SMEntry {
+        return withIOContext {
+            val url = "$API_URL/mangas".toUri().buildUpon()
                 .appendPath(id.toString())
                 .build()
             with(json) {
@@ -346,4 +371,28 @@ class ShikimoriApi(
                 .build(),
         )
     }
+}
+
+private fun List<SMEntry>.prioritizeExactMatch(query: String): List<SMEntry> {
+    if (isEmpty()) return this
+
+    val normalizedQuery = query.normalizedForSearch()
+    val exactMatches = filter { entry ->
+        entry.name.normalizedForSearch() == normalizedQuery ||
+            entry.russian.orEmpty().normalizedForSearch() == normalizedQuery
+    }
+
+    return if (exactMatches.isEmpty()) {
+        this
+    } else {
+        exactMatches.sortedByDescending { it.score } + filterNot { it in exactMatches }
+    }
+}
+
+private fun String.normalizedForSearch(): String {
+    return trim().lowercase().replace(Regex("\\s+"), " ")
+}
+
+private fun SMEntry.describeForLog(): String {
+    return "id=$id name='$name' russian='${russian.orEmpty()}' score=$score status=$status kind=${kind.orEmpty()}"
 }

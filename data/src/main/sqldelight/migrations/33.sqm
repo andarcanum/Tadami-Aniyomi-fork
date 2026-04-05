@@ -1,0 +1,23 @@
+import kotlin.Boolean;
+
+CREATE TABLE external_metadata_cache (
+    _id INTEGER PRIMARY KEY AUTOINCREMENT,
+    content_type TEXT NOT NULL,
+    media_id INTEGER NOT NULL,
+    source TEXT NOT NULL,
+    remote_id INTEGER,
+    score REAL,
+    format TEXT,
+    status TEXT,
+    cover_url TEXT,
+    cover_url_fallback TEXT,
+    search_query TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    is_manual_match INTEGER AS Boolean DEFAULT 0,
+    UNIQUE(content_type, media_id, source)
+);
+
+CREATE INDEX idx_external_metadata_cache_media_id
+    ON external_metadata_cache(content_type, media_id, source);
+CREATE INDEX idx_external_metadata_cache_updated_at
+    ON external_metadata_cache(updated_at);

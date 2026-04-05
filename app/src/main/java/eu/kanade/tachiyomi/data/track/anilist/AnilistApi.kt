@@ -7,8 +7,10 @@ import eu.kanade.tachiyomi.data.database.models.manga.MangaTrack
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALAddEntryResult
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALAnime
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALCurrentUserResult
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALManga
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALOAuth
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALSearchResult
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALMangaSingleMediaResult
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALSingleMediaResult
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALUserListEntryQueryResult
 import eu.kanade.tachiyomi.data.track.model.AnimeTrackSearch
@@ -642,6 +644,83 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
                                 totalEpisodes = media.episodes ?: 0,
                                 averageScore = media.averageScore ?: -1,
                                 studios = media.studios,
+                            )
+                        } else {
+                            null
+                        }
+                    }
+            }
+        }
+    }
+
+    suspend fun searchMangaById(id: Long): ALManga? {
+        return withIOContext {
+            val query = """
+            |query GetById(${'$'}id: Int) {
+                |Media(id: ${'$'}id, type: MANGA) {
+                    |id
+                    |staff {
+                        |edges {
+                            |role
+                            |id
+                            |node {
+                                |name {
+                                    |full
+                                    |userPreferred
+                                    |native
+                                |}
+                            |}
+                        |}
+                    |}
+                    |title {
+                        |userPreferred
+                    |}
+                    |coverImage {
+                        |large
+                    |}
+                    |format
+                    |status
+                    |chapters
+                    |description
+                    |startDate {
+                        |year
+                        |month
+                        |day
+                    |}
+                    |averageScore
+                |}
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("id", id)
+                }
+            }
+            with(json) {
+                authClient.newCall(
+                    POST(
+                        API_URL,
+                        body = payload.toString().toRequestBody(jsonMime),
+                    ),
+                )
+                    .awaitSuccess()
+                    .parseAs<ALMangaSingleMediaResult>()
+                    .let { result ->
+                        val media = result.data.media
+                        if (media != null) {
+                            ALManga(
+                                remoteId = media.id,
+                                title = media.title.userPreferred,
+                                imageUrl = media.coverImage.large,
+                                description = media.description,
+                                format = media.format?.replace("_", "-") ?: "",
+                                publishingStatus = media.status ?: "",
+                                startDateFuzzy = media.startDate.toEpochMilli(),
+                                totalChapters = media.chapters ?: 0,
+                                averageScore = media.averageScore ?: -1,
+                                staff = media.staff,
                             )
                         } else {
                             null

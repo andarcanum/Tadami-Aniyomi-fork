@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.presentation.entries.components.displayScore
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionButton
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroChipBorderColor
@@ -53,8 +54,8 @@ import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroSeconda
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroTitleColor
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
-import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreenModel
 import tachiyomi.domain.entries.anime.model.Anime
+import tachiyomi.domain.metadata.model.ExternalMetadata
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
@@ -93,7 +94,7 @@ fun AnimeHeroContent(
     onContinueWatching: () -> Unit,
     onDubbingClicked: (() -> Unit)?,
     selectedDubbing: String?,
-    animeMetadata: AnimeScreenModel.AnimeMetadataData? = null,
+    animeMetadata: ExternalMetadata? = null,
     modifier: Modifier = Modifier,
 ) {
     val uiPreferences = remember { Injekt.get<UiPreferences>() }
@@ -106,6 +107,7 @@ fun AnimeHeroContent(
     val originalTitle = remember(anime.description) {
         parseOriginalTitle(anime.description)
     }
+    val metadataScore = animeMetadata?.displayScore()
     val heroPanelShape = RoundedCornerShape(24.dp)
     val titleColor = resolveAuroraHeroTitleColor(colors)
     val primaryMetaColor = resolveAuroraHeroPrimaryMetaColor(colors)
@@ -206,7 +208,7 @@ fun AnimeHeroContent(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (animeMetadata?.score != null) {
+                if (metadataScore != null) {
                     Icon(
                         Icons.Filled.Star,
                         contentDescription = null,
@@ -214,7 +216,7 @@ fun AnimeHeroContent(
                         modifier = Modifier.size(14.dp),
                     )
                     Text(
-                        text = String.format("%.1f", animeMetadata.score),
+                        text = metadataScore,
                         fontSize = 13.sp,
                         color = primaryMetaColor,
                         fontWeight = FontWeight.Medium,

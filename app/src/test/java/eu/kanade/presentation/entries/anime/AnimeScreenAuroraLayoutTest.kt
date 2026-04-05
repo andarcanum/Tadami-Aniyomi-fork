@@ -53,8 +53,8 @@ class AnimeScreenAuroraLayoutTest {
 
         val resolved = resolveCoverUrl(state, useMetadataCovers = true)
 
-        resolved.url shouldBe "https://example.org/plugin-cover.jpg"
-        resolved.fallbackUrl.shouldBeNull()
+        resolved.coverUrl shouldBe "https://example.org/plugin-cover.jpg"
+        resolved.coverUrlFallback.shouldBeNull()
     }
 }
 

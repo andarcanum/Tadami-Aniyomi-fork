@@ -71,12 +71,14 @@ import androidx.compose.ui.zIndex
 import eu.kanade.presentation.components.EntryDownloadDropdownMenu
 import eu.kanade.presentation.entries.DownloadAction
 import eu.kanade.presentation.entries.TitleFastScrollOverlayAccumulator
+import eu.kanade.presentation.entries.components.ResolvedCover
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.AuroraEntryHoldToRefresh
 import eu.kanade.presentation.entries.components.EntryBottomActionMenu
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionFab
 import eu.kanade.presentation.entries.components.normalizeAuroraGlobalSearchQuery
+import eu.kanade.presentation.entries.components.resolveExternalMetadataCover
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadAction
 import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
 import eu.kanade.presentation.entries.manga.components.aurora.ChaptersHeader
@@ -94,6 +96,8 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.resolveAuroraAdaptiveSpec
+import eu.kanade.domain.ui.UiPreferences
+import tachiyomi.domain.metadata.model.MetadataSource
 import eu.kanade.tachiyomi.data.download.manga.model.MangaDownload
 import eu.kanade.tachiyomi.ui.entries.manga.ChapterList
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreenModel
@@ -109,6 +113,8 @@ import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.TwoPanelBox
 import tachiyomi.presentation.core.components.VerticalFastScroller
 import tachiyomi.presentation.core.i18n.stringResource
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.time.Instant
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -173,6 +179,23 @@ fun MangaScreenAuroraImpl(
     }
     val contentMaxWidthDp = auroraAdaptiveSpec.entryMaxWidthDp
     val useTwoPaneLayout = shouldUseMangaAuroraTwoPane(auroraAdaptiveSpec.deviceClass)
+    val uiPreferences = remember { Injekt.get<UiPreferences>() }
+    val metadataSource: MetadataSource = remember { uiPreferences.metadataSource().get() }
+    val resolvedCover = remember(
+        manga,
+        state.isMetadataLoading,
+        state.metadataError,
+        state.mangaMetadata,
+        metadataSource,
+    ) {
+        resolveExternalMetadataCover(
+            baseCoverUrl = manga.thumbnailUrl.orEmpty(),
+            metadata = state.mangaMetadata,
+            isMetadataLoading = state.isMetadataLoading,
+            metadataError = state.metadataError,
+            useMetadataCovers = metadataSource != MetadataSource.NONE,
+        )
+    }
 
     val lazyListState = rememberLazyListState()
     val scrollOffset by remember { derivedStateOf { lazyListState.firstVisibleItemScrollOffset } }
@@ -287,6 +310,8 @@ fun MangaScreenAuroraImpl(
                 manga = manga,
                 scrollOffset = scrollOffset,
                 firstVisibleItemIndex = firstVisibleItemIndex,
+                resolvedCoverUrl = resolvedCover.coverUrl,
+                resolvedCoverUrlFallback = resolvedCover.coverUrlFallback,
             )
 
             if (useTwoPaneLayout) {
@@ -338,6 +363,9 @@ fun MangaScreenAuroraImpl(
                                     chapterCount = chapters.size,
                                     hasReadingProgress = hasReadingProgress,
                                     onContinueReading = onContinueReading,
+                                    mangaMetadata = state.mangaMetadata,
+                                    isMetadataLoading = state.isMetadataLoading,
+                                    metadataError = state.metadataError,
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 MangaInfoCard(
@@ -357,6 +385,10 @@ fun MangaScreenAuroraImpl(
                                     },
                                     onToggleGenres = { genresExpanded = !genresExpanded },
                                     statsRequester = statsBringIntoViewRequester,
+                                    mangaMetadata = state.mangaMetadata,
+                                    isMetadataLoading = state.isMetadataLoading,
+                                    metadataError = state.metadataError,
+                                    onRetryMetadata = onRefresh,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
@@ -613,6 +645,10 @@ fun MangaScreenAuroraImpl(
                                     },
                                     onToggleGenres = { genresExpanded = !genresExpanded },
                                     statsRequester = statsBringIntoViewRequester,
+                                    mangaMetadata = state.mangaMetadata,
+                                    isMetadataLoading = state.isMetadataLoading,
+                                    metadataError = state.metadataError,
+                                    onRetryMetadata = onRefresh,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
 
@@ -807,6 +843,9 @@ fun MangaScreenAuroraImpl(
                             chapterCount = chapters.size,
                             hasReadingProgress = hasReadingProgress,
                             onContinueReading = onContinueReading,
+                            mangaMetadata = state.mangaMetadata,
+                            isMetadataLoading = state.isMetadataLoading,
+                            metadataError = state.metadataError,
                         )
                     }
                 }

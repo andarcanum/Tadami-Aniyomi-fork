@@ -32,6 +32,10 @@ import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.domain.metadata.model.MetadataLoadError
+import eu.kanade.presentation.entries.components.displayFormat
+import eu.kanade.presentation.entries.components.displayScore
+import eu.kanade.presentation.entries.components.displayStatus
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionButton
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroChipBorderColor
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroChipContainerColor
@@ -45,6 +49,7 @@ import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroTitleCo
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
 import tachiyomi.domain.entries.manga.model.Manga
+import tachiyomi.domain.metadata.model.ExternalMetadata
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.pluralStringResource
 
@@ -54,6 +59,9 @@ fun MangaHeroContent(
     chapterCount: Int,
     hasReadingProgress: Boolean,
     onContinueReading: () -> Unit,
+    mangaMetadata: ExternalMetadata? = null,
+    isMetadataLoading: Boolean = false,
+    metadataError: MetadataLoadError? = null,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
@@ -144,8 +152,23 @@ fun MangaHeroContent(
                 val parsedRating = remember(manga.description) {
                     RatingParser.parseRating(manga.description)
                 }
+                val metadataScore = mangaMetadata?.displayScore()
+                val metadataFormat = mangaMetadata?.displayFormat()
+                val metadataStatus = mangaMetadata?.displayStatus()
+                val ratingText = when {
+                    isMetadataLoading -> "..."
+                    metadataError == MetadataLoadError.NotAuthenticated -> null
+                    metadataScore != null -> metadataScore
+                    parsedRating != null -> RatingParser.formatRating(parsedRating.rating)
+                    else -> null
+                }
+                val statusText = when {
+                    isMetadataLoading -> "..."
+                    metadataError == MetadataLoadError.NotAuthenticated -> MangaStatusFormatter.formatStatus(manga.status)
+                    else -> metadataStatus ?: MangaStatusFormatter.formatStatus(manga.status)
+                }
 
-                if (parsedRating != null) {
+                if (ratingText != null) {
                     Icon(
                         Icons.Filled.Star,
                         contentDescription = null,
@@ -153,7 +176,7 @@ fun MangaHeroContent(
                         modifier = Modifier.size(14.dp),
                     )
                     Text(
-                        text = RatingParser.formatRating(parsedRating.rating),
+                        text = ratingText,
                         color = primaryMetaColor,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
@@ -165,8 +188,27 @@ fun MangaHeroContent(
                     )
                 }
 
+                val formatText = when {
+                    isMetadataLoading -> "..."
+                    metadataError == MetadataLoadError.NotAuthenticated -> null
+                    else -> metadataFormat
+                }
+                if (formatText != null) {
+                    Text(
+                        text = formatText,
+                        color = secondaryMetaColor,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        text = "|",
+                        color = secondaryMetaColor,
+                        fontSize = 13.sp,
+                    )
+                }
+
                 Text(
-                    text = MangaStatusFormatter.formatStatus(manga.status),
+                    text = statusText,
                     color = secondaryMetaColor,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,

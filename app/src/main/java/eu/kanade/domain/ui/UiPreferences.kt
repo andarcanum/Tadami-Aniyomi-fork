@@ -1,12 +1,12 @@
 package eu.kanade.domain.ui
 
-import eu.kanade.domain.ui.model.AnimeMetadataSource
 import eu.kanade.domain.ui.model.AppTheme
 import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.domain.ui.model.NavTransitionMode
 import eu.kanade.domain.ui.model.StartScreen
 import eu.kanade.domain.ui.model.TabletUiMode
 import eu.kanade.domain.ui.model.ThemeMode
+import tachiyomi.domain.metadata.model.MetadataSource
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.preference.getEnum
 import java.time.format.DateTimeFormatter
@@ -56,13 +56,16 @@ class UiPreferences(
     )
 
     /**
-     * Source for anime metadata (posters, ratings, type, status).
+     * Source for external metadata (posters, ratings, type, status).
      * Default is ANILIST for better coverage and quality.
      */
-    fun animeMetadataSource() = preferenceStore.getEnum(
+    fun metadataSource() = preferenceStore.getEnum(
         "anime_metadata_source",
-        AnimeMetadataSource.ANILIST,
+        MetadataSource.ANILIST,
     )
+
+    @Deprecated("Use metadataSource() instead", ReplaceWith("metadataSource()"))
+    fun animeMetadataSource() = metadataSource()
 
     /**
      * Whether the metadata authentication hint has been shown.

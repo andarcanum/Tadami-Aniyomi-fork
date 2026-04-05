@@ -10,6 +10,8 @@ import kotlinx.serialization.Serializable
 data class SMEntry(
     val id: Long,
     val name: String,
+    @SerialName("russian")
+    val russian: String? = null,
     val chapters: Long?,
     val episodes: Long?,
     val image: SUEntryCover,

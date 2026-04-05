@@ -70,7 +70,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import eu.kanade.domain.ui.model.AnimeMetadataSource
+import eu.kanade.domain.metadata.model.MetadataLoadError
+import eu.kanade.presentation.entries.components.ResolvedCover
+import eu.kanade.presentation.entries.components.resolveExternalMetadataCover
 import eu.kanade.presentation.components.EntryDownloadDropdownMenu
 import eu.kanade.presentation.entries.DownloadAction
 import eu.kanade.presentation.entries.TitleFastScrollOverlayAccumulator
@@ -96,6 +98,7 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.resolveAuroraAdaptiveSpec
+import tachiyomi.domain.metadata.model.MetadataSource
 import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreenModel
 import eu.kanade.tachiyomi.ui.entries.anime.EpisodeList
@@ -184,9 +187,8 @@ fun AnimeScreenAuroraImpl(
     val contentMaxWidthDp = auroraAdaptiveSpec.entryMaxWidthDp
     val useTwoPaneLayout = shouldUseAnimeAuroraTwoPane(auroraAdaptiveSpec.deviceClass)
 
-    // Get the metadata source preference to determine cover URL
-    val metadataSource = remember {
-        Injekt.get<eu.kanade.domain.ui.UiPreferences>().animeMetadataSource().get()
+    val metadataSource: MetadataSource = remember {
+        Injekt.get<eu.kanade.domain.ui.UiPreferences>().metadataSource().get()
     }
 
     val resolvedCover = remember(
@@ -196,7 +198,7 @@ fun AnimeScreenAuroraImpl(
         state.animeMetadata,
         metadataSource,
     ) {
-        resolveCoverUrl(state, metadataSource != eu.kanade.domain.ui.model.AnimeMetadataSource.NONE)
+        resolveCoverUrl(state, metadataSource != MetadataSource.NONE)
     }
 
     val lazyListState = rememberLazyListState()
@@ -301,7 +303,7 @@ fun AnimeScreenAuroraImpl(
 
     // One-time Snackbar when metadata source is not authenticated
     LaunchedEffect(state.metadataError) {
-        if (state.metadataError == AnimeScreenModel.MetadataError.NotAuthenticated &&
+        if (state.metadataError == MetadataLoadError.NotAuthenticated &&
             !metadataAuthHintShown.get() &&
             !metadataHintDismissed &&
             onTrackingClicked != null
@@ -346,8 +348,8 @@ fun AnimeScreenAuroraImpl(
                 anime = anime,
                 scrollOffset = scrollOffset,
                 firstVisibleItemIndex = firstVisibleItemIndex,
-                resolvedCoverUrl = resolvedCover.url,
-                resolvedCoverUrlFallback = resolvedCover.fallbackUrl,
+                resolvedCoverUrl = resolvedCover.coverUrl,
+                resolvedCoverUrlFallback = resolvedCover.coverUrlFallback,
             )
 
             if (useTwoPaneLayout) {
@@ -1169,11 +1171,6 @@ private fun AuroraEpisodeSelectionBottomStack(
     }
 }
 
-data class ResolvedCover(
-    val url: String?,
-    val fallbackUrl: String?,
-)
-
 internal fun shouldUseAnimeAuroraTwoPane(deviceClass: AuroraDeviceClass): Boolean {
     return deviceClass == AuroraDeviceClass.TabletExpanded
 }
@@ -1253,31 +1250,13 @@ internal fun resolveCoverUrl(
     state: AnimeScreenModel.State.Success,
     useMetadataCovers: Boolean,
 ): ResolvedCover {
-    if (!useMetadataCovers) {
-        return ResolvedCover(state.anime.thumbnailUrl, null)
-    }
-
-    if (state.isMetadataLoading) {
-        return ResolvedCover(state.anime.thumbnailUrl, null)
-    }
-
-    val metadataCoverUrl = state.animeMetadata?.coverUrl?.takeIf { it.isNotBlank() }
-    val metadataCoverUrlFallback = state.animeMetadata?.coverUrlFallback?.takeIf { it.isNotBlank() }
-
-    return when (state.metadataError) {
-        null -> {
-            if (metadataCoverUrl != null) {
-                ResolvedCover(metadataCoverUrl, metadataCoverUrlFallback ?: state.anime.thumbnailUrl)
-            } else {
-                ResolvedCover(state.anime.thumbnailUrl, null)
-            }
-        }
-        AnimeScreenModel.MetadataError.NetworkError,
-        AnimeScreenModel.MetadataError.NotFound,
-        AnimeScreenModel.MetadataError.NotAuthenticated,
-        AnimeScreenModel.MetadataError.Disabled,
-        -> ResolvedCover(state.anime.thumbnailUrl, null)
-    }
+    return resolveExternalMetadataCover(
+        baseCoverUrl = state.anime.thumbnailUrl.orEmpty(),
+        metadata = state.animeMetadata,
+        isMetadataLoading = state.isMetadataLoading,
+        metadataError = state.metadataError,
+        useMetadataCovers = useMetadataCovers,
+    )
 }
 
 /**
