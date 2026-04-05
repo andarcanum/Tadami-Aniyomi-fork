@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.network.interceptor
 import android.content.Context
 import eu.kanade.tachiyomi.network.AndroidCookieJar
 import io.mockk.every
+import io.mockk.justRun
 import io.mockk.mockk
 import io.mockk.verify
 import okhttp3.Cookie
@@ -101,6 +102,49 @@ class CloudflareInterceptorTest {
 
         assertEquals(200, result.code)
         verify(exactly = 1) { cookieJar.get(request.url) }
+        verify(exactly = 1) { chain.proceed(request) }
+    }
+
+    @Test
+    fun `intercept delegates cloudflare challenge resolution before final retry`() {
+        val request = Request.Builder()
+            .url("https://novel.tl/images/4/4c/cover.jpg")
+            .build()
+
+        val initialResponse = response(
+            request = request,
+            code = 403,
+            message = "Forbidden",
+            server = "cloudflare",
+        )
+        val finalResponse = response(
+            request = request,
+            code = 200,
+            message = "OK",
+            server = null,
+        )
+
+        val cookieJar = mockk<AndroidCookieJar>()
+        every { cookieJar.get(request.url) } returns emptyList()
+
+        val challengeResolver = mockk<CloudflareChallengeResolver>()
+        justRun { challengeResolver.resolve(request, null) }
+
+        val chain = mockk<Interceptor.Chain>()
+        every { chain.proceed(request) } returns finalResponse
+
+        val interceptor = CloudflareInterceptor(
+            context = mockk<Context>(relaxed = true),
+            cookieManager = cookieJar,
+            defaultUserAgentProvider = { "test-agent" },
+            challengeResolver = challengeResolver,
+        )
+
+        val result = interceptor.intercept(chain, request, initialResponse)
+
+        assertEquals(200, result.code)
+        verify(exactly = 1) { cookieJar.get(request.url) }
+        verify(exactly = 1) { challengeResolver.resolve(request, null) }
         verify(exactly = 1) { chain.proceed(request) }
     }
 
