@@ -685,6 +685,8 @@
     <string name="bandwidth_data_saver_server">Прокси-сервер Bandwidth Hero</string>
     <string name="data_saver_server_summary">Укажите URL прокси-сервера Bandwidth Hero здесь</string>
     <string name="download_slots_info">Одновременная загрузка будет осуществляться только из источников с собственным хостингом или без ограничений</string>
+    <string name="pref_parallel_page_downloads">Параллельные загрузки страниц</string>
+    <string name="parallel_page_downloads_info">Больше значение может ускорить загрузку страниц, но некоторые источники лучше работают с меньшими значениями.</string>
     <string name="unseen">Не просмотрено</string>
     <string name="label_manga_extension_repos">Репозитории расширений манги</string>
     <string name="label_anime_extension_repos">Репозитории расширений аниме</string>

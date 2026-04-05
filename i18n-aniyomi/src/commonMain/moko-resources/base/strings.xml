@@ -360,6 +360,7 @@
     <!-- Reader section -->
     <string name="pref_preserve_reading_position">Preserve reading position on read chapters</string>
     <string name="pref_download_slots">Maximum downloads</string>
+    <string name="pref_parallel_page_downloads">Parallel page downloads</string>
     <string name="custom_button_settings">Custom buttons</string>
     <string name="local_source_badge">Local</string>
     <string name="type">Type</string>
@@ -921,6 +922,7 @@
     <string name="bandwidth_data_saver_server">Bandwidth Hero Proxy Server</string>
     <string name="data_saver_server_summary">Put Bandwidth Hero Proxy server url here</string>
     <string name="download_slots_info">Will only download concurrently from self-hosted or unmetered sources</string>
+    <string name="parallel_page_downloads_info">Higher values can speed up page loading, but some sources work better with smaller values.</string>
     <string name="unseen">Unseen</string>
     <string name="label_manga_extension_repos">Manga extension repos</string>
     <string name="label_anime_extension_repos">Anime extension repos</string>
