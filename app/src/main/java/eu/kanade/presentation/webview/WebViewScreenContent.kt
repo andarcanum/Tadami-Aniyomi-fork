@@ -132,10 +132,11 @@ fun WebViewScreenContent(
                 return try {
                     val internalRequest = Request.Builder().apply {
                         url(request!!.url.toString())
-                        request.requestHeaders.forEach { (key, value) ->
-                            if (key == "X-Requested-With" && value in setOf(context.packageName, spoofedPackageName)) {
-                                return@forEach
-                            }
+                        sanitizeCloudflareRequestHeaders(
+                            requestHeaders = request.requestHeaders,
+                            contextPackageName = context.packageName,
+                            spoofedPackageName = spoofedPackageName,
+                        ).forEach { (key, value) ->
                             addHeader(key, value)
                         }
                         method(request.method, null)
