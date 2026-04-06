@@ -1339,6 +1339,7 @@
     <string name="aurora_source">SOURCE</string>
     <string name="aurora_translation">TRANSLATION</string>
     <string name="aurora_state">STATE</string>
+    <string name="aurora_description_header">DESCRIPTION</string>
     <string name="aurora_status">STATUS</string>
     <string name="aurora_continue">CONTINUE</string>
     <string name="aurora_episodes_header">Episodes</string>

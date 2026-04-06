@@ -65,9 +65,18 @@ fun MangaInfoCard(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Column(
-                verticalArrangement = Arrangement.Top,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
+                Text(
+                    text = stringResource(AYMR.strings.aurora_description_header),
+                    color = colors.textSecondary.copy(alpha = 0.6f),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
