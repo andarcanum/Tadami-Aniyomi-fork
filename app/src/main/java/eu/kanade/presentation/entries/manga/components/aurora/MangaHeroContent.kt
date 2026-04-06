@@ -19,7 +19,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -122,26 +125,15 @@ fun MangaHeroContent(
                 style = TextStyle(fontFamily = coverTitleFontFamily),
             )
 
-            Row(
+            HeroStatsStrip(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                HeroStat(
-                    label = stringResource(AYMR.strings.aurora_rating),
-                    value = detailsSnapshot.ratingText ?: stringResource(MR.strings.not_applicable),
-                    modifier = Modifier.weight(1f),
-                )
-                HeroStat(
-                    label = "Chapters",
-                    value = detailsSnapshot.progress?.chaptersText ?: stringResource(MR.strings.not_applicable),
-                    modifier = Modifier.weight(1f),
-                )
-                HeroStat(
-                    label = "Progress",
-                    value = detailsSnapshot.progress?.progressText ?: stringResource(MR.strings.not_applicable),
-                    modifier = Modifier.weight(1f),
-                )
-            }
+                ratingLabel = stringResource(AYMR.strings.aurora_rating),
+                ratingValue = detailsSnapshot.ratingText ?: stringResource(MR.strings.not_applicable),
+                chaptersLabel = stringResource(AYMR.strings.aurora_chapters),
+                chaptersValue = detailsSnapshot.progress?.chaptersText ?: stringResource(MR.strings.not_applicable),
+                progressLabel = stringResource(AYMR.strings.aurora_progress),
+                progressValue = detailsSnapshot.progress?.progressText ?: stringResource(MR.strings.not_applicable),
+            )
 
             Spacer(modifier = Modifier.height(2.dp))
 
@@ -165,33 +157,94 @@ fun MangaHeroContent(
 }
 
 @Composable
+private fun HeroStatsStrip(
+    modifier: Modifier = Modifier,
+    ratingLabel: String,
+    ratingValue: String,
+    chaptersLabel: String,
+    chaptersValue: String,
+    progressLabel: String,
+    progressValue: String,
+) {
+    val normalizedProgressValue = progressValue.substringBefore("(").trimEnd()
+
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Start,
+    ) {
+        HeroStat(
+            label = ratingLabel,
+            value = ratingValue,
+            modifier = Modifier.weight(0.95f, fill = false),
+        )
+        HeroStatDivider()
+        HeroStat(
+            label = chaptersLabel,
+            value = chaptersValue,
+            modifier = Modifier.weight(1.05f, fill = false),
+        )
+        HeroStatDivider()
+        HeroStat(
+            label = progressLabel,
+            value = normalizedProgressValue,
+            modifier = Modifier.weight(1.4f, fill = false),
+        )
+    }
+}
+
+@Composable
 private fun HeroStat(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
+    val normalizedLabel = label
+        .lowercase()
+        .replaceFirstChar { char -> char.titlecase() }
 
-    Column(
+    Text(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Text(
-            text = label.uppercase(),
-            color = colors.textSecondary.copy(alpha = 0.75f),
-            fontSize = 9.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            text = value,
-            color = colors.textPrimary,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            softWrap = false,
-        )
-    }
+        text = buildAnnotatedString {
+            withStyle(
+                SpanStyle(
+                    color = colors.textSecondary.copy(alpha = 0.68f),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                ),
+            ) {
+                append(normalizedLabel)
+            }
+            append(" - ")
+            withStyle(
+                SpanStyle(
+                    color = colors.textPrimary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                ),
+            ) {
+                append(value)
+            }
+        },
+        fontSize = 11.sp,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        softWrap = false,
+    )
+}
+
+@Composable
+private fun HeroStatDivider() {
+    val colors = AuroraTheme.colors
+
+    Text(
+        text = " | ",
+        color = colors.textSecondary.copy(alpha = 0.5f),
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Medium,
+        maxLines = 1,
+        overflow = TextOverflow.Clip,
+        softWrap = false,
+    )
 }

@@ -1194,6 +1194,9 @@
     
     <!-- Anime Detail Screen -->
     <string name="aurora_rating">РЕЙТИНГ</string>
+    <string name="aurora_source">ИСТОЧНИК</string>
+    <string name="aurora_translation">ПЕРЕВОД</string>
+    <string name="aurora_state">СТАТУС</string>
     <string name="aurora_status">СТАТУС</string>
     <string name="aurora_continue">ЗАПУСК</string>
     <string name="aurora_episodes_header">Эпизоды</string>
@@ -1201,8 +1204,10 @@
     <string name="aurora_episode_badge_filler">Филлер</string>
     <string name="aurora_episode_badge_seen">Просм.</string>
     <string name="aurora_chapters_header">Главы</string>
+    <string name="aurora_chapters">ГЛАВЫ</string>
     <string name="aurora_chapter_count">%d гл.</string>
     <string name="aurora_chapter_progress">Глава %d</string>
+    <string name="aurora_progress">ПРОГРЕСС</string>
     <string name="aurora_select_dubbing">Выбрать озвучку</string>
     <string name="aurora_no_description">Нет описания</string>
 

@@ -1336,6 +1336,9 @@
 
     <!-- Anime Detail Screen -->
     <string name="aurora_rating">RATING</string>
+    <string name="aurora_source">SOURCE</string>
+    <string name="aurora_translation">TRANSLATION</string>
+    <string name="aurora_state">STATE</string>
     <string name="aurora_status">STATUS</string>
     <string name="aurora_continue">CONTINUE</string>
     <string name="aurora_episodes_header">Episodes</string>
@@ -1343,8 +1346,10 @@
     <string name="aurora_episode_badge_filler">Filler</string>
     <string name="aurora_episode_badge_seen">Seen</string>
     <string name="aurora_chapters_header">Chapters</string>
+    <string name="aurora_chapters">CHAPTERS</string>
     <string name="aurora_chapter_count">%d chs</string>
     <string name="aurora_chapter_progress">Chapter %d</string>
+    <string name="aurora_progress">PROGRESS</string>
     <string name="aurora_select_dubbing">Select Dubbing</string>
     <string name="aurora_no_description">No description</string>
 

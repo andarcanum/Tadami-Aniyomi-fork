@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.theme.AuroraTheme
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
@@ -38,11 +39,11 @@ fun MangaStatsCard(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             StatRow(
-                label = "Source",
+                label = stringResource(AYMR.strings.aurora_source),
                 value = detailsSnapshot.sourceTitle ?: stringResource(MR.strings.not_applicable),
             )
             StatRow(
-                label = "Translation",
+                label = stringResource(AYMR.strings.aurora_translation),
                 value = detailsSnapshot.translationText ?: stringResource(MR.strings.not_applicable),
             )
             StatRow(
@@ -51,15 +52,15 @@ fun MangaStatsCard(
                 ratingValue = detailsSnapshot.ratingValue,
             )
             StatRow(
-                label = "State",
+                label = stringResource(AYMR.strings.aurora_state),
                 value = detailsSnapshot.statusText,
             )
             StatRow(
-                label = "Chapters",
+                label = stringResource(AYMR.strings.aurora_chapters),
                 value = detailsSnapshot.progress?.chaptersText ?: stringResource(MR.strings.not_applicable),
             )
             StatRow(
-                label = "Progress",
+                label = stringResource(AYMR.strings.aurora_progress),
                 value = detailsSnapshot.progress?.progressText ?: stringResource(MR.strings.not_applicable),
             )
         }
