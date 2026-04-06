@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.presentation.entries.manga.components.aurora.QuietMetricTile
 import eu.kanade.domain.entries.novel.model.normalizeNovelDescription
 import eu.kanade.presentation.entries.manga.components.aurora.GlassmorphismCard
 import eu.kanade.presentation.theme.AuroraTheme
@@ -98,25 +99,26 @@ fun NovelInfoCard(
                     .let { base ->
                         if (statsRequester != null) base.bringIntoViewRequester(statsRequester) else base
                     },
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                StatItem(
-                    value = chapterCount.toString(),
+                QuietMetricTile(
                     label = stringResource(MR.strings.chapters),
+                    value = chapterCount.toString(),
                     modifier = Modifier.weight(1f),
                 )
-                StatItem(
-                    value = novelStatusText(novel.status),
+                QuietMetricTile(
                     label = stringResource(AYMR.strings.aurora_status),
+                    value = novelStatusText(novel.status),
+                    badge = true,
                     modifier = Modifier.weight(1f),
                 )
-                StatItem(
+                QuietMetricTile(
+                    label = stringResource(MR.strings.action_sort_next_updated),
                     value = when (nextUpdateDays) {
                         null -> stringResource(MR.strings.not_applicable)
                         0 -> stringResource(MR.strings.manga_interval_expected_update_soon)
                         else -> "${nextUpdateDays}d"
                     },
-                    label = stringResource(MR.strings.action_sort_next_updated),
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -234,38 +236,6 @@ internal fun shouldShowNovelDescriptionToggle(
     descriptionExpanded: Boolean,
 ): Boolean {
     return hasDescriptionOverflow || descriptionExpanded
-}
-
-@Composable
-private fun StatItem(
-    value: String,
-    label: String,
-    modifier: Modifier = Modifier,
-) {
-    val colors = AuroraTheme.colors
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier,
-    ) {
-        Text(
-            text = value,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            color = colors.textPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = label.uppercase(),
-            fontSize = 10.sp,
-            letterSpacing = 1.sp,
-            color = colors.textSecondary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
 }
 
 @Composable
