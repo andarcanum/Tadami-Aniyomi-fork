@@ -109,29 +109,30 @@ internal fun QuietMetadataRow(
 ) {
     val colors = AuroraTheme.colors
 
-    Row(
+    Column(
         modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalAlignment = Alignment.Start,
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = colors.textSecondary.copy(alpha = 0.78f),
-            modifier = Modifier.size(16.dp),
+        Text(
+            text = label.uppercase(),
+            fontSize = 9.sp,
+            letterSpacing = 0.8.sp,
+            fontWeight = FontWeight.Medium,
+            color = colors.textSecondary.copy(alpha = 0.62f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
-        Spacer(modifier = Modifier.width(10.dp))
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(
-                text = label.uppercase(),
-                fontSize = 9.sp,
-                letterSpacing = 0.8.sp,
-                fontWeight = FontWeight.Medium,
-                color = colors.textSecondary.copy(alpha = 0.62f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = colors.textSecondary.copy(alpha = 0.78f),
+                modifier = Modifier.size(14.dp),
             )
             Text(
                 text = value,
@@ -151,7 +152,9 @@ internal fun QuietSectionDivider() {
     val colors = AuroraTheme.colors
 
     HorizontalDivider(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp),
         color = colors.textPrimary.copy(alpha = 0.05f),
         thickness = 1.dp,
     )

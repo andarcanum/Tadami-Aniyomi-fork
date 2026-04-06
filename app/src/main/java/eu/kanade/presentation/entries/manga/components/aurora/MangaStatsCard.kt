@@ -30,43 +30,43 @@ fun MangaStatsCard(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Column(
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     QuietMetricTile(
                         label = stringResource(AYMR.strings.aurora_rating),
                         value = detailsSnapshot.ratingText ?: stringResource(MR.strings.not_applicable),
                         leadingIcon = Icons.Filled.Star,
                         leadingIconTint = Color(0xFFFACC15),
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.fillMaxWidth(),
                     )
-                    QuietMetricTile(
-                        label = stringResource(AYMR.strings.aurora_chapters),
-                        value = detailsSnapshot.progress?.chaptersText ?: stringResource(MR.strings.not_applicable),
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
                     QuietMetricTile(
                         label = stringResource(AYMR.strings.aurora_progress),
                         value = detailsSnapshot.progress?.progressText ?: stringResource(MR.strings.not_applicable),
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.fillMaxWidth(),
                         progressFraction = detailsSnapshot.progress?.percent,
+                    )
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    QuietMetricTile(
+                        label = stringResource(AYMR.strings.aurora_chapters),
+                        value = detailsSnapshot.progress?.chaptersText ?: stringResource(MR.strings.not_applicable),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                     QuietMetricTile(
                         label = stringResource(AYMR.strings.aurora_state),
                         value = detailsSnapshot.statusText,
                         badge = true,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
@@ -75,7 +75,7 @@ fun MangaStatsCard(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 QuietMetadataRow(
                     icon = Icons.Outlined.Public,
