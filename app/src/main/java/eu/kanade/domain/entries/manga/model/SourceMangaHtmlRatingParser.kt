@@ -65,7 +65,8 @@ internal object SourceMangaHtmlRatingParser {
     }
 
     private fun parseInkStory(document: Document): Float? {
-        return parseAggregateRating(document)
+        parseAggregateRating(document)?.let { return it }
+        return parseInkStoryText(document.body().text())
     }
 
     private fun parseMadara(document: Document): Float? {
@@ -135,6 +136,26 @@ internal object SourceMangaHtmlRatingParser {
             ?.toFloatOrNull()
             ?.let { normalizeRating(it, 5f) }
         if (averageRating != null) return averageRating
+
+        return null
+    }
+
+    private fun parseInkStoryText(text: String): Float? {
+        val ratingWithVotes = Regex("""(?i)\bРейтинг\b\s+([0-9]+(?:[.,][0-9]+)?)\s+\d+\s+оценок\b""")
+            .find(text)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.replace(',', '.')
+            ?.toFloatOrNull()
+        if (ratingWithVotes != null) return ratingWithVotes
+
+        val standaloneRating = Regex("""\b([0-9]+(?:[.,][0-9]+)?)\s+\d+\s+оценок\b""")
+            .find(text)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.replace(',', '.')
+            ?.toFloatOrNull()
+        if (standaloneRating != null) return standaloneRating
 
         return null
     }

@@ -64,6 +64,20 @@ class SourceMangaHtmlRatingParserTest {
     }
 
     @Test
+    fun `parse extracts inkstory rating from visible text`() {
+        val html = """
+            <html>
+              <body>
+                <div>Рейтинг</div>
+                <div>9.71 958 оценок</div>
+              </body>
+            </html>
+        """.trimIndent()
+
+        SourceMangaHtmlRatingParser.parse("InkStory", "https://inkstory.net", html = html) shouldBe 9.71f
+    }
+
+    @Test
     fun `parse extracts madara rating from rating summary text`() {
         val html = """
             <html>
