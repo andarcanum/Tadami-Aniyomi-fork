@@ -1196,6 +1196,7 @@
     <string name="aurora_rating">РЕЙТИНГ</string>
     <string name="aurora_source">ИСТОЧНИК</string>
     <string name="aurora_translation">ПЕРЕВОД</string>
+    <string name="aurora_update">ОБНОВЛЕНИЕ</string>
     <string name="aurora_state">СТАТУС</string>
     <string name="aurora_description_header">ОПИСАНИЕ</string>
     <string name="aurora_status">СТАТУС</string>

@@ -125,6 +125,7 @@ internal fun QuietMetadataRow(
         )
 
         Row(
+            modifier = Modifier.padding(top = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {

@@ -1338,6 +1338,7 @@
     <string name="aurora_rating">RATING</string>
     <string name="aurora_source">SOURCE</string>
     <string name="aurora_translation">TRANSLATION</string>
+    <string name="aurora_update">UPDATE</string>
     <string name="aurora_state">STATE</string>
     <string name="aurora_description_header">DESCRIPTION</string>
     <string name="aurora_status">STATUS</string>
