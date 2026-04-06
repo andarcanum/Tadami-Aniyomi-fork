@@ -12,6 +12,7 @@ import eu.kanade.domain.entries.manga.interactor.SetExcludedScanlators
 import eu.kanade.domain.entries.manga.interactor.SetMangaViewerFlags
 import eu.kanade.domain.entries.manga.interactor.UpdateManga
 import eu.kanade.domain.entries.novel.interactor.GetNovelExcludedScanlators
+import eu.kanade.domain.entries.novel.interactor.NovelRatingFetcher
 import eu.kanade.domain.entries.novel.interactor.SetNovelExcludedScanlators
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.extension.anime.interactor.GetAnimeExtensionLanguages
@@ -543,6 +544,7 @@ class DomainModule : InjektModule {
             )
         }
         addFactory { GetRemoteNovel(get()) }
+        addFactory { NovelRatingFetcher() }
         addFactory { GetNovelSourcesWithFavoriteCount(get(), get()) }
         addFactory { GetNovelSourcesWithNonLibraryNovels(get()) }
         addFactory { ToggleNovelSource(get<SourcePreferences>().disabledNovelSources()) }

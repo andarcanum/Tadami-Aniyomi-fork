@@ -10,6 +10,7 @@ import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.entries.novel.interactor.GetNovelExcludedScanlators
+import eu.kanade.domain.entries.novel.interactor.NovelRatingFetcher
 import eu.kanade.domain.entries.novel.interactor.SetNovelExcludedScanlators
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.entries.novel.model.chaptersFiltered
@@ -117,6 +118,7 @@ class NovelScreenModel(
     private val getNovelCategories: GetNovelCategories = Injekt.get(),
     private val setNovelCategories: SetNovelCategories = Injekt.get(),
     private val sourceManager: NovelSourceManager = Injekt.get(),
+    private val novelRatingFetcher: NovelRatingFetcher = Injekt.get(),
     private val trackerManager: TrackerManager = Injekt.get(),
     private val getTracks: GetNovelTracks = Injekt.get(),
     private val application: Application? = runCatching { Injekt.get<Application>() }.getOrNull(),
@@ -330,6 +332,7 @@ class NovelScreenModel(
                 State.Success(
                     novel = novel,
                     source = source,
+                    rating = null,
                     chapters = chapters,
                     availableScanlators = availableScanlators,
                     scanlatorChapterCounts = scanlatorChapterCounts,
@@ -374,6 +377,9 @@ class NovelScreenModel(
                 }
             }
             cacheState(state.value as? State.Success)
+            if (!(shouldAutoRefreshNovel || shouldAutoRefreshChapters)) {
+                refreshNovelRating(state.value as? State.Success)
+            }
             observeTrackers()
             syncDownloadedState()
 
@@ -712,6 +718,20 @@ class NovelScreenModel(
             remoteNovel = networkNovel,
             manualFetch = manualFetch,
         )
+        refreshNovelRating(state)
+    }
+
+    private fun refreshNovelRating(state: State.Success?) {
+        if (state == null) return
+        screenModelScope.launchIO {
+            val rating = novelRatingFetcher.await(state.source, state.novel)
+            logcat {
+                "Resolved novel rating for id=${state.novel.id} source=${state.source.name}, rating=$rating"
+            }
+            updateSuccessState { current ->
+                if (current.novel.id != state.novel.id) current else current.copy(rating = rating)
+            }
+        }
     }
 
     private suspend fun fetchChaptersFromSource(
@@ -1463,6 +1483,7 @@ class NovelScreenModel(
         data class Success(
             val novel: Novel,
             val source: NovelSource,
+            val rating: Float? = null,
             val chapters: List<NovelChapter>,
             val availableScanlators: Set<String>,
             val scanlatorChapterCounts: Map<String, Int>,

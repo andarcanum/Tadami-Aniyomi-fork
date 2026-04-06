@@ -22,10 +22,12 @@ import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 import java.time.Instant
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 
 @Composable
 fun NovelStatsCard(
     novel: Novel,
+    rating: Float?,
     chapterCount: Int,
     readChapterCount: Int,
     nextUpdate: Instant?,
@@ -55,7 +57,8 @@ fun NovelStatsCard(
                 ) {
                     QuietMetricTile(
                         label = stringResource(AYMR.strings.aurora_rating),
-                        value = stringResource(MR.strings.not_applicable),
+                        value = rating?.let { String.format(Locale.ROOT, "%.1f", it) }
+                            ?: stringResource(MR.strings.not_applicable),
                         leadingIcon = Icons.Filled.Star,
                         leadingIconTint = Color(0xFFFACC15),
                         modifier = Modifier.fillMaxWidth(),
