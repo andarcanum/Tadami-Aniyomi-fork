@@ -73,6 +73,15 @@ class GetMangaMetadata(
                 anilistApi.search(query)
             }
 
+            override fun remoteId(remote: MangaTrackSearch): Long = remote.remote_id
+
+            override fun candidateTitles(remote: MangaTrackSearch): List<String> {
+                return buildList {
+                    add(remote.title)
+                    addAll(remote.alternative_titles)
+                }
+            }
+
             override suspend fun map(
                 target: MetadataTarget,
                 remote: MangaTrackSearch,
@@ -125,6 +134,15 @@ class GetMangaMetadata(
 
             override suspend fun search(query: String): List<MangaTrackSearch> = withIOContext {
                 shikimoriApi.search(query)
+            }
+
+            override fun remoteId(remote: MangaTrackSearch): Long = remote.remote_id
+
+            override fun candidateTitles(remote: MangaTrackSearch): List<String> {
+                return buildList {
+                    add(remote.title)
+                    addAll(remote.alternative_titles)
+                }
             }
 
             override suspend fun map(

@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,7 +48,6 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -87,6 +85,8 @@ import eu.kanade.presentation.entries.manga.components.aurora.MangaActionCard
 import eu.kanade.presentation.entries.manga.components.aurora.MangaChapterCardCompact
 import eu.kanade.presentation.entries.manga.components.aurora.MangaHeroContent
 import eu.kanade.presentation.entries.manga.components.aurora.MangaInfoCard
+import eu.kanade.presentation.entries.manga.components.aurora.MangaStatsCard
+import eu.kanade.presentation.entries.manga.components.aurora.resolveMangaDetailsSnapshot
 import eu.kanade.presentation.entries.reduceTitleFastScrollOverlayAccumulator
 import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
 import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
@@ -97,6 +97,7 @@ import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.resolveAuroraAdaptiveSpec
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.tachiyomi.source.manga.getNameForMangaInfo
 import tachiyomi.domain.metadata.model.MetadataSource
 import eu.kanade.tachiyomi.data.download.manga.model.MangaDownload
 import eu.kanade.tachiyomi.ui.entries.manga.ChapterList
@@ -105,7 +106,6 @@ import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.runningFold
-import kotlinx.coroutines.launch
 import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
@@ -196,12 +196,36 @@ fun MangaScreenAuroraImpl(
             useMetadataCovers = metadataSource != MetadataSource.NONE,
         )
     }
+    val chapterModels = remember(chapters) {
+        chapters.mapNotNull { (it as? ChapterList.Item)?.chapter }
+    }
+    val detailsSnapshot = remember(
+        manga,
+        chapterModels,
+        state.source,
+        selectedScanlator,
+        scanlatorChapterCounts,
+        state.mangaMetadata,
+        state.isMetadataLoading,
+        state.metadataError,
+    ) {
+        resolveMangaDetailsSnapshot(
+            sourceTitle = state.source.getNameForMangaInfo(),
+            sourceName = state.source.name,
+            sourceLanguage = state.source.lang,
+            manga = manga,
+            chapters = chapterModels,
+            selectedScanlator = selectedScanlator,
+            scanlatorChapterCounts = scanlatorChapterCounts,
+            mangaMetadata = state.mangaMetadata,
+            isMetadataLoading = state.isMetadataLoading,
+            metadataError = state.metadataError,
+        )
+    }
 
     val lazyListState = rememberLazyListState()
     val scrollOffset by remember { derivedStateOf { lazyListState.firstVisibleItemScrollOffset } }
     val firstVisibleItemIndex by remember { derivedStateOf { lazyListState.firstVisibleItemIndex } }
-    val scope = rememberCoroutineScope()
-    val statsBringIntoViewRequester = remember { BringIntoViewRequester() }
     val haptic = LocalHapticFeedback.current
 
     // State for chapters expansion
@@ -241,12 +265,6 @@ fun MangaScreenAuroraImpl(
             .collect { isReverseScrollingOverlay = it }
     }
     val chaptersToShow = if (chaptersExpanded) chapters else chapters.take(5)
-    val hasReadingProgress = remember(chapters) {
-        chapters.any { chapterItem ->
-            val chapter = (chapterItem as? ChapterList.Item)?.chapter ?: return@any false
-            chapter.read || chapter.lastPageRead > 0L
-        }
-    }
 
     // Auto-scroll to target chapter on initial load
     var hasScrolledToTarget: Boolean by remember { mutableStateOf(false) }
@@ -360,35 +378,25 @@ fun MangaScreenAuroraImpl(
                             ) {
                                 MangaHeroContent(
                                     manga = manga,
-                                    chapterCount = chapters.size,
-                                    hasReadingProgress = hasReadingProgress,
+                                    detailsSnapshot = detailsSnapshot,
+                                    hasProgress = detailsSnapshot.progress?.hasProgress == true,
                                     onContinueReading = onContinueReading,
-                                    mangaMetadata = state.mangaMetadata,
-                                    isMetadataLoading = state.isMetadataLoading,
-                                    metadataError = state.metadataError,
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                MangaStatsCard(
+                                    detailsSnapshot = detailsSnapshot,
+                                    modifier = Modifier.fillMaxWidth(),
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 MangaInfoCard(
                                     manga = manga,
-                                    chapterCount = chapters.size,
-                                    nextUpdate = nextUpdate,
                                     onTagSearch = onTagSearch,
                                     descriptionExpanded = descriptionExpanded,
                                     genresExpanded = genresExpanded,
                                     onToggleDescription = {
                                         descriptionExpanded = !descriptionExpanded
-                                        if (descriptionExpanded) {
-                                            scope.launch {
-                                                statsBringIntoViewRequester.bringIntoView()
-                                            }
-                                        }
                                     },
                                     onToggleGenres = { genresExpanded = !genresExpanded },
-                                    statsRequester = statsBringIntoViewRequester,
-                                    mangaMetadata = state.mangaMetadata,
-                                    isMetadataLoading = state.isMetadataLoading,
-                                    metadataError = state.metadataError,
-                                    onRetryMetadata = onRefresh,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
@@ -628,27 +636,18 @@ fun MangaScreenAuroraImpl(
                                     ),
                             ) {
                                 Spacer(modifier = Modifier.height(16.dp))
+                                MangaStatsCard(
+                                    detailsSnapshot = detailsSnapshot,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
                                 MangaInfoCard(
                                     manga = manga,
-                                    chapterCount = chapters.size,
-                                    nextUpdate = nextUpdate,
                                     onTagSearch = onTagSearch,
                                     descriptionExpanded = descriptionExpanded,
                                     genresExpanded = genresExpanded,
-                                    onToggleDescription = {
-                                        descriptionExpanded = !descriptionExpanded
-                                        if (descriptionExpanded) {
-                                            scope.launch {
-                                                statsBringIntoViewRequester.bringIntoView()
-                                            }
-                                        }
-                                    },
+                                    onToggleDescription = { descriptionExpanded = !descriptionExpanded },
                                     onToggleGenres = { genresExpanded = !genresExpanded },
-                                    statsRequester = statsBringIntoViewRequester,
-                                    mangaMetadata = state.mangaMetadata,
-                                    isMetadataLoading = state.isMetadataLoading,
-                                    metadataError = state.metadataError,
-                                    onRetryMetadata = onRefresh,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
 
@@ -840,12 +839,9 @@ fun MangaScreenAuroraImpl(
                     ) {
                         MangaHeroContent(
                             manga = manga,
-                            chapterCount = chapters.size,
-                            hasReadingProgress = hasReadingProgress,
+                            detailsSnapshot = detailsSnapshot,
+                            hasProgress = detailsSnapshot.progress?.hasProgress == true,
                             onContinueReading = onContinueReading,
-                            mangaMetadata = state.mangaMetadata,
-                            isMetadataLoading = state.isMetadataLoading,
-                            metadataError = state.metadataError,
                         )
                     }
                 }

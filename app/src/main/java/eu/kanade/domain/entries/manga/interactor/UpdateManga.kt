@@ -1,6 +1,9 @@
 package eu.kanade.domain.entries.manga.interactor
 
+import android.util.Log
 import eu.kanade.domain.entries.manga.model.hasCustomCover
+import eu.kanade.domain.entries.manga.model.mergeRatings
+import eu.kanade.domain.entries.manga.model.resolveIncomingSourceRating
 import eu.kanade.tachiyomi.data.cache.MangaCoverCache
 import eu.kanade.tachiyomi.source.model.SManga
 import tachiyomi.domain.entries.manga.interactor.MangaFetchInterval
@@ -68,6 +71,17 @@ class UpdateManga(
         } else {
             null
         }
+        val incomingRating = resolveIncomingSourceRating(
+            rawRating = remoteManga.rating,
+            description = remoteManga.description,
+        )
+        val mergedRating = mergeRatings(
+            current = localManga.rating,
+            incoming = incomingRating,
+        )
+        debugLog(
+            "awaitUpdateFromSource: sourceManga title=${remoteManga.safeTitle().previewForLog()} rawRating=${remoteManga.rating} incomingRating=${incomingRating.previewFloat()} mergedRating=${mergedRating.previewFloat()} desc=${remoteManga.description.previewForLog()}",
+        )
 
         return mangaRepository.updateManga(
             MangaUpdate(
@@ -78,6 +92,7 @@ class UpdateManga(
                 artist = remoteManga.artist,
                 description = remoteManga.description,
                 genre = remoteManga.getGenres(),
+                rating = mergedRating.takeIf { it >= 0f },
                 thumbnailUrl = thumbnailUrl,
                 status = remoteManga.status.toLong(),
                 updateStrategy = remoteManga.update_strategy,
@@ -112,5 +127,22 @@ class UpdateManga(
         return mangaRepository.updateManga(
             MangaUpdate(id = mangaId, favorite = favorite, dateAdded = dateAdded),
         )
+    }
+
+    private fun debugLog(message: String) {
+        runCatching { Log.d("UpdateManga", message) }
+    }
+
+    private fun String?.previewForLog(limit: Int = 120): String {
+        return this
+            ?.replace(Regex("\\s+"), " ")
+            ?.take(limit)
+            .orEmpty()
+    }
+
+    private fun Float.previewFloat(): String = String.format("%.3f", this)
+
+    private fun SManga.safeTitle(): String {
+        return runCatching { title }.getOrDefault("")
     }
 }

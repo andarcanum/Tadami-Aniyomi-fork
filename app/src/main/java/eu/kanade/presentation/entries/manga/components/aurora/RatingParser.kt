@@ -1,6 +1,7 @@
 package eu.kanade.presentation.entries.manga.components.aurora
 
 import android.util.Log
+import java.util.Locale
 
 /**
  * Data class to hold parsed rating information from manga description.
@@ -92,7 +93,7 @@ object RatingParser {
      * Always shows one decimal place.
      */
     fun formatRating(rating: Float): String {
-        return String.format("%.1f", rating)
+        return String.format(Locale.US, "%.1f", rating)
     }
 
     /**

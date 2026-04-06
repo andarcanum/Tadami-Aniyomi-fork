@@ -29,6 +29,7 @@ data class SMEntry(
             total_chapters = chapters!!
             cover_url = ShikimoriApi.BASE_URL + image.original
             summary = ""
+            alternative_titles = listOfNotNull(russian?.takeIf { it.isNotBlank() }?.takeIf { it != name })
             score = this@SMEntry.score
             tracking_url = ShikimoriApi.BASE_URL + url
             publishing_status = this@SMEntry.status
@@ -44,6 +45,7 @@ data class SMEntry(
             total_episodes = episodes!!
             cover_url = ShikimoriApi.BASE_URL + image.original
             summary = ""
+            alternative_titles = listOfNotNull(russian?.takeIf { it.isNotBlank() }?.takeIf { it != name })
             score = this@SMEntry.score
             tracking_url = ShikimoriApi.BASE_URL + url
             publishing_status = this@SMEntry.status

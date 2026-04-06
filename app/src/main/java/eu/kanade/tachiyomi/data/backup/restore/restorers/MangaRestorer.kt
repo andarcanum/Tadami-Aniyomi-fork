@@ -91,12 +91,14 @@ class MangaRestorer(
     }
 
     private fun Manga.copyFrom(newer: Manga): Manga {
+        val rating = if (newer.rating >= 0f) newer.rating else rating
         return this.copy(
             favorite = this.favorite || newer.favorite,
             author = newer.author,
             artist = newer.artist,
             description = newer.description,
             genre = newer.genre,
+            rating = rating,
             thumbnailUrl = newer.thumbnailUrl,
             status = newer.status,
             initialized = this.initialized || newer.initialized,
@@ -115,6 +117,7 @@ class MangaRestorer(
                 genre = manga.genre?.joinToString(separator = ", "),
                 title = manga.title,
                 status = manga.status,
+                rating = manga.rating.toDouble(),
                 thumbnailUrl = manga.thumbnailUrl,
                 favorite = manga.favorite,
                 lastUpdate = manga.lastUpdate,
@@ -249,6 +252,7 @@ class MangaRestorer(
                 genre = manga.genre,
                 title = manga.title,
                 status = manga.status,
+                rating = manga.rating.toDouble(),
                 thumbnailUrl = manga.thumbnailUrl,
                 favorite = manga.favorite,
                 lastUpdate = manga.lastUpdate,

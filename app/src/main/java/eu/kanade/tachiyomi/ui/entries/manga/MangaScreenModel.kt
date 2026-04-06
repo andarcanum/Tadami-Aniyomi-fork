@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.entries.manga
 
+import android.util.Log
 import android.content.Context
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
@@ -19,6 +20,7 @@ import eu.kanade.domain.metadata.interactor.GetMangaMetadata
 import eu.kanade.domain.metadata.model.MetadataLoadError
 import eu.kanade.domain.entries.manga.interactor.GetExcludedScanlators
 import eu.kanade.domain.entries.manga.interactor.SetExcludedScanlators
+import eu.kanade.domain.entries.manga.interactor.SourceMangaRatingFetcher
 import eu.kanade.domain.entries.manga.interactor.UpdateManga
 import eu.kanade.domain.entries.manga.model.chaptersFiltered
 import eu.kanade.domain.entries.manga.model.effectiveDownloadedFilter
@@ -44,6 +46,7 @@ import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.source.ConfigurableSource
 import eu.kanade.tachiyomi.source.MangaSource
+import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.ui.entries.mergeNewItemIds
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.chapter.getNextUnread
@@ -133,6 +136,7 @@ class MangaScreenModel(
     private val mangaRepository: MangaRepository = Injekt.get(),
     private val filterChaptersForDownload: FilterChaptersForDownload = Injekt.get(),
     private val getMangaMetadata: GetMangaMetadata = Injekt.get(),
+    private val sourceMangaRatingFetcher: SourceMangaRatingFetcher = Injekt.get(),
     val snackbarHostState: SnackbarHostState = SnackbarHostState(),
 ) : StateScreenModel<MangaScreenModel.State>(State.Loading) {
 
@@ -329,6 +333,11 @@ class MangaScreenModel(
         try {
             withIOContext {
                 val networkManga = state.source.getMangaDetails(state.manga.toSManga())
+                val fetchedRating = sourceMangaRatingFetcher.await(state.source, state.manga)
+                if (networkManga.rating <= 0f && fetchedRating != null) {
+                    networkManga.rating = fetchedRating
+                }
+                debugLog("fetchMangaFromSource: source=${state.source.name} title=${networkManga.safeTitle().previewForLog()} rating=${networkManga.rating} desc=${networkManga.description.previewForLog()}")
                 updateManga.awaitUpdateFromSource(state.manga, networkManga, manualFetch)
             }
         } catch (e: Throwable) {
@@ -1452,6 +1461,21 @@ class MangaScreenModel(
                     }
             }
         }
+    }
+
+    private fun debugLog(message: String) {
+        runCatching { Log.d("MangaScreenModel", message) }
+    }
+
+    private fun String?.previewForLog(limit: Int = 120): String {
+        return this
+            ?.replace(Regex("\\s+"), " ")
+            ?.take(limit)
+            .orEmpty()
+    }
+
+    private fun SManga.safeTitle(): String {
+        return runCatching { title }.getOrDefault("")
     }
 }
 

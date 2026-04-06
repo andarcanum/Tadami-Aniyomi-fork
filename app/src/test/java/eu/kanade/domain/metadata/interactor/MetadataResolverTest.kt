@@ -14,7 +14,7 @@ class MetadataResolverTest {
     @Test
     fun `returns cached metadata without querying provider`() = runTest {
         val cache = FakeExternalMetadataCache()
-        val cached = sampleMetadata(searchQuery = "cached-query")
+        val cached = sampleMetadata(searchQuery = "My Anime")
         cache.cached = cached
 
         val adapter = FakeMetadataAdapter(
@@ -58,7 +58,7 @@ class MetadataResolverTest {
             contentType = MetadataContentType.MANGA,
             source = MetadataSource.ANILIST,
             searchResults = mapOf(
-                "My Manga" to listOf(sampleRemote(name = "Search result")),
+                "My Manga" to listOf(sampleRemote(name = "My Manga")),
             ),
         )
         val resolver = MetadataResolver(cache, adapter)
@@ -74,6 +74,163 @@ class MetadataResolverTest {
         result?.searchQuery shouldBe "My Manga"
         result?.remoteId shouldBe 777L
         result?.isManualMatch shouldBe false
+        adapter.searchCalls shouldBe 1
+        cache.upserted.size shouldBe 1
+    }
+
+    @Test
+    fun `prefers exact alias match over first search result`() = runTest {
+        val cache = FakeExternalMetadataCache()
+        val adapter = FakeMetadataAdapter(
+            contentType = MetadataContentType.MANGA,
+            source = MetadataSource.SHIKIMORI,
+            searchResults = mapOf(
+                "Колорист" to listOf(
+                    sampleRemote(
+                        remoteId = 111L,
+                        name = "Wrong Result",
+                    ),
+                    sampleRemote(
+                        remoteId = 222L,
+                        name = "Colorist",
+                        alternativeTitles = listOf("Колорист"),
+                    ),
+                ),
+            ),
+        )
+        val resolver = MetadataResolver(cache, adapter)
+
+        val result = resolver.await(
+            MetadataTarget(
+                mediaId = 4L,
+                title = "Колорист",
+                description = null,
+            ),
+        )
+
+        result?.remoteId shouldBe 222L
+        result?.searchQuery shouldBe "Колорист"
+        adapter.searchCalls shouldBe 1
+        cache.upserted.size shouldBe 1
+    }
+
+    @Test
+    fun `prefers primary title exact match over alias exact match`() = runTest {
+        val cache = FakeExternalMetadataCache()
+        val adapter = FakeMetadataAdapter(
+            contentType = MetadataContentType.MANGA,
+            source = MetadataSource.SHIKIMORI,
+            searchResults = mapOf(
+                "Colorist" to listOf(
+                    sampleRemote(
+                        remoteId = 111L,
+                        name = "Colorist Deluxe",
+                        alternativeTitles = listOf("Colorist"),
+                    ),
+                    sampleRemote(
+                        remoteId = 222L,
+                        name = "Colorist",
+                    ),
+                ),
+            ),
+        )
+        val resolver = MetadataResolver(cache, adapter)
+
+        val result = resolver.await(
+            MetadataTarget(
+                mediaId = 8L,
+                title = "Colorist",
+                description = null,
+            ),
+        )
+
+        result?.remoteId shouldBe 222L
+        result?.searchQuery shouldBe "Colorist"
+        adapter.searchCalls shouldBe 1
+        cache.upserted.size shouldBe 1
+    }
+
+    @Test
+    fun `accepts a single low confidence result instead of dropping it`() = runTest {
+        val cache = FakeExternalMetadataCache()
+        val adapter = FakeMetadataAdapter(
+            contentType = MetadataContentType.MANGA,
+            source = MetadataSource.SHIKIMORI,
+            searchResults = mapOf(
+                "Boku no Hero Academia" to listOf(
+                    sampleRemote(
+                        remoteId = 333L,
+                        name = "My Hero Academia",
+                    ),
+                ),
+            ),
+        )
+        val resolver = MetadataResolver(cache, adapter)
+
+        val result = resolver.await(
+            MetadataTarget(
+                mediaId = 9L,
+                title = "Boku no Hero Academia",
+                description = null,
+            ),
+        )
+
+        result?.remoteId shouldBe 333L
+        result?.searchQuery shouldBe "Boku no Hero Academia"
+        adapter.searchCalls shouldBe 1
+        cache.upserted.size shouldBe 1
+    }
+
+    @Test
+    fun `rejects ambiguous equal-scoring results`() = runTest {
+        val cache = FakeExternalMetadataCache()
+        val adapter = FakeMetadataAdapter(
+            contentType = MetadataContentType.MANGA,
+            source = MetadataSource.SHIKIMORI,
+            searchResults = mapOf(
+                "Shared Title" to listOf(
+                    sampleRemote(remoteId = 301L, name = "Shared Title"),
+                    sampleRemote(remoteId = 302L, name = "Shared Title"),
+                ),
+            ),
+        )
+        val resolver = MetadataResolver(cache, adapter)
+
+        val result = resolver.await(
+            MetadataTarget(
+                mediaId = 5L,
+                title = "Shared Title",
+                description = null,
+            ),
+        )
+
+        result.shouldBeNull()
+        cache.upserted.size shouldBe 1
+        cache.upserted.single().remoteId shouldBe null
+    }
+
+    @Test
+    fun `bypasses stale cache when cached query no longer matches current candidates`() = runTest {
+        val cache = FakeExternalMetadataCache()
+        cache.cached = sampleMetadata(searchQuery = "Old Query")
+        val adapter = FakeMetadataAdapter(
+            contentType = MetadataContentType.MANGA,
+            source = MetadataSource.ANILIST,
+            searchResults = mapOf(
+                "My Anime" to listOf(sampleRemote(name = "My Anime")),
+            ),
+        )
+        val resolver = MetadataResolver(cache, adapter)
+
+        val result = resolver.await(
+            MetadataTarget(
+                mediaId = 6L,
+                title = "My Anime",
+                description = null,
+            ),
+        )
+
+        result?.remoteId shouldBe 777L
         adapter.searchCalls shouldBe 1
         cache.upserted.size shouldBe 1
     }
@@ -125,9 +282,11 @@ class MetadataResolverTest {
     private fun sampleRemote(
         remoteId: Long = 777L,
         name: String,
+        alternativeTitles: List<String> = emptyList(),
     ) = TestRemote(
         remoteId = remoteId,
         title = name,
+        alternativeTitles = alternativeTitles,
         score = 8.5,
         format = "TV",
         status = "RELEASING",
@@ -139,6 +298,7 @@ class MetadataResolverTest {
     private data class TestRemote(
         val remoteId: Long,
         val title: String,
+        val alternativeTitles: List<String>,
         val score: Double?,
         val format: String?,
         val status: String?,
@@ -194,6 +354,15 @@ class MetadataResolverTest {
         override fun trackTrackerId(track: TestTrack): Long = trackerId
 
         override fun trackRemoteId(track: TestTrack): Long = track.remoteId
+
+        override fun remoteId(remote: TestRemote): Long = remote.remoteId
+
+        override fun candidateTitles(remote: TestRemote): List<String> {
+            return buildList {
+                add(remote.title)
+                addAll(remote.alternativeTitles)
+            }
+        }
 
         override suspend fun fetchById(remoteId: Long): TestRemote? {
             fetchByIdCalls += 1

@@ -11,31 +11,19 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.Hyphens
-import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import eu.kanade.domain.metadata.model.MetadataLoadError
-import eu.kanade.presentation.entries.components.displayFormat
-import eu.kanade.presentation.entries.components.displayScore
-import eu.kanade.presentation.entries.components.displayStatus
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionButton
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroChipBorderColor
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroChipContainerColor
@@ -43,25 +31,20 @@ import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroChipTex
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroOverlayBrush
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroPanelBorderColor
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroPanelContainerColor
-import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroPrimaryMetaColor
-import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroSecondaryMetaColor
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroTitleColor
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
-import tachiyomi.domain.entries.manga.model.Manga
-import tachiyomi.domain.metadata.model.ExternalMetadata
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.i18n.MR
-import tachiyomi.presentation.core.i18n.pluralStringResource
+import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.domain.entries.manga.model.Manga
 
 @Composable
 fun MangaHeroContent(
     manga: Manga,
-    chapterCount: Int,
-    hasReadingProgress: Boolean,
+    detailsSnapshot: MangaDetailsSnapshot,
+    hasProgress: Boolean,
     onContinueReading: () -> Unit,
-    mangaMetadata: ExternalMetadata? = null,
-    isMetadataLoading: Boolean = false,
-    metadataError: MetadataLoadError? = null,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
@@ -69,8 +52,6 @@ fun MangaHeroContent(
     val coverTitleFontFamily = LocalCoverTitleFontFamily.current
     val heroPanelShape = RoundedCornerShape(24.dp)
     val titleColor = resolveAuroraHeroTitleColor(colors)
-    val primaryMetaColor = resolveAuroraHeroPrimaryMetaColor(colors)
-    val secondaryMetaColor = resolveAuroraHeroSecondaryMetaColor(colors)
 
     Box(
         modifier = modifier
@@ -138,102 +119,34 @@ fun MangaHeroContent(
                 lineHeight = 36.sp,
                 maxLines = Int.MAX_VALUE,
                 overflow = TextOverflow.Clip,
-                style = TextStyle(
-                    fontFamily = coverTitleFontFamily,
-                    lineBreak = LineBreak.Heading,
-                    hyphens = Hyphens.None,
-                ),
+                style = TextStyle(fontFamily = coverTitleFontFamily),
             )
 
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                val parsedRating = remember(manga.description) {
-                    RatingParser.parseRating(manga.description)
-                }
-                val metadataScore = mangaMetadata?.displayScore()
-                val metadataFormat = mangaMetadata?.displayFormat()
-                val metadataStatus = mangaMetadata?.displayStatus()
-                val ratingText = when {
-                    isMetadataLoading -> "..."
-                    metadataError == MetadataLoadError.NotAuthenticated -> null
-                    metadataScore != null -> metadataScore
-                    parsedRating != null -> RatingParser.formatRating(parsedRating.rating)
-                    else -> null
-                }
-                val statusText = when {
-                    isMetadataLoading -> "..."
-                    metadataError == MetadataLoadError.NotAuthenticated -> MangaStatusFormatter.formatStatus(manga.status)
-                    else -> metadataStatus ?: MangaStatusFormatter.formatStatus(manga.status)
-                }
-
-                if (ratingText != null) {
-                    Icon(
-                        Icons.Filled.Star,
-                        contentDescription = null,
-                        tint = Color(0xFFFACC15),
-                        modifier = Modifier.size(14.dp),
-                    )
-                    Text(
-                        text = ratingText,
-                        color = primaryMetaColor,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    Text(
-                        text = "|",
-                        color = secondaryMetaColor,
-                        fontSize = 13.sp,
-                    )
-                }
-
-                val formatText = when {
-                    isMetadataLoading -> "..."
-                    metadataError == MetadataLoadError.NotAuthenticated -> null
-                    else -> metadataFormat
-                }
-                if (formatText != null) {
-                    Text(
-                        text = formatText,
-                        color = secondaryMetaColor,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    Text(
-                        text = "|",
-                        color = secondaryMetaColor,
-                        fontSize = 13.sp,
-                    )
-                }
-
-                Text(
-                    text = statusText,
-                    color = secondaryMetaColor,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
+                HeroStat(
+                    label = stringResource(AYMR.strings.aurora_rating),
+                    value = detailsSnapshot.ratingText ?: stringResource(MR.strings.not_applicable),
+                    modifier = Modifier.weight(1f),
                 )
-                Text(
-                    text = "|",
-                    color = secondaryMetaColor,
-                    fontSize = 13.sp,
+                HeroStat(
+                    label = "Chapters",
+                    value = detailsSnapshot.progress?.chaptersText ?: stringResource(MR.strings.not_applicable),
+                    modifier = Modifier.weight(1f),
                 )
-                Text(
-                    text = pluralStringResource(
-                        MR.plurals.manga_num_chapters,
-                        count = chapterCount,
-                        chapterCount,
-                    ),
-                    color = secondaryMetaColor,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
+                HeroStat(
+                    label = "Progress",
+                    value = detailsSnapshot.progress?.progressText ?: stringResource(MR.strings.not_applicable),
+                    modifier = Modifier.weight(1f),
                 )
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(2.dp))
 
             AuroraTitleHeroActionButton(
-                hasProgress = hasReadingProgress,
+                hasProgress = hasProgress,
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onContinueReading()
@@ -248,5 +161,37 @@ fun MangaHeroContent(
                 textWeight = FontWeight.Bold,
             )
         }
+    }
+}
+
+@Composable
+private fun HeroStat(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AuroraTheme.colors
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = label.uppercase(),
+            color = colors.textSecondary.copy(alpha = 0.75f),
+            fontSize = 9.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = value,
+            color = colors.textPrimary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            softWrap = false,
+        )
     }
 }

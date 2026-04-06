@@ -3,6 +3,7 @@ package eu.kanade.presentation.entries.components
 import eu.kanade.domain.metadata.model.MetadataLoadError
 import tachiyomi.domain.metadata.model.ExternalMetadata
 import tachiyomi.domain.metadata.model.MetadataSource
+import java.util.Locale
 
 internal data class ResolvedCover(
     val coverUrl: String,
@@ -10,7 +11,7 @@ internal data class ResolvedCover(
 )
 
 internal fun ExternalMetadata.displayScore(): String? {
-    return score?.let { String.format("%.1f", it) }
+    return score?.let { String.format(Locale.US, "%.1f", it) }
 }
 
 internal fun ExternalMetadata.displayFormat(): String? {
