@@ -3,6 +3,13 @@ package eu.kanade.presentation.reader.novel
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -153,6 +160,53 @@ private fun SettingsSectionHeader(
 }
 
 @Composable
+private fun NovelReaderAccordionSection(
+    title: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggle)
+                .padding(vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                imageVector = if (expanded) {
+                    Icons.Filled.KeyboardArrowDown
+                } else {
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight
+                },
+                contentDescription = null,
+            )
+        }
+        AnimatedVisibility(
+            visible = expanded,
+            enter = fadeIn(animationSpec = tween(120)) + expandVertically(animationSpec = tween(120)),
+            exit = fadeOut(animationSpec = tween(100)) + shrinkVertically(animationSpec = tween(100)),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                content()
+            }
+        }
+    }
+}
+
+@Composable
 private fun GeneralTab(
     settings: eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings,
     sourceId: Long,
@@ -207,6 +261,10 @@ private fun GeneralTab(
     var pageTurnTuningExpanded by rememberSaveable(settings.pageReader, settings.pageTransitionStyle) {
         mutableStateOf(false)
     }
+    var readingBehaviorExpanded by rememberSaveable(sourceId) { mutableStateOf(true) }
+    var gesturesExpanded by rememberSaveable(sourceId) { mutableStateOf(false) }
+    var translationExpanded by rememberSaveable(sourceId) { mutableStateOf(false) }
+    var advancedExpanded by rememberSaveable(sourceId) { mutableStateOf(false) }
     val surfaceStrategy = remember { resolveNovelReaderSettingsSurfaceStrategy() }
 
     @Composable
@@ -276,9 +334,12 @@ private fun GeneralTab(
             )
         }
 
-        SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_reading_behavior))
-
-        SwitchPreferenceWidget(
+        NovelReaderAccordionSection(
+            title = stringResource(AYMR.strings.novel_reader_section_reading_behavior),
+            expanded = readingBehaviorExpanded,
+            onToggle = { readingBehaviorExpanded = !readingBehaviorExpanded },
+        ) {
+            SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_page_mode),
             subtitle = stringResource(AYMR.strings.novel_reader_page_mode_summary),
             checked = settings.pageReader,
@@ -484,9 +545,13 @@ private fun GeneralTab(
                 )
             },
         )
-        SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_gestures))
-
-        SwitchPreferenceWidget(
+        }
+        NovelReaderAccordionSection(
+            title = stringResource(AYMR.strings.novel_reader_section_gestures),
+            expanded = gesturesExpanded,
+            onToggle = { gesturesExpanded = !gesturesExpanded },
+        ) {
+            SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_swipe_gestures),
             subtitle = stringResource(AYMR.strings.novel_reader_swipe_gestures_summary),
             checked = settings.swipeGestures,
@@ -525,10 +590,12 @@ private fun GeneralTab(
                 update(it, { o, v -> o.copy(tapToScroll = v) }, { preferences.tapToScroll().set(it) })
             },
         )
-
-        SettingsSectionHeader(
+        }
+        NovelReaderAccordionSection(
             title = stringResource(AYMR.strings.novel_reader_selected_text_translation_section),
-        )
+            expanded = translationExpanded,
+            onToggle = { translationExpanded = !translationExpanded },
+        ) {
         if (overrideEnabled) {
             Text(
                 text = stringResource(AYMR.strings.novel_reader_selected_text_translation_global_only_summary),
@@ -608,8 +675,12 @@ private fun GeneralTab(
                 }, { preferences.googleTranslationAutoStart().set(it) })
             },
         )
-
-        SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_advanced))
+        }
+        NovelReaderAccordionSection(
+            title = stringResource(AYMR.strings.novel_reader_section_advanced),
+            expanded = advancedExpanded,
+            onToggle = { advancedExpanded = !advancedExpanded },
+        ) {
 
         SwitchPreferenceWidget(
             title = stringResource(AYMR.strings.novel_reader_volume_buttons),
@@ -754,6 +825,7 @@ private fun GeneralTab(
             canBeBlank = true,
             formatSubtitle = false,
         )
+        }
     }
 }
 
