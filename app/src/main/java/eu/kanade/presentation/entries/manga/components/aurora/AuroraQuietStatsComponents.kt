@@ -41,7 +41,7 @@ internal fun QuietMetricTile(
     val colors = AuroraTheme.colors
 
     Column(
-        modifier = modifier.heightIn(min = 46.dp),
+        modifier = modifier.heightIn(min = 42.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
         horizontalAlignment = Alignment.Start,
     ) {
@@ -125,7 +125,7 @@ internal fun QuietMetadataRow(
         )
 
         Row(
-            modifier = Modifier.padding(top = 5.dp),
+            modifier = Modifier.padding(top = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {

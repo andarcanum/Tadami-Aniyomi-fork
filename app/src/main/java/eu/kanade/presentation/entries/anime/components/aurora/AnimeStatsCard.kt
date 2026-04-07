@@ -27,19 +27,19 @@ fun AnimeStatsCard(
     GlassmorphismCard(
         modifier = modifier,
         verticalPadding = 8.dp,
-        innerPadding = 20.dp,
+        innerPadding = 16.dp,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     QuietMetricTile(
                         label = stringResource(AYMR.strings.aurora_rating),
@@ -58,7 +58,7 @@ fun AnimeStatsCard(
 
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     QuietMetricTile(
                         label = stringResource(AYMR.strings.aurora_episodes),
@@ -77,7 +77,7 @@ fun AnimeStatsCard(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 QuietMetadataRow(
                     icon = Icons.Outlined.Public,

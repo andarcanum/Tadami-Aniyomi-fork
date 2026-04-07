@@ -24,7 +24,7 @@ fun MangaStatsCard(
     GlassmorphismCard(
         modifier = modifier,
         verticalPadding = 8.dp,
-        innerPadding = 20.dp,
+        innerPadding = 16.dp,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -32,11 +32,11 @@ fun MangaStatsCard(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     QuietMetricTile(
                         label = stringResource(AYMR.strings.aurora_rating),
@@ -55,7 +55,7 @@ fun MangaStatsCard(
 
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     QuietMetricTile(
                         label = stringResource(AYMR.strings.aurora_chapters),
@@ -75,7 +75,7 @@ fun MangaStatsCard(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 QuietMetadataRow(
                     icon = Icons.Outlined.Public,
