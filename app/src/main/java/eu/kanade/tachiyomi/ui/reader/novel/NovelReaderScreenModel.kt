@@ -208,7 +208,6 @@ class NovelReaderScreenModel(
     private var pluginSite: String? = null
     private var chapterWebUrl: String? = null
     private var parsedContentBlocks: List<ContentBlock>? = null
-    private var parsedTextBlocks: List<String>? = null
     private var parsedRichContentResult: NovelRichContentParseResult? = null
     private var lastSavedProgress: Long? = null
     private var lastSavedRead: Boolean? = null
@@ -413,7 +412,7 @@ class NovelReaderScreenModel(
         if (!settings.geminiEnabled || !settings.geminiAutoTranslateEnglishSource) return
         if (!isGeminiSourceLanguageEnglish(settings.geminiSourceLang)) return
         if (!settings.hasConfiguredTranslationProvider()) return
-        if (parsedTextBlocks.orEmpty().isEmpty()) return
+        if (currentParsedTextBlocks().isEmpty()) return
         if (isGeminiTranslating || hasGeminiTranslationCache || geminiTranslatedByIndex.isNotEmpty()) return
         hasTriggeredGeminiAutoStart = true
         addGeminiLog("?? Auto-start translation for English source")
@@ -547,22 +546,10 @@ class NovelReaderScreenModel(
             customCss = pluginCss,
             customJs = pluginJs,
         )
-        val baseContentBlocks = parsedContentBlocks
-            ?: extractContentBlocks(
-                rawHtml = html,
-                chapterWebUrl = chapterWebUrl,
-                novelUrl = novel.url,
-                pluginSite = pluginSite,
-            ).ifEmpty {
-                extractTextBlocks(html).map(ContentBlock::Text)
-            }.also {
-                parsedContentBlocks = it
-            }
-        val baseTextBlocks = parsedTextBlocks
-            ?: baseContentBlocks
-                .filterIsInstance<ContentBlock.Text>()
-                .map { it.text }
-                .also { parsedTextBlocks = it }
+        val baseContentBlocks = currentParsedContentBlocks()
+        val baseTextBlocks = baseContentBlocks
+            .filterIsInstance<ContentBlock.Text>()
+            .map { it.text }
         val richContentResult = parsedRichContentResult
             ?: parseNovelRichContent(baseContent)
                 .let { parsed ->
@@ -583,12 +570,9 @@ class NovelReaderScreenModel(
         }
         if (googleVisibleInUi) {
             addGoogleLog(
-                "Apply UI: baseBlocks=${baseContentBlocks.size}, textBlocks=${parsedTextBlocks.orEmpty().size}, translatedSegments=${googleTranslatedByIndex.size}, visible=$googleVisibleInUi",
+                "Apply UI: baseBlocks=${baseContentBlocks.size}, textBlocks=${baseTextBlocks.size}, translatedSegments=${googleTranslatedByIndex.size}, visible=$googleVisibleInUi",
             )
         }
-        val displayTextBlocks = displayContentBlocks
-            .filterIsInstance<ContentBlock.Text>()
-            .map { it.text }
         val displayRichBlocks = if (geminiVisibleInUi) {
             applyGeminiTranslationToRichContentBlocks(richContentResult.blocks)
         } else if (googleVisibleInUi) {
@@ -618,7 +602,6 @@ class NovelReaderScreenModel(
             enableJs = !pluginJs.isNullOrBlank() || settings.selectedTextTranslationEnabled,
             readerSettings = settings,
             contentBlocks = displayContentBlocks,
-            textBlocks = displayTextBlocks,
             richContentBlocks = displayRichBlocks,
             richContentUnsupportedFeaturesDetected = richContentResult.unsupportedFeaturesDetected,
             lastSavedIndex = lastSavedIndex,
@@ -671,9 +654,6 @@ class NovelReaderScreenModel(
             extractedBlocks
         }
         parsedContentBlocks = blocks
-        parsedTextBlocks = blocks
-            .filterIsInstance<ContentBlock.Text>()
-            .map { it.text }
         parsedRichContentResult = null
     }
     private suspend fun resolveChapterWebUrl(
@@ -1064,7 +1044,6 @@ class NovelReaderScreenModel(
         pluginSite = null
         chapterWebUrl = null
         parsedContentBlocks = null
-        parsedTextBlocks = null
         parsedRichContentResult = null
         lastSavedProgress = null
         lastSavedRead = null
@@ -1557,7 +1536,7 @@ class NovelReaderScreenModel(
         if (isGeminiTranslating) return
         val currentState = mutableState.value as? State.Success ?: return
         val chapter = currentChapter ?: return
-        val baseTextBlocks = parsedTextBlocks.orEmpty()
+        val baseTextBlocks = currentParsedTextBlocks()
         if (baseTextBlocks.isEmpty()) return
         val settings = currentState.readerSettings
         if (!settings.geminiEnabled) {
@@ -1774,7 +1753,7 @@ class NovelReaderScreenModel(
             return
         }
 
-        val baseTextBlocks = parsedTextBlocks.orEmpty()
+        val baseTextBlocks = currentParsedTextBlocks()
         if (baseTextBlocks.isEmpty()) return
         addGoogleLog(
             "Start: chapter=${currentChapter?.id ?: -1}, textBlocks=${baseTextBlocks.size}, source=${settings.googleTranslationSourceLang}, target=${settings.googleTranslationTargetLang}, backend=simple, autoStart=${settings.googleTranslationAutoStart}",
@@ -2110,6 +2089,31 @@ class NovelReaderScreenModel(
                     }
                 }
             }
+        }
+    }
+    private fun currentParsedTextBlocks(): List<String> {
+        parsedContentBlocks?.let { blocks ->
+            return blocks
+                .asSequence()
+                .filterIsInstance<ContentBlock.Text>()
+                .map { it.text }
+                .toList()
+        }
+        val html = rawHtml ?: return emptyList()
+        return extractTextBlocks(html)
+    }
+
+    private fun currentParsedContentBlocks(): List<ContentBlock> {
+        parsedContentBlocks?.let { return it }
+        val html = rawHtml ?: return emptyList()
+        val novel = currentNovel ?: return emptyList()
+        return extractContentBlocks(
+            rawHtml = html,
+            chapterWebUrl = chapterWebUrl,
+            novelUrl = novel.url,
+            pluginSite = pluginSite,
+        ).ifEmpty {
+            extractTextBlocks(html).map(ContentBlock::Text)
         }
     }
     private fun NovelReaderSettings.resolveTranslationPromptModifiers(): String {
@@ -3106,7 +3110,6 @@ class NovelReaderScreenModel(
             val enableJs: Boolean,
             val readerSettings: NovelReaderSettings,
             val contentBlocks: List<ContentBlock>,
-            val textBlocks: List<String>,
             val richContentBlocks: List<NovelRichContentBlock>,
             val richContentUnsupportedFeaturesDetected: Boolean,
             val lastSavedIndex: Int,
@@ -3140,7 +3143,14 @@ class NovelReaderScreenModel(
             val deepSeekModelIds: List<String> = emptyList(),
             val isDeepSeekModelsLoading: Boolean = false,
             val isTestingDeepSeekConnection: Boolean = false,
-        ) : State
+        ) : State {
+            val textBlocks: List<String>
+                get() = contentBlocks
+                    .asSequence()
+                    .filterIsInstance<ContentBlock.Text>()
+                    .map { it.text }
+                    .toList()
+        }
     }
     sealed interface ContentBlock {
         data class Text(val text: String) : ContentBlock

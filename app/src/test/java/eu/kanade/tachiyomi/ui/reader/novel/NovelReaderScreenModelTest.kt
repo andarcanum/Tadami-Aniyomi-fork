@@ -191,7 +191,6 @@ class NovelReaderScreenModelTest {
             val sentinelTime = 123L
             setPrivateField(screenModel, "rawHtml", "<p>stale</p>")
             setPrivateField(screenModel, "parsedContentBlocks", successState.contentBlocks)
-            setPrivateField(screenModel, "parsedTextBlocks", successState.textBlocks)
             setPrivateField(
                 screenModel,
                 "parsedRichContentResult",
@@ -222,7 +221,6 @@ class NovelReaderScreenModelTest {
 
             getPrivateFieldOrNull<String>(screenModel, "rawHtml") shouldBe null
             getPrivateFieldOrNull<List<Any?>>(screenModel, "parsedContentBlocks") shouldBe null
-            getPrivateFieldOrNull<List<Any?>>(screenModel, "parsedTextBlocks") shouldBe null
             getPrivateFieldOrNull<NovelRichContentParseResult>(screenModel, "parsedRichContentResult") shouldBe null
             getPrivateField<Map<Any?, Any?>>(screenModel, "geminiTranslatedByIndex") shouldBe emptyMap<Any?, Any?>()
             getPrivateField<Map<Any?, Any?>>(screenModel, "googleTranslatedByIndex") shouldBe emptyMap<Any?, Any?>()
@@ -458,6 +456,7 @@ class NovelReaderScreenModelTest {
             state.contentBlocks[2].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Image>().url shouldBe
                 "https://example.org/images/pic.jpg"
             state.contentBlocks[3].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Text>().text shouldBe "Outro"
+            state.textBlocks shouldBe listOf("Chapter 1", "Intro", "Outro")
         }
     }
 
@@ -500,6 +499,47 @@ class NovelReaderScreenModelTest {
             state.contentBlocks.mapNotNull {
                 (it as? NovelReaderScreenModel.ContentBlock.Text)?.text
             } shouldBe listOf("Chapter 1", "Intro", "Side note", "Outro")
+        }
+    }
+
+    @Test
+    fun `derives parsed text blocks from chapter html when parsed content cache is missing`() {
+        runBlocking {
+            val novel = Novel.create().copy(
+                id = 1L,
+                source = 10L,
+                title = "Novel",
+                url = "https://example.org/book/slug",
+            )
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/book/ch1",
+            )
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(
+                    sourceId = novel.source,
+                    chapterHtml = "<p>Intro</p><p>Outro</p>",
+                ),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            setPrivateField(screenModel, "parsedContentBlocks", null)
+
+            invokePrivateCurrentParsedTextBlocks(screenModel) shouldBe listOf("Chapter 1", "Intro", "Outro")
         }
     }
 
@@ -2191,6 +2231,13 @@ class NovelReaderScreenModelTest {
         val method = target.javaClass.getDeclaredMethod("updateContent", NovelReaderSettings::class.java)
         method.isAccessible = true
         method.invoke(target, settings)
+    }
+
+    private fun invokePrivateCurrentParsedTextBlocks(target: Any): List<String> {
+        val method = target.javaClass.getDeclaredMethod("currentParsedTextBlocks")
+        method.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        return method.invoke(target) as List<String>
     }
 
     private class FakeNovelChapterRepository(

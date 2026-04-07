@@ -698,8 +698,11 @@ fun NovelReaderScreen(
         state.contentBlocks.takeIf { it.isNotEmpty() }
             ?: state.textBlocks.map { NovelReaderScreenModel.ContentBlock.Text(it) }
     }
-    val pageReaderTextBlocks = remember(state.chapter.id, state.textBlocks) {
-        state.textBlocks.filter { it.isNotBlank() }
+    val pageReaderTextBlocks = remember(state.chapter.id, scrollContentBlocks) {
+        scrollContentBlocks
+            .filterIsInstance<NovelReaderScreenModel.ContentBlock.Text>()
+            .map { it.text }
+            .filter { it.isNotBlank() }
     }
     val richScrollBlocks = remember(state.chapter.id, state.richContentBlocks) {
         state.richContentBlocks
@@ -719,7 +722,7 @@ fun NovelReaderScreen(
     }
     val pageReaderPages: List<List<PlainPageSlice>> = remember(
         state.chapter.id,
-        state.textBlocks,
+        pageReaderTextBlocks,
         shouldPaginatePageReader,
         state.readerSettings.fontSize,
         state.readerSettings.lineHeight,
@@ -981,8 +984,8 @@ fun NovelReaderScreen(
             }
         }
     }
-    val totalWords = remember(state.chapter.id, state.textBlocks) {
-        countNovelWords(state.textBlocks)
+    val totalWords = remember(state.chapter.id, pageReaderTextBlocks) {
+        countNovelWords(pageReaderTextBlocks)
     }
     val readWords by remember(totalWords, readingProgressPercent) {
         derivedStateOf {
