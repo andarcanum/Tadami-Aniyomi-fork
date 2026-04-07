@@ -1,8 +1,15 @@
 package eu.kanade.tachiyomi.ui.reader.novel.translation
 
 class GoogleTranslationSessionCache {
+    private companion object {
+        const val MAX_ENTRIES = 4
+    }
 
-    private val cache = LinkedHashMap<String, Map<Int, String>>()
+    private val cache = object : LinkedHashMap<String, Map<Int, String>>(MAX_ENTRIES, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Map<Int, String>>?): Boolean {
+            return size > MAX_ENTRIES
+        }
+    }
 
     fun buildKey(
         chapterId: Long,
@@ -17,7 +24,9 @@ class GoogleTranslationSessionCache {
         sourceLang: String,
         targetLang: String,
     ): Map<Int, String>? {
-        return cache[buildKey(chapterId, sourceLang, targetLang)]
+        return synchronized(cache) {
+            cache[buildKey(chapterId, sourceLang, targetLang)]
+        }
     }
 
     fun put(
@@ -26,7 +35,9 @@ class GoogleTranslationSessionCache {
         targetLang: String,
         translatedByIndex: Map<Int, String>,
     ) {
-        cache[buildKey(chapterId, sourceLang, targetLang)] = translatedByIndex
+        synchronized(cache) {
+            cache[buildKey(chapterId, sourceLang, targetLang)] = translatedByIndex
+        }
     }
 
     fun remove(
@@ -34,10 +45,20 @@ class GoogleTranslationSessionCache {
         sourceLang: String,
         targetLang: String,
     ) {
-        cache.remove(buildKey(chapterId, sourceLang, targetLang))
+        synchronized(cache) {
+            cache.remove(buildKey(chapterId, sourceLang, targetLang))
+        }
     }
 
     fun clear() {
-        cache.clear()
+        synchronized(cache) {
+            cache.clear()
+        }
+    }
+
+    fun snapshotSize(): Int {
+        return synchronized(cache) {
+            cache.size
+        }
     }
 }

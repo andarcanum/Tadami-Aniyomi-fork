@@ -285,9 +285,9 @@ class NovelReaderScreenModel(
             ?: return setError("Novel not found")
         val source = sourceManager.get(novel.source)
             ?: return setError("Source not found")
-        attemptedJaomixPages.clear()
-        adjacentJaomixPageJob?.cancel()
-        adjacentJaomixPageJob = null
+        clearChapterTransientState()
+        currentNovel = novel
+        currentChapter = chapter
         chapterOrderList = loadChapterOrderList(novel.id)
         val html = try {
             val cacheReadChapters = novelReaderPreferences.cacheReadChapters().get()
@@ -317,26 +317,6 @@ class NovelReaderScreenModel(
             val sanitizedChapterHtml = sanitizeChapterHtmlForReader(normalizedChapterHtml)
             if (sanitizedChapterHtml.isBlank()) normalizedChapterHtml else sanitizedChapterHtml
         }
-        currentNovel = novel
-        currentChapter = chapter
-        parsedContentBlocks = null
-        parsedTextBlocks = null
-        parsedRichContentResult = null
-        geminiTranslationJob?.cancel()
-        geminiTranslationJob = null
-        geminiTranslatedByIndex = emptyMap()
-        isGeminiTranslating = false
-        geminiTranslationProgress = 0
-        isGeminiTranslationVisible = false
-        hasGeminiTranslationCache = false
-        geminiLogs = emptyList()
-        isAirforceModelsLoading = false
-        isTestingAirforceConnection = false
-        isOpenRouterModelsLoading = false
-        isTestingOpenRouterConnection = false
-        isDeepSeekModelsLoading = false
-        isTestingDeepSeekConnection = false
-        resetSelectedTextTranslationForChapter()
         lastSavedProgress = chapter.lastPageRead
         lastSavedRead = chapter.read
         val savedNativeProgress = decodeNativeScrollProgress(chapter.lastPageRead)
@@ -1069,12 +1049,63 @@ class NovelReaderScreenModel(
                 )
             }
         }
+        clearChapterTransientState()
         settingsJob?.cancel()
-        nextChapterPrefetchJob?.cancel()
-        nextChapterGeminiPrefetchJob?.cancel()
-        geminiTranslationJob?.cancel()
-        selectedTextTranslationJob?.cancel()
         super.onDispose()
+    }
+
+    private fun clearChapterTransientState() {
+        currentNovel = null
+        currentChapter = null
+        chapterOrderList = emptyList()
+        rawHtml = null
+        customCss = null
+        customJs = null
+        pluginSite = null
+        chapterWebUrl = null
+        parsedContentBlocks = null
+        parsedTextBlocks = null
+        parsedRichContentResult = null
+        lastSavedProgress = null
+        lastSavedRead = null
+        initialProgressIndex = 0
+        hasProgressChanged = false
+        hasTriggeredNextChapterPrefetch = false
+        hasTriggeredNextChapterGeminiPrefetch = false
+        hasTriggeredGeminiAutoStart = false
+        adjacentJaomixPageJob?.cancel()
+        adjacentJaomixPageJob = null
+        nextChapterPrefetchJob?.cancel()
+        nextChapterPrefetchJob = null
+        nextChapterGeminiPrefetchJob?.cancel()
+        nextChapterGeminiPrefetchJob = null
+        geminiTranslationJob?.cancel()
+        geminiTranslationJob = null
+        googleTranslationJob?.cancel()
+        googleTranslationJob = null
+        clearSelectedTextTranslationSelection(refreshUi = false)
+        selectedTextTranslationSessionCache.clear()
+        attemptedJaomixPages.clear()
+        geminiTranslatedByIndex = emptyMap()
+        googleTranslatedByIndex = emptyMap()
+        isGeminiTranslating = false
+        isGoogleTranslating = false
+        geminiTranslationProgress = 0
+        googleTranslationProgress = 0
+        isGeminiTranslationVisible = false
+        isGoogleTranslationVisible = false
+        hasGeminiTranslationCache = false
+        hasGoogleTranslationCache = false
+        geminiLogs = emptyList()
+        googleLogs = emptyList()
+        googleRateLimited = false
+        isAirforceModelsLoading = false
+        isTestingAirforceConnection = false
+        isOpenRouterModelsLoading = false
+        isTestingOpenRouterConnection = false
+        isDeepSeekModelsLoading = false
+        isTestingDeepSeekConnection = false
+        chapterReadStartTimeMs = System.currentTimeMillis()
     }
     fun addGeminiLog(message: String) {
         val text = message.trim()

@@ -161,6 +161,90 @@ class NovelReaderScreenModelTest {
     }
 
     @Test
+    fun `clear chapter transient state resets chapter scoped data`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            val successState = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            val sentinelTime = 123L
+            setPrivateField(screenModel, "rawHtml", "<p>stale</p>")
+            setPrivateField(screenModel, "parsedContentBlocks", successState.contentBlocks)
+            setPrivateField(screenModel, "parsedTextBlocks", successState.textBlocks)
+            setPrivateField(
+                screenModel,
+                "parsedRichContentResult",
+                NovelRichContentParseResult(
+                    blocks = emptyList(),
+                    unsupportedFeaturesDetected = false,
+                ),
+            )
+            setPrivateField(screenModel, "geminiTranslatedByIndex", mapOf(0 to "g"))
+            setPrivateField(screenModel, "googleTranslatedByIndex", mapOf(0 to "g"))
+            setPrivateField(screenModel, "geminiLogs", listOf("gemini"))
+            setPrivateField(screenModel, "googleLogs", listOf("google"))
+            setPrivateField(screenModel, "isGeminiTranslating", true)
+            setPrivateField(screenModel, "isGoogleTranslating", true)
+            setPrivateField(screenModel, "isGeminiTranslationVisible", true)
+            setPrivateField(screenModel, "isGoogleTranslationVisible", true)
+            setPrivateField(screenModel, "hasGeminiTranslationCache", true)
+            setPrivateField(screenModel, "hasGoogleTranslationCache", true)
+            setPrivateField(screenModel, "geminiTranslationProgress", 77)
+            setPrivateField(screenModel, "googleTranslationProgress", 88)
+            setPrivateField(screenModel, "hasTriggeredNextChapterPrefetch", true)
+            setPrivateField(screenModel, "hasTriggeredNextChapterGeminiPrefetch", true)
+            setPrivateField(screenModel, "hasTriggeredGeminiAutoStart", true)
+            setPrivateField(screenModel, "attemptedJaomixPages", mutableSetOf(1))
+            setPrivateField(screenModel, "chapterReadStartTimeMs", sentinelTime)
+
+            invokePrivateClearChapterTransientState(screenModel)
+
+            getPrivateFieldOrNull<String>(screenModel, "rawHtml") shouldBe null
+            getPrivateFieldOrNull<List<Any?>>(screenModel, "parsedContentBlocks") shouldBe null
+            getPrivateFieldOrNull<List<Any?>>(screenModel, "parsedTextBlocks") shouldBe null
+            getPrivateFieldOrNull<NovelRichContentParseResult>(screenModel, "parsedRichContentResult") shouldBe null
+            getPrivateField<Map<Any?, Any?>>(screenModel, "geminiTranslatedByIndex") shouldBe emptyMap<Any?, Any?>()
+            getPrivateField<Map<Any?, Any?>>(screenModel, "googleTranslatedByIndex") shouldBe emptyMap<Any?, Any?>()
+            getPrivateField<List<Any?>>(screenModel, "geminiLogs") shouldBe emptyList<Any?>()
+            getPrivateField<List<Any?>>(screenModel, "googleLogs") shouldBe emptyList<Any?>()
+            getPrivateField<Boolean>(screenModel, "isGeminiTranslating") shouldBe false
+            getPrivateField<Boolean>(screenModel, "isGoogleTranslating") shouldBe false
+            getPrivateField<Boolean>(screenModel, "isGeminiTranslationVisible") shouldBe false
+            getPrivateField<Boolean>(screenModel, "isGoogleTranslationVisible") shouldBe false
+            getPrivateField<Boolean>(screenModel, "hasGeminiTranslationCache") shouldBe false
+            getPrivateField<Boolean>(screenModel, "hasGoogleTranslationCache") shouldBe false
+            getPrivateField<Int>(screenModel, "geminiTranslationProgress") shouldBe 0
+            getPrivateField<Int>(screenModel, "googleTranslationProgress") shouldBe 0
+            getPrivateField<Boolean>(screenModel, "hasTriggeredNextChapterPrefetch") shouldBe false
+            getPrivateField<Boolean>(screenModel, "hasTriggeredNextChapterGeminiPrefetch") shouldBe false
+            getPrivateField<Boolean>(screenModel, "hasTriggeredGeminiAutoStart") shouldBe false
+            getPrivateField<MutableSet<Int>>(screenModel, "attemptedJaomixPages") shouldBe emptySet()
+            (getPrivateField<Long>(screenModel, "chapterReadStartTimeMs") > sentinelTime) shouldBe true
+        }
+    }
+
+    @Test
     fun `loads chapter text off caller thread to avoid main-thread blocking`() {
         runBlocking {
             val callerThreadId = Thread.currentThread().id
@@ -2078,6 +2162,26 @@ class NovelReaderScreenModelTest {
         val field = target.javaClass.getDeclaredField(name)
         field.isAccessible = true
         field.set(target, value)
+    }
+
+    private inline fun <reified T> getPrivateField(target: Any, name: String): T {
+        val field = target.javaClass.getDeclaredField(name)
+        field.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        return field.get(target) as T
+    }
+
+    private inline fun <reified T> getPrivateFieldOrNull(target: Any, name: String): T? {
+        val field = target.javaClass.getDeclaredField(name)
+        field.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        return field.get(target) as T?
+    }
+
+    private fun invokePrivateClearChapterTransientState(target: Any) {
+        val method = target.javaClass.getDeclaredMethod("clearChapterTransientState")
+        method.isAccessible = true
+        method.invoke(target)
     }
 
     private fun invokePrivateUpdateContent(
