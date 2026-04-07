@@ -333,7 +333,13 @@ class MangaScreenModel(
         try {
             withIOContext {
                 val networkManga = state.source.getMangaDetails(state.manga.toSManga())
-                val fetchedRating = sourceMangaRatingFetcher.await(state.source, state.manga)
+                val sourceRating = networkManga.rating.takeIf { it > 0f }
+                val fetchedRating = sourceMangaRatingFetcher.await(
+                    source = state.source,
+                    manga = state.manga,
+                    sourceRating = sourceRating,
+                    forceRefresh = manualFetch,
+                )
                 if (networkManga.rating <= 0f && fetchedRating != null) {
                     networkManga.rating = fetchedRating
                 }

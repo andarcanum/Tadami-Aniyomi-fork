@@ -1,6 +1,7 @@
 package eu.kanade.domain.entries.novel.interactor
 
 import android.util.Log
+import eu.kanade.domain.entries.rating.EntryRatingCache
 import eu.kanade.domain.entries.novel.model.NovelRatingJsonParser
 import eu.kanade.domain.entries.novel.model.NovelRatingHtmlParser
 import eu.kanade.tachiyomi.network.GET
@@ -18,8 +19,13 @@ import java.util.TimeZone
 
 class NovelRatingFetcher {
     private val network: NetworkHelper by injectLazy()
+    private val ratingCache: EntryRatingCache by injectLazy()
 
-    suspend fun await(source: NovelSource, novel: Novel): Float? {
+    suspend fun await(
+        source: NovelSource,
+        novel: Novel,
+        forceRefresh: Boolean = false,
+    ): Float? {
         val webUrl = resolveWebUrl(source, novel) ?: run {
             debugLog("await: skip source=${source.name} novelUrl=${novel.url} reason=no-web-url")
             return null
@@ -30,9 +36,16 @@ class NovelRatingFetcher {
             return null
         }
 
-        val rating = when (requestUrl.host.lowercase(Locale.ROOT)) {
-            "ranobelib.me" -> fetchRanobeLibRating(requestUrl)
-            else -> fetchHtmlRating(requestUrl)
+        val rating = ratingCache.resolve(
+            contentType = CONTENT_TYPE,
+            sourceName = source.name,
+            url = requestUrl.toString(),
+            forceRefresh = forceRefresh,
+        ) {
+            when (requestUrl.host.lowercase(Locale.ROOT)) {
+                "ranobelib.me" -> fetchRanobeLibRating(requestUrl)
+                else -> fetchHtmlRating(requestUrl)
+            }
         }
         debugLog(
             "await: source=${source.name} novelUrl=${requestUrl} rating=${rating.previewFloat()}",
@@ -109,5 +122,9 @@ class NovelRatingFetcher {
 
     private fun debugLog(message: String) {
         runCatching { Log.d("NovelRatingFetcher", message) }
+    }
+
+    private companion object {
+        private const val CONTENT_TYPE = "novel"
     }
 }

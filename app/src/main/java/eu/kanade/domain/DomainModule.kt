@@ -11,6 +11,7 @@ import eu.kanade.domain.entries.manga.interactor.SourceMangaRatingFetcher
 import eu.kanade.domain.entries.manga.interactor.SetExcludedScanlators
 import eu.kanade.domain.entries.manga.interactor.SetMangaViewerFlags
 import eu.kanade.domain.entries.manga.interactor.UpdateManga
+import eu.kanade.domain.entries.rating.EntryRatingCache
 import eu.kanade.domain.entries.novel.interactor.GetNovelExcludedScanlators
 import eu.kanade.domain.entries.novel.interactor.NovelRatingFetcher
 import eu.kanade.domain.entries.novel.interactor.SetNovelExcludedScanlators
@@ -376,6 +377,7 @@ class DomainModule : InjektModule {
         }
         addFactory { SetMangaViewerFlags(get()) }
         addFactory { NetworkToLocalManga(get()) }
+        addSingletonFactory { EntryRatingCache() }
         addFactory { SourceMangaRatingFetcher() }
         addFactory { UpdateManga(get(), get()) }
         addFactory { SetMangaCategories(get()) }

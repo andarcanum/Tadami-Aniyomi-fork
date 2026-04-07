@@ -1,6 +1,7 @@
 package eu.kanade.domain.entries.manga.interactor
 
 import android.util.Log
+import eu.kanade.domain.entries.rating.EntryRatingCache
 import eu.kanade.domain.entries.manga.model.SourceMangaHtmlRatingParser
 import eu.kanade.domain.entries.manga.model.SourceMangaRatingSourceMatcher
 import eu.kanade.domain.entries.manga.model.toSManga
@@ -9,11 +10,18 @@ import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.network.awaitSuccess
 import tachiyomi.domain.entries.manga.model.Manga
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import uy.kohesive.injekt.injectLazy
 import java.util.Locale
 
 class SourceMangaRatingFetcher {
+    private val ratingCache: EntryRatingCache by injectLazy()
 
-    suspend fun await(source: MangaSource, manga: Manga): Float? {
+    suspend fun await(
+        source: MangaSource,
+        manga: Manga,
+        sourceRating: Float? = null,
+        forceRefresh: Boolean = false,
+    ): Float? {
         val httpSource = source as? HttpSource ?: return null
         val sourceClassName = source.javaClass.superclass?.simpleName
         val family = SourceMangaRatingSourceMatcher.resolveFamily(
@@ -34,17 +42,54 @@ class SourceMangaRatingFetcher {
         } else {
             request
         }
-        val html = httpSource.client.newCall(requestToUse).awaitSuccess().use { response ->
-            response.body.string()
-        }
-        val rating = SourceMangaHtmlRatingParser.parse(
+
+        val cachedRating = ratingCache.peek(
+            contentType = CONTENT_TYPE,
             sourceName = source.name,
-            sourceBaseUrl = httpSource.baseUrl,
-            sourceClassName = sourceClassName,
-            html = html,
+            url = requestToUse.url.toString(),
         )
+        if (cachedRating != null && !forceRefresh) {
+            debugLog(
+                "await: source=${source.name} family=$family mangaUrl=${requestToUse.url} rating=${cachedRating.previewFloat()} cacheHit=true",
+            )
+            return cachedRating
+        }
+
+        if (sourceRating != null) {
+            ratingCache.put(
+                contentType = CONTENT_TYPE,
+                sourceName = source.name,
+                url = requestToUse.url.toString(),
+                rating = sourceRating,
+            )
+            debugLog(
+                "await: source=${source.name} family=$family mangaUrl=${requestToUse.url} rating=${sourceRating.previewFloat()} sourceRating=true forceRefresh=$forceRefresh",
+            )
+            return sourceRating
+        }
+
+        val rating = ratingCache.resolve(
+            contentType = CONTENT_TYPE,
+            sourceName = source.name,
+            url = requestToUse.url.toString(),
+            forceRefresh = forceRefresh,
+        ) {
+            val html = httpSource.client.newCall(requestToUse).awaitSuccess().use { response ->
+                response.body.string()
+            }
+            val parsedRating = SourceMangaHtmlRatingParser.parse(
+                sourceName = source.name,
+                sourceBaseUrl = httpSource.baseUrl,
+                sourceClassName = sourceClassName,
+                html = html,
+            )
+            debugLog(
+                "fetchHtml: source=${source.name} family=$family mangaUrl=${requestToUse.url} rating=${parsedRating.previewFloat()} htmlPreview=${html.previewForLog()}",
+            )
+            parsedRating
+        }
         debugLog(
-            "await: source=${source.name} family=$family mangaUrl=${requestToUse.url} rating=${rating.previewFloat()} htmlPreview=${html.previewForLog()}",
+            "await: source=${source.name} family=$family mangaUrl=${requestToUse.url} rating=${rating.previewFloat()}",
         )
         return rating
     }
@@ -72,5 +117,9 @@ class SourceMangaRatingFetcher {
 
     private fun debugLog(message: String) {
         runCatching { Log.d("SourceMangaHtmlFetcher", message) }
+    }
+
+    private companion object {
+        private const val CONTENT_TYPE = "manga"
     }
 }

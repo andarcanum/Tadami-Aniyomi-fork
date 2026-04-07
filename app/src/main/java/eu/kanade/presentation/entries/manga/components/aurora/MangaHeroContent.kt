@@ -10,8 +10,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -19,10 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -37,8 +40,8 @@ import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroPanelCo
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroTitleColor
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
-import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.pluralStringResource
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.domain.entries.manga.model.Manga
 
@@ -127,11 +130,14 @@ fun MangaHeroContent(
 
             HeroStatsStrip(
                 modifier = Modifier.fillMaxWidth(),
-                ratingLabel = stringResource(AYMR.strings.aurora_rating),
                 ratingValue = detailsSnapshot.ratingText ?: stringResource(MR.strings.not_applicable),
-                chaptersLabel = stringResource(AYMR.strings.aurora_chapters),
-                chaptersValue = detailsSnapshot.progress?.chaptersText ?: stringResource(MR.strings.not_applicable),
-                progressLabel = stringResource(AYMR.strings.aurora_progress),
+                chaptersValue = detailsSnapshot.progress?.totalChapters?.let {
+                    pluralStringResource(
+                        MR.plurals.manga_num_chapters,
+                        count = it,
+                        it,
+                    )
+                } ?: stringResource(MR.strings.not_applicable),
                 progressValue = detailsSnapshot.progress?.progressText ?: stringResource(MR.strings.not_applicable),
             )
 
@@ -159,75 +165,73 @@ fun MangaHeroContent(
 @Composable
 private fun HeroStatsStrip(
     modifier: Modifier = Modifier,
-    ratingLabel: String,
     ratingValue: String,
-    chaptersLabel: String,
     chaptersValue: String,
-    progressLabel: String,
     progressValue: String,
 ) {
-    val normalizedProgressValue = progressValue.substringBefore("(").trimEnd()
-
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Start,
     ) {
-        HeroStat(
-            label = ratingLabel,
+        HeroRatingStat(
             value = ratingValue,
             modifier = Modifier.weight(0.95f, fill = false),
         )
         HeroStatDivider()
         HeroStat(
-            label = chaptersLabel,
             value = chaptersValue,
             modifier = Modifier.weight(1.05f, fill = false),
         )
         HeroStatDivider()
         HeroStat(
-            label = progressLabel,
-            value = normalizedProgressValue,
+            value = progressValue,
             modifier = Modifier.weight(1.4f, fill = false),
         )
     }
 }
 
 @Composable
-private fun HeroStat(
-    label: String,
+private fun HeroRatingStat(
     value: String,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
-    val normalizedLabel = label
-        .lowercase()
-        .replaceFirstChar { char -> char.titlecase() }
 
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Star,
+            contentDescription = null,
+            tint = Color(0xFFFACC15),
+            modifier = Modifier.size(12.dp),
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = value,
+            color = colors.textPrimary,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            softWrap = false,
+        )
+    }
+}
+
+@Composable
+private fun HeroStat(
+    value: String,
+    modifier: Modifier = Modifier,
+) {
     Text(
         modifier = modifier,
-        text = buildAnnotatedString {
-            withStyle(
-                SpanStyle(
-                    color = colors.textSecondary.copy(alpha = 0.68f),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                ),
-            ) {
-                append(normalizedLabel)
-            }
-            append(" - ")
-            withStyle(
-                SpanStyle(
-                    color = colors.textPrimary,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                ),
-            ) {
-                append(value)
-            }
-        },
+        text = value,
+        color = AuroraTheme.colors.textPrimary,
         fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         softWrap = false,

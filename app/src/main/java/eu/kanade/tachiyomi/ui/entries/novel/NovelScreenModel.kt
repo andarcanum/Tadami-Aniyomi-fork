@@ -378,7 +378,10 @@ class NovelScreenModel(
             }
             cacheState(state.value as? State.Success)
             if (!(shouldAutoRefreshNovel || shouldAutoRefreshChapters)) {
-                refreshNovelRating(state.value as? State.Success)
+                refreshNovelRating(
+                    state = state.value as? State.Success,
+                    forceRefresh = false,
+                )
             }
             observeTrackers()
             syncDownloadedState()
@@ -718,13 +721,23 @@ class NovelScreenModel(
             remoteNovel = networkNovel,
             manualFetch = manualFetch,
         )
-        refreshNovelRating(state)
+        refreshNovelRating(
+            state = state,
+            forceRefresh = manualFetch,
+        )
     }
 
-    private fun refreshNovelRating(state: State.Success?) {
+    private fun refreshNovelRating(
+        state: State.Success?,
+        forceRefresh: Boolean,
+    ) {
         if (state == null) return
         screenModelScope.launchIO {
-            val rating = novelRatingFetcher.await(state.source, state.novel)
+            val rating = novelRatingFetcher.await(
+                source = state.source,
+                novel = state.novel,
+                forceRefresh = forceRefresh,
+            )
             logcat {
                 "Resolved novel rating for id=${state.novel.id} source=${state.source.name}, rating=$rating"
             }

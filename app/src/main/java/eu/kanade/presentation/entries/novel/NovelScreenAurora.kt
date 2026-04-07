@@ -340,6 +340,7 @@ fun NovelScreenAuroraImpl(
                                 NovelHeroContent(
                                     novel = novel,
                                     chapterCount = totalChapterCount,
+                                    rating = state.rating,
                                     onContinueReading = onStartReading,
                                     isReading = isReading,
                                     modifier = Modifier.fillMaxWidth(),
@@ -1125,6 +1126,7 @@ fun NovelScreenAuroraImpl(
                     NovelHeroContent(
                         novel = novel,
                         chapterCount = totalChapterCount,
+                        rating = state.rating,
                         onContinueReading = onStartReading,
                         isReading = isReading,
                     )
