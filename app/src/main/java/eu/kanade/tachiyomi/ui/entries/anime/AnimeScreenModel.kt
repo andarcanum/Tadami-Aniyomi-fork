@@ -16,6 +16,7 @@ import eu.kanade.core.util.insertSeparators
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.metadata.interactor.GetAnimeMetadata
 import eu.kanade.domain.metadata.model.MetadataLoadError
+import eu.kanade.domain.entries.anime.interactor.AnimeRatingFetcher
 import eu.kanade.domain.entries.anime.interactor.SetAnimeViewerFlags
 import eu.kanade.domain.entries.anime.interactor.SyncSeasonsWithSource
 import eu.kanade.domain.entries.anime.interactor.UpdateAnime
@@ -143,6 +144,7 @@ class AnimeScreenModel(
     private val setSeenStatus: SetSeenStatus = Injekt.get(),
     private val updateEpisode: UpdateEpisode = Injekt.get(),
     private val updateAnime: UpdateAnime = Injekt.get(),
+    private val animeRatingFetcher: AnimeRatingFetcher = Injekt.get(),
     private val syncEpisodesWithSource: SyncEpisodesWithSource = Injekt.get(),
     private val syncSeasonsWithSource: SyncSeasonsWithSource = Injekt.get(),
     private val getCategories: GetAnimeCategories = Injekt.get(),
@@ -402,6 +404,10 @@ class AnimeScreenModel(
                 fetchFromSourceTasks.awaitAll()
             }
 
+            if (successState?.sourceRating == null) {
+                restoreAnimeSourceRating()
+            }
+
             // Load metadata after fetching fresh data from source
             loadAnimeMetadata(animeId)
 
@@ -436,7 +442,15 @@ class AnimeScreenModel(
         try {
             withIOContext {
                 val networkAnime = state.source.getAnimeDetails(state.anime.toSAnime())
+                val sourceRating = animeRatingFetcher.await(
+                    source = state.source,
+                    anime = state.anime,
+                    forceRefresh = manualFetch,
+                )
                 updateAnime.awaitUpdateFromSource(state.anime, networkAnime, manualFetch)
+                updateSuccessState {
+                    it.copy(sourceRating = sourceRating)
+                }
             }
         } catch (e: Throwable) {
             // Ignore early hints "errors" that aren't handled by OkHttp
@@ -445,6 +459,21 @@ class AnimeScreenModel(
             logcat(LogPriority.ERROR, e)
             screenModelScope.launch {
                 snackbarHostState.showSnackbar(message = e.formattedMessage(context))
+            }
+        }
+    }
+
+    private suspend fun restoreAnimeSourceRating() {
+        val state = successState ?: return
+        val sourceRating = animeRatingFetcher.await(
+            source = state.source,
+            anime = state.anime,
+            forceRefresh = false,
+        )
+
+        if (sourceRating != null || state.sourceRating != null) {
+            updateSuccessState {
+                it.copy(sourceRating = sourceRating ?: it.sourceRating)
             }
         }
     }
@@ -1874,6 +1903,7 @@ class AnimeScreenModel(
                 anime.nextEpisodeToAir,
                 anime.nextEpisodeAiringAt,
             ),
+            val sourceRating: Float? = null,
             val animeMetadata: ExternalMetadata? = null,
             val isMetadataLoading: Boolean = false,
             val metadataError: MetadataLoadError? = null,

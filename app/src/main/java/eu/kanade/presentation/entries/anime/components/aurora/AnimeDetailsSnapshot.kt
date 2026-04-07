@@ -56,17 +56,19 @@ fun resolveAnimeDetailsSnapshot(
     sourceName: String,
     selectedDubbing: String?,
     nextUpdate: Instant?,
+    sourceRating: Float?,
     animeMetadata: ExternalMetadata?,
     isMetadataLoading: Boolean,
     metadataError: MetadataLoadError?,
 ): AnimeDetailsSnapshot {
     val ratingValue = resolveAnimeRatingValue(
         anime = anime,
+        sourceRating = sourceRating,
         animeMetadata = animeMetadata,
-        isMetadataLoading = isMetadataLoading,
         metadataError = metadataError,
     )
     val ratingText = when {
+        sourceRating != null -> String.format(Locale.US, "%.1f", sourceRating)
         isMetadataLoading -> "..."
         metadataError == MetadataLoadError.NotAuthenticated -> "N/D"
         else -> ratingValue?.let { String.format(Locale.US, "%.1f", it) } ?: "N/D"
@@ -114,13 +116,22 @@ fun resolveAnimeDetailsSnapshot(
 
 private fun resolveAnimeRatingValue(
     anime: Anime,
+    sourceRating: Float?,
     animeMetadata: ExternalMetadata?,
-    isMetadataLoading: Boolean,
     metadataError: MetadataLoadError?,
 ): Float? {
-    if (isMetadataLoading || metadataError == MetadataLoadError.NotAuthenticated) {
+    sourceRating
+        ?.takeIf { it >= 0.0 }
+        ?.also {
+            debugLog(
+                "resolveAnimeRatingValue: sourceRating=${it.previewFloat()} title=${anime.title}",
+            )
+        }
+        ?.let { return it }
+
+    if (metadataError == MetadataLoadError.NotAuthenticated) {
         debugLog(
-            "resolveAnimeRatingValue: blocked loading=$isMetadataLoading error=$metadataError title=${anime.title}",
+            "resolveAnimeRatingValue: blocked error=$metadataError title=${anime.title}",
         )
         return null
     }

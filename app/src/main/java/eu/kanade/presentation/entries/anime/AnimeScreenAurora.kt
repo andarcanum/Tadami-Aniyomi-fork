@@ -211,6 +211,7 @@ fun AnimeScreenAuroraImpl(
         selectedDubbing,
         nextUpdate,
         state.animeMetadata,
+        state.sourceRating,
         state.isMetadataLoading,
         state.metadataError,
     ) {
@@ -221,6 +222,7 @@ fun AnimeScreenAuroraImpl(
             sourceName = state.source.name,
             selectedDubbing = selectedDubbing,
             nextUpdate = nextUpdate,
+            sourceRating = state.sourceRating,
             animeMetadata = state.animeMetadata,
             isMetadataLoading = state.isMetadataLoading,
             metadataError = state.metadataError,

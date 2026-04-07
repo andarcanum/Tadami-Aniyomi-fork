@@ -4,6 +4,7 @@ import android.app.Application
 import eu.kanade.domain.download.anime.interactor.DeleteEpisodeDownload
 import eu.kanade.domain.download.manga.interactor.DeleteChapterDownload
 import eu.kanade.domain.entries.anime.interactor.SetAnimeViewerFlags
+import eu.kanade.domain.entries.anime.interactor.AnimeRatingFetcher
 import eu.kanade.domain.entries.anime.interactor.SyncSeasonsWithSource
 import eu.kanade.domain.entries.anime.interactor.UpdateAnime
 import eu.kanade.domain.entries.manga.interactor.GetExcludedScanlators
@@ -347,6 +348,7 @@ class DomainModule : InjektModule {
         addFactory { SetAnimeEpisodeFlags(get()) }
         addFactory { SetAnimeSeasonFlags(get()) }
         addFactory { AnimeFetchInterval(get()) }
+        addFactory { AnimeRatingFetcher() }
         addFactory { SetAnimeDefaultEpisodeFlags(get(), get(), get()) }
         addFactory { SetAnimeDefaultSeasonFlags(get(), get(), get()) }
         addFactory { SetAnimeViewerFlags(get()) }
