@@ -827,11 +827,7 @@ internal fun resolveReaderWebViewBackgroundColor(
     isBackgroundMode: Boolean,
     backgroundColor: Color,
 ): Int {
-    return if (isBackgroundMode) {
-        Color.Transparent.toArgb()
-    } else {
-        backgroundColor.toArgb()
-    }
+    return backgroundColor.toArgb()
 }
 
 internal fun resolveReaderBackgroundWebImageUrl(selection: ReaderBackgroundSelection): String {
@@ -852,6 +848,33 @@ internal fun resolveReaderBackgroundIdentity(selection: ReaderBackgroundSelectio
     return when (selection.source) {
         NovelReaderBackgroundSource.PRESET -> "preset:${selection.preset.id}"
         NovelReaderBackgroundSource.CUSTOM -> "custom:${selection.customId ?: selection.customPath.orEmpty()}"
+    }
+}
+
+internal fun resolveReaderBackgroundImageModel(selection: ReaderBackgroundSelection): Any? {
+    return when (selection.source) {
+        NovelReaderBackgroundSource.PRESET -> selection.preset.imageResId
+        NovelReaderBackgroundSource.CUSTOM -> selection.customPath?.let(::File)
+    }
+}
+
+internal fun resolveReaderBackgroundBackdropColor(selection: ReaderBackgroundSelection): Color {
+    return when (selection.source) {
+        NovelReaderBackgroundSource.PRESET -> {
+            parseReaderColor(selection.preset.backdropColorHex)
+                ?: if (selection.preset.isDarkPreferred) Color(0xFF121212) else Color(0xFFE8DDBD)
+        }
+        NovelReaderBackgroundSource.CUSTOM -> {
+            selection.customPath?.let(::sampleReaderBackgroundAverageColor)
+                ?: when (selection.customIsDarkHint) {
+                    true -> Color(0xFF121212)
+                    false -> Color(0xFFE8DDBD)
+                    null -> {
+                        parseReaderColor(selection.preset.backdropColorHex)
+                            ?: if (selection.preset.isDarkPreferred) Color(0xFF121212) else Color(0xFFE8DDBD)
+                    }
+                }
+        }
     }
 }
 

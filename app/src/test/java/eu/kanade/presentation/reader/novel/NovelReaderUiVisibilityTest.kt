@@ -67,13 +67,13 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `background mode keeps webview background transparent`() {
+    fun `background mode keeps webview background aligned with reader backdrop`() {
         val backgroundColor = resolveReaderWebViewBackgroundColor(
             isBackgroundMode = true,
-            backgroundColor = Color.White,
+            backgroundColor = Color(0xFFE8DDBD),
         )
 
-        assertEquals(Color.Transparent.toArgb(), backgroundColor)
+        assertEquals(Color(0xFFE8DDBD).toArgb(), backgroundColor)
     }
 
     @Test
@@ -131,6 +131,26 @@ class NovelReaderUiVisibilityTest {
         assertTrue(selection.source == NovelReaderBackgroundSource.CUSTOM)
         assertTrue(selection.customId == "custom-2")
         assertTrue(selection.customPath == "D:/reader/custom-2.jpg")
+    }
+
+    @Test
+    fun `background backdrop color uses representative linen paper tone`() {
+        val selection = ReaderBackgroundSelection(
+            source = NovelReaderBackgroundSource.PRESET,
+            preset = novelReaderBackgroundPresets.first { it.id == NOVEL_READER_BACKGROUND_PRESET_LINEN_PAPER_ID },
+        )
+
+        assertEquals(Color(0xFFE8DDBD), resolveReaderBackgroundBackdropColor(selection))
+    }
+
+    @Test
+    fun `background backdrop color uses representative dark wood tone`() {
+        val selection = ReaderBackgroundSelection(
+            source = NovelReaderBackgroundSource.PRESET,
+            preset = novelReaderBackgroundPresets.first { it.id == NOVEL_READER_BACKGROUND_PRESET_DARK_WOOD_ID },
+        )
+
+        assertEquals(Color(0xFF1B1209), resolveReaderBackgroundBackdropColor(selection))
     }
 
     @Test
@@ -790,6 +810,38 @@ class NovelReaderUiVisibilityTest {
         assertTrue(shouldHideSystemBars(fullScreenMode = true, showReaderUi = false))
         assertFalse(shouldHideSystemBars(fullScreenMode = true, showReaderUi = true))
         assertFalse(shouldHideSystemBars(fullScreenMode = false, showReaderUi = false))
+    }
+
+    @Test
+    fun `reader system ui flag prefers active then loading then initial values`() {
+        assertTrue(
+            resolveReaderSystemUiFlag(
+                activeValue = true,
+                loadingValue = false,
+                initialValue = false,
+            ),
+        )
+        assertTrue(
+            resolveReaderSystemUiFlag(
+                activeValue = null,
+                loadingValue = true,
+                initialValue = false,
+            ),
+        )
+        assertTrue(
+            resolveReaderSystemUiFlag(
+                activeValue = null,
+                loadingValue = null,
+                initialValue = true,
+            ),
+        )
+        assertFalse(
+            resolveReaderSystemUiFlag(
+                activeValue = null,
+                loadingValue = null,
+                initialValue = null,
+            ),
+        )
     }
 
     @Test

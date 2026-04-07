@@ -190,7 +190,7 @@ class NovelReaderScreenModel(
         val networkHelper = Injekt.get<NetworkHelper>()
         GoogleTranslationService(client = networkHelper.client)
     },
-) : StateScreenModel<NovelReaderScreenModel.State>(State.Loading) {
+) : StateScreenModel<NovelReaderScreenModel.State>(State.Loading()) {
     private val contentPrefetchService = ContentPrefetchService(
         environment = runCatching {
             AndroidContentPrefetchEnvironment(Injekt.get<Application>())
@@ -361,6 +361,8 @@ class NovelReaderScreenModel(
                 pluginSite = pluginSite,
             )
         }
+        val initialSettings = novelReaderPreferences.resolveSettings(novel.source)
+        mutableState.value = State.Loading(initialSettings)
         parseAndCacheContentBlocks(
             rawHtml = rawHtml ?: return setError("Chapter content is empty"),
             chapterWebUrl = chapterWebUrl,
@@ -368,7 +370,6 @@ class NovelReaderScreenModel(
             pluginSite = pluginSite,
         )
         chapterReadStartTimeMs = System.currentTimeMillis()
-        val initialSettings = novelReaderPreferences.resolveSettings(novel.source)
         restoreGeminiTranslationFromCache(
             chapterId = chapter.id,
             settings = initialSettings,
@@ -3065,7 +3066,7 @@ class NovelReaderScreenModel(
         saveHistorySnapshot(chapterId, readDurationMs)
     }
     sealed interface State {
-        data object Loading : State
+        data class Loading(val readerSettings: NovelReaderSettings? = null) : State
         data class Error(val message: String?) : State
         data class Success(
             val novel: Novel,

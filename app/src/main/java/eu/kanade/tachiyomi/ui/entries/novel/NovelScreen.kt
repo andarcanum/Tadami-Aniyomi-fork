@@ -250,7 +250,7 @@ class NovelScreen(
             snackbarHostState = screenModel.snackbarHostState,
             onBack = navigator::pop,
             onStartReading = startChapter?.let { chapter ->
-                { navigator.push(NovelReaderScreen(chapter.id)) }
+                { navigator.push(NovelReaderScreen(chapter.id, successState.source.id)) }
             },
             isReading = isReading,
             onToggleFavorite = screenModel::toggleFavorite,
@@ -308,7 +308,7 @@ class NovelScreen(
                 if (screenModel.isAnyChapterSelected) {
                     screenModel.toggleSelection(chapterId)
                 } else {
-                    navigator.push(NovelReaderScreen(chapterId))
+                    navigator.push(NovelReaderScreen(chapterId, successState.source.id))
                 }
             },
             onChapterReadToggle = screenModel::toggleChapterRead,

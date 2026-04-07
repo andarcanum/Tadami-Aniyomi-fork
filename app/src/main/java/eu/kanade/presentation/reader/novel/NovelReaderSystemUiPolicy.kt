@@ -1,5 +1,9 @@
 package eu.kanade.presentation.reader.novel
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.core.view.WindowInsetsControllerCompat
 
 internal object NovelReaderSystemUiSession {
@@ -22,6 +26,15 @@ internal object NovelReaderSystemUiSession {
 
     fun clear() {
         internalChapterReplacePending = false
+    }
+}
+
+internal object NovelReaderBackdropSession {
+    var backgroundColor by mutableStateOf<Color?>(null)
+        private set
+
+    fun update(backgroundColor: Color?) {
+        this.backgroundColor = backgroundColor
     }
 }
 
@@ -90,6 +103,14 @@ internal fun shouldHideSystemBars(
     showReaderUi: Boolean,
 ): Boolean {
     return fullScreenMode && !showReaderUi
+}
+
+internal fun resolveReaderSystemUiFlag(
+    activeValue: Boolean?,
+    loadingValue: Boolean?,
+    initialValue: Boolean?,
+): Boolean {
+    return activeValue ?: loadingValue ?: initialValue ?: false
 }
 
 internal fun shouldRestoreSystemBarsOnDispose(

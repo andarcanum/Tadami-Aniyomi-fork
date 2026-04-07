@@ -95,8 +95,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -195,6 +195,37 @@ private data class TranslationSwitchRequest(
     val from: TranslationKind,
     val to: TranslationKind,
 )
+
+internal fun resolveNovelReaderBackdropColor(
+    settings: NovelReaderSettings,
+    isSystemDark: Boolean,
+): Color {
+    val themeFallback = when (settings.theme) {
+        NovelReaderTheme.SYSTEM -> if (isSystemDark) Color(0xFF121212) else Color.White
+        NovelReaderTheme.LIGHT -> Color.White
+        NovelReaderTheme.DARK -> Color(0xFF121212)
+    }
+    val themeBackground = parseReaderColor(settings.backgroundColor)
+        .takeIf { settings.backgroundColor?.isNotBlank() == true }
+        ?: themeFallback
+
+    return when (settings.appearanceMode) {
+        NovelReaderAppearanceMode.THEME -> themeBackground
+        NovelReaderAppearanceMode.BACKGROUND -> {
+            resolveReaderBackgroundBackdropColor(
+                resolveReaderBackgroundSelection(
+                    backgroundSource = settings.backgroundSource,
+                    backgroundPresetId = settings.backgroundPresetId,
+                    customBackgroundId = settings.customBackgroundId,
+                    customBackgroundItems = emptyList(),
+                    customBackgroundPath = settings.customBackgroundPath,
+                    customBackgroundExists = settings.customBackgroundPath.isNotBlank() &&
+                        File(settings.customBackgroundPath).exists(),
+                ),
+            )
+        }
+    }
+}
 
 @Composable
 fun NovelReaderScreen(
@@ -454,13 +485,9 @@ fun NovelReaderScreen(
             customBackgroundExists = customBackgroundExists,
         )
     }
-    val backgroundImageModel =
-        remember(backgroundSelection.source, backgroundSelection.preset.id, backgroundSelection.customPath) {
-            when (backgroundSelection.source) {
-                NovelReaderBackgroundSource.PRESET -> backgroundSelection.preset.imageResId
-                NovelReaderBackgroundSource.CUSTOM -> backgroundSelection.customPath?.let(::File)
-            }
-        }
+    val backgroundImageModel = remember(backgroundSelection) {
+        resolveReaderBackgroundImageModel(backgroundSelection)
+    }
     val customBackgroundLuminance = remember(backgroundSelection.customPath) {
         backgroundSelection.customPath?.let(::sampleReaderBackgroundLuminance)
     }
@@ -489,12 +516,8 @@ fun NovelReaderScreen(
     val backgroundModeTextColor = remember(effectiveBackgroundLuminance) {
         resolveReaderTextColorForBackgroundMode(effectiveBackgroundLuminance)
     }
-    val backgroundModeBaseColor = remember(backgroundModeTextColor) {
-        if (backgroundModeTextColor.luminance() > 0.5f) {
-            Color(0xFF121212)
-        } else {
-            Color(0xFFF6F2E7)
-        }
+    val backgroundModeBaseColor = remember(backgroundSelection) {
+        resolveReaderBackgroundBackdropColor(backgroundSelection)
     }
     val backgroundModeWebImageUrl = remember(backgroundSelection) {
         resolveReaderBackgroundWebImageUrl(backgroundSelection)
@@ -552,6 +575,10 @@ fun NovelReaderScreen(
         isEInkMode -> Color.White
         isBackgroundMode -> backgroundModeBaseColor
         else -> themeModeBackground
+    }
+
+    SideEffect {
+        NovelReaderBackdropSession.update(textBackground)
     }
 
     LaunchedEffect(
@@ -1278,6 +1305,7 @@ fun NovelReaderScreen(
     androidx.compose.foundation.layout.Box(
         modifier = Modifier
             .fillMaxSize()
+            .background(textBackground)
             .onSizeChanged { pageViewportSize = it },
     ) {
         if (
