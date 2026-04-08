@@ -309,6 +309,8 @@
     <string name="novel_reader_swipe_gestures_summary">Включить горизонтальные свайпы жестами для навигации</string>
     <string name="novel_reader_page_mode">Постраничный режим</string>
     <string name="novel_reader_page_mode_summary">Отображать содержимое постранично вместо непрерывной прокрутки</string>
+    <string name="novel_reader_show_page_chapter_title">Показывать название главы</string>
+    <string name="novel_reader_show_page_chapter_title_summary">Показывать название главы в постраничном режиме</string>
     <string name="novel_reader_page_transition_style">Стиль перелистывания</string>
     <string name="novel_reader_page_transition_style_instant">Мгновенно</string>
     <string name="novel_reader_page_transition_style_slide">Сдвиг</string>

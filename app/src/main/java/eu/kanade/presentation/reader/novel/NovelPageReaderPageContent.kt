@@ -724,12 +724,21 @@ internal fun NovelPageReaderPageContent(
                                     textAlign = readerSettings.textAlign,
                                     textTypeface = textTypeface,
                                     chapterTitleTypeface = chapterTitleTypeface,
-                                    chapterTitleTextColor = chapterTitleTextColor,
+                                    chapterTitleTextColor = if (block.isChapterTitle) {
+                                        Color.Black
+                                    } else {
+                                        chapterTitleTextColor
+                                    },
                                     textShadowEnabled = readerSettings.textShadow,
                                     textShadowColor = readerSettings.textShadowColor,
                                     textShadowBlur = readerSettings.textShadowBlur,
                                     textShadowX = readerSettings.textShadowX,
                                     textShadowY = readerSettings.textShadowY,
+                                    baseTypefaceStyle = if (block.isChapterTitle) {
+                                        Typeface.BOLD
+                                    } else {
+                                        Typeface.NORMAL
+                                    },
                                     selectionRenderer = selectionRenderer,
                                     selectionSessionIdProvider = selectionSessionIdProvider,
                                     onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
@@ -749,12 +758,21 @@ internal fun NovelPageReaderPageContent(
                                     textAlign = readerSettings.textAlign,
                                     textTypeface = textTypeface,
                                     chapterTitleTypeface = chapterTitleTypeface,
-                                    chapterTitleTextColor = chapterTitleTextColor,
+                                    chapterTitleTextColor = if (block.isChapterTitle) {
+                                        Color.Black
+                                    } else {
+                                        chapterTitleTextColor
+                                    },
                                     textShadowEnabled = readerSettings.textShadow,
                                     textShadowColor = readerSettings.textShadowColor,
                                     textShadowBlur = readerSettings.textShadowBlur,
                                     textShadowX = readerSettings.textShadowX,
                                     textShadowY = readerSettings.textShadowY,
+                                    baseTypefaceStyle = if (block.isChapterTitle) {
+                                        Typeface.BOLD
+                                    } else {
+                                        Typeface.NORMAL
+                                    },
                                     selectionRenderer = selectionRenderer,
                                     selectionSessionIdProvider = selectionSessionIdProvider,
                                     onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,

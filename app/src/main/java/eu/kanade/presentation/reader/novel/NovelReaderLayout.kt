@@ -54,6 +54,40 @@ internal fun resolvePageReaderBlocks(
     return paginate(nonBlankBlocks, paragraphSpacingDp.coerceIn(0, 32)).ifEmpty { fallbackBlocks }
 }
 
+internal fun stripPageReaderChapterTitleBlocks(
+    textBlocks: List<String>,
+    chapterTitle: String?,
+): List<String> {
+    if (chapterTitle.isNullOrBlank() || textBlocks.isEmpty()) return textBlocks
+    val firstBlock = textBlocks.first()
+    return if (isNativeChapterTitleText(firstBlock, chapterTitle)) {
+        textBlocks.drop(1)
+    } else {
+        textBlocks
+    }
+}
+
+internal fun resolvePageReaderChapterTitleForFiltering(
+    showPageChapterTitle: Boolean,
+    chapterTitle: String?,
+): String? {
+    return if (showPageChapterTitle) null else chapterTitle
+}
+
+internal fun stripPageReaderChapterTitleRichBlocks(
+    richBlocks: List<NovelRichContentBlock>,
+    chapterTitle: String?,
+): List<NovelRichContentBlock> {
+    if (chapterTitle.isNullOrBlank() || richBlocks.isEmpty()) return richBlocks
+    val firstBlock = richBlocks.first()
+    val firstBlockText = buildRichPageReaderBlockAnnotatedText(firstBlock).text
+    return if (isNativeChapterTitleText(firstBlockText, chapterTitle)) {
+        richBlocks.drop(1)
+    } else {
+        richBlocks
+    }
+}
+
 internal fun resolveReaderContentPaddingPx(
     showReaderUi: Boolean,
     basePaddingPx: Int,

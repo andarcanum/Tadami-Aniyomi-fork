@@ -698,14 +698,30 @@ fun NovelReaderScreen(
         state.contentBlocks.takeIf { it.isNotEmpty() }
             ?: state.textBlocks.map { NovelReaderScreenModel.ContentBlock.Text(it) }
     }
-    val pageReaderTextBlocks = remember(state.chapter.id, scrollContentBlocks) {
-        scrollContentBlocks
-            .filterIsInstance<NovelReaderScreenModel.ContentBlock.Text>()
-            .map { it.text }
-            .filter { it.isNotBlank() }
+    val showPageChapterTitle = state.readerSettings.showPageChapterTitle
+    val pageReaderTextBlocks = remember(state.chapter.id, scrollContentBlocks, showPageChapterTitle) {
+        stripPageReaderChapterTitleBlocks(
+            textBlocks = scrollContentBlocks
+                .filterIsInstance<NovelReaderScreenModel.ContentBlock.Text>()
+                .map { it.text }
+                .filter { it.isNotBlank() },
+            chapterTitle = resolvePageReaderChapterTitleForFiltering(
+                showPageChapterTitle = showPageChapterTitle,
+                chapterTitle = state.chapter.name,
+            ),
+        )
     }
     val richScrollBlocks = remember(state.chapter.id, state.richContentBlocks) {
         state.richContentBlocks
+    }
+    val pageReaderRichBlocks = remember(state.chapter.id, richScrollBlocks, showPageChapterTitle) {
+        stripPageReaderChapterTitleRichBlocks(
+            richBlocks = richScrollBlocks,
+            chapterTitle = resolvePageReaderChapterTitleForFiltering(
+                showPageChapterTitle = showPageChapterTitle,
+                chapterTitle = state.chapter.name,
+            ),
+        )
     }
     val shouldPaginatePageReader = shouldPaginateForPageReader(
         pageReaderEnabled = state.readerSettings.pageReader,
@@ -723,6 +739,7 @@ fun NovelReaderScreen(
     val pageReaderPages: List<List<PlainPageSlice>> = remember(
         state.chapter.id,
         pageReaderTextBlocks,
+        showPageChapterTitle,
         shouldPaginatePageReader,
         state.readerSettings.fontSize,
         state.readerSettings.lineHeight,
@@ -765,7 +782,7 @@ fun NovelReaderScreen(
                 typeface = composeTypeface,
                 textAlign = pageReaderLayoutTextAlign,
                 forceParagraphIndent = state.readerSettings.forceParagraphIndent,
-                chapterTitle = state.chapter.name,
+                chapterTitle = if (showPageChapterTitle) state.chapter.name else null,
             )
         }
     }
@@ -778,8 +795,9 @@ fun NovelReaderScreen(
     )
     val richPageReaderPagination = remember(
         state.chapter.id,
-        state.richContentBlocks,
+        pageReaderRichBlocks,
         shouldPaginateRichForPageReader,
+        showPageChapterTitle,
         state.readerSettings.fontSize,
         state.readerSettings.lineHeight,
         state.readerSettings.margin,
@@ -812,7 +830,7 @@ fun NovelReaderScreen(
             val pageFitSafetyPx = with(density) { 4.dp.roundToPx() }
             val verticalPaddingPx = topPaddingPx + bottomPaddingPx + bookBottomInsetPx + pageFitSafetyPx
             paginateMixedRichPageBlocks(
-                richBlocks = state.richContentBlocks,
+                richBlocks = pageReaderRichBlocks,
                 paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() },
                 widthPx = (screenWidthPx - horizontalPaddingPx).coerceAtLeast(1),
                 heightPx = (screenHeightPx - verticalPaddingPx).coerceAtLeast(1),
@@ -821,7 +839,7 @@ fun NovelReaderScreen(
                 typeface = composeTypeface,
                 textAlign = pageReaderLayoutTextAlign,
                 forceParagraphIndent = state.readerSettings.forceParagraphIndent,
-                chapterTitle = state.chapter.name,
+                chapterTitle = if (showPageChapterTitle) state.chapter.name else null,
             )
         }
     }
@@ -840,7 +858,7 @@ fun NovelReaderScreen(
         richPageReaderBlockTexts,
         state.readerSettings.paragraphSpacing,
         state.readerSettings.forceParagraphIndent,
-        state.chapter.name,
+        showPageChapterTitle,
     ) {
         normalizePageReaderContentPages(
             useRichPageReader = useRichPageReader,
@@ -850,7 +868,7 @@ fun NovelReaderScreen(
             richBlockTexts = richPageReaderBlockTexts,
             paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() },
             forceParagraphIndent = state.readerSettings.forceParagraphIndent,
-            chapterTitle = state.chapter.name,
+            chapterTitle = if (showPageChapterTitle) state.chapter.name else null,
         )
     }
     val activePageTransitionStyle = remember(state.readerSettings.pageTransitionStyle) {

@@ -340,37 +340,49 @@ private fun GeneralTab(
             onToggle = { readingBehaviorExpanded = !readingBehaviorExpanded },
         ) {
             SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_page_mode),
-            subtitle = stringResource(AYMR.strings.novel_reader_page_mode_summary),
-            checked = settings.pageReader,
-            onCheckedChanged = {
-                update(
-                    it,
-                    { o, v -> o.copy(pageReader = v) },
-                    { preferences.pageReader().set(it) },
-                    dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
-                )
-            },
-        )
-        if (settings.pageReader) {
-            ListPreferenceWidget(
-                value = settings.pageTransitionStyle,
-                title = stringResource(AYMR.strings.novel_reader_page_transition_style),
-                subtitle = novelPageTransitionStyleSubtitle(
-                    style = settings.pageTransitionStyle,
-                    entries = pageTransitionEntries,
-                ),
-                icon = null,
-                entries = pageTransitionEntries,
-                onValueChange = {
+                title = stringResource(AYMR.strings.novel_reader_page_mode),
+                subtitle = stringResource(AYMR.strings.novel_reader_page_mode_summary),
+                checked = settings.pageReader,
+                onCheckedChanged = {
                     update(
                         it,
-                        { o, v -> o.copy(pageTransitionStyle = v) },
-                        { preferences.pageTransitionStyle().set(it) },
+                        { o, v -> o.copy(pageReader = v) },
+                        { preferences.pageReader().set(it) },
                         dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
                     )
                 },
             )
+            if (settings.pageReader) {
+                SwitchPreferenceWidget(
+                    title = stringResource(AYMR.strings.novel_reader_show_page_chapter_title),
+                    subtitle = stringResource(AYMR.strings.novel_reader_show_page_chapter_title_summary),
+                    checked = settings.showPageChapterTitle,
+                    onCheckedChanged = {
+                        update(
+                            it,
+                            { o, v -> o.copy(showPageChapterTitle = v) },
+                            { preferences.showPageChapterTitle().set(it) },
+                        )
+                    },
+                )
+                ListPreferenceWidget(
+                    value = settings.pageTransitionStyle,
+                    title = stringResource(AYMR.strings.novel_reader_page_transition_style),
+                    subtitle = novelPageTransitionStyleSubtitle(
+                        style = settings.pageTransitionStyle,
+                        entries = pageTransitionEntries,
+                    ),
+                    icon = null,
+                    entries = pageTransitionEntries,
+                    onValueChange = {
+                        update(
+                            it,
+                            { o, v -> o.copy(pageTransitionStyle = v) },
+                            { preferences.pageTransitionStyle().set(it) },
+                            dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
+                        )
+                    },
+                )
             if (settings.pageTransitionStyle == NovelPageTransitionStyle.BOOK_FLIP) {
                 val bookFlipAnimationSpeedEntries = novelBookFlipAnimationSpeedEntries()
                 LnReaderSliderRow(

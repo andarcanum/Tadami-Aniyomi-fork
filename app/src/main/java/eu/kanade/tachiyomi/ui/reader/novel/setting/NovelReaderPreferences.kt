@@ -57,6 +57,7 @@ data class NovelReaderSettings(
     val useVolumeButtons: Boolean,
     val swipeGestures: Boolean,
     val pageReader: Boolean,
+    val showPageChapterTitle: Boolean = true,
     val preferWebViewRenderer: Boolean,
     val richNativeRendererExperimental: Boolean,
     val pageTransitionStyle: NovelPageTransitionStyle = NovelPageTransitionStyle.SLIDE,
@@ -284,6 +285,7 @@ data class NovelReaderOverride(
     val useVolumeButtons: Boolean? = null,
     val swipeGestures: Boolean? = null,
     val pageReader: Boolean? = null,
+    val showPageChapterTitle: Boolean? = null,
     val preferWebViewRenderer: Boolean? = null,
     val richNativeRendererExperimental: Boolean? = null,
     val pageTransitionStyle: NovelPageTransitionStyle? = null,
@@ -449,6 +451,9 @@ class NovelReaderPreferences(
     fun swipeGestures() = preferenceStore.getBoolean("novel_reader_swipe_gestures", false)
 
     fun pageReader() = preferenceStore.getBoolean("novel_reader_page_mode", false)
+
+    fun showPageChapterTitle() =
+        preferenceStore.getBoolean("novel_reader_show_page_chapter_title", true)
 
     fun preferWebViewRenderer() = preferenceStore.getBoolean("novel_reader_prefer_webview_renderer", false)
 
@@ -744,6 +749,7 @@ class NovelReaderPreferences(
                 useVolumeButtons = useVolumeButtons().get(),
                 swipeGestures = swipeGestures().get(),
                 pageReader = pageReader().get(),
+                showPageChapterTitle = showPageChapterTitle().get(),
                 preferWebViewRenderer = preferWebViewRenderer().get(),
                 richNativeRendererExperimental = richNativeRendererExperimental().get(),
                 pageTransitionStyle = pageTransitionStyle().get(),
@@ -854,6 +860,7 @@ class NovelReaderPreferences(
             useVolumeButtons = override?.useVolumeButtons ?: useVolumeButtons().get(),
             swipeGestures = override?.swipeGestures ?: swipeGestures().get(),
             pageReader = override?.pageReader ?: pageReader().get(),
+            showPageChapterTitle = override?.showPageChapterTitle ?: showPageChapterTitle().get(),
             preferWebViewRenderer = override?.preferWebViewRenderer ?: preferWebViewRenderer().get(),
             richNativeRendererExperimental =
             override?.richNativeRendererExperimental ?: richNativeRendererExperimental().get(),
@@ -1008,6 +1015,7 @@ class NovelReaderPreferences(
             useVolumeButtons().changes(),
             swipeGestures().changes(),
             pageReader().changes(),
+            showPageChapterTitle().changes(),
             preferWebViewRenderer().changes(),
             richNativeRendererExperimental().changes(),
             pageTransitionStyle().changes(),
@@ -1031,20 +1039,21 @@ class NovelReaderPreferences(
                 values[2] as Boolean,
                 values[3] as Boolean,
                 values[4] as Boolean,
-                values[5] as NovelPageTransitionStyle,
-                values[6] as NovelBookFlipAnimationSpeed,
-                values[7] as NovelPageTurnSpeed,
-                values[8] as NovelPageTurnIntensity,
-                values[9] as NovelPageTurnShadowIntensity,
-                values[10] as NovelPageTurnActivationZone,
-                values[11] as Boolean,
+                values[5] as Boolean,
+                values[6] as NovelPageTransitionStyle,
+                values[7] as NovelBookFlipAnimationSpeed,
+                values[8] as NovelPageTurnSpeed,
+                values[9] as NovelPageTurnIntensity,
+                values[10] as NovelPageTurnShadowIntensity,
+                values[11] as NovelPageTurnActivationZone,
                 values[12] as Boolean,
                 values[13] as Boolean,
                 values[14] as Boolean,
                 values[15] as Boolean,
-                values[16] as Int,
+                values[16] as Boolean,
                 values[17] as Int,
-                values[18] as Boolean,
+                values[18] as Int,
+                values[19] as Boolean,
             )
         }.distinctUntilChanged()
 
@@ -1217,6 +1226,7 @@ class NovelReaderPreferences(
                 useVolumeButtons = override?.useVolumeButtons ?: navigation.useVolumeButtons,
                 swipeGestures = override?.swipeGestures ?: navigation.swipeGestures,
                 pageReader = override?.pageReader ?: navigation.pageReader,
+                showPageChapterTitle = override?.showPageChapterTitle ?: navigation.showPageChapterTitle,
                 preferWebViewRenderer = override?.preferWebViewRenderer ?: navigation.preferWebViewRenderer,
                 richNativeRendererExperimental =
                 override?.richNativeRendererExperimental ?: navigation.richNativeRendererExperimental,
@@ -1334,6 +1344,7 @@ class NovelReaderPreferences(
         val useVolumeButtons: Boolean,
         val swipeGestures: Boolean,
         val pageReader: Boolean,
+        val showPageChapterTitle: Boolean,
         val preferWebViewRenderer: Boolean,
         val richNativeRendererExperimental: Boolean,
         val pageTransitionStyle: NovelPageTransitionStyle,

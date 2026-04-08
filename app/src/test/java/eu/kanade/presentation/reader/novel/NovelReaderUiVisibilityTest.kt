@@ -1403,6 +1403,46 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `page title stripping removes leading chapter title block`() {
+        val plainBlocks = stripPageReaderChapterTitleBlocks(
+            textBlocks = listOf("Chapter 12", "First paragraph"),
+            chapterTitle = "Chapter 12",
+        )
+        val richBlocks = stripPageReaderChapterTitleRichBlocks(
+            richBlocks = listOf(
+                NovelRichContentBlock.Paragraph(
+                    segments = listOf(NovelRichTextSegment(text = "Chapter 12")),
+                ),
+                NovelRichContentBlock.Paragraph(
+                    segments = listOf(NovelRichTextSegment(text = "First paragraph")),
+                ),
+            ),
+            chapterTitle = "Chapter 12",
+        )
+
+        assertEquals(listOf("First paragraph"), plainBlocks)
+        assertEquals(1, richBlocks.size)
+    }
+
+    @Test
+    fun `page title filtering keeps title when enabled and strips when disabled`() {
+        assertEquals(
+            "Chapter 12",
+            resolvePageReaderChapterTitleForFiltering(
+                showPageChapterTitle = false,
+                chapterTitle = "Chapter 12",
+            ),
+        )
+        assertEquals(
+            null,
+            resolvePageReaderChapterTitleForFiltering(
+                showPageChapterTitle = true,
+                chapterTitle = "Chapter 12",
+            ),
+        )
+    }
+
+    @Test
     fun `paragraph indent makes pagination more conservative`() {
         val textBlocks = listOf("The quick brown fox jumps over the lazy dog ".repeat(3).trim())
         val compactPages = paginatePlainPageBlocks(

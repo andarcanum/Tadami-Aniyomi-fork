@@ -485,6 +485,8 @@
     <string name="novel_reader_tap_to_scroll">Tap edges to navigate</string>
     <string name="novel_reader_page_mode">Page mode</string>
     <string name="novel_reader_page_mode_summary">Display content in pages instead of continuous scroll</string>
+    <string name="novel_reader_show_page_chapter_title">Show chapter title</string>
+    <string name="novel_reader_show_page_chapter_title_summary">Display chapter titles in Page mode</string>
     <string name="novel_reader_page_transition_style">Page transition style</string>
     <string name="novel_reader_page_transition_style_instant">Instant</string>
     <string name="novel_reader_page_transition_style_slide">Slide</string>

@@ -770,6 +770,7 @@ object SettingsNovelReaderScreen : SearchableSettings {
         val swipeGestures by swipeGesturesPref.collectAsState()
         val pageReaderPref = prefs.pageReader()
         val pageReader by pageReaderPref.collectAsState()
+        val showPageChapterTitlePref = prefs.showPageChapterTitle()
         val pageTransitionStylePref = prefs.pageTransitionStyle()
         val pageTransitionStyle by pageTransitionStylePref.collectAsState()
         val bookFlipAnimationSpeedPref = prefs.bookFlipAnimationSpeed()
@@ -922,6 +923,15 @@ object SettingsNovelReaderScreen : SearchableSettings {
                     subtitle = stringResource(AYMR.strings.novel_reader_page_mode_summary),
                 ),
             )
+            if (pageReader) {
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = showPageChapterTitlePref,
+                        title = stringResource(AYMR.strings.novel_reader_show_page_chapter_title),
+                        subtitle = stringResource(AYMR.strings.novel_reader_show_page_chapter_title_summary),
+                    ),
+                )
+            }
             add(
                 Preference.PreferenceItem.ListPreference(
                     preference = pageTransitionStylePref,
