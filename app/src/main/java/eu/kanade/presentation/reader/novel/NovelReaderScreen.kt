@@ -1861,37 +1861,36 @@ fun NovelReaderScreen(
                 )
                 val initialSelectedFontFamily = selectedReaderFont.id.takeIf { it.isNotBlank() }
                 val initialFontFaceCss = buildNovelReaderFontFaceCss(selectedReaderFont)
-                val initialReaderCss = buildWebReaderCssText(
-                    fontFaceCss = initialFontFaceCss,
-                    paddingTop = initialPaddingTop,
-                    paddingBottom = initialPaddingBottom,
-                    paddingHorizontal = initialPaddingHorizontal,
-                    fontSizePx = state.readerSettings.fontSize,
-                    lineHeightMultiplier = state.readerSettings.lineHeight,
-                    paragraphSpacingPx = state.readerSettings.paragraphSpacing,
-                    textAlignCss = initialCssTextAlign,
-                    firstLineIndentCss = initialCssFirstLineIndent,
-                    textColorHex = colorToCssHex(textColor),
-                    backgroundHex = colorToCssHex(textBackground),
-                    appearanceMode = state.readerSettings.appearanceMode,
-                    backgroundTexture = activeBackgroundTexture,
-                    oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
-                    backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
-                    fontFamilyName = initialSelectedFontFamily,
-                    customCss = state.readerSettings.customCSS,
-                    textShadowCss = initialTextShadowCss,
-                    forceBoldText = state.readerSettings.forceBoldText,
-                    forceItalicText = state.readerSettings.forceItalicText,
-                )
-                val initialFactoryWebViewHtml = buildInitialWebReaderHtml(
-                    rawHtml = state.html,
-                    readerCss = initialReaderCss,
-                    hideUntilReveal = shouldHideWebViewUntilReveal,
-                )
 
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = { context ->
+                        val initialFactoryWebViewHtml = buildInitialWebReaderHtml(
+                            rawHtml = state.html,
+                            readerCss = buildWebReaderCssText(
+                                fontFaceCss = initialFontFaceCss,
+                                paddingTop = initialPaddingTop,
+                                paddingBottom = initialPaddingBottom,
+                                paddingHorizontal = initialPaddingHorizontal,
+                                fontSizePx = state.readerSettings.fontSize,
+                                lineHeightMultiplier = state.readerSettings.lineHeight,
+                                paragraphSpacingPx = state.readerSettings.paragraphSpacing,
+                                textAlignCss = initialCssTextAlign,
+                                firstLineIndentCss = initialCssFirstLineIndent,
+                                textColorHex = colorToCssHex(textColor),
+                                backgroundHex = colorToCssHex(textBackground),
+                                appearanceMode = state.readerSettings.appearanceMode,
+                                backgroundTexture = activeBackgroundTexture,
+                                oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
+                                backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
+                                fontFamilyName = initialSelectedFontFamily,
+                                customCss = state.readerSettings.customCSS,
+                                textShadowCss = initialTextShadowCss,
+                                forceBoldText = state.readerSettings.forceBoldText,
+                                forceItalicText = state.readerSettings.forceItalicText,
+                            ),
+                            hideUntilReveal = shouldHideWebViewUntilReveal,
+                        )
                         val factoryShouldEarlyReveal = shouldUseEarlyWebViewReveal(state.html)
                         val factoryWebViewClient = object : WebViewClient() {
                             private var hasEarlyRevealedPage = false
@@ -2242,36 +2241,9 @@ fun NovelReaderScreen(
                             forceBoldText = state.readerSettings.forceBoldText,
                             forceItalicText = state.readerSettings.forceItalicText,
                         )
-                        val currentRestoreProgress = state.lastSavedWebProgressPercent.coerceIn(0, 100)
                         val currentFontSize = state.readerSettings.fontSize
                         val currentLineHeight = state.readerSettings.lineHeight
-                        val currentReaderCss = buildWebReaderCssText(
-                            fontFaceCss = fontFaceCss,
-                            paddingTop = paddingTop,
-                            paddingBottom = paddingBottom,
-                            paddingHorizontal = paddingHorizontal,
-                            fontSizePx = currentFontSize,
-                            lineHeightMultiplier = currentLineHeight,
-                            paragraphSpacingPx = state.readerSettings.paragraphSpacing,
-                            textAlignCss = cssTextAlign,
-                            firstLineIndentCss = cssFirstLineIndent,
-                            textColorHex = currentTextColorCss,
-                            backgroundHex = currentBackgroundCss,
-                            appearanceMode = state.readerSettings.appearanceMode,
-                            backgroundTexture = activeBackgroundTexture,
-                            oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
-                            backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
-                            fontFamilyName = selectedFontFamily,
-                            customCss = currentCustomCss,
-                            textShadowCss = currentTextShadowCss,
-                            forceBoldText = state.readerSettings.forceBoldText,
-                            forceItalicText = state.readerSettings.forceItalicText,
-                        )
-                        val initialWebViewHtml = buildInitialWebReaderHtml(
-                            rawHtml = state.html,
-                            readerCss = currentReaderCss,
-                            hideUntilReveal = shouldHideWebViewUntilReveal,
-                        )
+                        val currentRestoreProgress = state.lastSavedWebProgressPercent.coerceIn(0, 100)
                         val shouldEarlyRevealWebView = shouldUseEarlyWebViewReveal(state.html)
                         webView.webViewClient = object : WebViewClient() {
                             private var hasEarlyRevealedPage = false
@@ -2390,6 +2362,35 @@ fun NovelReaderScreen(
                         }
 
                         if (webView.tag != state.html) {
+                            val currentRestoreProgress = state.lastSavedWebProgressPercent.coerceIn(0, 100)
+                            val currentReaderCss = buildWebReaderCssText(
+                                fontFaceCss = fontFaceCss,
+                                paddingTop = paddingTop,
+                                paddingBottom = paddingBottom,
+                                paddingHorizontal = paddingHorizontal,
+                                fontSizePx = currentFontSize,
+                                lineHeightMultiplier = currentLineHeight,
+                                paragraphSpacingPx = state.readerSettings.paragraphSpacing,
+                                textAlignCss = cssTextAlign,
+                                firstLineIndentCss = cssFirstLineIndent,
+                                textColorHex = currentTextColorCss,
+                                backgroundHex = currentBackgroundCss,
+                                appearanceMode = state.readerSettings.appearanceMode,
+                                backgroundTexture = activeBackgroundTexture,
+                                oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
+                                backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
+                                fontFamilyName = selectedFontFamily,
+                                customCss = currentCustomCss,
+                                textShadowCss = currentTextShadowCss,
+                                forceBoldText = state.readerSettings.forceBoldText,
+                                forceItalicText = state.readerSettings.forceItalicText,
+                            )
+                            val initialWebViewHtml = buildInitialWebReaderHtml(
+                                rawHtml = state.html,
+                                readerCss = currentReaderCss,
+                                hideUntilReveal = shouldHideWebViewUntilReveal,
+                            )
+                            val shouldEarlyRevealWebView = shouldUseEarlyWebViewReveal(state.html)
                             shouldRestoreWebScroll = true
                             appliedWebCssFingerprint = null
                             webView.animate().cancel()

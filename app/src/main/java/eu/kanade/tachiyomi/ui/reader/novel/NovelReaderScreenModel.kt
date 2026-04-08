@@ -961,16 +961,12 @@ class NovelReaderScreenModel(
             lastPageRead = progress,
         )
         currentChapter = updatedChapter
-        chapterOrderList = chapterOrderList.map { existing ->
-            if (existing.id == chapter.id) {
-                existing.copy(
-                    read = read,
-                    lastPageRead = progress,
-                )
-            } else {
-                existing
-            }
-        }
+        chapterOrderList = updateNovelReaderChapterProgressList(
+            chapters = chapterOrderList,
+            chapterId = chapter.id,
+            read = read,
+            progress = progress,
+        )
         val currentState = mutableState.value
         if (currentState is State.Success) {
             val decodedNativeProgress = decodeNativeScrollProgress(progress)
@@ -3210,6 +3206,28 @@ class NovelReaderScreenModel(
             "text",
         )
     }
+}
+
+internal fun updateNovelReaderChapterProgressList(
+    chapters: List<NovelChapter>,
+    chapterId: Long,
+    read: Boolean,
+    progress: Long,
+): List<NovelChapter> {
+    val chapterIndex = chapters.indexOfFirst { it.id == chapterId }
+    if (chapterIndex < 0) return chapters
+
+    val currentChapter = chapters[chapterIndex]
+    if (currentChapter.read == read && currentChapter.lastPageRead == progress) {
+        return chapters
+    }
+
+    val updatedChapters = chapters.toMutableList()
+    updatedChapters[chapterIndex] = currentChapter.copy(
+        read = read,
+        lastPageRead = progress,
+    )
+    return updatedChapters
 }
 internal fun sanitizeChapterHtmlForReader(rawHtml: String): String {
     if (rawHtml.isBlank()) return rawHtml
