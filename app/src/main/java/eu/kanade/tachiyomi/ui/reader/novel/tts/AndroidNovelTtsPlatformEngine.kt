@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:filename")
+
 package eu.kanade.tachiyomi.ui.reader.novel.tts
 
 import android.content.Context
@@ -11,7 +13,42 @@ import kotlin.coroutines.resume
 class AndroidNovelTtsPlatformFactory(
     private val context: Context,
 ) : NovelTtsPlatformFactory {
-    override fun create(): NovelTtsPlatformEngine = AndroidNovelTtsPlatformEngine(context.applicationContext)
+    override fun create(): NovelTtsPlatformEngine {
+        val applicationContext = runCatching { context.applicationContext }.getOrNull()
+            ?: return NoOpNovelTtsPlatformEngine
+        return AndroidNovelTtsPlatformEngine(applicationContext)
+    }
+}
+
+private object NoOpNovelTtsPlatformEngine : NovelTtsPlatformEngine {
+    override suspend fun initialize(enginePackageName: String?) = Unit
+
+    override fun setProgressListener(listener: NovelTtsPlaybackProgressListener?) = Unit
+
+    override fun availableVoices(): List<NovelTtsVoiceDescriptor> = emptyList()
+
+    override fun availableLocales(): List<Locale> = emptyList()
+
+    override fun capabilities(): NovelTtsEngineCapabilities = NovelTtsEngineCapabilities(
+        supportsExactWordOffsets = false,
+        supportsReliablePauseResume = false,
+        supportsVoiceEnumeration = false,
+        supportsLocaleEnumeration = false,
+    )
+
+    override suspend fun setVoice(voiceId: String?) = Unit
+
+    override suspend fun setLocale(localeTag: String?) = Unit
+
+    override suspend fun setSpeechRate(rate: Float) = Unit
+
+    override suspend fun setPitch(pitch: Float) = Unit
+
+    override suspend fun speak(utteranceId: String, text: String, flushQueue: Boolean) = Unit
+
+    override fun stop() = Unit
+
+    override fun shutdown() = Unit
 }
 
 private class AndroidNovelTtsPlatformEngine(

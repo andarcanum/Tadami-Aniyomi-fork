@@ -1,8 +1,8 @@
 package eu.kanade.presentation.reader.novel
 
+import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 import io.kotest.matchers.shouldBe
 import org.junit.Test
-import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 
 class NovelPageReaderSourceBlockIndexTest {
 

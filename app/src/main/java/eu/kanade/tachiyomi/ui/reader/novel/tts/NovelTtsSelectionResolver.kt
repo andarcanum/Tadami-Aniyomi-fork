@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:filename")
+
 package eu.kanade.tachiyomi.ui.reader.novel.tts
 
 data class NovelTtsResolvedVoiceSelection(

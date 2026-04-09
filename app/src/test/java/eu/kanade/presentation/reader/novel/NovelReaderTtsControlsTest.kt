@@ -6,11 +6,11 @@ import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsEngineCapabilities
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsEngineDescriptor
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackState
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsVoiceDescriptor
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertTrue
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NovelReaderTtsControlsTest {
@@ -220,7 +220,11 @@ class NovelReaderTtsControlsTest {
     fun `language search filters by human label and locale tag`() {
         val filteredByLabel = filterNovelReaderTtsLanguages(
             languages = listOf(
-                NovelReaderTtsLanguageOptionSnapshot(localeTag = "en-US", label = "English (United States)", voiceCount = 1),
+                NovelReaderTtsLanguageOptionSnapshot(
+                    localeTag = "en-US",
+                    label = "English (United States)",
+                    voiceCount = 1,
+                ),
                 NovelReaderTtsLanguageOptionSnapshot(localeTag = "ru-RU", label = "Russian (Russia)", voiceCount = 2),
                 NovelReaderTtsLanguageOptionSnapshot(localeTag = "zh-CN", label = "Chinese (China)", voiceCount = 1),
             ),
@@ -228,7 +232,11 @@ class NovelReaderTtsControlsTest {
         )
         val filteredByTag = filterNovelReaderTtsLanguages(
             languages = listOf(
-                NovelReaderTtsLanguageOptionSnapshot(localeTag = "en-US", label = "English (United States)", voiceCount = 1),
+                NovelReaderTtsLanguageOptionSnapshot(
+                    localeTag = "en-US",
+                    label = "English (United States)",
+                    voiceCount = 1,
+                ),
                 NovelReaderTtsLanguageOptionSnapshot(localeTag = "ru-RU", label = "Russian (Russia)", voiceCount = 2),
                 NovelReaderTtsLanguageOptionSnapshot(localeTag = "zh-CN", label = "Chinese (China)", voiceCount = 1),
             ),

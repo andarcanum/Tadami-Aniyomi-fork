@@ -6,9 +6,9 @@ import eu.kanade.domain.ui.model.NavTransitionMode
 import eu.kanade.domain.ui.model.StartScreen
 import eu.kanade.domain.ui.model.TabletUiMode
 import eu.kanade.domain.ui.model.ThemeMode
-import tachiyomi.domain.metadata.model.MetadataSource
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.preference.getEnum
+import tachiyomi.domain.metadata.model.MetadataSource
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale

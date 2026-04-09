@@ -1,7 +1,7 @@
 package eu.kanade.tachiyomi.ui.entries.manga
 
-import android.util.Log
 import android.content.Context
+import android.util.Log
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -16,8 +16,6 @@ import eu.kanade.core.preference.asState
 import eu.kanade.core.util.addOrRemove
 import eu.kanade.core.util.insertSeparators
 import eu.kanade.domain.base.BasePreferences
-import eu.kanade.domain.metadata.interactor.GetMangaMetadata
-import eu.kanade.domain.metadata.model.MetadataLoadError
 import eu.kanade.domain.entries.manga.interactor.GetExcludedScanlators
 import eu.kanade.domain.entries.manga.interactor.SetExcludedScanlators
 import eu.kanade.domain.entries.manga.interactor.SourceMangaRatingFetcher
@@ -29,6 +27,8 @@ import eu.kanade.domain.items.chapter.interactor.GetAvailableScanlators
 import eu.kanade.domain.items.chapter.interactor.GetScanlatorChapterCounts
 import eu.kanade.domain.items.chapter.interactor.SetReadStatus
 import eu.kanade.domain.items.chapter.interactor.SyncChaptersWithSource
+import eu.kanade.domain.metadata.interactor.GetMangaMetadata
+import eu.kanade.domain.metadata.model.MetadataLoadError
 import eu.kanade.domain.track.manga.interactor.AddMangaTracks
 import eu.kanade.domain.track.manga.interactor.RefreshMangaTracks
 import eu.kanade.domain.track.manga.interactor.TrackChapter
@@ -343,7 +343,9 @@ class MangaScreenModel(
                 if (networkManga.rating <= 0f && fetchedRating != null) {
                     networkManga.rating = fetchedRating
                 }
-                debugLog("fetchMangaFromSource: source=${state.source.name} title=${networkManga.safeTitle().previewForLog()} rating=${networkManga.rating} desc=${networkManga.description.previewForLog()}")
+                debugLog(
+                    "fetchMangaFromSource: source=${state.source.name} title=${networkManga.safeTitle().previewForLog()} rating=${networkManga.rating} desc=${networkManga.description.previewForLog()}",
+                )
                 updateManga.awaitUpdateFromSource(state.manga, networkManga, manualFetch)
             }
         } catch (e: Throwable) {

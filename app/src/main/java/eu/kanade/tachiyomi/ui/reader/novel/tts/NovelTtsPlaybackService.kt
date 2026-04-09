@@ -6,13 +6,12 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.os.Binder
 import android.os.IBinder
+import android.support.v4.media.session.MediaSessionCompat
+import android.support.v4.media.session.PlaybackStateCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
-import androidx.media.session.MediaButtonReceiver
 import androidx.media.session.MediaButtonReceiver.handleIntent
-import android.support.v4.media.session.MediaSessionCompat
-import android.support.v4.media.session.PlaybackStateCompat
 import com.tadami.aurora.R
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.util.system.notificationBuilder
@@ -177,7 +176,10 @@ class NovelTtsPlaybackService : Service() {
                 updateMediaSessionState()
                 NotificationManagerCompat.from(this@NovelTtsPlaybackService)
                     .notify(NOTIFICATION_ID, buildNotification())
-                if (it.playbackState == NovelTtsPlaybackState.IDLE || it.playbackState == NovelTtsPlaybackState.COMPLETED) {
+                if (
+                    it.playbackState == NovelTtsPlaybackState.IDLE ||
+                    it.playbackState == NovelTtsPlaybackState.COMPLETED
+                ) {
                     stopForegroundPlayback()
                 }
             }
@@ -228,7 +230,11 @@ class NovelTtsPlaybackService : Service() {
                     PlaybackStateCompat.ACTION_STOP,
             )
             .setState(
-                if (notificationState.isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED,
+                if (notificationState.isPlaying) {
+                    PlaybackStateCompat.STATE_PLAYING
+                } else {
+                    PlaybackStateCompat.STATE_PAUSED
+                },
                 PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN,
                 1f,
             )

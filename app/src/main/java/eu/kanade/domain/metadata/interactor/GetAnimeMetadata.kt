@@ -2,16 +2,12 @@ package eu.kanade.domain.metadata.interactor
 
 import eu.kanade.domain.anime.interactor.buildMediumPosterFallback
 import eu.kanade.domain.anime.interactor.chooseBestPosterUrl
-import eu.kanade.domain.anime.interactor.normalizeMetadataSearchQuery
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.data.track.anilist.AnilistApi
-import eu.kanade.tachiyomi.data.track.anilist.dto.ALAnime
 import eu.kanade.tachiyomi.data.track.model.AnimeTrackSearch
 import eu.kanade.tachiyomi.data.track.shikimori.Shikimori
 import eu.kanade.tachiyomi.data.track.shikimori.ShikimoriApi
-import logcat.LogPriority
-import logcat.logcat
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.data.metadata.AnimeExternalMetadataCache
 import tachiyomi.domain.entries.anime.model.Anime

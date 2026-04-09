@@ -123,12 +123,12 @@ class AnimeMetadataUpdateJob(private val context: Context, workerParams: WorkerP
                                     anime,
                                 ) {
                                     val source = sourceManager.get(anime.source) ?: return@withUpdateNotification
-                                try {
-                                    val networkAnime = source.getAnimeDetails(anime.toSAnime())
-                                    animeRatingFetcher.await(source, anime, forceRefresh = true)
-                                    val updatedAnime = anime
-                                        .prepUpdateCover(coverCache, networkAnime, true)
-                                        .prepUpdateBackground(backgroundCache, networkAnime, true)
+                                    try {
+                                        val networkAnime = source.getAnimeDetails(anime.toSAnime())
+                                        animeRatingFetcher.await(source, anime, forceRefresh = true)
+                                        val updatedAnime = anime
+                                            .prepUpdateCover(coverCache, networkAnime, true)
+                                            .prepUpdateBackground(backgroundCache, networkAnime, true)
                                             .copyFrom(networkAnime)
                                         try {
                                             updateAnime.await(updatedAnime.toAnimeUpdate())

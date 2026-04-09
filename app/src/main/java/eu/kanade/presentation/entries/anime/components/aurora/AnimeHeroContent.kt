@@ -312,4 +312,3 @@ fun AnimeHeroContent(
         }
     }
 }
-

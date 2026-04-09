@@ -84,13 +84,13 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.tadami.aurora.R
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
-import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
 import eu.kanade.presentation.components.DropdownMenu
+import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
 import eu.kanade.presentation.entries.components.DotSeparatorText
 import eu.kanade.presentation.entries.components.ItemCover
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
-import eu.kanade.tachiyomi.data.coil.AuroraPosterRequest
 import eu.kanade.tachiyomi.animesource.model.SAnime
+import eu.kanade.tachiyomi.data.coil.AuroraPosterRequest
 import eu.kanade.tachiyomi.data.coil.staticBlur
 import eu.kanade.tachiyomi.data.coil.useBackground
 import eu.kanade.tachiyomi.util.system.copyToClipboard

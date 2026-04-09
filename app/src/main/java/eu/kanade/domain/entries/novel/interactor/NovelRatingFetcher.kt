@@ -1,9 +1,9 @@
 package eu.kanade.domain.entries.novel.interactor
 
 import android.util.Log
-import eu.kanade.domain.entries.rating.EntryRatingCache
-import eu.kanade.domain.entries.novel.model.NovelRatingJsonParser
 import eu.kanade.domain.entries.novel.model.NovelRatingHtmlParser
+import eu.kanade.domain.entries.novel.model.NovelRatingJsonParser
+import eu.kanade.domain.entries.rating.EntryRatingCache
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.awaitSuccess
@@ -48,7 +48,7 @@ class NovelRatingFetcher {
             }
         }
         debugLog(
-            "await: source=${source.name} novelUrl=${requestUrl} rating=${rating.previewFloat()}",
+            "await: source=${source.name} novelUrl=$requestUrl rating=${rating.previewFloat()}",
         )
         return rating
     }

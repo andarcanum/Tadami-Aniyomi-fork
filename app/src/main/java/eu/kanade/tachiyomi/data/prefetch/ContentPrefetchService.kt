@@ -6,6 +6,7 @@ import android.net.NetworkCapabilities
 import android.os.PowerManager
 import eu.kanade.domain.items.novelchapter.model.toSNovelChapter
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
+import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderChapterDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderChapterPrefetchCache
 import kotlinx.coroutines.CancellationException
@@ -13,7 +14,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
-import eu.kanade.tachiyomi.novelsource.NovelSource
 import java.util.concurrent.ConcurrentHashMap
 
 internal interface ContentPrefetchEnvironment {
@@ -30,12 +30,13 @@ internal class AndroidContentPrefetchEnvironment(
     private val context: Context,
 ) : ContentPrefetchEnvironment {
     override fun isPowerSaveMode(): Boolean {
-        val powerManager = context.getSystemService(PowerManager::class.java)
+        val powerManager = runCatching { context.getSystemService(PowerManager::class.java) }.getOrNull()
         return powerManager?.isPowerSaveMode == true
     }
 
     override fun hasActiveNetwork(): Boolean {
-        val connectivityManager = context.getSystemService(ConnectivityManager::class.java) ?: return true
+        val connectivityManager = runCatching { context.getSystemService(ConnectivityManager::class.java) }.getOrNull()
+            ?: return true
         val network = connectivityManager.activeNetwork ?: return false
         val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
         return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)

@@ -69,7 +69,7 @@ class NovelPageReaderTtsPagingTest {
     }
 
     @Test
-    fun `start utterance resolver picks the utterance on the current page instead of the first utterance of the block`() {
+    fun `start utterance resolver respects current page`() {
         val anchors = mapOf(
             "utterance-0" to NovelTtsPageAnchor(pageIndex = 0),
             "utterance-1" to NovelTtsPageAnchor(pageIndex = 1),

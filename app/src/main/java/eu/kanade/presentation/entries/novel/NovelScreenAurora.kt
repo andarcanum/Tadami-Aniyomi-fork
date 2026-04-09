@@ -872,12 +872,12 @@ fun NovelScreenAuroraImpl(
                                 .auroraCenteredMaxWidth(contentMaxWidthDp),
                         ) {
                             Spacer(modifier = Modifier.height(16.dp))
-                                NovelStatsCard(
-                                    novel = novel,
-                                    rating = state.rating,
-                                    chapterCount = totalChapterCount,
-                                    readChapterCount = readChapterCount,
-                                    nextUpdate = nextUpdate,
+                            NovelStatsCard(
+                                novel = novel,
+                                rating = state.rating,
+                                chapterCount = totalChapterCount,
+                                readChapterCount = readChapterCount,
+                                nextUpdate = nextUpdate,
                                 sourceName = state.source.name,
                                 modifier = Modifier.fillMaxWidth(),
                             )

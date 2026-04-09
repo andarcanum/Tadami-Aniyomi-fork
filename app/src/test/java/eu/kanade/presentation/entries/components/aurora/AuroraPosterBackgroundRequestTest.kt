@@ -1,9 +1,9 @@
 package eu.kanade.presentation.entries.components.aurora
 
-import io.kotest.matchers.shouldBe
-import org.junit.jupiter.api.Test
 import eu.kanade.presentation.components.resolveAuroraPosterModelPair
 import eu.kanade.presentation.components.shouldApplyAuroraPosterTrim
+import io.kotest.matchers.shouldBe
+import org.junit.jupiter.api.Test
 import tachiyomi.domain.entries.manga.model.MangaCover
 
 class AuroraPosterBackgroundRequestTest {

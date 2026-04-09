@@ -5,12 +5,9 @@ import eu.kanade.domain.anime.interactor.chooseBestPosterUrl
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.data.track.anilist.AnilistApi
-import eu.kanade.tachiyomi.data.track.anilist.dto.ALManga
 import eu.kanade.tachiyomi.data.track.model.MangaTrackSearch
 import eu.kanade.tachiyomi.data.track.shikimori.Shikimori
 import eu.kanade.tachiyomi.data.track.shikimori.ShikimoriApi
-import logcat.LogPriority
-import logcat.logcat
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.data.metadata.MangaExternalMetadataCache
 import tachiyomi.domain.entries.manga.model.Manga

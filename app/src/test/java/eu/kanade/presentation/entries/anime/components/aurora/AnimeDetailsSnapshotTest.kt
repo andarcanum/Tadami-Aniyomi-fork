@@ -1,9 +1,9 @@
 package eu.kanade.presentation.entries.anime.components.aurora
 
+import eu.kanade.tachiyomi.animesource.model.SAnime
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
-import eu.kanade.tachiyomi.animesource.model.SAnime
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.metadata.model.ExternalMetadata
 import tachiyomi.domain.metadata.model.MetadataContentType

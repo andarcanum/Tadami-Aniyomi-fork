@@ -6,25 +6,25 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.entries.novel.model.toSNovel
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.domain.items.novelchapter.model.toSNovelChapter
+import eu.kanade.presentation.reader.novel.NovelReaderTtsChapterHandoffPolicy
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.prefetch.AllowAllContentPrefetchEnvironment
 import eu.kanade.tachiyomi.data.prefetch.AndroidContentPrefetchEnvironment
 import eu.kanade.tachiyomi.data.prefetch.ContentPrefetchService
-import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelJsSource
 import eu.kanade.tachiyomi.extension.novel.runtime.resolveUrl
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
-import eu.kanade.tachiyomi.source.novel.NovelSiteSource
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderOverride
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationStylePreset
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationService
@@ -50,30 +50,28 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePres
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
-import eu.kanade.presentation.reader.novel.NovelReaderTtsChapterHandoffPolicy
-import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterRepository
+import eu.kanade.tachiyomi.ui.reader.novel.translation.buildNovelSelectedTextTranslationRequestKey
+import eu.kanade.tachiyomi.ui.reader.novel.translation.formatGeminiThrowableForLog
+import eu.kanade.tachiyomi.ui.reader.novel.tts.AndroidNovelTtsAudioFocusBridge
 import eu.kanade.tachiyomi.ui.reader.novel.tts.AndroidNovelTtsEngineInfoSource
 import eu.kanade.tachiyomi.ui.reader.novel.tts.AndroidNovelTtsPlatformFactory
-import eu.kanade.tachiyomi.ui.reader.novel.tts.AndroidNovelTtsAudioFocusBridge
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelReaderTtsUiState
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsAudioFocusManager
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterModelBuildOptions
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterModelBuilder
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterRepository
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsEngine
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsEngineRegistry
-import eu.kanade.tachiyomi.ui.reader.novel.tts.resolveNovelTtsVoiceSelection
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsHighlightEstimator
-import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackServiceRuntime
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackProgressListener
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackServiceRuntime
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsResolvedChapter
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsSession
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsSessionController
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsSessionUiState
-import eu.kanade.tachiyomi.ui.reader.novel.tts.SharedNovelTtsSessionStore
-import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsTextSource
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsWordTokenizer
-import eu.kanade.tachiyomi.ui.reader.novel.translation.buildNovelSelectedTextTranslationRequestKey
-import eu.kanade.tachiyomi.ui.reader.novel.translation.formatGeminiThrowableForLog
+import eu.kanade.tachiyomi.ui.reader.novel.tts.SharedNovelTtsSessionStore
+import eu.kanade.tachiyomi.ui.reader.novel.tts.resolveNovelTtsVoiceSelection
 import eu.kanade.tachiyomi.util.system.isNightMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -1202,7 +1200,9 @@ class NovelReaderScreenModel(
     ) {
         val state = mutableState.value as? State.Success ?: return
         if (!state.readerSettings.ttsPauseOnManualNavigation) return
-        if (ttsSessionController.state.value.playbackState != eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackState.PLAYING) {
+        if (ttsSessionController.state.value.playbackState !=
+            eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackState.PLAYING
+        ) {
             pendingTtsStartRequest = startRequest
             return
         }
@@ -1646,7 +1646,7 @@ class NovelReaderScreenModel(
         isTestingDeepSeekConnection = false
         ttsWordProgressJob?.cancel()
         ttsWordProgressJob = null
-            pendingTtsStartRequest = null
+        pendingTtsStartRequest = null
         chapterReadStartTimeMs = System.currentTimeMillis()
     }
     fun addGeminiLog(message: String) {

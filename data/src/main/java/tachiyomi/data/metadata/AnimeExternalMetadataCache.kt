@@ -1,7 +1,5 @@
 package tachiyomi.data.metadata
 
-import logcat.LogPriority
-import logcat.logcat
 import tachiyomi.data.anilist.AnilistMetadataCache
 import tachiyomi.data.shikimori.ShikimoriMetadataCache
 import tachiyomi.domain.anilist.model.AnilistMetadata

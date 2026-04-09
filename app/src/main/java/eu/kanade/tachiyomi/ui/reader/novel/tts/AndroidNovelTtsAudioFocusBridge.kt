@@ -12,11 +12,14 @@ import android.os.Build
 class AndroidNovelTtsAudioFocusBridge(
     private val context: Context,
 ) : NovelTtsAudioFocusBridge {
-    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private val audioManager = runCatching {
+        context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+    }.getOrNull()
     private var focusRequest: AudioFocusRequest? = null
     private var noisyReceiver: BroadcastReceiver? = null
 
     override fun requestAudioFocus(onFocusChange: (NovelTtsAudioFocusChange) -> Unit): Boolean {
+        val audioManager = audioManager ?: return true
         val listener = AudioManager.OnAudioFocusChangeListener { focusChange ->
             onFocusChange(focusChange.toNovelTtsAudioFocusChange())
         }
@@ -45,6 +48,7 @@ class AndroidNovelTtsAudioFocusBridge(
     }
 
     override fun abandonAudioFocus() {
+        val audioManager = audioManager ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             focusRequest?.let(audioManager::abandonAudioFocusRequest)
             focusRequest = null

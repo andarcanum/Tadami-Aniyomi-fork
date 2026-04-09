@@ -38,7 +38,6 @@ import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.category.novel.interactor.GetNovelCategories
 import tachiyomi.domain.category.novel.model.NovelCategory
 import tachiyomi.domain.download.service.DownloadPreferences
-import tachiyomi.core.common.preference.Preference as PreferenceData
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.OutlinedNumericChooser
@@ -48,6 +47,7 @@ import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import tachiyomi.core.common.preference.Preference as PreferenceData
 
 object SettingsDownloadScreen : SearchableSettings {
 

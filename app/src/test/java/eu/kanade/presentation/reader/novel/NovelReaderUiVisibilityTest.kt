@@ -58,6 +58,7 @@ class NovelReaderUiVisibilityTest {
             )
         }
     }
+
     @AfterEach
     fun resetNovelReaderSystemUiSession() {
         NovelReaderSystemUiSession.clear()

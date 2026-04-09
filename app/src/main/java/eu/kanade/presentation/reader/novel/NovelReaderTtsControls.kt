@@ -347,7 +347,7 @@ internal fun NovelReaderTtsControls(
                     fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
                     maxLines = 2,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 8.dp)
+                    modifier = Modifier.padding(horizontal = 8.dp),
                 )
             }
             resolveNovelReaderTtsSummaryLine(uiState, optionsSnapshot, textSnapshot)?.let { summary ->
@@ -365,35 +365,48 @@ internal fun NovelReaderTtsControls(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             IconButton(onClick = onStop) {
-                Icon(Icons.Outlined.Stop, contentDescription = stringResource(AYMR.strings.novel_reader_tts_action_stop))
+                Icon(
+                    Icons.Outlined.Stop,
+                    contentDescription = stringResource(AYMR.strings.novel_reader_tts_action_stop),
+                )
             }
-            
+
             Row(
                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 IconButton(onClick = onSkipPrevious) {
-                    Icon(Icons.Outlined.SkipPrevious, contentDescription = stringResource(AYMR.strings.novel_reader_tts_action_previous))
+                    Icon(
+                        Icons.Outlined.SkipPrevious,
+                        contentDescription = stringResource(AYMR.strings.novel_reader_tts_action_previous),
+                    )
                 }
-                
+
                 IconButton(onClick = onTogglePlayback) {
                     Icon(
-                        imageVector = if (snapshot.primaryActionIsPause) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
+                        imageVector = if (snapshot.primaryActionIsPause) {
+                            Icons.Outlined.Pause
+                        } else {
+                            Icons.Outlined.PlayArrow
+                        },
                         contentDescription = if (snapshot.primaryActionIsPause) {
                             stringResource(AYMR.strings.novel_reader_tts_action_pause)
                         } else {
                             stringResource(AYMR.strings.novel_reader_tts_action_play)
                         },
                         modifier = Modifier.size(32.dp),
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = MaterialTheme.colorScheme.primary,
                     )
                 }
 
                 IconButton(onClick = onSkipNext) {
-                    Icon(Icons.Outlined.SkipNext, contentDescription = stringResource(AYMR.strings.novel_reader_tts_action_next))
+                    Icon(
+                        Icons.Outlined.SkipNext,
+                        contentDescription = stringResource(AYMR.strings.novel_reader_tts_action_next),
+                    )
                 }
             }
-            
+
             IconButton(onClick = { showOptions = true }) {
                 Icon(
                     imageVector = Icons.Outlined.SettingsVoice,
@@ -401,7 +414,7 @@ internal fun NovelReaderTtsControls(
                 )
             }
         }
-        
+
         uiState.errorMessage?.takeIf { it.isNotBlank() }?.let { errorMessage ->
             Text(
                 text = errorMessage,
@@ -582,7 +595,10 @@ private fun NovelReaderTtsOptionsDialog(
                             languagePicker.recentLanguages.forEach { language ->
                                 NovelReaderTtsSelectableCard(
                                     title = language.label,
-                                    subtitle = stringResource(AYMR.strings.novel_reader_tts_voice_count, language.voiceCount),
+                                    subtitle = stringResource(
+                                        AYMR.strings.novel_reader_tts_voice_count,
+                                        language.voiceCount,
+                                    ),
                                     selected = language.localeTag == languagePicker.activeLanguageTag,
                                     onClick = {
                                         browsingLanguageTag = language.localeTag
@@ -612,7 +628,10 @@ private fun NovelReaderTtsOptionsDialog(
                             filteredLanguages.forEach { language ->
                                 NovelReaderTtsSelectableCard(
                                     title = language.label,
-                                    subtitle = stringResource(AYMR.strings.novel_reader_tts_voice_count, language.voiceCount),
+                                    subtitle = stringResource(
+                                        AYMR.strings.novel_reader_tts_voice_count,
+                                        language.voiceCount,
+                                    ),
                                     selected = language.localeTag == languagePicker.activeLanguageTag,
                                     onClick = {
                                         browsingLanguageTag = language.localeTag

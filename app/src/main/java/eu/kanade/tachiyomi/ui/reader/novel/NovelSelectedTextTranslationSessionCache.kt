@@ -5,13 +5,17 @@ internal class NovelSelectedTextTranslationSessionCache {
         const val MAX_ENTRIES = 32
     }
 
-    private val entries = object : LinkedHashMap<NovelSelectedTextTranslationCacheKey, NovelSelectedTextTranslationResult>(
-        MAX_ENTRIES,
-        0.75f,
-        true,
-    ) {
+    private val entries = object :
+        LinkedHashMap<NovelSelectedTextTranslationCacheKey, NovelSelectedTextTranslationResult>(
+            MAX_ENTRIES,
+            0.75f,
+            true,
+        ) {
         override fun removeEldestEntry(
-            eldest: MutableMap.MutableEntry<NovelSelectedTextTranslationCacheKey, NovelSelectedTextTranslationResult>?,
+            eldest: MutableMap.MutableEntry<
+                NovelSelectedTextTranslationCacheKey,
+                NovelSelectedTextTranslationResult,
+                >?,
         ): Boolean {
             return size > MAX_ENTRIES
         }

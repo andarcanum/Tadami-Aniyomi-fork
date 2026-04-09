@@ -20,7 +20,7 @@ class NovelDownloadManager(
 ) {
 
     private val legacyRootDir: File?
-        get() = application?.filesDir?.let { File(it, ROOT_DIR_NAME) }
+        get() = runCatching { application?.filesDir }.getOrNull()?.let { File(it, ROOT_DIR_NAME) }
 
     private val rootDir: UniFile?
         get() = storageManager?.getDownloadsDirectory()?.createDirectory(ROOT_DIR_NAME)

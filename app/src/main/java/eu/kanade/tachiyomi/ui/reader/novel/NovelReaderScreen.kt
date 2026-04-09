@@ -11,48 +11,48 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.presentation.reader.novel.NovelAtmosphereBackground
 import eu.kanade.presentation.reader.novel.NovelReaderBackdropSession
 import eu.kanade.presentation.reader.novel.NovelReaderChapterHandoffPolicy
-import eu.kanade.presentation.reader.novel.NovelAtmosphereBackground
 import eu.kanade.presentation.reader.novel.NovelReaderPageReaderHandoffTarget
 import eu.kanade.presentation.reader.novel.NovelReaderScreen
 import eu.kanade.presentation.reader.novel.NovelReaderSystemUiSession
 import eu.kanade.presentation.reader.novel.SystemUIController
 import eu.kanade.presentation.reader.novel.readNovelReaderCustomBackgroundItems
+import eu.kanade.presentation.reader.novel.resolveNovelReaderBackdropColor
 import eu.kanade.presentation.reader.novel.resolveReaderBackgroundBackdropColor
 import eu.kanade.presentation.reader.novel.resolveReaderBackgroundImageModel
 import eu.kanade.presentation.reader.novel.resolveReaderBackgroundSelection
 import eu.kanade.presentation.reader.novel.resolveReaderSystemUiFlag
-import eu.kanade.presentation.reader.novel.resolveNovelReaderBackdropColor
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackService
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackState
+import eu.kanade.tachiyomi.util.system.isNightMode
 import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
 import tachiyomi.presentation.core.screens.LoadingScreen
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.platform.LocalContext
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
-import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackService
-import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackState
-import java.io.File
-import eu.kanade.tachiyomi.util.system.isNightMode
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.io.File
 
 class NovelReaderScreen(
     private val chapterId: Long,
@@ -109,7 +109,13 @@ class NovelReaderScreen(
         )
 
         val loadingBackdropColor = loadingReaderSettings
-            ?.let { resolveNovelReaderBackdropColor(it, isSystemDark = MaterialTheme.colorScheme.background.luminance() < 0.5f) }
+            ?.let {
+                resolveNovelReaderBackdropColor(
+                    it,
+                    isSystemDark =
+                    MaterialTheme.colorScheme.background.luminance() < 0.5f,
+                )
+            }
             ?: initialBackdropColor
             ?: MaterialTheme.colorScheme.background
         val activeBackdropColor = when (currentState) {

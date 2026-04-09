@@ -1,13 +1,13 @@
 package eu.kanade.domain.entries.manga.model
 
 import android.util.Log
-import org.jsoup.Jsoup
-import org.jsoup.nodes.Document
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
 import java.util.Locale
 
 internal object SourceMangaHtmlRatingParser {
@@ -35,7 +35,9 @@ internal object SourceMangaHtmlRatingParser {
             SourceMangaRatingFamily.INK_STORY -> parseInkStory(document)
             SourceMangaRatingFamily.MADARA -> parseMadara(document)
         }
-        debugLog("parse: source=$sourceName family=$family rating=${rating.previewFloat()} htmlPreview=${html.previewForLog()}")
+        debugLog(
+            "parse: source=$sourceName family=$family rating=${rating.previewFloat()} htmlPreview=${html.previewForLog()}",
+        )
         return rating
     }
 

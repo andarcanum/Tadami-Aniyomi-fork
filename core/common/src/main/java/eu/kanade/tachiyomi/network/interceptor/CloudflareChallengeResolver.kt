@@ -9,15 +9,13 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
 import eu.kanade.tachiyomi.network.AndroidCookieJar
-import eu.kanade.tachiyomi.util.system.WebViewUtil
-import eu.kanade.tachiyomi.util.system.isOutdated
 import eu.kanade.tachiyomi.util.system.toast
 import okhttp3.Cookie
 import okhttp3.Headers
 import okhttp3.Request
 import tachiyomi.i18n.MR
-import java.util.concurrent.Executor
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executor
 
 interface CloudflareChallengeResolver {
     fun resolve(originalRequest: Request, oldCookie: Cookie?)

@@ -8,9 +8,9 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
-import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsEngineDescriptor
-import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsEngineCapabilities
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelReaderTtsUiState
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsEngineCapabilities
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsEngineDescriptor
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackState
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsVoiceDescriptor
 import org.junit.Assert.assertEquals

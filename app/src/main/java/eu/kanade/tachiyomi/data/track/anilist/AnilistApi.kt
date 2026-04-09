@@ -8,9 +8,9 @@ import eu.kanade.tachiyomi.data.track.anilist.dto.ALAddEntryResult
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALAnime
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALCurrentUserResult
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALManga
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALMangaSingleMediaResult
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALOAuth
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALSearchResult
-import eu.kanade.tachiyomi.data.track.anilist.dto.ALMangaSingleMediaResult
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALSingleMediaResult
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALUserListEntryQueryResult
 import eu.kanade.tachiyomi.data.track.model.AnimeTrackSearch

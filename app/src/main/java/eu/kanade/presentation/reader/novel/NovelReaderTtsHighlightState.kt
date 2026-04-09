@@ -22,7 +22,7 @@ data class NovelReaderTtsHighlightState(
             (
                 (blockTextStart != null && blockTextEndExclusive != null) ||
                     !utteranceText.isNullOrBlank()
-            )
+                )
 }
 
 internal fun applyNovelReaderTtsHighlight(
@@ -40,12 +40,12 @@ internal fun applyNovelReaderTtsHighlight(
     val utteranceText = state.utteranceText?.takeIf { it.isNotBlank() }
     val hasPageContext = (
         pageIndex != null &&
-        pageBlockTextStart != null &&
-        pageBlockTextEndExclusive != null &&
-        state.pageIndex == pageIndex &&
-        state.blockTextStart != null &&
-        state.blockTextEndExclusive != null
-    )
+            pageBlockTextStart != null &&
+            pageBlockTextEndExclusive != null &&
+            state.pageIndex == pageIndex &&
+            state.blockTextStart != null &&
+            state.blockTextEndExclusive != null
+        )
 
     val pageAwareFragmentRange = if (hasPageContext) {
         val overlapStart = maxOf(state.blockTextStart, pageBlockTextStart)

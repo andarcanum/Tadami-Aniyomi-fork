@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:filename")
+
 package eu.kanade.presentation.reader.novel
 
 internal data class NovelReaderTtsSettingsPlacementSnapshot(

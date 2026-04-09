@@ -1,10 +1,12 @@
 package eu.kanade.tachiyomi.ui.entries.novel
 
+import android.app.Application
 import android.content.Context
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.entries.novel.interactor.GetNovelExcludedScanlators
+import eu.kanade.domain.entries.novel.interactor.NovelRatingFetcher
 import eu.kanade.domain.entries.novel.interactor.SetNovelExcludedScanlators
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.items.novelchapter.interactor.GetAvailableNovelScanlators
@@ -46,10 +48,25 @@ import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.track.novel.interactor.GetNovelTracks
 import tachiyomi.domain.track.novel.model.NovelTrack
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.fullType
+import uy.kohesive.injekt.api.get
 
 class NovelScreenModelTest {
+    private class TestApplication : Application()
 
     companion object {
+        @JvmStatic
+        @BeforeAll
+        fun setupInjektBindings() {
+            runCatching { Injekt.get<Application>() }
+                .getOrElse { Injekt.addSingleton(fullType<Application>(), TestApplication()) }
+            runCatching { Injekt.get<NovelRatingFetcher>() }
+                .getOrElse {
+                    Injekt.addSingleton(fullType<NovelRatingFetcher>(), mockk<NovelRatingFetcher>(relaxed = true))
+                }
+        }
+
         @JvmStatic
         @BeforeAll
         fun setupMainDispatcher() {

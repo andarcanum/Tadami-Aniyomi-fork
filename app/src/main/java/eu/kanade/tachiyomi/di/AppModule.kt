@@ -382,7 +382,12 @@ class AppModule(val app: Application) : InjektModule {
         }
         addSingletonFactory { NovelPluginApi(get(), get(), get()) }
         addSingletonFactory<NovelPluginApiFacade> { get<NovelPluginApi>() }
-        addSingletonFactory { NovelPluginStorage(File(app.filesDir, "novel_plugins")) }
+        addSingletonFactory {
+            val filesDir = runCatching { app.filesDir }.getOrElse {
+                File(System.getProperty("java.io.tmpdir"), "aniyomi_test_files_dir").also { it.mkdirs() }
+            }
+            NovelPluginStorage(File(filesDir, "novel_plugins"))
+        }
         addSingletonFactory<NovelPluginDownloader> { NetworkNovelPluginDownloader(get<NetworkHelper>().client) }
         addSingletonFactory { NovelPluginInstaller(get(), get(), get()) }
         addSingletonFactory<NovelPluginInstallerFacade> { get<NovelPluginInstaller>() }

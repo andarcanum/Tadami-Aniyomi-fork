@@ -2,11 +2,11 @@ package eu.kanade.domain.metadata.interactor
 
 import logcat.LogPriority
 import logcat.logcat
-import kotlin.math.roundToInt
 import tachiyomi.domain.metadata.cache.ExternalMetadataCache
 import tachiyomi.domain.metadata.model.ExternalMetadata
 import tachiyomi.domain.metadata.model.MetadataContentType
 import tachiyomi.domain.metadata.model.MetadataSource
+import kotlin.math.roundToInt
 
 data class MetadataTarget(
     val mediaId: Long,
@@ -142,7 +142,20 @@ class MetadataResolver<Track : Any, Remote : Any>(
             }
 
             logcat(LogPriority.DEBUG) {
-                "Metadata search selected for ${adapter.contentType} ${target.mediaId} ${adapter.source}: remoteId=${adapter.remoteId(best.remote)}, query='${best.searchQuery}', score=${best.score}"
+                buildString {
+                    append("Metadata search selected for ")
+                    append(adapter.contentType)
+                    append(" ")
+                    append(target.mediaId)
+                    append(" ")
+                    append(adapter.source)
+                    append(": remoteId=")
+                    append(adapter.remoteId(best.remote))
+                    append(", query='")
+                    append(best.searchQuery)
+                    append("', score=")
+                    append(best.score)
+                }
             }
 
             val metadata = adapter.map(
@@ -190,7 +203,7 @@ class MetadataResolver<Track : Any, Remote : Any>(
         }
 
         val bestMatch = scoredByTitles.maxWithOrNull(
-            compareByDescending<ScoreMatch> { it.selectionScore }
+            compareByDescending<ScoreMatch> { it.selectionScore },
         ) ?: ScoreMatch(
             score = 0,
             query = query,
@@ -312,5 +325,4 @@ class MetadataResolver<Track : Any, Remote : Any>(
         val selectionScore: Int,
         val remoteOrder: Int,
     )
-
 }

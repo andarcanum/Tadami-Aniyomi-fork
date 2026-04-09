@@ -1,5 +1,6 @@
-﻿package eu.kanade.tachiyomi.ui.reader.novel
+package eu.kanade.tachiyomi.ui.reader.novel
 
+import android.app.Application
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginPackage
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoEntry
@@ -9,8 +10,8 @@ import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationService
@@ -65,6 +66,7 @@ import uy.kohesive.injekt.api.get
 import java.util.Collections
 
 class NovelReaderScreenModelTest {
+    private class TestApplication : Application()
     private val activeScreenModels = mutableListOf<NovelReaderScreenModel>()
     private val syncNovelChaptersWithSource = mockk<SyncNovelChaptersWithSource>(relaxed = true)
     private val geminiTranslationService = mockk<GeminiTranslationService>(relaxed = true)
@@ -83,6 +85,13 @@ class NovelReaderScreenModelTest {
     }
 
     companion object {
+        @JvmStatic
+        @BeforeAll
+        fun setupInjektApplication() {
+            runCatching { Injekt.get<Application>() }
+                .getOrElse { Injekt.addSingleton(fullType<Application>(), TestApplication()) }
+        }
+
         @JvmStatic
         @BeforeAll
         fun setupMainDispatcher() {
@@ -2391,6 +2400,8 @@ class NovelReaderScreenModelTest {
     }
 
     private fun ensureReaderScreenModelDependencies() {
+        runCatching { Injekt.get<Application>() }
+            .getOrElse { Injekt.addSingleton(fullType<Application>(), TestApplication()) }
         runCatching { Injekt.get<NetworkHelper>() }
             .getOrElse {
                 val networkHelper = mockk<NetworkHelper>()

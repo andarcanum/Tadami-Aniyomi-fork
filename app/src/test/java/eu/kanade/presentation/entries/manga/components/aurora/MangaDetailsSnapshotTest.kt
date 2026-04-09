@@ -1,5 +1,7 @@
 package eu.kanade.presentation.entries.manga.components.aurora
 
+import eu.kanade.tachiyomi.source.model.SManga
+import eu.kanade.tachiyomi.source.model.UpdateStrategy
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
@@ -9,8 +11,6 @@ import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.metadata.model.ExternalMetadata
 import tachiyomi.domain.metadata.model.MetadataContentType
 import tachiyomi.domain.metadata.model.MetadataSource
-import eu.kanade.tachiyomi.source.model.SManga
-import eu.kanade.tachiyomi.source.model.UpdateStrategy
 
 class MangaDetailsSnapshotTest {
 

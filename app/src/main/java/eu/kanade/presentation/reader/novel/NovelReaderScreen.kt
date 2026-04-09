@@ -96,8 +96,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -121,7 +121,6 @@ import androidx.compose.ui.graphics.ImageShader
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -159,17 +158,6 @@ import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationUiState
 import eu.kanade.tachiyomi.ui.reader.novel.encodeNativeScrollProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodePageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodeWebScrollProgressPercent
-import eu.kanade.tachiyomi.ui.reader.novel.tts.NativeScrollTtsNavigationAdapter
-import eu.kanade.tachiyomi.ui.reader.novel.tts.NativeScrollTtsNavigator
-import eu.kanade.tachiyomi.ui.reader.novel.tts.PageReaderTtsNavigationAdapter
-import eu.kanade.tachiyomi.ui.reader.novel.tts.PageReaderTtsNavigator
-import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsNavigationAnchor
-import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPageReaderPosition
-import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPageSlice
-import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackStartRequest
-import eu.kanade.tachiyomi.ui.reader.novel.tts.WebViewTtsNavigationAdapter
-import eu.kanade.tachiyomi.ui.reader.novel.tts.WebViewTtsNavigator
-import eu.kanade.tachiyomi.ui.reader.novel.tts.resolvePlainPageReaderTtsAnchors
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
@@ -183,6 +171,17 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationStylePreset
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPrivateBridge
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptModifiers
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePresets
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NativeScrollTtsNavigationAdapter
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NativeScrollTtsNavigator
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsNavigationAnchor
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPageReaderPosition
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPageSlice
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackStartRequest
+import eu.kanade.tachiyomi.ui.reader.novel.tts.PageReaderTtsNavigationAdapter
+import eu.kanade.tachiyomi.ui.reader.novel.tts.PageReaderTtsNavigator
+import eu.kanade.tachiyomi.ui.reader.novel.tts.WebViewTtsNavigationAdapter
+import eu.kanade.tachiyomi.ui.reader.novel.tts.WebViewTtsNavigator
+import eu.kanade.tachiyomi.ui.reader.novel.tts.resolvePlainPageReaderTtsAnchors
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
@@ -1167,7 +1166,10 @@ fun NovelReaderScreen(
                             ?: 0
                     }
                 }
-                useRichNativeScroll -> textListState.firstVisibleItemIndex.coerceIn(0, richScrollBlocks.lastIndex.coerceAtLeast(0))
+                useRichNativeScroll -> textListState.firstVisibleItemIndex.coerceIn(
+                    0,
+                    richScrollBlocks.lastIndex.coerceAtLeast(0),
+                )
                 else -> textListState.firstVisibleItemIndex.coerceIn(0, scrollContentBlocks.lastIndex.coerceAtLeast(0))
             }
         }
@@ -1247,7 +1249,9 @@ fun NovelReaderScreen(
     }
     LaunchedEffect(currentTtsBlockIndex, pendingProgrammaticTtsBlockIndex, suppressManualTtsPauseUntilMs) {
         val pendingBlockIndex = pendingProgrammaticTtsBlockIndex ?: return@LaunchedEffect
-        if (currentTtsBlockIndex == pendingBlockIndex || SystemClock.elapsedRealtime() >= suppressManualTtsPauseUntilMs) {
+        if (currentTtsBlockIndex == pendingBlockIndex ||
+            SystemClock.elapsedRealtime() >= suppressManualTtsPauseUntilMs
+        ) {
             pendingProgrammaticTtsBlockIndex = null
             suppressManualTtsPauseUntilMs = 0L
         }
@@ -3333,10 +3337,10 @@ fun NovelReaderScreen(
                                 top = MaterialTheme.padding.medium,
                             ),
                     )
-                    
+
                     androidx.compose.material3.HorizontalDivider(
                         modifier = Modifier.padding(top = MaterialTheme.padding.medium),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
                     )
                 }
                 Row(

@@ -12,12 +12,14 @@ class SourceMangaRatingSourceMatcherTest {
 
     @Test
     fun `resolveFamily returns inkStory for inkstory hosts`() {
-        SourceMangaRatingSourceMatcher.resolveFamily("AnySource", "https://api.inkstory.net/v2") shouldBe SourceMangaRatingFamily.INK_STORY
+        SourceMangaRatingSourceMatcher.resolveFamily("AnySource", "https://api.inkstory.net/v2") shouldBe
+            SourceMangaRatingFamily.INK_STORY
     }
 
     @Test
     fun `resolveFamily returns madara for madara classes`() {
-        SourceMangaRatingSourceMatcher.resolveFamily("Golden Manga", "https://goldenmanga.net", "Madara") shouldBe SourceMangaRatingFamily.MADARA
+        SourceMangaRatingSourceMatcher.resolveFamily("Golden Manga", "https://goldenmanga.net", "Madara") shouldBe
+            SourceMangaRatingFamily.MADARA
     }
 
     @Test

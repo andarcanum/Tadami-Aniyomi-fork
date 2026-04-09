@@ -10,8 +10,8 @@ import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreenModel
 import eu.kanade.tachiyomi.ui.reader.novel.PageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodePageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -23,18 +23,18 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.junit.Test
+import tachiyomi.core.common.preference.Preference
+import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.domain.entries.novel.interactor.GetNovel
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.entries.novel.model.NovelUpdate
+import tachiyomi.domain.entries.novel.repository.NovelRepository
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.source.novel.model.StubNovelSource
 import tachiyomi.domain.source.novel.service.NovelSourceManager
-import tachiyomi.core.common.preference.Preference
-import tachiyomi.core.common.preference.PreferenceStore
-import tachiyomi.domain.entries.novel.repository.NovelRepository
 
 class NovelTtsChapterRepositoryTest {
 
@@ -67,7 +67,8 @@ class NovelTtsChapterRepositoryTest {
 
             val snapshot = repository.loadChapterSnapshot(current.id)
             val titleBlock = snapshot.contentBlocks[0].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Text>()
-            val firstParagraphBlock = snapshot.contentBlocks[1].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Text>()
+            val firstParagraphBlock =
+                snapshot.contentBlocks[1].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Text>()
             val imageBlock = snapshot.contentBlocks[2].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Image>()
 
             snapshot.chapter.id shouldBe current.id
@@ -173,7 +174,8 @@ class NovelTtsChapterRepositoryTest {
         private val chapterHtml: String,
     ) : NovelSourceManager {
         override val isInitialized = MutableStateFlow(true)
-        override val catalogueSources = MutableStateFlow(emptyList<eu.kanade.tachiyomi.novelsource.NovelCatalogueSource>())
+        override val catalogueSources =
+            MutableStateFlow(emptyList<eu.kanade.tachiyomi.novelsource.NovelCatalogueSource>())
 
         override fun get(sourceKey: Long): NovelSource? =
             if (sourceKey == sourceId) {
@@ -216,11 +218,17 @@ class NovelTtsChapterRepositoryTest {
         private val values = mutableMapOf<String, Any?>()
         private val flows = mutableMapOf<String, MutableStateFlow<Any?>>()
 
-        override fun getString(key: String, defaultValue: String): Preference<String> = createPreference(key, defaultValue)
+        override fun getString(
+            key: String,
+            defaultValue: String,
+        ): Preference<String> = createPreference(key, defaultValue)
         override fun getLong(key: String, defaultValue: Long): Preference<Long> = createPreference(key, defaultValue)
         override fun getInt(key: String, defaultValue: Int): Preference<Int> = createPreference(key, defaultValue)
         override fun getFloat(key: String, defaultValue: Float): Preference<Float> = createPreference(key, defaultValue)
-        override fun getBoolean(key: String, defaultValue: Boolean): Preference<Boolean> = createPreference(key, defaultValue)
+        override fun getBoolean(
+            key: String,
+            defaultValue: Boolean,
+        ): Preference<Boolean> = createPreference(key, defaultValue)
         override fun getStringSet(key: String, defaultValue: Set<String>): Preference<Set<String>> =
             createPreference(key, defaultValue)
 

@@ -20,9 +20,9 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
-import eu.kanade.presentation.components.resolveAuroraPosterModelPair
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.components.resolveAuroraCoverModel
+import eu.kanade.presentation.components.resolveAuroraPosterModelPair
 import eu.kanade.presentation.entries.components.aurora.applyAuroraBlurBackground
 import eu.kanade.presentation.entries.components.aurora.auroraPosterBackgroundSpec
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter

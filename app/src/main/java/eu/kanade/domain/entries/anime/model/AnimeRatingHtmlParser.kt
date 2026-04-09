@@ -124,7 +124,14 @@ internal object AnimeRatingHtmlParser {
         val bestCandidate = selectBestCandidate(candidates)
         if (bestCandidate != null) {
             debugLog(
-                "parse: selected source=${bestCandidate.source} value=${bestCandidate.value.previewFloat()} evidence=${bestCandidate.evidence.previewForLog()}",
+                buildString {
+                    append("parse: selected source=")
+                    append(bestCandidate.source)
+                    append(" value=")
+                    append(bestCandidate.value.previewFloat())
+                    append(" evidence=")
+                    append(bestCandidate.evidence.previewForLog())
+                },
             )
             return bestCandidate.value
         }
@@ -151,7 +158,13 @@ internal object AnimeRatingHtmlParser {
                                 candidates += RatingCandidate(
                                     value = normalized,
                                     source = CandidateSource.STRUCTURED_META,
-                                    evidence = "${element.tagName()}=${rawValue.previewForLog()} scale=${(scaleHint ?: match.scale)?.toString().orEmpty()}",
+                                    evidence = buildString {
+                                        append(element.tagName())
+                                        append("=")
+                                        append(rawValue.previewForLog())
+                                        append(" scale=")
+                                        append((scaleHint ?: match.scale)?.toString().orEmpty())
+                                    },
                                     order = index,
                                     scale = scaleHint ?: match.scale,
                                 )
@@ -258,9 +271,19 @@ internal object AnimeRatingHtmlParser {
                 }
         }
 
-        document.select(
-            "[class*=rating], [id*=rating], [class*=score], [id*=score], [class*=star], [id*=star], [aria-label*=rating], [title*=rating], [aria-label*=score], [title*=score]",
-        ).forEachIndexed { index, element ->
+        val ratingSelectors = listOf(
+            "[class*=rating]",
+            "[id*=rating]",
+            "[class*=score]",
+            "[id*=score]",
+            "[class*=star]",
+            "[id*=star]",
+            "[aria-label*=rating]",
+            "[title*=rating]",
+            "[aria-label*=score]",
+            "[title*=score]",
+        ).joinToString(", ")
+        document.select(ratingSelectors).forEachIndexed { index, element ->
             val candidateText = element.text()
                 .ifBlank { element.attr("title") }
                 .ifBlank { element.attr("aria-label") }
@@ -275,7 +298,12 @@ internal object AnimeRatingHtmlParser {
                             candidates += RatingCandidate(
                                 value = normalized,
                                 source = CandidateSource.SEMANTIC_WIDGET,
-                                evidence = "class=${element.className().previewForLog()} text=${candidateText.previewForLog()}",
+                                evidence = buildString {
+                                    append("class=")
+                                    append(element.className().previewForLog())
+                                    append(" text=")
+                                    append(candidateText.previewForLog())
+                                },
                                 order = 1000 + index,
                                 scale = match.scale,
                             )
@@ -388,7 +416,13 @@ internal object AnimeRatingHtmlParser {
     private fun detectScaleHint(element: Element): Int? {
         var current: Element? = element.parent()
         while (current != null) {
-            current.selectFirst("meta[itemprop=bestRating], meta[property=rating:best], meta[name=bestRating]")?.attr("content")
+            current.selectFirst(
+                listOf(
+                    "meta[itemprop=bestRating]",
+                    "meta[property=rating:best]",
+                    "meta[name=bestRating]",
+                ).joinToString(", "),
+            )?.attr("content")
                 ?.replace(',', '.')
                 ?.toFloatOrNull()
                 ?.toInt()
@@ -502,7 +536,10 @@ internal object AnimeRatingHtmlParser {
     private fun parseJsonLdAggregateRating(payload: String): Float? {
         val root = runCatching { json.parseToJsonElement(payload) }.getOrNull() ?: return null
         val ratingObject = root.findAggregateRatingObject() ?: return null
-        val ratingValue = ratingObject.jsonPrimitiveFloat("ratingValue") ?: ratingObject.jsonPrimitiveFloat("score") ?: return null
+        val ratingValue =
+            ratingObject.jsonPrimitiveFloat("ratingValue")
+                ?: ratingObject.jsonPrimitiveFloat("score")
+                ?: return null
         val bestRating = ratingObject.jsonPrimitiveFloat("bestRating")
         return normalizeRating(ratingValue, bestRating?.toInt())
     }

@@ -212,5 +212,3 @@ object AnimeStatusFormatter {
         }
     }
 }
-
-

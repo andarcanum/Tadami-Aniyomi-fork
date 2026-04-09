@@ -11,8 +11,8 @@ import eu.kanade.presentation.entries.components.isCompleted
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.metadata.model.ExternalMetadata
-import kotlin.math.roundToInt
 import java.util.Locale
+import kotlin.math.roundToInt
 
 @Immutable
 data class MangaProgressSnapshot(

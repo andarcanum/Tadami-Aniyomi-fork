@@ -1,18 +1,18 @@
 package eu.kanade.tachiyomi.data.coil
 
+import coil3.fetch.SourceFetchResult
 import eu.kanade.tachiyomi.network.interceptor.CoverRecoveryInterceptor
 import eu.kanade.tachiyomi.network.interceptor.CoverRequestPolicy
 import kotlinx.coroutines.test.runTest
-import coil3.fetch.SourceFetchResult
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okio.FileSystem
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.io.IOException
 

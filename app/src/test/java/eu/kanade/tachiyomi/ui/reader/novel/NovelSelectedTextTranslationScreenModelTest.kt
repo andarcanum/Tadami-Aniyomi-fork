@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.novel
 
+import android.app.Application
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginPackage
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
@@ -49,8 +50,12 @@ import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.source.novel.model.StubNovelSource
 import tachiyomi.domain.source.novel.service.NovelSourceManager
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.fullType
+import uy.kohesive.injekt.api.get
 
 class NovelSelectedTextTranslationScreenModelTest {
+    private class TestApplication : Application()
 
     private val activeScreenModels = mutableListOf<NovelReaderScreenModel>()
     private val syncNovelChaptersWithSource = mockk<SyncNovelChaptersWithSource>(relaxed = true)
@@ -69,6 +74,13 @@ class NovelSelectedTextTranslationScreenModelTest {
     }
 
     companion object {
+        @JvmStatic
+        @BeforeAll
+        fun setupInjektApplication() {
+            runCatching { Injekt.get<Application>() }
+                .getOrElse { Injekt.addSingleton(fullType<Application>(), TestApplication()) }
+        }
+
         @JvmStatic
         @BeforeAll
         fun setupMainDispatcher() {

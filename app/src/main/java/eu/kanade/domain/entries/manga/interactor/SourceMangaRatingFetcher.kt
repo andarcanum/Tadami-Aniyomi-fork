@@ -1,15 +1,15 @@
 package eu.kanade.domain.entries.manga.interactor
 
 import android.util.Log
-import eu.kanade.domain.entries.rating.EntryRatingCache
 import eu.kanade.domain.entries.manga.model.SourceMangaHtmlRatingParser
 import eu.kanade.domain.entries.manga.model.SourceMangaRatingSourceMatcher
 import eu.kanade.domain.entries.manga.model.toSManga
+import eu.kanade.domain.entries.rating.EntryRatingCache
+import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.source.MangaSource
 import eu.kanade.tachiyomi.source.online.HttpSource
-import eu.kanade.tachiyomi.network.awaitSuccess
-import tachiyomi.domain.entries.manga.model.Manga
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import tachiyomi.domain.entries.manga.model.Manga
 import uy.kohesive.injekt.injectLazy
 import java.util.Locale
 

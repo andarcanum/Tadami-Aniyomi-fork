@@ -1,7 +1,7 @@
 package eu.kanade.domain.entries.manga.model
 
-import io.kotest.matchers.shouldBe
 import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 
 class SourceMangaHtmlRatingParserTest {
@@ -91,7 +91,13 @@ class SourceMangaHtmlRatingParserTest {
             </html>
         """.trimIndent()
 
-        SourceMangaHtmlRatingParser.parse("Manga Kiss", "https://mangakiss.org", sourceClassName = "Madara", html = html) shouldBe 8.6f
+        SourceMangaHtmlRatingParser.parse(
+            "Manga Kiss",
+            "https://mangakiss.org",
+            sourceClassName = "Madara",
+            html = html,
+        ) shouldBe
+            8.6f
     }
 
     @Test
