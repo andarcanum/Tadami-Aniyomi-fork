@@ -175,9 +175,9 @@ class NovelReaderScreen(
                         }
                     }
                 }
-                DisposableEffect(successState.ttsUiState.playbackState) {
-                    val shouldRunService = successState.ttsUiState.playbackState == NovelTtsPlaybackState.PLAYING ||
-                        successState.ttsUiState.playbackState == NovelTtsPlaybackState.PAUSED
+                DisposableEffect(successState.ttsUiState.playbackState, successState.readerSettings.ttsEnabled) {
+                    val shouldRunService = successState.readerSettings.ttsEnabled && (successState.ttsUiState.playbackState == NovelTtsPlaybackState.PLAYING ||
+                        successState.ttsUiState.playbackState == NovelTtsPlaybackState.PAUSED)
                     val serviceIntent = Intent(context, NovelTtsPlaybackService::class.java)
                     if (shouldRunService) {
                         ContextCompat.startForegroundService(context, serviceIntent)
