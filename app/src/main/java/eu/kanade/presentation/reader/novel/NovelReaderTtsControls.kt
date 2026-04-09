@@ -331,49 +331,51 @@ internal fun NovelReaderTtsControls(
 
     var showOptions by remember { mutableStateOf(false) }
 
-    Card(modifier = modifier) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+    ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = stringResource(AYMR.strings.novel_reader_tts_section),
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                IconButton(onClick = { showOptions = true }, modifier = Modifier.size(32.dp)) {
-                    Icon(
-                        imageVector = Icons.Outlined.SettingsVoice,
-                        contentDescription = stringResource(AYMR.strings.novel_reader_tts_voice_settings),
-                    )
-                }
-            }
             uiState.activeUtteranceText?.takeIf { it.isNotBlank() }?.let { utteranceText ->
                 Text(
                     text = utteranceText,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
                     maxLines = 2,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 8.dp)
                 )
             }
             resolveNovelReaderTtsSummaryLine(uiState, optionsSnapshot, textSnapshot)?.let { summary ->
                 Text(
                     text = summary,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
             }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            IconButton(onClick = onStop) {
+                Icon(Icons.Outlined.Stop, contentDescription = stringResource(AYMR.strings.novel_reader_tts_action_stop))
+            }
+            
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 IconButton(onClick = onSkipPrevious) {
                     Icon(Icons.Outlined.SkipPrevious, contentDescription = stringResource(AYMR.strings.novel_reader_tts_action_previous))
                 }
+                
                 IconButton(onClick = onTogglePlayback) {
                     Icon(
                         imageVector = if (snapshot.primaryActionIsPause) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
@@ -382,22 +384,31 @@ internal fun NovelReaderTtsControls(
                         } else {
                             stringResource(AYMR.strings.novel_reader_tts_action_play)
                         },
+                        modifier = Modifier.size(32.dp),
+                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
-                IconButton(onClick = onStop) {
-                    Icon(Icons.Outlined.Stop, contentDescription = stringResource(AYMR.strings.novel_reader_tts_action_stop))
-                }
+
                 IconButton(onClick = onSkipNext) {
                     Icon(Icons.Outlined.SkipNext, contentDescription = stringResource(AYMR.strings.novel_reader_tts_action_next))
                 }
             }
-            uiState.errorMessage?.takeIf { it.isNotBlank() }?.let { errorMessage ->
-                Text(
-                    text = errorMessage,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
+            
+            IconButton(onClick = { showOptions = true }) {
+                Icon(
+                    imageVector = Icons.Outlined.SettingsVoice,
+                    contentDescription = stringResource(AYMR.strings.novel_reader_tts_voice_settings),
                 )
             }
+        }
+        
+        uiState.errorMessage?.takeIf { it.isNotBlank() }?.let { errorMessage ->
+            Text(
+                text = errorMessage,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
         }
     }
 

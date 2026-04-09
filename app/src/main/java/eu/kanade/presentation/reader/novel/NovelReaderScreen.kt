@@ -3316,7 +3316,7 @@ fun NovelReaderScreen(
                 if (state.readerSettings.ttsEnabled) {
                     NovelReaderTtsControls(
                         uiState = state.ttsUiState,
-                    onTogglePlayback = { onToggleTtsPlayback(currentTtsStartRequest) },
+                        onTogglePlayback = { onToggleTtsPlayback(currentTtsStartRequest) },
                         onStop = onStopTtsPlayback,
                         onSkipPrevious = onSkipPreviousTts,
                         onSkipNext = onSkipNextTts,
@@ -3332,6 +3332,11 @@ fun NovelReaderScreen(
                                 end = MaterialTheme.padding.medium,
                                 top = MaterialTheme.padding.medium,
                             ),
+                    )
+                    
+                    androidx.compose.material3.HorizontalDivider(
+                        modifier = Modifier.padding(top = MaterialTheme.padding.medium),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
                     )
                 }
                 Row(
