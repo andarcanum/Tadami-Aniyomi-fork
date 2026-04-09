@@ -186,6 +186,13 @@ class NovelReaderScreen(
                     }
                     onDispose { }
                 }
+                DisposableEffect(successState.readerSettings.ttsEnabled) {
+                    onDispose {
+                        if (!successState.readerSettings.ttsEnabled) {
+                            context.stopService(Intent(context, NovelTtsPlaybackService::class.java))
+                        }
+                    }
+                }
                 NovelReaderScreen(
                     state = successState,
                     showReaderUi = showReaderUi,
