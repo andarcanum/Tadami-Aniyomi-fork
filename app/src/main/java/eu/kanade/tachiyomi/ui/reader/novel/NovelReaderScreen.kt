@@ -147,8 +147,8 @@ class NovelReaderScreen(
             }
             is NovelReaderScreenModel.State.Success -> {
                 val successState = currentState
-                DisposableEffect(successState.chapter.id) {
-                    val serviceIntent = Intent(context, NovelTtsPlaybackService::class.java)
+                DisposableEffect(successState.chapter.id, successState.readerSettings.ttsEnabled) {
+                    var isBound = false
                     val connection = object : ServiceConnection {
                         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
                             val binder = service as? NovelTtsPlaybackService.LocalBinder ?: return
@@ -161,10 +161,18 @@ class NovelReaderScreen(
                             ttsPlaybackService = null
                         }
                     }
-                    context.bindService(serviceIntent, connection, Context.BIND_AUTO_CREATE)
+
+                    if (successState.readerSettings.ttsEnabled) {
+                        val serviceIntent = Intent(context, NovelTtsPlaybackService::class.java)
+                        context.bindService(serviceIntent, connection, Context.BIND_AUTO_CREATE)
+                        isBound = true
+                    }
+
                     onDispose {
-                        runCatching { context.unbindService(connection) }
-                        ttsPlaybackService = null
+                        if (isBound) {
+                            runCatching { context.unbindService(connection) }
+                            ttsPlaybackService = null
+                        }
                     }
                 }
                 DisposableEffect(successState.ttsUiState.playbackState) {
