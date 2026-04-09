@@ -578,6 +578,28 @@ private fun GeneralTab(
                             )
                         },
                     )
+                    LnReaderSliderRow(
+                        label = stringResource(AYMR.strings.novel_reader_page_turn_activation_zone),
+                        valueText = { value ->
+                            resolveNovelPageTurnSliderLabel(
+                                value = resolveNovelPageTurnActivationZoneSliderValue(value.roundToInt()),
+                                entries = pageTurnActivationZoneEntries,
+                            )
+                        },
+                        committedValue = novelPageTurnActivationZoneSliderIndex(
+                            settings.pageTurnActivationZone,
+                        ).toFloat(),
+                        range = 0f..(pageTurnActivationZoneEntries.size - 1).toFloat(),
+                        steps = pageTurnActivationZoneEntries.size - 2,
+                        onCommit = { value ->
+                            update(
+                                resolveNovelPageTurnActivationZoneSliderValue(value.roundToInt()),
+                                { o, v -> o.copy(pageTurnActivationZone = v) },
+                                { preferences.pageTurnActivationZone().set(it) },
+                                dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
+                            )
+                        },
+                    )
                 }
                 if (showPageTurnTuning) {
                     TextPreferenceWidget(
