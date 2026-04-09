@@ -64,8 +64,8 @@ import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsEngine
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsEngineRegistry
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsHighlightEstimator
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackProgressListener
-import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackState
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackServiceRuntime
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackState
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsResolvedChapter
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsSession
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsSessionController
