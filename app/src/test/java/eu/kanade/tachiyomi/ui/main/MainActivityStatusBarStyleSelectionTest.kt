@@ -85,10 +85,10 @@ class MainActivityStatusBarStyleSelectionTest {
     }
 
     @Test
-    fun `novel exit path keeps the home shell status bar contract for light and dark themes`() {
+    fun `novel reader maintains edge-to-edge for proper UI handling`() {
         shouldMainActivityApplyEdgeToEdge(
             eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen(chapterId = 1L),
-        ) shouldBe false
+        ) shouldBe true
 
         resolveMainStatusBarStyleMode(
             isHomeScreen = true,

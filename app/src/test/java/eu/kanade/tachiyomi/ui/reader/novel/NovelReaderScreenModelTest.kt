@@ -2091,7 +2091,13 @@ class NovelReaderScreenModelTest {
             }
 
             screenModel.toggleChapterBookmark()
-            yield()
+
+            // Wait for the async repository update to complete
+            withTimeout(1_000) {
+                while (chapterRepo.lastUpdate == null) {
+                    yield()
+                }
+            }
 
             chapterRepo.lastUpdate?.bookmark shouldBe true
             val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
