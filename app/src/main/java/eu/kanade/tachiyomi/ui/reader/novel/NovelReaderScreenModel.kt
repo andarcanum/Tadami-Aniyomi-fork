@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.novel
 import android.app.Application
+import android.os.SystemClock
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.entries.novel.model.toSNovel
@@ -21,6 +22,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderOverride
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationStylePreset
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceModelsService
@@ -48,6 +50,28 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePres
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
+import eu.kanade.presentation.reader.novel.NovelReaderTtsChapterHandoffPolicy
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterRepository
+import eu.kanade.tachiyomi.ui.reader.novel.tts.AndroidNovelTtsEngineInfoSource
+import eu.kanade.tachiyomi.ui.reader.novel.tts.AndroidNovelTtsPlatformFactory
+import eu.kanade.tachiyomi.ui.reader.novel.tts.AndroidNovelTtsAudioFocusBridge
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelReaderTtsUiState
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsAudioFocusManager
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterModelBuildOptions
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterModelBuilder
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsEngine
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsEngineRegistry
+import eu.kanade.tachiyomi.ui.reader.novel.tts.resolveNovelTtsVoiceSelection
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsHighlightEstimator
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackServiceRuntime
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackProgressListener
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsResolvedChapter
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsSession
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsSessionController
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsSessionUiState
+import eu.kanade.tachiyomi.ui.reader.novel.tts.SharedNovelTtsSessionStore
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsTextSource
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsWordTokenizer
 import eu.kanade.tachiyomi.ui.reader.novel.translation.buildNovelSelectedTextTranslationRequestKey
 import eu.kanade.tachiyomi.ui.reader.novel.translation.formatGeminiThrowableForLog
 import eu.kanade.tachiyomi.util.system.isNightMode
@@ -58,6 +82,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -97,6 +122,7 @@ import java.util.Date
 import java.util.LinkedHashMap
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import kotlin.math.roundToInt
 class NovelReaderScreenModel(
     private val chapterId: Long,
     private val novelChapterRepository: NovelChapterRepository = Injekt.get(),
@@ -107,6 +133,14 @@ class NovelReaderScreenModel(
     private val pluginStorage: NovelPluginStorage = Injekt.get(),
     private val historyRepository: NovelHistoryRepository? = null,
     private val novelReaderPreferences: NovelReaderPreferences = Injekt.get(),
+    private val ttsChapterRepository: NovelTtsChapterRepository = NovelTtsChapterRepository(
+        novelChapterRepository = novelChapterRepository,
+        getNovel = getNovel,
+        sourceManager = sourceManager,
+        novelDownloadManager = novelDownloadManager,
+        pluginStorage = pluginStorage,
+        novelReaderPreferences = novelReaderPreferences,
+    ),
     private val eventBus: AchievementEventBus? = runCatching { Injekt.get<AchievementEventBus>() }.getOrNull(),
     private val isSystemDark: () -> Boolean = { Injekt.get<Application>().isNightMode() },
     private val geminiTranslationService: GeminiTranslationService = run {
@@ -198,7 +232,48 @@ class NovelReaderScreenModel(
             AllowAllContentPrefetchEnvironment
         },
     )
+    private val application = Injekt.get<Application>()
+    private val ttsChapterModelBuilder = NovelTtsChapterModelBuilder(NovelTtsWordTokenizer)
+    private val ttsHighlightEstimator = NovelTtsHighlightEstimator()
+    private val ttsEngineRegistry = NovelTtsEngineRegistry(AndroidNovelTtsEngineInfoSource(application))
+    private val ttsEngine = NovelTtsEngine(AndroidNovelTtsPlatformFactory(application))
+    private val ttsAudioFocusManager = NovelTtsAudioFocusManager(
+        bridge = AndroidNovelTtsAudioFocusBridge(application),
+        onPauseRequested = {
+            screenModelScope.launch {
+                ttsSessionController.pause()
+            }
+        },
+    )
+    private val ttsSessionStore = SharedNovelTtsSessionStore
+    private val ttsSessionController = NovelTtsSessionController(
+        chapterSource = object : eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterSource {
+            override suspend fun loadChapter(chapterId: Long): NovelTtsResolvedChapter? {
+                return resolveTtsChapter(chapterId)
+            }
+        },
+        speaker = object : eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackSpeaker {
+            override suspend fun speak(
+                utterance: eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsUtterance,
+                flushQueue: Boolean,
+                startWordIndex: Int,
+            ) {
+                val resumedText = utterance.wordRanges
+                    .getOrNull(startWordIndex.coerceAtLeast(0))
+                    ?.startChar
+                    ?.let { startChar -> utterance.text.substring(startChar) }
+                    ?: utterance.text
+                ttsEngine.speak(utterance.id, resumedText, flushQueue)
+            }
+
+            override fun stop() {
+                ttsEngine.stop()
+            }
+        },
+        sessionStore = ttsSessionStore,
+    )
     private var settingsJob: Job? = null
+    private var ttsWordProgressJob: Job? = null
     private var rawHtml: String? = null
     private var currentNovel: Novel? = null
     private var currentChapter: NovelChapter? = null
@@ -240,6 +315,9 @@ class NovelReaderScreenModel(
     private var googleLogs: List<String> = emptyList()
     private var googleRateLimited: Boolean = false
     private val googleSessionCache = GoogleTranslationSessionCache()
+    private var ttsUiState: NovelReaderTtsUiState = NovelReaderTtsUiState()
+    private var initializedTtsEnginePackage: String? = null
+    private var pendingTtsStartRequest: eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackStartRequest? = null
 
     private var airforceModelIds: List<String> = emptyList()
     private var isAirforceModelsLoading: Boolean = false
@@ -269,48 +347,60 @@ class NovelReaderScreenModel(
         historyRepository ?: runCatching { Injekt.get<NovelHistoryRepository>() }.getOrNull()
     }
     init {
+        ttsEngine.setProgressListener(
+            object : NovelTtsPlaybackProgressListener {
+                override fun onUtteranceStart(utteranceId: String) {
+                    screenModelScope.launch {
+                        handleTtsUtteranceStarted(utteranceId)
+                    }
+                }
+
+                override fun onUtteranceDone(utteranceId: String) {
+                    screenModelScope.launch {
+                        ttsWordProgressJob?.cancel()
+                        ttsSessionController.onUtteranceCompleted(utteranceId)
+                    }
+                }
+
+                override fun onUtteranceError(utteranceId: String) {
+                    screenModelScope.launch {
+                        ttsWordProgressJob?.cancel()
+                        ttsUiState = ttsUiState.copy(errorMessage = "Failed to speak utterance")
+                        refreshTtsUiState()
+                    }
+                }
+            },
+        )
+        screenModelScope.launch {
+            refreshTtsEngines()
+        }
+        screenModelScope.launch {
+            ttsSessionController.state.collect { sessionState ->
+                onTtsSessionStateChanged(sessionState)
+            }
+        }
         screenModelScope.launch {
             loadChapter()
         }
     }
     private suspend fun loadChapter() {
-        val chapter = withContext(Dispatchers.IO) {
-            novelChapterRepository.getChapterById(chapterId)
+        val snapshot = try {
+            ttsChapterRepository.loadChapterSnapshot(chapterId)
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e) { "Failed to load novel chapter snapshot" }
+            return setError(e.message)
         }
-            ?: return setError("Chapter not found")
-        val novel = withContext(Dispatchers.IO) {
-            getNovel.await(chapter.novelId)
-        }
-            ?: return setError("Novel not found")
+        val chapter = snapshot.chapter
+        val novel = snapshot.novel
         val source = sourceManager.get(novel.source)
             ?: return setError("Source not found")
         clearChapterTransientState()
         currentNovel = novel
         currentChapter = chapter
-        chapterOrderList = loadChapterOrderList(novel.id)
-        val html = try {
-            val cacheReadChapters = novelReaderPreferences.cacheReadChapters().get()
-            withContext(Dispatchers.IO) {
-                contentPrefetchService.resolveNovelChapterText(
-                    novel = novel,
-                    chapter = chapter,
-                    source = source,
-                    downloadManager = novelDownloadManager,
-                    cacheReadChapters = cacheReadChapters,
-                )
-            }
-        } catch (e: Exception) {
-            logcat(LogPriority.ERROR, e) { "Failed to load novel chapter text" }
-            return setError(e.message)
-        }
-        val pluginPackage = withContext(Dispatchers.IO) {
-            pluginStorage.getAll()
-                .firstOrNull { it.entry.id.hashCode().toLong() == novel.source }
-        }
-        val sourceSiteUrl = (source as? NovelSiteSource)?.siteUrl
+        chapterOrderList = snapshot.chapterOrderList
         rawHtml = withContext(Dispatchers.Default) {
             val normalizedChapterHtml = prependChapterHeadingIfMissing(
-                rawHtml = html.normalizeStructuredChapterPayload(),
+                rawHtml = snapshot.rawHtml.normalizeStructuredChapterPayload(),
                 chapterName = chapter.name,
             )
             val sanitizedChapterHtml = sanitizeChapterHtmlForReader(normalizedChapterHtml)
@@ -318,32 +408,20 @@ class NovelReaderScreenModel(
         }
         lastSavedProgress = chapter.lastPageRead
         lastSavedRead = chapter.read
-        val savedNativeProgress = decodeNativeScrollProgress(chapter.lastPageRead)
-        val savedWebProgress = decodeWebScrollProgressPercent(chapter.lastPageRead)
-        val savedPageReaderProgress = decodePageReaderProgress(chapter.lastPageRead)
-        initialProgressIndex = savedNativeProgress?.index
-            ?: savedPageReaderProgress?.index
-            ?: savedWebProgress
-            ?: chapter.lastPageRead.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
+        initialProgressIndex = snapshot.lastSavedIndex
         hasProgressChanged = false
         hasTriggeredNextChapterPrefetch = false
         hasTriggeredNextChapterGeminiPrefetch = false
         hasTriggeredGeminiAutoStart = false
-        customCss = pluginPackage?.customCss?.toString(Charsets.UTF_8)
-        customJs = pluginPackage?.customJs?.toString(Charsets.UTF_8)
-        pluginSite = pluginPackage?.entry?.site ?: sourceSiteUrl
-        chapterWebUrl = withContext(Dispatchers.IO) {
-            resolveChapterWebUrl(
-                source = source,
-                chapterUrl = chapter.url,
-                novelUrl = novel.url,
-                pluginSite = pluginSite,
-            )
-        }
+        customCss = snapshot.customCss
+        customJs = snapshot.customJs
+        pluginSite = snapshot.pluginSite
+        chapterWebUrl = snapshot.chapterWebUrl
         val initialSettings = novelReaderPreferences.resolveSettings(novel.source)
         mutableState.value = State.Loading(initialSettings)
+        if (rawHtml == null) return setError("Chapter content is empty")
         parseAndCacheContentBlocks(
-            rawHtml = rawHtml ?: return setError("Chapter content is empty"),
+            rawHtml = rawHtml.orEmpty(),
             chapterWebUrl = chapterWebUrl,
             novelUrl = novel.url,
             pluginSite = pluginSite,
@@ -365,12 +443,18 @@ class NovelReaderScreenModel(
                     }
                     skippedInitialEmission = true
                     updateContent(settings)
+                    initializeTtsRuntime()
                     maybeAutoStartGeminiTranslation(settings)
                     maybeAutoStartGoogleTranslation()
                 }
         }
         saveHistorySnapshot(chapter.id, sessionReadDurationMs = 0L)
         updateContent(initialSettings)
+        initializeTtsRuntime()
+        maybeRestoreTtsAfterChapterHandoff(
+            chapterId = chapter.id,
+            settings = initialSettings,
+        )
         maybeAutoStartGeminiTranslation(initialSettings)
         maybeAutoStartGoogleTranslation()
         when (initialSettings.translationProvider) {
@@ -625,6 +709,14 @@ class NovelReaderScreenModel(
             isGoogleTranslationVisible = googleVisibleInUi,
             hasGoogleTranslationCache = googleCacheAvailableInUi,
             googleLogs = googleLogs,
+            ttsUiState = ttsUiState.copy(
+                enabled = settings.ttsEnabled,
+                selectedEnginePackage = settings.ttsEnginePackage,
+                selectedVoiceId = settings.ttsVoiceId,
+                selectedLocaleTag = settings.ttsLocaleTag,
+                speechRate = settings.ttsSpeechRate,
+                pitch = settings.ttsPitch,
+            ),
             airforceModelIds = airforceModelIds,
             isAirforceModelsLoading = isAirforceModelsLoading,
             isTestingAirforceConnection = isTestingAirforceConnection,
@@ -635,6 +727,319 @@ class NovelReaderScreenModel(
             isDeepSeekModelsLoading = isDeepSeekModelsLoading,
             isTestingDeepSeekConnection = isTestingDeepSeekConnection,
         )
+    }
+    private suspend fun refreshTtsEngines() {
+        val engines = runCatching { ttsEngineRegistry.listEngines() }
+            .getOrElse { emptyList() }
+        ttsUiState = ttsUiState.copy(availableEngines = engines)
+        refreshTtsUiState()
+        initializeTtsRuntime()
+    }
+
+    private fun readRecentTtsLanguageTags(): List<String> {
+        return novelReaderPreferences.ttsRecentLanguageTags().get()
+            .split('|')
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .distinct()
+    }
+
+    private fun rememberRecentTtsLanguage(localeTag: String) {
+        if (localeTag.isBlank()) return
+        val updatedTags = buildList {
+            add(localeTag)
+            addAll(readRecentTtsLanguageTags().filterNot { it.equals(localeTag, ignoreCase = true) })
+        }.take(5)
+        novelReaderPreferences.ttsRecentLanguageTags().set(updatedTags.joinToString("|"))
+        ttsUiState = ttsUiState.copy(recentLanguageTags = updatedTags)
+        refreshTtsUiState()
+    }
+
+    private suspend fun initializeTtsRuntime() {
+        val settings = (mutableState.value as? State.Success)?.readerSettings ?: currentNovel?.source
+            ?.let(novelReaderPreferences::resolveSettings)
+            ?: return
+        val recentLanguageTags = readRecentTtsLanguageTags()
+        val preferredEngine = ttsEngineRegistry.resolvePreferredEngine(
+            settings.ttsEnginePackage.takeIf { it.isNotBlank() },
+        )
+        if (!settings.ttsEnabled) {
+            ttsEngine.shutdown()
+            initializedTtsEnginePackage = null
+            ttsUiState = ttsUiState.copy(
+                enabled = false,
+                availableVoices = emptyList(),
+                availableLocales = emptyList(),
+                recentLanguageTags = recentLanguageTags,
+                isLoadingVoices = false,
+                selectedEnginePackage = preferredEngine?.packageName.orEmpty(),
+                selectedVoiceId = settings.ttsVoiceId,
+                selectedLocaleTag = settings.ttsLocaleTag,
+                speechRate = settings.ttsSpeechRate,
+                pitch = settings.ttsPitch,
+                activeHighlightMode = NovelTtsHighlightMode.OFF,
+            )
+            refreshTtsUiState()
+            return
+        }
+
+        val targetEnginePackage = preferredEngine?.packageName
+        val enginePackageChanged = initializedTtsEnginePackage != targetEnginePackage
+        if (enginePackageChanged || ttsUiState.availableVoices.isEmpty()) {
+            ttsUiState = ttsUiState.copy(
+                enabled = true,
+                availableVoices = emptyList(),
+                availableLocales = emptyList(),
+                recentLanguageTags = recentLanguageTags,
+                isLoadingVoices = true,
+                selectedEnginePackage = targetEnginePackage.orEmpty(),
+                selectedVoiceId = "",
+                selectedLocaleTag = settings.ttsLocaleTag,
+                speechRate = settings.ttsSpeechRate,
+                pitch = settings.ttsPitch,
+                errorMessage = null,
+            )
+            refreshTtsUiState()
+        }
+
+        runCatching {
+            ttsEngine.initialize(targetEnginePackage)
+            ttsEngine.setSpeechRate(settings.ttsSpeechRate)
+            ttsEngine.setPitch(settings.ttsPitch)
+            val capabilities = ttsEngine.capabilities()
+            val availableVoices = ttsEngine.availableVoices()
+            val availableLocales = ttsEngine.availableLocales()
+            val selection = resolveNovelTtsVoiceSelection(
+                availableVoices = availableVoices,
+                availableLocales = availableLocales,
+                capabilities = capabilities,
+                preferredVoiceId = settings.ttsVoiceId,
+                preferredLocaleTag = settings.ttsLocaleTag,
+            )
+            ttsEngine.setLocale(selection.selectedLocaleTag.takeIf { it.isNotBlank() })
+            ttsEngine.setVoice(selection.selectedVoiceId.takeIf { it.isNotBlank() })
+            initializedTtsEnginePackage = targetEnginePackage
+            ttsUiState = ttsUiState.copy(
+                enabled = true,
+                availableVoices = availableVoices,
+                availableLocales = availableLocales,
+                recentLanguageTags = recentLanguageTags,
+                isLoadingVoices = false,
+                selectedEnginePackage = targetEnginePackage.orEmpty(),
+                selectedVoiceId = selection.selectedVoiceId,
+                selectedLocaleTag = selection.selectedLocaleTag,
+                speechRate = settings.ttsSpeechRate,
+                pitch = settings.ttsPitch,
+                capabilities = capabilities,
+                activeHighlightMode = capabilities.resolveHighlightMode(settings.ttsHighlightMode),
+                errorMessage = null,
+            )
+        }.onFailure { error ->
+            logcat(LogPriority.WARN, error) { "Failed to initialize novel reader TTS" }
+            initializedTtsEnginePackage = null
+            ttsUiState = ttsUiState.copy(
+                enabled = settings.ttsEnabled,
+                availableVoices = emptyList(),
+                availableLocales = emptyList(),
+                recentLanguageTags = recentLanguageTags,
+                isLoadingVoices = false,
+                selectedEnginePackage = targetEnginePackage.orEmpty(),
+                selectedVoiceId = settings.ttsVoiceId,
+                selectedLocaleTag = settings.ttsLocaleTag,
+                speechRate = settings.ttsSpeechRate,
+                pitch = settings.ttsPitch,
+                errorMessage = error.message,
+            )
+        }
+        refreshTtsUiState()
+    }
+
+    private suspend fun maybeRestoreTtsAfterChapterHandoff(
+        chapterId: Long,
+        settings: NovelReaderSettings,
+    ) {
+        if (!settings.ttsEnabled) return
+        if (!NovelReaderTtsChapterHandoffPolicy.consumePendingRestore(chapterId)) return
+        if (!ttsAudioFocusManager.requestPlaybackFocus()) return
+        ttsSessionController.restoreFromCheckpoint()
+    }
+
+    private suspend fun resolveTtsChapter(targetChapterId: Long): NovelTtsResolvedChapter? {
+        val snapshot = ttsChapterRepository.loadChapterSnapshot(targetChapterId)
+        val source = sourceManager.get(snapshot.novel.source) ?: return null
+        val normalizedHtml = withContext(Dispatchers.Default) {
+            val withHeading = prependChapterHeadingIfMissing(
+                rawHtml = snapshot.rawHtml.normalizeStructuredChapterPayload(),
+                chapterName = snapshot.chapter.name,
+            )
+            val sanitized = sanitizeChapterHtmlForReader(withHeading)
+            if (sanitized.isBlank()) withHeading else sanitized
+        }
+        val chapterWebUrl = resolveChapterWebUrl(
+            source = source,
+            chapterUrl = snapshot.chapter.url,
+            novelUrl = snapshot.novel.url,
+            pluginSite = snapshot.pluginSite,
+        )
+        val parsedBlocks = withContext(Dispatchers.Default) {
+            extractContentBlocks(
+                rawHtml = normalizedHtml,
+                chapterWebUrl = chapterWebUrl,
+                novelUrl = snapshot.novel.url,
+                pluginSite = snapshot.pluginSite,
+            ).ifEmpty {
+                extractTextBlocks(normalizedHtml).map(ContentBlock::Text)
+            }
+        }
+        val normalizedContent = normalizeHtml(
+            rawHtml = normalizedHtml,
+            settings = novelReaderPreferences.resolveSettings(snapshot.novel.source),
+            customCss = snapshot.customCss,
+            customJs = snapshot.customJs,
+        )
+        val richBlocks = parseNovelRichContent(normalizedContent)
+            .let { parsed ->
+                resolveRichContentBlocks(
+                    blocks = parsed.blocks,
+                    chapterWebUrl = chapterWebUrl,
+                    novelUrl = snapshot.novel.url,
+                    pluginSite = snapshot.pluginSite,
+                )
+            }
+        val currentSettings = novelReaderPreferences.resolveSettings(snapshot.novel.source)
+        val originalModel = ttsChapterModelBuilder.build(
+            chapterId = snapshot.chapter.id,
+            chapterTitle = snapshot.chapter.name,
+            contentBlocks = parsedBlocks,
+            richContentBlocks = richBlocks,
+            options = NovelTtsChapterModelBuildOptions(
+                includeChapterTitle = currentSettings.ttsReadChapterTitle,
+            ),
+        )
+        val translatedModel = resolveTranslatedTtsChapterModel(
+            chapterId = targetChapterId,
+            chapterTitle = snapshot.chapter.name,
+            originalContentBlocks = parsedBlocks,
+            richContentBlocks = richBlocks,
+            settings = currentSettings,
+        )
+        val nextChapterId = snapshot.chapterOrderList
+            .indexOfFirst { it.id == snapshot.chapter.id }
+            .takeIf { it >= 0 }
+            ?.let { snapshot.chapterOrderList.getOrNull(it + 1)?.id }
+        return NovelTtsResolvedChapter(
+            chapterId = snapshot.chapter.id,
+            nextChapterId = nextChapterId,
+            originalModel = originalModel,
+            translatedModel = translatedModel,
+        )
+    }
+
+    private fun resolveTranslatedTtsChapterModel(
+        chapterId: Long,
+        chapterTitle: String,
+        originalContentBlocks: List<ContentBlock>,
+        richContentBlocks: List<NovelRichContentBlock>,
+        settings: NovelReaderSettings,
+    ): eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterModel? {
+        if (!settings.ttsPreferTranslatedText) return null
+        if (chapterId != currentChapter?.id) return null
+        val translatedBlocks = when {
+            settings.geminiEnabled && geminiTranslatedByIndex.isNotEmpty() -> {
+                applyGeminiTranslationToContentBlocks(originalContentBlocks)
+            }
+            settings.googleTranslationEnabled && googleTranslatedByIndex.isNotEmpty() -> {
+                applyGoogleTranslationToContentBlocks(originalContentBlocks)
+            }
+            else -> return null
+        }
+        val translatedRichBlocks = when {
+            settings.geminiEnabled && geminiTranslatedByIndex.isNotEmpty() -> {
+                applyGeminiTranslationToRichContentBlocks(richContentBlocks)
+            }
+            settings.googleTranslationEnabled && googleTranslatedByIndex.isNotEmpty() -> {
+                applyGoogleTranslationToRichContentBlocks(richContentBlocks)
+            }
+            else -> richContentBlocks
+        }
+        return ttsChapterModelBuilder.build(
+            chapterId = chapterId,
+            chapterTitle = chapterTitle,
+            contentBlocks = translatedBlocks,
+            richContentBlocks = translatedRichBlocks,
+            options = NovelTtsChapterModelBuildOptions(
+                includeChapterTitle = settings.ttsReadChapterTitle,
+            ),
+        )
+    }
+
+    private suspend fun onTtsSessionStateChanged(sessionState: NovelTtsSessionUiState) {
+        val session = sessionState.session
+        val activeUtterance = session?.utterance
+        ttsUiState = ttsUiState.copy(
+            playbackState = sessionState.playbackState,
+            activeSession = session,
+            activeUtteranceText = activeUtterance?.text,
+            activeSourceBlockIndex = activeUtterance?.sourceBlockIndex,
+            activeWordRange = activeUtterance?.wordRanges?.getOrNull(session.wordIndex),
+        )
+        refreshTtsUiState()
+    }
+
+    private suspend fun handleTtsUtteranceStarted(utteranceId: String) {
+        val session = ttsSessionController.state.value.session ?: return
+        if (session.utterance.id != utteranceId) return
+        ttsWordProgressJob?.cancel()
+        startEstimatedTtsWordProgress(session)
+    }
+
+    private fun startEstimatedTtsWordProgress(session: NovelTtsSession) {
+        val highlightMode = ttsUiState.activeHighlightMode
+        if (highlightMode == NovelTtsHighlightMode.OFF) return
+        ttsWordProgressJob = screenModelScope.launch {
+            val utterance = session.utterance
+            val estimatedDurationMs = estimateTtsUtteranceDurationMs(
+                utterance = utterance,
+                speechRate = ttsUiState.speechRate,
+            )
+            val startTimeMs = SystemClock.elapsedRealtime()
+            while (isActive) {
+                val elapsedMs = (SystemClock.elapsedRealtime() - startTimeMs).coerceAtLeast(0L)
+                val selection = ttsHighlightEstimator.estimateWordRange(
+                    utterance = utterance,
+                    elapsedMs = elapsedMs,
+                    durationMs = estimatedDurationMs,
+                    mode = highlightMode,
+                    startWordIndex = session.wordIndex,
+                )
+                if (selection != null) {
+                    ttsSessionController.updateWordProgress(selection.wordIndex)
+                    ttsUiState = ttsUiState.copy(activeWordRange = selection.wordRange)
+                    refreshTtsUiState()
+                }
+                if (elapsedMs >= estimatedDurationMs) break
+                delay(TTS_WORD_PROGRESS_UPDATE_INTERVAL_MS)
+            }
+        }
+    }
+
+    private fun estimateTtsUtteranceDurationMs(
+        utterance: eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsUtterance,
+        speechRate: Float,
+    ): Long {
+        val words = utterance.wordRanges.size.coerceAtLeast(1)
+        val effectiveRate = speechRate.coerceAtLeast(0.5f)
+        val millisPerWord = (TTS_BASE_MILLIS_PER_WORD / effectiveRate).roundToInt()
+        return (words * millisPerWord)
+            .coerceAtLeast(TTS_MIN_UTTERANCE_DURATION_MS.toInt())
+            .toLong()
+    }
+
+    private fun refreshTtsUiState() {
+        val state = mutableState.value
+        if (state is State.Success) {
+            mutableState.value = state.copy(ttsUiState = ttsUiState)
+        }
     }
     private suspend fun parseAndCacheContentBlocks(
         rawHtml: String,
@@ -737,6 +1142,162 @@ class NovelReaderScreenModel(
                 emitNovelCompleted = shouldEmitNovelCompleted,
                 sessionReadDurationMs = System.currentTimeMillis() - chapterReadStartTimeMs,
             ),
+        )
+    }
+    fun toggleTtsPlayback(
+        startRequest: eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackStartRequest =
+            eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackStartRequest(),
+    ) {
+        val state = mutableState.value as? State.Success ?: return
+        if (!state.readerSettings.ttsEnabled) return
+        screenModelScope.launch {
+            initializeTtsRuntime()
+            val playbackState = ttsSessionController.state.value.playbackState
+            when (playbackState) {
+                eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackState.PLAYING -> {
+                    pendingTtsStartRequest = null
+                    ttsSessionController.pause()
+                }
+                eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackState.PAUSED -> {
+                    val pendingRequest = pendingTtsStartRequest
+                    if (!ttsAudioFocusManager.requestPlaybackFocus()) return@launch
+                    if (pendingRequest != null) {
+                        startTtsFromRequest(pendingRequest, state.readerSettings)
+                    } else {
+                        ttsSessionController.resume()
+                    }
+                    pendingTtsStartRequest = null
+                }
+                else -> {
+                    if (!ttsAudioFocusManager.requestPlaybackFocus()) return@launch
+                    startTtsFromRequest(startRequest, state.readerSettings)
+                    pendingTtsStartRequest = null
+                }
+            }
+        }
+    }
+
+    fun stopTtsPlayback() {
+        screenModelScope.launch {
+            ttsWordProgressJob?.cancel()
+            ttsAudioFocusManager.abandonPlaybackFocus()
+            ttsSessionController.stop()
+        }
+    }
+
+    fun skipToNextTtsSegment() {
+        screenModelScope.launch {
+            ttsSessionController.skipNext()
+        }
+    }
+
+    fun skipToPreviousTtsSegment() {
+        screenModelScope.launch {
+            ttsSessionController.skipPrevious()
+        }
+    }
+
+    fun pauseTtsForManualNavigation(
+        startRequest: eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackStartRequest,
+    ) {
+        val state = mutableState.value as? State.Success ?: return
+        if (!state.readerSettings.ttsPauseOnManualNavigation) return
+        if (ttsSessionController.state.value.playbackState != eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackState.PLAYING) {
+            pendingTtsStartRequest = startRequest
+            return
+        }
+        screenModelScope.launch {
+            pendingTtsStartRequest = startRequest
+            ttsSessionController.pause()
+        }
+    }
+
+    fun setTtsEnginePackage(value: String) = updateTtsSetting(
+        setGlobal = { novelReaderPreferences.ttsEnginePackage().set(value) },
+        setOverride = { it.copy(ttsEnginePackage = value) },
+    )
+
+    fun setTtsVoiceId(value: String) {
+        val localeTag = ttsUiState.availableVoices
+            .firstOrNull { it.id == value }
+            ?.localeTag
+            ?: ttsUiState.selectedLocaleTag
+        updateTtsSetting(
+            setGlobal = {
+                novelReaderPreferences.ttsVoiceId().set(value)
+                if (localeTag.isNotBlank()) {
+                    novelReaderPreferences.ttsLocaleTag().set(localeTag)
+                }
+            },
+            setOverride = {
+                it.copy(
+                    ttsVoiceId = value,
+                    ttsLocaleTag = localeTag.takeIf(String::isNotBlank) ?: it.ttsLocaleTag,
+                )
+            },
+        )
+        rememberRecentTtsLanguage(localeTag)
+    }
+
+    fun setTtsLocaleTag(value: String) {
+        updateTtsSetting(
+            setGlobal = { novelReaderPreferences.ttsLocaleTag().set(value) },
+            setOverride = { it.copy(ttsLocaleTag = value) },
+        )
+        rememberRecentTtsLanguage(value)
+    }
+
+    fun setTtsSpeechRate(value: Float) = updateTtsSetting(
+        setGlobal = { novelReaderPreferences.ttsSpeechRate().set(value) },
+        setOverride = { it.copy(ttsSpeechRate = value) },
+    )
+
+    fun setTtsPitch(value: Float) = updateTtsSetting(
+        setGlobal = { novelReaderPreferences.ttsPitch().set(value) },
+        setOverride = { it.copy(ttsPitch = value) },
+    )
+
+    fun createTtsPlaybackServiceRuntime(): NovelTtsPlaybackServiceRuntime {
+        return NovelTtsPlaybackServiceRuntime(
+            controller = ttsSessionController,
+            audioFocusManager = ttsAudioFocusManager,
+        )
+    }
+
+    private suspend fun startTtsFromRequest(
+        startRequest: eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackStartRequest,
+        settings: NovelReaderSettings,
+    ) {
+        val resolvedChapter = resolveTtsChapter(targetChapterId = currentChapter?.id ?: return) ?: return
+        val sessionModel = if (
+            settings.ttsPreferTranslatedText &&
+            resolvedChapter.translatedModel != null
+        ) {
+            resolvedChapter.translatedModel
+        } else {
+            resolvedChapter.originalModel
+        }
+        val utteranceId = startRequest.pageReaderPosition?.let { pageReaderPosition ->
+            val utteranceAnchors = eu.kanade.tachiyomi.ui.reader.novel.tts.resolvePlainPageReaderTtsAnchors(
+                textBlocks = pageReaderPosition.blockTexts,
+                pages = pageReaderPosition.pages,
+                chapterModel = sessionModel,
+            )
+            eu.kanade.tachiyomi.ui.reader.novel.tts.resolvePageReaderTtsStartUtteranceId(
+                pageIndex = pageReaderPosition.pageIndex,
+                fallbackBlockIndex = startRequest.fallbackBlockIndex,
+                chapterModel = sessionModel,
+                utteranceAnchors = utteranceAnchors,
+            )
+        } ?: sessionModel.utterances
+            .firstOrNull { it.sourceBlockIndex >= startRequest.fallbackBlockIndex }
+            ?.id
+            ?: sessionModel.utterances.firstOrNull()?.id
+        ttsSessionController.startFromCurrentPosition(
+            chapterId = resolvedChapter.chapterId,
+            utteranceId = utteranceId,
+            preferTranslatedText = settings.ttsPreferTranslatedText,
+            autoAdvanceChapter = settings.ttsAutoAdvanceChapter,
         )
     }
     private fun enqueueProgressPersistence(update: PendingProgressPersistence) {
@@ -1027,6 +1588,9 @@ class NovelReaderScreenModel(
         }
         clearChapterTransientState()
         settingsJob?.cancel()
+        ttsWordProgressJob?.cancel()
+        ttsAudioFocusManager.abandonPlaybackFocus()
+        ttsEngine.shutdown()
         super.onDispose()
     }
 
@@ -1080,6 +1644,9 @@ class NovelReaderScreenModel(
         isTestingOpenRouterConnection = false
         isDeepSeekModelsLoading = false
         isTestingDeepSeekConnection = false
+        ttsWordProgressJob?.cancel()
+        ttsWordProgressJob = null
+            pendingTtsStartRequest = null
         chapterReadStartTimeMs = System.currentTimeMillis()
     }
     fun addGeminiLog(message: String) {
@@ -1407,6 +1974,15 @@ class NovelReaderScreenModel(
             novelReaderPreferences.updateSourceOverride(sourceId, setOverride)
         } else {
             setGlobal()
+        }
+    }
+    private fun updateTtsSetting(
+        setGlobal: () -> Unit,
+        setOverride: (NovelReaderOverride) -> NovelReaderOverride,
+    ) {
+        updateGeminiSetting(setGlobal, setOverride)
+        screenModelScope.launch {
+            initializeTtsRuntime()
         }
     }
     fun updateSelectedTextSelection(selection: NovelSelectedTextSelection?) {
@@ -3130,6 +3706,7 @@ class NovelReaderScreenModel(
             val isGoogleTranslationVisible: Boolean = false,
             val hasGoogleTranslationCache: Boolean = false,
             val googleLogs: List<String> = emptyList(),
+            val ttsUiState: NovelReaderTtsUiState = NovelReaderTtsUiState(),
             val airforceModelIds: List<String> = emptyList(),
             val isAirforceModelsLoading: Boolean = false,
             val isTestingAirforceConnection: Boolean = false,
@@ -3186,6 +3763,9 @@ class NovelReaderScreenModel(
         private const val MAX_DEEPSEEK_CONCURRENCY = 32
         private const val PRIVATE_FALLBACK_CHUNK_SIZE = 40
         private const val PRIVATE_FALLBACK_CONCURRENCY = 1
+        private const val TTS_BASE_MILLIS_PER_WORD = 360f
+        private const val TTS_MIN_UTTERANCE_DURATION_MS = 700L
+        private const val TTS_WORD_PROGRESS_UPDATE_INTERVAL_MS = 60L
         private const val DEEPSEEK_TEMPERATURE_MIN = 1.3f
         private const val DEEPSEEK_TEMPERATURE_MAX = 1.5f
         private const val DEEPSEEK_TOP_P_MIN = 0.9f

@@ -57,6 +57,26 @@ internal object NovelReaderChapterHandoffPolicy {
     }
 }
 
+internal object NovelReaderTtsChapterHandoffPolicy {
+    @Volatile
+    private var pendingRestoreChapterId: Long? = null
+
+    fun markPendingRestore(chapterId: Long) {
+        pendingRestoreChapterId = chapterId
+    }
+
+    fun consumePendingRestore(chapterId: Long): Boolean {
+        val pendingChapterId = pendingRestoreChapterId
+        if (pendingChapterId != chapterId) return false
+        pendingRestoreChapterId = null
+        return true
+    }
+
+    fun clear() {
+        pendingRestoreChapterId = null
+    }
+}
+
 internal enum class NovelReaderPageReaderHandoffTarget {
     SAVED,
     START,

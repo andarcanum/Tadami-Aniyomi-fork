@@ -1,16 +1,23 @@
 package eu.kanade.tachiyomi.ui.reader.novel
 
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
+import android.os.IBinder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.SideEffect
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -40,6 +47,8 @@ import androidx.compose.ui.platform.LocalContext
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackService
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackState
 import java.io.File
 import eu.kanade.tachiyomi.util.system.isNightMode
 import uy.kohesive.injekt.Injekt
@@ -49,12 +58,12 @@ class NovelReaderScreen(
     private val chapterId: Long,
     private val sourceId: Long? = null,
 ) : eu.kanade.presentation.util.Screen() {
-    private val initialReaderSettings = sourceId?.let { id ->
-        Injekt.get<NovelReaderPreferences>().resolveSettings(id)
-    }
-    val initialBackdropColor: Color? = initialReaderSettings?.let { settings ->
-        resolveNovelReaderBackdropColor(
-            settings = settings,
+    fun resolveInitialBackdropColor(): Color? {
+        val initialReaderSettings = sourceId?.let { id ->
+            Injekt.get<NovelReaderPreferences>().resolveSettings(id)
+        } ?: return null
+        return resolveNovelReaderBackdropColor(
+            settings = initialReaderSettings,
             isSystemDark = Injekt.get<android.app.Application>().isNightMode(),
         )
     }
@@ -67,6 +76,16 @@ class NovelReaderScreen(
         val currentState = state
         val coroutineScope = rememberCoroutineScope()
         var showReaderUi by remember { mutableStateOf(false) }
+        val context = LocalContext.current
+        var ttsPlaybackService by remember { mutableStateOf<NovelTtsPlaybackService?>(null) }
+        val initialReaderSettings = remember(sourceId) {
+            sourceId?.let { id ->
+                Injekt.get<NovelReaderPreferences>().resolveSettings(id)
+            }
+        }
+        val initialBackdropColor = remember(initialReaderSettings) {
+            resolveInitialBackdropColor()
+        }
 
         val activeReaderSettings = (currentState as? NovelReaderScreenModel.State.Success)?.readerSettings
         val loadingReaderSettings = (currentState as? NovelReaderScreenModel.State.Loading)
@@ -122,6 +141,37 @@ class NovelReaderScreen(
             }
             is NovelReaderScreenModel.State.Success -> {
                 val successState = currentState
+                DisposableEffect(successState.chapter.id) {
+                    val serviceIntent = Intent(context, NovelTtsPlaybackService::class.java)
+                    val connection = object : ServiceConnection {
+                        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                            val binder = service as? NovelTtsPlaybackService.LocalBinder ?: return
+                            ttsPlaybackService = binder.service().also { playbackService ->
+                                playbackService.bindRuntime(screenModel.createTtsPlaybackServiceRuntime())
+                            }
+                        }
+
+                        override fun onServiceDisconnected(name: ComponentName?) {
+                            ttsPlaybackService = null
+                        }
+                    }
+                    context.bindService(serviceIntent, connection, Context.BIND_AUTO_CREATE)
+                    onDispose {
+                        runCatching { context.unbindService(connection) }
+                        ttsPlaybackService = null
+                    }
+                }
+                DisposableEffect(successState.ttsUiState.playbackState) {
+                    val shouldRunService = successState.ttsUiState.playbackState == NovelTtsPlaybackState.PLAYING ||
+                        successState.ttsUiState.playbackState == NovelTtsPlaybackState.PAUSED
+                    val serviceIntent = Intent(context, NovelTtsPlaybackService::class.java)
+                    if (shouldRunService) {
+                        ContextCompat.startForegroundService(context, serviceIntent)
+                    } else {
+                        context.stopService(serviceIntent)
+                    }
+                    onDispose { }
+                }
                 NovelReaderScreen(
                     state = successState,
                     showReaderUi = showReaderUi,
@@ -180,6 +230,16 @@ class NovelReaderScreen(
                     onSetGoogleTranslationAutoStart = screenModel::setGoogleTranslationAutoStart,
                     onSetGoogleTranslationSourceLang = screenModel::setGoogleTranslationSourceLang,
                     onSetGoogleTranslationTargetLang = screenModel::setGoogleTranslationTargetLang,
+                    onToggleTtsPlayback = screenModel::toggleTtsPlayback,
+                    onStopTtsPlayback = screenModel::stopTtsPlayback,
+                    onSkipPreviousTts = screenModel::skipToPreviousTtsSegment,
+                    onSkipNextTts = screenModel::skipToNextTtsSegment,
+                    onPauseTtsForManualNavigation = screenModel::pauseTtsForManualNavigation,
+                    onSetTtsEnginePackage = screenModel::setTtsEnginePackage,
+                    onSetTtsVoiceId = screenModel::setTtsVoiceId,
+                    onSetTtsLocaleTag = screenModel::setTtsLocaleTag,
+                    onSetTtsSpeechRate = screenModel::setTtsSpeechRate,
+                    onSetTtsPitch = screenModel::setTtsPitch,
                     onSelectedTextSelectionChanged = screenModel::updateSelectedTextSelection,
                     onTranslateSelectedText = screenModel::translateSelectedText,
                     onRetrySelectedTextTranslation = screenModel::retrySelectedTextTranslation,

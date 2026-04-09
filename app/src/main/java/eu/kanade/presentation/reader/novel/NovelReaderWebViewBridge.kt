@@ -139,6 +139,20 @@ internal fun buildWebReaderSelectionJavascript(
     """.trimIndent()
 }
 
+internal fun WebView.syncTtsApproximatePosition(
+    snippet: String,
+    progressPercent: Int,
+    onComplete: ((String?) -> Unit)? = null,
+) {
+    evaluateJavascript(
+        buildWebReaderTtsSyncJavascript(
+            snippet = snippet,
+            progressPercent = progressPercent,
+        ),
+        onComplete,
+    )
+}
+
 internal class NovelReaderSelectionBridge(
     private val view: WebView,
     private val selectionSessionIdProvider: () -> Long,

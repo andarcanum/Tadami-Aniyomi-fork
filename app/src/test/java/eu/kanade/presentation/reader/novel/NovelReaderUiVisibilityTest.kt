@@ -49,6 +49,15 @@ import kotlin.math.abs
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
 
 class NovelReaderUiVisibilityTest {
+
+    private fun List<String>.asPlainPageReaderBlocks(): List<PlainPageReaderTextBlock> {
+        return mapIndexed { index, text ->
+            PlainPageReaderTextBlock(
+                sourceBlockIndex = index,
+                text = text,
+            )
+        }
+    }
     @AfterEach
     fun resetNovelReaderSystemUiSession() {
         NovelReaderSystemUiSession.clear()
@@ -1029,7 +1038,7 @@ class NovelReaderUiVisibilityTest {
         val textBlocks = listOf("First paragraph", "Second paragraph")
 
         val compactPages = paginatePlainPageBlocks(
-            textBlocks = textBlocks,
+            textBlocks = textBlocks.asPlainPageReaderBlocks(),
             paragraphSpacingPx = 0,
             widthPx = 600,
             heightPx = 76,
@@ -1043,7 +1052,7 @@ class NovelReaderUiVisibilityTest {
             }
         }
         val spacedPages = paginatePlainPageBlocks(
-            textBlocks = textBlocks,
+            textBlocks = textBlocks.asPlainPageReaderBlocks(),
             paragraphSpacingPx = 64,
             widthPx = 600,
             heightPx = 76,
@@ -1071,7 +1080,7 @@ class NovelReaderUiVisibilityTest {
             paragraphSpacingDp = 32,
         ) { blocks, paragraphSpacingPx ->
             paginatePlainPageBlocks(
-                textBlocks = blocks,
+                textBlocks = blocks.asPlainPageReaderBlocks(),
                 paragraphSpacingPx = paragraphSpacingPx,
                 widthPx = 260,
                 heightPx = 120,
@@ -1089,7 +1098,7 @@ class NovelReaderUiVisibilityTest {
         assertTrue(pages.size > 1)
         val renderBlocks = buildPlainPageRenderBlocks(
             page = paginatePlainPageBlocks(
-                textBlocks = listOf("Long paragraph ".repeat(40).trim()),
+                textBlocks = listOf("Long paragraph ".repeat(40).trim()).asPlainPageReaderBlocks(),
                 paragraphSpacingPx = 32,
                 widthPx = 260,
                 heightPx = 120,
@@ -1098,7 +1107,7 @@ class NovelReaderUiVisibilityTest {
                 typeface = null,
                 textAlign = ReaderTextAlign.LEFT,
             )[1],
-            textBlocks = listOf("Long paragraph ".repeat(40).trim()),
+            textBlocks = listOf("Long paragraph ".repeat(40).trim()).asPlainPageReaderBlocks(),
             paragraphSpacingPx = 32,
             forceParagraphIndent = true,
         )
@@ -1116,7 +1125,7 @@ class NovelReaderUiVisibilityTest {
         )
 
         val pages = paginatePlainPageBlocks(
-            textBlocks = textBlocks,
+            textBlocks = textBlocks.asPlainPageReaderBlocks(),
             paragraphSpacingPx = 32,
             widthPx = 260,
             heightPx = 1000,
@@ -1135,7 +1144,7 @@ class NovelReaderUiVisibilityTest {
 
         val continuationBlocks = buildPlainPageRenderBlocks(
             page = pages.drop(1).first(),
-            textBlocks = textBlocks,
+            textBlocks = textBlocks.asPlainPageReaderBlocks(),
             paragraphSpacingPx = 32,
             forceParagraphIndent = true,
         )
@@ -1308,7 +1317,7 @@ class NovelReaderUiVisibilityTest {
         )
 
         val pages = paginatePlainPageBlocks(
-            textBlocks = textBlocks,
+            textBlocks = textBlocks.asPlainPageReaderBlocks(),
             paragraphSpacingPx = 0,
             widthPx = 600,
             heightPx = 55,
@@ -1359,7 +1368,7 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `plain paged page assembly preserves paragraph boundaries`() {
         val page = paginatePlainPageBlocks(
-            textBlocks = listOf("First paragraph", "Second paragraph"),
+            textBlocks = listOf("First paragraph", "Second paragraph").asPlainPageReaderBlocks(),
             paragraphSpacingPx = 12,
             widthPx = 600,
             heightPx = 76,
@@ -1370,7 +1379,7 @@ class NovelReaderUiVisibilityTest {
         ).first()
         val renderBlocks = buildPlainPageRenderBlocks(
             page = page,
-            textBlocks = listOf("First paragraph", "Second paragraph"),
+            textBlocks = listOf("First paragraph", "Second paragraph").asPlainPageReaderBlocks(),
             paragraphSpacingPx = 12,
             forceParagraphIndent = true,
         )
@@ -1393,7 +1402,7 @@ class NovelReaderUiVisibilityTest {
                     range = TextPageRange(start = 0, endExclusive = "First paragraph".length),
                 ),
             ),
-            textBlocks = listOf("Chapter 12", "First paragraph"),
+            textBlocks = listOf("Chapter 12", "First paragraph").asPlainPageReaderBlocks(),
             paragraphSpacingPx = 12,
             forceParagraphIndent = true,
             chapterTitle = "Chapter 12",
@@ -1405,7 +1414,7 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `page title stripping removes leading chapter title block`() {
         val plainBlocks = stripPageReaderChapterTitleBlocks(
-            textBlocks = listOf("Chapter 12", "First paragraph"),
+            textBlocks = listOf("Chapter 12", "First paragraph").asPlainPageReaderBlocks(),
             chapterTitle = "Chapter 12",
         )
         val richBlocks = stripPageReaderChapterTitleRichBlocks(
@@ -1416,11 +1425,11 @@ class NovelReaderUiVisibilityTest {
                 NovelRichContentBlock.Paragraph(
                     segments = listOf(NovelRichTextSegment(text = "First paragraph")),
                 ),
-            ),
+            ).withIndex().toList(),
             chapterTitle = "Chapter 12",
         )
 
-        assertEquals(listOf("First paragraph"), plainBlocks)
+        assertEquals(listOf("First paragraph"), plainBlocks.map { it.text })
         assertEquals(1, richBlocks.size)
     }
 
@@ -1446,7 +1455,7 @@ class NovelReaderUiVisibilityTest {
     fun `paragraph indent makes pagination more conservative`() {
         val textBlocks = listOf("The quick brown fox jumps over the lazy dog ".repeat(3).trim())
         val compactPages = paginatePlainPageBlocks(
-            textBlocks = textBlocks,
+            textBlocks = textBlocks.asPlainPageReaderBlocks(),
             paragraphSpacingPx = 0,
             widthPx = 220,
             heightPx = 72,
@@ -1457,7 +1466,7 @@ class NovelReaderUiVisibilityTest {
             forceParagraphIndent = false,
         )
         val indentedPages = paginatePlainPageBlocks(
-            textBlocks = textBlocks,
+            textBlocks = textBlocks.asPlainPageReaderBlocks(),
             paragraphSpacingPx = 0,
             widthPx = 220,
             heightPx = 72,
@@ -1572,7 +1581,7 @@ class NovelReaderUiVisibilityTest {
                 ),
             ),
             richPages = emptyList(),
-            plainTextBlocks = listOf("Chapter 12", "First paragraph"),
+            plainTextBlocks = listOf("Chapter 12", "First paragraph").asPlainPageReaderBlocks(),
             richBlockTexts = emptyList(),
             paragraphSpacingPx = 12,
             forceParagraphIndent = true,
@@ -1626,7 +1635,7 @@ class NovelReaderUiVisibilityTest {
                     ),
                 ),
             ),
-            plainTextBlocks = emptyList(),
+            plainTextBlocks = emptyList<PlainPageReaderTextBlock>(),
             richBlockTexts = richBlockTexts,
             paragraphSpacingPx = 12,
             forceParagraphIndent = false,
@@ -1687,7 +1696,7 @@ class NovelReaderUiVisibilityTest {
                     ),
                 ),
             ),
-            plainTextBlocks = emptyList(),
+            plainTextBlocks = emptyList<PlainPageReaderTextBlock>(),
             richBlockTexts = richBlockTexts,
             paragraphSpacingPx = 12,
             forceParagraphIndent = false,
@@ -3670,7 +3679,7 @@ class NovelReaderUiVisibilityTest {
                     ),
                 ),
             ),
-            plainTextBlocks = emptyList(),
+            plainTextBlocks = emptyList<PlainPageReaderTextBlock>(),
             richBlockTexts = richBlockTexts,
             paragraphSpacingPx = 12,
             forceParagraphIndent = false,

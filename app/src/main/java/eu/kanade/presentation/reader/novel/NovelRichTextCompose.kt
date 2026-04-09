@@ -140,6 +140,8 @@ internal fun NovelRichNativeScrollItem(
     textTypeface: Typeface?,
     chapterTitleTypeface: Typeface?,
     paragraphSpacing: androidx.compose.ui.unit.Dp,
+    ttsHighlightState: NovelReaderTtsHighlightState? = null,
+    ttsHighlightColor: Color = Color.Transparent,
     selectionSessionIdProvider: () -> Long,
     onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit,
     onPlainTap: ((Float, Float) -> Unit)? = null,
@@ -164,7 +166,14 @@ internal fun NovelRichNativeScrollItem(
     }
     when (block) {
         is NovelRichContentBlock.Paragraph -> {
-            val text = buildNovelRichAnnotatedString(block.segments)
+            val baseText = buildNovelRichAnnotatedString(block.segments)
+            val text = applyNovelReaderTtsHighlight(
+                text = baseText,
+                blockText = baseText.text,
+                sourceBlockIndex = index,
+                highlightState = ttsHighlightState,
+                highlightColor = ttsHighlightColor,
+            )
             val isChapterTitle = index == 0 && isNativeChapterTitleText(text.text, chapterTitle)
             val resolvedTextAlign = resolveNativeReaderTextAlign(
                 globalTextAlign = readerSettings.textAlign,
@@ -243,6 +252,7 @@ internal fun NovelRichNativeScrollItem(
             }
         }
         is NovelRichContentBlock.Heading -> {
+            val baseText = buildNovelRichAnnotatedString(block.segments)
             val headingScale = when (block.level) {
                 1 -> 1.24f
                 2 -> 1.18f
@@ -250,7 +260,13 @@ internal fun NovelRichNativeScrollItem(
                 else -> 1.08f
             }
             NovelPageReaderTextBlock(
-                text = buildNovelRichAnnotatedString(block.segments),
+                text = applyNovelReaderTtsHighlight(
+                    text = baseText,
+                    blockText = baseText.text,
+                    sourceBlockIndex = index,
+                    highlightState = ttsHighlightState,
+                    highlightColor = ttsHighlightColor,
+                ),
                 isChapterTitle = false,
                 firstLineIndentEm = null,
                 readerSettings = readerSettings,
@@ -284,8 +300,15 @@ internal fun NovelRichNativeScrollItem(
             )
         }
         is NovelRichContentBlock.BlockQuote -> {
+            val baseText = buildNovelRichAnnotatedString(block.segments)
             NovelPageReaderTextBlock(
-                text = buildNovelRichAnnotatedString(block.segments),
+                text = applyNovelReaderTtsHighlight(
+                    text = baseText,
+                    blockText = baseText.text,
+                    sourceBlockIndex = index,
+                    highlightState = ttsHighlightState,
+                    highlightColor = ttsHighlightColor,
+                ),
                 isChapterTitle = false,
                 firstLineIndentEm = null,
                 readerSettings = readerSettings,

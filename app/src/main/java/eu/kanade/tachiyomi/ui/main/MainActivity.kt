@@ -269,7 +269,7 @@ class MainActivity : BaseActivity() {
 
                 val readerBackdropColor = when (val currentScreen = navigator.lastItem) {
                     is NovelReaderScreen -> {
-                        currentScreen.initialBackdropColor ?: NovelReaderBackdropSession.backgroundColor
+                        currentScreen.resolveInitialBackdropColor() ?: NovelReaderBackdropSession.backgroundColor
                     }
                     else -> null
                 }

@@ -242,6 +242,17 @@ internal fun buildNovelPageReaderSpannableText(
     return spannable
 }
 
+internal fun resolveNovelPageReaderRenderedTextSignature(
+    text: AnnotatedString,
+    firstLineIndentPx: Int?,
+    forcedTypefaceStyle: Int,
+): Int {
+    var result = text.hashCode()
+    result = 31 * result + (firstLineIndentPx ?: 0)
+    result = 31 * result + forcedTypefaceStyle
+    return result
+}
+
 private class NovelPageReaderUrlClickableSpan(
     private val url: String,
     private val onUrlClick: ((String) -> Unit)?,
@@ -365,6 +376,7 @@ private class NovelPageReaderTextView constructor(
     private var selectionPromotionScheduled = false
     private var selectionPromotedByLongPress = false
     private var selectionInteractionEnabled = selectionInteractionEnabled
+    var renderedTextSignature: Int? = null
     private val selectionPromotionRunnable = Runnable {
         selectionPromotionScheduled = false
         if (
@@ -650,6 +662,8 @@ internal fun NovelPageReaderPageContent(
     statusBarTopPadding: Dp,
     backgroundTexture: NovelReaderBackgroundTexture,
     nativeTextureStrengthPercent: Int,
+    ttsHighlightState: NovelReaderTtsHighlightState? = null,
+    ttsHighlightColor: Color = Color.Transparent,
     selectionRenderer: NovelSelectedTextRenderer = NovelSelectedTextRenderer.PAGE_READER,
     selectionSessionIdProvider: () -> Long = { 0L },
     onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit = {},
@@ -710,12 +724,22 @@ internal fun NovelPageReaderPageContent(
                         }
                         when (block) {
                             is NovelPageContentBlock.Plain -> {
+                                val baseText = if (readerSettings.bionicReading) {
+                                    toBionicText(block.text)
+                                } else {
+                                    AnnotatedString(block.text)
+                                }
                                 NovelPageReaderTextBlock(
-                                    text = if (readerSettings.bionicReading) {
-                                        toBionicText(block.text)
-                                    } else {
-                                        AnnotatedString(block.text)
-                                    },
+                                    text = applyNovelReaderTtsHighlight(
+                                        text = baseText,
+                                        blockText = block.text,
+                                        sourceBlockIndex = block.sourceBlockIndex,
+                                        pageIndex = contentPage.pageIndex,
+                                        pageBlockTextStart = block.sourceTextStart,
+                                        pageBlockTextEndExclusive = block.sourceTextEndExclusive,
+                                        highlightState = ttsHighlightState,
+                                        highlightColor = ttsHighlightColor,
+                                    ),
                                     isChapterTitle = block.isChapterTitle,
                                     firstLineIndentEm = block.firstLineIndentEm,
                                     readerSettings = readerSettings,
@@ -749,7 +773,16 @@ internal fun NovelPageReaderPageContent(
                             }
                             is NovelPageContentBlock.Rich -> {
                                 NovelPageReaderTextBlock(
-                                    text = block.text,
+                                    text = applyNovelReaderTtsHighlight(
+                                        text = block.text,
+                                        blockText = block.text.text,
+                                        sourceBlockIndex = block.sourceBlockIndex,
+                                        pageIndex = contentPage.pageIndex,
+                                        pageBlockTextStart = block.sourceTextStart,
+                                        pageBlockTextEndExclusive = block.sourceTextEndExclusive,
+                                        highlightState = ttsHighlightState,
+                                        highlightColor = ttsHighlightColor,
+                                    ),
                                     isChapterTitle = block.isChapterTitle,
                                     firstLineIndentEm = block.firstLineIndentEm,
                                     readerSettings = readerSettings,
@@ -913,20 +946,26 @@ internal fun NovelPageReaderTextBlock(
             textView.updatePlainTapHandler(onPlainTap)
             textView.updateSelectionInteractionEnabled(selectionInteractionEnabled)
             applyNovelPageReaderTextViewMetrics(textView = textView, metrics = blockTextViewMetrics)
-            val renderedText = text.text
-            if (textView.text?.toString() != renderedText) {
+            val forcedTypefaceStyle = combineTypefaceStyles(
+                first = baseTypefaceStyle,
+                second = resolveForcedReaderTypefaceStyle(
+                    forceBoldText = readerSettings.forceBoldText,
+                    forceItalicText = readerSettings.forceItalicText,
+                ),
+            )
+            val renderedTextSignature = resolveNovelPageReaderRenderedTextSignature(
+                text = text,
+                firstLineIndentPx = blockFirstLineIndentPx,
+                forcedTypefaceStyle = forcedTypefaceStyle,
+            )
+            if (textView.renderedTextSignature != renderedTextSignature) {
                 textView.text = buildNovelPageReaderSpannableText(
                     text = text,
                     firstLineIndentPx = blockFirstLineIndentPx,
-                    forcedTypefaceStyle = combineTypefaceStyles(
-                        first = baseTypefaceStyle,
-                        second = resolveForcedReaderTypefaceStyle(
-                            forceBoldText = readerSettings.forceBoldText,
-                            forceItalicText = readerSettings.forceItalicText,
-                        ),
-                    ),
+                    forcedTypefaceStyle = forcedTypefaceStyle,
                     onUrlClick = onUrlClick,
                 )
+                textView.renderedTextSignature = renderedTextSignature
             }
             textView.setTextColor(blockTextColor.toArgb())
         },

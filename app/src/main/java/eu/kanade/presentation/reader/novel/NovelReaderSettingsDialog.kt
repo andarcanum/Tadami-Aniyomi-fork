@@ -79,6 +79,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderOverride
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 import kotlinx.collections.immutable.persistentListOf
@@ -135,6 +136,170 @@ fun NovelReaderSettingsDialog(
                     preferences = preferences,
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun NovelReaderTtsBehaviorSettingsDialog(
+    sourceId: Long,
+    onDismissRequest: () -> Unit,
+) {
+    val preferences = remember { Injekt.get<NovelReaderPreferences>() }
+    val sourceOverrides = remember { preferences.sourceOverrides() }
+    val overrides by sourceOverrides.changes().collectAsStateWithLifecycle(initialValue = sourceOverrides.get())
+    val overrideEnabled = overrides[sourceId] != null
+    val settingsFlow = remember(sourceId) { preferences.settingsFlow(sourceId) }
+    val settings by settingsFlow.collectAsStateWithLifecycle(initialValue = preferences.resolveSettings(sourceId))
+
+    fun <T> update(
+        value: T,
+        copyOverride: (NovelReaderOverride, T) -> NovelReaderOverride,
+        setGlobal: (T) -> Unit,
+    ) {
+        if (overrideEnabled) {
+            preferences.updateSourceOverride(sourceId) { copyOverride(it, value) }
+        } else {
+            setGlobal(value)
+        }
+    }
+
+    TabbedDialog(
+        onDismissRequest = onDismissRequest,
+        tabTitles = persistentListOf(stringResource(AYMR.strings.novel_reader_tts_behavior_settings)),
+        enableSwipeDismiss = false,
+        modifier = Modifier.fillMaxHeight(0.7f),
+    ) {
+        Column(
+            modifier = Modifier
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            LnReaderSliderRow(
+                label = stringResource(AYMR.strings.novel_reader_tts_speech_rate),
+                valueText = { formatTtsPercentage(it / 100f) },
+                committedValue = settings.ttsSpeechRate * 100f,
+                range = 50f..200f,
+                steps = 149,
+                enabled = true,
+                onCommit = {
+                    update(
+                        it / 100f,
+                        { o, v -> o.copy(ttsSpeechRate = v) },
+                        { preferences.ttsSpeechRate().set(it) },
+                    )
+                },
+            )
+            LnReaderSliderRow(
+                label = stringResource(AYMR.strings.novel_reader_tts_pitch),
+                valueText = { formatTtsPercentage(it / 100f) },
+                committedValue = settings.ttsPitch * 100f,
+                range = 50f..200f,
+                steps = 149,
+                enabled = true,
+                onCommit = {
+                    update(
+                        it / 100f,
+                        { o, v -> o.copy(ttsPitch = v) },
+                        { preferences.ttsPitch().set(it) },
+                    )
+                },
+            )
+            ListPreferenceWidget(
+                value = settings.ttsHighlightMode,
+                title = stringResource(AYMR.strings.novel_reader_tts_highlight_mode),
+                subtitle = stringResource(AYMR.strings.novel_reader_tts_highlight_mode_summary),
+                icon = null,
+                entries = NovelTtsHighlightMode.entries.associateWith { getTtsHighlightModeLabel(it) },
+                onValueChange = {
+                    update(
+                        it,
+                        { o, v -> o.copy(ttsHighlightMode = v) },
+                        { preferences.ttsHighlightMode().set(it) },
+                    )
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_tts_word_highlight_enabled),
+                subtitle = stringResource(AYMR.strings.novel_reader_tts_word_highlight_enabled_summary),
+                checked = settings.ttsWordHighlightEnabled,
+                onCheckedChanged = {
+                    update(
+                        it,
+                        { o, v -> o.copy(ttsWordHighlightEnabled = v) },
+                        { preferences.ttsWordHighlightEnabled().set(it) },
+                    )
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_tts_auto_advance_chapter),
+                checked = settings.ttsAutoAdvanceChapter,
+                onCheckedChanged = {
+                    update(
+                        it,
+                        { o, v -> o.copy(ttsAutoAdvanceChapter = v) },
+                        { preferences.ttsAutoAdvanceChapter().set(it) },
+                    )
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_tts_follow_along),
+                subtitle = stringResource(AYMR.strings.novel_reader_tts_follow_along_summary),
+                checked = settings.ttsFollowAlong,
+                onCheckedChanged = {
+                    update(
+                        it,
+                        { o, v -> o.copy(ttsFollowAlong = v) },
+                        { preferences.ttsFollowAlong().set(it) },
+                    )
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_tts_pause_on_manual_navigation),
+                checked = settings.ttsPauseOnManualNavigation,
+                onCheckedChanged = {
+                    update(
+                        it,
+                        { o, v -> o.copy(ttsPauseOnManualNavigation = v) },
+                        { preferences.ttsPauseOnManualNavigation().set(it) },
+                    )
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_tts_keep_screen_on_during_playback),
+                checked = settings.ttsKeepScreenOnDuringPlayback,
+                onCheckedChanged = {
+                    update(
+                        it,
+                        { o, v -> o.copy(ttsKeepScreenOnDuringPlayback = v) },
+                        { preferences.ttsKeepScreenOnDuringPlayback().set(it) },
+                    )
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_tts_prefer_translated_text),
+                subtitle = stringResource(AYMR.strings.novel_reader_tts_prefer_translated_text_summary),
+                checked = settings.ttsPreferTranslatedText,
+                onCheckedChanged = {
+                    update(
+                        it,
+                        { o, v -> o.copy(ttsPreferTranslatedText = v) },
+                        { preferences.ttsPreferTranslatedText().set(it) },
+                    )
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_tts_read_chapter_title),
+                checked = settings.ttsReadChapterTitle,
+                onCheckedChanged = {
+                    update(
+                        it,
+                        { o, v -> o.copy(ttsReadChapterTitle = v) },
+                        { preferences.ttsReadChapterTitle().set(it) },
+                    )
+                },
+            )
         }
     }
 }
@@ -254,6 +419,9 @@ private fun GeneralTab(
     val pageTurnIntensityEntries = novelPageTurnIntensityEntries()
     val pageTurnShadowEntries = novelPageTurnShadowIntensityEntries()
     val pageTurnActivationZoneEntries = novelPageTurnActivationZoneEntries()
+    val ttsPlacement = remember(settings.ttsEnabled) {
+        resolveNovelReaderTtsSettingsPlacementSnapshot(settings.ttsEnabled)
+    }
     val showPageTurnTuning = shouldShowPageTurnTuningControls(
         pageReaderEnabled = settings.pageReader,
         style = settings.pageTransitionStyle,
@@ -264,6 +432,7 @@ private fun GeneralTab(
     var readingBehaviorExpanded by rememberSaveable(sourceId) { mutableStateOf(true) }
     var gesturesExpanded by rememberSaveable(sourceId) { mutableStateOf(false) }
     var translationExpanded by rememberSaveable(sourceId) { mutableStateOf(false) }
+    var ttsExpanded by rememberSaveable(sourceId) { mutableStateOf(false) }
     var advancedExpanded by rememberSaveable(sourceId) { mutableStateOf(false) }
     val surfaceStrategy = remember { resolveNovelReaderSettingsSurfaceStrategy() }
 
@@ -687,6 +856,22 @@ private fun GeneralTab(
                 }, { preferences.googleTranslationAutoStart().set(it) })
             },
         )
+        }
+        NovelReaderAccordionSection(
+            title = stringResource(AYMR.strings.novel_reader_tts_section),
+            expanded = ttsExpanded,
+            onToggle = { ttsExpanded = !ttsExpanded },
+        ) {
+            if (ttsPlacement.showGeneralEnableToggle) {
+                SwitchPreferenceWidget(
+                    title = stringResource(AYMR.strings.novel_reader_tts_enabled),
+                    subtitle = stringResource(AYMR.strings.novel_reader_tts_enabled_summary),
+                    checked = settings.ttsEnabled,
+                    onCheckedChanged = {
+                        update(it, { o, v -> o.copy(ttsEnabled = v) }, { preferences.ttsEnabled().set(it) })
+                    },
+                )
+            }
         }
         NovelReaderAccordionSection(
             title = stringResource(AYMR.strings.novel_reader_section_advanced),
@@ -1721,6 +1906,20 @@ internal fun resolveLnReaderSliderCommitValue(
     draftValue: Float,
 ): Float? {
     return draftValue.takeIf { abs(it - committedValue) > 0.0001f }
+}
+
+@Composable
+private fun getTtsHighlightModeLabel(mode: NovelTtsHighlightMode): String {
+    return when (mode) {
+        NovelTtsHighlightMode.AUTO -> stringResource(AYMR.strings.novel_reader_tts_highlight_mode_auto)
+        NovelTtsHighlightMode.EXACT -> stringResource(AYMR.strings.novel_reader_tts_highlight_mode_exact)
+        NovelTtsHighlightMode.ESTIMATED -> stringResource(AYMR.strings.novel_reader_tts_highlight_mode_estimated)
+        NovelTtsHighlightMode.OFF -> stringResource(AYMR.strings.novel_reader_tts_highlight_mode_off)
+    }
+}
+
+private fun formatTtsPercentage(value: Float): String {
+    return "${(value * 100).roundToInt()}%"
 }
 
 @Composable

@@ -55,17 +55,18 @@ internal fun resolvePageReaderBlocks(
 }
 
 internal fun stripPageReaderChapterTitleBlocks(
-    textBlocks: List<String>,
+    textBlocks: List<PlainPageReaderTextBlock>,
     chapterTitle: String?,
-): List<String> {
+): List<PlainPageReaderTextBlock> {
     if (chapterTitle.isNullOrBlank() || textBlocks.isEmpty()) return textBlocks
-    val firstBlock = textBlocks.first()
+    val firstBlock = textBlocks.first().text
     return if (isNativeChapterTitleText(firstBlock, chapterTitle)) {
         textBlocks.drop(1)
     } else {
         textBlocks
     }
 }
+
 
 internal fun resolvePageReaderChapterTitleForFiltering(
     showPageChapterTitle: Boolean,
@@ -75,11 +76,11 @@ internal fun resolvePageReaderChapterTitleForFiltering(
 }
 
 internal fun stripPageReaderChapterTitleRichBlocks(
-    richBlocks: List<NovelRichContentBlock>,
+    richBlocks: List<IndexedValue<NovelRichContentBlock>>,
     chapterTitle: String?,
-): List<NovelRichContentBlock> {
+): List<IndexedValue<NovelRichContentBlock>> {
     if (chapterTitle.isNullOrBlank() || richBlocks.isEmpty()) return richBlocks
-    val firstBlock = richBlocks.first()
+    val firstBlock = richBlocks.first().value
     val firstBlockText = buildRichPageReaderBlockAnnotatedText(firstBlock).text
     return if (isNativeChapterTitleText(firstBlockText, chapterTitle)) {
         richBlocks.drop(1)
@@ -87,6 +88,7 @@ internal fun stripPageReaderChapterTitleRichBlocks(
         richBlocks
     }
 }
+
 
 internal fun resolveReaderContentPaddingPx(
     showReaderUi: Boolean,
@@ -478,6 +480,11 @@ internal data class PlainPageSlice(
     val range: TextPageRange,
 )
 
+internal data class PlainPageReaderTextBlock(
+    val sourceBlockIndex: Int,
+    val text: String,
+)
+
 internal sealed interface RichPageSlice {
     data class Text(
         val blockIndex: Int,
@@ -492,20 +499,27 @@ internal sealed interface RichPageSlice {
 }
 
 internal data class PlainPageRenderBlock(
+    val sourceBlockIndex: Int,
     val text: String,
+    val sourceTextStart: Int,
+    val sourceTextEndExclusive: Int,
     val spacingBeforePx: Int,
     val firstLineIndentEm: Float?,
     val isChapterTitle: Boolean = false,
 )
 
 internal data class RichPageBlockText(
+    val sourceBlockIndex: Int,
     val text: AnnotatedString,
     val firstLineIndentEm: Float?,
     val sourceTextAlign: NovelRichBlockTextAlign? = null,
 )
 
 internal data class RichPageRenderBlock(
+    val sourceBlockIndex: Int,
     val text: AnnotatedString,
+    val sourceTextStart: Int,
+    val sourceTextEndExclusive: Int,
     val spacingBeforePx: Int,
     val firstLineIndentEm: Float?,
     val sourceTextAlign: NovelRichBlockTextAlign? = null,
@@ -518,14 +532,20 @@ internal sealed interface NovelPageContentBlock {
     val isChapterTitle: Boolean
 
     data class Plain(
+        val sourceBlockIndex: Int,
         val text: String,
+        val sourceTextStart: Int? = null,
+        val sourceTextEndExclusive: Int? = null,
         override val spacingBeforePx: Int,
         override val firstLineIndentEm: Float?,
         override val isChapterTitle: Boolean = false,
     ) : NovelPageContentBlock
 
     data class Rich(
+        val sourceBlockIndex: Int,
         val text: AnnotatedString,
+        val sourceTextStart: Int? = null,
+        val sourceTextEndExclusive: Int? = null,
         override val spacingBeforePx: Int,
         override val firstLineIndentEm: Float?,
         val sourceTextAlign: NovelRichBlockTextAlign? = null,
@@ -544,10 +564,11 @@ internal sealed interface NovelPageContentBlock {
 
 internal data class NovelPageContentPage(
     val blocks: List<NovelPageContentBlock>,
+    val pageIndex: Int = -1,
 )
 
 internal fun paginatePlainPageBlocks(
-    textBlocks: List<String>,
+    textBlocks: List<PlainPageReaderTextBlock>,
     paragraphSpacingPx: Int,
     widthPx: Int,
     heightPx: Int,
@@ -571,8 +592,10 @@ internal fun paginatePlainPageBlocks(
         remainingHeight = safeHeight
     }
 
-    textBlocks.forEachIndexed { blockIndex, text ->
-        if (text.isBlank()) return@forEachIndexed
+    textBlocks.forEach { block ->
+        val blockIndex = block.sourceBlockIndex
+        val text = block.text
+        if (text.isBlank()) return@forEach
         val isChapterTitle = blockIndex == 0 &&
             chapterTitle != null &&
             isNativeChapterTitleText(text, chapterTitle)
@@ -654,7 +677,7 @@ internal fun paginatePlainPageBlocks(
                     flushPage()
                 }
             }
-            return@forEachIndexed
+            return@forEach
         }
 
         val blockHeight = resolveStaticLayoutHeight(layout)
@@ -710,6 +733,7 @@ internal fun paginatePlainPageBlocks(
     return pages
 }
 
+
 internal fun buildRichPageReaderChapterAnnotatedText(
     richBlocks: List<NovelRichContentBlock>,
     paragraphSpacingDp: Int,
@@ -746,6 +770,7 @@ internal fun buildRichPageReaderBlockAnnotatedText(
 
 internal fun buildRichPageReaderBlockText(
     block: NovelRichContentBlock,
+    sourceBlockIndex: Int = -1,
     forcedParagraphFirstLineIndentEm: Float? = null,
 ): RichPageBlockText {
     val blockText: AnnotatedString = when (block) {
@@ -757,6 +782,7 @@ internal fun buildRichPageReaderBlockText(
     }
     if (blockText.text.isBlank()) {
         return RichPageBlockText(
+            sourceBlockIndex = sourceBlockIndex,
             text = AnnotatedString(""),
             firstLineIndentEm = null,
             sourceTextAlign = null,
@@ -769,6 +795,7 @@ internal fun buildRichPageReaderBlockText(
             else -> null
         }
         return RichPageBlockText(
+            sourceBlockIndex = sourceBlockIndex,
             text = blockText,
             firstLineIndentEm = null,
             sourceTextAlign = sourceTextAlign,
@@ -777,6 +804,7 @@ internal fun buildRichPageReaderBlockText(
 
     val firstLineIndentEm = forcedParagraphFirstLineIndentEm ?: block.firstLineIndentEm
     return RichPageBlockText(
+        sourceBlockIndex = sourceBlockIndex,
         text = blockText,
         firstLineIndentEm = firstLineIndentEm,
         sourceTextAlign = block.textAlign,
@@ -794,7 +822,6 @@ internal fun paginateRichPageBlocks(
     textAlign: ReaderTextAlign,
     chapterTitle: String? = null,
     allowChapterTitleBlock: Boolean = true,
-    blockIndexOffset: Int = 0,
 ): List<List<RichPageSlice.Text>> {
     val safeHeight = heightPx.coerceAtLeast(1)
     val pages = mutableListOf<MutableList<RichPageSlice.Text>>()
@@ -809,8 +836,9 @@ internal fun paginateRichPageBlocks(
         remainingHeight = safeHeight
     }
 
-    blockTexts.forEachIndexed { blockIndex, blockText ->
-        if (blockText.text.text.isBlank()) return@forEachIndexed
+    blockTexts.forEach { blockText ->
+        val blockIndex = blockText.sourceBlockIndex
+        if (blockText.text.text.isBlank()) return@forEach
         val isChapterTitle = allowChapterTitleBlock &&
             blockIndex == 0 &&
             chapterTitle != null &&
@@ -885,7 +913,7 @@ internal fun paginateRichPageBlocks(
                     metrics = approximateMetrics,
                 ).coerceAtMost(safeHeight)
                 currentPage += RichPageSlice.Text(
-                    blockIndex = blockIndex + blockIndexOffset,
+                    blockIndex = blockIndex,
                     range = range,
                 )
                 remainingHeight -= spacingBefore + sliceHeight
@@ -893,7 +921,7 @@ internal fun paginateRichPageBlocks(
                     flushPage()
                 }
             }
-            return@forEachIndexed
+            return@forEach
         }
 
         val blockHeight = resolveStaticLayoutHeight(layout)
@@ -935,7 +963,7 @@ internal fun paginateRichPageBlocks(
             }
 
             currentPage += RichPageSlice.Text(
-                blockIndex = blockIndex + blockIndexOffset,
+                blockIndex = blockIndex,
                 range = slice.range,
             )
             remainingHeight -= spacingBefore + slice.heightPx
@@ -958,7 +986,7 @@ internal data class MixedRichPagePagination(
 )
 
 internal fun paginateMixedRichPageBlocks(
-    richBlocks: List<NovelRichContentBlock>,
+    richBlocks: List<IndexedValue<NovelRichContentBlock>>,
     paragraphSpacingPx: Int,
     widthPx: Int,
     heightPx: Int,
@@ -972,7 +1000,6 @@ internal fun paginateMixedRichPageBlocks(
     val allBlockTexts = mutableListOf<RichPageBlockText>()
     val currentChunkTexts = mutableListOf<RichPageBlockText>()
     val pages = mutableListOf<List<RichPageSlice>>()
-    var currentChunkStartIndex = 0
     var currentChunkCanUseChapterTitle = true
     var sawRenderableSourceBlock = false
 
@@ -989,13 +1016,14 @@ internal fun paginateMixedRichPageBlocks(
             textAlign = textAlign,
             chapterTitle = chapterTitle,
             allowChapterTitleBlock = currentChunkCanUseChapterTitle,
-            blockIndexOffset = currentChunkStartIndex,
         )
         currentChunkTexts.clear()
         currentChunkCanUseChapterTitle = false
     }
 
-    richBlocks.forEachIndexed { sourceBlockIndex, block ->
+    richBlocks.forEach { indexedBlock ->
+        val sourceBlockIndex = indexedBlock.index
+        val block = indexedBlock.value
         when (block) {
             is NovelRichContentBlock.Image -> {
                 flushCurrentChunk()
@@ -1011,17 +1039,15 @@ internal fun paginateMixedRichPageBlocks(
             else -> {
                 val blockText = buildRichPageReaderBlockText(
                     block = block,
+                    sourceBlockIndex = sourceBlockIndex,
                     forcedParagraphFirstLineIndentEm = if (forceParagraphIndent) {
                         FORCED_PARAGRAPH_FIRST_LINE_INDENT_EM
                     } else {
                         null
                     },
                 )
-                if (blockText.text.text.isBlank()) return@forEachIndexed
-                if (currentChunkTexts.isEmpty()) {
-                    currentChunkStartIndex = allBlockTexts.size
-                    currentChunkCanUseChapterTitle = !sawRenderableSourceBlock
-                }
+                if (blockText.text.text.isBlank()) return@forEach
+                if (currentChunkTexts.isEmpty()) currentChunkCanUseChapterTitle = !sawRenderableSourceBlock
                 allBlockTexts += blockText
                 currentChunkTexts += blockText
                 sawRenderableSourceBlock = true
@@ -1036,20 +1062,25 @@ internal fun paginateMixedRichPageBlocks(
     )
 }
 
+
 internal fun buildPlainPageRenderBlocks(
     page: List<PlainPageSlice>,
-    textBlocks: List<String>,
+    textBlocks: List<PlainPageReaderTextBlock>,
     paragraphSpacingPx: Int,
     forceParagraphIndent: Boolean,
     chapterTitle: String? = null,
 ): List<PlainPageRenderBlock> {
     if (page.isEmpty()) return emptyList()
+    val textBySourceBlockIndex = textBlocks.associateBy({ it.sourceBlockIndex }, { it.text })
     return page.mapIndexed { index, slice ->
         val previousBlockIndex = page.getOrNull(index - 1)?.blockIndex
         val startsNewBlock = index > 0 && previousBlockIndex != slice.blockIndex
-        val fullBlockText = textBlocks[slice.blockIndex]
+        val fullBlockText = textBySourceBlockIndex[slice.blockIndex].orEmpty()
         PlainPageRenderBlock(
+            sourceBlockIndex = slice.blockIndex,
             text = fullBlockText.substring(slice.range.start, slice.range.endExclusive),
+            sourceTextStart = slice.range.start,
+            sourceTextEndExclusive = slice.range.endExclusive,
             spacingBeforePx = if (startsNewBlock) paragraphSpacingPx.coerceAtLeast(0) else 0,
             firstLineIndentEm = if (
                 forceParagraphIndent &&
@@ -1072,6 +1103,7 @@ internal fun buildPlainPageRenderBlocks(
     }
 }
 
+
 internal fun buildRichPageRenderBlocks(
     page: List<RichPageSlice.Text>,
     blockTexts: List<RichPageBlockText>,
@@ -1080,17 +1112,21 @@ internal fun buildRichPageRenderBlocks(
     allowChapterTitleBlock: Boolean = true,
 ): List<RichPageRenderBlock> {
     if (page.isEmpty()) return emptyList()
+    val blockTextBySourceBlockIndex = blockTexts.associateBy { it.sourceBlockIndex }
     return page.mapIndexed { index, slice ->
         val previousBlockIndex = page.getOrNull(index - 1)?.blockIndex
         val startsNewBlock = index > 0 && previousBlockIndex != slice.blockIndex
-        val blockText = blockTexts[slice.blockIndex]
+        val blockText = blockTextBySourceBlockIndex.getValue(slice.blockIndex)
         val isChapterTitle = allowChapterTitleBlock &&
             chapterTitle != null &&
             slice.blockIndex == 0 &&
             slice.range.start == 0 &&
             isNativeChapterTitleText(blockText.text.text, chapterTitle)
         RichPageRenderBlock(
+            sourceBlockIndex = slice.blockIndex,
             text = blockText.text.subSequence(TextRange(slice.range.start, slice.range.endExclusive)),
+            sourceTextStart = slice.range.start,
+            sourceTextEndExclusive = slice.range.endExclusive,
             spacingBeforePx = if (startsNewBlock) paragraphSpacingPx.coerceAtLeast(0) else 0,
             firstLineIndentEm = if (slice.range.start == 0 && !isChapterTitle) blockText.firstLineIndentEm else null,
             sourceTextAlign = blockText.sourceTextAlign,
@@ -1103,14 +1139,14 @@ internal fun normalizePageReaderContentPages(
     useRichPageReader: Boolean,
     plainPages: List<List<PlainPageSlice>>,
     richPages: List<List<RichPageSlice>>,
-    plainTextBlocks: List<String>,
+    plainTextBlocks: List<PlainPageReaderTextBlock>,
     richBlockTexts: List<RichPageBlockText>,
     paragraphSpacingPx: Int,
     forceParagraphIndent: Boolean,
     chapterTitle: String? = null,
 ): List<NovelPageContentPage> {
     return if (useRichPageReader) {
-        richPages.map { page ->
+        richPages.mapIndexed { pageIndex, page ->
             val imagePage = page.singleOrNull() as? RichPageSlice.Image
             if (imagePage != null) {
                 NovelPageContentPage(
@@ -1120,6 +1156,7 @@ internal fun normalizePageReaderContentPages(
                             contentDescription = imagePage.contentDescription,
                         ),
                     ),
+                    pageIndex = pageIndex,
                 )
             } else {
                 val textPage = page.filterIsInstance<RichPageSlice.Text>()
@@ -1131,18 +1168,22 @@ internal fun normalizePageReaderContentPages(
                         chapterTitle = chapterTitle,
                     ).map { block ->
                         NovelPageContentBlock.Rich(
+                            sourceBlockIndex = block.sourceBlockIndex,
                             text = block.text,
+                            sourceTextStart = block.sourceTextStart,
+                            sourceTextEndExclusive = block.sourceTextEndExclusive,
                             spacingBeforePx = block.spacingBeforePx,
                             firstLineIndentEm = block.firstLineIndentEm,
                             sourceTextAlign = block.sourceTextAlign,
                             isChapterTitle = block.isChapterTitle,
                         )
                     },
+                    pageIndex = pageIndex,
                 )
             }
         }
     } else {
-        plainPages.map { page ->
+        plainPages.mapIndexed { pageIndex, page ->
             NovelPageContentPage(
                 blocks = buildPlainPageRenderBlocks(
                     page = page,
@@ -1152,16 +1193,21 @@ internal fun normalizePageReaderContentPages(
                     chapterTitle = chapterTitle,
                 ).map { block ->
                     NovelPageContentBlock.Plain(
+                        sourceBlockIndex = block.sourceBlockIndex,
                         text = block.text,
+                        sourceTextStart = block.sourceTextStart,
+                        sourceTextEndExclusive = block.sourceTextEndExclusive,
                         spacingBeforePx = block.spacingBeforePx,
                         firstLineIndentEm = block.firstLineIndentEm,
                         isChapterTitle = block.isChapterTitle,
                     )
                 },
+                pageIndex = pageIndex,
             )
         }
     }
 }
+
 
 internal fun resolvePageReaderParagraphSeparator(
     paragraphSpacingDp: Int,
