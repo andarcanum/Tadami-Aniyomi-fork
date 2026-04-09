@@ -3,16 +3,22 @@ package eu.kanade.tachiyomi.data.download.novel
 import android.app.Application
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import logcat.LogPriority
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import kotlin.system.measureTimeMillis
 
 enum class NovelQueuedDownloadType {
     ORIGINAL,
@@ -55,6 +61,145 @@ data class NovelDownloadQueueState(
         get() = pendingCount + activeCount + failedCount
 }
 
+class NovelDownloadQueueRuntimeState {
+    private var nextTaskId = 0L
+    private var workerRunning = false
+    private val canceledTaskIds = mutableSetOf<Long>()
+    private var activeDownloadTaskId: Long? = null
+    private var activeDownloadJob: Job? = null
+
+    @Synchronized
+    fun nextTaskId(): Long {
+        nextTaskId += 1
+        return nextTaskId
+    }
+
+    @Synchronized
+    fun tryStartWorker(): Boolean {
+        if (workerRunning) return false
+        workerRunning = true
+        return true
+    }
+
+    @Synchronized
+    fun markWorkerStopped() {
+        workerRunning = false
+    }
+
+    @Synchronized
+    fun markCanceled(taskId: Long) {
+        canceledTaskIds += taskId
+    }
+
+    @Synchronized
+    fun markCanceled(taskIds: Collection<Long>) {
+        canceledTaskIds += taskIds
+    }
+
+    @Synchronized
+    fun consumeCanceled(taskId: Long): Boolean {
+        return canceledTaskIds.remove(taskId)
+    }
+
+    @Synchronized
+    fun registerActiveDownload(taskId: Long, job: Job) {
+        activeDownloadTaskId = taskId
+        activeDownloadJob = job
+    }
+
+    @Synchronized
+    fun clearActiveDownload(taskId: Long, job: Job) {
+        if (activeDownloadTaskId == taskId && activeDownloadJob === job) {
+            activeDownloadTaskId = null
+            activeDownloadJob = null
+        }
+    }
+
+    @Synchronized
+    fun cancelActiveDownload(taskId: Long): Boolean {
+        if (activeDownloadTaskId != taskId) return false
+        activeDownloadJob?.cancel()
+        return activeDownloadJob != null
+    }
+}
+
+private data class NovelQueueTaskKey(
+    val novelId: Long,
+    val chapterId: Long,
+    val type: NovelQueuedDownloadType,
+    val format: NovelQueuedDownloadFormat,
+)
+
+data class MergeNovelQueuedTasksResult(
+    val tasks: List<NovelQueuedDownload>,
+    val addedCount: Int,
+)
+
+fun mergeNovelQueuedTasks(
+    currentTasks: List<NovelQueuedDownload>,
+    novel: Novel,
+    chapters: List<NovelChapter>,
+    type: NovelQueuedDownloadType,
+    format: NovelQueuedDownloadFormat,
+    runtimeState: NovelDownloadQueueRuntimeState,
+): MergeNovelQueuedTasksResult {
+    if (chapters.isEmpty()) {
+        return MergeNovelQueuedTasksResult(
+            tasks = currentTasks,
+            addedCount = 0,
+        )
+    }
+
+    val tasks = currentTasks.toMutableList()
+    val indexByKey = tasks
+        .withIndex()
+        .associate { (index, task) ->
+            NovelQueueTaskKey(
+                novelId = task.novel.id,
+                chapterId = task.chapter.id,
+                type = task.type,
+                format = task.format,
+            ) to index
+        }.toMutableMap()
+    var added = 0
+
+    chapters.forEach { chapter ->
+        val key = NovelQueueTaskKey(
+            novelId = novel.id,
+            chapterId = chapter.id,
+            type = type,
+            format = format,
+        )
+        val existingIndex = indexByKey[key]
+        if (existingIndex == null) {
+            tasks += NovelQueuedDownload(
+                taskId = runtimeState.nextTaskId(),
+                novel = novel,
+                chapter = chapter,
+                type = type,
+                format = format,
+                status = NovelQueuedDownloadStatus.QUEUED,
+            )
+            indexByKey[key] = tasks.lastIndex
+            added++
+        } else {
+            val existing = tasks[existingIndex]
+            if (existing.status == NovelQueuedDownloadStatus.FAILED) {
+                tasks[existingIndex] = existing.copy(
+                    status = NovelQueuedDownloadStatus.QUEUED,
+                    errorMessage = null,
+                )
+                added++
+            }
+        }
+    }
+
+    return MergeNovelQueuedTasksResult(
+        tasks = tasks,
+        addedCount = added,
+    )
+}
+
 object NovelDownloadQueueManager {
 
     private val queueScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -66,9 +211,7 @@ object NovelDownloadQueueManager {
         NovelDownloadNotifier(Injekt.get<Application>())
     }.getOrNull()
 
-    private var taskIdSeed = 0L
-    private var workerRunning = false
-    private val canceledTaskIds = mutableSetOf<Long>()
+    private val runtimeState = NovelDownloadQueueRuntimeState()
     private var previousNotifiedSummary = QueueNotifySummary()
 
     fun startDownloads() {
@@ -84,7 +227,7 @@ object NovelDownloadQueueManager {
         val runningTaskIds = state.value.tasks
             .filter { it.status == NovelQueuedDownloadStatus.DOWNLOADING }
             .mapTo(mutableSetOf()) { it.taskId }
-        canceledTaskIds += runningTaskIds
+        runtimeState.markCanceled(runningTaskIds)
         updateState {
             it.copy(
                 tasks = it.tasks.filter { task -> task.status == NovelQueuedDownloadStatus.DOWNLOADING },
@@ -117,7 +260,8 @@ object NovelDownloadQueueManager {
             it.novel.id == novelId && it.chapter.id == chapterId && it.type == type
         } ?: return
 
-        canceledTaskIds += task.taskId
+        runtimeState.markCanceled(task.taskId)
+        runtimeState.cancelActiveDownload(task.taskId)
         updateState { queueState ->
             queueState.copy(tasks = queueState.tasks.filterNot { it.taskId == task.taskId })
         }
@@ -172,49 +316,37 @@ object NovelDownloadQueueManager {
         format: NovelQueuedDownloadFormat,
     ): Int {
         if (chapters.isEmpty()) return 0
-        var added = 0
-        updateState { queueState ->
-            val currentTasks = queueState.tasks.toMutableList()
-            chapters.forEach { chapter ->
-                val existing = currentTasks.firstOrNull { task ->
-                    task.novel.id == novel.id &&
-                        task.chapter.id == chapter.id &&
-                        task.type == type &&
-                        task.format == format
-                }
-                if (existing == null) {
-                    currentTasks += NovelQueuedDownload(
-                        taskId = ++taskIdSeed,
-                        novel = novel,
-                        chapter = chapter,
-                        type = type,
-                        format = format,
-                        status = NovelQueuedDownloadStatus.QUEUED,
-                    )
-                    added++
-                } else if (existing.status == NovelQueuedDownloadStatus.FAILED) {
-                    val index = currentTasks.indexOf(existing)
-                    currentTasks[index] = existing.copy(
-                        status = NovelQueuedDownloadStatus.QUEUED,
-                        errorMessage = null,
-                    )
-                    added++
-                }
+        var addedCount = 0
+        val elapsed = measureTimeMillis {
+            updateState { queueState ->
+                val merged = mergeNovelQueuedTasks(
+                    currentTasks = queueState.tasks,
+                    novel = novel,
+                    chapters = chapters,
+                    type = type,
+                    format = format,
+                    runtimeState = runtimeState,
+                )
+                addedCount = merged.addedCount
+                queueState.copy(tasks = merged.tasks)
             }
-            queueState.copy(tasks = currentTasks)
+        }
+        logcat(LogPriority.DEBUG) {
+            "Novel queue enqueue: novel=${novel.id}, requested=${chapters.size}, added=$addedCount, type=$type, format=$format, elapsedMs=$elapsed"
         }
         startWorkerIfNeeded()
-        return added
+        return addedCount
     }
 
     private fun startWorkerIfNeeded() {
-        if (workerRunning) return
-        workerRunning = true
+        if (!runtimeState.tryStartWorker()) return
+        logcat(LogPriority.DEBUG) { "Novel queue worker starting" }
         queueScope.launch {
             try {
                 processLoop()
             } finally {
-                workerRunning = false
+                runtimeState.markWorkerStopped()
+                logcat(LogPriority.DEBUG) { "Novel queue worker stopped" }
             }
         }
     }
@@ -232,26 +364,37 @@ object NovelDownloadQueueManager {
 
             val nextTask = snapshot.tasks.firstOrNull { it.status == NovelQueuedDownloadStatus.QUEUED } ?: break
             markTaskStatus(nextTask.taskId, NovelQueuedDownloadStatus.DOWNLOADING)
+            logcat(LogPriority.DEBUG) {
+                "Novel queue task starting: taskId=${nextTask.taskId}, novel=${nextTask.novel.id}, chapter=${nextTask.chapter.id}, type=${nextTask.type}"
+            }
 
-            val result = runCatching {
-                when (nextTask.type) {
-                    NovelQueuedDownloadType.ORIGINAL -> {
-                        downloadManager.downloadChapter(nextTask.novel, nextTask.chapter)
-                    }
-                    NovelQueuedDownloadType.TRANSLATED -> {
-                        val format = when (nextTask.format) {
-                            NovelQueuedDownloadFormat.TXT -> NovelTranslatedDownloadFormat.TXT
-                            NovelQueuedDownloadFormat.DOCX -> NovelTranslatedDownloadFormat.DOCX
-                            NovelQueuedDownloadFormat.HTML -> NovelTranslatedDownloadFormat.TXT
+            val result = coroutineScope {
+                val downloadJob = async {
+                    when (nextTask.type) {
+                        NovelQueuedDownloadType.ORIGINAL -> {
+                            downloadManager.downloadChapter(nextTask.novel, nextTask.chapter)
                         }
-                        translatedDownloadManager
-                            .exportTranslatedChapter(nextTask.novel, nextTask.chapter, format)
-                            .isSuccess
+                        NovelQueuedDownloadType.TRANSLATED -> {
+                            val format = when (nextTask.format) {
+                                NovelQueuedDownloadFormat.TXT -> NovelTranslatedDownloadFormat.TXT
+                                NovelQueuedDownloadFormat.DOCX -> NovelTranslatedDownloadFormat.DOCX
+                                NovelQueuedDownloadFormat.HTML -> NovelTranslatedDownloadFormat.TXT
+                            }
+                            translatedDownloadManager
+                                .exportTranslatedChapter(nextTask.novel, nextTask.chapter, format)
+                                .isSuccess
+                        }
                     }
+                }
+                runtimeState.registerActiveDownload(nextTask.taskId, downloadJob)
+                try {
+                    runCatching { downloadJob.await() }
+                } finally {
+                    runtimeState.clearActiveDownload(nextTask.taskId, downloadJob)
                 }
             }
 
-            val canceled = canceledTaskIds.remove(nextTask.taskId)
+            val canceled = runtimeState.consumeCanceled(nextTask.taskId)
             if (canceled) {
                 if (nextTask.type == NovelQueuedDownloadType.ORIGINAL) {
                     downloadManager.deleteChapter(nextTask.novel, nextTask.chapter.id)
@@ -263,9 +406,15 @@ object NovelDownloadQueueManager {
             val success = result.getOrElse { false }
             if (success) {
                 removeTask(nextTask.taskId)
+                logcat(LogPriority.DEBUG) {
+                    "Novel queue task completed: taskId=${nextTask.taskId}, novel=${nextTask.novel.id}, chapter=${nextTask.chapter.id}"
+                }
             } else {
                 val message = result.exceptionOrNull()?.message
                 markTaskFailed(nextTask.taskId, message ?: "Download failed")
+                logcat(LogPriority.WARN) {
+                    "Novel queue task failed: taskId=${nextTask.taskId}, novel=${nextTask.novel.id}, chapter=${nextTask.chapter.id}, error=${message ?: "Download failed"}"
+                }
             }
         }
     }

@@ -4,6 +4,11 @@ import android.app.Application
 import com.hippo.unifile.UniFile
 import eu.kanade.domain.items.novelchapter.model.toSNovelChapter
 import eu.kanade.tachiyomi.util.storage.DiskUtil
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withTimeout
+import logcat.LogPriority
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.source.novel.service.NovelSourceManager
@@ -11,12 +16,18 @@ import tachiyomi.domain.storage.service.StorageManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
+import kotlin.coroutines.coroutineContext
+import kotlin.system.measureTimeMillis
 
 class NovelDownloadManager(
     private val application: Application? = runCatching { Injekt.get<Application>() }.getOrNull(),
     private val sourceManager: NovelSourceManager? = runCatching { Injekt.get<NovelSourceManager>() }.getOrNull(),
     private val storageManager: StorageManager? = runCatching { Injekt.get<StorageManager>() }.getOrNull(),
     private val downloadCache: NovelDownloadCache? = runCatching { Injekt.get<NovelDownloadCache>() }.getOrNull(),
+    private val chapterFetchTimeoutMillis: Long = DEFAULT_CHAPTER_FETCH_TIMEOUT_MILLIS,
+    private val fetchChapterText: suspend (Novel, NovelChapter) -> String? = { novel, chapter ->
+        sourceManager?.get(novel.source)?.getChapterText(chapter.toSNovelChapter())
+    },
 ) {
 
     private val legacyRootDir: File?
@@ -101,14 +112,38 @@ class NovelDownloadManager(
     }
 
     suspend fun downloadChapter(novel: Novel, chapter: NovelChapter): Boolean {
-        val source = sourceManager?.get(novel.source) ?: return false
-        val text = source.getChapterText(chapter.toSNovelChapter())
+        var fetchElapsed = 0L
+        val text = try {
+            var fetchedText: String? = null
+            fetchElapsed = measureTimeMillis {
+                fetchedText = withTimeout(chapterFetchTimeoutMillis) {
+                    fetchChapterText(novel, chapter)
+                }
+            }
+            fetchedText
+        } catch (_: TimeoutCancellationException) {
+            logcat(LogPriority.WARN) {
+                "Novel download fetch timed out: novel=${novel.id}, chapter=${chapter.id}, timeoutMs=$chapterFetchTimeoutMillis"
+            }
+            return false
+        } ?: return false
+        coroutineContext.ensureActive()
         val file = chapterFile(novel, chapter.id, create = true) ?: return false
-        val outputStream = file.openOutputStream()
-        outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
-            writer.write(text)
+        var writeElapsed = 0L
+        writeElapsed = measureTimeMillis {
+            val outputStream = file.openOutputStream()
+            outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
+                writer.write(text)
+            }
         }
-        downloadCache?.onNovelDownloadsChanged(novel)
+        logcat(LogPriority.DEBUG) {
+            "Novel download completed: novel=${novel.id}, chapter=${chapter.id}, fetchMs=$fetchElapsed, writeMs=$writeElapsed, chars=${text.length}"
+        }
+        downloadCache?.onChaptersChanged(
+            novel = novel,
+            chapterIds = setOf(chapter.id),
+            downloaded = true,
+        )
         return true
     }
 
@@ -127,7 +162,11 @@ class NovelDownloadManager(
         chapterFile(novel, chapterId)?.delete()
         legacyChapterFile(novel, chapterId)?.delete()
         cleanupDirectories(novel)
-        downloadCache?.onNovelDownloadsChanged(novel)
+        downloadCache?.onChaptersChanged(
+            novel = novel,
+            chapterIds = setOf(chapterId),
+            downloaded = false,
+        )
     }
 
     fun deleteChapters(novel: Novel, chapterIds: Collection<Long>) {
@@ -136,7 +175,11 @@ class NovelDownloadManager(
             legacyChapterFile(novel, chapterId)?.delete()
         }
         cleanupDirectories(novel)
-        downloadCache?.onNovelDownloadsChanged(novel)
+        downloadCache?.onChaptersChanged(
+            novel = novel,
+            chapterIds = chapterIds.toSet(),
+            downloaded = false,
+        )
     }
 
     fun deleteNovel(novel: Novel) {
@@ -151,7 +194,7 @@ class NovelDownloadManager(
         }
 
         cleanupDirectories(novel)
-        downloadCache?.onNovelDownloadsChanged(novel)
+        downloadCache?.onNovelRemoved(novel)
     }
 
     fun getDownloadedChapterText(novel: Novel, chapterId: Long): String? {
@@ -257,5 +300,6 @@ class NovelDownloadManager(
 
     private companion object {
         const val ROOT_DIR_NAME = "novels"
+        const val DEFAULT_CHAPTER_FETCH_TIMEOUT_MILLIS = 30_000L
     }
 }

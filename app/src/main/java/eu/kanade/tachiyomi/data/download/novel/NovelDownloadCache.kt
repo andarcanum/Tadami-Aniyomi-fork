@@ -13,6 +13,20 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.concurrent.ConcurrentHashMap
 
+sealed interface NovelDownloadCacheEvent {
+    data object InvalidateAll : NovelDownloadCacheEvent
+
+    data class ChaptersChanged(
+        val novelId: Long,
+        val chapterIds: Set<Long>,
+        val downloaded: Boolean,
+    ) : NovelDownloadCacheEvent
+
+    data class NovelRemoved(
+        val novelId: Long,
+    ) : NovelDownloadCacheEvent
+}
+
 /**
  * Lightweight in-memory cache for per-novel download presence.
  *
@@ -29,7 +43,7 @@ class NovelDownloadCache(
 
     private val cachedCounts = ConcurrentHashMap<Long, Int>()
 
-    private val _changes = MutableSharedFlow<Unit>(
+    private val _changes = MutableSharedFlow<NovelDownloadCacheEvent>(
         replay = 1,
         extraBufferCapacity = 1,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
@@ -37,7 +51,7 @@ class NovelDownloadCache(
     val changes = _changes.asSharedFlow()
 
     init {
-        _changes.tryEmit(Unit)
+        _changes.tryEmit(NovelDownloadCacheEvent.InvalidateAll)
         storageManager.changes
             .onEach { invalidateAll() }
             .launchIn(scope)
@@ -53,13 +67,28 @@ class NovelDownloadCache(
         }
     }
 
-    fun onNovelDownloadsChanged(novel: Novel) {
+    fun onChaptersChanged(
+        novel: Novel,
+        chapterIds: Set<Long>,
+        downloaded: Boolean,
+    ) {
         cachedCounts[novel.id] = downloadCountLookup(novel)
-        _changes.tryEmit(Unit)
+        _changes.tryEmit(
+            NovelDownloadCacheEvent.ChaptersChanged(
+                novelId = novel.id,
+                chapterIds = chapterIds,
+                downloaded = downloaded,
+            ),
+        )
+    }
+
+    fun onNovelRemoved(novel: Novel) {
+        cachedCounts.remove(novel.id)
+        _changes.tryEmit(NovelDownloadCacheEvent.NovelRemoved(novel.id))
     }
 
     fun invalidateAll() {
         cachedCounts.clear()
-        _changes.tryEmit(Unit)
+        _changes.tryEmit(NovelDownloadCacheEvent.InvalidateAll)
     }
 }

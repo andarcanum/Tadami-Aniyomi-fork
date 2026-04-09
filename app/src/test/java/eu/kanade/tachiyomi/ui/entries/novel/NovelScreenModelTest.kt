@@ -12,6 +12,7 @@ import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.items.novelchapter.interactor.GetAvailableNovelScanlators
 import eu.kanade.domain.items.novelchapter.interactor.GetNovelScanlatorChapterCounts
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCacheEvent
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.novelsource.NovelSource
@@ -19,6 +20,7 @@ import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -444,7 +446,7 @@ class NovelScreenModelTest {
                 novelChapter(id = 2L, novelId = novel.id, chapterNumber = 2.0, read = false),
             )
             val chapterRepository = FakeNovelChapterRepository(initialChapters)
-            val downloadCacheChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+            val downloadCacheChanges = MutableSharedFlow<NovelDownloadCacheEvent>(replay = 1, extraBufferCapacity = 1)
             var resolveDownloadedIdsCalls = 0
 
             val screenModel = createResumeScreenModel(
@@ -465,7 +467,7 @@ class NovelScreenModelTest {
 
             try {
                 awaitResumeScreenModel(screenModel)
-                downloadCacheChanges.emit(Unit)
+                downloadCacheChanges.emit(NovelDownloadCacheEvent.InvalidateAll)
                 withTimeout(1_000) {
                     while ((screenModel.state.value as? NovelScreenModel.State.Success)?.downloadedChapterIds !=
                         setOf(1L)
@@ -502,6 +504,240 @@ class NovelScreenModelTest {
         }
     }
 
+    @Test
+    fun `toggle chapter download returns before enqueue finishes`() {
+        runBlocking {
+            val novel = novelForResumeTests(201L)
+            val chapters = listOf(
+                novelChapter(id = 1L, novelId = novel.id, chapterNumber = 1.0, read = false),
+            )
+            val enqueueStarted = CompletableDeferred<Unit>()
+            val allowEnqueueToFinish = CompletableDeferred<Unit>()
+            val methodReturned = CompletableDeferred<Unit>()
+            val screenModel = createResumeScreenModel(
+                novel = novel,
+                chapters = chapters,
+                enqueueOriginal = { _, _ ->
+                    enqueueStarted.complete(Unit)
+                    runBlocking {
+                        allowEnqueueToFinish.await()
+                    }
+                    1
+                },
+            )
+
+            try {
+                awaitResumeScreenModel(screenModel)
+
+                val worker = Thread {
+                    screenModel.toggleChapterDownload(1L)
+                    methodReturned.complete(Unit)
+                }
+                worker.start()
+
+                withTimeout(1_000) {
+                    enqueueStarted.await()
+                }
+                methodReturned.isCompleted shouldBe true
+
+                allowEnqueueToFinish.complete(Unit)
+                worker.join(1_000)
+            } finally {
+                screenModel.onDispose()
+            }
+        }
+    }
+
+    @Test
+    fun `download selected chapters returns before enqueue finishes`() {
+        runBlocking {
+            val novel = novelForResumeTests(202L)
+            val chapters = listOf(
+                novelChapter(id = 1L, novelId = novel.id, chapterNumber = 1.0, read = false),
+                novelChapter(id = 2L, novelId = novel.id, chapterNumber = 2.0, read = false),
+            )
+            val enqueueStarted = CompletableDeferred<Unit>()
+            val allowEnqueueToFinish = CompletableDeferred<Unit>()
+            val methodReturned = CompletableDeferred<Unit>()
+            val screenModel = createResumeScreenModel(
+                novel = novel,
+                chapters = chapters,
+                enqueueOriginal = { _, queuedChapters ->
+                    queuedChapters.map { it.id }.toSet() shouldBe setOf(1L, 2L)
+                    enqueueStarted.complete(Unit)
+                    runBlocking {
+                        allowEnqueueToFinish.await()
+                    }
+                    queuedChapters.size
+                },
+            )
+
+            try {
+                awaitResumeScreenModel(screenModel)
+                screenModel.toggleSelection(1L)
+                screenModel.toggleSelection(2L)
+
+                val worker = Thread {
+                    screenModel.downloadSelectedChapters()
+                    methodReturned.complete(Unit)
+                }
+                worker.start()
+
+                withTimeout(1_000) {
+                    enqueueStarted.await()
+                }
+                methodReturned.isCompleted shouldBe true
+
+                allowEnqueueToFinish.complete(Unit)
+                worker.join(1_000)
+            } finally {
+                screenModel.onDispose()
+            }
+        }
+    }
+
+    @Test
+    fun `run download action returns before enqueue finishes`() {
+        runBlocking {
+            val novel = novelForResumeTests(203L)
+            val chapters = listOf(
+                novelChapter(id = 1L, novelId = novel.id, chapterNumber = 1.0, read = false),
+                novelChapter(id = 2L, novelId = novel.id, chapterNumber = 2.0, read = false),
+                novelChapter(id = 3L, novelId = novel.id, chapterNumber = 3.0, read = false),
+            )
+            val enqueueStarted = CompletableDeferred<Unit>()
+            val allowEnqueueToFinish = CompletableDeferred<Unit>()
+            val methodReturned = CompletableDeferred<Unit>()
+            val screenModel = createResumeScreenModel(
+                novel = novel,
+                chapters = chapters,
+                enqueueOriginal = { _, queuedChapters ->
+                    queuedChapters.map { it.id }.toSet() shouldBe setOf(1L, 2L, 3L)
+                    enqueueStarted.complete(Unit)
+                    runBlocking {
+                        allowEnqueueToFinish.await()
+                    }
+                    queuedChapters.size
+                },
+            )
+
+            try {
+                awaitResumeScreenModel(screenModel)
+
+                val worker = Thread {
+                    screenModel.runDownloadAction(NovelDownloadAction.ALL)
+                    methodReturned.complete(Unit)
+                }
+                worker.start()
+
+                withTimeout(1_000) {
+                    enqueueStarted.await()
+                }
+                methodReturned.isCompleted shouldBe true
+
+                allowEnqueueToFinish.complete(Unit)
+                worker.join(1_000)
+            } finally {
+                screenModel.onDispose()
+            }
+        }
+    }
+
+    @Test
+    fun `targeted download cache update changes downloaded ids without full rescan`() {
+        runBlocking {
+            val novel = novelForResumeTests(301L)
+            val chapters = listOf(
+                novelChapter(id = 1L, novelId = novel.id, chapterNumber = 1.0, read = false),
+                novelChapter(id = 2L, novelId = novel.id, chapterNumber = 2.0, read = false),
+            )
+            val downloadCacheChanges = MutableSharedFlow<NovelDownloadCacheEvent>(replay = 1, extraBufferCapacity = 1)
+            var resolveDownloadedIdsCalls = 0
+            val screenModel = createResumeScreenModel(
+                novel = novel,
+                chapters = chapters,
+                downloadCacheChanges = downloadCacheChanges,
+                resolveDownloadedChapterIds = { _, resolvedChapters ->
+                    resolveDownloadedIdsCalls++
+                    resolvedChapters
+                        .asSequence()
+                        .map { it.id }
+                        .filter { it == 1L }
+                        .toSet()
+                },
+            )
+
+            try {
+                awaitResumeScreenModel(screenModel)
+                downloadCacheChanges.emit(NovelDownloadCacheEvent.InvalidateAll)
+                withTimeout(1_000) {
+                    while ((screenModel.state.value as? NovelScreenModel.State.Success)?.downloadedChapterIds !=
+                        setOf(1L)
+                    ) {
+                        yield()
+                    }
+                }
+
+                val callsAfterInitialRescan = resolveDownloadedIdsCalls
+                screenModel.handleDownloadCacheEvent(
+                    NovelDownloadCacheEvent.ChaptersChanged(
+                        novelId = novel.id,
+                        chapterIds = setOf(2L),
+                        downloaded = true,
+                    ),
+                )
+
+                withTimeout(1_000) {
+                    while ((screenModel.state.value as? NovelScreenModel.State.Success)?.downloadedChapterIds !=
+                        setOf(1L, 2L)
+                    ) {
+                        yield()
+                    }
+                }
+
+                resolveDownloadedIdsCalls shouldBe callsAfterInitialRescan
+            } finally {
+                screenModel.onDispose()
+            }
+        }
+    }
+
+    @Test
+    fun `invalidate all download cache event still triggers full rescan`() {
+        runBlocking {
+            val novel = novelForResumeTests(302L)
+            val chapters = listOf(
+                novelChapter(id = 1L, novelId = novel.id, chapterNumber = 1.0, read = false),
+            )
+            val downloadCacheChanges = MutableSharedFlow<NovelDownloadCacheEvent>(replay = 1, extraBufferCapacity = 1)
+            var resolveDownloadedIdsCalls = 0
+            val screenModel = createResumeScreenModel(
+                novel = novel,
+                chapters = chapters,
+                downloadCacheChanges = downloadCacheChanges,
+                resolveDownloadedChapterIds = { _, resolvedChapters ->
+                    resolveDownloadedIdsCalls++
+                    resolvedChapters.map { it.id }.toSet()
+                },
+            )
+
+            try {
+                awaitResumeScreenModel(screenModel)
+                val initialCalls = resolveDownloadedIdsCalls
+
+                screenModel.handleDownloadCacheEvent(NovelDownloadCacheEvent.InvalidateAll)
+
+                withTimeout(1_000) {
+                    while (resolveDownloadedIdsCalls <= initialCalls) {
+                        yield()
+                    }
+                }
+            } finally {
+                screenModel.onDispose()
+            }
+        }
+    }
+
     private class FakeLifecycleOwner : LifecycleOwner {
         private class NoopStartedLifecycle : Lifecycle() {
             override val currentState: State
@@ -519,9 +755,12 @@ class NovelScreenModelTest {
         novel: Novel,
         chapters: List<NovelChapter>,
         chapterRepository: FakeNovelChapterRepository = FakeNovelChapterRepository(chapters),
-        downloadCacheChanges: Flow<Unit> = MutableSharedFlow(extraBufferCapacity = 1),
+        downloadCacheChanges: Flow<NovelDownloadCacheEvent> = MutableSharedFlow(replay = 1, extraBufferCapacity = 1),
         downloadQueueState: Flow<NovelDownloadQueueState> = MutableStateFlow(NovelDownloadQueueState()),
         resolveDownloadedChapterIds: (Novel, List<NovelChapter>) -> Set<Long> = { _, _ -> emptySet() },
+        enqueueOriginal: (Novel, List<NovelChapter>) -> Int = { novel, queuedChapters ->
+            eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager.enqueueOriginal(novel, queuedChapters)
+        },
     ): NovelScreenModel {
         val novelRepository = FakeNovelRepository(novel)
         val preferenceStore = FakePreferenceStore()
@@ -604,6 +843,7 @@ class NovelScreenModelTest {
             downloadCacheChanges = downloadCacheChanges,
             downloadQueueState = downloadQueueState,
             resolveDownloadedChapterIds = resolveDownloadedChapterIds,
+            enqueueOriginal = enqueueOriginal,
             novelReaderPreferences = eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences(
                 preferenceStore = preferenceStore,
                 json = Json { encodeDefaults = true },
