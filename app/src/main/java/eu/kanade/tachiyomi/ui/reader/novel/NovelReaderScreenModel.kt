@@ -64,6 +64,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsEngine
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsEngineRegistry
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsHighlightEstimator
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackProgressListener
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackState
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackServiceRuntime
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsResolvedChapter
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsSession
@@ -762,20 +763,31 @@ class NovelReaderScreenModel(
             settings.ttsEnginePackage.takeIf { it.isNotBlank() },
         )
         if (!settings.ttsEnabled) {
+            ttsWordProgressJob?.cancel()
+            ttsWordProgressJob = null
+            pendingTtsStartRequest = null
+            ttsAudioFocusManager.abandonPlaybackFocus()
+            ttsSessionController.stop()
             ttsEngine.shutdown()
             initializedTtsEnginePackage = null
             ttsUiState = ttsUiState.copy(
                 enabled = false,
+                playbackState = NovelTtsPlaybackState.IDLE,
+                activeSession = null,
+                activeHighlightMode = NovelTtsHighlightMode.OFF,
+                activeWordRange = null,
+                activeUtteranceText = null,
+                activeSourceBlockIndex = null,
                 availableVoices = emptyList(),
                 availableLocales = emptyList(),
                 recentLanguageTags = recentLanguageTags,
                 isLoadingVoices = false,
-                selectedEnginePackage = preferredEngine?.packageName.orEmpty(),
-                selectedVoiceId = settings.ttsVoiceId,
-                selectedLocaleTag = settings.ttsLocaleTag,
+                selectedEnginePackage = "",
+                selectedVoiceId = "",
+                selectedLocaleTag = "",
                 speechRate = settings.ttsSpeechRate,
                 pitch = settings.ttsPitch,
-                activeHighlightMode = NovelTtsHighlightMode.OFF,
+                errorMessage = null,
             )
             refreshTtsUiState()
             return

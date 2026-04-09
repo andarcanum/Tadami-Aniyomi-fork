@@ -25,6 +25,40 @@ class NovelReaderTtsControlsTest {
     }
 
     @Test
+    fun `summary line is hidden when tts is disabled`() {
+        val uiState = NovelReaderTtsUiState(
+            enabled = false,
+            availableEngines = listOf(
+                NovelTtsEngineDescriptor(
+                    packageName = "engine.default",
+                    label = "Default Engine",
+                    isSystemDefault = true,
+                ),
+            ),
+            availableVoices = listOf(
+                NovelTtsVoiceDescriptor(
+                    id = "voice.ru",
+                    name = "Anna",
+                    localeTag = "ru-RU",
+                ),
+            ),
+            selectedEnginePackage = "engine.default",
+            selectedVoiceId = "voice.ru",
+            selectedLocaleTag = "ru-RU",
+            capabilities = NovelTtsEngineCapabilities(
+                supportsExactWordOffsets = false,
+                supportsReliablePauseResume = true,
+                supportsVoiceEnumeration = true,
+                supportsLocaleEnumeration = true,
+            ),
+        )
+
+        val snapshot = resolveNovelReaderTtsOptionsSnapshot(uiState)
+
+        assertNull(resolveNovelReaderTtsSummaryLine(uiState, snapshot))
+    }
+
+    @Test
     fun `playback state switches primary action to pause`() {
         val snapshot = resolveNovelReaderTtsControlSnapshot(
             NovelReaderTtsUiState(

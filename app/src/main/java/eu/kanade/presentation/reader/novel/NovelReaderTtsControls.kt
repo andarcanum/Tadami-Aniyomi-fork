@@ -274,6 +274,7 @@ internal fun resolveNovelReaderTtsSummaryLine(
     snapshot: NovelReaderTtsOptionsSnapshot,
     textSnapshot: NovelReaderTtsTextSnapshot = NovelReaderTtsTextSnapshot(),
 ): String? {
+    if (!uiState.enabled) return null
     if (uiState.isLoadingVoices) return textSnapshot.loadingVoices
     val selectedVoiceTitle = snapshot.selectedVoice?.let { selectedVoice ->
         val voicesInLanguage = uiState.availableVoices.filter { it.localeTag == selectedVoice.localeTag }
