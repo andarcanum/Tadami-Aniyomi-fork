@@ -8,6 +8,7 @@ import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.GetApp
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.NewReleases
 import androidx.compose.material.icons.outlined.QueryStats
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Storage
@@ -18,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.vectorResource
+import com.tadami.aurora.BuildConfig
 import com.tadami.aurora.R
 import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.presentation.more.settings.widget.SwitchPreferenceWidget
@@ -49,6 +51,7 @@ fun MoreScreen(
     onClickNovelReaderSettings: () -> Unit,
     onClickSettings: () -> Unit,
     onClickAbout: () -> Unit,
+    onClickDebugAppUpdatePreview: () -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
 
@@ -174,6 +177,16 @@ fun MoreScreen(
                     icon = Icons.Outlined.Info,
                     onPreferenceClick = onClickAbout,
                 )
+            }
+            if (BuildConfig.DEBUG) {
+                item {
+                    TextPreferenceWidget(
+                        title = stringResource(AYMR.strings.debug_app_update_preview),
+                        subtitle = stringResource(AYMR.strings.debug_app_update_preview_summary),
+                        icon = Icons.Outlined.NewReleases,
+                        onPreferenceClick = onClickDebugAppUpdatePreview,
+                    )
+                }
             }
             item {
                 TextPreferenceWidget(

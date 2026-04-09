@@ -180,6 +180,7 @@
     <string name="update_48hour">Каждые 2 дня</string>
     <string name="update_6hour">Каждые 6 часов</string>
     <string name="update_check_confirm">Загрузить</string>
+    <string name="update_check_ignore_version">Не показывать эту версию снова</string>
     <string name="update_check_no_new_updates">Нет обновлений</string>
     <string name="update_check_notification_download_complete">Нажмите для установки обновления</string>
     <string name="update_check_notification_download_error">Ошибка загрузки</string>

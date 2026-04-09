@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.NewReleases
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.VideoSettings
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -41,6 +42,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tadami.aurora.BuildConfig
 import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.presentation.components.AuroraBackground
 import eu.kanade.presentation.more.settings.AuroraTopBarTitleText
@@ -66,6 +68,7 @@ fun MoreScreenAurora(
     onNovelReaderSettingsClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onAboutClick: () -> Unit,
+    onDebugAppUpdatePreviewClick: () -> Unit,
     onStatsClick: () -> Unit,
     onAchievementsClick: () -> Unit,
     onHelpClick: () -> Unit,
@@ -188,6 +191,15 @@ fun MoreScreenAurora(
                     icon = Icons.Filled.Info,
                     onClick = onAboutClick,
                 )
+
+                if (BuildConfig.DEBUG) {
+                    AuroraSettingItem(
+                        title = stringResource(AYMR.strings.debug_app_update_preview),
+                        subtitle = stringResource(AYMR.strings.debug_app_update_preview_summary),
+                        icon = Icons.Outlined.NewReleases,
+                        onClick = onDebugAppUpdatePreviewClick,
+                    )
+                }
 
                 AuroraSettingItem(
                     title = stringResource(AYMR.strings.aurora_help),

@@ -1369,6 +1369,8 @@
     <string name="aurora_statistics">Statistics</string>
     <string name="aurora_achievements">Achievements</string>
     <string name="aurora_more">More</string>
+    <string name="debug_app_update_preview">App update preview</string>
+    <string name="debug_app_update_preview_summary">Open the update sheet with mock release data</string>
     <string name="aurora_library">Library</string>
     <string name="aurora_categories">Categories</string>
     <string name="aurora_data_storage">Data &amp; Storage</string>

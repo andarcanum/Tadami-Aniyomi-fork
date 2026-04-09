@@ -1227,6 +1227,8 @@
     <string name="aurora_help">Помощь</string>
     <string name="aurora_statistics">Статистика</string>
     <string name="aurora_more">Ещё</string>
+    <string name="debug_app_update_preview">Предпросмотр обновления</string>
+    <string name="debug_app_update_preview_summary">Открыть экран обновления с тестовыми данными</string>
     <string name="aurora_library">Библиотека</string>
     <string name="aurora_categories">Категории</string>
     <string name="aurora_data_storage">Данные и хранилище</string>

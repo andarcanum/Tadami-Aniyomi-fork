@@ -30,6 +30,7 @@ import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
 import eu.kanade.tachiyomi.ui.category.CategoriesTab
 import eu.kanade.tachiyomi.ui.download.DownloadsTab
+import eu.kanade.tachiyomi.ui.more.DebugAppUpdatePreviewScreen
 import eu.kanade.tachiyomi.ui.setting.PlayerSettingsScreen
 import eu.kanade.tachiyomi.ui.setting.SettingsScreen
 import eu.kanade.tachiyomi.ui.stats.StatsTab
@@ -97,6 +98,7 @@ data object MoreTab : Tab {
                 onNovelReaderSettingsClick = { navigator.push(SettingsNovelReaderScreen) },
                 onSettingsClick = { navigator.push(SettingsScreen()) },
                 onAboutClick = { navigator.push(AboutScreen) },
+                onDebugAppUpdatePreviewClick = { navigator.push(DebugAppUpdatePreviewScreen()) },
                 onStatsClick = { navigator.push(StatsTab) },
                 onAchievementsClick = { navigator.push(AchievementScreenVoyager) },
                 onHelpClick = { uriHandler.openUri(Constants.URL_HELP) },
@@ -119,6 +121,7 @@ data object MoreTab : Tab {
                 onClickNovelReaderSettings = { navigator.push(SettingsNovelReaderScreen) },
                 onClickSettings = { navigator.push(SettingsScreen()) },
                 onClickAbout = { navigator.push(AboutScreen) },
+                onClickDebugAppUpdatePreview = { navigator.push(DebugAppUpdatePreviewScreen()) },
             )
         }
     }
