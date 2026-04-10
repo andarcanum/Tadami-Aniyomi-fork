@@ -648,6 +648,7 @@
     <string name="novel_reader_tts_loading_voices">Loading voices…</string>
     <string name="novel_reader_tts_voice_settings">Voice settings</string>
     <string name="novel_reader_tts_behavior_settings">TTS behavior</string>
+    <string name="novel_reader_tts_disable">Disable TTS</string>
     <string name="novel_reader_tts_action_previous">Previous</string>
     <string name="novel_reader_tts_action_pause">Pause</string>
     <string name="novel_reader_tts_action_play">Play</string>

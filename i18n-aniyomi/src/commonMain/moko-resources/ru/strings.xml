@@ -417,6 +417,7 @@
     <string name="novel_reader_tts_loading_voices">Загрузка озвучек…</string>
     <string name="novel_reader_tts_voice_settings">Настройки озвучки</string>
     <string name="novel_reader_tts_behavior_settings">Параметры озвучки</string>
+    <string name="novel_reader_tts_disable">Выключить TTS</string>
     <string name="novel_reader_tts_action_previous">Предыдущий фрагмент</string>
     <string name="novel_reader_tts_action_pause">Пауза</string>
     <string name="novel_reader_tts_action_play">Воспроизвести</string>

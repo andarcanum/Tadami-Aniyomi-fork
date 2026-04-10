@@ -1261,6 +1261,27 @@ class NovelReaderScreenModel(
         setOverride = { it.copy(ttsPitch = value) },
     )
 
+    fun disableTts() {
+        val currentState = mutableState.value as? State.Success ?: return
+        if (!currentState.readerSettings.ttsEnabled) return
+        val sourceId = currentNovel?.source ?: return
+        screenModelScope.launch {
+            ttsWordProgressJob?.cancel()
+            ttsWordProgressJob = null
+            pendingTtsStartRequest = null
+            ttsAudioFocusManager.abandonPlaybackFocus()
+            ttsSessionController.stop()
+            if (novelReaderPreferences.getSourceOverride(sourceId) != null) {
+                novelReaderPreferences.updateSourceOverride(sourceId) {
+                    it.copy(ttsEnabled = false)
+                }
+            } else {
+                novelReaderPreferences.ttsEnabled().set(false)
+            }
+            updateContent(currentState.readerSettings.copy(ttsEnabled = false))
+        }
+    }
+
     fun createTtsPlaybackServiceRuntime(): NovelTtsPlaybackServiceRuntime {
         return NovelTtsPlaybackServiceRuntime(
             controller = ttsSessionController,

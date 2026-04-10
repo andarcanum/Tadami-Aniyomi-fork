@@ -323,6 +323,7 @@ internal fun NovelReaderTtsControls(
     onSetLocaleTag: (String) -> Unit,
     onSetSpeechRate: (Float) -> Unit,
     onSetPitch: (Float) -> Unit,
+    onDisableTts: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val snapshot = resolveNovelReaderTtsControlSnapshot(uiState)
@@ -435,6 +436,7 @@ internal fun NovelReaderTtsControls(
             onSetLocaleTag = onSetLocaleTag,
             onSetSpeechRate = onSetSpeechRate,
             onSetPitch = onSetPitch,
+            onDisableTts = onDisableTts,
         )
     }
 }
@@ -448,6 +450,7 @@ private fun NovelReaderTtsOptionsDialog(
     onSetLocaleTag: (String) -> Unit,
     onSetSpeechRate: (Float) -> Unit,
     onSetPitch: (Float) -> Unit,
+    onDisableTts: () -> Unit,
 ) {
     val snapshot = resolveNovelReaderTtsOptionsSnapshot(uiState)
     val textSnapshot = rememberNovelReaderTtsTextSnapshot()
@@ -486,6 +489,16 @@ private fun NovelReaderTtsOptionsDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                TextButton(
+                    onClick = onDisableTts,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = stringResource(AYMR.strings.novel_reader_tts_disable),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+
                 Text(
                     text = stringResource(AYMR.strings.novel_reader_tts_engine),
                     style = MaterialTheme.typography.titleSmall,
@@ -692,9 +705,16 @@ private fun NovelReaderTtsOptionsDialog(
                 )
             }
         },
-        confirmButton = {
+        dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text(text = stringResource(AYMR.strings.novel_reader_selected_text_translation_action_close))
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(
+                    text = stringResource(AYMR.strings.novel_reader_selected_text_translation_action_close),
+                )
             }
         },
     )

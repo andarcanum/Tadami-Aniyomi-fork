@@ -319,6 +319,7 @@ fun NovelReaderScreen(
     onSetTtsLocaleTag: (String) -> Unit = {},
     onSetTtsSpeechRate: (Float) -> Unit = {},
     onSetTtsPitch: (Float) -> Unit = {},
+    onDisableTts: () -> Unit = {},
     onOpenPreviousChapter: ((Long) -> Unit)? = null,
     onOpenNextChapter: ((Long) -> Unit)? = null,
     showReaderUi: Boolean,
@@ -3331,6 +3332,7 @@ fun NovelReaderScreen(
                         onSetLocaleTag = onSetTtsLocaleTag,
                         onSetSpeechRate = onSetTtsSpeechRate,
                         onSetPitch = onSetTtsPitch,
+                        onDisableTts = onDisableTts,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(

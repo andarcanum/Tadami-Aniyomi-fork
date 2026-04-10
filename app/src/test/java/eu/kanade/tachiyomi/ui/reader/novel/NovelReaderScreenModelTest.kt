@@ -527,6 +527,53 @@ class NovelReaderScreenModelTest {
     }
 
     @Test
+    fun `disable tts updates preference and reader state`() {
+        runBlocking {
+            val novelReaderPreferences = createNovelReaderPreferences(
+                ttsEnabled = true,
+            )
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(
+                    sourceId = novel.source,
+                    chapterHtml = "<p>Original paragraph</p>",
+                ),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = novelReaderPreferences,
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            screenModel.disableTts()
+
+            withTimeout(1_000) {
+                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.readerSettings?.ttsEnabled != false) {
+                    yield()
+                }
+            }
+
+            novelReaderPreferences.ttsEnabled().get() shouldBe false
+            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            state.readerSettings.ttsEnabled shouldBe false
+        }
+    }
+
+    @Test
     fun `injects chapter title heading when chapter html has no heading`() {
         runBlocking {
             val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
@@ -2570,6 +2617,7 @@ class NovelReaderScreenModelTest {
 
     private fun createNovelReaderPreferences(
         selectedTextTranslationEnabled: Boolean = false,
+        ttsEnabled: Boolean = false,
     ): NovelReaderPreferences {
         return NovelReaderPreferences(
             preferenceStore = ReactivePreferenceStore(),
@@ -2579,6 +2627,7 @@ class NovelReaderScreenModelTest {
             prefs.cacheReadChapters().set(false)
             prefs.cacheReadChaptersUnlimited().set(false)
             prefs.selectedTextTranslationEnabled().set(selectedTextTranslationEnabled)
+            prefs.ttsEnabled().set(ttsEnabled)
         }
     }
 
