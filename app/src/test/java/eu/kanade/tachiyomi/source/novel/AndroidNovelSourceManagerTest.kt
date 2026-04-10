@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.novelsource.model.SNovel
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.novelsource.online.NovelHttpSource
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBeNull
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -77,6 +78,25 @@ class AndroidNovelSourceManagerTest {
 
             stubs.size shouldBe 1
             stubs.first().id shouldBe 2L
+        }
+    }
+
+    @Test
+    fun `source manager exposes imported epub source without extension install`() {
+        runTest {
+            val dispatcher = StandardTestDispatcher(testScheduler)
+            val extensionManager = FakeNovelExtensionManager()
+            val repository = FakeNovelStubSourceRepository()
+            val manager = AndroidNovelSourceManager(extensionManager, repository, dispatcher)
+
+            extensionManager.emitSources(emptyList())
+            advanceUntilIdle()
+
+            val source = manager.get(IMPORTED_EPUB_NOVEL_SOURCE_ID)
+
+            source.shouldNotBeNull()
+            source.id shouldBe IMPORTED_EPUB_NOVEL_SOURCE_ID
+            source.name shouldBe IMPORTED_EPUB_NOVEL_SOURCE_NAME
         }
     }
 

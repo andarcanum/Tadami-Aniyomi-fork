@@ -49,6 +49,10 @@ class AndroidNovelSourceManager(
                         mutableMap[it.id] = it
                         registerStubSource(StubNovelSource.from(it))
                     }
+                    // Add built-in imported EPUB source
+                    val importedEpubSource = ImportedEpubNovelSource()
+                    mutableMap[importedEpubSource.id] = importedEpubSource
+                    registerStubSource(StubNovelSource.from(importedEpubSource))
                     sourcesMapFlow.value = mutableMap
                     _isInitialized.value = true
                 }
