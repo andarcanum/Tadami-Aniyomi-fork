@@ -788,6 +788,7 @@
     <string name="novel_translated_download_choose_chapters">Choose chapters to download</string>
     <string name="novel_translated_download_select_title">Select translated chapters</string>
     <string name="novel_download_queue_started_count">Queued chapters: %d</string>
+    <string name="novel_download_queue_waiting">Waiting to start</string>
     <string name="novel_download_queue_progress">Downloading... Pending: %1$d, Active: %2$d</string>
     <string name="novel_download_queue_completed">Download completed</string>
     <string name="novel_download_queue_failed_count">Failed downloads: %d</string>

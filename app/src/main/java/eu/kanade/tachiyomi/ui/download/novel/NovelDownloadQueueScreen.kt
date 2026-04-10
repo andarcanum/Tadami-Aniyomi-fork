@@ -25,6 +25,8 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.presentation.components.auroraMenuRimLightBrush
+import eu.kanade.presentation.components.resolveAuroraTabContainerColor
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
@@ -47,6 +49,26 @@ fun NovelDownloadQueueScreen(
     val theme by uiPreferences.appTheme().preferenceCollectAsState()
     val isAurora = theme.isAuroraStyle
     val auroraColors = AuroraTheme.colors
+    val primaryTextColor = if (isAurora) {
+        auroraColors.textPrimary
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    val secondaryTextColor = if (isAurora) {
+        auroraColors.textSecondary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val queueCardShape = if (isAurora) {
+        RoundedCornerShape(28.dp)
+    } else {
+        RoundedCornerShape(20.dp)
+    }
+    val queueCardBorder = if (isAurora) {
+        BorderStroke(0.75.dp, auroraMenuRimLightBrush(auroraColors))
+    } else {
+        BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    }
 
     Scaffold(
         containerColor = if (isAurora) Color.Transparent else MaterialTheme.colorScheme.background,
@@ -69,56 +91,62 @@ fun NovelDownloadQueueScreen(
                 .padding(MaterialTheme.padding.medium),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
         ) {
-            if (isAurora) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = auroraColors.glass),
-                    border = BorderStroke(1.dp, auroraColors.accent.copy(alpha = 0.2f)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = queueCardShape,
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isAurora) {
+                        resolveAuroraTabContainerColor(auroraColors)
+                    } else {
+                        MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)
+                    },
+                ),
+                border = queueCardBorder,
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            ) {
+                Column(
+                    modifier = Modifier.padding(MaterialTheme.padding.medium),
+                    verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
                 ) {
-                    Column(
-                        modifier = Modifier.padding(MaterialTheme.padding.medium),
-                        verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
-                    ) {
-                        Text(
-                            text = "${stringResource(MR.strings.label_download_queue)}: ${state.queueCount}",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = auroraColors.textPrimary,
-                        )
-                        Text(
-                            text = "${stringResource(MR.strings.ext_pending)}: ${state.pendingCount}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = auroraColors.textSecondary,
-                        )
-                        Text(
-                            text = "${stringResource(MR.strings.ext_downloading)}: ${state.activeCount}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = auroraColors.textSecondary,
-                        )
-                        Text(
-                            text = "${stringResource(AYMR.strings.novel_downloads_failed)}: ${state.failedCount}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = auroraColors.textSecondary,
-                        )
-                        Text(
-                            text = "${stringResource(
-                                AYMR.strings.novel_downloads_saved_on_device,
-                            )}: ${state.downloadCount}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = auroraColors.textPrimary,
-                        )
-                        Text(
-                            text = "${stringResource(MR.strings.pref_storage_usage)}: $formattedSize",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = auroraColors.textSecondary,
-                        )
-                        Text(
-                            text = stringResource(AYMR.strings.novel_downloads_info_with_queue),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = auroraColors.textSecondary,
-                        )
-                        Box(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "${stringResource(MR.strings.label_download_queue)}: ${state.queueCount}",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = primaryTextColor,
+                    )
+                    Text(
+                        text = "${stringResource(MR.strings.ext_pending)}: ${state.pendingCount}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = secondaryTextColor,
+                    )
+                    Text(
+                        text = "${stringResource(MR.strings.ext_downloading)}: ${state.activeCount}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = secondaryTextColor,
+                    )
+                    Text(
+                        text = "${stringResource(AYMR.strings.novel_downloads_failed)}: ${state.failedCount}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = secondaryTextColor,
+                    )
+                    Text(
+                        text = "${stringResource(
+                            AYMR.strings.novel_downloads_saved_on_device,
+                        )}: ${state.downloadCount}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = primaryTextColor,
+                    )
+                    Text(
+                        text = "${stringResource(MR.strings.pref_storage_usage)}: $formattedSize",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = secondaryTextColor,
+                    )
+                    Text(
+                        text = stringResource(AYMR.strings.novel_downloads_info_with_queue),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = secondaryTextColor,
+                    )
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        if (isAurora) {
                             Button(
                                 onClick = onRefresh,
                                 colors = ButtonDefaults.buttonColors(
@@ -128,40 +156,12 @@ fun NovelDownloadQueueScreen(
                             ) {
                                 Text(text = stringResource(MR.strings.ext_update))
                             }
+                        } else {
+                            Button(onClick = onRefresh) {
+                                Text(text = stringResource(MR.strings.ext_update))
+                            }
                         }
                     }
-                }
-            } else {
-                Text(
-                    text = "${stringResource(MR.strings.label_download_queue)}: ${state.queueCount}",
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    text = "${stringResource(MR.strings.ext_pending)}: ${state.pendingCount}",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Text(
-                    text = "${stringResource(MR.strings.ext_downloading)}: ${state.activeCount}",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Text(
-                    text = "${stringResource(AYMR.strings.novel_downloads_failed)}: ${state.failedCount}",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Text(
-                    text = "${stringResource(AYMR.strings.novel_downloads_saved_on_device)}: ${state.downloadCount}",
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    text = "${stringResource(MR.strings.pref_storage_usage)}: $formattedSize",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Text(
-                    text = stringResource(AYMR.strings.novel_downloads_info_with_queue),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Button(onClick = onRefresh) {
-                    Text(text = stringResource(MR.strings.ext_update))
                 }
             }
         }

@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.entries.novel
 
 import android.app.Application
 import android.content.Context
+import androidx.compose.material3.SnackbarHostState
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import eu.kanade.domain.base.BasePreferences
@@ -22,6 +23,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -549,6 +551,34 @@ class NovelScreenModelTest {
     }
 
     @Test
+    fun `toggle chapter download does not show snackbar queue status`() {
+        runBlocking {
+            val novel = novelForResumeTests(2011L)
+            val chapters = listOf(
+                novelChapter(id = 1L, novelId = novel.id, chapterNumber = 1.0, read = false),
+            )
+            val snackbarHostState = SnackbarHostState()
+            val screenModel = createResumeScreenModel(
+                novel = novel,
+                chapters = chapters,
+                enqueueOriginal = { _, _ -> 1 },
+                snackbarHostState = snackbarHostState,
+            )
+
+            try {
+                awaitResumeScreenModel(screenModel)
+
+                screenModel.toggleChapterDownload(1L)
+                delay(250)
+
+                snackbarHostState.currentSnackbarData shouldBe null
+            } finally {
+                screenModel.onDispose()
+            }
+        }
+    }
+
+    @Test
     fun `download selected chapters returns before enqueue finishes`() {
         runBlocking {
             val novel = novelForResumeTests(202L)
@@ -761,6 +791,7 @@ class NovelScreenModelTest {
         enqueueOriginal: (Novel, List<NovelChapter>) -> Int = { novel, queuedChapters ->
             eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager.enqueueOriginal(novel, queuedChapters)
         },
+        snackbarHostState: SnackbarHostState = SnackbarHostState(),
     ): NovelScreenModel {
         val novelRepository = FakeNovelRepository(novel)
         val preferenceStore = FakePreferenceStore()
@@ -844,6 +875,7 @@ class NovelScreenModelTest {
             downloadQueueState = downloadQueueState,
             resolveDownloadedChapterIds = resolveDownloadedChapterIds,
             enqueueOriginal = enqueueOriginal,
+            snackbarHostState = snackbarHostState,
             novelReaderPreferences = eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences(
                 preferenceStore = preferenceStore,
                 json = Json { encodeDefaults = true },

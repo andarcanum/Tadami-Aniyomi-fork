@@ -556,6 +556,7 @@
     <string name="novel_translated_download_choose_chapters">Выбрать главы для скачивания</string>
     <string name="novel_translated_download_select_title">Выбор переведённых глав</string>
     <string name="novel_download_queue_started_count">Глав в очереди: %d</string>
+    <string name="novel_download_queue_waiting">Ожидание запуска</string>
     <string name="novel_download_queue_progress">Загрузка... В ожидании: %1$d, Активно: %2$d</string>
     <string name="novel_download_queue_completed">Загрузка завершена</string>
     <string name="novel_download_queue_failed_count">Завершено с ошибками: %d</string>

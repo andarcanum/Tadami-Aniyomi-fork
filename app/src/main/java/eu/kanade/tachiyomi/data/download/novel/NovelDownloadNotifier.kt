@@ -83,6 +83,31 @@ internal class NovelDownloadNotifier(private val context: Context) {
         }
     }
 
+    fun onQueued(queuedCount: Int) {
+        with(progressNotificationBuilder) {
+            setSmallIcon(android.R.drawable.stat_sys_download)
+            setOngoing(true)
+            setProgress(0, 0, false)
+            clearActions()
+            setContentIntent(NotificationHandler.openDownloadManagerPendingActivity(context))
+            context.cancelNotification(Notifications.ID_DOWNLOAD_NOVEL_ERROR)
+
+            val queuedText = context.stringResource(
+                AYMR.strings.novel_download_queue_started_count,
+                queuedCount,
+            )
+            if (preferences.hideNotificationContent().get()) {
+                setContentTitle(queuedText)
+                setContentText(null)
+            } else {
+                setContentTitle(queuedText)
+                setContentText(context.stringResource(AYMR.strings.novel_download_queue_waiting))
+            }
+
+            show(Notifications.ID_DOWNLOAD_NOVEL_PROGRESS)
+        }
+    }
+
     fun onComplete(failedCount: Int) {
         dismissProgress()
 

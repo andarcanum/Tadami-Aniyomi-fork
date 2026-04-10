@@ -1,7 +1,5 @@
 package eu.kanade.tachiyomi.ui.entries.novel
 
-import android.app.Application
-import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.Lifecycle
@@ -54,7 +52,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.supervisorScope
 import logcat.LogPriority
-import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
@@ -79,7 +76,6 @@ import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.track.novel.interactor.GetNovelTracks
 import tachiyomi.domain.track.novel.model.NovelTrack
-import tachiyomi.i18n.aniyomi.AYMR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
@@ -124,7 +120,6 @@ class NovelScreenModel(
     private val novelRatingFetcher: NovelRatingFetcher = Injekt.get(),
     private val trackerManager: TrackerManager = Injekt.get(),
     private val getTracks: GetNovelTracks = Injekt.get(),
-    private val application: Application? = runCatching { Injekt.get<Application>() }.getOrNull(),
     private val novelDownloadManager: NovelDownloadManager = NovelDownloadManager(),
     private val novelTranslatedDownloadManager: NovelTranslatedDownloadManager = NovelTranslatedDownloadManager(),
     private val downloadCacheChanges: Flow<NovelDownloadCacheEvent> = runCatching {
@@ -160,8 +155,6 @@ class NovelScreenModel(
             get() = pending + active
     }
 
-    private var previousQueueNotifySummary = QueueNotifySummary()
-    private var lastQueueProgressNotifyAt = 0L
     private val downloadedStateVersion = AtomicLong(0L)
 
     private val successState: State.Success?
@@ -468,13 +461,26 @@ class NovelScreenModel(
         val requestVersion = downloadedStateVersion.incrementAndGet()
         screenModelScope.launchIO {
             var downloadedIds = emptySet<Long>()
-            val elapsed = measureTimeMillis {
-                downloadedIds = resolveDownloadedChapterIds(state.novel, state.chapters)
+
+            val downloadCache = runCatching { Injekt.get<NovelDownloadCache>() }.getOrNull()
+            val cachedIds = downloadCache?.getDownloadedChapterIds(state.novel.id)
+            if (cachedIds != null) {
+                downloadedIds = cachedIds.intersect(state.chapters.map { it.id }.toSet())
+                logcat(LogPriority.DEBUG) {
+                    "Novel downloaded-state sync: novel=${state.novel.id}, from_cache=true, count=${downloadedIds.size}"
+                }
+            } else {
+                val elapsed = measureTimeMillis {
+                    downloadedIds = resolveDownloadedChapterIds(state.novel, state.chapters)
+                }
+                if (downloadedStateVersion.get() != requestVersion) return@launchIO
+                logcat(LogPriority.DEBUG) {
+                    "Novel downloaded-state sync: novel=${state.novel.id}, from_fs=true, count=${downloadedIds.size}, elapsedMs=$elapsed"
+                }
+                downloadCache?.updateChapterIds(state.novel.id, downloadedIds)
             }
+
             if (downloadedStateVersion.get() != requestVersion) return@launchIO
-            logcat(LogPriority.DEBUG) {
-                "Novel downloaded-state sync: novel=${state.novel.id}, chapters=${state.chapters.size}, resolved=${downloadedIds.size}, elapsedMs=$elapsed, version=$requestVersion"
-            }
             updateSuccessState {
                 if (downloadedIds == it.downloadedChapterIds) {
                     it
@@ -553,71 +559,10 @@ class NovelScreenModel(
 
     private fun notifyQueueStarted(addedCount: Int) {
         if (addedCount <= 0) return
-        val app = application ?: return
-        val message = runCatching {
-            app.stringResource(
-                AYMR.strings.novel_download_queue_started_count,
-                addedCount,
-            )
-        }.getOrNull() ?: return
-        screenModelScope.launchIO {
-            snackbarHostState.showSnackbar(
-                message = message,
-                duration = SnackbarDuration.Short,
-            )
-        }
     }
 
     private fun maybeNotifyQueueState(summary: QueueNotifySummary) {
-        val previous = previousQueueNotifySummary
-        val now = System.currentTimeMillis()
-
-        if (summary.activeTotal > 0 &&
-            (summary.pending != previous.pending || summary.active != previous.active) &&
-            now - lastQueueProgressNotifyAt >= 1_500
-        ) {
-            val app = application
-            if (app != null) {
-                val message = runCatching {
-                    app.stringResource(
-                        AYMR.strings.novel_download_queue_progress,
-                        summary.pending,
-                        summary.active,
-                    )
-                }.getOrNull() ?: return
-                screenModelScope.launchIO {
-                    snackbarHostState.showSnackbar(
-                        message = message,
-                        duration = SnackbarDuration.Short,
-                    )
-                }
-                lastQueueProgressNotifyAt = now
-            }
-        }
-
-        if (summary.activeTotal == 0 && previous.activeTotal > 0) {
-            val app = application
-            if (app != null) {
-                val message = runCatching {
-                    if (summary.failed > 0) {
-                        app.stringResource(
-                            AYMR.strings.novel_download_queue_failed_count,
-                            summary.failed,
-                        )
-                    } else {
-                        app.stringResource(AYMR.strings.novel_download_queue_completed)
-                    }
-                }.getOrNull() ?: return
-                screenModelScope.launchIO {
-                    snackbarHostState.showSnackbar(
-                        message = message,
-                        duration = SnackbarDuration.Short,
-                    )
-                }
-            }
-        }
-
-        previousQueueNotifySummary = summary
+        return
     }
 
     fun toggleFavorite() {
