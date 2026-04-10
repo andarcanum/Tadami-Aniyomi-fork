@@ -85,6 +85,7 @@ class NovelTtsSessionController(
 ) : NovelTtsPlaybackController {
     private val mutableState = MutableStateFlow(NovelTtsSessionUiState())
     override val state: StateFlow<NovelTtsSessionUiState> = mutableState.asStateFlow()
+    private var preferredTranslatedText: Boolean = false
 
     suspend fun startFromCurrentPosition(
         chapterId: Long,
@@ -92,6 +93,7 @@ class NovelTtsSessionController(
         preferTranslatedText: Boolean,
         autoAdvanceChapter: Boolean,
     ) {
+        preferredTranslatedText = preferTranslatedText
         val resolvedChapter = chapterSource.loadChapter(chapterId) ?: return
         val session = buildSession(
             resolvedChapter = resolvedChapter,
@@ -114,6 +116,11 @@ class NovelTtsSessionController(
 
     override suspend fun resume() {
         val session = mutableState.value.session ?: return
+        val sessionPrefersTranslatedText = session.textSource == NovelTtsTextSource.TRANSLATED
+        if (sessionPrefersTranslatedText != preferredTranslatedText) {
+            restartFromCurrentPosition(preferredTranslatedText)
+            return
+        }
         updateState(session, NovelTtsPlaybackState.PLAYING)
         persistCheckpoint(session)
         speaker.speak(session.utterance, flushQueue = true, startWordIndex = session.wordIndex)
@@ -192,6 +199,7 @@ class NovelTtsSessionController(
 
     suspend fun restoreFromCheckpoint() {
         val checkpoint = sessionStore.loadCheckpoint() ?: return
+        preferredTranslatedText = checkpoint.textSource == NovelTtsTextSource.TRANSLATED
         val resolvedChapter = chapterSource.loadChapter(checkpoint.chapterId) ?: return
         val session = buildSession(
             resolvedChapter = resolvedChapter,
@@ -203,6 +211,10 @@ class NovelTtsSessionController(
         updateState(session, NovelTtsPlaybackState.PLAYING)
         persistCheckpoint(session)
         speaker.speak(session.utterance, flushQueue = true, startWordIndex = session.wordIndex)
+    }
+
+    fun setPreferredTranslatedText(preferTranslatedText: Boolean) {
+        preferredTranslatedText = preferTranslatedText
     }
 
     private suspend fun completeSession() {
@@ -265,6 +277,25 @@ class NovelTtsSessionController(
                 textSource = session.textSource,
                 autoAdvanceChapter = session.autoAdvanceChapter,
             ),
+        )
+    }
+
+    private suspend fun restartFromCurrentPosition(preferTranslatedText: Boolean) {
+        val session = mutableState.value.session ?: return
+        val resolvedChapter = chapterSource.loadChapter(session.chapterId) ?: return
+        val rebuiltSession = buildSession(
+            resolvedChapter = resolvedChapter,
+            utteranceId = session.utterance.id,
+            preferTranslatedText = preferTranslatedText,
+            autoAdvanceChapter = session.autoAdvanceChapter,
+            restoredWordIndex = session.wordIndex,
+        ) ?: return
+        updateState(rebuiltSession, NovelTtsPlaybackState.PLAYING)
+        persistCheckpoint(rebuiltSession)
+        speaker.speak(
+            rebuiltSession.utterance,
+            flushQueue = true,
+            startWordIndex = rebuiltSession.wordIndex,
         )
     }
 }

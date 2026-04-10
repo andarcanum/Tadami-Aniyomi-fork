@@ -65,6 +65,39 @@ class NovelTtsSessionControllerTest {
     }
 
     @Test
+    fun `resume restarts with translated text when preference changes while paused`() {
+        runBlocking {
+            val speaker = FakeSpeaker()
+            val controller = NovelTtsSessionController(
+                chapterSource = FakeChapterSource(listOf(chapter(chapterId = 1L))),
+                speaker = speaker,
+                sessionStore = InMemoryNovelTtsSessionStore(),
+            )
+
+            controller.startFromCurrentPosition(
+                chapterId = 1L,
+                utteranceId = "chapter-1-utterance-0",
+                preferTranslatedText = false,
+                autoAdvanceChapter = true,
+            )
+            controller.pause()
+            controller.setPreferredTranslatedText(true)
+            controller.resume()
+
+            speaker.spokenUtteranceIds shouldContainExactly listOf(
+                "chapter-1-utterance-0",
+                "chapter-1-utterance-0",
+            )
+            speaker.spokenTexts shouldContainExactly listOf(
+                "Original first",
+                "Translated first",
+            )
+            controller.state.value.session.shouldNotBeNull().textSource shouldBe NovelTtsTextSource.TRANSLATED
+            controller.state.value.playbackState shouldBe NovelTtsPlaybackState.PLAYING
+        }
+    }
+
+    @Test
     fun `stop clears the active session and checkpoint`() {
         runBlocking {
             val store = InMemoryNovelTtsSessionStore()
