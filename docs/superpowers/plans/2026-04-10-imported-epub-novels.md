@@ -92,7 +92,7 @@ No changes needed - ImportedEpubParser and ImportedEpubHtmlNormalizer already pl
 Run: `rtk read docs/superpowers/plans/2026-04-10-imported-epub-novels.md`
 Expected: The plan explicitly documents parser capability assumptions instead of hiding them
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/superpowers/plans/2026-04-10-imported-epub-novels.md
