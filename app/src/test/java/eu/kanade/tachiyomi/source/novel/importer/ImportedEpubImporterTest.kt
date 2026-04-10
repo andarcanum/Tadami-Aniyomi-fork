@@ -7,7 +7,7 @@ import org.junit.jupiter.api.io.TempDir
 import java.io.File
 import java.nio.file.Path
 
-class ImportedEpubStorageTest {
+class ImportedEpubImporterTest {
 
     @TempDir
     lateinit var tempDir: Path
@@ -38,4 +38,6 @@ class ImportedEpubStorageTest {
         assetFile.exists() shouldBe true
         assetFile.readBytes() shouldBe assetBytes
     }
+
+    // TODO: Add importer tests with mocked repositories
 }
