@@ -1,7 +1,7 @@
 package eu.kanade.tachiyomi.ui.library.novel
 
 import android.app.Application
-
+import android.net.Uri
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,7 +54,6 @@ import tachiyomi.domain.entries.novel.model.NovelUpdate
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
-import android.net.Uri
 import tachiyomi.domain.items.novelchapter.service.getNovelChapterSort
 import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.library.novel.model.NovelLibrarySort

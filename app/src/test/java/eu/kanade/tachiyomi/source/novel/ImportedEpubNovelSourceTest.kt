@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.source.novel
 
 import eu.kanade.tachiyomi.novelsource.model.SNovel
+import eu.kanade.tachiyomi.source.novel.importer.ImportedEpubStorage
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -10,7 +11,6 @@ import org.junit.jupiter.api.io.TempDir
 import tachiyomi.domain.entries.novel.repository.NovelRepository
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
-import eu.kanade.tachiyomi.source.novel.importer.ImportedEpubStorage
 import java.nio.file.Path
 
 class ImportedEpubNovelSourceTest {

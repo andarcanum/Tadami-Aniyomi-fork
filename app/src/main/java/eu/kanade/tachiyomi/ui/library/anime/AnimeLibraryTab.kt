@@ -1,7 +1,6 @@
 package eu.kanade.tachiyomi.ui.library.anime
 
 import android.content.res.Configuration
-import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -1492,7 +1491,8 @@ private fun AuroraLibraryPinnedHeader(
                                     },
                                     leadingIcon = when (item) {
                                         AuroraLibraryPinnedHeaderMenuItem.RefreshCurrent,
-                                        AuroraLibraryPinnedHeaderMenuItem.RefreshGlobal -> Icons.Filled.Refresh
+                                        AuroraLibraryPinnedHeaderMenuItem.RefreshGlobal,
+                                        -> Icons.Filled.Refresh
                                         AuroraLibraryPinnedHeaderMenuItem.OpenRandomEntry -> Icons.Filled.Shuffle
                                         AuroraLibraryPinnedHeaderMenuItem.ImportEpub -> Icons.Filled.Add
                                     },

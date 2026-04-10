@@ -132,12 +132,14 @@ private fun LibraryRegularToolbar(
                 }
             }
             AppBarActions(
-                (overflowActions + AppBar.Action(
-                    title = stringResource(MR.strings.action_filter),
-                    icon = Icons.Outlined.FilterList,
-                    iconTint = filterTint,
-                    onClick = onClickFilter,
-                )).toImmutableList(),
+                (
+                    overflowActions + AppBar.Action(
+                        title = stringResource(MR.strings.action_filter),
+                        icon = Icons.Outlined.FilterList,
+                        iconTint = filterTint,
+                        onClick = onClickFilter,
+                    )
+                    ).toImmutableList(),
             )
         },
         scrollBehavior = scrollBehavior,

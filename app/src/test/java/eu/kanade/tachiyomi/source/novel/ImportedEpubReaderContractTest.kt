@@ -9,8 +9,10 @@ class ImportedEpubReaderContractTest {
     fun `normalized chapter html rewrites image and stylesheet paths to stored local assets`() {
         val normalizer = ImportedEpubHtmlNormalizer()
         val assetMap = mapOf(
-            "OEBPS/images/cover.jpg" to "file:///data/data/app/files/imported_epub_novels/123/assets/OEBPS/images/cover.jpg",
-            "OEBPS/styles/main.css" to "file:///data/data/app/files/imported_epub_novels/123/assets/OEBPS/styles/main.css",
+            "OEBPS/images/cover.jpg" to
+                "file:///data/data/app/files/imported_epub_novels/123/assets/OEBPS/images/cover.jpg",
+            "OEBPS/styles/main.css" to
+                "file:///data/data/app/files/imported_epub_novels/123/assets/OEBPS/styles/main.css",
         )
 
         val rawHtml = """
@@ -31,8 +33,14 @@ class ImportedEpubReaderContractTest {
             chapterAssetMap = assetMap,
         )
 
-        normalized.contains("file:///data/data/app/files/imported_epub_novels/123/assets/OEBPS/styles/main.css") shouldBe true
-        normalized.contains("file:///data/data/app/files/imported_epub_novels/123/assets/OEBPS/images/cover.jpg") shouldBe true
+        normalized.contains(
+            "file:///data/data/app/files/imported_epub_novels/123/assets/OEBPS/styles/main.css",
+        ) shouldBe
+            true
+        normalized.contains(
+            "file:///data/data/app/files/imported_epub_novels/123/assets/OEBPS/images/cover.jpg",
+        ) shouldBe
+            true
         normalized.contains("<p>Chapter content</p>") shouldBe true
     }
 
@@ -52,8 +60,10 @@ class ImportedEpubReaderContractTest {
     @Test
     fun `normalized chapter html rewrites svg image references for cover pages`() {
         val normalizer = ImportedEpubHtmlNormalizer()
+        val expectedCoverAssetPath =
+            "file:///data/data/app/files/imported_epub_novels/123/assets/OPS/images/cover.jpg"
         val assetMap = mapOf(
-            "OPS/images/cover.jpg" to "file:///data/data/app/files/imported_epub_novels/123/assets/OPS/images/cover.jpg",
+            "OPS/images/cover.jpg" to expectedCoverAssetPath,
         )
 
         val rawHtml = """
@@ -72,6 +82,6 @@ class ImportedEpubReaderContractTest {
             chapterAssetMap = assetMap,
         )
 
-        normalized.contains("file:///data/data/app/files/imported_epub_novels/123/assets/OPS/images/cover.jpg") shouldBe true
+        normalized.contains(expectedCoverAssetPath) shouldBe true
     }
 }

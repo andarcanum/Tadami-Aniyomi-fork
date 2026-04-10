@@ -2,8 +2,8 @@ package eu.kanade.tachiyomi.source.novel.importer
 
 import eu.kanade.tachiyomi.source.novel.importer.model.ImportedEpubChapter
 import io.kotest.matchers.shouldBe
-import org.junit.jupiter.api.Test
 import org.jsoup.Jsoup
+import org.junit.jupiter.api.Test
 
 class ImportedEpubParserTest {
 
