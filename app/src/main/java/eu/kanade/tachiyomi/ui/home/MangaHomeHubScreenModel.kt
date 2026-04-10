@@ -44,7 +44,7 @@ class MangaHomeHubScreenModel(
         val history: List<HistoryData> = emptyList(),
         val recommendations: List<RecommendationData> = emptyList(),
         val heroChapter: Chapter? = null,
-        val userName: String = "Читатель",
+        val userName: String = "",
         val userAvatar: String = "",
         val greeting: StringResource = AYMR.strings.aurora_welcome_back,
         val greetingReady: Boolean = false,

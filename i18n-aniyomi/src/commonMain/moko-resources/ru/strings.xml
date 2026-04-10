@@ -877,6 +877,9 @@
     <string name="aurora_change_nickname">Изменить имя</string>
     <string name="aurora_nickname_field_label">Никнейм</string>
     <string name="aurora_nickname_preview">Предпросмотр</string>
+    <string name="home_hub_default_nickname_anime">Зритель</string>
+    <string name="home_hub_default_nickname_manga">Читатель</string>
+    <string name="home_hub_default_nickname_novel">Читатель</string>
     <string name="aurora_nickname_font">Шрифт</string>
     <string name="aurora_nickname_font_size">Размер никнейма: %s</string>
     <string name="aurora_nickname_font_default">По умолчанию</string>

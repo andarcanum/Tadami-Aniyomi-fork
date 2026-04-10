@@ -176,7 +176,7 @@ class HomeHubHeaderBehaviorTest {
     @Test
     fun `shouldShowNicknameEditHint returns true for default untouched nickname`() {
         shouldShowNicknameEditHint(
-            currentName = "\u0417\u0440\u0438\u0442\u0435\u043b\u044c",
+            currentName = "",
             isNameEdited = false,
         ) shouldBe true
     }
