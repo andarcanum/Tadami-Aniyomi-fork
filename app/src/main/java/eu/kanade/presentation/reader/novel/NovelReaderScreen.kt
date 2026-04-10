@@ -742,6 +742,10 @@ fun NovelReaderScreen(
             basePaddingPx = baseContentPadding.roundToPx(),
         ).toDp()
     }
+    val ttsScrollTopPadding = resolveNovelReaderTtsScrollTopPadding(
+        hasActiveTtsSession = state.ttsUiState.activeSession != null,
+        statusBarTopPadding = statusBarTopPadding,
+    )
     val scrollContentBlocks = remember(state.chapter.id, state.contentBlocks) {
         state.contentBlocks.takeIf { it.isNotEmpty() }
             ?: state.textBlocks.map { NovelReaderScreenModel.ContentBlock.Text(it) }
@@ -2003,7 +2007,7 @@ fun NovelReaderScreen(
                             ),
                         state = textListState,
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            top = contentPaddingPx,
+                            top = contentPaddingPx + ttsScrollTopPadding,
                             bottom = contentPaddingPx,
                             start = state.readerSettings.margin.dp,
                             end = state.readerSettings.margin.dp,
