@@ -3,16 +3,20 @@ package eu.kanade.domain
 import android.app.Application
 import eu.kanade.domain.download.anime.interactor.DeleteEpisodeDownload
 import eu.kanade.domain.download.manga.interactor.DeleteChapterDownload
+import eu.kanade.domain.entries.anime.interactor.AnimeRatingFetcher
 import eu.kanade.domain.entries.anime.interactor.SetAnimeViewerFlags
 import eu.kanade.domain.entries.anime.interactor.SyncSeasonsWithSource
 import eu.kanade.domain.entries.anime.interactor.UpdateAnime
 import eu.kanade.domain.entries.manga.interactor.GetExcludedScanlators
 import eu.kanade.domain.entries.manga.interactor.SetExcludedScanlators
 import eu.kanade.domain.entries.manga.interactor.SetMangaViewerFlags
+import eu.kanade.domain.entries.manga.interactor.SourceMangaRatingFetcher
 import eu.kanade.domain.entries.manga.interactor.UpdateManga
 import eu.kanade.domain.entries.novel.interactor.GetNovelExcludedScanlators
+import eu.kanade.domain.entries.novel.interactor.NovelRatingFetcher
 import eu.kanade.domain.entries.novel.interactor.SetNovelExcludedScanlators
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
+import eu.kanade.domain.entries.rating.EntryRatingCache
 import eu.kanade.domain.extension.anime.interactor.GetAnimeExtensionLanguages
 import eu.kanade.domain.extension.anime.interactor.GetAnimeExtensionSources
 import eu.kanade.domain.extension.anime.interactor.GetAnimeExtensionsByType
@@ -344,6 +348,7 @@ class DomainModule : InjektModule {
         addFactory { SetAnimeEpisodeFlags(get()) }
         addFactory { SetAnimeSeasonFlags(get()) }
         addFactory { AnimeFetchInterval(get()) }
+        addFactory { AnimeRatingFetcher() }
         addFactory { SetAnimeDefaultEpisodeFlags(get(), get(), get()) }
         addFactory { SetAnimeDefaultSeasonFlags(get(), get(), get()) }
         addFactory { SetAnimeViewerFlags(get()) }
@@ -374,6 +379,8 @@ class DomainModule : InjektModule {
         }
         addFactory { SetMangaViewerFlags(get()) }
         addFactory { NetworkToLocalManga(get()) }
+        addSingletonFactory { EntryRatingCache() }
+        addFactory { SourceMangaRatingFetcher() }
         addFactory { UpdateManga(get(), get()) }
         addFactory { SetMangaCategories(get()) }
         addFactory { GetExcludedScanlators(get()) }
@@ -541,6 +548,7 @@ class DomainModule : InjektModule {
             )
         }
         addFactory { GetRemoteNovel(get()) }
+        addFactory { NovelRatingFetcher() }
         addFactory { GetNovelSourcesWithFavoriteCount(get(), get()) }
         addFactory { GetNovelSourcesWithNonLibraryNovels(get()) }
         addFactory { ToggleNovelSource(get<SourcePreferences>().disabledNovelSources()) }

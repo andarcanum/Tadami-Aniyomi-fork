@@ -73,6 +73,7 @@ import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.SettingsVoice
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -102,6 +103,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -119,7 +121,6 @@ import androidx.compose.ui.graphics.ImageShader
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -170,11 +171,23 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationStylePreset
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPrivateBridge
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptModifiers
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePresets
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NativeScrollTtsNavigationAdapter
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NativeScrollTtsNavigator
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsNavigationAnchor
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPageReaderPosition
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPageSlice
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackStartRequest
+import eu.kanade.tachiyomi.ui.reader.novel.tts.PageReaderTtsNavigationAdapter
+import eu.kanade.tachiyomi.ui.reader.novel.tts.PageReaderTtsNavigator
+import eu.kanade.tachiyomi.ui.reader.novel.tts.WebViewTtsNavigationAdapter
+import eu.kanade.tachiyomi.ui.reader.novel.tts.WebViewTtsNavigator
+import eu.kanade.tachiyomi.ui.reader.novel.tts.resolvePlainPageReaderTtsAnchors
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.padding
@@ -183,6 +196,7 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.ByteArrayInputStream
 import java.io.File
+import kotlin.coroutines.resume
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -195,6 +209,48 @@ private data class TranslationSwitchRequest(
     val from: TranslationKind,
     val to: TranslationKind,
 )
+
+internal fun resolveNovelReaderBackdropColor(
+    settings: NovelReaderSettings,
+    isSystemDark: Boolean,
+): Color {
+    val themeFallback = when (settings.theme) {
+        NovelReaderTheme.SYSTEM -> if (isSystemDark) Color(0xFF121212) else Color.White
+        NovelReaderTheme.LIGHT -> Color.White
+        NovelReaderTheme.DARK -> Color(0xFF121212)
+    }
+    val themeBackground = parseReaderColor(settings.backgroundColor)
+        .takeIf { settings.backgroundColor?.isNotBlank() == true }
+        ?: themeFallback
+
+    return when (settings.appearanceMode) {
+        NovelReaderAppearanceMode.THEME -> themeBackground
+        NovelReaderAppearanceMode.BACKGROUND -> {
+            resolveReaderBackgroundBackdropColor(
+                resolveReaderBackgroundSelection(
+                    backgroundSource = settings.backgroundSource,
+                    backgroundPresetId = settings.backgroundPresetId,
+                    customBackgroundId = settings.customBackgroundId,
+                    customBackgroundItems = emptyList(),
+                    customBackgroundPath = settings.customBackgroundPath,
+                    customBackgroundExists = settings.customBackgroundPath.isNotBlank() &&
+                        File(settings.customBackgroundPath).exists(),
+                ),
+            )
+        }
+    }
+}
+
+private fun buildSourceIndexedPageReaderTextList(
+    blocks: List<PlainPageReaderTextBlock>,
+): List<String> {
+    val maxSourceBlockIndex = blocks.maxOfOrNull { it.sourceBlockIndex } ?: return emptyList()
+    return MutableList(maxSourceBlockIndex + 1) { "" }.apply {
+        blocks.forEach { block ->
+            this[block.sourceBlockIndex] = block.text
+        }
+    }
+}
 
 @Composable
 fun NovelReaderScreen(
@@ -253,6 +309,16 @@ fun NovelReaderScreen(
     onSetGoogleTranslationAutoStart: (Boolean) -> Unit = {},
     onSetGoogleTranslationSourceLang: (String) -> Unit = {},
     onSetGoogleTranslationTargetLang: (String) -> Unit = {},
+    onToggleTtsPlayback: (NovelTtsPlaybackStartRequest) -> Unit = {},
+    onStopTtsPlayback: () -> Unit = {},
+    onSkipPreviousTts: () -> Unit = {},
+    onSkipNextTts: () -> Unit = {},
+    onPauseTtsForManualNavigation: (NovelTtsPlaybackStartRequest) -> Unit = {},
+    onSetTtsEnginePackage: (String) -> Unit = {},
+    onSetTtsVoiceId: (String) -> Unit = {},
+    onSetTtsLocaleTag: (String) -> Unit = {},
+    onSetTtsSpeechRate: (Float) -> Unit = {},
+    onSetTtsPitch: (Float) -> Unit = {},
     onOpenPreviousChapter: ((Long) -> Unit)? = null,
     onOpenNextChapter: ((Long) -> Unit)? = null,
     showReaderUi: Boolean,
@@ -263,8 +329,17 @@ fun NovelReaderScreen(
     onDismissSelectedTextTranslation: () -> Unit = {},
 ) {
     var showSettings by remember { mutableStateOf(false) }
+    var showTtsBehaviorSettings by remember { mutableStateOf(false) }
     var selectedTextSelectionSessionId by remember(state.chapter.id) {
         mutableIntStateOf(0)
+    }
+    val ttsPlacement = remember(state.readerSettings.ttsEnabled) {
+        resolveNovelReaderTtsSettingsPlacementSnapshot(state.readerSettings.ttsEnabled)
+    }
+    LaunchedEffect(ttsPlacement.showFooterEntry) {
+        if (!ttsPlacement.showFooterEntry) {
+            showTtsBehaviorSettings = false
+        }
     }
     var showWebView by remember(
         state.chapter.id,
@@ -320,7 +395,10 @@ fun NovelReaderScreen(
     var translationSwitchRequest by remember(state.chapter.id) {
         mutableStateOf<TranslationSwitchRequest?>(null)
     }
+    var requestedTtsChapterSyncTarget by remember(state.chapter.id) { mutableStateOf<Long?>(null) }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
+    var pendingProgrammaticTtsBlockIndex by remember(state.chapter.id) { mutableStateOf<Int?>(null) }
+    var suppressManualTtsPauseUntilMs by remember(state.chapter.id) { mutableLongStateOf(0L) }
     val shouldHideWebViewUntilReveal = state.enableJs
     var webProgressPercent by remember(state.chapter.id) {
         mutableIntStateOf(state.lastSavedWebProgressPercent.coerceIn(0, 100))
@@ -454,13 +532,9 @@ fun NovelReaderScreen(
             customBackgroundExists = customBackgroundExists,
         )
     }
-    val backgroundImageModel =
-        remember(backgroundSelection.source, backgroundSelection.preset.id, backgroundSelection.customPath) {
-            when (backgroundSelection.source) {
-                NovelReaderBackgroundSource.PRESET -> backgroundSelection.preset.imageResId
-                NovelReaderBackgroundSource.CUSTOM -> backgroundSelection.customPath?.let(::File)
-            }
-        }
+    val backgroundImageModel = remember(backgroundSelection) {
+        resolveReaderBackgroundImageModel(backgroundSelection)
+    }
     val customBackgroundLuminance = remember(backgroundSelection.customPath) {
         backgroundSelection.customPath?.let(::sampleReaderBackgroundLuminance)
     }
@@ -489,12 +563,8 @@ fun NovelReaderScreen(
     val backgroundModeTextColor = remember(effectiveBackgroundLuminance) {
         resolveReaderTextColorForBackgroundMode(effectiveBackgroundLuminance)
     }
-    val backgroundModeBaseColor = remember(backgroundModeTextColor) {
-        if (backgroundModeTextColor.luminance() > 0.5f) {
-            Color(0xFF121212)
-        } else {
-            Color(0xFFF6F2E7)
-        }
+    val backgroundModeBaseColor = remember(backgroundSelection) {
+        resolveReaderBackgroundBackdropColor(backgroundSelection)
     }
     val backgroundModeWebImageUrl = remember(backgroundSelection) {
         resolveReaderBackgroundWebImageUrl(backgroundSelection)
@@ -552,6 +622,10 @@ fun NovelReaderScreen(
         isEInkMode -> Color.White
         isBackgroundMode -> backgroundModeBaseColor
         else -> themeModeBackground
+    }
+
+    SideEffect {
+        NovelReaderBackdropSession.update(textBackground)
     }
 
     LaunchedEffect(
@@ -671,11 +745,35 @@ fun NovelReaderScreen(
         state.contentBlocks.takeIf { it.isNotEmpty() }
             ?: state.textBlocks.map { NovelReaderScreenModel.ContentBlock.Text(it) }
     }
-    val pageReaderTextBlocks = remember(state.chapter.id, state.textBlocks) {
-        state.textBlocks.filter { it.isNotBlank() }
+    val showPageChapterTitle = state.readerSettings.showPageChapterTitle
+    val pageReaderTextBlocks = remember(state.chapter.id, scrollContentBlocks, showPageChapterTitle) {
+        stripPageReaderChapterTitleBlocks(
+            textBlocks = scrollContentBlocks
+                .mapIndexedNotNull { index, block ->
+                    val text = (block as? NovelReaderScreenModel.ContentBlock.Text)?.text?.takeIf { it.isNotBlank() }
+                        ?: return@mapIndexedNotNull null
+                    PlainPageReaderTextBlock(
+                        sourceBlockIndex = index,
+                        text = text,
+                    )
+                },
+            chapterTitle = resolvePageReaderChapterTitleForFiltering(
+                showPageChapterTitle = showPageChapterTitle,
+                chapterTitle = state.chapter.name,
+            ),
+        )
     }
     val richScrollBlocks = remember(state.chapter.id, state.richContentBlocks) {
         state.richContentBlocks
+    }
+    val pageReaderRichBlocks = remember(state.chapter.id, richScrollBlocks, showPageChapterTitle) {
+        stripPageReaderChapterTitleRichBlocks(
+            richBlocks = richScrollBlocks.withIndex().toList(),
+            chapterTitle = resolvePageReaderChapterTitleForFiltering(
+                showPageChapterTitle = showPageChapterTitle,
+                chapterTitle = state.chapter.name,
+            ),
+        )
     }
     val shouldPaginatePageReader = shouldPaginateForPageReader(
         pageReaderEnabled = state.readerSettings.pageReader,
@@ -692,7 +790,8 @@ fun NovelReaderScreen(
     }
     val pageReaderPages: List<List<PlainPageSlice>> = remember(
         state.chapter.id,
-        state.textBlocks,
+        pageReaderTextBlocks,
+        showPageChapterTitle,
         shouldPaginatePageReader,
         state.readerSettings.fontSize,
         state.readerSettings.lineHeight,
@@ -735,7 +834,7 @@ fun NovelReaderScreen(
                 typeface = composeTypeface,
                 textAlign = pageReaderLayoutTextAlign,
                 forceParagraphIndent = state.readerSettings.forceParagraphIndent,
-                chapterTitle = state.chapter.name,
+                chapterTitle = if (showPageChapterTitle) state.chapter.name else null,
             )
         }
     }
@@ -748,8 +847,9 @@ fun NovelReaderScreen(
     )
     val richPageReaderPagination = remember(
         state.chapter.id,
-        state.richContentBlocks,
+        pageReaderRichBlocks,
         shouldPaginateRichForPageReader,
+        showPageChapterTitle,
         state.readerSettings.fontSize,
         state.readerSettings.lineHeight,
         state.readerSettings.margin,
@@ -782,7 +882,7 @@ fun NovelReaderScreen(
             val pageFitSafetyPx = with(density) { 4.dp.roundToPx() }
             val verticalPaddingPx = topPaddingPx + bottomPaddingPx + bookBottomInsetPx + pageFitSafetyPx
             paginateMixedRichPageBlocks(
-                richBlocks = state.richContentBlocks,
+                richBlocks = pageReaderRichBlocks,
                 paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() },
                 widthPx = (screenWidthPx - horizontalPaddingPx).coerceAtLeast(1),
                 heightPx = (screenHeightPx - verticalPaddingPx).coerceAtLeast(1),
@@ -791,7 +891,7 @@ fun NovelReaderScreen(
                 typeface = composeTypeface,
                 textAlign = pageReaderLayoutTextAlign,
                 forceParagraphIndent = state.readerSettings.forceParagraphIndent,
-                chapterTitle = state.chapter.name,
+                chapterTitle = if (showPageChapterTitle) state.chapter.name else null,
             )
         }
     }
@@ -810,7 +910,7 @@ fun NovelReaderScreen(
         richPageReaderBlockTexts,
         state.readerSettings.paragraphSpacing,
         state.readerSettings.forceParagraphIndent,
-        state.chapter.name,
+        showPageChapterTitle,
     ) {
         normalizePageReaderContentPages(
             useRichPageReader = useRichPageReader,
@@ -820,7 +920,7 @@ fun NovelReaderScreen(
             richBlockTexts = richPageReaderBlockTexts,
             paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() },
             forceParagraphIndent = state.readerSettings.forceParagraphIndent,
-            chapterTitle = state.chapter.name,
+            chapterTitle = if (showPageChapterTitle) state.chapter.name else null,
         )
     }
     val activePageTransitionStyle = remember(state.readerSettings.pageTransitionStyle) {
@@ -885,6 +985,61 @@ fun NovelReaderScreen(
             }
         },
     )
+    val pageReaderTtsNavigationAdapter = remember(
+        pagerState,
+        pageReaderRendererRoute,
+        composePagerHasPreviousChapter,
+    ) {
+        PageReaderTtsNavigationAdapter(
+            navigator = object : PageReaderTtsNavigator {
+                override suspend fun scrollToPage(pageIndex: Int) {
+                    val targetPage = if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
+                        resolveComposePagerVirtualPageIndex(
+                            actualPageIndex = pageIndex,
+                            hasPreviousChapter = composePagerHasPreviousChapter,
+                        )
+                    } else {
+                        pageIndex
+                    }.coerceIn(0, (pagerState.pageCount - 1).coerceAtLeast(0))
+                    pagerState.scrollToPage(targetPage)
+                }
+            },
+        )
+    }
+    val nativeScrollTtsNavigationAdapter = remember(textListState) {
+        NativeScrollTtsNavigationAdapter(
+            navigator = object : NativeScrollTtsNavigator {
+                override suspend fun scrollToBlock(blockIndex: Int, scrollOffsetPx: Int) {
+                    textListState.scrollToItem(blockIndex, scrollOffsetPx)
+                }
+            },
+        )
+    }
+    val webViewTtsNavigationAdapter = remember(state.chapter.id, scrollContentBlocks.size) {
+        WebViewTtsNavigationAdapter(
+            navigator = object : WebViewTtsNavigator {
+                override suspend fun evaluateJavascript(script: String): String? {
+                    val view = webViewInstance ?: return null
+                    if (!view.settings.javaScriptEnabled) return null
+                    return suspendCancellableCoroutine { continuation ->
+                        view.post {
+                            view.evaluateJavascript(script) { result ->
+                                if (continuation.isActive) {
+                                    continuation.resume(result)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            totalBlocks = scrollContentBlocks.size.coerceAtLeast(1),
+        )
+    }
+    SideEffect {
+        pageReaderTtsNavigationAdapter.hashCode()
+        nativeScrollTtsNavigationAdapter.hashCode()
+        webViewTtsNavigationAdapter.hashCode()
+    }
     LaunchedEffect(
         pageReaderRendererRoute,
         pageReaderItemsCount,
@@ -925,6 +1080,211 @@ fun NovelReaderScreen(
             )
         }
     }
+    val pageReaderTtsPosition = remember(
+        usePageReader,
+        useRichPageReader,
+        pageReaderProgressPageIndex,
+        pageReaderPages,
+        richPageReaderPages,
+        pageReaderTextBlocks,
+        richPageReaderBlockTexts,
+    ) {
+        if (!usePageReader) {
+            null
+        } else {
+            val blockTexts = if (useRichPageReader) {
+                buildSourceIndexedPageReaderTextList(
+                    richPageReaderBlockTexts.map {
+                        PlainPageReaderTextBlock(
+                            sourceBlockIndex = it.sourceBlockIndex,
+                            text = it.text.text,
+                        )
+                    },
+                )
+            } else {
+                buildSourceIndexedPageReaderTextList(pageReaderTextBlocks)
+            }
+            val pages = if (useRichPageReader) {
+                richPageReaderPages.map { page ->
+                    page.filterIsInstance<RichPageSlice.Text>().map { slice ->
+                        NovelTtsPageSlice(
+                            blockIndex = slice.blockIndex,
+                            start = slice.range.start,
+                            endExclusive = slice.range.endExclusive,
+                        )
+                    }
+                }
+            } else {
+                pageReaderPages.map { page ->
+                    page.map { slice ->
+                        NovelTtsPageSlice(
+                            blockIndex = slice.blockIndex,
+                            start = slice.range.start,
+                            endExclusive = slice.range.endExclusive,
+                        )
+                    }
+                }
+            }
+            NovelTtsPageReaderPosition(
+                pageIndex = pageReaderProgressPageIndex,
+                blockTexts = blockTexts,
+                pages = pages,
+            )
+        }
+    }
+    val currentTtsBlockIndex by remember(
+        showWebView,
+        usePageReader,
+        pageReaderProgressPageIndex,
+        pageReaderPages,
+        richPageReaderPages,
+        textListState.firstVisibleItemIndex,
+        scrollContentBlocks.size,
+        richScrollBlocks.size,
+        webProgressPercent,
+    ) {
+        derivedStateOf {
+            when {
+                showWebView -> {
+                    val targetBlockCount = scrollContentBlocks.size.coerceAtLeast(1)
+                    (((webProgressPercent.coerceIn(0, 100) / 100f) * (targetBlockCount - 1)).roundToInt())
+                        .coerceIn(0, targetBlockCount - 1)
+                }
+                usePageReader -> {
+                    if (useRichPageReader) {
+                        richPageReaderPages
+                            .getOrNull(pageReaderProgressPageIndex)
+                            ?.filterIsInstance<RichPageSlice.Text>()
+                            ?.firstOrNull()
+                            ?.blockIndex
+                            ?: 0
+                    } else {
+                        pageReaderPages
+                            .getOrNull(pageReaderProgressPageIndex)
+                            ?.firstOrNull()
+                            ?.blockIndex
+                            ?: 0
+                    }
+                }
+                useRichNativeScroll -> textListState.firstVisibleItemIndex.coerceIn(
+                    0,
+                    richScrollBlocks.lastIndex.coerceAtLeast(0),
+                )
+                else -> textListState.firstVisibleItemIndex.coerceIn(0, scrollContentBlocks.lastIndex.coerceAtLeast(0))
+            }
+        }
+    }
+    val currentTtsStartRequest by remember(
+        currentTtsBlockIndex,
+        pageReaderTtsPosition,
+        usePageReader,
+    ) {
+        derivedStateOf {
+            NovelTtsPlaybackStartRequest(
+                fallbackBlockIndex = currentTtsBlockIndex,
+                pageReaderPosition = if (usePageReader) pageReaderTtsPosition else null,
+            )
+        }
+    }
+    LaunchedEffect(
+        state.chapter.id,
+        state.nextChapterId,
+        state.ttsUiState.activeSession?.chapterId,
+    ) {
+        val targetChapterId = resolveTtsAutoAdvancedChapterNavigationTarget(
+            currentChapterId = state.chapter.id,
+            activeTtsChapterId = state.ttsUiState.activeSession?.chapterId,
+            nextChapterId = state.nextChapterId,
+        ) ?: return@LaunchedEffect
+        if (requestedTtsChapterSyncTarget == targetChapterId) return@LaunchedEffect
+        requestedTtsChapterSyncTarget = targetChapterId
+        NovelReaderTtsChapterHandoffPolicy.markPendingRestore(targetChapterId)
+        onOpenNextChapter?.invoke(targetChapterId)
+    }
+    val activePageReaderTtsAnchors = remember(
+        usePageReader,
+        pageReaderTtsPosition,
+        state.ttsUiState.activeSession?.model,
+    ) {
+        val sessionModel = state.ttsUiState.activeSession?.model
+        val position = pageReaderTtsPosition
+        if (!usePageReader || sessionModel == null || position == null) {
+            emptyMap()
+        } else {
+            resolvePlainPageReaderTtsAnchors(
+                textBlocks = position.blockTexts,
+                pages = position.pages,
+                chapterModel = sessionModel,
+            )
+        }
+    }
+    LaunchedEffect(
+        state.ttsUiState.activeSession?.utterance?.id,
+        state.readerSettings.ttsFollowAlong,
+        showWebView,
+        usePageReader,
+        pageReaderProgressPageIndex,
+        activePageReaderTtsAnchors,
+    ) {
+        if (!state.readerSettings.ttsFollowAlong) return@LaunchedEffect
+        val session = state.ttsUiState.activeSession ?: return@LaunchedEffect
+        val segment = session.model.findSegmentForUtterance(session.utterance.id) ?: return@LaunchedEffect
+        pendingProgrammaticTtsBlockIndex = segment.sourceBlockIndex
+        suppressManualTtsPauseUntilMs = SystemClock.elapsedRealtime() + 1_500L
+        when {
+            showWebView -> webViewTtsNavigationAdapter.syncToSegment(segment)
+            usePageReader -> {
+                val anchor = activePageReaderTtsAnchors[session.utterance.id]
+                val targetPage = when {
+                    anchor == null -> segment.pageCandidates.firstOrNull()
+                    anchor.pageCandidates.contains(pageReaderProgressPageIndex) -> pageReaderProgressPageIndex
+                    else -> anchor.pageIndex
+                } ?: return@LaunchedEffect
+                pageReaderTtsNavigationAdapter.restorePosition(
+                    NovelTtsNavigationAnchor(pageIndex = targetPage),
+                )
+            }
+            else -> nativeScrollTtsNavigationAdapter.syncToSegment(segment)
+        }
+    }
+    LaunchedEffect(currentTtsBlockIndex, pendingProgrammaticTtsBlockIndex, suppressManualTtsPauseUntilMs) {
+        val pendingBlockIndex = pendingProgrammaticTtsBlockIndex ?: return@LaunchedEffect
+        if (currentTtsBlockIndex == pendingBlockIndex ||
+            SystemClock.elapsedRealtime() >= suppressManualTtsPauseUntilMs
+        ) {
+            pendingProgrammaticTtsBlockIndex = null
+            suppressManualTtsPauseUntilMs = 0L
+        }
+    }
+    val ttsHighlightState = remember(
+        usePageReader,
+        pageReaderProgressPageIndex,
+        activePageReaderTtsAnchors,
+        state.ttsUiState.activeSession?.utterance?.id,
+        state.ttsUiState.activeSourceBlockIndex,
+        state.ttsUiState.activeUtteranceText,
+        state.ttsUiState.activeWordRange,
+        state.ttsUiState.activeHighlightMode,
+    ) {
+        val activeUtterance = state.ttsUiState.activeSession?.utterance
+        val activePageAnchor = if (usePageReader) {
+            activeUtterance?.id?.let(activePageReaderTtsAnchors::get)
+        } else {
+            null
+        }
+        NovelReaderTtsHighlightState(
+            sourceBlockIndex = state.ttsUiState.activeSourceBlockIndex,
+            utteranceText = state.ttsUiState.activeUtteranceText,
+            wordRange = state.ttsUiState.activeWordRange,
+            pageIndex = activePageAnchor?.pageCandidates
+                ?.firstOrNull { it == pageReaderProgressPageIndex }
+                ?: activePageAnchor?.pageIndex,
+            blockTextStart = activePageAnchor?.blockTextStart ?: activeUtterance?.blockTextStart,
+            blockTextEndExclusive = activePageAnchor?.blockTextEndExclusive ?: activeUtterance?.blockTextEndExclusive,
+            mode = state.ttsUiState.activeHighlightMode,
+        )
+    }
+    val ttsHighlightColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
     val readingProgressPercent by remember(
         showWebView,
         webProgressPercent,
@@ -954,8 +1314,8 @@ fun NovelReaderScreen(
             }
         }
     }
-    val totalWords = remember(state.chapter.id, state.textBlocks) {
-        countNovelWords(state.textBlocks)
+    val totalWords = remember(state.chapter.id, pageReaderTextBlocks) {
+        countNovelWords(pageReaderTextBlocks.map { it.text })
     }
     val readWords by remember(totalWords, readingProgressPercent) {
         derivedStateOf {
@@ -963,6 +1323,41 @@ fun NovelReaderScreen(
                 totalWords = totalWords,
                 readingProgressPercent = readingProgressPercent,
             )
+        }
+    }
+    LaunchedEffect(
+        state.ttsUiState.isPlaying,
+        state.readerSettings.ttsPauseOnManualNavigation,
+        usePageReader,
+        currentTtsBlockIndex,
+        pageReaderProgressPageIndex,
+        state.ttsUiState.activeSourceBlockIndex,
+        state.ttsUiState.activeSession?.utterance?.id,
+        activePageReaderTtsAnchors,
+    ) {
+        val activePageCandidates = if (usePageReader) {
+            state.ttsUiState.activeSession
+                ?.utterance
+                ?.id
+                ?.let(activePageReaderTtsAnchors::get)
+                ?.pageCandidates
+                ?.toSet()
+        } else {
+            null
+        }
+        val shouldPauseForManualNavigation = resolveShouldPauseTtsForManualNavigation(
+            isPlaying = state.ttsUiState.isPlaying,
+            pauseOnManualNavigation = state.readerSettings.ttsPauseOnManualNavigation,
+            nowMs = SystemClock.elapsedRealtime(),
+            suppressUntilMs = suppressManualTtsPauseUntilMs,
+            usePageReader = usePageReader,
+            currentBlockIndex = currentTtsBlockIndex,
+            activeSourceBlockIndex = state.ttsUiState.activeSourceBlockIndex,
+            currentPageIndex = if (usePageReader) pageReaderProgressPageIndex else null,
+            activePageCandidates = activePageCandidates,
+        )
+        if (shouldPauseForManualNavigation) {
+            onPauseTtsForManualNavigation(currentTtsStartRequest)
         }
     }
     var readingPaceState by remember(state.chapter.id) {
@@ -1278,6 +1673,7 @@ fun NovelReaderScreen(
     androidx.compose.foundation.layout.Box(
         modifier = Modifier
             .fillMaxSize()
+            .background(textBackground)
             .onSizeChanged { pageViewportSize = it },
     ) {
         if (
@@ -1388,6 +1784,8 @@ fun NovelReaderScreen(
                         chapterTitleTypeface = chapterTitleTypeface,
                         contentPadding = contentPaddingPx,
                         statusBarTopPadding = statusBarTopPadding,
+                        ttsHighlightState = ttsHighlightState,
+                        ttsHighlightColor = ttsHighlightColor,
                         hasPreviousChapter = state.previousChapterId != null,
                         previousChapterName = state.previousChapterName,
                         hasNextChapter = state.nextChapterId != null,
@@ -1439,6 +1837,8 @@ fun NovelReaderScreen(
                         chapterTitleTypeface = chapterTitleTypeface,
                         contentPadding = contentPaddingPx,
                         statusBarTopPadding = statusBarTopPadding,
+                        ttsHighlightState = ttsHighlightState,
+                        ttsHighlightColor = ttsHighlightColor,
                         hasPreviousChapter = state.previousChapterId != null,
                         previousChapterName = state.previousChapterName,
                         hasNextChapter = state.nextChapterId != null,
@@ -1629,6 +2029,8 @@ fun NovelReaderScreen(
                                     textTypeface = composeTypeface,
                                     chapterTitleTypeface = chapterTitleTypeface,
                                     paragraphSpacing = paragraphSpacing,
+                                    ttsHighlightState = ttsHighlightState,
+                                    ttsHighlightColor = ttsHighlightColor,
                                     selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
                                     onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                                     onPlainTap = { tapX, width -> latestReaderShortTapHandler(tapX, width) },
@@ -1643,11 +2045,18 @@ fun NovelReaderScreen(
                                     is NovelReaderScreenModel.ContentBlock.Text -> {
                                         val isChapterTitle = index == 0 &&
                                             isNativeChapterTitleText(block.text, state.chapter.name)
-                                        val textContent = if (state.readerSettings.bionicReading) {
+                                        val baseTextContent = if (state.readerSettings.bionicReading) {
                                             toBionicText(block.text)
                                         } else {
                                             AnnotatedString(block.text)
                                         }
+                                        val textContent = applyNovelReaderTtsHighlight(
+                                            text = baseTextContent,
+                                            blockText = block.text,
+                                            sourceBlockIndex = index,
+                                            highlightState = ttsHighlightState,
+                                            highlightColor = ttsHighlightColor,
+                                        )
                                         if (isChapterTitle) {
                                             Column(
                                                 modifier = Modifier.padding(
@@ -1761,7 +2170,10 @@ fun NovelReaderScreen(
                     }
                 }
             } else {
-                val backgroundColor = textBackground.toArgb()
+                val backgroundColor = resolveReaderWebViewBackgroundColor(
+                    isBackgroundMode = isBackgroundMode,
+                    backgroundColor = textBackground,
+                )
                 val baseUrl = remember(state.chapterWebUrl) {
                     state.chapterWebUrl
                 }
@@ -1827,37 +2239,36 @@ fun NovelReaderScreen(
                 )
                 val initialSelectedFontFamily = selectedReaderFont.id.takeIf { it.isNotBlank() }
                 val initialFontFaceCss = buildNovelReaderFontFaceCss(selectedReaderFont)
-                val initialReaderCss = buildWebReaderCssText(
-                    fontFaceCss = initialFontFaceCss,
-                    paddingTop = initialPaddingTop,
-                    paddingBottom = initialPaddingBottom,
-                    paddingHorizontal = initialPaddingHorizontal,
-                    fontSizePx = state.readerSettings.fontSize,
-                    lineHeightMultiplier = state.readerSettings.lineHeight,
-                    paragraphSpacingPx = state.readerSettings.paragraphSpacing,
-                    textAlignCss = initialCssTextAlign,
-                    firstLineIndentCss = initialCssFirstLineIndent,
-                    textColorHex = colorToCssHex(textColor),
-                    backgroundHex = colorToCssHex(textBackground),
-                    appearanceMode = state.readerSettings.appearanceMode,
-                    backgroundTexture = activeBackgroundTexture,
-                    oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
-                    backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
-                    fontFamilyName = initialSelectedFontFamily,
-                    customCss = state.readerSettings.customCSS,
-                    textShadowCss = initialTextShadowCss,
-                    forceBoldText = state.readerSettings.forceBoldText,
-                    forceItalicText = state.readerSettings.forceItalicText,
-                )
-                val initialFactoryWebViewHtml = buildInitialWebReaderHtml(
-                    rawHtml = state.html,
-                    readerCss = initialReaderCss,
-                    hideUntilReveal = shouldHideWebViewUntilReveal,
-                )
 
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = { context ->
+                        val initialFactoryWebViewHtml = buildInitialWebReaderHtml(
+                            rawHtml = state.html,
+                            readerCss = buildWebReaderCssText(
+                                fontFaceCss = initialFontFaceCss,
+                                paddingTop = initialPaddingTop,
+                                paddingBottom = initialPaddingBottom,
+                                paddingHorizontal = initialPaddingHorizontal,
+                                fontSizePx = state.readerSettings.fontSize,
+                                lineHeightMultiplier = state.readerSettings.lineHeight,
+                                paragraphSpacingPx = state.readerSettings.paragraphSpacing,
+                                textAlignCss = initialCssTextAlign,
+                                firstLineIndentCss = initialCssFirstLineIndent,
+                                textColorHex = colorToCssHex(textColor),
+                                backgroundHex = colorToCssHex(textBackground),
+                                appearanceMode = state.readerSettings.appearanceMode,
+                                backgroundTexture = activeBackgroundTexture,
+                                oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
+                                backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
+                                fontFamilyName = initialSelectedFontFamily,
+                                customCss = state.readerSettings.customCSS,
+                                textShadowCss = initialTextShadowCss,
+                                forceBoldText = state.readerSettings.forceBoldText,
+                                forceItalicText = state.readerSettings.forceItalicText,
+                            ),
+                            hideUntilReveal = shouldHideWebViewUntilReveal,
+                        )
                         val factoryShouldEarlyReveal = shouldUseEarlyWebViewReveal(state.html)
                         val factoryWebViewClient = object : WebViewClient() {
                             private var hasEarlyRevealedPage = false
@@ -2208,36 +2619,9 @@ fun NovelReaderScreen(
                             forceBoldText = state.readerSettings.forceBoldText,
                             forceItalicText = state.readerSettings.forceItalicText,
                         )
-                        val currentRestoreProgress = state.lastSavedWebProgressPercent.coerceIn(0, 100)
                         val currentFontSize = state.readerSettings.fontSize
                         val currentLineHeight = state.readerSettings.lineHeight
-                        val currentReaderCss = buildWebReaderCssText(
-                            fontFaceCss = fontFaceCss,
-                            paddingTop = paddingTop,
-                            paddingBottom = paddingBottom,
-                            paddingHorizontal = paddingHorizontal,
-                            fontSizePx = currentFontSize,
-                            lineHeightMultiplier = currentLineHeight,
-                            paragraphSpacingPx = state.readerSettings.paragraphSpacing,
-                            textAlignCss = cssTextAlign,
-                            firstLineIndentCss = cssFirstLineIndent,
-                            textColorHex = currentTextColorCss,
-                            backgroundHex = currentBackgroundCss,
-                            appearanceMode = state.readerSettings.appearanceMode,
-                            backgroundTexture = activeBackgroundTexture,
-                            oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
-                            backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
-                            fontFamilyName = selectedFontFamily,
-                            customCss = currentCustomCss,
-                            textShadowCss = currentTextShadowCss,
-                            forceBoldText = state.readerSettings.forceBoldText,
-                            forceItalicText = state.readerSettings.forceItalicText,
-                        )
-                        val initialWebViewHtml = buildInitialWebReaderHtml(
-                            rawHtml = state.html,
-                            readerCss = currentReaderCss,
-                            hideUntilReveal = shouldHideWebViewUntilReveal,
-                        )
+                        val currentRestoreProgress = state.lastSavedWebProgressPercent.coerceIn(0, 100)
                         val shouldEarlyRevealWebView = shouldUseEarlyWebViewReveal(state.html)
                         webView.webViewClient = object : WebViewClient() {
                             private var hasEarlyRevealedPage = false
@@ -2356,6 +2740,35 @@ fun NovelReaderScreen(
                         }
 
                         if (webView.tag != state.html) {
+                            val currentRestoreProgress = state.lastSavedWebProgressPercent.coerceIn(0, 100)
+                            val currentReaderCss = buildWebReaderCssText(
+                                fontFaceCss = fontFaceCss,
+                                paddingTop = paddingTop,
+                                paddingBottom = paddingBottom,
+                                paddingHorizontal = paddingHorizontal,
+                                fontSizePx = currentFontSize,
+                                lineHeightMultiplier = currentLineHeight,
+                                paragraphSpacingPx = state.readerSettings.paragraphSpacing,
+                                textAlignCss = cssTextAlign,
+                                firstLineIndentCss = cssFirstLineIndent,
+                                textColorHex = currentTextColorCss,
+                                backgroundHex = currentBackgroundCss,
+                                appearanceMode = state.readerSettings.appearanceMode,
+                                backgroundTexture = activeBackgroundTexture,
+                                oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
+                                backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
+                                fontFamilyName = selectedFontFamily,
+                                customCss = currentCustomCss,
+                                textShadowCss = currentTextShadowCss,
+                                forceBoldText = state.readerSettings.forceBoldText,
+                                forceItalicText = state.readerSettings.forceItalicText,
+                            )
+                            val initialWebViewHtml = buildInitialWebReaderHtml(
+                                rawHtml = state.html,
+                                readerCss = currentReaderCss,
+                                hideUntilReveal = shouldHideWebViewUntilReveal,
+                            )
+                            val shouldEarlyRevealWebView = shouldUseEarlyWebViewReveal(state.html)
                             shouldRestoreWebScroll = true
                             appliedWebCssFingerprint = null
                             webView.animate().cancel()
@@ -2904,6 +3317,32 @@ fun NovelReaderScreen(
                         RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
                     ),
             ) {
+                if (state.readerSettings.ttsEnabled) {
+                    NovelReaderTtsControls(
+                        uiState = state.ttsUiState,
+                        onTogglePlayback = { onToggleTtsPlayback(currentTtsStartRequest) },
+                        onStop = onStopTtsPlayback,
+                        onSkipPrevious = onSkipPreviousTts,
+                        onSkipNext = onSkipNextTts,
+                        onSetEnginePackage = onSetTtsEnginePackage,
+                        onSetVoiceId = onSetTtsVoiceId,
+                        onSetLocaleTag = onSetTtsLocaleTag,
+                        onSetSpeechRate = onSetTtsSpeechRate,
+                        onSetPitch = onSetTtsPitch,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                start = MaterialTheme.padding.medium,
+                                end = MaterialTheme.padding.medium,
+                                top = MaterialTheme.padding.medium,
+                            ),
+                    )
+
+                    androidx.compose.material3.HorizontalDivider(
+                        modifier = Modifier.padding(top = MaterialTheme.padding.medium),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
+                    )
+                }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -2956,6 +3395,14 @@ fun NovelReaderScreen(
                     }
                     IconButton(onClick = { showSettings = true }) {
                         Icon(imageVector = Icons.Outlined.Settings, contentDescription = null)
+                    }
+                    if (ttsPlacement.showFooterEntry) {
+                        IconButton(onClick = { showTtsBehaviorSettings = true }) {
+                            Icon(
+                                imageVector = Icons.Outlined.SettingsVoice,
+                                contentDescription = stringResource(AYMR.strings.novel_reader_tts_behavior_settings),
+                            )
+                        }
                     }
                     if (state.readerSettings.geminiEnabled) {
                         IconButton(onClick = { showGeminiDialog = true }) {
@@ -3012,6 +3459,12 @@ fun NovelReaderScreen(
                 currentWebViewActive = showWebView,
                 currentPageReaderActive = usePageReader,
                 onDismissRequest = { showSettings = false },
+            )
+        }
+        if (showTtsBehaviorSettings && ttsPlacement.showFooterEntry) {
+            NovelReaderTtsBehaviorSettingsDialog(
+                sourceId = state.novel.source,
+                onDismissRequest = { showTtsBehaviorSettings = false },
             )
         }
         if (showGeminiDialog && state.readerSettings.geminiEnabled) {

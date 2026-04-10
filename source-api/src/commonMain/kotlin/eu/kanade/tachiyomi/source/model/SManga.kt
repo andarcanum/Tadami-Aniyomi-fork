@@ -20,6 +20,8 @@ interface SManga : Serializable {
 
     var status: Int
 
+    var rating: Float
+
     var thumbnail_url: String?
 
     var update_strategy: UpdateStrategy
@@ -39,6 +41,7 @@ interface SManga : Serializable {
         it.description = description
         it.genre = genre
         it.status = status
+        it.rating = rating
         it.thumbnail_url = thumbnail_url
         it.update_strategy = update_strategy
         it.initialized = initialized

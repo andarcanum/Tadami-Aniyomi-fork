@@ -10,6 +10,7 @@ import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.entries.novel.interactor.GetNovelExcludedScanlators
+import eu.kanade.domain.entries.novel.interactor.NovelRatingFetcher
 import eu.kanade.domain.entries.novel.interactor.SetNovelExcludedScanlators
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.entries.novel.model.chaptersFiltered
@@ -20,6 +21,7 @@ import eu.kanade.domain.items.novelchapter.interactor.GetNovelScanlatorChapterCo
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.presentation.util.TargetChapterCalculator
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCacheEvent
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager
 import eu.kanade.tachiyomi.data.download.novel.NovelQueuedDownloadStatus
@@ -83,7 +85,9 @@ import uy.kohesive.injekt.api.get
 import java.io.File
 import java.time.Instant
 import java.util.LinkedHashMap
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.system.measureTimeMillis
 
 enum class NovelDownloadAction {
     NEXT,
@@ -117,18 +121,29 @@ class NovelScreenModel(
     private val getNovelCategories: GetNovelCategories = Injekt.get(),
     private val setNovelCategories: SetNovelCategories = Injekt.get(),
     private val sourceManager: NovelSourceManager = Injekt.get(),
+    private val novelRatingFetcher: NovelRatingFetcher = Injekt.get(),
     private val trackerManager: TrackerManager = Injekt.get(),
     private val getTracks: GetNovelTracks = Injekt.get(),
     private val application: Application? = runCatching { Injekt.get<Application>() }.getOrNull(),
     private val novelDownloadManager: NovelDownloadManager = NovelDownloadManager(),
     private val novelTranslatedDownloadManager: NovelTranslatedDownloadManager = NovelTranslatedDownloadManager(),
-    private val downloadCacheChanges: Flow<Unit> = runCatching {
+    private val downloadCacheChanges: Flow<NovelDownloadCacheEvent> = runCatching {
         Injekt.get<NovelDownloadCache>().changes
     }.getOrElse { emptyFlow() },
     private val downloadQueueState:
     Flow<eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState> = NovelDownloadQueueManager.state,
     private val resolveDownloadedChapterIds: (Novel, List<NovelChapter>) -> Set<Long> = { novel, chapters ->
         novelDownloadManager.getDownloadedChapterIds(novel, chapters)
+    },
+    private val enqueueOriginal: (Novel, List<NovelChapter>) -> Int = { novel, chapters ->
+        NovelDownloadQueueManager.enqueueOriginal(novel, chapters)
+    },
+    private val enqueueTranslated: (Novel, List<NovelChapter>, NovelTranslatedDownloadFormat) -> Int = {
+            novel,
+            chapters,
+            format,
+        ->
+        NovelDownloadQueueManager.enqueueTranslated(novel, chapters, format)
     },
     private val novelEpubExporter: NovelEpubExporter = NovelEpubExporter(),
     private val novelReaderPreferences: NovelReaderPreferences = Injekt.get(),
@@ -147,6 +162,7 @@ class NovelScreenModel(
 
     private var previousQueueNotifySummary = QueueNotifySummary()
     private var lastQueueProgressNotifyAt = 0L
+    private val downloadedStateVersion = AtomicLong(0L)
 
     private val successState: State.Success?
         get() = state.value as? State.Success
@@ -256,11 +272,9 @@ class NovelScreenModel(
 
         screenModelScope.launchIO {
             downloadCacheChanges
-                .onStart { emit(Unit) }
+                .onStart { emit(NovelDownloadCacheEvent.InvalidateAll) }
                 .flowWithLifecycle(lifecycle)
-                .collectLatest {
-                    syncDownloadedState()
-                }
+                .collectLatest(::handleDownloadCacheEvent)
         }
 
         screenModelScope.launchIO {
@@ -330,6 +344,7 @@ class NovelScreenModel(
                 State.Success(
                     novel = novel,
                     source = source,
+                    rating = null,
                     chapters = chapters,
                     availableScanlators = availableScanlators,
                     scanlatorChapterCounts = scanlatorChapterCounts,
@@ -374,6 +389,12 @@ class NovelScreenModel(
                 }
             }
             cacheState(state.value as? State.Success)
+            if (!(shouldAutoRefreshNovel || shouldAutoRefreshChapters)) {
+                refreshNovelRating(
+                    state = state.value as? State.Success,
+                    forceRefresh = false,
+                )
+            }
             observeTrackers()
             syncDownloadedState()
 
@@ -444,14 +465,73 @@ class NovelScreenModel(
 
     private fun syncDownloadedState() {
         val state = successState ?: return
+        val requestVersion = downloadedStateVersion.incrementAndGet()
         screenModelScope.launchIO {
-            val downloadedIds = resolveDownloadedChapterIds(state.novel, state.chapters)
+            var downloadedIds = emptySet<Long>()
+            val elapsed = measureTimeMillis {
+                downloadedIds = resolveDownloadedChapterIds(state.novel, state.chapters)
+            }
+            if (downloadedStateVersion.get() != requestVersion) return@launchIO
+            logcat(LogPriority.DEBUG) {
+                "Novel downloaded-state sync: novel=${state.novel.id}, chapters=${state.chapters.size}, resolved=${downloadedIds.size}, elapsedMs=$elapsed, version=$requestVersion"
+            }
             updateSuccessState {
                 if (downloadedIds == it.downloadedChapterIds) {
                     it
                 } else {
                     it.copy(downloadedChapterIds = downloadedIds)
                 }
+            }
+        }
+    }
+
+    internal fun handleDownloadCacheEvent(event: NovelDownloadCacheEvent) {
+        // Targeted chapter changes may update state incrementally, but we keep InvalidateAll as the
+        // reconciliation path after storage changes, process restarts, or any suspected mismatch.
+        when (event) {
+            is NovelDownloadCacheEvent.ChaptersChanged -> {
+                updateDownloadedStateFromCacheEvent(event)
+            }
+            NovelDownloadCacheEvent.InvalidateAll -> {
+                syncDownloadedState()
+            }
+            is NovelDownloadCacheEvent.NovelRemoved -> {
+                updateDownloadedStateForRemovedNovel(event.novelId)
+            }
+        }
+    }
+
+    private fun updateDownloadedStateFromCacheEvent(event: NovelDownloadCacheEvent.ChaptersChanged) {
+        val state = successState ?: return
+        if (event.novelId != state.novel.id) return
+        val knownChapterIds = state.chapters.asSequence().map { it.id }.toSet()
+        val affectedChapterIds = event.chapterIds.intersect(knownChapterIds)
+        if (affectedChapterIds.isEmpty()) return
+        downloadedStateVersion.incrementAndGet()
+
+        updateSuccessState {
+            val downloadedChapterIds = if (event.downloaded) {
+                it.downloadedChapterIds + affectedChapterIds
+            } else {
+                it.downloadedChapterIds - affectedChapterIds
+            }
+            if (downloadedChapterIds == it.downloadedChapterIds) {
+                it
+            } else {
+                it.copy(downloadedChapterIds = downloadedChapterIds)
+            }
+        }
+    }
+
+    private fun updateDownloadedStateForRemovedNovel(novelId: Long) {
+        val state = successState ?: return
+        if (state.novel.id != novelId) return
+        downloadedStateVersion.incrementAndGet()
+        updateSuccessState {
+            if (it.downloadedChapterIds.isEmpty()) {
+                it
+            } else {
+                it.copy(downloadedChapterIds = emptySet())
             }
         }
     }
@@ -474,10 +554,12 @@ class NovelScreenModel(
     private fun notifyQueueStarted(addedCount: Int) {
         if (addedCount <= 0) return
         val app = application ?: return
-        val message = app.stringResource(
-            AYMR.strings.novel_download_queue_started_count,
-            addedCount,
-        )
+        val message = runCatching {
+            app.stringResource(
+                AYMR.strings.novel_download_queue_started_count,
+                addedCount,
+            )
+        }.getOrNull() ?: return
         screenModelScope.launchIO {
             snackbarHostState.showSnackbar(
                 message = message,
@@ -496,11 +578,13 @@ class NovelScreenModel(
         ) {
             val app = application
             if (app != null) {
-                val message = app.stringResource(
-                    AYMR.strings.novel_download_queue_progress,
-                    summary.pending,
-                    summary.active,
-                )
+                val message = runCatching {
+                    app.stringResource(
+                        AYMR.strings.novel_download_queue_progress,
+                        summary.pending,
+                        summary.active,
+                    )
+                }.getOrNull() ?: return
                 screenModelScope.launchIO {
                     snackbarHostState.showSnackbar(
                         message = message,
@@ -514,14 +598,16 @@ class NovelScreenModel(
         if (summary.activeTotal == 0 && previous.activeTotal > 0) {
             val app = application
             if (app != null) {
-                val message = if (summary.failed > 0) {
-                    app.stringResource(
-                        AYMR.strings.novel_download_queue_failed_count,
-                        summary.failed,
-                    )
-                } else {
-                    app.stringResource(AYMR.strings.novel_download_queue_completed)
-                }
+                val message = runCatching {
+                    if (summary.failed > 0) {
+                        app.stringResource(
+                            AYMR.strings.novel_download_queue_failed_count,
+                            summary.failed,
+                        )
+                    } else {
+                        app.stringResource(AYMR.strings.novel_download_queue_completed)
+                    }
+                }.getOrNull() ?: return
                 screenModelScope.launchIO {
                     snackbarHostState.showSnackbar(
                         message = message,
@@ -712,6 +798,30 @@ class NovelScreenModel(
             remoteNovel = networkNovel,
             manualFetch = manualFetch,
         )
+        refreshNovelRating(
+            state = state,
+            forceRefresh = manualFetch,
+        )
+    }
+
+    private fun refreshNovelRating(
+        state: State.Success?,
+        forceRefresh: Boolean,
+    ) {
+        if (state == null) return
+        screenModelScope.launchIO {
+            val rating = novelRatingFetcher.await(
+                source = state.source,
+                novel = state.novel,
+                forceRefresh = forceRefresh,
+            )
+            logcat {
+                "Resolved novel rating for id=${state.novel.id} source=${state.source.name}, rating=$rating"
+            }
+            updateSuccessState { current ->
+                if (current.novel.id != state.novel.id) current else current.copy(rating = rating)
+            }
+        }
     }
 
     private suspend fun fetchChaptersFromSource(
@@ -1109,9 +1219,11 @@ class NovelScreenModel(
             return
         }
 
-        val added = NovelDownloadQueueManager.enqueueOriginal(state.novel, listOf(chapter))
-        notifyQueueStarted(added)
-        syncDownloadedState()
+        screenModelScope.launchIO {
+            val added = enqueueOriginal(state.novel, listOf(chapter))
+            notifyQueueStarted(added)
+            syncDownloadedState()
+        }
     }
 
     fun downloadSelectedChapters() {
@@ -1121,10 +1233,12 @@ class NovelScreenModel(
         }
         if (selectedChapters.isEmpty()) return
 
-        val added = NovelDownloadQueueManager.enqueueOriginal(state.novel, selectedChapters)
-        notifyQueueStarted(added)
-        toggleAllSelection(false)
-        syncDownloadedState()
+        screenModelScope.launchIO {
+            val added = enqueueOriginal(state.novel, selectedChapters)
+            notifyQueueStarted(added)
+            toggleAllSelection(false)
+            syncDownloadedState()
+        }
     }
 
     fun runDownloadAction(
@@ -1141,9 +1255,11 @@ class NovelScreenModel(
         )
         if (chaptersToDownload.isEmpty()) return
 
-        val added = NovelDownloadQueueManager.enqueueOriginal(state.novel, chaptersToDownload)
-        notifyQueueStarted(added)
-        syncDownloadedState()
+        screenModelScope.launchIO {
+            val added = enqueueOriginal(state.novel, chaptersToDownload)
+            notifyQueueStarted(added)
+            syncDownloadedState()
+        }
     }
 
     fun getBatchDownloadCandidates(onlyNotDownloaded: Boolean): List<NovelChapter> {
@@ -1207,10 +1323,10 @@ class NovelScreenModel(
         )
         if (translatedChapters.isEmpty()) return 0
 
-        val added = NovelDownloadQueueManager.enqueueTranslated(
-            novel = state.novel,
-            chapters = translatedChapters,
-            format = format,
+        val added = enqueueTranslated(
+            state.novel,
+            translatedChapters,
+            format,
         )
         notifyQueueStarted(added)
         return added
@@ -1252,10 +1368,10 @@ class NovelScreenModel(
             .toList()
         if (chapters.isEmpty()) return 0
 
-        val added = NovelDownloadQueueManager.enqueueTranslated(
-            novel = state.novel,
-            chapters = chapters,
-            format = format,
+        val added = enqueueTranslated(
+            state.novel,
+            chapters,
+            format,
         )
         notifyQueueStarted(added)
         return added
@@ -1463,6 +1579,7 @@ class NovelScreenModel(
         data class Success(
             val novel: Novel,
             val source: NovelSource,
+            val rating: Float? = null,
             val chapters: List<NovelChapter>,
             val availableScanlators: Set<String>,
             val scanlatorChapterCounts: Map<String, Int>,

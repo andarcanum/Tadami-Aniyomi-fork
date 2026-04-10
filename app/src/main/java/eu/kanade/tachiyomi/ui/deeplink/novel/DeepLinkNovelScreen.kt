@@ -57,7 +57,7 @@ class DeepLinkNovelScreen(
                             ),
                         )
                     } else {
-                        navigator.replace(NovelReaderScreen(resultState.chapterId))
+                        navigator.replace(NovelReaderScreen(resultState.chapterId, resultState.novel.source))
                     }
                 }
             }

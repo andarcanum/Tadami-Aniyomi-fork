@@ -83,6 +83,7 @@ import eu.kanade.presentation.entries.novel.components.aurora.NovelActionCard
 import eu.kanade.presentation.entries.novel.components.aurora.NovelChapterCardCompactUi
 import eu.kanade.presentation.entries.novel.components.aurora.NovelHeroContent
 import eu.kanade.presentation.entries.novel.components.aurora.NovelInfoCard
+import eu.kanade.presentation.entries.novel.components.aurora.NovelStatsCard
 import eu.kanade.presentation.entries.reduceTitleFastScrollOverlayAccumulator
 import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
 import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
@@ -161,6 +162,7 @@ fun NovelScreenAuroraImpl(
     val novel = state.novel
     val globalSearchQuery = remember(novel.title) { normalizeAuroraGlobalSearchQuery(novel.title) }
     val chapters = state.processedChapters
+    val readChapterCount = remember(state.chapters) { state.chapters.count { it.read } }
     val groupedByChapter = false
     val chapterGroups = remember(chapters, groupedByChapter) {
         if (groupedByChapter) {
@@ -338,15 +340,24 @@ fun NovelScreenAuroraImpl(
                                 NovelHeroContent(
                                     novel = novel,
                                     chapterCount = totalChapterCount,
+                                    rating = state.rating,
                                     onContinueReading = onStartReading,
                                     isReading = isReading,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
+                                NovelStatsCard(
+                                    novel = novel,
+                                    rating = state.rating,
+                                    chapterCount = totalChapterCount,
+                                    readChapterCount = readChapterCount,
+                                    nextUpdate = nextUpdate,
+                                    sourceName = state.source.name,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
                                 NovelInfoCard(
                                     novel = novel,
-                                    chapterCount = totalChapterCount,
-                                    nextUpdate = nextUpdate,
                                     onTagSearch = { tag -> onSearch(tag, true) },
                                     descriptionExpanded = descriptionExpanded,
                                     genresExpanded = genresExpanded,
@@ -861,10 +872,18 @@ fun NovelScreenAuroraImpl(
                                 .auroraCenteredMaxWidth(contentMaxWidthDp),
                         ) {
                             Spacer(modifier = Modifier.height(16.dp))
+                            NovelStatsCard(
+                                novel = novel,
+                                rating = state.rating,
+                                chapterCount = totalChapterCount,
+                                readChapterCount = readChapterCount,
+                                nextUpdate = nextUpdate,
+                                sourceName = state.source.name,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
                             NovelInfoCard(
                                 novel = novel,
-                                chapterCount = totalChapterCount,
-                                nextUpdate = nextUpdate,
                                 onTagSearch = { tag -> onSearch(tag, true) },
                                 descriptionExpanded = descriptionExpanded,
                                 genresExpanded = genresExpanded,
@@ -1107,6 +1126,7 @@ fun NovelScreenAuroraImpl(
                     NovelHeroContent(
                         novel = novel,
                         chapterCount = totalChapterCount,
+                        rating = state.rating,
                         onContinueReading = onStartReading,
                         isReading = isReading,
                     )

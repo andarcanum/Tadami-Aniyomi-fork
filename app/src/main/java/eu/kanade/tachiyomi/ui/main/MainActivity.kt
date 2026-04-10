@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -38,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.animation.doOnEnd
 import androidx.core.net.toUri
@@ -76,6 +79,7 @@ import eu.kanade.presentation.components.IndexingBannerBackgroundColor
 import eu.kanade.presentation.more.settings.screen.browse.AnimeExtensionReposScreen
 import eu.kanade.presentation.more.settings.screen.browse.MangaExtensionReposScreen
 import eu.kanade.presentation.more.settings.screen.data.RestoreBackupScreen
+import eu.kanade.presentation.reader.novel.NovelReaderBackdropSession
 import eu.kanade.presentation.util.AssistContentScreen
 import eu.kanade.presentation.util.DefaultNavigatorScreenTransition
 import eu.kanade.tachiyomi.animesource.model.Hoster
@@ -175,6 +179,11 @@ class MainActivity : BaseActivity() {
 
         super.onCreate(savedInstanceState)
 
+        updateMainActivityWindowBackground(
+            readerBackdropColor = NovelReaderBackdropSession.backgroundColor,
+            fallbackColorArgb = resolveMainActivityThemeBackgroundArgb(),
+        )
+
         val didMigration = Migrator.awaitAndRelease()
 
         // Do not let the launcher create a new activity http://stackoverflow.com/questions/16283079
@@ -258,8 +267,25 @@ class MainActivity : BaseActivity() {
                         .collectLatest { incognitoAnime = it }
                 }
 
+                val readerBackdropColor = when (val currentScreen = navigator.lastItem) {
+                    is NovelReaderScreen -> {
+                        currentScreen.resolveInitialBackdropColor() ?: NovelReaderBackdropSession.backgroundColor
+                    }
+                    else -> null
+                }
+                val themeBackgroundArgb = MaterialTheme.colorScheme.background.toArgb()
+                SideEffect {
+                    updateMainActivityWindowBackground(
+                        readerBackdropColor = readerBackdropColor,
+                        fallbackColorArgb = themeBackgroundArgb,
+                    )
+                    if (navigator.lastItem !is NovelReaderScreen) {
+                        NovelReaderBackdropSession.update(null)
+                    }
+                }
                 val scaffoldInsets = WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal)
                 Scaffold(
+                    containerColor = readerBackdropColor ?: MaterialTheme.colorScheme.background,
                     topBar = {
                         AppStateBanners(
                             downloadedOnlyMode = downloadOnly,
@@ -767,6 +793,29 @@ class MainActivity : BaseActivity() {
             }
         }
     }
+
+    private fun resolveMainActivityThemeBackgroundArgb(): Int {
+        val typedArray = theme.obtainStyledAttributes(intArrayOf(android.R.attr.colorBackground))
+        return try {
+            typedArray.getColor(0, Color.WHITE)
+        } finally {
+            typedArray.recycle()
+        }
+    }
+
+    private fun updateMainActivityWindowBackground(
+        readerBackdropColor: androidx.compose.ui.graphics.Color?,
+        fallbackColorArgb: Int,
+    ) {
+        window.setBackgroundDrawable(
+            ColorDrawable(
+                resolveMainActivityWindowBackgroundArgb(
+                    readerBackdropColor = readerBackdropColor,
+                    fallbackColorArgb = fallbackColorArgb,
+                ),
+            ),
+        )
+    }
 }
 
 internal enum class MainStatusBarStyleMode {
@@ -801,8 +850,15 @@ internal fun resolveMainStatusBarStyleMode(
 }
 
 internal fun shouldMainActivityApplyEdgeToEdge(screen: Any?): Boolean {
-    // Novel reader controls system bar appearance on its own.
-    return screen !is NovelReaderScreen
+    // Novel reader still needs the host window to remain edge-to-edge after activity recreation.
+    return true
+}
+
+internal fun resolveMainActivityWindowBackgroundArgb(
+    readerBackdropColor: androidx.compose.ui.graphics.Color?,
+    fallbackColorArgb: Int,
+): Int {
+    return readerBackdropColor?.toArgb() ?: fallbackColorArgb
 }
 
 // Splash screen

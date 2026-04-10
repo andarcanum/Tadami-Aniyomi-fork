@@ -379,6 +379,7 @@ class MangaDownloader(
             } else {
                 DataSaver.NoOp
             }
+            val pageDownloadConcurrency = downloadPreferences.pageDownloadConcurrency().get().coerceIn(1, 10)
 
             // Delete all temporary (unfinished) files
             tmpDir.listFiles()
@@ -388,9 +389,9 @@ class MangaDownloader(
             download.status = MangaDownload.State.DOWNLOADING
 
             // Start downloading images, consider we can have downloaded images already
-            // Concurrently do 2 pages at a time
+            // Concurrently download a configurable number of pages at a time
             pageList.asFlow()
-                .flatMapMerge(concurrency = 2) { page ->
+                .flatMapMerge(concurrency = pageDownloadConcurrency) { page ->
                     flow {
                         // Fetch image URL if necessary
                         if (page.imageUrl.isNullOrEmpty()) {

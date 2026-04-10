@@ -8,6 +8,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.core.content.res.ResourcesCompat
@@ -136,6 +137,20 @@ internal fun buildWebReaderSelectionJavascript(
             document.addEventListener('touchend', schedulePublish, true);
         })();
     """.trimIndent()
+}
+
+internal fun WebView.syncTtsApproximatePosition(
+    snippet: String,
+    progressPercent: Int,
+    onComplete: ((String?) -> Unit)? = null,
+) {
+    evaluateJavascript(
+        buildWebReaderTtsSyncJavascript(
+            snippet = snippet,
+            progressPercent = progressPercent,
+        ),
+        onComplete,
+    )
 }
 
 internal class NovelReaderSelectionBridge(
@@ -822,6 +837,13 @@ internal fun resolveReaderTextColorForBackgroundMode(averageLuminance: Float): C
     }
 }
 
+internal fun resolveReaderWebViewBackgroundColor(
+    isBackgroundMode: Boolean,
+    backgroundColor: Color,
+): Int {
+    return backgroundColor.toArgb()
+}
+
 internal fun resolveReaderBackgroundWebImageUrl(selection: ReaderBackgroundSelection): String {
     return when (selection.source) {
         NovelReaderBackgroundSource.PRESET -> "$READER_BACKGROUND_PRESET_URL_PREFIX${selection.preset.id}"
@@ -840,6 +862,33 @@ internal fun resolveReaderBackgroundIdentity(selection: ReaderBackgroundSelectio
     return when (selection.source) {
         NovelReaderBackgroundSource.PRESET -> "preset:${selection.preset.id}"
         NovelReaderBackgroundSource.CUSTOM -> "custom:${selection.customId ?: selection.customPath.orEmpty()}"
+    }
+}
+
+internal fun resolveReaderBackgroundImageModel(selection: ReaderBackgroundSelection): Any? {
+    return when (selection.source) {
+        NovelReaderBackgroundSource.PRESET -> selection.preset.imageResId
+        NovelReaderBackgroundSource.CUSTOM -> selection.customPath?.let(::File)
+    }
+}
+
+internal fun resolveReaderBackgroundBackdropColor(selection: ReaderBackgroundSelection): Color {
+    return when (selection.source) {
+        NovelReaderBackgroundSource.PRESET -> {
+            parseReaderColor(selection.preset.backdropColorHex)
+                ?: if (selection.preset.isDarkPreferred) Color(0xFF121212) else Color(0xFFE8DDBD)
+        }
+        NovelReaderBackgroundSource.CUSTOM -> {
+            selection.customPath?.let(::sampleReaderBackgroundAverageColor)
+                ?: when (selection.customIsDarkHint) {
+                    true -> Color(0xFF121212)
+                    false -> Color(0xFFE8DDBD)
+                    null -> {
+                        parseReaderColor(selection.preset.backdropColorHex)
+                            ?: if (selection.preset.isDarkPreferred) Color(0xFF121212) else Color(0xFFE8DDBD)
+                    }
+                }
+        }
     }
 }
 

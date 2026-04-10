@@ -107,6 +107,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPrivateBridge
 import kotlinx.collections.immutable.persistentListOf
@@ -119,6 +120,7 @@ import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import kotlin.math.roundToInt
 import android.graphics.Color as AndroidColor
 
 internal enum class NovelReaderDisplaySettingKey {
@@ -176,6 +178,7 @@ object SettingsNovelReaderScreen : SearchableSettings {
             getThemeGroup(prefs),
             getNavigationGroup(prefs),
             getAccessibilityGroup(prefs),
+            getTtsGroup(prefs),
             getAdvancedGroup(prefs),
         )
     }
@@ -770,6 +773,7 @@ object SettingsNovelReaderScreen : SearchableSettings {
         val swipeGestures by swipeGesturesPref.collectAsState()
         val pageReaderPref = prefs.pageReader()
         val pageReader by pageReaderPref.collectAsState()
+        val showPageChapterTitlePref = prefs.showPageChapterTitle()
         val pageTransitionStylePref = prefs.pageTransitionStyle()
         val pageTransitionStyle by pageTransitionStylePref.collectAsState()
         val bookFlipAnimationSpeedPref = prefs.bookFlipAnimationSpeed()
@@ -922,6 +926,15 @@ object SettingsNovelReaderScreen : SearchableSettings {
                     subtitle = stringResource(AYMR.strings.novel_reader_page_mode_summary),
                 ),
             )
+            if (pageReader) {
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = showPageChapterTitlePref,
+                        title = stringResource(AYMR.strings.novel_reader_show_page_chapter_title),
+                        subtitle = stringResource(AYMR.strings.novel_reader_show_page_chapter_title_summary),
+                    ),
+                )
+            }
             add(
                 Preference.PreferenceItem.ListPreference(
                     preference = pageTransitionStylePref,
@@ -1190,6 +1203,84 @@ object SettingsNovelReaderScreen : SearchableSettings {
     }
 
     @Composable
+    private fun getTtsGroup(prefs: NovelReaderPreferences): Preference.PreferenceGroup {
+        val ttsSpeechRatePref = prefs.ttsSpeechRate()
+        val ttsSpeechRate by ttsSpeechRatePref.collectAsState()
+        val ttsPitchPref = prefs.ttsPitch()
+        val ttsPitch by ttsPitchPref.collectAsState()
+
+        return Preference.PreferenceGroup(
+            title = stringResource(AYMR.strings.novel_reader_tts_section),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = prefs.ttsEnabled(),
+                    title = stringResource(AYMR.strings.novel_reader_tts_enabled),
+                    subtitle = stringResource(AYMR.strings.novel_reader_tts_enabled_summary),
+                ),
+                Preference.PreferenceItem.SliderPreference(
+                    value = (ttsSpeechRate * 100).roundToInt(),
+                    title = stringResource(AYMR.strings.novel_reader_tts_speech_rate),
+                    subtitle = formatTtsPercentage(ttsSpeechRate),
+                    valueRange = 50..200,
+                    onValueChanged = {
+                        ttsSpeechRatePref.set(it / 100f)
+                        true
+                    },
+                ),
+                Preference.PreferenceItem.SliderPreference(
+                    value = (ttsPitch * 100).roundToInt(),
+                    title = stringResource(AYMR.strings.novel_reader_tts_pitch),
+                    subtitle = formatTtsPercentage(ttsPitch),
+                    valueRange = 50..200,
+                    onValueChanged = {
+                        ttsPitchPref.set(it / 100f)
+                        true
+                    },
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = prefs.ttsHighlightMode(),
+                    entries = NovelTtsHighlightMode.entries
+                        .associateWith { getTtsHighlightModeLabel(it) }
+                        .toImmutableMap(),
+                    title = stringResource(AYMR.strings.novel_reader_tts_highlight_mode),
+                    subtitle = stringResource(AYMR.strings.novel_reader_tts_highlight_mode_summary),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = prefs.ttsWordHighlightEnabled(),
+                    title = stringResource(AYMR.strings.novel_reader_tts_word_highlight_enabled),
+                    subtitle = stringResource(AYMR.strings.novel_reader_tts_word_highlight_enabled_summary),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = prefs.ttsAutoAdvanceChapter(),
+                    title = stringResource(AYMR.strings.novel_reader_tts_auto_advance_chapter),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = prefs.ttsFollowAlong(),
+                    title = stringResource(AYMR.strings.novel_reader_tts_follow_along),
+                    subtitle = stringResource(AYMR.strings.novel_reader_tts_follow_along_summary),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = prefs.ttsPauseOnManualNavigation(),
+                    title = stringResource(AYMR.strings.novel_reader_tts_pause_on_manual_navigation),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = prefs.ttsKeepScreenOnDuringPlayback(),
+                    title = stringResource(AYMR.strings.novel_reader_tts_keep_screen_on_during_playback),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = prefs.ttsPreferTranslatedText(),
+                    title = stringResource(AYMR.strings.novel_reader_tts_prefer_translated_text),
+                    subtitle = stringResource(AYMR.strings.novel_reader_tts_prefer_translated_text_summary),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = prefs.ttsReadChapterTitle(),
+                    title = stringResource(AYMR.strings.novel_reader_tts_read_chapter_title),
+                ),
+            ),
+        )
+    }
+
+    @Composable
     private fun getAdvancedGroup(prefs: NovelReaderPreferences): Preference.PreferenceGroup {
         val translationProviderPref = prefs.translationProvider()
         val translationProvider by translationProviderPref.collectAsState()
@@ -1315,6 +1406,20 @@ object SettingsNovelReaderScreen : SearchableSettings {
             title = stringResource(AYMR.strings.novel_reader_advanced),
             preferenceItems = items.toImmutableList(),
         )
+    }
+
+    @Composable
+    private fun getTtsHighlightModeLabel(mode: NovelTtsHighlightMode): String {
+        return when (mode) {
+            NovelTtsHighlightMode.AUTO -> stringResource(AYMR.strings.novel_reader_tts_highlight_mode_auto)
+            NovelTtsHighlightMode.EXACT -> stringResource(AYMR.strings.novel_reader_tts_highlight_mode_exact)
+            NovelTtsHighlightMode.ESTIMATED -> stringResource(AYMR.strings.novel_reader_tts_highlight_mode_estimated)
+            NovelTtsHighlightMode.OFF -> stringResource(AYMR.strings.novel_reader_tts_highlight_mode_off)
+        }
+    }
+
+    private fun formatTtsPercentage(value: Float): String {
+        return "${(value * 100).roundToInt()}%"
     }
 
     @Composable

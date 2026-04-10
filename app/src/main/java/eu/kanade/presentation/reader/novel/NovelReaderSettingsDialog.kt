@@ -1,8 +1,17 @@
+@file:Suppress("ktlint:standard:max-line-length")
+
 package eu.kanade.presentation.reader.novel
 
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -73,6 +82,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderOverride
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.i18n.aniyomi.AYMR
@@ -133,6 +143,170 @@ fun NovelReaderSettingsDialog(
 }
 
 @Composable
+fun NovelReaderTtsBehaviorSettingsDialog(
+    sourceId: Long,
+    onDismissRequest: () -> Unit,
+) {
+    val preferences = remember { Injekt.get<NovelReaderPreferences>() }
+    val sourceOverrides = remember { preferences.sourceOverrides() }
+    val overrides by sourceOverrides.changes().collectAsStateWithLifecycle(initialValue = sourceOverrides.get())
+    val overrideEnabled = overrides[sourceId] != null
+    val settingsFlow = remember(sourceId) { preferences.settingsFlow(sourceId) }
+    val settings by settingsFlow.collectAsStateWithLifecycle(initialValue = preferences.resolveSettings(sourceId))
+
+    fun <T> update(
+        value: T,
+        copyOverride: (NovelReaderOverride, T) -> NovelReaderOverride,
+        setGlobal: (T) -> Unit,
+    ) {
+        if (overrideEnabled) {
+            preferences.updateSourceOverride(sourceId) { copyOverride(it, value) }
+        } else {
+            setGlobal(value)
+        }
+    }
+
+    TabbedDialog(
+        onDismissRequest = onDismissRequest,
+        tabTitles = persistentListOf(stringResource(AYMR.strings.novel_reader_tts_behavior_settings)),
+        enableSwipeDismiss = false,
+        modifier = Modifier.fillMaxHeight(0.7f),
+    ) {
+        Column(
+            modifier = Modifier
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            LnReaderSliderRow(
+                label = stringResource(AYMR.strings.novel_reader_tts_speech_rate),
+                valueText = { formatTtsPercentage(it / 100f) },
+                committedValue = settings.ttsSpeechRate * 100f,
+                range = 50f..200f,
+                steps = 149,
+                enabled = true,
+                onCommit = {
+                    update(
+                        it / 100f,
+                        { o, v -> o.copy(ttsSpeechRate = v) },
+                        { preferences.ttsSpeechRate().set(it) },
+                    )
+                },
+            )
+            LnReaderSliderRow(
+                label = stringResource(AYMR.strings.novel_reader_tts_pitch),
+                valueText = { formatTtsPercentage(it / 100f) },
+                committedValue = settings.ttsPitch * 100f,
+                range = 50f..200f,
+                steps = 149,
+                enabled = true,
+                onCommit = {
+                    update(
+                        it / 100f,
+                        { o, v -> o.copy(ttsPitch = v) },
+                        { preferences.ttsPitch().set(it) },
+                    )
+                },
+            )
+            ListPreferenceWidget(
+                value = settings.ttsHighlightMode,
+                title = stringResource(AYMR.strings.novel_reader_tts_highlight_mode),
+                subtitle = stringResource(AYMR.strings.novel_reader_tts_highlight_mode_summary),
+                icon = null,
+                entries = NovelTtsHighlightMode.entries.associateWith { getTtsHighlightModeLabel(it) },
+                onValueChange = {
+                    update(
+                        it,
+                        { o, v -> o.copy(ttsHighlightMode = v) },
+                        { preferences.ttsHighlightMode().set(it) },
+                    )
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_tts_word_highlight_enabled),
+                subtitle = stringResource(AYMR.strings.novel_reader_tts_word_highlight_enabled_summary),
+                checked = settings.ttsWordHighlightEnabled,
+                onCheckedChanged = {
+                    update(
+                        it,
+                        { o, v -> o.copy(ttsWordHighlightEnabled = v) },
+                        { preferences.ttsWordHighlightEnabled().set(it) },
+                    )
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_tts_auto_advance_chapter),
+                checked = settings.ttsAutoAdvanceChapter,
+                onCheckedChanged = {
+                    update(
+                        it,
+                        { o, v -> o.copy(ttsAutoAdvanceChapter = v) },
+                        { preferences.ttsAutoAdvanceChapter().set(it) },
+                    )
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_tts_follow_along),
+                subtitle = stringResource(AYMR.strings.novel_reader_tts_follow_along_summary),
+                checked = settings.ttsFollowAlong,
+                onCheckedChanged = {
+                    update(
+                        it,
+                        { o, v -> o.copy(ttsFollowAlong = v) },
+                        { preferences.ttsFollowAlong().set(it) },
+                    )
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_tts_pause_on_manual_navigation),
+                checked = settings.ttsPauseOnManualNavigation,
+                onCheckedChanged = {
+                    update(
+                        it,
+                        { o, v -> o.copy(ttsPauseOnManualNavigation = v) },
+                        { preferences.ttsPauseOnManualNavigation().set(it) },
+                    )
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_tts_keep_screen_on_during_playback),
+                checked = settings.ttsKeepScreenOnDuringPlayback,
+                onCheckedChanged = {
+                    update(
+                        it,
+                        { o, v -> o.copy(ttsKeepScreenOnDuringPlayback = v) },
+                        { preferences.ttsKeepScreenOnDuringPlayback().set(it) },
+                    )
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_tts_prefer_translated_text),
+                subtitle = stringResource(AYMR.strings.novel_reader_tts_prefer_translated_text_summary),
+                checked = settings.ttsPreferTranslatedText,
+                onCheckedChanged = {
+                    update(
+                        it,
+                        { o, v -> o.copy(ttsPreferTranslatedText = v) },
+                        { preferences.ttsPreferTranslatedText().set(it) },
+                    )
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_tts_read_chapter_title),
+                checked = settings.ttsReadChapterTitle,
+                onCheckedChanged = {
+                    update(
+                        it,
+                        { o, v -> o.copy(ttsReadChapterTitle = v) },
+                        { preferences.ttsReadChapterTitle().set(it) },
+                    )
+                },
+            )
+        }
+    }
+}
+
+@Composable
 private fun SettingsSectionHeader(
     title: String,
     subtitle: String? = null,
@@ -148,6 +322,53 @@ private fun SettingsSectionHeader(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+@Composable
+private fun NovelReaderAccordionSection(
+    title: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggle)
+                .padding(vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                imageVector = if (expanded) {
+                    Icons.Filled.KeyboardArrowDown
+                } else {
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight
+                },
+                contentDescription = null,
+            )
+        }
+        AnimatedVisibility(
+            visible = expanded,
+            enter = fadeIn(animationSpec = tween(120)) + expandVertically(animationSpec = tween(120)),
+            exit = fadeOut(animationSpec = tween(100)) + shrinkVertically(animationSpec = tween(100)),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                content()
+            }
         }
     }
 }
@@ -200,6 +421,9 @@ private fun GeneralTab(
     val pageTurnIntensityEntries = novelPageTurnIntensityEntries()
     val pageTurnShadowEntries = novelPageTurnShadowIntensityEntries()
     val pageTurnActivationZoneEntries = novelPageTurnActivationZoneEntries()
+    val ttsPlacement = remember(settings.ttsEnabled) {
+        resolveNovelReaderTtsSettingsPlacementSnapshot(settings.ttsEnabled)
+    }
     val showPageTurnTuning = shouldShowPageTurnTuningControls(
         pageReaderEnabled = settings.pageReader,
         style = settings.pageTransitionStyle,
@@ -207,6 +431,11 @@ private fun GeneralTab(
     var pageTurnTuningExpanded by rememberSaveable(settings.pageReader, settings.pageTransitionStyle) {
         mutableStateOf(false)
     }
+    var readingBehaviorExpanded by rememberSaveable(sourceId) { mutableStateOf(true) }
+    var gesturesExpanded by rememberSaveable(sourceId) { mutableStateOf(false) }
+    var translationExpanded by rememberSaveable(sourceId) { mutableStateOf(false) }
+    var ttsExpanded by rememberSaveable(sourceId) { mutableStateOf(false) }
+    var advancedExpanded by rememberSaveable(sourceId) { mutableStateOf(false) }
     val surfaceStrategy = remember { resolveNovelReaderSettingsSurfaceStrategy() }
 
     @Composable
@@ -276,151 +505,75 @@ private fun GeneralTab(
             )
         }
 
-        SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_reading_behavior))
-
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_page_mode),
-            subtitle = stringResource(AYMR.strings.novel_reader_page_mode_summary),
-            checked = settings.pageReader,
-            onCheckedChanged = {
-                update(
-                    it,
-                    { o, v -> o.copy(pageReader = v) },
-                    { preferences.pageReader().set(it) },
-                    dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
-                )
-            },
-        )
-        if (settings.pageReader) {
-            ListPreferenceWidget(
-                value = settings.pageTransitionStyle,
-                title = stringResource(AYMR.strings.novel_reader_page_transition_style),
-                subtitle = novelPageTransitionStyleSubtitle(
-                    style = settings.pageTransitionStyle,
-                    entries = pageTransitionEntries,
-                ),
-                icon = null,
-                entries = pageTransitionEntries,
-                onValueChange = {
+        NovelReaderAccordionSection(
+            title = stringResource(AYMR.strings.novel_reader_section_reading_behavior),
+            expanded = readingBehaviorExpanded,
+            onToggle = { readingBehaviorExpanded = !readingBehaviorExpanded },
+        ) {
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_page_mode),
+                subtitle = stringResource(AYMR.strings.novel_reader_page_mode_summary),
+                checked = settings.pageReader,
+                onCheckedChanged = {
                     update(
                         it,
-                        { o, v -> o.copy(pageTransitionStyle = v) },
-                        { preferences.pageTransitionStyle().set(it) },
+                        { o, v -> o.copy(pageReader = v) },
+                        { preferences.pageReader().set(it) },
                         dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
                     )
                 },
             )
-            if (settings.pageTransitionStyle == NovelPageTransitionStyle.BOOK_FLIP) {
-                val bookFlipAnimationSpeedEntries = novelBookFlipAnimationSpeedEntries()
-                LnReaderSliderRow(
-                    label = stringResource(AYMR.strings.novel_reader_book_flip_animation_speed),
-                    valueText = { value ->
-                        resolveNovelPageTurnSliderLabel(
-                            value = resolveNovelBookFlipAnimationSpeedSliderValue(value.roundToInt()),
-                            entries = bookFlipAnimationSpeedEntries,
+            if (settings.pageReader) {
+                SwitchPreferenceWidget(
+                    title = stringResource(AYMR.strings.novel_reader_show_page_chapter_title),
+                    subtitle = stringResource(AYMR.strings.novel_reader_show_page_chapter_title_summary),
+                    checked = settings.showPageChapterTitle,
+                    onCheckedChanged = {
+                        update(
+                            it,
+                            { o, v -> o.copy(showPageChapterTitle = v) },
+                            { preferences.showPageChapterTitle().set(it) },
                         )
                     },
-                    committedValue = novelBookFlipAnimationSpeedSliderIndex(
-                        settings.bookFlipAnimationSpeed,
-                    ).toFloat(),
-                    range = 0f..(bookFlipAnimationSpeedEntries.size - 1).toFloat(),
-                    steps = bookFlipAnimationSpeedEntries.size - 2,
-                    onCommit = { value ->
+                )
+                ListPreferenceWidget(
+                    value = settings.pageTransitionStyle,
+                    title = stringResource(AYMR.strings.novel_reader_page_transition_style),
+                    subtitle = novelPageTransitionStyleSubtitle(
+                        style = settings.pageTransitionStyle,
+                        entries = pageTransitionEntries,
+                    ),
+                    icon = null,
+                    entries = pageTransitionEntries,
+                    onValueChange = {
                         update(
-                            resolveNovelBookFlipAnimationSpeedSliderValue(value.roundToInt()),
-                            { o, v -> o.copy(bookFlipAnimationSpeed = v) },
-                            { preferences.bookFlipAnimationSpeed().set(it) },
+                            it,
+                            { o, v -> o.copy(pageTransitionStyle = v) },
+                            { preferences.pageTransitionStyle().set(it) },
                             dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
                         )
                     },
                 )
-            }
-            if (showPageTurnTuning) {
-                TextPreferenceWidget(
-                    title = stringResource(AYMR.strings.novel_reader_page_turn_tuning),
-                    subtitle = novelPageTurnTuningSummary(
-                        speed = settings.pageTurnSpeed,
-                        intensity = settings.pageTurnIntensity,
-                        shadowIntensity = settings.pageTurnShadowIntensity,
-                        activationZone = settings.pageTurnActivationZone,
-                        speedEntries = pageTurnSpeedEntries,
-                        intensityEntries = pageTurnIntensityEntries,
-                        shadowEntries = pageTurnShadowEntries,
-                        activationZoneEntries = pageTurnActivationZoneEntries,
-                    ),
-                    widget = {
-                        Icon(
-                            imageVector = if (pageTurnTuningExpanded) {
-                                Icons.Filled.KeyboardArrowDown
-                            } else {
-                                Icons.AutoMirrored.Filled.KeyboardArrowRight
-                            },
-                            contentDescription = null,
-                        )
-                    },
-                    onPreferenceClick = {
-                        pageTurnTuningExpanded = !pageTurnTuningExpanded
-                    },
-                )
-                if (pageTurnTuningExpanded) {
+                if (settings.pageTransitionStyle == NovelPageTransitionStyle.BOOK_FLIP) {
+                    val bookFlipAnimationSpeedEntries = novelBookFlipAnimationSpeedEntries()
                     LnReaderSliderRow(
-                        label = stringResource(AYMR.strings.novel_reader_page_turn_speed),
+                        label = stringResource(AYMR.strings.novel_reader_book_flip_animation_speed),
                         valueText = { value ->
                             resolveNovelPageTurnSliderLabel(
-                                value = resolveNovelPageTurnSpeedSliderValue(value.roundToInt()),
-                                entries = pageTurnSpeedEntries,
+                                value = resolveNovelBookFlipAnimationSpeedSliderValue(value.roundToInt()),
+                                entries = bookFlipAnimationSpeedEntries,
                             )
                         },
-                        committedValue = novelPageTurnSpeedSliderIndex(settings.pageTurnSpeed).toFloat(),
-                        range = 0f..(pageTurnSpeedEntries.size - 1).toFloat(),
-                        steps = pageTurnSpeedEntries.size - 2,
-                        onCommit = { value ->
-                            update(
-                                resolveNovelPageTurnSpeedSliderValue(value.roundToInt()),
-                                { o, v -> o.copy(pageTurnSpeed = v) },
-                                { preferences.pageTurnSpeed().set(it) },
-                                dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
-                            )
-                        },
-                    )
-                    LnReaderSliderRow(
-                        label = stringResource(AYMR.strings.novel_reader_page_turn_intensity),
-                        valueText = { value ->
-                            resolveNovelPageTurnSliderLabel(
-                                value = resolveNovelPageTurnIntensitySliderValue(value.roundToInt()),
-                                entries = pageTurnIntensityEntries,
-                            )
-                        },
-                        committedValue = novelPageTurnIntensitySliderIndex(settings.pageTurnIntensity).toFloat(),
-                        range = 0f..(pageTurnIntensityEntries.size - 1).toFloat(),
-                        steps = pageTurnIntensityEntries.size - 2,
-                        onCommit = { value ->
-                            update(
-                                resolveNovelPageTurnIntensitySliderValue(value.roundToInt()),
-                                { o, v -> o.copy(pageTurnIntensity = v) },
-                                { preferences.pageTurnIntensity().set(it) },
-                                dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
-                            )
-                        },
-                    )
-                    LnReaderSliderRow(
-                        label = stringResource(AYMR.strings.novel_reader_page_turn_shadow_intensity),
-                        valueText = { value ->
-                            resolveNovelPageTurnSliderLabel(
-                                value = resolveNovelPageTurnShadowIntensitySliderValue(value.roundToInt()),
-                                entries = pageTurnShadowEntries,
-                            )
-                        },
-                        committedValue = novelPageTurnShadowIntensitySliderIndex(
-                            settings.pageTurnShadowIntensity,
+                        committedValue = novelBookFlipAnimationSpeedSliderIndex(
+                            settings.bookFlipAnimationSpeed,
                         ).toFloat(),
-                        range = 0f..(pageTurnShadowEntries.size - 1).toFloat(),
-                        steps = pageTurnShadowEntries.size - 2,
+                        range = 0f..(bookFlipAnimationSpeedEntries.size - 1).toFloat(),
+                        steps = bookFlipAnimationSpeedEntries.size - 2,
                         onCommit = { value ->
                             update(
-                                resolveNovelPageTurnShadowIntensitySliderValue(value.roundToInt()),
-                                { o, v -> o.copy(pageTurnShadowIntensity = v) },
-                                { preferences.pageTurnShadowIntensity().set(it) },
+                                resolveNovelBookFlipAnimationSpeedSliderValue(value.roundToInt()),
+                                { o, v -> o.copy(bookFlipAnimationSpeed = v) },
+                                { preferences.bookFlipAnimationSpeed().set(it) },
                                 dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
                             )
                         },
@@ -448,312 +601,459 @@ private fun GeneralTab(
                         },
                     )
                 }
+                if (showPageTurnTuning) {
+                    TextPreferenceWidget(
+                        title = stringResource(AYMR.strings.novel_reader_page_turn_tuning),
+                        subtitle = novelPageTurnTuningSummary(
+                            speed = settings.pageTurnSpeed,
+                            intensity = settings.pageTurnIntensity,
+                            shadowIntensity = settings.pageTurnShadowIntensity,
+                            activationZone = settings.pageTurnActivationZone,
+                            speedEntries = pageTurnSpeedEntries,
+                            intensityEntries = pageTurnIntensityEntries,
+                            shadowEntries = pageTurnShadowEntries,
+                            activationZoneEntries = pageTurnActivationZoneEntries,
+                        ),
+                        widget = {
+                            Icon(
+                                imageVector = if (pageTurnTuningExpanded) {
+                                    Icons.Filled.KeyboardArrowDown
+                                } else {
+                                    Icons.AutoMirrored.Filled.KeyboardArrowRight
+                                },
+                                contentDescription = null,
+                            )
+                        },
+                        onPreferenceClick = {
+                            pageTurnTuningExpanded = !pageTurnTuningExpanded
+                        },
+                    )
+                    if (pageTurnTuningExpanded) {
+                        LnReaderSliderRow(
+                            label = stringResource(AYMR.strings.novel_reader_page_turn_speed),
+                            valueText = { value ->
+                                resolveNovelPageTurnSliderLabel(
+                                    value = resolveNovelPageTurnSpeedSliderValue(value.roundToInt()),
+                                    entries = pageTurnSpeedEntries,
+                                )
+                            },
+                            committedValue = novelPageTurnSpeedSliderIndex(settings.pageTurnSpeed).toFloat(),
+                            range = 0f..(pageTurnSpeedEntries.size - 1).toFloat(),
+                            steps = pageTurnSpeedEntries.size - 2,
+                            onCommit = { value ->
+                                update(
+                                    resolveNovelPageTurnSpeedSliderValue(value.roundToInt()),
+                                    { o, v -> o.copy(pageTurnSpeed = v) },
+                                    { preferences.pageTurnSpeed().set(it) },
+                                    dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
+                                )
+                            },
+                        )
+                        LnReaderSliderRow(
+                            label = stringResource(AYMR.strings.novel_reader_page_turn_intensity),
+                            valueText = { value ->
+                                resolveNovelPageTurnSliderLabel(
+                                    value = resolveNovelPageTurnIntensitySliderValue(value.roundToInt()),
+                                    entries = pageTurnIntensityEntries,
+                                )
+                            },
+                            committedValue = novelPageTurnIntensitySliderIndex(settings.pageTurnIntensity).toFloat(),
+                            range = 0f..(pageTurnIntensityEntries.size - 1).toFloat(),
+                            steps = pageTurnIntensityEntries.size - 2,
+                            onCommit = { value ->
+                                update(
+                                    resolveNovelPageTurnIntensitySliderValue(value.roundToInt()),
+                                    { o, v -> o.copy(pageTurnIntensity = v) },
+                                    { preferences.pageTurnIntensity().set(it) },
+                                    dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
+                                )
+                            },
+                        )
+                        LnReaderSliderRow(
+                            label = stringResource(AYMR.strings.novel_reader_page_turn_shadow_intensity),
+                            valueText = { value ->
+                                resolveNovelPageTurnSliderLabel(
+                                    value = resolveNovelPageTurnShadowIntensitySliderValue(value.roundToInt()),
+                                    entries = pageTurnShadowEntries,
+                                )
+                            },
+                            committedValue = novelPageTurnShadowIntensitySliderIndex(
+                                settings.pageTurnShadowIntensity,
+                            ).toFloat(),
+                            range = 0f..(pageTurnShadowEntries.size - 1).toFloat(),
+                            steps = pageTurnShadowEntries.size - 2,
+                            onCommit = { value ->
+                                update(
+                                    resolveNovelPageTurnShadowIntensitySliderValue(value.roundToInt()),
+                                    { o, v -> o.copy(pageTurnShadowIntensity = v) },
+                                    { preferences.pageTurnShadowIntensity().set(it) },
+                                    dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
+                                )
+                            },
+                        )
+                        LnReaderSliderRow(
+                            label = stringResource(AYMR.strings.novel_reader_page_turn_activation_zone),
+                            valueText = { value ->
+                                resolveNovelPageTurnSliderLabel(
+                                    value = resolveNovelPageTurnActivationZoneSliderValue(value.roundToInt()),
+                                    entries = pageTurnActivationZoneEntries,
+                                )
+                            },
+                            committedValue = novelPageTurnActivationZoneSliderIndex(
+                                settings.pageTurnActivationZone,
+                            ).toFloat(),
+                            range = 0f..(pageTurnActivationZoneEntries.size - 1).toFloat(),
+                            steps = pageTurnActivationZoneEntries.size - 2,
+                            onCommit = { value ->
+                                update(
+                                    resolveNovelPageTurnActivationZoneSliderValue(value.roundToInt()),
+                                    { o, v -> o.copy(pageTurnActivationZone = v) },
+                                    { preferences.pageTurnActivationZone().set(it) },
+                                    dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
+                                )
+                            },
+                        )
+                    }
+                }
             }
-        }
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_prefer_webview_renderer),
-            subtitle = rendererSubtitle(
-                baseSubtitle = stringResource(AYMR.strings.novel_reader_prefer_webview_renderer_summary),
-                reason = rendererAvailability.preferWebViewReason,
-            ),
-            checked = settings.preferWebViewRenderer,
-            enabled = rendererAvailability.preferWebViewEnabled,
-            onCheckedChanged = {
-                update(
-                    it,
-                    { o, v -> o.copy(preferWebViewRenderer = v) },
-                    { preferences.preferWebViewRenderer().set(it) },
-                    dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
-                )
-            },
-        )
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_rich_native_renderer_experimental),
-            subtitle = rendererSubtitle(
-                baseSubtitle = stringResource(AYMR.strings.novel_reader_rich_native_renderer_experimental_summary),
-                reason = rendererAvailability.richNativeReason,
-            ),
-            checked = settings.richNativeRendererExperimental,
-            enabled = rendererAvailability.richNativeEnabled,
-            onCheckedChanged = {
-                update(
-                    it,
-                    { o, v -> o.copy(richNativeRendererExperimental = v) },
-                    { preferences.richNativeRendererExperimental().set(it) },
-                    dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
-                )
-            },
-        )
-        SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_gestures))
-
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_swipe_gestures),
-            subtitle = stringResource(AYMR.strings.novel_reader_swipe_gestures_summary),
-            checked = settings.swipeGestures,
-            onCheckedChanged = {
-                update(it, { o, v -> o.copy(swipeGestures = v) }, { preferences.swipeGestures().set(it) })
-            },
-        )
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_swipe_to_next),
-            checked = settings.swipeToNextChapter,
-            enabled = chapterSwipeControlsEnabled,
-            onCheckedChanged = {
-                update(
-                    it,
-                    { o, v -> o.copy(swipeToNextChapter = v) },
-                    { preferences.swipeToNextChapter().set(it) },
-                )
-            },
-        )
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_swipe_to_prev),
-            checked = settings.swipeToPrevChapter,
-            enabled = chapterSwipeControlsEnabled,
-            onCheckedChanged = {
-                update(
-                    it,
-                    { o, v -> o.copy(swipeToPrevChapter = v) },
-                    { preferences.swipeToPrevChapter().set(it) },
-                )
-            },
-        )
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_tap_to_scroll),
-            checked = settings.tapToScroll,
-            onCheckedChanged = {
-                update(it, { o, v -> o.copy(tapToScroll = v) }, { preferences.tapToScroll().set(it) })
-            },
-        )
-
-        SettingsSectionHeader(
-            title = stringResource(AYMR.strings.novel_reader_selected_text_translation_section),
-        )
-        if (overrideEnabled) {
-            Text(
-                text = stringResource(AYMR.strings.novel_reader_selected_text_translation_global_only_summary),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_prefer_webview_renderer),
+                subtitle = rendererSubtitle(
+                    baseSubtitle = stringResource(AYMR.strings.novel_reader_prefer_webview_renderer_summary),
+                    reason = rendererAvailability.preferWebViewReason,
+                ),
+                checked = settings.preferWebViewRenderer,
+                enabled = rendererAvailability.preferWebViewEnabled,
+                onCheckedChanged = {
+                    update(
+                        it,
+                        { o, v -> o.copy(preferWebViewRenderer = v) },
+                        { preferences.preferWebViewRenderer().set(it) },
+                        dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
+                    )
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_rich_native_renderer_experimental),
+                subtitle = rendererSubtitle(
+                    baseSubtitle = stringResource(AYMR.strings.novel_reader_rich_native_renderer_experimental_summary),
+                    reason = rendererAvailability.richNativeReason,
+                ),
+                checked = settings.richNativeRendererExperimental,
+                enabled = rendererAvailability.richNativeEnabled,
+                onCheckedChanged = {
+                    update(
+                        it,
+                        { o, v -> o.copy(richNativeRendererExperimental = v) },
+                        { preferences.richNativeRendererExperimental().set(it) },
+                        dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
+                    )
+                },
             )
         }
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_selected_text_translation_enabled),
-            checked = settings.selectedTextTranslationEnabled,
-            onCheckedChanged = { preferences.selectedTextTranslationEnabled().set(it) },
-        )
-        EditTextPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_selected_text_translation_target_language),
-            subtitle = "%s",
-            icon = null,
-            value = settings.selectedTextTranslationTargetLanguage,
-            onConfirm = {
-                preferences.selectedTextTranslationTargetLanguage().set(it)
-                true
-            },
-            singleLine = true,
-            canBeBlank = false,
-            formatSubtitle = true,
-        )
-
-        SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_google_translate))
-
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_google_translate_enable),
-            checked = settings.googleTranslationEnabled,
-            onCheckedChanged = {
-                update(it, { o, v ->
-                    o.copy(googleTranslationEnabled = v)
-                }, { preferences.googleTranslationEnabled().set(it) })
-            },
-        )
-
-        EditTextPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_google_translate_source),
-            subtitle = "%s",
-            icon = null,
-            value = settings.googleTranslationSourceLang,
-            onConfirm = {
-                update(it, { o, v ->
-                    o.copy(googleTranslationSourceLang = v)
-                }, { preferences.googleTranslationSourceLang().set(it) })
-                true
-            },
-            singleLine = true,
-            canBeBlank = false,
-            formatSubtitle = true,
-        )
-
-        EditTextPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_google_translate_target),
-            subtitle = "%s",
-            icon = null,
-            value = settings.googleTranslationTargetLang,
-            onConfirm = {
-                update(it, { o, v ->
-                    o.copy(googleTranslationTargetLang = v)
-                }, { preferences.googleTranslationTargetLang().set(it) })
-                true
-            },
-            singleLine = true,
-            canBeBlank = false,
-            formatSubtitle = true,
-        )
-
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_google_translate_auto_start),
-            checked = settings.googleTranslationAutoStart,
-            onCheckedChanged = {
-                update(it, { o, v ->
-                    o.copy(googleTranslationAutoStart = v)
-                }, { preferences.googleTranslationAutoStart().set(it) })
-            },
-        )
-
-        SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_advanced))
-
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_volume_buttons),
-            subtitle = stringResource(AYMR.strings.novel_reader_volume_buttons_summary),
-            checked = settings.useVolumeButtons,
-            onCheckedChanged = {
-                update(it, { o, v -> o.copy(useVolumeButtons = v) }, { preferences.useVolumeButtons().set(it) })
-            },
-        )
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_vertical_seekbar),
-            checked = settings.verticalSeekbar,
-            onCheckedChanged = {
-                update(it, { o, v -> o.copy(verticalSeekbar = v) }, { preferences.verticalSeekbar().set(it) })
-            },
-        )
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_prefetch_next_chapter),
-            subtitle = stringResource(AYMR.strings.novel_reader_prefetch_next_chapter_summary),
-            checked = settings.prefetchNextChapter,
-            onCheckedChanged = {
-                update(
-                    it,
-                    { o, v -> o.copy(prefetchNextChapter = v) },
-                    { preferences.prefetchNextChapter().set(it) },
+        NovelReaderAccordionSection(
+            title = stringResource(AYMR.strings.novel_reader_section_gestures),
+            expanded = gesturesExpanded,
+            onToggle = { gesturesExpanded = !gesturesExpanded },
+        ) {
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_swipe_gestures),
+                subtitle = stringResource(AYMR.strings.novel_reader_swipe_gestures_summary),
+                checked = settings.swipeGestures,
+                onCheckedChanged = {
+                    update(it, { o, v -> o.copy(swipeGestures = v) }, { preferences.swipeGestures().set(it) })
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_swipe_to_next),
+                checked = settings.swipeToNextChapter,
+                enabled = chapterSwipeControlsEnabled,
+                onCheckedChanged = {
+                    update(
+                        it,
+                        { o, v -> o.copy(swipeToNextChapter = v) },
+                        { preferences.swipeToNextChapter().set(it) },
+                    )
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_swipe_to_prev),
+                checked = settings.swipeToPrevChapter,
+                enabled = chapterSwipeControlsEnabled,
+                onCheckedChanged = {
+                    update(
+                        it,
+                        { o, v -> o.copy(swipeToPrevChapter = v) },
+                        { preferences.swipeToPrevChapter().set(it) },
+                    )
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_tap_to_scroll),
+                checked = settings.tapToScroll,
+                onCheckedChanged = {
+                    update(it, { o, v -> o.copy(tapToScroll = v) }, { preferences.tapToScroll().set(it) })
+                },
+            )
+        }
+        NovelReaderAccordionSection(
+            title = stringResource(AYMR.strings.novel_reader_selected_text_translation_section),
+            expanded = translationExpanded,
+            onToggle = { translationExpanded = !translationExpanded },
+        ) {
+            if (overrideEnabled) {
+                Text(
+                    text = stringResource(AYMR.strings.novel_reader_selected_text_translation_global_only_summary),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            },
-        )
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_fullscreen),
-            subtitle = stringResource(AYMR.strings.novel_reader_fullscreen_summary),
-            checked = settings.fullScreenMode,
-            onCheckedChanged = {
-                update(it, { o, v -> o.copy(fullScreenMode = v) }, { preferences.fullScreenMode().set(it) })
-            },
-        )
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_keep_screen_on),
-            subtitle = stringResource(AYMR.strings.novel_reader_keep_screen_on_summary),
-            checked = settings.keepScreenOn,
-            onCheckedChanged = {
-                update(it, { o, v -> o.copy(keepScreenOn = v) }, { preferences.keepScreenOn().set(it) })
-            },
-        )
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_show_scroll_percentage),
-            checked = settings.showScrollPercentage,
-            onCheckedChanged = {
-                update(it, { o, v -> o.copy(showScrollPercentage = v) }, { preferences.showScrollPercentage().set(it) })
-            },
-        )
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_show_battery_time),
-            checked = settings.showBatteryAndTime,
-            onCheckedChanged = {
-                update(it, { o, v -> o.copy(showBatteryAndTime = v) }, { preferences.showBatteryAndTime().set(it) })
-            },
-        )
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_show_kindle_info_block),
-            subtitle = stringResource(AYMR.strings.novel_reader_show_kindle_info_block_summary),
-            checked = settings.showKindleInfoBlock,
-            onCheckedChanged = {
-                update(it, { o, v -> o.copy(showKindleInfoBlock = v) }, { preferences.showKindleInfoBlock().set(it) })
-            },
-        )
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_show_time_to_end),
-            checked = settings.showTimeToEnd,
-            enabled = areQuickDialogKindleDependentControlsEnabled(settings.showKindleInfoBlock),
-            onCheckedChanged = {
-                update(it, { o, v -> o.copy(showTimeToEnd = v) }, { preferences.showTimeToEnd().set(it) })
-            },
-        )
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_show_word_count),
-            checked = settings.showWordCount,
-            enabled = areQuickDialogKindleDependentControlsEnabled(settings.showKindleInfoBlock),
-            onCheckedChanged = {
-                update(it, { o, v -> o.copy(showWordCount = v) }, { preferences.showWordCount().set(it) })
-            },
-        )
-        SwitchPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_bionic_reading),
-            checked = settings.bionicReading,
-            onCheckedChanged = {
-                update(it, { o, v -> o.copy(bionicReading = v) }, { preferences.bionicReading().set(it) })
-            },
-        )
-        LnReaderSliderRow(
-            label = stringResource(AYMR.strings.novel_reader_auto_scroll_speed),
-            valueText = { it.roundToInt().toString() },
-            committedValue = intervalToAutoScrollSpeed(settings.autoScrollInterval).toFloat(),
-            range = 1f..100f,
-            steps = 98,
-            enabled = true,
-            onCommit = {
-                val speed = it.roundToInt().coerceIn(1, 100)
-                update(
-                    autoScrollSpeedToInterval(speed),
-                    { o, v -> o.copy(autoScrollInterval = v) },
-                    { preferences.autoScrollInterval().set(it) },
+            }
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_selected_text_translation_enabled),
+                checked = settings.selectedTextTranslationEnabled,
+                onCheckedChanged = { preferences.selectedTextTranslationEnabled().set(it) },
+            )
+            EditTextPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_selected_text_translation_target_language),
+                subtitle = "%s",
+                icon = null,
+                value = settings.selectedTextTranslationTargetLanguage,
+                onConfirm = {
+                    preferences.selectedTextTranslationTargetLanguage().set(it)
+                    true
+                },
+                singleLine = true,
+                canBeBlank = false,
+                formatSubtitle = true,
+            )
+
+            SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_google_translate))
+
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_google_translate_enable),
+                checked = settings.googleTranslationEnabled,
+                onCheckedChanged = {
+                    update(it, { o, v ->
+                        o.copy(googleTranslationEnabled = v)
+                    }, { preferences.googleTranslationEnabled().set(it) })
+                },
+            )
+
+            EditTextPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_google_translate_source),
+                subtitle = "%s",
+                icon = null,
+                value = settings.googleTranslationSourceLang,
+                onConfirm = {
+                    update(it, { o, v ->
+                        o.copy(googleTranslationSourceLang = v)
+                    }, { preferences.googleTranslationSourceLang().set(it) })
+                    true
+                },
+                singleLine = true,
+                canBeBlank = false,
+                formatSubtitle = true,
+            )
+
+            EditTextPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_google_translate_target),
+                subtitle = "%s",
+                icon = null,
+                value = settings.googleTranslationTargetLang,
+                onConfirm = {
+                    update(it, { o, v ->
+                        o.copy(googleTranslationTargetLang = v)
+                    }, { preferences.googleTranslationTargetLang().set(it) })
+                    true
+                },
+                singleLine = true,
+                canBeBlank = false,
+                formatSubtitle = true,
+            )
+
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_google_translate_auto_start),
+                checked = settings.googleTranslationAutoStart,
+                onCheckedChanged = {
+                    update(it, { o, v ->
+                        o.copy(googleTranslationAutoStart = v)
+                    }, { preferences.googleTranslationAutoStart().set(it) })
+                },
+            )
+        }
+        NovelReaderAccordionSection(
+            title = stringResource(AYMR.strings.novel_reader_tts_section),
+            expanded = ttsExpanded,
+            onToggle = { ttsExpanded = !ttsExpanded },
+        ) {
+            if (ttsPlacement.showGeneralEnableToggle) {
+                SwitchPreferenceWidget(
+                    title = stringResource(AYMR.strings.novel_reader_tts_enabled),
+                    subtitle = stringResource(AYMR.strings.novel_reader_tts_enabled_summary),
+                    checked = settings.ttsEnabled,
+                    onCheckedChanged = {
+                        update(it, { o, v -> o.copy(ttsEnabled = v) }, { preferences.ttsEnabled().set(it) })
+                    },
                 )
-            },
-        )
-        LnReaderSliderRow(
-            label = stringResource(AYMR.strings.novel_reader_auto_scroll_offset),
-            valueText = { it.roundToInt().toString() },
-            committedValue = settings.autoScrollOffset.toFloat(),
-            range = 0f..2000f,
-            steps = 1999,
-            enabled = true,
-            onCommit = {
-                update(it.roundToInt(), { o, v ->
-                    o.copy(autoScrollOffset = v)
-                }, { preferences.autoScrollOffset().set(it) })
-            },
-        )
-        EditTextPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_custom_css),
-            subtitle = stringResource(AYMR.strings.novel_reader_custom_css_hint),
-            icon = null,
-            value = settings.customCSS,
-            onConfirm = {
-                update(it, { o, v -> o.copy(customCSS = v) }, { preferences.customCSS().set(it) })
-                true
-            },
-            singleLine = false,
-            canBeBlank = true,
-            formatSubtitle = false,
-        )
-        EditTextPreferenceWidget(
-            title = stringResource(AYMR.strings.novel_reader_custom_js),
-            subtitle = stringResource(AYMR.strings.novel_reader_custom_js_hint),
-            icon = null,
-            value = settings.customJS,
-            onConfirm = {
-                update(it, { o, v -> o.copy(customJS = v) }, { preferences.customJS().set(it) })
-                true
-            },
-            singleLine = false,
-            canBeBlank = true,
-            formatSubtitle = false,
-        )
+            }
+        }
+        NovelReaderAccordionSection(
+            title = stringResource(AYMR.strings.novel_reader_section_advanced),
+            expanded = advancedExpanded,
+            onToggle = { advancedExpanded = !advancedExpanded },
+        ) {
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_volume_buttons),
+                subtitle = stringResource(AYMR.strings.novel_reader_volume_buttons_summary),
+                checked = settings.useVolumeButtons,
+                onCheckedChanged = {
+                    update(it, { o, v -> o.copy(useVolumeButtons = v) }, { preferences.useVolumeButtons().set(it) })
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_vertical_seekbar),
+                checked = settings.verticalSeekbar,
+                onCheckedChanged = {
+                    update(it, { o, v -> o.copy(verticalSeekbar = v) }, { preferences.verticalSeekbar().set(it) })
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_prefetch_next_chapter),
+                subtitle = stringResource(AYMR.strings.novel_reader_prefetch_next_chapter_summary),
+                checked = settings.prefetchNextChapter,
+                onCheckedChanged = {
+                    update(
+                        it,
+                        { o, v -> o.copy(prefetchNextChapter = v) },
+                        { preferences.prefetchNextChapter().set(it) },
+                    )
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_fullscreen),
+                subtitle = stringResource(AYMR.strings.novel_reader_fullscreen_summary),
+                checked = settings.fullScreenMode,
+                onCheckedChanged = {
+                    update(it, { o, v -> o.copy(fullScreenMode = v) }, { preferences.fullScreenMode().set(it) })
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_keep_screen_on),
+                subtitle = stringResource(AYMR.strings.novel_reader_keep_screen_on_summary),
+                checked = settings.keepScreenOn,
+                onCheckedChanged = {
+                    update(it, { o, v -> o.copy(keepScreenOn = v) }, { preferences.keepScreenOn().set(it) })
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_show_scroll_percentage),
+                checked = settings.showScrollPercentage,
+                onCheckedChanged = {
+                    update(it, { o, v ->
+                        o.copy(showScrollPercentage = v)
+                    }, { preferences.showScrollPercentage().set(it) })
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_show_battery_time),
+                checked = settings.showBatteryAndTime,
+                onCheckedChanged = {
+                    update(it, { o, v -> o.copy(showBatteryAndTime = v) }, { preferences.showBatteryAndTime().set(it) })
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_show_kindle_info_block),
+                subtitle = stringResource(AYMR.strings.novel_reader_show_kindle_info_block_summary),
+                checked = settings.showKindleInfoBlock,
+                onCheckedChanged = {
+                    update(it, { o, v ->
+                        o.copy(showKindleInfoBlock = v)
+                    }, { preferences.showKindleInfoBlock().set(it) })
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_show_time_to_end),
+                checked = settings.showTimeToEnd,
+                enabled = areQuickDialogKindleDependentControlsEnabled(settings.showKindleInfoBlock),
+                onCheckedChanged = {
+                    update(it, { o, v -> o.copy(showTimeToEnd = v) }, { preferences.showTimeToEnd().set(it) })
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_show_word_count),
+                checked = settings.showWordCount,
+                enabled = areQuickDialogKindleDependentControlsEnabled(settings.showKindleInfoBlock),
+                onCheckedChanged = {
+                    update(
+                        it,
+                        { o, v -> o.copy(showWordCount = v) },
+                        { preferences.showWordCount().set(it) },
+                    )
+                },
+            )
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_bionic_reading),
+                checked = settings.bionicReading,
+                onCheckedChanged = {
+                    update(it, { o, v -> o.copy(bionicReading = v) }, { preferences.bionicReading().set(it) })
+                },
+            )
+            LnReaderSliderRow(
+                label = stringResource(AYMR.strings.novel_reader_auto_scroll_speed),
+                valueText = { it.roundToInt().toString() },
+                committedValue = intervalToAutoScrollSpeed(settings.autoScrollInterval).toFloat(),
+                range = 1f..100f,
+                steps = 98,
+                enabled = true,
+                onCommit = {
+                    val speed = it.roundToInt().coerceIn(1, 100)
+                    update(
+                        autoScrollSpeedToInterval(speed),
+                        { o, v -> o.copy(autoScrollInterval = v) },
+                        { preferences.autoScrollInterval().set(it) },
+                    )
+                },
+            )
+            LnReaderSliderRow(
+                label = stringResource(AYMR.strings.novel_reader_auto_scroll_offset),
+                valueText = { it.roundToInt().toString() },
+                committedValue = settings.autoScrollOffset.toFloat(),
+                range = 0f..2000f,
+                steps = 1999,
+                enabled = true,
+                onCommit = {
+                    update(it.roundToInt(), { o, v ->
+                        o.copy(autoScrollOffset = v)
+                    }, { preferences.autoScrollOffset().set(it) })
+                },
+            )
+            EditTextPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_custom_css),
+                subtitle = stringResource(AYMR.strings.novel_reader_custom_css_hint),
+                icon = null,
+                value = settings.customCSS,
+                onConfirm = {
+                    update(it, { o, v -> o.copy(customCSS = v) }, { preferences.customCSS().set(it) })
+                    true
+                },
+                singleLine = false,
+                canBeBlank = true,
+                formatSubtitle = false,
+            )
+            EditTextPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_custom_js),
+                subtitle = stringResource(AYMR.strings.novel_reader_custom_js_hint),
+                icon = null,
+                value = settings.customJS,
+                onConfirm = {
+                    update(it, { o, v -> o.copy(customJS = v) }, { preferences.customJS().set(it) })
+                    true
+                },
+                singleLine = false,
+                canBeBlank = true,
+                formatSubtitle = false,
+            )
+        }
     }
 }
 
@@ -1637,6 +1937,20 @@ internal fun resolveLnReaderSliderCommitValue(
     draftValue: Float,
 ): Float? {
     return draftValue.takeIf { abs(it - committedValue) > 0.0001f }
+}
+
+@Composable
+private fun getTtsHighlightModeLabel(mode: NovelTtsHighlightMode): String {
+    return when (mode) {
+        NovelTtsHighlightMode.AUTO -> stringResource(AYMR.strings.novel_reader_tts_highlight_mode_auto)
+        NovelTtsHighlightMode.EXACT -> stringResource(AYMR.strings.novel_reader_tts_highlight_mode_exact)
+        NovelTtsHighlightMode.ESTIMATED -> stringResource(AYMR.strings.novel_reader_tts_highlight_mode_estimated)
+        NovelTtsHighlightMode.OFF -> stringResource(AYMR.strings.novel_reader_tts_highlight_mode_off)
+    }
+}
+
+private fun formatTtsPercentage(value: Float): String {
+    return "${(value * 100).roundToInt()}%"
 }
 
 @Composable

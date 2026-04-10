@@ -1,0 +1,62 @@
+import kotlin.Boolean;
+
+CREATE TABLE external_metadata_cache (
+    _id INTEGER PRIMARY KEY AUTOINCREMENT,
+    content_type TEXT NOT NULL,
+    media_id INTEGER NOT NULL,
+    source TEXT NOT NULL,
+    remote_id INTEGER,
+    score REAL,
+    format TEXT,
+    status TEXT,
+    cover_url TEXT,
+    cover_url_fallback TEXT,
+    search_query TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    is_manual_match INTEGER AS Boolean DEFAULT 0,
+    UNIQUE(content_type, media_id, source)
+);
+
+CREATE INDEX idx_external_metadata_cache_media_id
+    ON external_metadata_cache(content_type, media_id, source);
+CREATE INDEX idx_external_metadata_cache_updated_at
+    ON external_metadata_cache(updated_at);
+
+getByMediaIdAndSource:
+SELECT * FROM external_metadata_cache
+WHERE content_type = :contentType
+  AND media_id = :mediaId
+  AND source = :source
+LIMIT 1;
+
+upsert:
+INSERT INTO external_metadata_cache(
+    content_type, media_id, source, remote_id, score, format, status, cover_url,
+    cover_url_fallback, search_query, updated_at, is_manual_match
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(content_type, media_id, source)
+DO UPDATE SET
+    remote_id = excluded.remote_id,
+    score = excluded.score,
+    format = excluded.format,
+    status = excluded.status,
+    cover_url = excluded.cover_url,
+    cover_url_fallback = excluded.cover_url_fallback,
+    search_query = excluded.search_query,
+    updated_at = excluded.updated_at,
+    is_manual_match = excluded.is_manual_match
+WHERE is_manual_match = 0;
+
+deleteByMediaIdAndSource:
+DELETE FROM external_metadata_cache
+WHERE content_type = :contentType
+  AND media_id = :mediaId
+  AND source = :source;
+
+deleteStaleEntries:
+DELETE FROM external_metadata_cache
+WHERE updated_at < :threshold AND is_manual_match = 0;
+
+clearAll:
+DELETE FROM external_metadata_cache;

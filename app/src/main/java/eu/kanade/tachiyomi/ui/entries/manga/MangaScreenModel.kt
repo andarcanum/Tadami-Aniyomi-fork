@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.entries.manga
 
 import android.content.Context
+import android.util.Log
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -17,6 +18,7 @@ import eu.kanade.core.util.insertSeparators
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.entries.manga.interactor.GetExcludedScanlators
 import eu.kanade.domain.entries.manga.interactor.SetExcludedScanlators
+import eu.kanade.domain.entries.manga.interactor.SourceMangaRatingFetcher
 import eu.kanade.domain.entries.manga.interactor.UpdateManga
 import eu.kanade.domain.entries.manga.model.chaptersFiltered
 import eu.kanade.domain.entries.manga.model.effectiveDownloadedFilter
@@ -25,6 +27,8 @@ import eu.kanade.domain.items.chapter.interactor.GetAvailableScanlators
 import eu.kanade.domain.items.chapter.interactor.GetScanlatorChapterCounts
 import eu.kanade.domain.items.chapter.interactor.SetReadStatus
 import eu.kanade.domain.items.chapter.interactor.SyncChaptersWithSource
+import eu.kanade.domain.metadata.interactor.GetMangaMetadata
+import eu.kanade.domain.metadata.model.MetadataLoadError
 import eu.kanade.domain.track.manga.interactor.AddMangaTracks
 import eu.kanade.domain.track.manga.interactor.RefreshMangaTracks
 import eu.kanade.domain.track.manga.interactor.TrackChapter
@@ -42,6 +46,7 @@ import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.source.ConfigurableSource
 import eu.kanade.tachiyomi.source.MangaSource
+import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.ui.entries.mergeNewItemIds
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.chapter.getNextUnread
@@ -87,6 +92,8 @@ import tachiyomi.domain.items.chapter.model.NoChaptersException
 import tachiyomi.domain.items.chapter.service.calculateChapterGap
 import tachiyomi.domain.items.chapter.service.getChapterSort
 import tachiyomi.domain.library.service.LibraryPreferences
+import tachiyomi.domain.metadata.model.ExternalMetadata
+import tachiyomi.domain.metadata.model.MetadataSource
 import tachiyomi.domain.source.manga.service.MangaSourceManager
 import tachiyomi.domain.track.manga.interactor.GetMangaTracks
 import tachiyomi.i18n.MR
@@ -102,6 +109,7 @@ class MangaScreenModel(
     private val mangaId: Long,
     private val isFromSource: Boolean,
     private val basePreferences: BasePreferences = Injekt.get(),
+    private val uiPreferences: eu.kanade.domain.ui.UiPreferences = Injekt.get(),
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
     private val trackPreferences: TrackPreferences = Injekt.get(),
     readerPreferences: ReaderPreferences = Injekt.get(),
@@ -127,6 +135,8 @@ class MangaScreenModel(
     private val setMangaCategories: SetMangaCategories = Injekt.get(),
     private val mangaRepository: MangaRepository = Injekt.get(),
     private val filterChaptersForDownload: FilterChaptersForDownload = Injekt.get(),
+    private val getMangaMetadata: GetMangaMetadata = Injekt.get(),
+    private val sourceMangaRatingFetcher: SourceMangaRatingFetcher = Injekt.get(),
     val snackbarHostState: SnackbarHostState = SnackbarHostState(),
 ) : StateScreenModel<MangaScreenModel.State>(State.Loading) {
 
@@ -255,6 +265,8 @@ class MangaScreenModel(
 
             val needRefreshInfo = !manga.initialized || isFromSource
             val needRefreshChapter = chapters.isEmpty()
+            val metadataSource = uiPreferences.metadataSource().get()
+            val willLoadMetadata = metadataSource != MetadataSource.NONE
 
             // Show what we have earlier
             mutableState.update {
@@ -269,6 +281,7 @@ class MangaScreenModel(
                     downloadedOnly = basePreferences.downloadedOnly().get(),
                     isRefreshingData = needRefreshInfo || needRefreshChapter,
                     dialog = null,
+                    isMetadataLoading = willLoadMetadata,
                 )
             }
             screenModelScope.launchIO {
@@ -290,6 +303,8 @@ class MangaScreenModel(
                 fetchFromSourceTasks.awaitAll()
             }
 
+            loadMangaMetadata(mangaId)
+
             // Initial loading finished
             updateSuccessState { it.copy(isRefreshingData = false) }
         }
@@ -304,6 +319,7 @@ class MangaScreenModel(
             )
             fetchFromSourceTasks.awaitAll()
             updateSuccessState { it.copy(isRefreshingData = false) }
+            successState?.manga?.id?.let { loadMangaMetadata(it) }
         }
     }
 
@@ -317,6 +333,19 @@ class MangaScreenModel(
         try {
             withIOContext {
                 val networkManga = state.source.getMangaDetails(state.manga.toSManga())
+                val sourceRating = networkManga.rating.takeIf { it > 0f }
+                val fetchedRating = sourceMangaRatingFetcher.await(
+                    source = state.source,
+                    manga = state.manga,
+                    sourceRating = sourceRating,
+                    forceRefresh = manualFetch,
+                )
+                if (networkManga.rating <= 0f && fetchedRating != null) {
+                    networkManga.rating = fetchedRating
+                }
+                debugLog(
+                    "fetchMangaFromSource: source=${state.source.name} title=${networkManga.safeTitle().previewForLog()} rating=${networkManga.rating} desc=${networkManga.description.previewForLog()}",
+                )
                 updateManga.awaitUpdateFromSource(state.manga, networkManga, manualFetch)
             }
         } catch (e: Throwable) {
@@ -344,6 +373,65 @@ class MangaScreenModel(
                 snackbarHostState.showSnackbar(message = formattedMessage)
             }
         }
+    }
+
+    private suspend fun loadMangaMetadata(mangaId: Long) {
+        val currentState = successState ?: return
+        val metadataSource = uiPreferences.metadataSource().get()
+        if (metadataSource == MetadataSource.NONE) {
+            updateSuccessState {
+                it.copy(
+                    mangaMetadata = null,
+                    isMetadataLoading = false,
+                    metadataError = MetadataLoadError.Disabled,
+                )
+            }
+            return
+        }
+
+        updateSuccessState {
+            it.copy(isMetadataLoading = true, metadataError = null)
+        }
+
+        try {
+            val metadata = getMangaMetadata.await(currentState.manga)
+            updateSuccessState {
+                it.copy(
+                    mangaMetadata = metadata,
+                    isMetadataLoading = false,
+                    metadataError = if (metadata == null || !metadata.hasData()) {
+                        MetadataLoadError.NotFound
+                    } else {
+                        null
+                    },
+                )
+            }
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e) { "Failed to load manga metadata for manga $mangaId" }
+            val error = when {
+                e.isNotAuthenticatedError() -> MetadataLoadError.NotAuthenticated
+                else -> MetadataLoadError.NetworkError
+            }
+            updateSuccessState {
+                it.copy(
+                    mangaMetadata = null,
+                    isMetadataLoading = false,
+                    metadataError = error,
+                )
+            }
+        }
+    }
+
+    private fun Throwable.isNotAuthenticatedError(): Boolean {
+        var current: Throwable? = this
+        while (current != null) {
+            val message = current.message.orEmpty()
+            if (message.contains("Not authenticated", ignoreCase = true)) {
+                return true
+            }
+            current = current.cause
+        }
+        return false
     }
 
     fun toggleFavorite() {
@@ -1297,6 +1385,9 @@ class MangaScreenModel(
             val isRefreshingData: Boolean = false,
             val dialog: Dialog? = null,
             val hasPromptedToAddBefore: Boolean = false,
+            val mangaMetadata: ExternalMetadata? = null,
+            val isMetadataLoading: Boolean = false,
+            val metadataError: MetadataLoadError? = null,
             val scrollIndex: Int = 0,
             val scrollOffset: Int = 0,
         ) : State {
@@ -1378,6 +1469,21 @@ class MangaScreenModel(
                     }
             }
         }
+    }
+
+    private fun debugLog(message: String) {
+        runCatching { Log.d("MangaScreenModel", message) }
+    }
+
+    private fun String?.previewForLog(limit: Int = 120): String {
+        return this
+            ?.replace(Regex("\\s+"), " ")
+            ?.take(limit)
+            .orEmpty()
+    }
+
+    private fun SManga.safeTitle(): String {
+        return runCatching { title }.getOrDefault("")
     }
 }
 

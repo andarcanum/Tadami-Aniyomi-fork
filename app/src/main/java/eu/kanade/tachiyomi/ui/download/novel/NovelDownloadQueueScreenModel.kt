@@ -5,23 +5,26 @@ import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState
 import eu.kanade.tachiyomi.data.download.novel.NovelQueuedDownload
 import eu.kanade.tachiyomi.data.download.novel.NovelQueuedDownloadStatus
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class NovelDownloadQueueScreenModel(
     private val downloadManager: NovelDownloadManager = NovelDownloadManager(),
+    private val queueState: Flow<NovelDownloadQueueState> = NovelDownloadQueueManager.state,
+    private val getDownloadCount: () -> Int = { downloadManager.getDownloadCount() },
+    private val getDownloadSize: () -> Long = { downloadManager.getDownloadSize() },
 ) : StateScreenModel<NovelDownloadQueueScreenModel.State>(State()) {
 
     init {
         screenModelScope.launch {
-            NovelDownloadQueueManager.state.collect { queueState ->
+            queueState.collect { queueState ->
                 mutableState.update { current ->
                     current.copy(
-                        downloadCount = downloadManager.getDownloadCount(),
-                        downloadSize = downloadManager.getDownloadSize(),
                         queueTasks = queueState.tasks,
                         isQueueRunning = queueState.isRunning,
                     )
@@ -34,8 +37,8 @@ class NovelDownloadQueueScreenModel(
     fun refreshStorage() {
         mutableState.update {
             it.copy(
-                downloadCount = downloadManager.getDownloadCount(),
-                downloadSize = downloadManager.getDownloadSize(),
+                downloadCount = getDownloadCount(),
+                downloadSize = getDownloadSize(),
             )
         }
     }

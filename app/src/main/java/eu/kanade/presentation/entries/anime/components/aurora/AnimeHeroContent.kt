@@ -47,13 +47,10 @@ import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroChipTex
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroOverlayBrush
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroPanelBorderColor
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroPanelContainerColor
-import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroPrimaryMetaColor
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroSecondaryButtonPalette
-import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroSecondaryMetaColor
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroTitleColor
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
-import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreenModel
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -88,28 +85,26 @@ internal fun resolveAnimeHeroPrimaryActionLayoutSpec(): AnimeHeroPrimaryActionLa
 @Composable
 fun AnimeHeroContent(
     anime: Anime,
-    episodeCount: Int,
     hasWatchingProgress: Boolean,
+    ratingText: String,
+    episodesText: String,
+    statusText: String,
     onContinueWatching: () -> Unit,
     onDubbingClicked: (() -> Unit)?,
     selectedDubbing: String?,
-    animeMetadata: AnimeScreenModel.AnimeMetadataData? = null,
     modifier: Modifier = Modifier,
 ) {
     val uiPreferences = remember { Injekt.get<UiPreferences>() }
     val showOriginalTitle by uiPreferences.showOriginalTitle().collectAsState()
     val colors = AuroraTheme.colors
     val coverTitleFontFamily = LocalCoverTitleFontFamily.current
-    val primaryActionLayoutSpec = remember {
-        resolveAnimeHeroPrimaryActionLayoutSpec()
-    }
+    val primaryActionLayoutSpec = remember { resolveAnimeHeroPrimaryActionLayoutSpec() }
     val originalTitle = remember(anime.description) {
         parseOriginalTitle(anime.description)
     }
     val heroPanelShape = RoundedCornerShape(24.dp)
     val titleColor = resolveAuroraHeroTitleColor(colors)
-    val primaryMetaColor = resolveAuroraHeroPrimaryMetaColor(colors)
-    val secondaryMetaColor = resolveAuroraHeroSecondaryMetaColor(colors)
+    val secondaryMetaColor = colors.textSecondary.copy(alpha = 0.74f)
 
     Box(
         modifier = modifier
@@ -203,43 +198,52 @@ fun AnimeHeroContent(
             }
 
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (animeMetadata?.score != null) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.weight(0.95f, fill = false),
+                ) {
                     Icon(
-                        Icons.Filled.Star,
+                        imageVector = Icons.Filled.Star,
                         contentDescription = null,
                         tint = Color(0xFFFACC15),
-                        modifier = Modifier.size(14.dp),
+                        modifier = Modifier.size(12.dp),
                     )
                     Text(
-                        text = String.format("%.1f", animeMetadata.score),
-                        fontSize = 13.sp,
-                        color = primaryMetaColor,
+                        text = ratingText,
+                        color = colors.textPrimary,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
-                    )
-                    Text(
-                        text = "|",
-                        fontSize = 13.sp,
-                        color = secondaryMetaColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        softWrap = false,
                     )
                 }
 
                 Text(
-                    text = AnimeStatusFormatter.formatStatus(anime.status),
-                    fontSize = 13.sp,
-                    color = secondaryMetaColor,
+                    text = "$episodesText эп.",
+                    color = colors.textSecondary.copy(alpha = 0.82f),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    softWrap = false,
+                    modifier = Modifier.weight(1.05f, fill = false),
                 )
+
                 Text(
-                    text = "|",
-                    fontSize = 13.sp,
-                    color = secondaryMetaColor,
-                )
-                Text(
-                    text = "$episodeCount эп.",
-                    fontSize = 13.sp,
-                    color = secondaryMetaColor,
+                    text = statusText,
+                    color = colors.textPrimary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    softWrap = false,
+                    modifier = Modifier.weight(1.4f, fill = false),
                 )
             }
 

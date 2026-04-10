@@ -20,6 +20,7 @@ data class BackupManga(
     @ProtoNumber(8) var status: Int = 0,
     // thumbnailUrl is called cover in 1.x
     @ProtoNumber(9) var thumbnailUrl: String? = null,
+    @ProtoNumber(110) var rating: Float = -1f,
     // @ProtoNumber(10) val customCover: String = "", 1.x value, not used in 0.x
     // @ProtoNumber(11) val lastUpdate: Long = 0, 1.x value, not used in 0.x
     // @ProtoNumber(12) val lastInit: Long = 0, 1.x value, not used in 0.x
@@ -50,6 +51,7 @@ data class BackupManga(
             description = this@BackupManga.description,
             genre = this@BackupManga.genre,
             status = this@BackupManga.status.toLong(),
+            rating = this@BackupManga.rating,
             thumbnailUrl = this@BackupManga.thumbnailUrl,
             favorite = this@BackupManga.favorite,
             source = this@BackupManga.source,

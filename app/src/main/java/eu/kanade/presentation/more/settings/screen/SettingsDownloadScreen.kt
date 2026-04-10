@@ -24,6 +24,7 @@ import androidx.compose.ui.util.fastMap
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.presentation.category.visualName
 import eu.kanade.presentation.more.settings.Preference
+import eu.kanade.presentation.more.settings.widget.DiscreteSliderPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.TriStateListDialog
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -46,6 +47,7 @@ import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import tachiyomi.core.common.preference.Preference as PreferenceData
 
 object SettingsDownloadScreen : SearchableSettings {
 
@@ -64,6 +66,10 @@ object SettingsDownloadScreen : SearchableSettings {
         val downloadPreferences = remember { Injekt.get<DownloadPreferences>() }
         val basePreferences = remember { Injekt.get<BasePreferences>() }
         val speedLimit by downloadPreferences.downloadSpeedLimit().collectAsState()
+        val downloadSlotsPref = downloadPreferences.numberOfDownloads()
+        val downloadSlots by downloadSlotsPref.collectAsState()
+        val pageConcurrencyPref = downloadPreferences.pageDownloadConcurrency()
+        val pageConcurrency by pageConcurrencyPref.collectAsState()
         var currentSpeedLimit by remember { mutableIntStateOf(speedLimit) }
         var showDownloadLimitDialog by rememberSaveable { mutableStateOf(false) }
         if (showDownloadLimitDialog) {
@@ -102,12 +108,18 @@ object SettingsDownloadScreen : SearchableSettings {
                 title = stringResource(MR.strings.split_tall_images),
                 subtitle = stringResource(MR.strings.split_tall_images_summary),
             ),
-            Preference.PreferenceItem.ListPreference(
-                preference = downloadPreferences.numberOfDownloads(),
-                entries = (1..5).associateWith { it.toString() }.toImmutableMap(),
+            getDiscreteDownloadSliderPreference(
+                preference = downloadSlotsPref,
+                value = downloadSlots,
                 title = stringResource(AYMR.strings.pref_download_slots),
+                helperText = stringResource(AYMR.strings.download_slots_info),
             ),
-            Preference.PreferenceItem.InfoPreference(stringResource(AYMR.strings.download_slots_info)),
+            getDiscreteDownloadSliderPreference(
+                preference = pageConcurrencyPref,
+                value = pageConcurrency,
+                title = stringResource(AYMR.strings.pref_parallel_page_downloads),
+                helperText = stringResource(AYMR.strings.parallel_page_downloads_info),
+            ),
             getDeleteChaptersGroup(
                 downloadPreferences = downloadPreferences,
                 animeCategories = allAnimeCategories.toImmutableList(),
@@ -126,6 +138,26 @@ object SettingsDownloadScreen : SearchableSettings {
                 basePreferences = basePreferences,
             ),
         )
+    }
+
+    @Composable
+    private fun getDiscreteDownloadSliderPreference(
+        preference: PreferenceData<Int>,
+        value: Int,
+        title: String,
+        helperText: String,
+    ): Preference.PreferenceItem.CustomPreference {
+        return Preference.PreferenceItem.CustomPreference(
+            title = title,
+        ) {
+            DiscreteSliderPreferenceWidget(
+                title = title,
+                value = value,
+                valueRange = 1..10,
+                helperText = helperText,
+                onValueChange = { preference.set(it.coerceIn(1, 10)) },
+            )
+        }
     }
 
     @Composable

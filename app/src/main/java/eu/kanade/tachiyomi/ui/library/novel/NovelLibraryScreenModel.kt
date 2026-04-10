@@ -10,6 +10,7 @@ import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCacheEvent
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
@@ -65,7 +66,9 @@ class NovelLibraryScreenModel(
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
     private val novelDownloadManager: NovelDownloadManager = NovelDownloadManager(),
     private val novelTranslatedDownloadManager: NovelTranslatedDownloadManager = NovelTranslatedDownloadManager(),
-    private val downloadCacheChanges: Flow<Unit> = Injekt.get<NovelDownloadCache>().changes,
+    private val downloadCacheChanges: Flow<Unit> = Injekt.get<NovelDownloadCache>()
+        .changes
+        .map { _: NovelDownloadCacheEvent -> Unit },
     private val hasDownloadedChapters: (tachiyomi.domain.entries.novel.model.Novel) -> Boolean = {
         Injekt.get<NovelDownloadCache>().hasAnyDownloadedChapter(it)
     },

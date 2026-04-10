@@ -12,6 +12,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkQuery
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import eu.kanade.domain.entries.anime.interactor.AnimeRatingFetcher
 import eu.kanade.domain.entries.anime.interactor.UpdateAnime
 import eu.kanade.domain.entries.anime.model.toSAnime
 import eu.kanade.domain.items.episode.interactor.SyncEpisodesWithSource
@@ -79,6 +80,7 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
     private val getLibraryAnime: GetLibraryAnime = Injekt.get()
     private val getAnime: GetAnime = Injekt.get()
     private val updateAnime: UpdateAnime = Injekt.get()
+    private val animeRatingFetcher: AnimeRatingFetcher = Injekt.get()
     private val syncEpisodesWithSource: SyncEpisodesWithSource = Injekt.get()
     private val animeFetchInterval: AnimeFetchInterval = Injekt.get()
     private val filterEpisodesForDownload: FilterEpisodesForDownload = Injekt.get()
@@ -361,6 +363,7 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
         // Update anime metadata if needed
         if (libraryPreferences.autoUpdateMetadata().get()) {
             val networkAnime = source.getAnimeDetails(anime.toSAnime())
+            animeRatingFetcher.await(source, anime, forceRefresh = true)
             updateAnime.awaitUpdateFromSource(anime, networkAnime, manualFetch = false, coverCache, backgroundCache)
         }
 

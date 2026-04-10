@@ -151,6 +151,7 @@ class NovelPageTurnSnapshotRendererTest {
         return NovelPageContentPage(
             blocks = listOf(
                 NovelPageContentBlock.Plain(
+                    sourceBlockIndex = 0,
                     text = text,
                     spacingBeforePx = 0,
                     firstLineIndentEm = null,

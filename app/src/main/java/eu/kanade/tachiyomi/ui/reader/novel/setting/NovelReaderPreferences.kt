@@ -57,6 +57,7 @@ data class NovelReaderSettings(
     val useVolumeButtons: Boolean,
     val swipeGestures: Boolean,
     val pageReader: Boolean,
+    val showPageChapterTitle: Boolean = true,
     val preferWebViewRenderer: Boolean,
     val richNativeRendererExperimental: Boolean,
     val pageTransitionStyle: NovelPageTransitionStyle = NovelPageTransitionStyle.SLIDE,
@@ -132,6 +133,22 @@ data class NovelReaderSettings(
     val googleTranslationSourceLang: String = "auto",
     val googleTranslationTargetLang: String = "Russian",
     val googleTranslationAutoStart: Boolean = false,
+
+    // TTS
+    val ttsEnabled: Boolean = false,
+    val ttsEnginePackage: String = "",
+    val ttsVoiceId: String = "",
+    val ttsLocaleTag: String = "",
+    val ttsSpeechRate: Float = 1f,
+    val ttsPitch: Float = 1f,
+    val ttsHighlightMode: NovelTtsHighlightMode = NovelTtsHighlightMode.AUTO,
+    val ttsWordHighlightEnabled: Boolean = true,
+    val ttsAutoAdvanceChapter: Boolean = false,
+    val ttsFollowAlong: Boolean = true,
+    val ttsPauseOnManualNavigation: Boolean = true,
+    val ttsKeepScreenOnDuringPlayback: Boolean = false,
+    val ttsPreferTranslatedText: Boolean = false,
+    val ttsReadChapterTitle: Boolean = true,
 )
 
 enum class NovelReaderTheme {
@@ -239,6 +256,13 @@ enum class NovelTranslationProvider {
     DEEPSEEK,
 }
 
+enum class NovelTtsHighlightMode {
+    AUTO,
+    EXACT,
+    ESTIMATED,
+    OFF,
+}
+
 @Serializable
 data class NovelReaderColorTheme(
     val backgroundColor: String,
@@ -284,6 +308,7 @@ data class NovelReaderOverride(
     val useVolumeButtons: Boolean? = null,
     val swipeGestures: Boolean? = null,
     val pageReader: Boolean? = null,
+    val showPageChapterTitle: Boolean? = null,
     val preferWebViewRenderer: Boolean? = null,
     val richNativeRendererExperimental: Boolean? = null,
     val pageTransitionStyle: NovelPageTransitionStyle? = null,
@@ -355,6 +380,22 @@ data class NovelReaderOverride(
     val googleTranslationSourceLang: String? = null,
     val googleTranslationTargetLang: String? = null,
     val googleTranslationAutoStart: Boolean? = null,
+
+    // TTS
+    val ttsEnabled: Boolean? = null,
+    val ttsEnginePackage: String? = null,
+    val ttsVoiceId: String? = null,
+    val ttsLocaleTag: String? = null,
+    val ttsSpeechRate: Float? = null,
+    val ttsPitch: Float? = null,
+    val ttsHighlightMode: NovelTtsHighlightMode? = null,
+    val ttsWordHighlightEnabled: Boolean? = null,
+    val ttsAutoAdvanceChapter: Boolean? = null,
+    val ttsFollowAlong: Boolean? = null,
+    val ttsPauseOnManualNavigation: Boolean? = null,
+    val ttsKeepScreenOnDuringPlayback: Boolean? = null,
+    val ttsPreferTranslatedText: Boolean? = null,
+    val ttsReadChapterTitle: Boolean? = null,
 )
 
 class NovelReaderPreferences(
@@ -449,6 +490,9 @@ class NovelReaderPreferences(
     fun swipeGestures() = preferenceStore.getBoolean("novel_reader_swipe_gestures", false)
 
     fun pageReader() = preferenceStore.getBoolean("novel_reader_page_mode", false)
+
+    fun showPageChapterTitle() =
+        preferenceStore.getBoolean("novel_reader_show_page_chapter_title", true)
 
     fun preferWebViewRenderer() = preferenceStore.getBoolean("novel_reader_prefer_webview_renderer", false)
 
@@ -549,6 +593,43 @@ class NovelReaderPreferences(
 
     fun selectedTextTranslationTargetLanguage() =
         preferenceStore.getString("novel_reader_selected_text_translation_target_language", "Russian")
+
+    fun ttsEnabled() = preferenceStore.getBoolean("novel_reader_tts_enabled", false)
+
+    fun ttsEnginePackage() = preferenceStore.getString("novel_reader_tts_engine_package", "")
+
+    fun ttsVoiceId() = preferenceStore.getString("novel_reader_tts_voice_id", "")
+
+    fun ttsLocaleTag() = preferenceStore.getString("novel_reader_tts_locale_tag", "")
+
+    fun ttsRecentLanguageTags() = preferenceStore.getString("novel_reader_tts_recent_language_tags", "")
+
+    fun ttsSpeechRate() = preferenceStore.getFloat("novel_reader_tts_speech_rate", 1f)
+
+    fun ttsPitch() = preferenceStore.getFloat("novel_reader_tts_pitch", 1f)
+
+    fun ttsHighlightMode() =
+        preferenceStore.getEnum("novel_reader_tts_highlight_mode", NovelTtsHighlightMode.AUTO)
+
+    fun ttsWordHighlightEnabled() =
+        preferenceStore.getBoolean("novel_reader_tts_word_highlight_enabled", true)
+
+    fun ttsAutoAdvanceChapter() =
+        preferenceStore.getBoolean("novel_reader_tts_auto_advance_chapter", false)
+
+    fun ttsFollowAlong() = preferenceStore.getBoolean("novel_reader_tts_follow_along", true)
+
+    fun ttsPauseOnManualNavigation() =
+        preferenceStore.getBoolean("novel_reader_tts_pause_on_manual_navigation", true)
+
+    fun ttsKeepScreenOnDuringPlayback() =
+        preferenceStore.getBoolean("novel_reader_tts_keep_screen_on_during_playback", false)
+
+    fun ttsPreferTranslatedText() =
+        preferenceStore.getBoolean("novel_reader_tts_prefer_translated_text", false)
+
+    fun ttsReadChapterTitle() =
+        preferenceStore.getBoolean("novel_reader_tts_read_chapter_title", true)
 
     // Gemini Translation
     fun geminiEnabled() = preferenceStore.getBoolean("novel_reader_gemini_enabled", false)
@@ -744,6 +825,7 @@ class NovelReaderPreferences(
                 useVolumeButtons = useVolumeButtons().get(),
                 swipeGestures = swipeGestures().get(),
                 pageReader = pageReader().get(),
+                showPageChapterTitle = showPageChapterTitle().get(),
                 preferWebViewRenderer = preferWebViewRenderer().get(),
                 richNativeRendererExperimental = richNativeRendererExperimental().get(),
                 pageTransitionStyle = pageTransitionStyle().get(),
@@ -805,6 +887,20 @@ class NovelReaderPreferences(
                 googleTranslationSourceLang = googleTranslationSourceLang().get(),
                 googleTranslationTargetLang = googleTranslationTargetLang().get(),
                 googleTranslationAutoStart = googleTranslationAutoStart().get(),
+                ttsEnabled = ttsEnabled().get(),
+                ttsEnginePackage = ttsEnginePackage().get(),
+                ttsVoiceId = ttsVoiceId().get(),
+                ttsLocaleTag = ttsLocaleTag().get(),
+                ttsSpeechRate = ttsSpeechRate().get(),
+                ttsPitch = ttsPitch().get(),
+                ttsHighlightMode = ttsHighlightMode().get(),
+                ttsWordHighlightEnabled = ttsWordHighlightEnabled().get(),
+                ttsAutoAdvanceChapter = ttsAutoAdvanceChapter().get(),
+                ttsFollowAlong = ttsFollowAlong().get(),
+                ttsPauseOnManualNavigation = ttsPauseOnManualNavigation().get(),
+                ttsKeepScreenOnDuringPlayback = ttsKeepScreenOnDuringPlayback().get(),
+                ttsPreferTranslatedText = ttsPreferTranslatedText().get(),
+                ttsReadChapterTitle = ttsReadChapterTitle().get(),
             ),
         )
     }
@@ -854,6 +950,7 @@ class NovelReaderPreferences(
             useVolumeButtons = override?.useVolumeButtons ?: useVolumeButtons().get(),
             swipeGestures = override?.swipeGestures ?: swipeGestures().get(),
             pageReader = override?.pageReader ?: pageReader().get(),
+            showPageChapterTitle = override?.showPageChapterTitle ?: showPageChapterTitle().get(),
             preferWebViewRenderer = override?.preferWebViewRenderer ?: preferWebViewRenderer().get(),
             richNativeRendererExperimental =
             override?.richNativeRendererExperimental ?: richNativeRendererExperimental().get(),
@@ -928,6 +1025,22 @@ class NovelReaderPreferences(
             googleTranslationSourceLang = override?.googleTranslationSourceLang ?: googleTranslationSourceLang().get(),
             googleTranslationTargetLang = override?.googleTranslationTargetLang ?: googleTranslationTargetLang().get(),
             googleTranslationAutoStart = override?.googleTranslationAutoStart ?: googleTranslationAutoStart().get(),
+            ttsEnabled = override?.ttsEnabled ?: ttsEnabled().get(),
+            ttsEnginePackage = override?.ttsEnginePackage ?: ttsEnginePackage().get(),
+            ttsVoiceId = override?.ttsVoiceId ?: ttsVoiceId().get(),
+            ttsLocaleTag = override?.ttsLocaleTag ?: ttsLocaleTag().get(),
+            ttsSpeechRate = override?.ttsSpeechRate ?: ttsSpeechRate().get(),
+            ttsPitch = override?.ttsPitch ?: ttsPitch().get(),
+            ttsHighlightMode = override?.ttsHighlightMode ?: ttsHighlightMode().get(),
+            ttsWordHighlightEnabled = override?.ttsWordHighlightEnabled ?: ttsWordHighlightEnabled().get(),
+            ttsAutoAdvanceChapter = override?.ttsAutoAdvanceChapter ?: ttsAutoAdvanceChapter().get(),
+            ttsFollowAlong = override?.ttsFollowAlong ?: ttsFollowAlong().get(),
+            ttsPauseOnManualNavigation =
+            override?.ttsPauseOnManualNavigation ?: ttsPauseOnManualNavigation().get(),
+            ttsKeepScreenOnDuringPlayback =
+            override?.ttsKeepScreenOnDuringPlayback ?: ttsKeepScreenOnDuringPlayback().get(),
+            ttsPreferTranslatedText = override?.ttsPreferTranslatedText ?: ttsPreferTranslatedText().get(),
+            ttsReadChapterTitle = override?.ttsReadChapterTitle ?: ttsReadChapterTitle().get(),
         )
     }
 
@@ -1008,6 +1121,7 @@ class NovelReaderPreferences(
             useVolumeButtons().changes(),
             swipeGestures().changes(),
             pageReader().changes(),
+            showPageChapterTitle().changes(),
             preferWebViewRenderer().changes(),
             richNativeRendererExperimental().changes(),
             pageTransitionStyle().changes(),
@@ -1031,20 +1145,21 @@ class NovelReaderPreferences(
                 values[2] as Boolean,
                 values[3] as Boolean,
                 values[4] as Boolean,
-                values[5] as NovelPageTransitionStyle,
-                values[6] as NovelBookFlipAnimationSpeed,
-                values[7] as NovelPageTurnSpeed,
-                values[8] as NovelPageTurnIntensity,
-                values[9] as NovelPageTurnShadowIntensity,
-                values[10] as NovelPageTurnActivationZone,
-                values[11] as Boolean,
+                values[5] as Boolean,
+                values[6] as NovelPageTransitionStyle,
+                values[7] as NovelBookFlipAnimationSpeed,
+                values[8] as NovelPageTurnSpeed,
+                values[9] as NovelPageTurnIntensity,
+                values[10] as NovelPageTurnShadowIntensity,
+                values[11] as NovelPageTurnActivationZone,
                 values[12] as Boolean,
                 values[13] as Boolean,
                 values[14] as Boolean,
                 values[15] as Boolean,
-                values[16] as Int,
+                values[16] as Boolean,
                 values[17] as Int,
-                values[18] as Boolean,
+                values[18] as Int,
+                values[19] as Boolean,
             )
         }.distinctUntilChanged()
 
@@ -1164,6 +1279,40 @@ class NovelReaderPreferences(
             )
         }.distinctUntilChanged()
 
+        val ttsFlow = combine(
+            ttsEnabled().changes(),
+            ttsEnginePackage().changes(),
+            ttsVoiceId().changes(),
+            ttsLocaleTag().changes(),
+            ttsSpeechRate().changes(),
+            ttsPitch().changes(),
+            ttsHighlightMode().changes(),
+            ttsWordHighlightEnabled().changes(),
+            ttsAutoAdvanceChapter().changes(),
+            ttsFollowAlong().changes(),
+            ttsPauseOnManualNavigation().changes(),
+            ttsKeepScreenOnDuringPlayback().changes(),
+            ttsPreferTranslatedText().changes(),
+            ttsReadChapterTitle().changes(),
+        ) { values: Array<Any?> ->
+            TtsSettings(
+                enabled = values[0] as Boolean,
+                enginePackage = values[1] as String,
+                voiceId = values[2] as String,
+                localeTag = values[3] as String,
+                speechRate = values[4] as Float,
+                pitch = values[5] as Float,
+                highlightMode = values[6] as NovelTtsHighlightMode,
+                wordHighlightEnabled = values[7] as Boolean,
+                autoAdvanceChapter = values[8] as Boolean,
+                followAlong = values[9] as Boolean,
+                pauseOnManualNavigation = values[10] as Boolean,
+                keepScreenOnDuringPlayback = values[11] as Boolean,
+                preferTranslatedText = values[12] as Boolean,
+                readChapterTitle = values[13] as Boolean,
+            )
+        }.distinctUntilChanged()
+
         return combine(
             displayFlow,
             themeFlow,
@@ -1171,6 +1320,7 @@ class NovelReaderPreferences(
             accessibilityFlow,
             advancedFlow,
             geminiFlow,
+            ttsFlow,
             sourceOverrides().changes(),
         ) { values: Array<Any?> ->
             val display = values[0] as DisplaySettings
@@ -1179,7 +1329,8 @@ class NovelReaderPreferences(
             val accessibility = values[3] as AccessibilitySettings
             val advanced = values[4] as AdvancedSettings
             val gemini = values[5] as GeminiSettings
-            val overrides = values[6] as Map<Long, NovelReaderOverride>
+            val tts = values[6] as TtsSettings
+            val overrides = values[7] as Map<Long, NovelReaderOverride>
 
             val override = overrides[sourceId]
             NovelReaderSettings(
@@ -1217,6 +1368,7 @@ class NovelReaderPreferences(
                 useVolumeButtons = override?.useVolumeButtons ?: navigation.useVolumeButtons,
                 swipeGestures = override?.swipeGestures ?: navigation.swipeGestures,
                 pageReader = override?.pageReader ?: navigation.pageReader,
+                showPageChapterTitle = override?.showPageChapterTitle ?: navigation.showPageChapterTitle,
                 preferWebViewRenderer = override?.preferWebViewRenderer ?: navigation.preferWebViewRenderer,
                 richNativeRendererExperimental =
                 override?.richNativeRendererExperimental ?: navigation.richNativeRendererExperimental,
@@ -1290,6 +1442,23 @@ class NovelReaderPreferences(
                 googleTranslationTargetLang =
                 override?.googleTranslationTargetLang ?: gemini.googleTranslationTargetLang,
                 googleTranslationAutoStart = override?.googleTranslationAutoStart ?: gemini.googleTranslationAutoStart,
+                ttsEnabled = override?.ttsEnabled ?: tts.enabled,
+                ttsEnginePackage = override?.ttsEnginePackage ?: tts.enginePackage,
+                ttsVoiceId = override?.ttsVoiceId ?: tts.voiceId,
+                ttsLocaleTag = override?.ttsLocaleTag ?: tts.localeTag,
+                ttsSpeechRate = override?.ttsSpeechRate ?: tts.speechRate,
+                ttsPitch = override?.ttsPitch ?: tts.pitch,
+                ttsHighlightMode = override?.ttsHighlightMode ?: tts.highlightMode,
+                ttsWordHighlightEnabled = override?.ttsWordHighlightEnabled ?: tts.wordHighlightEnabled,
+                ttsAutoAdvanceChapter = override?.ttsAutoAdvanceChapter ?: tts.autoAdvanceChapter,
+                ttsFollowAlong = override?.ttsFollowAlong ?: tts.followAlong,
+                ttsPauseOnManualNavigation =
+                override?.ttsPauseOnManualNavigation ?: tts.pauseOnManualNavigation,
+                ttsKeepScreenOnDuringPlayback =
+                override?.ttsKeepScreenOnDuringPlayback ?: tts.keepScreenOnDuringPlayback,
+                ttsPreferTranslatedText =
+                override?.ttsPreferTranslatedText ?: tts.preferTranslatedText,
+                ttsReadChapterTitle = override?.ttsReadChapterTitle ?: tts.readChapterTitle,
             )
         }.distinctUntilChanged()
     }
@@ -1334,6 +1503,7 @@ class NovelReaderPreferences(
         val useVolumeButtons: Boolean,
         val swipeGestures: Boolean,
         val pageReader: Boolean,
+        val showPageChapterTitle: Boolean,
         val preferWebViewRenderer: Boolean,
         val richNativeRendererExperimental: Boolean,
         val pageTransitionStyle: NovelPageTransitionStyle,
@@ -1408,6 +1578,23 @@ class NovelReaderPreferences(
         val googleTranslationSourceLang: String,
         val googleTranslationTargetLang: String,
         val googleTranslationAutoStart: Boolean,
+    )
+
+    private data class TtsSettings(
+        val enabled: Boolean,
+        val enginePackage: String,
+        val voiceId: String,
+        val localeTag: String,
+        val speechRate: Float,
+        val pitch: Float,
+        val highlightMode: NovelTtsHighlightMode,
+        val wordHighlightEnabled: Boolean,
+        val autoAdvanceChapter: Boolean,
+        val followAlong: Boolean,
+        val pauseOnManualNavigation: Boolean,
+        val keepScreenOnDuringPlayback: Boolean,
+        val preferTranslatedText: Boolean,
+        val readChapterTitle: Boolean,
     )
 
     companion object {

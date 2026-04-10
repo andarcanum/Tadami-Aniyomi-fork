@@ -11,6 +11,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkQuery
 import androidx.work.WorkerParameters
+import eu.kanade.domain.entries.anime.interactor.AnimeRatingFetcher
 import eu.kanade.domain.entries.anime.interactor.UpdateAnime
 import eu.kanade.domain.entries.anime.model.copyFrom
 import eu.kanade.domain.entries.anime.model.toSAnime
@@ -49,6 +50,7 @@ class AnimeMetadataUpdateJob(private val context: Context, workerParams: WorkerP
     private val backgroundCache: AnimeBackgroundCache = Injekt.get()
     private val getLibraryAnime: GetLibraryAnime = Injekt.get()
     private val updateAnime: UpdateAnime = Injekt.get()
+    private val animeRatingFetcher: AnimeRatingFetcher = Injekt.get()
 
     private val notifier = AnimeLibraryUpdateNotifier(context)
 
@@ -123,6 +125,7 @@ class AnimeMetadataUpdateJob(private val context: Context, workerParams: WorkerP
                                     val source = sourceManager.get(anime.source) ?: return@withUpdateNotification
                                     try {
                                         val networkAnime = source.getAnimeDetails(anime.toSAnime())
+                                        animeRatingFetcher.await(source, anime, forceRefresh = true)
                                         val updatedAnime = anime
                                             .prepUpdateCover(coverCache, networkAnime, true)
                                             .prepUpdateBackground(backgroundCache, networkAnime, true)

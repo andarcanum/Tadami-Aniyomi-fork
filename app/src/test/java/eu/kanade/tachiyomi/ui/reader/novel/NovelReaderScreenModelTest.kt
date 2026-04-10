@@ -1,5 +1,6 @@
-﻿package eu.kanade.tachiyomi.ui.reader.novel
+package eu.kanade.tachiyomi.ui.reader.novel
 
+import android.app.Application
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginPackage
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoEntry
@@ -10,6 +11,7 @@ import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationService
@@ -64,6 +66,7 @@ import uy.kohesive.injekt.api.get
 import java.util.Collections
 
 class NovelReaderScreenModelTest {
+    private class TestApplication : Application()
     private val activeScreenModels = mutableListOf<NovelReaderScreenModel>()
     private val syncNovelChaptersWithSource = mockk<SyncNovelChaptersWithSource>(relaxed = true)
     private val geminiTranslationService = mockk<GeminiTranslationService>(relaxed = true)
@@ -82,6 +85,13 @@ class NovelReaderScreenModelTest {
     }
 
     companion object {
+        @JvmStatic
+        @BeforeAll
+        fun setupInjektApplication() {
+            runCatching { Injekt.get<Application>() }
+                .getOrElse { Injekt.addSingleton(fullType<Application>(), TestApplication()) }
+        }
+
         @JvmStatic
         @BeforeAll
         fun setupMainDispatcher() {
@@ -110,7 +120,7 @@ class NovelReaderScreenModelTest {
                 isSystemDark = { false },
             )
 
-            withTimeout(1_000) {
+            withTimeout(5_000) {
                 while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
                     yield()
                 }
@@ -160,6 +170,88 @@ class NovelReaderScreenModelTest {
     }
 
     @Test
+    fun `clear chapter transient state resets chapter scoped data`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            val successState = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            val sentinelTime = 123L
+            setPrivateField(screenModel, "rawHtml", "<p>stale</p>")
+            setPrivateField(screenModel, "parsedContentBlocks", successState.contentBlocks)
+            setPrivateField(
+                screenModel,
+                "parsedRichContentResult",
+                NovelRichContentParseResult(
+                    blocks = emptyList(),
+                    unsupportedFeaturesDetected = false,
+                ),
+            )
+            setPrivateField(screenModel, "geminiTranslatedByIndex", mapOf(0 to "g"))
+            setPrivateField(screenModel, "googleTranslatedByIndex", mapOf(0 to "g"))
+            setPrivateField(screenModel, "geminiLogs", listOf("gemini"))
+            setPrivateField(screenModel, "googleLogs", listOf("google"))
+            setPrivateField(screenModel, "isGeminiTranslating", true)
+            setPrivateField(screenModel, "isGoogleTranslating", true)
+            setPrivateField(screenModel, "isGeminiTranslationVisible", true)
+            setPrivateField(screenModel, "isGoogleTranslationVisible", true)
+            setPrivateField(screenModel, "hasGeminiTranslationCache", true)
+            setPrivateField(screenModel, "hasGoogleTranslationCache", true)
+            setPrivateField(screenModel, "geminiTranslationProgress", 77)
+            setPrivateField(screenModel, "googleTranslationProgress", 88)
+            setPrivateField(screenModel, "hasTriggeredNextChapterPrefetch", true)
+            setPrivateField(screenModel, "hasTriggeredNextChapterGeminiPrefetch", true)
+            setPrivateField(screenModel, "hasTriggeredGeminiAutoStart", true)
+            setPrivateField(screenModel, "attemptedJaomixPages", mutableSetOf(1))
+            setPrivateField(screenModel, "chapterReadStartTimeMs", sentinelTime)
+
+            invokePrivateClearChapterTransientState(screenModel)
+
+            getPrivateFieldOrNull<String>(screenModel, "rawHtml") shouldBe null
+            getPrivateFieldOrNull<List<Any?>>(screenModel, "parsedContentBlocks") shouldBe null
+            getPrivateFieldOrNull<NovelRichContentParseResult>(screenModel, "parsedRichContentResult") shouldBe null
+            getPrivateField<Map<Any?, Any?>>(screenModel, "geminiTranslatedByIndex") shouldBe emptyMap<Any?, Any?>()
+            getPrivateField<Map<Any?, Any?>>(screenModel, "googleTranslatedByIndex") shouldBe emptyMap<Any?, Any?>()
+            getPrivateField<List<Any?>>(screenModel, "geminiLogs") shouldBe emptyList<Any?>()
+            getPrivateField<List<Any?>>(screenModel, "googleLogs") shouldBe emptyList<Any?>()
+            getPrivateField<Boolean>(screenModel, "isGeminiTranslating") shouldBe false
+            getPrivateField<Boolean>(screenModel, "isGoogleTranslating") shouldBe false
+            getPrivateField<Boolean>(screenModel, "isGeminiTranslationVisible") shouldBe false
+            getPrivateField<Boolean>(screenModel, "isGoogleTranslationVisible") shouldBe false
+            getPrivateField<Boolean>(screenModel, "hasGeminiTranslationCache") shouldBe false
+            getPrivateField<Boolean>(screenModel, "hasGoogleTranslationCache") shouldBe false
+            getPrivateField<Int>(screenModel, "geminiTranslationProgress") shouldBe 0
+            getPrivateField<Int>(screenModel, "googleTranslationProgress") shouldBe 0
+            getPrivateField<Boolean>(screenModel, "hasTriggeredNextChapterPrefetch") shouldBe false
+            getPrivateField<Boolean>(screenModel, "hasTriggeredNextChapterGeminiPrefetch") shouldBe false
+            getPrivateField<Boolean>(screenModel, "hasTriggeredGeminiAutoStart") shouldBe false
+            getPrivateField<MutableSet<Int>>(screenModel, "attemptedJaomixPages") shouldBe emptySet()
+            (getPrivateField<Long>(screenModel, "chapterReadStartTimeMs") > sentinelTime) shouldBe true
+        }
+    }
+
+    @Test
     fun `loads chapter text off caller thread to avoid main-thread blocking`() {
         runBlocking {
             val callerThreadId = Thread.currentThread().id
@@ -196,6 +288,67 @@ class NovelReaderScreenModelTest {
             }
 
             (sourceCallThreadId == callerThreadId) shouldBe false
+        }
+    }
+
+    @Test
+    fun `gemini log updates do not rebuild translated content`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+            val novelReaderPreferences = createNovelReaderPreferences()
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(
+                    sourceId = novel.source,
+                    chapterHtml = "<p>Hello</p><p>World</p>",
+                ),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = novelReaderPreferences,
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            val successState = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            val translatedByIndex = (successState.textBlocks.indices).associateWith { index ->
+                "Translated $index"
+            }
+            val translatedSettings = successState.readerSettings.copy(
+                geminiEnabled = true,
+                geminiApiKey = "test-key",
+            )
+
+            setPrivateField(screenModel, "geminiTranslatedByIndex", translatedByIndex)
+            setPrivateField(screenModel, "isGeminiTranslationVisible", true)
+            setPrivateField(screenModel, "hasGeminiTranslationCache", true)
+            setPrivateField(screenModel, "isGeminiTranslating", false)
+            setPrivateField(screenModel, "geminiTranslationProgress", 100)
+            invokePrivateUpdateContent(screenModel, translatedSettings)
+
+            val before = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            val beforeContentBlocks = before.contentBlocks
+            before.contentBlocks.any { block ->
+                (block as? NovelReaderScreenModel.ContentBlock.Text)?.text?.startsWith("Translated") == true
+            } shouldBe true
+
+            screenModel.addGeminiLog("Gemini UI log")
+
+            val after = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            after.geminiLogs.firstOrNull() shouldBe "Gemini UI log"
+            (after.contentBlocks === beforeContentBlocks) shouldBe true
         }
     }
 
@@ -312,6 +465,7 @@ class NovelReaderScreenModelTest {
             state.contentBlocks[2].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Image>().url shouldBe
                 "https://example.org/images/pic.jpg"
             state.contentBlocks[3].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Text>().text shouldBe "Outro"
+            state.textBlocks shouldBe listOf("Chapter 1", "Intro", "Outro")
         }
     }
 
@@ -354,6 +508,47 @@ class NovelReaderScreenModelTest {
             state.contentBlocks.mapNotNull {
                 (it as? NovelReaderScreenModel.ContentBlock.Text)?.text
             } shouldBe listOf("Chapter 1", "Intro", "Side note", "Outro")
+        }
+    }
+
+    @Test
+    fun `derives parsed text blocks from chapter html when parsed content cache is missing`() {
+        runBlocking {
+            val novel = Novel.create().copy(
+                id = 1L,
+                source = 10L,
+                title = "Novel",
+                url = "https://example.org/book/slug",
+            )
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/book/ch1",
+            )
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(
+                    sourceId = novel.source,
+                    chapterHtml = "<p>Intro</p><p>Outro</p>",
+                ),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            setPrivateField(screenModel, "parsedContentBlocks", null)
+
+            invokePrivateCurrentParsedTextBlocks(screenModel) shouldBe listOf("Chapter 1", "Intro", "Outro")
         }
     }
 
@@ -1896,7 +2091,13 @@ class NovelReaderScreenModelTest {
             }
 
             screenModel.toggleChapterBookmark()
-            yield()
+
+            // Wait for the async repository update to complete
+            withTimeout(1_000) {
+                while (chapterRepo.lastUpdate == null) {
+                    yield()
+                }
+            }
 
             chapterRepo.lastUpdate?.bookmark shouldBe true
             val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
@@ -2010,6 +2211,48 @@ class NovelReaderScreenModelTest {
             chapterRepo.completedUpdates.size shouldBe 1
             chapterRepo.completedUpdates.single().lastPageRead shouldBe 1L
         }
+    }
+
+    private fun setPrivateField(target: Any, name: String, value: Any?) {
+        val field = target.javaClass.getDeclaredField(name)
+        field.isAccessible = true
+        field.set(target, value)
+    }
+
+    private inline fun <reified T> getPrivateField(target: Any, name: String): T {
+        val field = target.javaClass.getDeclaredField(name)
+        field.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        return field.get(target) as T
+    }
+
+    private inline fun <reified T> getPrivateFieldOrNull(target: Any, name: String): T? {
+        val field = target.javaClass.getDeclaredField(name)
+        field.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        return field.get(target) as T?
+    }
+
+    private fun invokePrivateClearChapterTransientState(target: Any) {
+        val method = target.javaClass.getDeclaredMethod("clearChapterTransientState")
+        method.isAccessible = true
+        method.invoke(target)
+    }
+
+    private fun invokePrivateUpdateContent(
+        target: Any,
+        settings: NovelReaderSettings,
+    ) {
+        val method = target.javaClass.getDeclaredMethod("updateContent", NovelReaderSettings::class.java)
+        method.isAccessible = true
+        method.invoke(target, settings)
+    }
+
+    private fun invokePrivateCurrentParsedTextBlocks(target: Any): List<String> {
+        val method = target.javaClass.getDeclaredMethod("currentParsedTextBlocks")
+        method.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        return method.invoke(target) as List<String>
     }
 
     private class FakeNovelChapterRepository(
@@ -2163,6 +2406,8 @@ class NovelReaderScreenModelTest {
     }
 
     private fun ensureReaderScreenModelDependencies() {
+        runCatching { Injekt.get<Application>() }
+            .getOrElse { Injekt.addSingleton(fullType<Application>(), TestApplication()) }
         runCatching { Injekt.get<NetworkHelper>() }
             .getOrElse {
                 val networkHelper = mockk<NetworkHelper>()

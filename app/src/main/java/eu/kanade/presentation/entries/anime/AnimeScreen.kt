@@ -76,6 +76,7 @@ import eu.kanade.presentation.entries.components.EntryBottomActionMenu
 import eu.kanade.presentation.entries.components.EntryToolbar
 import eu.kanade.presentation.entries.components.ItemHeader
 import eu.kanade.presentation.entries.components.MissingItemCountListItem
+import eu.kanade.presentation.entries.components.resolveExternalMetadataCover
 import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
 import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.util.formatEpisodeNumber
@@ -94,6 +95,7 @@ import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.items.episode.model.Episode
 import tachiyomi.domain.items.episode.service.missingEntriesCount
 import tachiyomi.domain.library.service.LibraryPreferences
+import tachiyomi.domain.metadata.model.MetadataSource
 import tachiyomi.domain.source.anime.model.StubAnimeSource
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
@@ -200,7 +202,7 @@ fun AnimeScreen(
     val context = LocalContext.current
     val uiPreferences = Injekt.get<eu.kanade.domain.ui.UiPreferences>()
     val theme by uiPreferences.appTheme().collectAsState()
-    val metadataSource by uiPreferences.animeMetadataSource().collectAsState()
+    val metadataSource by uiPreferences.metadataSource().collectAsState()
     val autoJumpToNextEnabled by uiPreferences.entryAutoJumpToNextAnime().collectAsState()
     val autoJumpToNextLabel = stringResource(
         if (autoJumpToNextEnabled) {
@@ -440,7 +442,7 @@ private fun AnimeScreenSmallImpl(
     onSaveScrollPosition: (Int, Int) -> Unit = { _, _ -> },
 ) {
     val uiPreferences = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }
-    val metadataSource by uiPreferences.animeMetadataSource().collectAsState()
+    val metadataSource by uiPreferences.metadataSource().collectAsState()
     val showOriginalTitle by uiPreferences.showOriginalTitle().collectAsState()
     val originalTitle = remember(state.anime.description) {
         parseOriginalTitle(state.anime.description)
@@ -668,6 +670,7 @@ private fun AnimeScreenSmallImpl(
                             doSearch = onSearch,
                             modifier = Modifier.ignorePadding(offsetGridPaddingPx),
                             resolvedCoverUrl = resolvedCoverUrl,
+                            resolvedCoverUrlFallback = state.animeMetadata?.coverUrlFallback,
                         )
                     }
 
@@ -874,7 +877,7 @@ fun AnimeScreenLargeImpl(
     selectedDubbing: String?,
 ) {
     val uiPreferences = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }
-    val metadataSource by uiPreferences.animeMetadataSource().collectAsState()
+    val metadataSource by uiPreferences.metadataSource().collectAsState()
     val showOriginalTitle by uiPreferences.showOriginalTitle().collectAsState()
     val originalTitle = remember(state.anime.description) {
         parseOriginalTitle(state.anime.description)
@@ -1058,6 +1061,7 @@ fun AnimeScreenLargeImpl(
                                 onCoverClick = onCoverClicked,
                                 doSearch = onSearch,
                                 resolvedCoverUrl = resolvedCoverUrl,
+                                resolvedCoverUrlFallback = state.animeMetadata?.coverUrlFallback,
                             )
                             AnimeActionRow(
                                 favorite = state.anime.favorite,
@@ -1376,25 +1380,15 @@ private fun onEpisodeItemClick(
 
 internal fun resolveCoverUrl(
     state: AnimeScreenModel.State.Success,
-    metadataSource: eu.kanade.domain.ui.model.AnimeMetadataSource,
+    metadataSource: MetadataSource,
 ): String? {
-    if (metadataSource == eu.kanade.domain.ui.model.AnimeMetadataSource.NONE) {
-        return state.anime.thumbnailUrl
-    }
-
-    if (state.isMetadataLoading) {
-        return state.anime.thumbnailUrl
-    }
-
-    val metadataCoverUrl = state.animeMetadata?.coverUrl?.takeIf { it.isNotBlank() }
-    return when (state.metadataError) {
-        null -> metadataCoverUrl ?: state.anime.thumbnailUrl
-        AnimeScreenModel.MetadataError.NetworkError,
-        AnimeScreenModel.MetadataError.NotFound,
-        AnimeScreenModel.MetadataError.NotAuthenticated,
-        AnimeScreenModel.MetadataError.Disabled,
-        -> state.anime.thumbnailUrl
-    }
+    return resolveExternalMetadataCover(
+        baseCoverUrl = state.anime.thumbnailUrl.orEmpty(),
+        metadata = state.animeMetadata,
+        isMetadataLoading = state.isMetadataLoading,
+        metadataError = state.metadataError,
+        useMetadataCovers = metadataSource != MetadataSource.NONE,
+    ).coverUrl.takeIf { it.isNotBlank() }
 }
 
 private fun formatTime(milliseconds: Long, useDayFormat: Boolean = false): String {

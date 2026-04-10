@@ -62,6 +62,58 @@ internal fun sampleReaderBackgroundLuminance(path: String): Float? {
     }.getOrNull()
 }
 
+internal fun sampleReaderBackgroundAverageColor(path: String): Color? {
+    return runCatching {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
+        val maxDimension = max(bounds.outWidth, bounds.outHeight).coerceAtLeast(1)
+        val sampleSize = (maxDimension / 96).coerceAtLeast(1)
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+            inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
+        }
+        val sampled = BitmapFactory.decodeFile(path, options) ?: return@runCatching null
+        try {
+            val width = sampled.width.coerceAtLeast(1)
+            val height = sampled.height.coerceAtLeast(1)
+            val stepX = (width / 12).coerceAtLeast(1)
+            val stepY = (height / 12).coerceAtLeast(1)
+            var redSum = 0L
+            var greenSum = 0L
+            var blueSum = 0L
+            var alphaSum = 0L
+            var sampledPixels = 0L
+            var x = 0
+            while (x < width) {
+                var y = 0
+                while (y < height) {
+                    val pixel = sampled.getPixel(x, y)
+                    redSum += android.graphics.Color.red(pixel).toLong()
+                    greenSum += android.graphics.Color.green(pixel).toLong()
+                    blueSum += android.graphics.Color.blue(pixel).toLong()
+                    alphaSum += android.graphics.Color.alpha(pixel).toLong()
+                    sampledPixels++
+                    y += stepY
+                }
+                x += stepX
+            }
+            if (sampledPixels == 0L) {
+                null
+            } else {
+                Color(
+                    red = (redSum.toFloat() / sampledPixels.toFloat()) / 255f,
+                    green = (greenSum.toFloat() / sampledPixels.toFloat()) / 255f,
+                    blue = (blueSum.toFloat() / sampledPixels.toFloat()) / 255f,
+                    alpha = (alphaSum.toFloat() / sampledPixels.toFloat()) / 255f,
+                )
+            }
+        } finally {
+            sampled.recycle()
+        }
+    }.getOrNull()
+}
+
 internal fun readBatteryLevel(
     context: Context,
     batteryIntent: Intent? = null,

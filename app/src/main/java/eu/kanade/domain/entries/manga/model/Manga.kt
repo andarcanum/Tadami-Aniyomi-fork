@@ -42,6 +42,7 @@ fun Manga.toSManga(): SManga = SManga.create().also {
     it.description = description
     it.genre = genre.orEmpty().joinToString()
     it.status = status.toInt()
+    it.rating = rating.normalizeRating()
     it.thumbnail_url = thumbnailUrl
     it.initialized = initialized
 }
@@ -56,11 +57,13 @@ fun Manga.copyFrom(other: SManga): Manga {
         genre
     }
     val thumbnailUrl = other.thumbnail_url ?: thumbnailUrl
+    val rating = mergeRatings(current = rating, incoming = other.rating)
     return this.copy(
         author = author,
         artist = artist,
         description = description,
         genre = genres,
+        rating = rating,
         thumbnailUrl = thumbnailUrl,
         status = other.status.toLong(),
         updateStrategy = other.update_strategy,
@@ -77,6 +80,7 @@ fun SManga.toDomainManga(sourceId: Long): Manga {
         description = description,
         genre = getGenres(),
         status = status.toLong(),
+        rating = rating.normalizeRating(),
         thumbnailUrl = thumbnail_url,
         updateStrategy = update_strategy,
         initialized = initialized,
@@ -87,6 +91,32 @@ fun SManga.toDomainManga(sourceId: Long): Manga {
 fun Manga.hasCustomCover(coverCache: MangaCoverCache): Boolean {
     return coverCache.getCustomCoverFile(id).exists()
 }
+
+private fun Float.normalizeRating(): Float {
+    if (this < 0f) return UNKNOWN_RATING
+    val normalized = if (this > 1f) this / 10f else this
+    return normalized.coerceIn(0f, 1f)
+}
+
+internal fun mergeRatings(current: Float, incoming: Float): Float {
+    val normalizedCurrent = current.normalizeRating()
+    val normalizedIncoming = incoming.normalizeRating()
+    return when {
+        normalizedCurrent < 0f -> normalizedIncoming
+        normalizedIncoming < 0f -> normalizedCurrent
+        else -> maxOf(normalizedCurrent, normalizedIncoming)
+    }
+}
+
+internal fun resolveIncomingSourceRating(rawRating: Float, description: String?): Float {
+    val normalizedRawRating = rawRating.normalizeRating()
+    if (normalizedRawRating > 0f) {
+        return rawRating
+    }
+    return SourceMangaRatingParser.parse(description) ?: UNKNOWN_RATING
+}
+
+private const val UNKNOWN_RATING = -1f
 
 /**
  * Creates a ComicInfo instance based on the manga and chapter metadata.

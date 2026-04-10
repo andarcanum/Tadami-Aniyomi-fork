@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,7 +50,6 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -70,7 +68,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import eu.kanade.domain.ui.model.AnimeMetadataSource
+import eu.kanade.domain.metadata.model.MetadataLoadError
 import eu.kanade.presentation.components.EntryDownloadDropdownMenu
 import eu.kanade.presentation.entries.DownloadAction
 import eu.kanade.presentation.entries.TitleFastScrollOverlayAccumulator
@@ -79,14 +77,18 @@ import eu.kanade.presentation.entries.anime.components.aurora.AnimeActionCard
 import eu.kanade.presentation.entries.anime.components.aurora.AnimeEpisodeCardCompact
 import eu.kanade.presentation.entries.anime.components.aurora.AnimeHeroContent
 import eu.kanade.presentation.entries.anime.components.aurora.AnimeInfoCard
+import eu.kanade.presentation.entries.anime.components.aurora.AnimeStatsCard
 import eu.kanade.presentation.entries.anime.components.aurora.EpisodesHeader
 import eu.kanade.presentation.entries.anime.components.aurora.FullscreenPosterBackground
+import eu.kanade.presentation.entries.anime.components.aurora.resolveAnimeDetailsSnapshot
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.AuroraEntryHoldToRefresh
 import eu.kanade.presentation.entries.components.EntryBottomActionMenu
+import eu.kanade.presentation.entries.components.ResolvedCover
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionFab
 import eu.kanade.presentation.entries.components.normalizeAuroraGlobalSearchQuery
+import eu.kanade.presentation.entries.components.resolveExternalMetadataCover
 import eu.kanade.presentation.entries.reduceTitleFastScrollOverlayAccumulator
 import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
 import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
@@ -103,9 +105,9 @@ import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.runningFold
-import kotlinx.coroutines.launch
 import tachiyomi.domain.items.episode.model.Episode
 import tachiyomi.domain.library.service.LibraryPreferences
+import tachiyomi.domain.metadata.model.MetadataSource
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.TwoPanelBox
@@ -184,9 +186,8 @@ fun AnimeScreenAuroraImpl(
     val contentMaxWidthDp = auroraAdaptiveSpec.entryMaxWidthDp
     val useTwoPaneLayout = shouldUseAnimeAuroraTwoPane(auroraAdaptiveSpec.deviceClass)
 
-    // Get the metadata source preference to determine cover URL
-    val metadataSource = remember {
-        Injekt.get<eu.kanade.domain.ui.UiPreferences>().animeMetadataSource().get()
+    val metadataSource: MetadataSource = remember {
+        Injekt.get<eu.kanade.domain.ui.UiPreferences>().metadataSource().get()
     }
 
     val resolvedCover = remember(
@@ -196,14 +197,35 @@ fun AnimeScreenAuroraImpl(
         state.animeMetadata,
         metadataSource,
     ) {
-        resolveCoverUrl(state, metadataSource != eu.kanade.domain.ui.model.AnimeMetadataSource.NONE)
+        resolveCoverUrl(state, metadataSource != MetadataSource.NONE)
     }
 
     val lazyListState = rememberLazyListState()
     val scrollOffset by remember { derivedStateOf { lazyListState.firstVisibleItemScrollOffset } }
     val firstVisibleItemIndex by remember { derivedStateOf { lazyListState.firstVisibleItemIndex } }
-    val statsBringIntoViewRequester = remember { BringIntoViewRequester() }
-    val coroutineScope = rememberCoroutineScope()
+    val animeDetailsSnapshot = remember(
+        anime,
+        episodes,
+        selectedDubbing,
+        nextUpdate,
+        state.animeMetadata,
+        state.sourceRating,
+        state.isMetadataLoading,
+        state.metadataError,
+    ) {
+        resolveAnimeDetailsSnapshot(
+            anime = anime,
+            watchedCount = state.episodes.count { it.episode.seen || it.episode.lastSecondSeen > 0L },
+            totalEpisodes = state.episodes.size,
+            sourceName = state.source.name,
+            selectedDubbing = selectedDubbing,
+            nextUpdate = nextUpdate,
+            sourceRating = state.sourceRating,
+            animeMetadata = state.animeMetadata,
+            isMetadataLoading = state.isMetadataLoading,
+            metadataError = state.metadataError,
+        )
+    }
 
     // State for episodes expansion
     var episodesExpanded by remember { mutableStateOf(false) }
@@ -301,7 +323,7 @@ fun AnimeScreenAuroraImpl(
 
     // One-time Snackbar when metadata source is not authenticated
     LaunchedEffect(state.metadataError) {
-        if (state.metadataError == AnimeScreenModel.MetadataError.NotAuthenticated &&
+        if (state.metadataError == MetadataLoadError.NotAuthenticated &&
             !metadataAuthHintShown.get() &&
             !metadataHintDismissed &&
             onTrackingClicked != null
@@ -346,8 +368,8 @@ fun AnimeScreenAuroraImpl(
                 anime = anime,
                 scrollOffset = scrollOffset,
                 firstVisibleItemIndex = firstVisibleItemIndex,
-                resolvedCoverUrl = resolvedCover.url,
-                resolvedCoverUrlFallback = resolvedCover.fallbackUrl,
+                resolvedCoverUrl = resolvedCover.coverUrl,
+                resolvedCoverUrlFallback = resolvedCover.coverUrlFallback,
             )
 
             if (useTwoPaneLayout) {
@@ -395,36 +417,29 @@ fun AnimeScreenAuroraImpl(
                             ) {
                                 AnimeHeroContent(
                                     anime = anime,
-                                    episodeCount = episodes.size,
                                     hasWatchingProgress = hasWatchingProgress,
+                                    ratingText = animeDetailsSnapshot.ratingText,
+                                    episodesText = animeDetailsSnapshot.episodesText,
+                                    statusText = animeDetailsSnapshot.statusText,
                                     onContinueWatching = onContinueWatching,
                                     onDubbingClicked = onDubbingClicked,
                                     selectedDubbing = selectedDubbing,
-                                    animeMetadata = state.animeMetadata,
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                AnimeStatsCard(
+                                    snapshot = animeDetailsSnapshot,
+                                    modifier = Modifier.fillMaxWidth(),
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 AnimeInfoCard(
                                     anime = anime,
-                                    episodeCount = episodes.size,
-                                    nextUpdate = nextUpdate,
                                     onTagSearch = onTagSearch,
                                     descriptionExpanded = descriptionExpanded,
                                     genresExpanded = genresExpanded,
                                     onToggleDescription = {
                                         descriptionExpanded = !descriptionExpanded
-                                        if (descriptionExpanded) {
-                                            coroutineScope.launch {
-                                                statsBringIntoViewRequester.bringIntoView()
-                                            }
-                                        }
                                     },
                                     onToggleGenres = { genresExpanded = !genresExpanded },
-                                    animeMetadata = state.animeMetadata,
-                                    isMetadataLoading = state.isMetadataLoading,
-                                    metadataError = state.metadataError,
-                                    onRetryMetadata = onRetryMetadata,
-                                    onLoginClick = { onTrackingClicked?.invoke() },
-                                    statsRequester = statsBringIntoViewRequester,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
@@ -650,33 +665,22 @@ fun AnimeScreenAuroraImpl(
                                     ),
                             ) {
                                 Spacer(modifier = Modifier.height(16.dp))
+                                AnimeStatsCard(
+                                    snapshot = animeDetailsSnapshot,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
                                 AnimeInfoCard(
                                     anime = anime,
-                                    episodeCount = episodes.size,
-                                    nextUpdate = nextUpdate,
                                     onTagSearch = onTagSearch,
                                     descriptionExpanded = descriptionExpanded,
                                     genresExpanded = genresExpanded,
                                     onToggleDescription = {
                                         descriptionExpanded = !descriptionExpanded
-                                        if (descriptionExpanded) {
-                                            coroutineScope.launch {
-                                                statsBringIntoViewRequester.bringIntoView()
-                                            }
-                                        }
                                     },
                                     onToggleGenres = {
                                         genresExpanded = !genresExpanded
                                     },
-                                    animeMetadata = state.animeMetadata,
-                                    isMetadataLoading = state.isMetadataLoading,
-                                    metadataError = state.metadataError,
-                                    onRetryMetadata = onRetryMetadata,
-                                    onLoginClick = {
-                                        onTrackingClicked?.invoke()
-                                    },
-
-                                    statsRequester = statsBringIntoViewRequester,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
 
@@ -852,12 +856,13 @@ fun AnimeScreenAuroraImpl(
                     ) {
                         AnimeHeroContent(
                             anime = anime,
-                            episodeCount = episodes.size,
                             hasWatchingProgress = hasWatchingProgress,
+                            ratingText = animeDetailsSnapshot.ratingText,
+                            episodesText = animeDetailsSnapshot.episodesText,
+                            statusText = animeDetailsSnapshot.statusText,
                             onContinueWatching = onContinueWatching,
                             onDubbingClicked = onDubbingClicked,
                             selectedDubbing = selectedDubbing,
-                            animeMetadata = state.animeMetadata,
                         )
                     }
                 }
@@ -1169,11 +1174,6 @@ private fun AuroraEpisodeSelectionBottomStack(
     }
 }
 
-data class ResolvedCover(
-    val url: String?,
-    val fallbackUrl: String?,
-)
-
 internal fun shouldUseAnimeAuroraTwoPane(deviceClass: AuroraDeviceClass): Boolean {
     return deviceClass == AuroraDeviceClass.TabletExpanded
 }
@@ -1253,31 +1253,13 @@ internal fun resolveCoverUrl(
     state: AnimeScreenModel.State.Success,
     useMetadataCovers: Boolean,
 ): ResolvedCover {
-    if (!useMetadataCovers) {
-        return ResolvedCover(state.anime.thumbnailUrl, null)
-    }
-
-    if (state.isMetadataLoading) {
-        return ResolvedCover(state.anime.thumbnailUrl, null)
-    }
-
-    val metadataCoverUrl = state.animeMetadata?.coverUrl?.takeIf { it.isNotBlank() }
-    val metadataCoverUrlFallback = state.animeMetadata?.coverUrlFallback?.takeIf { it.isNotBlank() }
-
-    return when (state.metadataError) {
-        null -> {
-            if (metadataCoverUrl != null) {
-                ResolvedCover(metadataCoverUrl, metadataCoverUrlFallback ?: state.anime.thumbnailUrl)
-            } else {
-                ResolvedCover(state.anime.thumbnailUrl, null)
-            }
-        }
-        AnimeScreenModel.MetadataError.NetworkError,
-        AnimeScreenModel.MetadataError.NotFound,
-        AnimeScreenModel.MetadataError.NotAuthenticated,
-        AnimeScreenModel.MetadataError.Disabled,
-        -> ResolvedCover(state.anime.thumbnailUrl, null)
-    }
+    return resolveExternalMetadataCover(
+        baseCoverUrl = state.anime.thumbnailUrl.orEmpty(),
+        metadata = state.animeMetadata,
+        isMetadataLoading = state.isMetadataLoading,
+        metadataError = state.metadataError,
+        useMetadataCovers = useMetadataCovers,
+    )
 }
 
 /**

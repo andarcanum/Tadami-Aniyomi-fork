@@ -31,6 +31,7 @@ object MangaMapper {
         version: Long,
         @Suppress("UNUSED_PARAMETER")
         isSyncing: Long,
+        rating: Double,
     ): Manga = Manga(
         id = id,
         source = source,
@@ -49,6 +50,7 @@ object MangaMapper {
         description = description,
         genre = genre,
         status = status,
+        rating = rating.toFloat(),
         thumbnailUrl = thumbnailUrl,
         updateStrategy = updateStrategy,
         initialized = initialized,
@@ -82,6 +84,7 @@ object MangaMapper {
         favoriteModifiedAt: Long?,
         version: Long,
         isSyncing: Long,
+        rating: Double,
         totalCount: Long,
         readCount: Double,
         latestUpload: Long,
@@ -115,6 +118,7 @@ object MangaMapper {
             favoriteModifiedAt,
             version,
             isSyncing,
+            rating,
         ),
         category = category,
         totalChapters = totalCount,

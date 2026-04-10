@@ -22,11 +22,13 @@ import coil3.request.ImageRequest
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.components.resolveAuroraCoverModel
+import eu.kanade.presentation.components.resolveAuroraPosterModelPair
 import eu.kanade.presentation.entries.components.aurora.applyAuroraBlurBackground
 import eu.kanade.presentation.entries.components.aurora.auroraPosterBackgroundSpec
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraPosterScrimBrush
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.tachiyomi.data.coil.AuroraPosterRequest
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.entries.manga.model.asMangaCover
 
@@ -43,12 +45,26 @@ fun FullscreenPosterBackground(
     scrollOffset: Int,
     firstVisibleItemIndex: Int,
     modifier: Modifier = Modifier,
+    resolvedCoverUrl: String? = null,
+    resolvedCoverUrlFallback: String? = null,
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter(AuroraCoverPlaceholderVariant.Wide)
-    val posterModel = resolveAuroraCoverModel(manga.asMangaCover())
+    val posterModelPair = remember(resolvedCoverUrl, resolvedCoverUrlFallback) {
+        resolveAuroraPosterModelPair(
+            primary = resolvedCoverUrl?.takeIf { it.isNotBlank() } ?: resolveAuroraCoverModel(manga.asMangaCover()),
+            fallback = resolvedCoverUrlFallback,
+        )
+    }
+    val posterRequest = remember(posterModelPair) {
+        AuroraPosterRequest(
+            primaryUrl = posterModelPair.primary as? String,
+            fallbackUrl = posterModelPair.fallback as? String,
+        )
+    }
+    val posterModel = posterRequest.primaryUrl ?: posterRequest.fallbackUrl
 
     val hasScrolledAway = firstVisibleItemIndex > 0 || scrollOffset > 100
 
@@ -74,12 +90,13 @@ fun FullscreenPosterBackground(
     val backgroundSpec = remember(
         manga.id,
         manga.coverLastModified,
+        posterRequest.hashCode(),
         containerWidthPx,
         containerHeightPx,
         blurRadiusPx,
     ) {
         auroraPosterBackgroundSpec(
-            baseCacheKey = "manga-bg;${manga.id};${manga.coverLastModified}",
+            baseCacheKey = "manga-bg;${manga.id};${manga.coverLastModified};${posterRequest.hashCode()}",
             containerWidthPx = containerWidthPx,
             containerHeightPx = containerHeightPx,
             blurRadiusPx = blurRadiusPx,
@@ -91,9 +108,9 @@ fun FullscreenPosterBackground(
 
         if (posterModel != null) {
             AsyncImage(
-                model = remember(posterModel, backgroundSpec.sharpMemoryCacheKey) {
+                model = remember(posterRequest, backgroundSpec.sharpMemoryCacheKey) {
                     ImageRequest.Builder(context)
-                        .data(posterModel)
+                        .data(posterRequest)
                         .memoryCacheKey(backgroundSpec.sharpMemoryCacheKey)
                         .build()
                 },
@@ -106,9 +123,9 @@ fun FullscreenPosterBackground(
             )
 
             AsyncImage(
-                model = remember(posterModel, backgroundSpec, blurRadiusPx) {
+                model = remember(posterRequest, backgroundSpec, blurRadiusPx) {
                     ImageRequest.Builder(context)
-                        .data(posterModel)
+                        .data(posterRequest)
                         .applyAuroraBlurBackground(
                             spec = backgroundSpec,
                             blurRadiusPx = blurRadiusPx,
