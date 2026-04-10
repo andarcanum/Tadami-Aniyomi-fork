@@ -562,7 +562,9 @@ class NovelReaderScreenModelTest {
             screenModel.disableTts()
 
             withTimeout(1_000) {
-                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.readerSettings?.ttsEnabled != false) {
+                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.readerSettings?.ttsEnabled !=
+                    false
+                ) {
                     yield()
                 }
             }
