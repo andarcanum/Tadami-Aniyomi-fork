@@ -16,5 +16,8 @@ internal data class ImportedEpubChapter(
 
 internal data class ImportedEpubAsset(
     val sourcePath: String,
-    val targetFileName: String,
-)
+    val targetPath: String,
+) {
+    val targetFileName: String
+        get() = targetPath.substringAfterLast('/')
+}

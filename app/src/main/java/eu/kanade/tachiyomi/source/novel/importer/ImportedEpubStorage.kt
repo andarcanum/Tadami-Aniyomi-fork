@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.source.novel.importer
 
+import eu.kanade.tachiyomi.source.novel.importer.model.ImportedEpubAsset
 import java.io.File
 
 internal class ImportedEpubStorage(
@@ -9,15 +10,27 @@ internal class ImportedEpubStorage(
         return File(baseDirectory, novelId.toString()).apply { mkdirs() }
     }
 
-    fun writeChapter(novelId: Long, chapterId: Long, html: String) {
+    fun chapterHtmlFile(novelId: Long, chapterId: Long): File {
         val chapterDir = File(novelDirectory(novelId), chapterId.toString()).apply { mkdirs() }
-        val indexFile = File(chapterDir, "index.html")
-        indexFile.writeText(html)
+        return File(chapterDir, "index.html")
     }
 
-    fun writeAsset(novelId: Long, asset: ImportedEpubAsset, bytes: ByteArray) {
-        val assetDir = File(novelDirectory(novelId), "assets").apply { mkdirs() }
-        val assetFile = File(assetDir, asset.targetFileName)
+    fun writeChapter(novelId: Long, chapterId: Long, html: String) {
+        chapterHtmlFile(novelId, chapterId).writeText(html)
+    }
+
+    fun readChapterHtml(novelId: Long, chapterId: Long): String {
+        return chapterHtmlFile(novelId, chapterId).readText()
+    }
+
+    fun assetFile(novelId: Long, asset: ImportedEpubAsset): File {
+        return File(File(novelDirectory(novelId), "assets"), asset.targetPath)
+    }
+
+    fun writeAsset(novelId: Long, asset: ImportedEpubAsset, bytes: ByteArray): File {
+        val assetFile = assetFile(novelId, asset)
+        assetFile.parentFile?.mkdirs()
         assetFile.writeBytes(bytes)
+        return assetFile
     }
 }
