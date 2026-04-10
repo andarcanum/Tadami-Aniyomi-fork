@@ -398,6 +398,17 @@ object NovelDownloadQueueManager {
             if (canceled) {
                 if (nextTask.type == NovelQueuedDownloadType.ORIGINAL) {
                     downloadManager.deleteChapter(nextTask.novel, nextTask.chapter.id)
+                } else {
+                    val format = when (nextTask.format) {
+                        NovelQueuedDownloadFormat.TXT -> NovelTranslatedDownloadFormat.TXT
+                        NovelQueuedDownloadFormat.DOCX -> NovelTranslatedDownloadFormat.DOCX
+                        NovelQueuedDownloadFormat.HTML -> NovelTranslatedDownloadFormat.TXT
+                    }
+                    translatedDownloadManager.deleteTranslatedChapter(
+                        novel = nextTask.novel,
+                        chapter = nextTask.chapter,
+                        format = format,
+                    )
                 }
                 removeTask(nextTask.taskId)
                 continue
@@ -482,14 +493,18 @@ object NovelDownloadQueueManager {
         val isActive = summary.activeTotal > 0
 
         if (isActive) {
-            val currentTask = state.tasks.firstOrNull { it.status == NovelQueuedDownloadStatus.DOWNLOADING }
-                ?: state.tasks.firstOrNull { it.status == NovelQueuedDownloadStatus.QUEUED }
-            notifier.onProgressChange(
-                pendingCount = summary.pending,
-                activeCount = summary.active,
-                failedCount = summary.failed,
-                currentTask = currentTask,
-            )
+            if (summary.active > 0) {
+                val currentTask = state.tasks.firstOrNull { it.status == NovelQueuedDownloadStatus.DOWNLOADING }
+                    ?: state.tasks.firstOrNull { it.status == NovelQueuedDownloadStatus.QUEUED }
+                notifier.onProgressChange(
+                    pendingCount = summary.pending,
+                    activeCount = summary.active,
+                    failedCount = summary.failed,
+                    currentTask = currentTask,
+                )
+            } else {
+                notifier.onQueued(summary.pending)
+            }
         } else if (wasActive) {
             notifier.onComplete(summary.failed)
         } else if (summary.failed == 0) {

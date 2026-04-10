@@ -39,11 +39,23 @@ class NovelTranslatedDownloadManager(
         chapter: NovelChapter,
         format: NovelTranslatedDownloadFormat,
     ): Boolean {
-        val baseDir = rootDir ?: return false
-        val sourceDir = baseDir.findFile(getSourceDirName(novel)) ?: return false
-        val novelDir = sourceDir.findFile(getNovelDirName(novel)) ?: return false
         val fileName = buildTranslatedFileName(chapter, format)
-        return novelDir.findFile(fileName)?.exists() == true
+        return translatedFile(novel, fileName)?.exists() == true
+    }
+
+    fun deleteTranslatedChapter(
+        novel: Novel,
+        chapter: NovelChapter,
+        format: NovelTranslatedDownloadFormat,
+    ) {
+        val fileName = buildTranslatedFileName(chapter, format)
+        translatedFileInDirectory(
+            baseDir = rootDir,
+            sourceDirName = getStableSourceDirName(novel),
+            novelDirName = getStableNovelDirName(novel),
+            fileName = fileName,
+        )?.delete()
+        legacyTranslatedFile(novel, fileName)?.delete()
     }
 
     suspend fun exportTranslatedChapter(
@@ -90,10 +102,48 @@ class NovelTranslatedDownloadManager(
         format: NovelTranslatedDownloadFormat,
     ): UniFile? {
         val baseDir = rootDir ?: return null
-        val sourceDir = baseDir.createDirectory(getSourceDirName(novel)) ?: return null
-        val novelDir = sourceDir.createDirectory(getNovelDirName(novel)) ?: return null
+        val sourceDir = baseDir.createDirectory(getStableSourceDirName(novel)) ?: return null
+        val novelDir = sourceDir.createDirectory(getStableNovelDirName(novel)) ?: return null
         val fileName = buildTranslatedFileName(chapter, format)
         return novelDir.findFile(fileName) ?: novelDir.createFile(fileName)
+    }
+
+    private fun translatedFile(
+        novel: Novel,
+        fileName: String,
+    ): UniFile? {
+        val stable = translatedFileInDirectory(
+            baseDir = rootDir,
+            sourceDirName = getStableSourceDirName(novel),
+            novelDirName = getStableNovelDirName(novel),
+            fileName = fileName,
+        )
+        if (stable != null) return stable
+
+        return legacyTranslatedFile(novel, fileName)
+    }
+
+    private fun translatedFileInDirectory(
+        baseDir: UniFile?,
+        sourceDirName: String,
+        novelDirName: String,
+        fileName: String,
+    ): UniFile? {
+        val sourceDir = baseDir?.findFile(sourceDirName) ?: return null
+        val novelDir = sourceDir.findFile(novelDirName) ?: return null
+        return novelDir.findFile(fileName)
+    }
+
+    private fun legacyTranslatedFile(
+        novel: Novel,
+        fileName: String,
+    ): UniFile? {
+        return translatedFileInDirectory(
+            baseDir = rootDir,
+            sourceDirName = getLegacySourceDirName(novel),
+            novelDirName = getLegacyNovelDirName(novel),
+            fileName = fileName,
+        )
     }
 
     private fun buildTranslatedFileName(
@@ -191,12 +241,21 @@ class NovelTranslatedDownloadManager(
         }
     }
 
-    private fun getSourceDirName(novel: Novel): String {
-        val sourceName = sourceManager?.get(novel.source)?.toString()?.ifBlank { null } ?: novel.source.toString()
+    private fun getStableSourceDirName(novel: Novel): String {
+        return DiskUtil.buildValidFilename(novel.source.toString())
+    }
+
+    private fun getStableNovelDirName(novel: Novel): String {
+        return DiskUtil.buildValidFilename(novel.id.toString())
+    }
+
+    private fun getLegacySourceDirName(novel: Novel): String {
+        val sourceName = sourceManager?.getOrStub(novel.source)?.toString()?.ifBlank { null }
+            ?: novel.source.toString()
         return DiskUtil.buildValidFilename(sourceName)
     }
 
-    private fun getNovelDirName(novel: Novel): String {
+    private fun getLegacyNovelDirName(novel: Novel): String {
         val title = novel.title.ifBlank { novel.id.toString() }
         return DiskUtil.buildValidFilename(title)
     }
