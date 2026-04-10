@@ -250,6 +250,9 @@
     <string name="label_manga">Манга</string>
     <string name="label_novel">Ранобэ</string>
     <string name="label_novel_library">Библиотека</string>
+    <string name="novel_library_import_epub">Импортировать EPUB</string>
+    <string name="novel_library_import_success">EPUB успешно импортирован</string>
+    <string name="novel_library_import_failed">Не удалось импортировать EPUB</string>
     <string name="novel_reader_settings_title">Настройки чтения</string>
     <string name="novel_reader_override_source">Переопределить для источника</string>
     <string name="novel_reader_override_summary">Использовать свои настройки только для этого источника</string>

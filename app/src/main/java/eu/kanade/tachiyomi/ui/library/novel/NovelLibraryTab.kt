@@ -21,6 +21,9 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -58,11 +61,13 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import tachiyomi.core.common.i18n.stringResource
+import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.Badge
 import tachiyomi.presentation.core.components.BadgeGroup
 import tachiyomi.presentation.core.components.material.Scaffold
@@ -151,6 +156,27 @@ data object NovelLibraryTab : Tab {
                 snackbarHostState.showSnackbar(context.stringResource(msgRes))
             }
         }
+        val epubImportLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocument(),
+            onResult = { uri ->
+                if (uri != null) {
+                    scope.launchIO {
+                        try {
+                            screenModel.importEpub(uri)
+                            snackbarHostState.showSnackbar(
+                                context.stringResource(AYMR.strings.novel_library_import_success),
+                                duration = SnackbarDuration.Short,
+                            )
+                        } catch (_: Exception) {
+                            snackbarHostState.showSnackbar(
+                                context.stringResource(AYMR.strings.novel_library_import_failed),
+                                duration = SnackbarDuration.Short,
+                            )
+                        }
+                    }
+                }
+            },
+        )
 
         Scaffold(
             topBar = { scrollBehavior ->
@@ -179,6 +205,7 @@ data object NovelLibraryTab : Tab {
                             }
                         }
                     },
+                    onClickImportEpub = { epubImportLauncher.launch(arrayOf("application/epub+zip")) },
                     searchQuery = state.searchQuery,
                     onSearchQueryChange = screenModel::search,
                     scrollBehavior = scrollBehavior,

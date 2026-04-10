@@ -1,8 +1,11 @@
 package eu.kanade.tachiyomi.ui.library.anime
 
 import android.content.res.Configuration
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.graphics.ExperimentalAnimationGraphicsApi
 import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
@@ -28,6 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MoreVert
@@ -277,6 +281,28 @@ data object AnimeLibraryTab : Tab {
         }
 
         val snackbarHostState = remember { SnackbarHostState() }
+        val epubImportLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocument(),
+            onResult = { uri ->
+                if (uri != null) {
+                    val activeNovelScreenModel = novelScreenModel ?: return@rememberLauncherForActivityResult
+                    scope.launchIO {
+                        try {
+                            activeNovelScreenModel.importEpub(uri)
+                            snackbarHostState.showSnackbar(
+                                context.stringResource(AYMR.strings.novel_library_import_success),
+                                duration = SnackbarDuration.Short,
+                            )
+                        } catch (e: Exception) {
+                            snackbarHostState.showSnackbar(
+                                context.stringResource(AYMR.strings.novel_library_import_failed),
+                                duration = SnackbarDuration.Short,
+                            )
+                        }
+                    }
+                }
+            },
+        )
         var showNovelBatchDownloadDialog by remember { mutableStateOf(false) }
         var showNovelBatchChapterPickerDialog by remember { mutableStateOf(false) }
         var novelBatchPickerChapters by remember { mutableStateOf<List<DomainNovelChapter>>(emptyList()) }
@@ -452,6 +478,29 @@ data object AnimeLibraryTab : Tab {
             content = { contentPadding, _ ->
                 val activeNovelScreenModel = novelScreenModel
                     ?: return@TabContent LoadingScreen(Modifier.padding(contentPadding))
+
+                val epubImportLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.OpenDocument(),
+                    onResult = { uri ->
+                        if (uri != null) {
+                            scope.launchIO {
+                                try {
+                                    activeNovelScreenModel.importEpub(uri)
+                                    snackbarHostState.showSnackbar(
+                                        context.stringResource(AYMR.strings.novel_library_import_success),
+                                        duration = SnackbarDuration.Short,
+                                    )
+                                } catch (e: Exception) {
+                                    snackbarHostState.showSnackbar(
+                                        context.stringResource(AYMR.strings.novel_library_import_failed),
+                                        duration = SnackbarDuration.Short,
+                                    )
+                                }
+                            }
+                        }
+                    },
+                )
+
                 NovelLibraryAuroraContent(
                     items = currentNovelCategoryItems,
                     selection = novelState.selection,
@@ -495,6 +544,7 @@ data object AnimeLibraryTab : Tab {
                         }
                         Unit
                     }.takeIf { showContinueViewingButton },
+                    onImportEpub = { epubImportLauncher.launch(arrayOf("application/epub+zip")) },
                     showInlineHeader = false,
                 )
             },
@@ -852,6 +902,7 @@ data object AnimeLibraryTab : Tab {
                                     onRefreshCurrent = onAuroraRefreshCurrent,
                                     onRefreshGlobal = onAuroraRefreshGlobal,
                                     onOpenRandomEntry = onAuroraOpenRandom,
+                                    onImportEpub = { epubImportLauncher.launch(arrayOf("application/epub+zip")) },
                                     categories = auroraCategories,
                                     selectedCategoryIndex = auroraCategoryIndex,
                                     showCategories = showAuroraCategoryTabs,
@@ -1291,6 +1342,7 @@ private fun AuroraLibraryPinnedHeader(
     onRefreshCurrent: () -> Unit,
     onRefreshGlobal: () -> Unit,
     onOpenRandomEntry: () -> Unit,
+    onImportEpub: (() -> Unit)?,
     categories: List<Category>,
     selectedCategoryIndex: Int,
     showCategories: Boolean,
@@ -1424,30 +1476,37 @@ private fun AuroraLibraryPinnedHeader(
                             expanded = showMenu,
                             onDismissRequest = { showMenu = false },
                         ) {
-                            AuroraEntryDropdownMenuItem(
-                                text = stringResource(MR.strings.action_update_library),
-                                leadingIcon = Icons.Filled.Refresh,
-                                onClick = {
-                                    onRefreshCurrent()
-                                    showMenu = false
-                                },
-                            )
-                            AuroraEntryDropdownMenuItem(
-                                text = stringResource(MR.strings.pref_category_library_update),
-                                leadingIcon = Icons.Filled.Refresh,
-                                onClick = {
-                                    onRefreshGlobal()
-                                    showMenu = false
-                                },
-                            )
-                            AuroraEntryDropdownMenuItem(
-                                text = stringResource(MR.strings.action_open_random_manga),
-                                leadingIcon = Icons.Filled.Shuffle,
-                                onClick = {
-                                    onOpenRandomEntry()
-                                    showMenu = false
-                                },
-                            )
+                            auroraLibraryPinnedHeaderMenuItems(
+                                includeImportEpub = onImportEpub != null,
+                            ).forEach { item ->
+                                AuroraEntryDropdownMenuItem(
+                                    text = when (item) {
+                                        AuroraLibraryPinnedHeaderMenuItem.RefreshCurrent ->
+                                            stringResource(MR.strings.action_update_library)
+                                        AuroraLibraryPinnedHeaderMenuItem.RefreshGlobal ->
+                                            stringResource(MR.strings.pref_category_library_update)
+                                        AuroraLibraryPinnedHeaderMenuItem.OpenRandomEntry ->
+                                            stringResource(MR.strings.action_open_random_manga)
+                                        AuroraLibraryPinnedHeaderMenuItem.ImportEpub ->
+                                            stringResource(AYMR.strings.novel_library_import_epub)
+                                    },
+                                    leadingIcon = when (item) {
+                                        AuroraLibraryPinnedHeaderMenuItem.RefreshCurrent,
+                                        AuroraLibraryPinnedHeaderMenuItem.RefreshGlobal -> Icons.Filled.Refresh
+                                        AuroraLibraryPinnedHeaderMenuItem.OpenRandomEntry -> Icons.Filled.Shuffle
+                                        AuroraLibraryPinnedHeaderMenuItem.ImportEpub -> Icons.Filled.Add
+                                    },
+                                    onClick = {
+                                        when (item) {
+                                            AuroraLibraryPinnedHeaderMenuItem.RefreshCurrent -> onRefreshCurrent()
+                                            AuroraLibraryPinnedHeaderMenuItem.RefreshGlobal -> onRefreshGlobal()
+                                            AuroraLibraryPinnedHeaderMenuItem.OpenRandomEntry -> onOpenRandomEntry()
+                                            AuroraLibraryPinnedHeaderMenuItem.ImportEpub -> onImportEpub?.invoke()
+                                        }
+                                        showMenu = false
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -1472,6 +1531,26 @@ private fun AuroraLibraryPinnedHeader(
                 onCategorySelected = onCategorySelected,
                 getCountForCategory = getCountForCategory,
             )
+        }
+    }
+}
+
+internal enum class AuroraLibraryPinnedHeaderMenuItem {
+    RefreshCurrent,
+    RefreshGlobal,
+    OpenRandomEntry,
+    ImportEpub,
+}
+
+internal fun auroraLibraryPinnedHeaderMenuItems(
+    includeImportEpub: Boolean,
+): List<AuroraLibraryPinnedHeaderMenuItem> {
+    return buildList {
+        add(AuroraLibraryPinnedHeaderMenuItem.RefreshCurrent)
+        add(AuroraLibraryPinnedHeaderMenuItem.RefreshGlobal)
+        add(AuroraLibraryPinnedHeaderMenuItem.OpenRandomEntry)
+        if (includeImportEpub) {
+            add(AuroraLibraryPinnedHeaderMenuItem.ImportEpub)
         }
     }
 }

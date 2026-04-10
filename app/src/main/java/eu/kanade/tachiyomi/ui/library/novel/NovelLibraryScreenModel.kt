@@ -1,5 +1,7 @@
 package eu.kanade.tachiyomi.ui.library.novel
 
+import android.app.Application
+
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -16,6 +18,10 @@ import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadManager
 import eu.kanade.tachiyomi.source.model.SManga
+import eu.kanade.tachiyomi.source.novel.IMPORTED_EPUB_STORAGE_DIR
+import eu.kanade.tachiyomi.source.novel.importer.ImportedEpubImporter
+import eu.kanade.tachiyomi.source.novel.importer.ImportedEpubParser
+import eu.kanade.tachiyomi.source.novel.importer.ImportedEpubStorage
 import eu.kanade.tachiyomi.ui.entries.novel.NovelDownloadAction
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
 import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
@@ -48,12 +54,14 @@ import tachiyomi.domain.entries.novel.model.NovelUpdate
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
+import android.net.Uri
 import tachiyomi.domain.items.novelchapter.service.getNovelChapterSort
 import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.library.novel.model.NovelLibrarySort
 import tachiyomi.domain.library.service.LibraryPreferences
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.io.File
 import kotlin.random.Random
 
 class NovelLibraryScreenModel(
@@ -88,6 +96,16 @@ class NovelLibraryScreenModel(
     ),
 ) {
     var activeCategoryIndex: Int by mutableStateOf(0)
+    private val importedEpubImporter by lazy {
+        val application = Injekt.get<Application>()
+        ImportedEpubImporter(
+            context = application,
+            parser = ImportedEpubParser(application),
+            storage = ImportedEpubStorage(
+                File(application.filesDir, IMPORTED_EPUB_STORAGE_DIR),
+            ),
+        )
+    }
 
     init {
         screenModelScope.launch {
@@ -819,6 +837,12 @@ class NovelLibraryScreenModel(
                 randomSortSeed = randomSortSeed,
             )
         }.distinctUntilChanged()
+    }
+
+    suspend fun importEpub(uri: Uri) {
+        withContext(Dispatchers.IO) {
+            importedEpubImporter.import(uri)
+        }
     }
 
     sealed interface Dialog {

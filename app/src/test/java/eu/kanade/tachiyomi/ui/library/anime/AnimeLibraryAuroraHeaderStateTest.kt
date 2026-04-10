@@ -94,4 +94,23 @@ class AnimeLibraryAuroraHeaderStateTest {
             searchQuery = null,
         ) shouldBe true
     }
+
+    @Test
+    fun `aurora pinned header menu includes import action when requested`() {
+        auroraLibraryPinnedHeaderMenuItems(includeImportEpub = true) shouldBe listOf(
+            AuroraLibraryPinnedHeaderMenuItem.RefreshCurrent,
+            AuroraLibraryPinnedHeaderMenuItem.RefreshGlobal,
+            AuroraLibraryPinnedHeaderMenuItem.OpenRandomEntry,
+            AuroraLibraryPinnedHeaderMenuItem.ImportEpub,
+        )
+    }
+
+    @Test
+    fun `aurora pinned header menu omits import action by default`() {
+        auroraLibraryPinnedHeaderMenuItems(includeImportEpub = false) shouldBe listOf(
+            AuroraLibraryPinnedHeaderMenuItem.RefreshCurrent,
+            AuroraLibraryPinnedHeaderMenuItem.RefreshGlobal,
+            AuroraLibraryPinnedHeaderMenuItem.OpenRandomEntry,
+        )
+    }
 }

@@ -393,6 +393,9 @@
     <string name="label_manga">Manga</string>
     <string name="label_novel">Novel</string>
     <string name="label_novel_library">Novel library</string>
+    <string name="novel_library_import_epub">Import EPUB</string>
+    <string name="novel_library_import_success">EPUB imported successfully</string>
+    <string name="novel_library_import_failed">Failed to import EPUB</string>
     <string name="novel_reader_settings_title">Reader settings</string>
     <string name="novel_reader_override_source">Override for this source</string>
     <string name="novel_reader_override_summary">Use custom settings for this source only</string>

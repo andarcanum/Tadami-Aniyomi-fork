@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledIconButton
@@ -114,6 +115,7 @@ fun NovelLibraryAuroraContent(
     onRefresh: () -> Unit,
     onGlobalUpdate: () -> Unit,
     onOpenRandomEntry: () -> Unit,
+    onImportEpub: () -> Unit = {},
     onLongClickNovel: ((LibraryNovel) -> Unit)? = null,
     onContinueReadingClicked: ((LibraryNovel) -> Unit)? = null,
     showInlineHeader: Boolean = true,
@@ -223,6 +225,7 @@ fun NovelLibraryAuroraContent(
                             onRefresh = onRefresh,
                             onGlobalUpdate = onGlobalUpdate,
                             onOpenRandomEntry = onOpenRandomEntry,
+                            onImportEpub = onImportEpub,
                             modifier = Modifier.auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),
                         )
                     }
@@ -282,6 +285,7 @@ fun NovelLibraryAuroraContent(
                             onRefresh = onRefresh,
                             onGlobalUpdate = onGlobalUpdate,
                             onOpenRandomEntry = onOpenRandomEntry,
+                            onImportEpub = onImportEpub,
                             modifier = Modifier.auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),
                         )
                     }
@@ -673,6 +677,7 @@ private fun InlineNovelLibraryHeader(
     onRefresh: () -> Unit,
     onGlobalUpdate: () -> Unit,
     onOpenRandomEntry: () -> Unit,
+    onImportEpub: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
@@ -768,6 +773,14 @@ private fun InlineNovelLibraryHeader(
                                 leadingIcon = Icons.Filled.Shuffle,
                                 onClick = {
                                     onOpenRandomEntry()
+                                    showMenu = false
+                                },
+                            )
+                            AuroraEntryDropdownMenuItem(
+                                text = stringResource(AYMR.strings.novel_library_import_epub),
+                                leadingIcon = Icons.Filled.Add,
+                                onClick = {
+                                    onImportEpub()
                                     showMenu = false
                                 },
                             )
