@@ -22,6 +22,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.theme.AuroraTheme
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
 fun ActivityStreakIndicator(
@@ -59,7 +61,7 @@ fun ActivityStreakIndicator(
         )
         Spacer(modifier = Modifier.width(12.dp))
         Text(
-            text = "Текущая серия:",
+            text = stringResource(MR.strings.achievement_current_streak),
             color = colors.textSecondary,
             fontSize = 14.sp,
         )
@@ -72,7 +74,7 @@ fun ActivityStreakIndicator(
         )
         Spacer(modifier = Modifier.width(4.dp))
         Text(
-            text = "дней",
+            text = stringResource(MR.strings.achievement_days_unit),
             color = colors.textSecondary,
             fontSize = 14.sp,
         )

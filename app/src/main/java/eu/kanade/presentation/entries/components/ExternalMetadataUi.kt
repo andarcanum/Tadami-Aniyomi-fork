@@ -18,6 +18,17 @@ internal fun ExternalMetadata.displayFormat(): String? {
     return format?.uppercase()
 }
 
+/**
+ * Returns display status for external metadata.
+ * TODO: This currently returns hardcoded Russian strings.
+ * Call sites should use stringResource() with the returned key:
+ * - "Завершён" → MR.strings.status_finished
+ * - "Онгоинг" → MR.strings.status_releasing
+ * - "Анонс" → MR.strings.status_not_yet_released
+ * - "Отменён" → MR.strings.status_cancelled
+ * - "На паузе" → MR.strings.status_hiatus
+ * - "Брошен" → MR.strings.status_discontinued
+ */
 internal fun ExternalMetadata.displayStatus(): String? {
     val rawStatus = status?.trim().orEmpty()
     if (rawStatus.isEmpty()) return null

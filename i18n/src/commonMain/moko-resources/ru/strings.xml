@@ -894,4 +894,127 @@
     <string name="pref_aurora_library_card_style">Стиль карточек Aurora</string>
     <string name="pref_aurora_library_card_style_standard">Стандартный</string>
     <string name="pref_aurora_library_card_style_glow_contour">Свечение</string>
+
+    <!-- Novel reader - AI Translation -->
+    <string name="reader_translation_running">Перевод выполняется</string>
+    <string name="reader_translation_running_subtitle">Обновление текста в реальном времени</string>
+    <string name="reader_translation_visible">Показывается перевод</string>
+    <string name="reader_translation_visible_subtitle">Можно быстро переключать оригинал и перевод</string>
+    <string name="reader_translation_cache_ready">Кэш готов</string>
+    <string name="reader_translation_cache_ready_subtitle">Можно быстро переключать оригинал и перевод</string>
+    <string name="reader_translation_ready">Готов к запуску</string>
+    <string name="reader_translation_ready_subtitle">Выберите модель и запустите перевод главы</string>
+    <string name="reader_action_stop_translation">Остановить перевод</string>
+    <string name="reader_action_show_original">Показать оригинал</string>
+    <string name="reader_action_show_translation">Показать перевод</string>
+    <string name="reader_action_start_translation">Запустить перевод</string>
+
+    <!-- Achievement screens -->
+    <string name="achievement_current_streak">Текущая серия:</string>
+    <string name="achievement_days_unit">дней</string>
+    <string name="achievement_no_achievements">Нет достижений</string>
+    <string name="achievement_empty_category">В этой категории пока нет достижений</string>
+    <string name="achievement_comparison_title">Сравнение с прошлым месяцем</string>
+    <string name="achievement_stat_chapters_read">Глав прочитано</string>
+    <string name="achievement_stat_episodes_watched">Эпизодов просмотрено</string>
+    <string name="achievement_stat_app_time">Время в приложении</string>
+    <string name="achievement_stat_unlocked">Достижений получено</string>
+    <string name="achievement_vs_last_month">vs прошлый месяц</string>
+    <string name="achievement_no_data">Нет данных</string>
+    <string name="achievement_year_activity_title">Активность за год</string>
+    <string name="achievement_period_jan_jun">Янв–Июнь</string>
+    <string name="achievement_period_jul_dec">Июль–Дек</string>
+    <string name="achievement_stat_total">Всего: %d</string>
+    <string name="achievement_stat_chapters">Глав: %d</string>
+    <string name="achievement_stat_episodes">Эпизодов: %d</string>
+    <string name="achievement_stat_time">Время: %s</string>
+    <string name="achievement_stat_achievements">Достижений: %d</string>
+    <string name="achievement_no_activity">Нет активности</string>
+    <string name="achievement_hours_minutes">%1$dч %2$dм</string>
+    <string name="achievement_hours">%1$dч</string>
+    <string name="achievement_minutes">%1$dм</string>
+    <string name="achievement_hours_minutes_alt">%1$dч %2$dмин</string>
+    <string name="achievement_minutes_alt">%1$dмин</string>
+
+    <!-- External metadata status labels -->
+    <string name="status_finished">Завершён</string>
+    <string name="status_releasing">Онгоинг</string>
+    <string name="status_not_yet_released">Анонс</string>
+    <string name="status_cancelled">Отменён</string>
+    <string name="status_hiatus">На паузе</string>
+    <string name="status_discontinued">Брошен</string>
+
+    <!-- Anime episode list -->
+    <string name="anime_voiceovers">%d озвучек</string>
+
+    <!-- Home screen default user names -->
+    <string name="default_user_reader">Читатель</string>
+    <string name="default_user_viewer">Зритель</string>
+
+    <!-- Novel reader - AI Translator dialog -->
+    <string name="ai_translator_dialog_title">AI Переводчик</string>
+    <string name="ai_translator_tab_basics">Основные</string>
+    <string name="ai_translator_tab_prompt">Промпт</string>
+    <string name="ai_translator_tab_more">Еще</string>
+    <string name="ai_translator_section_status">Статус и действия</string>
+    <string name="ai_translator_section_status_subtitle">Запуск, остановка и переключение отображения</string>
+    <string name="ai_translator_action_stop">Остановить</string>
+    <string name="ai_translator_action_start">Запустить</string>
+    <string name="ai_translator_action_original">Оригинал</string>
+    <string name="ai_translator_action_translation">Перевод</string>
+    <string name="ai_translator_action_clear_cache">Очистить кэш главы</string>
+    <string name="ai_translator_section_basics">Основные параметры</string>
+    <string name="ai_translator_section_basics_subtitle">Модель, режим промпта и производительность</string>
+    <string name="ai_translator_label_provider">Провайдер</string>
+    <string name="ai_translator_label_model">Модель</string>
+    <string name="ai_translator_label_current_model">Текущая модель</string>
+    <string name="ai_translator_label_prompt_mode">Режим промпта</string>
+    <string name="ai_translator_prompt_mode_classic">Классический</string>
+    <string name="ai_translator_label_translation_style">Стиль перевода</string>
+    <string name="ai_translator_label_prompt_modifiers">Модификаторы промпта</string>
+    <string name="ai_translator_custom_modifier_add">+ Свой</string>
+    <string name="ai_translator_custom_modifier_active">Свой</string>
+    <string name="ai_translator_section_system">Система и кэш</string>
+    <string name="ai_translator_section_system_subtitle">API ключ, кэш и ручной контроль потоков</string>
+    <string name="ai_translator_autostart_english">Автостарт перевода для English</string>
+    <string name="ai_translator_preventive_translation">Превентивный перевод следующей главы (30%%)</string>
+    <string name="ai_translator_label_api_key">API ключ</string>
+    <string name="ai_translator_action_save">Сохранить</string>
+    <string name="ai_translator_action_test_connection">Тест подключения</string>
+    <string name="ai_translator_action_refresh_models">Обновить модели</string>
+    <string name="ai_translator_cache_on">Кэш: ON</string>
+    <string name="ai_translator_cache_off">Кэш: OFF</string>
+    <string name="ai_translator_label_batch">Батч</string>
+    <string name="ai_translator_label_threads">Потоки</string>
+    <string name="ai_translator_action_clear_all_cache">Очистить весь кэш</string>
+    <string name="ai_translator_section_generation">Генерация</string>
+    <string name="ai_translator_section_generation_subtitle">Пресеты и ручные параметры sampling</string>
+    <string name="ai_translator_show_generation">Генерация</string>
+    <string name="ai_translator_hide_generation">Скрыть генерацию</string>
+    <string name="ai_translator_label_reasoning_level">Уровень размышления</string>
+    <string name="ai_translator_label_purpose">Для чего:</string>
+    <string name="ai_translator_label_advantage">Преимущество:</string>
+    <string name="ai_translator_loading_models">Загрузка моделей…</string>
+    <string name="ai_translator_action_refresh_list">Обновить список</string>
+    <string name="ai_translator_label_free_models">Бесплатные модели</string>
+    <string name="ai_translator_select_free_model">Выберите free модель (:free)</string>
+    <string name="ai_translator_select_model">Выберите модель</string>
+    <string name="ai_translator_enter_model_id">Model ID (только :free)</string>
+    <string name="ai_translator_checking">Проверка…</string>
+    <string name="ai_translator_updating">Обновление…</string>
+    <string name="ai_translator_password_label">Пароль %s bridge</string>
+    <string name="ai_translator_action_clear">Очистить</string>
+    <string name="ai_translator_private_connected">%s bridge подключен и разблокирован.</string>
+    <string name="ai_translator_private_needs_unlock">%s bridge подключен. Для работы нужен unlock.</string>
+    <string name="ai_translator_private_rules">%s: используются защищённые правила private bridge и авто-режим без пользовательских модификаторов.</string>
+    <string name="ai_translator_speed_title">Скорость (батч-параллельность)</string>
+    <string name="ai_translator_speed_single">%s: отправка идёт одним запросом на главу. При ошибке включается fallback (batch=40, threads=1).</string>
+    <string name="ai_translator_log_title">Логи</string>
+    <string name="ai_translator_log_subtitle">Диагностика запросов и ответа модели</string>
+    <string name="ai_translator_log_show">Показать</string>
+    <string name="ai_translator_log_hide">Скрыть</string>
+    <string name="ai_translator_log_clear">Очистить</string>
+    <string name="ai_translator_log_empty">Логи пока пусты</string>
+    <string name="ai_translator_custom_prompt_title">Свой модификатор промпта</string>
+    <string name="ai_translator_custom_prompt_hint">Свои инструкции</string>
 </resources>

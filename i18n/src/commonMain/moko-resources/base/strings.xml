@@ -1027,4 +1027,127 @@
     <string name="exception_http">HTTP %d, check website in WebView</string>
     <string name="exception_offline">No Internet connection</string>
     <string name="exception_unknown_host">Couldn\'t reach %s</string>
+
+    <!-- Novel reader - AI Translation -->
+    <string name="reader_translation_running">Translation running</string>
+    <string name="reader_translation_running_subtitle">Real-time text updates</string>
+    <string name="reader_translation_visible">Translation shown</string>
+    <string name="reader_translation_visible_subtitle">Quickly toggle between original and translation</string>
+    <string name="reader_translation_cache_ready">Cache ready</string>
+    <string name="reader_translation_cache_ready_subtitle">Quickly toggle between original and translation</string>
+    <string name="reader_translation_ready">Ready to start</string>
+    <string name="reader_translation_ready_subtitle">Select a model and start translating the chapter</string>
+    <string name="reader_action_stop_translation">Stop translation</string>
+    <string name="reader_action_show_original">Show original</string>
+    <string name="reader_action_show_translation">Show translation</string>
+    <string name="reader_action_start_translation">Start translation</string>
+
+    <!-- Achievement screens -->
+    <string name="achievement_current_streak">Current streak:</string>
+    <string name="achievement_days_unit">days</string>
+    <string name="achievement_no_achievements">No achievements</string>
+    <string name="achievement_empty_category">No achievements in this category yet</string>
+    <string name="achievement_comparison_title">Comparison with last month</string>
+    <string name="achievement_stat_chapters_read">Chapters read</string>
+    <string name="achievement_stat_episodes_watched">Episodes watched</string>
+    <string name="achievement_stat_app_time">Time in app</string>
+    <string name="achievement_stat_unlocked">Achievements unlocked</string>
+    <string name="achievement_vs_last_month">vs last month</string>
+    <string name="achievement_no_data">No data</string>
+    <string name="achievement_year_activity_title">Activity for the year</string>
+    <string name="achievement_period_jan_jun">Jan–Jun</string>
+    <string name="achievement_period_jul_dec">Jul–Dec</string>
+    <string name="achievement_stat_total">Total: %d</string>
+    <string name="achievement_stat_chapters">Chapters: %d</string>
+    <string name="achievement_stat_episodes">Episodes: %d</string>
+    <string name="achievement_stat_time">Time: %s</string>
+    <string name="achievement_stat_achievements">Achievements: %d</string>
+    <string name="achievement_no_activity">No activity</string>
+    <string name="achievement_hours_minutes">%1$dh %2$dm</string>
+    <string name="achievement_hours">%1$dh</string>
+    <string name="achievement_minutes">%1$dm</string>
+    <string name="achievement_hours_minutes_alt">%1$dh %2$dm</string>
+    <string name="achievement_minutes_alt">%1$dm</string>
+
+    <!-- External metadata status labels -->
+    <string name="status_finished">Finished</string>
+    <string name="status_releasing">Releasing</string>
+    <string name="status_not_yet_released">Announced</string>
+    <string name="status_cancelled">Cancelled</string>
+    <string name="status_hiatus">On hiatus</string>
+    <string name="status_discontinued">Discontinued</string>
+
+    <!-- Anime episode list -->
+    <string name="anime_voiceovers">%d voiceovers</string>
+
+    <!-- Home screen default user names -->
+    <string name="default_user_reader">Reader</string>
+    <string name="default_user_viewer">Viewer</string>
+
+    <!-- Novel reader - AI Translator dialog -->
+    <string name="ai_translator_dialog_title">AI Translator</string>
+    <string name="ai_translator_tab_basics">Basics</string>
+    <string name="ai_translator_tab_prompt">Prompt</string>
+    <string name="ai_translator_tab_more">More</string>
+    <string name="ai_translator_section_status">Status and actions</string>
+    <string name="ai_translator_section_status_subtitle">Start, stop and toggle display</string>
+    <string name="ai_translator_action_stop">Stop</string>
+    <string name="ai_translator_action_start">Start</string>
+    <string name="ai_translator_action_original">Original</string>
+    <string name="ai_translator_action_translation">Translation</string>
+    <string name="ai_translator_action_clear_cache">Clear chapter cache</string>
+    <string name="ai_translator_section_basics">Basic parameters</string>
+    <string name="ai_translator_section_basics_subtitle">Model, prompt mode and performance</string>
+    <string name="ai_translator_label_provider">Provider</string>
+    <string name="ai_translator_label_model">Model</string>
+    <string name="ai_translator_label_current_model">Current model</string>
+    <string name="ai_translator_label_prompt_mode">Prompt mode</string>
+    <string name="ai_translator_prompt_mode_classic">Classic</string>
+    <string name="ai_translator_label_translation_style">Translation style</string>
+    <string name="ai_translator_label_prompt_modifiers">Prompt modifiers</string>
+    <string name="ai_translator_custom_modifier_add">+ Custom</string>
+    <string name="ai_translator_custom_modifier_active">Custom</string>
+    <string name="ai_translator_section_system">System and cache</string>
+    <string name="ai_translator_section_system_subtitle">API key, cache and manual thread control</string>
+    <string name="ai_translator_autostart_english">Auto-start translation for English</string>
+    <string name="ai_translator_preventive_translation">Preemptive translation of next chapter (30%%)</string>
+    <string name="ai_translator_label_api_key">API key</string>
+    <string name="ai_translator_action_save">Save</string>
+    <string name="ai_translator_action_test_connection">Test connection</string>
+    <string name="ai_translator_action_refresh_models">Refresh models</string>
+    <string name="ai_translator_cache_on">Cache: ON</string>
+    <string name="ai_translator_cache_off">Cache: OFF</string>
+    <string name="ai_translator_label_batch">Batch</string>
+    <string name="ai_translator_label_threads">Threads</string>
+    <string name="ai_translator_action_clear_all_cache">Clear all cache</string>
+    <string name="ai_translator_section_generation">Generation</string>
+    <string name="ai_translator_section_generation_subtitle">Presets and manual sampling parameters</string>
+    <string name="ai_translator_show_generation">Generation</string>
+    <string name="ai_translator_hide_generation">Hide generation</string>
+    <string name="ai_translator_label_reasoning_level">Reasoning level</string>
+    <string name="ai_translator_label_purpose">Purpose:</string>
+    <string name="ai_translator_label_advantage">Advantage:</string>
+    <string name="ai_translator_loading_models">Loading models…</string>
+    <string name="ai_translator_action_refresh_list">Refresh list</string>
+    <string name="ai_translator_label_free_models">Free models</string>
+    <string name="ai_translator_select_free_model">Select a free model (:free)</string>
+    <string name="ai_translator_select_model">Select a model</string>
+    <string name="ai_translator_enter_model_id">Model ID (only :free)</string>
+    <string name="ai_translator_checking">Checking…</string>
+    <string name="ai_translator_updating">Updating…</string>
+    <string name="ai_translator_password_label">Password for %s bridge</string>
+    <string name="ai_translator_action_clear">Clear</string>
+    <string name="ai_translator_private_connected">%s bridge is connected and unlocked.</string>
+    <string name="ai_translator_private_needs_unlock">%s bridge is connected. Unlock required.</string>
+    <string name="ai_translator_private_rules">%s: protected private bridge rules and auto-mode without user modifiers.</string>
+    <string name="ai_translator_speed_title">Speed (batch parallelism)</string>
+    <string name="ai_translator_speed_single">%s: single request per chapter. On error, fallback (batch=40, threads=1).</string>
+    <string name="ai_translator_log_title">Logs</string>
+    <string name="ai_translator_log_subtitle">Request and response diagnostics</string>
+    <string name="ai_translator_log_show">Show</string>
+    <string name="ai_translator_log_hide">Hide</string>
+    <string name="ai_translator_log_clear">Clear</string>
+    <string name="ai_translator_log_empty">Logs are empty</string>
+    <string name="ai_translator_custom_prompt_title">Custom prompt modifier</string>
+    <string name="ai_translator_custom_prompt_hint">Custom instructions</string>
 </resources>
