@@ -51,6 +51,8 @@ import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.theme.AuroraTheme
 import kotlinx.coroutines.launch
 import tachiyomi.domain.achievement.model.MonthStats
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.stringResource
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -100,7 +102,7 @@ fun AchievementActivityGraph(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "Активность за год",
+                    text = stringResource(MR.strings.achievement_year_activity_title),
                     color = colors.textPrimary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
@@ -110,8 +112,8 @@ fun AchievementActivityGraph(
                 // Индикатор текущего периода
                 Text(
                     text = when (pagerState.currentPage) {
-                        0 -> "Янв–Июнь"
-                        1 -> "Июль–Дек"
+                        0 -> stringResource(MR.strings.achievement_period_jan_jun)
+                        1 -> stringResource(MR.strings.achievement_period_jul_dec)
                         else -> ""
                     },
                     color = colors.accent,
@@ -365,7 +367,7 @@ private fun ActivityTooltipContent(
         // Total activity
         if (stats.totalActivity > 0) {
             Text(
-                text = "Всего: ${stats.totalActivity}",
+                text = stringResource(MR.strings.achievement_stat_total, stats.totalActivity),
                 color = colors.accent,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 12.sp,
@@ -375,7 +377,7 @@ private fun ActivityTooltipContent(
         // Chapters
         if (stats.chaptersRead > 0) {
             Text(
-                text = "Глав: ${stats.chaptersRead}",
+                text = stringResource(MR.strings.achievement_stat_chapters, stats.chaptersRead),
                 color = colors.textSecondary,
                 fontSize = 11.sp,
             )
@@ -384,7 +386,7 @@ private fun ActivityTooltipContent(
         // Episodes
         if (stats.episodesWatched > 0) {
             Text(
-                text = "Эпизодов: ${stats.episodesWatched}",
+                text = stringResource(MR.strings.achievement_stat_episodes, stats.episodesWatched),
                 color = colors.progressCyan,
                 fontSize = 11.sp,
             )
@@ -395,12 +397,12 @@ private fun ActivityTooltipContent(
             val hours = stats.timeInAppMinutes / 60
             val minutes = stats.timeInAppMinutes % 60
             val timeText = if (hours > 0) {
-                "${hours}ч ${minutes}мин"
+                stringResource(MR.strings.achievement_hours_minutes_alt, hours, minutes)
             } else {
-                "${minutes}мин"
+                stringResource(MR.strings.achievement_minutes_alt, minutes)
             }
             Text(
-                text = "Время: $timeText",
+                text = stringResource(MR.strings.achievement_stat_time, timeText),
                 color = colors.textSecondary,
                 fontSize = 11.sp,
             )
@@ -409,7 +411,7 @@ private fun ActivityTooltipContent(
         // Achievements
         if (stats.achievementsUnlocked > 0) {
             Text(
-                text = "Достижений: ${stats.achievementsUnlocked}",
+                text = stringResource(MR.strings.achievement_stat_achievements, stats.achievementsUnlocked),
                 color = colors.accent.copy(alpha = 0.8f),
                 fontSize = 11.sp,
             )
@@ -418,7 +420,7 @@ private fun ActivityTooltipContent(
         // No activity message
         if (stats.totalActivity == 0) {
             Text(
-                text = "Нет активности",
+                text = stringResource(MR.strings.achievement_no_activity),
                 color = colors.textSecondary.copy(alpha = 0.7f),
                 fontSize = 11.sp,
             )

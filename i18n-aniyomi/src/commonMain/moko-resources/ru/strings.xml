@@ -250,6 +250,9 @@
     <string name="label_manga">Манга</string>
     <string name="label_novel">Ранобэ</string>
     <string name="label_novel_library">Библиотека</string>
+    <string name="novel_library_import_epub">Импортировать EPUB</string>
+    <string name="novel_library_import_success">EPUB успешно импортирован</string>
+    <string name="novel_library_import_failed">Не удалось импортировать EPUB</string>
     <string name="novel_reader_settings_title">Настройки чтения</string>
     <string name="novel_reader_override_source">Переопределить для источника</string>
     <string name="novel_reader_override_summary">Использовать свои настройки только для этого источника</string>
@@ -414,6 +417,7 @@
     <string name="novel_reader_tts_loading_voices">Загрузка озвучек…</string>
     <string name="novel_reader_tts_voice_settings">Настройки озвучки</string>
     <string name="novel_reader_tts_behavior_settings">Параметры озвучки</string>
+    <string name="novel_reader_tts_disable">Выключить TTS</string>
     <string name="novel_reader_tts_action_previous">Предыдущий фрагмент</string>
     <string name="novel_reader_tts_action_pause">Пауза</string>
     <string name="novel_reader_tts_action_play">Воспроизвести</string>
@@ -553,6 +557,7 @@
     <string name="novel_translated_download_choose_chapters">Выбрать главы для скачивания</string>
     <string name="novel_translated_download_select_title">Выбор переведённых глав</string>
     <string name="novel_download_queue_started_count">Глав в очереди: %d</string>
+    <string name="novel_download_queue_waiting">Ожидание запуска</string>
     <string name="novel_download_queue_progress">Загрузка... В ожидании: %1$d, Активно: %2$d</string>
     <string name="novel_download_queue_completed">Загрузка завершена</string>
     <string name="novel_download_queue_failed_count">Завершено с ошибками: %d</string>
@@ -872,6 +877,9 @@
     <string name="aurora_change_nickname">Изменить имя</string>
     <string name="aurora_nickname_field_label">Никнейм</string>
     <string name="aurora_nickname_preview">Предпросмотр</string>
+    <string name="home_hub_default_nickname_anime">Зритель</string>
+    <string name="home_hub_default_nickname_manga">Читатель</string>
+    <string name="home_hub_default_nickname_novel">Читатель</string>
     <string name="aurora_nickname_font">Шрифт</string>
     <string name="aurora_nickname_font_size">Размер никнейма: %s</string>
     <string name="aurora_nickname_font_default">По умолчанию</string>

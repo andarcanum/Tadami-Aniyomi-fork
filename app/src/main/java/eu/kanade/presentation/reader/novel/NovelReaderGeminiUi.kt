@@ -13,29 +13,31 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import dev.icerock.moko.resources.StringResource
+import tachiyomi.i18n.MR
 
 internal data class GeminiStatusPresentation(
-    val title: String,
-    val subtitle: String,
+    val titleRes: StringResource,
+    val subtitleRes: StringResource,
 )
 
 internal fun geminiStatusPresentation(uiState: GeminiTranslationUiState): GeminiStatusPresentation {
     return when (uiState) {
         GeminiTranslationUiState.Translating -> GeminiStatusPresentation(
-            title = "Перевод выполняется",
-            subtitle = "Обновление текста в реальном времени",
+            titleRes = MR.strings.reader_translation_running,
+            subtitleRes = MR.strings.reader_translation_running_subtitle,
         )
         GeminiTranslationUiState.CachedVisible -> GeminiStatusPresentation(
-            title = "Показывается перевод",
-            subtitle = "Можно быстро переключать оригинал и перевод",
+            titleRes = MR.strings.reader_translation_visible,
+            subtitleRes = MR.strings.reader_translation_visible_subtitle,
         )
         GeminiTranslationUiState.CachedHidden -> GeminiStatusPresentation(
-            title = "Кэш готов",
-            subtitle = "Можно быстро переключать оригинал и перевод",
+            titleRes = MR.strings.reader_translation_cache_ready,
+            subtitleRes = MR.strings.reader_translation_cache_ready_subtitle,
         )
         GeminiTranslationUiState.Ready -> GeminiStatusPresentation(
-            title = "Готов к запуску",
-            subtitle = "Выберите модель и запустите перевод главы",
+            titleRes = MR.strings.reader_translation_ready,
+            subtitleRes = MR.strings.reader_translation_ready_subtitle,
         )
     }
 }

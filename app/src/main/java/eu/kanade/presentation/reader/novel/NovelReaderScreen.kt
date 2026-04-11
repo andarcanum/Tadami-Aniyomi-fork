@@ -319,6 +319,7 @@ fun NovelReaderScreen(
     onSetTtsLocaleTag: (String) -> Unit = {},
     onSetTtsSpeechRate: (Float) -> Unit = {},
     onSetTtsPitch: (Float) -> Unit = {},
+    onDisableTts: () -> Unit = {},
     onOpenPreviousChapter: ((Long) -> Unit)? = null,
     onOpenNextChapter: ((Long) -> Unit)? = null,
     showReaderUi: Boolean,
@@ -741,6 +742,10 @@ fun NovelReaderScreen(
             basePaddingPx = baseContentPadding.roundToPx(),
         ).toDp()
     }
+    val ttsScrollTopPadding = resolveNovelReaderTtsScrollTopPadding(
+        hasActiveTtsSession = state.ttsUiState.activeSession != null,
+        statusBarTopPadding = statusBarTopPadding,
+    )
     val scrollContentBlocks = remember(state.chapter.id, state.contentBlocks) {
         state.contentBlocks.takeIf { it.isNotEmpty() }
             ?: state.textBlocks.map { NovelReaderScreenModel.ContentBlock.Text(it) }
@@ -2002,7 +2007,7 @@ fun NovelReaderScreen(
                             ),
                         state = textListState,
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            top = contentPaddingPx,
+                            top = contentPaddingPx + ttsScrollTopPadding,
                             bottom = contentPaddingPx,
                             start = state.readerSettings.margin.dp,
                             end = state.readerSettings.margin.dp,
@@ -2951,10 +2956,12 @@ fun NovelReaderScreen(
                         else -> Icons.Outlined.PlayArrow
                     }
                     val quickActionDescription = when {
-                        state.isGeminiTranslating -> "Остановить перевод"
-                        hasTranslationResult && state.isGeminiTranslationVisible -> "Показать оригинал"
-                        hasTranslationResult -> "Показать перевод"
-                        else -> "Запустить перевод"
+                        state.isGeminiTranslating -> stringResource(MR.strings.reader_action_stop_translation)
+                        hasTranslationResult && state.isGeminiTranslationVisible -> stringResource(
+                            MR.strings.reader_action_show_original,
+                        )
+                        hasTranslationResult -> stringResource(MR.strings.reader_action_show_translation)
+                        else -> stringResource(MR.strings.reader_action_start_translation)
                     }
                     val quickActionContainerColor = when {
                         state.isGeminiTranslating -> MaterialTheme.colorScheme.errorContainer
@@ -3329,6 +3336,7 @@ fun NovelReaderScreen(
                         onSetLocaleTag = onSetTtsLocaleTag,
                         onSetSpeechRate = onSetTtsSpeechRate,
                         onSetPitch = onSetTtsPitch,
+                        onDisableTts = onDisableTts,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(
@@ -3967,7 +3975,11 @@ private fun GeminiTranslationDialog(
     } else {
         defaultGenerationPresets
     }
-    val tabTitles = remember { persistentListOf("Основные", "Промпт", "Еще") }
+    val tabTitles = persistentListOf(
+        stringResource(MR.strings.ai_translator_tab_basics),
+        stringResource(MR.strings.ai_translator_tab_prompt),
+        stringResource(MR.strings.ai_translator_tab_more),
+    )
 
     LaunchedEffect(tempProvider) {
         if (tempProvider == NovelTranslationProvider.AIRFORCE) {
@@ -4028,7 +4040,7 @@ private fun GeminiTranslationDialog(
                                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                             ) {
                                 Text(
-                                    text = status.title,
+                                    text = stringResource(status.titleRes),
                                     style = MaterialTheme.typography.titleSmall,
                                 )
                                 Text(
@@ -4038,7 +4050,7 @@ private fun GeminiTranslationDialog(
                                 )
                             }
                             Text(
-                                text = status.subtitle,
+                                text = stringResource(status.subtitleRes),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

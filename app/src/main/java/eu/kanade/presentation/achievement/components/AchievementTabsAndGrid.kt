@@ -18,7 +18,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,7 +30,9 @@ import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.achievement.screenmodel.AchievementScreenState
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.achievement.model.Achievement
+import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.padding
+import tachiyomi.presentation.core.i18n.stringResource
 
 // Этот файл устарел. Используйте AchievementCategoryTabs.kt для табов
 // и LazyColumn с items в AchievementScreen для сетки достижений.
@@ -117,14 +118,14 @@ private fun AuroraEmptyState(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    text = "Нет достижений",
+                    text = stringResource(MR.strings.achievement_no_achievements),
                     color = colors.textPrimary,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.5.sp,
                 )
                 Text(
-                    text = "В этой категории пока нет достижений",
+                    text = stringResource(MR.strings.achievement_empty_category),
                     color = colors.textSecondary.copy(alpha = 0.7f),
                     fontSize = 14.sp,
                 )

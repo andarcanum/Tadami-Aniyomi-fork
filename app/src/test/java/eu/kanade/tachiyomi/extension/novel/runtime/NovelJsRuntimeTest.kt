@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.extension.novel.runtime
 
 import io.kotest.matchers.collections.shouldContain
+import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import org.junit.jupiter.api.Test
 
@@ -146,5 +147,260 @@ class NovelJsRuntimeTest {
         val script = NovelJsModuleRegistry().modules().first { it.name == "fetch.js" }.script
         script.shouldContain("arrayBuffer: function()")
         script.shouldContain("bodyBase64")
+    }
+
+    // ── Fetch default headers parity ─────────────────────────────────────
+
+    @Test
+    fun `fetch module normalizes init with default method GET`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "fetch.js" }.script
+        script.shouldContain("method: \"GET\"")
+    }
+
+    @Test
+    fun `fetch module normalizes init with empty headers object`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "fetch.js" }.script
+        script.shouldContain("headers: {}")
+    }
+
+    @Test
+    fun `fetch module normalizes init with bodyType none`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "fetch.js" }.script
+        script.shouldContain("bodyType: \"none\"")
+    }
+
+    // ── Top-level referrer and origin aliases parity ─────────────────────
+
+    @Test
+    fun `fetch module handles lowercase referer alias`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "fetch.js" }.script
+        script.shouldContain("init.referer")
+    }
+
+    @Test
+    fun `fetch module handles capitalized Referer alias`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "fetch.js" }.script
+        script.shouldContain("init.Referer")
+    }
+
+    @Test
+    fun `fetch module handles capitalized Referrer alias`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "fetch.js" }.script
+        script.shouldContain("init.Referrer")
+    }
+
+    @Test
+    fun `fetch module handles capitalized Origin alias`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "fetch.js" }.script
+        script.shouldContain("init.Origin")
+    }
+
+    @Test
+    fun `fetch module derives referrer from url-like object`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "fetch.js" }.script
+        script.shouldContain("url.referrer")
+        script.shouldContain("url.referer")
+    }
+
+    @Test
+    fun `fetch module derives origin from url-like object`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "fetch.js" }.script
+        script.shouldContain("url.origin")
+    }
+
+    // ── Storage module behavior after settings/web storage split ─────────
+
+    @Test
+    fun `storage module exports storage object`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "storage.js" }.script
+        script.shouldContain(
+            "module.exports = { storage: storage, localStorage: localStorage, sessionStorage: sessionStorage }",
+        )
+    }
+
+    @Test
+    fun `storage module exports localStorage stub`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "storage.js" }.script
+        script.shouldContain("var localStorage = { get: function() { return {}; } }")
+    }
+
+    @Test
+    fun `storage module exports sessionStorage stub`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "storage.js" }.script
+        script.shouldContain("var sessionStorage = { get: function() { return {}; } }")
+    }
+
+    @Test
+    fun `storage module uses native storageGet`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "storage.js" }.script
+        script.shouldContain("__native.storageGet")
+    }
+
+    @Test
+    fun `storage module uses native storageSet`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "storage.js" }.script
+        script.shouldContain("__native.storageSet")
+    }
+
+    @Test
+    fun `storage module uses native storageRemove`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "storage.js" }.script
+        script.shouldContain("__native.storageRemove")
+    }
+
+    @Test
+    fun `storage module uses native storageClear`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "storage.js" }.script
+        script.shouldContain("__native.storageClear")
+    }
+
+    @Test
+    fun `storage module uses native storageKeys`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "storage.js" }.script
+        script.shouldContain("__native.storageKeys")
+    }
+
+    @Test
+    fun `storage module handles expiry in get`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "storage.js" }.script
+        script.shouldContain("parsed.expires")
+        script.shouldContain("now() > parsed.expires")
+    }
+
+    @Test
+    fun `storage module removes expired entries`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "storage.js" }.script
+        script.shouldContain("__native.storageRemove(String(key))")
+    }
+
+    @Test
+    fun `storage module returns raw parsed value when raw flag set`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "storage.js" }.script
+        script.shouldContain("return raw ? parsed : parsed.value")
+    }
+
+    // ── Capability-aware module exports ──────────────────────────────────
+
+    @Test
+    fun `fetch module exports fetchApi function`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "fetch.js" }.script
+        script.shouldContain("fetchApi: fetchApi")
+    }
+
+    @Test
+    fun `fetch module exports fetchText function`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "fetch.js" }.script
+        script.shouldContain("fetchText: fetchText")
+    }
+
+    @Test
+    fun `fetch module exports fetchProto function`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "fetch.js" }.script
+        script.shouldContain("fetchProto: fetchProto")
+    }
+
+    @Test
+    fun `fetch module exports fetchFile function`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "fetch.js" }.script
+        script.shouldContain("fetchFile: fetchFile")
+    }
+
+    @Test
+    fun `cheerio module exports load function`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "cheerio.js" }.script
+        script.shouldContain("module.exports = { load: load }")
+    }
+
+    @Test
+    fun `types constants module requires novelStatus`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "typesConstants.js" }.script
+        script.shouldContain("require(\"@libs/novelStatus\")")
+    }
+
+    @Test
+    fun `types constants module requires defaultCover`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "typesConstants.js" }.script
+        script.shouldContain("require(\"@libs/defaultCover\")")
+    }
+
+    // ── Structured compatibility logging ─────────────────────────────────
+
+    @Test
+    fun `bootstrap script defines console log method`() {
+        val field = NovelJsRuntime::class.java.getDeclaredField("bootstrapScript").apply {
+            isAccessible = true
+        }
+        val script = field.get(null) as String
+        script.shouldContain("log: function()")
+    }
+
+    @Test
+    fun `bootstrap script defines console error method`() {
+        val field = NovelJsRuntime::class.java.getDeclaredField("bootstrapScript").apply {
+            isAccessible = true
+        }
+        val script = field.get(null) as String
+        script.shouldContain("error: function()")
+    }
+
+    @Test
+    fun `bootstrap script defines console warn method`() {
+        val field = NovelJsRuntime::class.java.getDeclaredField("bootstrapScript").apply {
+            isAccessible = true
+        }
+        val script = field.get(null) as String
+        script.shouldContain("warn: function()")
+    }
+
+    @Test
+    fun `bootstrap script defines console info method`() {
+        val field = NovelJsRuntime::class.java.getDeclaredField("bootstrapScript").apply {
+            isAccessible = true
+        }
+        val script = field.get(null) as String
+        script.shouldContain("info: function()")
+    }
+
+    // ── Structured compatibility logging for runtime operations ──────────
+
+    @Test
+    fun `runtime logs plugin id on initialization`() {
+        val field = NovelJsRuntime::class.java.getDeclaredField("LOG_TAG").apply {
+            isAccessible = true
+        }
+        val logTag = field.get(null) as String
+        logTag.shouldContain("NovelJsRuntime")
+    }
+
+    @Test
+    fun `runtime uses consistent log tag`() {
+        val field = NovelJsRuntime::class.java.getDeclaredField("LOG_TAG").apply {
+            isAccessible = true
+        }
+        val logTag = field.get(null) as String
+        logTag shouldBe "NovelJsRuntime"
+    }
+
+    @Test
+    fun `native api logs plugin id for console operations`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "storage.js" }.script
+        script.shouldContain("__native.storageGet")
+        script.shouldContain("__native.storageSet")
+    }
+
+    @Test
+    fun `fetch module logs operation type`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "fetch.js" }.script
+        script.shouldContain("fetchApi")
+        script.shouldContain("fetchText")
+        script.shouldContain("fetchProto")
+    }
+
+    @Test
+    fun `storage module logs capability`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "storage.js" }.script
+        script.shouldContain("storage")
+        script.shouldContain("localStorage")
+        script.shouldContain("sessionStorage")
     }
 }

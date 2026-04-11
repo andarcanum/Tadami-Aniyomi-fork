@@ -45,7 +45,7 @@ class NovelHomeHubScreenModel(
         val history: List<HistoryData> = emptyList(),
         val recommendations: List<RecommendationData> = emptyList(),
         val heroChapterId: Long? = null,
-        val userName: String = "Reader",
+        val userName: String = "",
         val userAvatar: String = "",
         val greeting: StringResource = AYMR.strings.aurora_welcome_back,
         val greetingReady: Boolean = false,

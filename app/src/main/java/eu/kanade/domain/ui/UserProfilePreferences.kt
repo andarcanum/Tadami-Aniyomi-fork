@@ -10,7 +10,7 @@ import tachiyomi.core.common.preference.PreferenceStore
 class UserProfilePreferences(
     private val preferenceStore: PreferenceStore,
 ) {
-    fun name() = preferenceStore.getString("user_profile_name", DEFAULT_NAME)
+    fun name() = preferenceStore.getString("user_profile_name", "")
     fun avatarUrl() = preferenceStore.getString("user_profile_avatar_url", "")
     fun lastOpenedTime() = preferenceStore.getLong("user_profile_last_opened", 0L)
     fun totalLaunches() = preferenceStore.getLong("user_profile_total_launches", 0L)
@@ -198,6 +198,5 @@ class UserProfilePreferences(
         private const val GREETING_EVENT_SEPARATOR = "@"
         private const val RECENT_HISTORY_LIMIT = 3
         private const val GREETING_EVENT_LIMIT = 200
-        const val DEFAULT_NAME = "\u0417\u0440\u0438\u0442\u0435\u043b\u044c"
     }
 }

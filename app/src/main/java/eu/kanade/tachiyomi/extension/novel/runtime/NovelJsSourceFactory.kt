@@ -5,6 +5,7 @@ import eu.kanade.tachiyomi.novelsource.NovelSource
 import kotlinx.serialization.json.Json
 import logcat.LogPriority
 import logcat.logcat
+import tachiyomi.data.extension.novel.NovelPluginKeyValueStore
 import tachiyomi.data.extension.novel.NovelPluginStorage
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 import java.lang.ref.WeakReference
@@ -14,6 +15,8 @@ class NovelJsSourceFactory(
     private val pluginStorage: NovelPluginStorage,
     private val json: Json,
     private val runtimeOverrides: NovelPluginRuntimeOverrides,
+    private val keyValueStore: NovelPluginKeyValueStore,
+    private val assetBindings: NovelPluginAssetBindings,
 ) : NovelPluginSourceFactory {
 
     private val scriptBuilder = NovelPluginScriptBuilder()
@@ -33,6 +36,11 @@ class NovelJsSourceFactory(
             pluginId = plugin.id,
             script = scriptBytes.toString(Charsets.UTF_8),
         )
+        val settingsBridge = NovelPluginSettingsBridge(
+            pluginId = plugin.id,
+            keyValueStore = keyValueStore,
+            json = json,
+        )
         val source = NovelJsSource(
             plugin = plugin,
             script = script,
@@ -42,12 +50,19 @@ class NovelJsSourceFactory(
             filterMapper = filterMapper,
             resultNormalizer = resultNormalizer,
             runtimeOverride = runtimeOverride,
+            settingsBridge = settingsBridge,
         )
+        val hasSettings = plugin.hasSettings
+        val exposedSource: NovelSource = if (hasSettings) {
+            NovelConfigurableJsSource(source)
+        } else {
+            source
+        }
         synchronized(sources) {
             sources.removeAll { it.get() == null }
             sources.add(WeakReference(source))
         }
-        return source
+        return exposedSource
     }
 
     override fun clearRuntimeCaches() {
@@ -62,5 +77,6 @@ class NovelJsSourceFactory(
                 }
             }
         }
+        assetBindings.clearAllCaches()
     }
 }

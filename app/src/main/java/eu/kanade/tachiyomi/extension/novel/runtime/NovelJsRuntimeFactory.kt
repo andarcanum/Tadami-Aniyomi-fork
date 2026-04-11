@@ -52,6 +52,7 @@ class NovelJsRuntimeFactory(
     ) : NovelJsRuntime.NativeApi {
 
         private val domStore = NovelJsDomStore()
+        private val storagePrefix = "storage:"
 
         override fun fetch(url: String, optionsJson: String?): String {
             val resolvedUrl = resolveAlias(url)
@@ -103,23 +104,49 @@ class NovelJsRuntimeFactory(
         }
 
         override fun storageGet(key: String): String? {
-            return keyValueStore.get(pluginId, key)
+            val canonicalKey = storageKey(key)
+            keyValueStore.get(pluginId, canonicalKey)?.let { return it }
+
+            if (!isLegacyStorageKey(key)) {
+                return null
+            }
+
+            val legacyValue = keyValueStore.get(pluginId, key) ?: return null
+            keyValueStore.set(pluginId, canonicalKey, legacyValue)
+            keyValueStore.remove(pluginId, key)
+            return legacyValue
         }
 
         override fun storageSet(key: String, value: String) {
-            keyValueStore.set(pluginId, key, value)
+            keyValueStore.set(pluginId, storageKey(key), value)
+            if (isLegacyStorageKey(key)) {
+                keyValueStore.remove(pluginId, key)
+            }
         }
 
         override fun storageRemove(key: String) {
-            keyValueStore.remove(pluginId, key)
+            keyValueStore.remove(pluginId, storageKey(key))
+            if (isLegacyStorageKey(key)) {
+                keyValueStore.remove(pluginId, key)
+            }
         }
 
         override fun storageClear() {
-            keyValueStore.clear(pluginId)
+            keyValueStore.keys(pluginId)
+                .asSequence()
+                .filter { isManagedStorageKey(it) }
+                .forEach { keyValueStore.remove(pluginId, it) }
         }
 
         override fun storageKeys(): String {
-            return json.encodeToString(keyValueStore.keys(pluginId).toList())
+            return json.encodeToString(
+                keyValueStore.keys(pluginId)
+                    .asSequence()
+                    .filter { isManagedStorageKey(it) }
+                    .map { storageKeyToPublicKey(it) }
+                    .distinct()
+                    .toList(),
+            )
         }
 
         override fun resolveUrl(url: String, base: String?): String {
@@ -145,6 +172,28 @@ class NovelJsRuntimeFactory(
                     }
             }.getOrElse { emptyList() }
             return json.encodeToString(nodes)
+        }
+
+        private fun storageKey(key: String): String {
+            return storagePrefix + key
+        }
+
+        private fun storageKeyToPublicKey(key: String): String {
+            return if (key.startsWith(storagePrefix)) {
+                key.removePrefix(storagePrefix)
+            } else {
+                key
+            }
+        }
+
+        private fun isManagedStorageKey(key: String): Boolean {
+            return key.startsWith(storagePrefix) || isLegacyStorageKey(key)
+        }
+
+        private fun isLegacyStorageKey(key: String): Boolean {
+            return !key.startsWith(storagePrefix) &&
+                !key.startsWith("setting:") &&
+                !key.startsWith("web_")
         }
 
         // DOM Store methods

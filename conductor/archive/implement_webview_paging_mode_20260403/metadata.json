@@ -1,8 +1,0 @@
-{
-  "track_id": "implement_webview_paging_mode_20260403",
-  "type": "feature",
-  "status": "new",
-  "created_at": "2026-04-03T18:30:00Z",
-  "updated_at": "2026-04-03T18:30:00Z",
-  "description": "Implement a new, separate reading mode that uses Webview for pagination, adapted from the lnreader application logic."
-}

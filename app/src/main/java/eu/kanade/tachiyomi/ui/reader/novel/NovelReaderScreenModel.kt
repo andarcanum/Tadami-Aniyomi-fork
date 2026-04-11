@@ -678,6 +678,7 @@ class NovelReaderScreenModel(
             )
             else -> baseContent
         }
+        ttsSessionController.setPreferredTranslatedText(shouldPreferTranslatedTts(settings))
         mutableState.value = State.Success(
             novel = novel,
             chapter = chapter,
@@ -952,31 +953,22 @@ class NovelReaderScreenModel(
         richContentBlocks: List<NovelRichContentBlock>,
         settings: NovelReaderSettings,
     ): eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterModel? {
-        if (!settings.ttsPreferTranslatedText) return null
+        if (!shouldPreferTranslatedTts(settings)) return null
         if (chapterId != currentChapter?.id) return null
         val translatedBlocks = when {
             settings.geminiEnabled && geminiTranslatedByIndex.isNotEmpty() -> {
-                applyGeminiTranslationToContentBlocks(originalContentBlocks)
+                applyGeminiTranslationToContentBlocks(originalContentBlocks, forceTranslation = true)
             }
             settings.googleTranslationEnabled && googleTranslatedByIndex.isNotEmpty() -> {
                 applyGoogleTranslationToContentBlocks(originalContentBlocks)
             }
             else -> return null
         }
-        val translatedRichBlocks = when {
-            settings.geminiEnabled && geminiTranslatedByIndex.isNotEmpty() -> {
-                applyGeminiTranslationToRichContentBlocks(richContentBlocks)
-            }
-            settings.googleTranslationEnabled && googleTranslatedByIndex.isNotEmpty() -> {
-                applyGoogleTranslationToRichContentBlocks(richContentBlocks)
-            }
-            else -> richContentBlocks
-        }
         return ttsChapterModelBuilder.build(
             chapterId = chapterId,
             chapterTitle = chapterTitle,
             contentBlocks = translatedBlocks,
-            richContentBlocks = translatedRichBlocks,
+            richContentBlocks = emptyList(),
             options = NovelTtsChapterModelBuildOptions(
                 includeChapterTitle = settings.ttsReadChapterTitle,
             ),
@@ -1269,6 +1261,27 @@ class NovelReaderScreenModel(
         setOverride = { it.copy(ttsPitch = value) },
     )
 
+    fun disableTts() {
+        val currentState = mutableState.value as? State.Success ?: return
+        if (!currentState.readerSettings.ttsEnabled) return
+        val sourceId = currentNovel?.source ?: return
+        screenModelScope.launch {
+            ttsWordProgressJob?.cancel()
+            ttsWordProgressJob = null
+            pendingTtsStartRequest = null
+            ttsAudioFocusManager.abandonPlaybackFocus()
+            ttsSessionController.stop()
+            if (novelReaderPreferences.getSourceOverride(sourceId) != null) {
+                novelReaderPreferences.updateSourceOverride(sourceId) {
+                    it.copy(ttsEnabled = false)
+                }
+            } else {
+                novelReaderPreferences.ttsEnabled().set(false)
+            }
+            updateContent(currentState.readerSettings.copy(ttsEnabled = false))
+        }
+    }
+
     fun createTtsPlaybackServiceRuntime(): NovelTtsPlaybackServiceRuntime {
         return NovelTtsPlaybackServiceRuntime(
             controller = ttsSessionController,
@@ -1281,14 +1294,14 @@ class NovelReaderScreenModel(
         settings: NovelReaderSettings,
     ) {
         val resolvedChapter = resolveTtsChapter(targetChapterId = currentChapter?.id ?: return) ?: return
-        val sessionModel = if (
-            settings.ttsPreferTranslatedText &&
+        val useTranslatedText = shouldPreferTranslatedTts(settings) &&
             resolvedChapter.translatedModel != null
-        ) {
+        val sessionModel = if (useTranslatedText) {
             resolvedChapter.translatedModel
         } else {
             resolvedChapter.originalModel
         }
+        ttsSessionController.setPreferredTranslatedText(useTranslatedText)
         val utteranceId = startRequest.pageReaderPosition?.let { pageReaderPosition ->
             val utteranceAnchors = eu.kanade.tachiyomi.ui.reader.novel.tts.resolvePlainPageReaderTtsAnchors(
                 textBlocks = pageReaderPosition.blockTexts,
@@ -1308,9 +1321,15 @@ class NovelReaderScreenModel(
         ttsSessionController.startFromCurrentPosition(
             chapterId = resolvedChapter.chapterId,
             utteranceId = utteranceId,
-            preferTranslatedText = settings.ttsPreferTranslatedText,
+            preferTranslatedText = useTranslatedText,
             autoAdvanceChapter = settings.ttsAutoAdvanceChapter,
         )
+    }
+
+    private fun shouldPreferTranslatedTts(settings: NovelReaderSettings): Boolean {
+        return settings.ttsPreferTranslatedText ||
+            isGeminiTranslationVisible ||
+            isGoogleTranslationVisible
     }
     private fun enqueueProgressPersistence(update: PendingProgressPersistence) {
         progressPersistenceScheduled = true
@@ -1529,9 +1548,11 @@ class NovelReaderScreenModel(
         read: Boolean,
         progress: Long,
     ) {
+        val bookmark = currentChapter?.bookmark ?: chapter.bookmark
         val updatedChapter = chapter.copy(
             read = read,
             lastPageRead = progress,
+            bookmark = bookmark,
         )
         currentChapter = updatedChapter
         chapterOrderList = updateNovelReaderChapterProgressList(
@@ -2559,8 +2580,9 @@ class NovelReaderScreenModel(
     }
     private fun applyGeminiTranslationToContentBlocks(
         blocks: List<ContentBlock>,
+        forceTranslation: Boolean = false,
     ): List<ContentBlock> {
-        if (!isGeminiTranslationVisible || geminiTranslatedByIndex.isEmpty()) return blocks
+        if ((!forceTranslation && !isGeminiTranslationVisible) || geminiTranslatedByIndex.isEmpty()) return blocks
         var textIndex = 0
         return blocks.map { block ->
             when (block) {
@@ -2579,8 +2601,9 @@ class NovelReaderScreenModel(
     }
     private fun applyGeminiTranslationToRichContentBlocks(
         blocks: List<NovelRichContentBlock>,
+        forceTranslation: Boolean = false,
     ): List<NovelRichContentBlock> {
-        if (!isGeminiTranslationVisible || geminiTranslatedByIndex.isEmpty()) return blocks
+        if ((!forceTranslation && !isGeminiTranslationVisible) || geminiTranslatedByIndex.isEmpty()) return blocks
         var textIndex = 0
         return blocks.map { block ->
             when (block) {
@@ -2607,8 +2630,9 @@ class NovelReaderScreenModel(
 
     private fun applyGoogleTranslationToRichContentBlocks(
         blocks: List<NovelRichContentBlock>,
+        forceTranslation: Boolean = false,
     ): List<NovelRichContentBlock> {
-        if (!isGoogleTranslationVisible || googleTranslatedByIndex.isEmpty()) return blocks
+        if ((!forceTranslation && !isGoogleTranslationVisible) || googleTranslatedByIndex.isEmpty()) return blocks
         var textIndex = 0
         var replacedCount = 0
         val updated = blocks.map { block ->

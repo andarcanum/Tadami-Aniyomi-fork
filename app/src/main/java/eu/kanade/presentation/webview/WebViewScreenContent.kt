@@ -39,13 +39,21 @@ import com.tadami.aurora.BuildConfig
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.components.WarningBanner
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginAssetBindings
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginIdentitySource
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginWebViewCoordinator
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.util.system.WebViewUtil
 import eu.kanade.tachiyomi.util.system.getHtml
 import eu.kanade.tachiyomi.util.system.sanitizeCloudflareRequestHeaders
 import eu.kanade.tachiyomi.util.system.setDefaultSettings
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Request
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
@@ -63,6 +71,7 @@ fun WebViewScreenContent(
     onClearCookies: (String) -> Unit,
     headers: Map<String, String> = emptyMap(),
     onUrlChange: (String) -> Unit = {},
+    novelSourceId: Long? = null,
 ) {
     val state = rememberWebViewState(url = url, additionalHttpHeaders = headers)
     val navigator = rememberWebViewNavigator()
@@ -70,7 +79,13 @@ fun WebViewScreenContent(
     val uriHandler = LocalUriHandler.current
     val scope = rememberCoroutineScope()
     val network = remember { Injekt.get<NetworkHelper>() }
+    val novelSourceManager = remember { Injekt.get<tachiyomi.domain.source.novel.service.NovelSourceManager>() }
+    val pluginAssetBindings = remember { Injekt.get<NovelPluginAssetBindings>() }
+    val webViewCoordinator = remember { Injekt.get<NovelPluginWebViewCoordinator>() }
     val spoofedPackageName = remember { WebViewUtil.spoofedPackageName(context) }
+    val novelPluginId = remember(novelSourceId) {
+        novelSourceId?.let { novelSourceManager.get(it) as? NovelPluginIdentitySource }?.pluginId
+    }
 
     var currentUrl by remember { mutableStateOf(url) }
     var showCloudflareHelp by remember { mutableStateOf(false) }
@@ -90,6 +105,17 @@ fun WebViewScreenContent(
                 scope.launch {
                     val html = view.getHtml()
                     showCloudflareHelp = "window._cf_chl_opt" in html || "Ray ID is" in html
+                }
+                novelPluginId?.let { pluginId ->
+                    scope.launch {
+                        applyNovelPluginWebViewBindings(
+                            view = view,
+                            pluginId = pluginId,
+                            scope = scope,
+                            assetBindings = pluginAssetBindings,
+                            webViewCoordinator = webViewCoordinator,
+                        )
+                    }
                 }
             }
 
@@ -275,4 +301,89 @@ fun WebViewScreenContent(
             client = webClient,
         )
     }
+}
+
+private suspend fun applyNovelPluginWebViewBindings(
+    view: WebView,
+    pluginId: String,
+    scope: CoroutineScope,
+    assetBindings: NovelPluginAssetBindings,
+    webViewCoordinator: NovelPluginWebViewCoordinator,
+) {
+    val snapshot = webViewCoordinator.syncBeforeParsing(pluginId)
+    val storageInjectionScript = webViewCoordinator.generateStorageInjectionScript(snapshot)
+    val assetInjectionScript = assetBindings.generateAssetInjectionScript(pluginId)
+    val combinedScript = listOf(storageInjectionScript, assetInjectionScript)
+        .filter { it.isNotBlank() }
+        .joinToString("\n\n")
+
+    if (combinedScript.isNotBlank()) {
+        view.evaluateJavascript(combinedScript, null)
+    }
+
+    view.evaluateJavascript(buildWebStorageSnapshotScript()) { result ->
+        val snapshotData = decodeWebStorageSnapshot(result)
+        if (snapshotData != null) {
+            val (localStorage, sessionStorage) = snapshotData
+            if (sessionStorage.isNotEmpty()) {
+                scope.launch {
+                    webViewCoordinator.syncAfterPageMutation(
+                        pluginId = pluginId,
+                        localStorageData = localStorage,
+                        sessionStorageData = sessionStorage,
+                    )
+                }
+            } else {
+                scope.launch {
+                    webViewCoordinator.syncAfterAuthFlow(
+                        pluginId = pluginId,
+                        webStorageData = localStorage,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun buildWebStorageSnapshotScript(): String {
+    return """
+        (function() {
+          function collect(storage) {
+            var result = {};
+            if (!storage) return result;
+            try {
+              for (var index = 0; index < storage.length; index++) {
+                var key = storage.key(index);
+                if (!key) continue;
+                var value = storage.getItem(key);
+                if (value == null) continue;
+                result[key] = String(value);
+              }
+            } catch (e) {}
+            return result;
+          }
+          return JSON.stringify({
+            localStorage: collect(window.localStorage),
+            sessionStorage: collect(window.sessionStorage)
+          });
+        })();
+    """.trimIndent()
+}
+
+private fun decodeWebStorageSnapshot(result: String?): Pair<Map<String, String>, Map<String, String>>? {
+    if (result.isNullOrBlank() || result == "null") return null
+    val rawJson = runCatching { Json.decodeFromString<String>(result) }.getOrNull() ?: return null
+    val element = runCatching { Json.parseToJsonElement(rawJson) }.getOrNull() ?: return null
+    val objectValue = element as? JsonObject ?: return null
+    val localStorage = objectValue["localStorage"].decodeStorageMap()
+    val sessionStorage = objectValue["sessionStorage"].decodeStorageMap()
+    return localStorage to sessionStorage
+}
+
+private fun kotlinx.serialization.json.JsonElement?.decodeStorageMap(): Map<String, String> {
+    val value = this as? JsonObject ?: return emptyMap()
+    return value.mapNotNull { (key, element) ->
+        val stringValue = element.jsonPrimitive.contentOrNull ?: return@mapNotNull null
+        key to stringValue
+    }.toMap()
 }

@@ -4,6 +4,7 @@ import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
 import eu.kanade.tachiyomi.extension.InstallStep
 import eu.kanade.tachiyomi.extension.novel.NovelExtensionManager
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginCapabilities
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -260,5 +261,7 @@ class NovelExtensionsScreenModelTest {
         override suspend fun getSourceData(id: Long): StubNovelSource? = null
 
         override fun getPluginIconUrlForSource(sourceId: Long): String? = null
+
+        override fun getCapabilitiesForSource(sourceId: Long): NovelPluginCapabilities? = null
     }
 }

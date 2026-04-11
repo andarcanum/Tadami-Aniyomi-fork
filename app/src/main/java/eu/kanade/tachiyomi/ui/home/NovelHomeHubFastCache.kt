@@ -20,7 +20,7 @@ class NovelHomeHubFastCache(context: Context) {
         val heroJson = prefs.getString(KEY_HERO, null)
         val historyJson = prefs.getString(KEY_HISTORY, null)
         val recommendationsJson = prefs.getString(KEY_RECOMMENDATIONS, null)
-        val userName = prefs.getString(KEY_USER_NAME, "Reader") ?: "Reader"
+        val userName = prefs.getString(KEY_USER_NAME, "") ?: ""
         val userAvatar = prefs.getString(KEY_USER_AVATAR, "") ?: ""
         val initialized = prefs.getBoolean(KEY_INITIALIZED, false)
 
@@ -86,7 +86,7 @@ data class CachedNovelHomeState(
     val hero: CachedNovelHeroItem? = null,
     val history: List<CachedNovelHistoryItem> = emptyList(),
     val recommendations: List<CachedNovelRecommendationItem> = emptyList(),
-    val userName: String = "Reader",
+    val userName: String = "",
     val userAvatar: String = "",
     val isInitialized: Boolean = false,
 ) {

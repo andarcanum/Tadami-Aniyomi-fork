@@ -1,12 +1,14 @@
 package eu.kanade.tachiyomi.source.novel
 
 import eu.kanade.tachiyomi.extension.novel.NovelExtensionManager
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginCapabilities
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.NovelFilterList
 import eu.kanade.tachiyomi.novelsource.model.NovelsPage
 import eu.kanade.tachiyomi.novelsource.model.SNovel
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.novelsource.online.NovelHttpSource
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -80,6 +82,25 @@ class AndroidNovelSourceManagerTest {
         }
     }
 
+    @Test
+    fun `source manager exposes imported epub source without extension install`() {
+        runTest {
+            val dispatcher = StandardTestDispatcher(testScheduler)
+            val extensionManager = FakeNovelExtensionManager()
+            val repository = FakeNovelStubSourceRepository()
+            val manager = AndroidNovelSourceManager(extensionManager, repository, dispatcher)
+
+            extensionManager.emitSources(emptyList())
+            advanceUntilIdle()
+
+            val source = manager.get(IMPORTED_EPUB_NOVEL_SOURCE_ID)
+
+            source.shouldNotBeNull()
+            source.id shouldBe IMPORTED_EPUB_NOVEL_SOURCE_ID
+            source.name shouldBe IMPORTED_EPUB_NOVEL_SOURCE_NAME
+        }
+    }
+
     private class FakeNovelExtensionManager : NovelExtensionManager {
         private val sourcesState = MutableStateFlow<List<NovelSource>>(emptyList())
 
@@ -103,6 +124,8 @@ class AndroidNovelSourceManagerTest {
         override suspend fun getSourceData(id: Long): StubNovelSource? = null
 
         override fun getPluginIconUrlForSource(sourceId: Long): String? = null
+
+        override fun getCapabilitiesForSource(sourceId: Long): NovelPluginCapabilities? = null
     }
 
     private class FakeNovelStubSourceRepository : NovelStubSourceRepository {

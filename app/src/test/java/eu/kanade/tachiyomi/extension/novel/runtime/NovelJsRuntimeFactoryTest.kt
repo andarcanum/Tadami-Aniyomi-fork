@@ -1,6 +1,9 @@
 package eu.kanade.tachiyomi.extension.novel.runtime
 
 import eu.kanade.tachiyomi.network.NetworkHelper
+import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldContain
+import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import io.mockk.mockk
@@ -299,6 +302,68 @@ class NovelJsRuntimeFactoryTest {
         assertTrue(buffer.readUtf8().contains("\"query\""))
     }
 
+    @Test
+    fun `storage methods preserve legacy raw keys and ignore saved settings keys`() {
+        val nativeApiClass = Class.forName(
+            "eu.kanade.tachiyomi.extension.novel.runtime.NovelJsRuntimeFactory\$NativeApiImpl",
+        )
+        val constructor = nativeApiClass.getDeclaredConstructor(
+            String::class.java,
+            NetworkHelper::class.java,
+            NovelPluginKeyValueStore::class.java,
+            Json::class.java,
+            NovelDomainAliasResolver::class.java,
+        ).apply {
+            isAccessible = true
+        }
+        val store = InMemoryStore()
+        store.set("plugin-a", "cache_key", "legacy-cache-value")
+        store.set("plugin-a", "setting:apiKey", "persisted-settings")
+        val nativeApi = constructor.newInstance(
+            "plugin-a",
+            mockk<NetworkHelper>(relaxed = true),
+            store,
+            Json { ignoreUnknownKeys = true },
+            NovelDomainAliasResolver(NovelPluginRuntimeOverrides()),
+        )
+
+        val storageSet = nativeApiClass.getDeclaredMethod(
+            "storageSet",
+            String::class.java,
+            String::class.java,
+        ).apply {
+            isAccessible = true
+        }
+        val storageGet = nativeApiClass.getDeclaredMethod(
+            "storageGet",
+            String::class.java,
+        ).apply {
+            isAccessible = true
+        }
+        val storageKeys = nativeApiClass.getDeclaredMethod("storageKeys").apply {
+            isAccessible = true
+        }
+        val storageClear = nativeApiClass.getDeclaredMethod("storageClear").apply {
+            isAccessible = true
+        }
+
+        storageGet.invoke(nativeApi, "cache_key") shouldBe "legacy-cache-value"
+        storageSet.invoke(nativeApi, "cache_key", "cache_value")
+
+        store.get("plugin-a", "storage:cache_key") shouldBe "cache_value"
+        store.get("plugin-a", "cache_key") shouldBe null
+        store.get("plugin-a", "setting:apiKey") shouldBe "persisted-settings"
+
+        val keysBeforeClear = storageKeys.invoke(nativeApi) as String
+        keysBeforeClear shouldContain "\"cache_key\""
+        keysBeforeClear shouldNotContain "setting:apiKey"
+
+        storageClear.invoke(nativeApi)
+
+        store.get("plugin-a", "storage:cache_key") shouldBe null
+        store.get("plugin-a", "setting:apiKey") shouldBe "persisted-settings"
+    }
+
     private class InMemoryStore : NovelPluginKeyValueStore {
         private val values = mutableMapOf<String, MutableMap<String, String>>()
 
@@ -372,4 +437,77 @@ class NovelJsRuntimeFactoryTest {
     private data class DriftedWuxiaStringValue(
         @ProtoNumber(1) val value: String? = null,
     )
+
+    // Golden-plugin regression tests for webStorageUtilized behavior
+
+    @Test
+    fun `webStorage stores and retrieves values per plugin`() {
+        val store = InMemoryStore()
+
+        // Simulate kakuyomu-auth plugin storing auth token
+        store.set("kakuyomu-auth", "auth_token", "token_123")
+        store.set("kakuyomu-auth", "user_id", "user_456")
+
+        // Simulate pixiv-novel plugin storing different values
+        store.set("pixiv-novel", "auth_token", "pixiv_token_789")
+        store.set("pixiv-novel", "refresh_token", "refresh_abc")
+
+        // Verify isolation between plugins
+        store.get("kakuyomu-auth", "auth_token") shouldBe "token_123"
+        store.get("pixiv-novel", "auth_token") shouldBe "pixiv_token_789"
+        store.get("kakuyomu-auth", "refresh_token") shouldBe null
+    }
+
+    @Test
+    fun `webStorage removes and clears values correctly`() {
+        val store = InMemoryStore()
+
+        // Setup: store values for hameln-auth plugin
+        store.set("hameln-auth", "session", "session_1")
+        store.set("hameln-auth", "preferences", "pref_data")
+
+        // Test remove
+        store.remove("hameln-auth", "session")
+        store.get("hameln-auth", "session") shouldBe null
+        store.get("hameln-auth", "preferences") shouldBe "pref_data"
+
+        // Test clear
+        store.set("hameln-auth", "session", "session_2")
+        store.clear("hameln-auth")
+        store.get("hameln-auth", "session") shouldBe null
+        store.get("hameln-auth", "preferences") shouldBe null
+    }
+
+    @Test
+    fun `webStorage returns correct keys for plugin`() {
+        val store = InMemoryStore()
+
+        store.set("plugin-a", "key1", "value1")
+        store.set("plugin-a", "key2", "value2")
+        store.set("plugin-b", "key1", "value3")
+
+        val keysA = store.keys("plugin-a")
+        val keysB = store.keys("plugin-b")
+
+        ("key1" in keysA) shouldBe true
+        ("key2" in keysA) shouldBe true
+        ("key3" in keysA) shouldBe false
+        ("key1" in keysB) shouldBe true
+        ("key2" in keysB) shouldBe false
+    }
+
+    @Test
+    fun `webStorage clearAll removes all data`() {
+        val store = InMemoryStore()
+
+        store.set("plugin1", "key", "value")
+        store.set("plugin2", "key", "value")
+
+        store.clearAll()
+
+        store.get("plugin1", "key") shouldBe null
+        store.get("plugin2", "key") shouldBe null
+        store.keys("plugin1").shouldBeEmpty()
+        store.keys("plugin2").shouldBeEmpty()
+    }
 }

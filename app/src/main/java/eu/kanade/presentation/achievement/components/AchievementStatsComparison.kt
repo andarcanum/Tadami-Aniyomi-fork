@@ -41,6 +41,8 @@ import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.theme.AuroraColors
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.achievement.model.MonthStats
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.stringResource
 
 /**
  * Aurora-themed statistics comparison card with glassmorphism effect
@@ -110,7 +112,7 @@ fun AchievementStatsComparison(
             ) {
                 // Header
                 Text(
-                    text = "Сравнение с прошлым месяцем",
+                    text = stringResource(MR.strings.achievement_comparison_title),
                     color = colors.textPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
@@ -133,7 +135,7 @@ fun AchievementStatsComparison(
                             icon = Icons.Default.Book,
                             iconBackground = colors.accent.copy(alpha = 0.15f),
                             iconTint = colors.accent,
-                            label = "Глав прочитано",
+                            label = stringResource(MR.strings.achievement_stat_chapters_read),
                             currentValue = currentMonth.chaptersRead,
                             previousValue = previousMonth.chaptersRead,
                             modifier = Modifier.weight(1f),
@@ -142,7 +144,7 @@ fun AchievementStatsComparison(
                             icon = Icons.Default.Movie,
                             iconBackground = colors.accent.copy(alpha = 0.15f),
                             iconTint = colors.accent,
-                            label = "Эпизодов просмотрено",
+                            label = stringResource(MR.strings.achievement_stat_episodes_watched),
                             currentValue = currentMonth.episodesWatched,
                             previousValue = previousMonth.episodesWatched,
                             modifier = Modifier.weight(1f),
@@ -158,7 +160,7 @@ fun AchievementStatsComparison(
                             icon = Icons.Default.AccessTime,
                             iconBackground = colors.accent.copy(alpha = 0.15f),
                             iconTint = colors.accent,
-                            label = "Время в приложении",
+                            label = stringResource(MR.strings.achievement_stat_app_time),
                             currentValue = currentMonth.timeInAppMinutes,
                             previousValue = previousMonth.timeInAppMinutes,
                             isTimeValue = true,
@@ -168,7 +170,7 @@ fun AchievementStatsComparison(
                             icon = Icons.Default.EmojiEvents,
                             iconBackground = colors.accent.copy(alpha = 0.15f),
                             iconTint = colors.accent,
-                            label = "Достижений получено",
+                            label = stringResource(MR.strings.achievement_stat_unlocked),
                             currentValue = currentMonth.achievementsUnlocked,
                             previousValue = previousMonth.achievementsUnlocked,
                             modifier = Modifier.weight(1f),
@@ -287,14 +289,14 @@ private fun StatItem(
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "vs прошлый месяц",
+                    text = stringResource(MR.strings.achievement_vs_last_month),
                     color = colors.textSecondary.copy(alpha = 0.7f),
                     fontSize = 11.sp,
                 )
             }
         } else {
             Text(
-                text = "Нет данных",
+                text = stringResource(MR.strings.achievement_no_data),
                 color = colors.textSecondary.copy(alpha = 0.5f),
                 fontSize = 11.sp,
             )

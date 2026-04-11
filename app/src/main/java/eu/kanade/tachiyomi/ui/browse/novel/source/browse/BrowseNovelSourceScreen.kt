@@ -38,7 +38,7 @@ import eu.kanade.presentation.browse.novel.components.BrowseNovelSourceToolbar
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.entries.novel.DuplicateNovelDialog
 import eu.kanade.presentation.util.Screen
-import eu.kanade.tachiyomi.novelsource.ConfigurableNovelSource
+import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettings
 import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.NovelFilter
@@ -397,6 +397,6 @@ internal fun novelSourcePreferencesScreenOrNull(
     sourceId: Long,
     source: NovelSource,
 ): NovelSourcePreferencesScreen? {
-    if (source !is ConfigurableNovelSource) return null
+    if (!source.hasVisiblePluginSettings()) return null
     return NovelSourcePreferencesScreen(sourceId)
 }

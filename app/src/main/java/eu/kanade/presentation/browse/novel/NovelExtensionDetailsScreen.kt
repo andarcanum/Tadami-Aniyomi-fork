@@ -35,7 +35,7 @@ import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.TrailingWidgetBuffer
-import eu.kanade.tachiyomi.novelsource.ConfigurableNovelSource
+import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettings
 import eu.kanade.tachiyomi.ui.browse.novel.extension.details.NovelExtensionDetailsScreenModel
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import eu.kanade.tachiyomi.util.system.copyToClipboard
@@ -296,7 +296,7 @@ private fun SourceSwitchPreference(
         },
         widget = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (source.source is ConfigurableNovelSource) {
+                if (source.source.hasVisiblePluginSettings()) {
                     IconButton(onClick = { onClickSourcePreferences(source.source.id) }) {
                         Icon(
                             imageVector = Icons.Outlined.Settings,

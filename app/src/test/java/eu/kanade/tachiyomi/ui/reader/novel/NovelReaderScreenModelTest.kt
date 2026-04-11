@@ -353,6 +353,229 @@ class NovelReaderScreenModelTest {
     }
 
     @Test
+    fun `tts prefers translated text even when translation is hidden`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(
+                    sourceId = novel.source,
+                    chapterHtml = "<h1>Original title</h1><p>Original paragraph</p>",
+                ),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            val settings = state.readerSettings.copy(
+                geminiEnabled = true,
+                ttsPreferTranslatedText = true,
+                ttsReadChapterTitle = false,
+            )
+            val originalBlocks = listOf(
+                NovelReaderScreenModel.ContentBlock.Text("Original paragraph"),
+            )
+            val richBlocks = listOf(
+                NovelRichContentBlock.Paragraph(
+                    segments = listOf(NovelRichTextSegment("Original paragraph")),
+                ),
+            )
+
+            setPrivateField(screenModel, "currentChapter", chapter)
+            setPrivateField(screenModel, "geminiTranslatedByIndex", mapOf(0 to "Переведенный абзац"))
+            setPrivateField(screenModel, "isGeminiTranslationVisible", false)
+
+            val translatedModel = invokePrivateResolveTranslatedTtsChapterModel(
+                target = screenModel,
+                chapterId = chapter.id,
+                chapterTitle = chapter.name,
+                originalContentBlocks = originalBlocks,
+                richContentBlocks = richBlocks,
+                settings = settings,
+            )
+
+            val resolvedTranslatedModel = translatedModel ?: error("Expected translated TTS model")
+            resolvedTranslatedModel.utterances.map { it.text } shouldBe listOf("Переведенный абзац")
+        }
+    }
+
+    @Test
+    fun `tts prefers google translated text even when rich content exists`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(
+                    sourceId = novel.source,
+                    chapterHtml = "<h1>Original title</h1><p>Original paragraph</p>",
+                ),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            val settings = state.readerSettings.copy(
+                googleTranslationEnabled = true,
+                ttsPreferTranslatedText = false,
+                ttsReadChapterTitle = false,
+            )
+            val originalBlocks = listOf(
+                NovelReaderScreenModel.ContentBlock.Text("Original paragraph"),
+            )
+            val richBlocks = listOf(
+                NovelRichContentBlock.Heading(
+                    level = 1,
+                    segments = listOf(NovelRichTextSegment("Original title")),
+                ),
+                NovelRichContentBlock.Paragraph(
+                    segments = listOf(NovelRichTextSegment("Original paragraph")),
+                ),
+            )
+
+            setPrivateField(screenModel, "currentChapter", chapter)
+            setPrivateField(screenModel, "googleTranslatedByIndex", mapOf(0 to "Переведенный абзац"))
+            setPrivateField(screenModel, "isGoogleTranslationVisible", true)
+
+            val translatedModel = invokePrivateResolveTranslatedTtsChapterModel(
+                target = screenModel,
+                chapterId = chapter.id,
+                chapterTitle = chapter.name,
+                originalContentBlocks = originalBlocks,
+                richContentBlocks = richBlocks,
+                settings = settings,
+            )
+
+            val resolvedTranslatedModel = translatedModel ?: error("Expected translated TTS model")
+            resolvedTranslatedModel.utterances.map { it.text } shouldBe listOf("Переведенный абзац")
+        }
+    }
+
+    @Test
+    fun `update content syncs translated preference into tts controller`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(
+                    sourceId = novel.source,
+                    chapterHtml = "<p>Original paragraph</p>",
+                ),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            setPrivateField(screenModel, "googleTranslatedByIndex", mapOf(0 to "Переведённый абзац"))
+            setPrivateField(screenModel, "isGoogleTranslationVisible", true)
+
+            invokePrivateUpdateContent(
+                target = screenModel,
+                settings = state.readerSettings.copy(googleTranslationEnabled = true),
+            )
+
+            val ttsController = getPrivateField<Any>(screenModel, "ttsSessionController")
+            getPrivateField<Boolean>(ttsController, "preferredTranslatedText") shouldBe true
+        }
+    }
+
+    @Test
+    fun `disable tts updates preference and reader state`() {
+        runBlocking {
+            val novelReaderPreferences = createNovelReaderPreferences(
+                ttsEnabled = true,
+            )
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(
+                    sourceId = novel.source,
+                    chapterHtml = "<p>Original paragraph</p>",
+                ),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = novelReaderPreferences,
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            screenModel.disableTts()
+
+            withTimeout(1_000) {
+                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.readerSettings?.ttsEnabled !=
+                    false
+                ) {
+                    yield()
+                }
+            }
+
+            novelReaderPreferences.ttsEnabled().get() shouldBe false
+            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            state.readerSettings.ttsEnabled shouldBe false
+        }
+    }
+
+    @Test
     fun `injects chapter title heading when chapter html has no heading`() {
         runBlocking {
             val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
@@ -2099,6 +2322,12 @@ class NovelReaderScreenModelTest {
                 }
             }
 
+            withTimeout(1_000) {
+                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.chapter?.bookmark != true) {
+                    yield()
+                }
+            }
+
             chapterRepo.lastUpdate?.bookmark shouldBe true
             val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
             state.chapter.bookmark shouldBe true
@@ -2255,6 +2484,34 @@ class NovelReaderScreenModelTest {
         return method.invoke(target) as List<String>
     }
 
+    private fun invokePrivateResolveTranslatedTtsChapterModel(
+        target: Any,
+        chapterId: Long,
+        chapterTitle: String,
+        originalContentBlocks: List<NovelReaderScreenModel.ContentBlock>,
+        richContentBlocks: List<NovelRichContentBlock>,
+        settings: NovelReaderSettings,
+    ): eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterModel? {
+        val method = target.javaClass.getDeclaredMethod(
+            "resolveTranslatedTtsChapterModel",
+            Long::class.javaPrimitiveType,
+            String::class.java,
+            List::class.java,
+            List::class.java,
+            NovelReaderSettings::class.java,
+        )
+        method.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        return method.invoke(
+            target,
+            chapterId,
+            chapterTitle,
+            originalContentBlocks,
+            richContentBlocks,
+            settings,
+        ) as eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterModel?
+    }
+
     private class FakeNovelChapterRepository(
         private val chapter: NovelChapter?,
         private val chaptersByNovel: List<NovelChapter> = emptyList(),
@@ -2362,6 +2619,7 @@ class NovelReaderScreenModelTest {
 
     private fun createNovelReaderPreferences(
         selectedTextTranslationEnabled: Boolean = false,
+        ttsEnabled: Boolean = false,
     ): NovelReaderPreferences {
         return NovelReaderPreferences(
             preferenceStore = ReactivePreferenceStore(),
@@ -2371,6 +2629,7 @@ class NovelReaderScreenModelTest {
             prefs.cacheReadChapters().set(false)
             prefs.cacheReadChaptersUnlimited().set(false)
             prefs.selectedTextTranslationEnabled().set(selectedTextTranslationEnabled)
+            prefs.ttsEnabled().set(ttsEnabled)
         }
     }
 

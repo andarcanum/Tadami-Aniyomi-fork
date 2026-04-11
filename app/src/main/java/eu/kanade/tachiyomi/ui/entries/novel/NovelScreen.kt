@@ -72,8 +72,8 @@ import eu.kanade.presentation.components.NavigatorAdaptiveSheet
 import eu.kanade.presentation.entries.novel.NovelChapterSettingsDialog
 import eu.kanade.presentation.entries.novel.NovelScreen
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
+import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettings
 import eu.kanade.tachiyomi.extension.novel.runtime.resolveUrl
-import eu.kanade.tachiyomi.novelsource.ConfigurableNovelSource
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.source.novel.NovelSiteSource
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
@@ -146,9 +146,10 @@ class NovelScreen(
         val canOpenNovelWebView = rawNovelUrl.isNotBlank()
         val startChapter = screenModel.getResumeOrNextChapter()
         val isReading = screenModel.isReadingStarted()
+        val isSourceConfigurable = successState.source.hasVisiblePluginSettings()
         val actionAvailability = resolveNovelEntryActionAvailability(
             isFavorite = successState.novel.favorite,
-            isSourceConfigurable = successState.source is ConfigurableNovelSource,
+            isSourceConfigurable = isSourceConfigurable,
         )
         val openInWebViewAction: (() -> Unit)? = if (canOpenNovelWebView) {
             {

@@ -350,7 +350,23 @@ internal fun shouldShowNicknameEditHint(
     currentName: String,
     isNameEdited: Boolean,
 ): Boolean {
-    return !isNameEdited && currentName == UserProfilePreferences.DEFAULT_NAME
+    return !isNameEdited && currentName.isBlank()
+}
+
+internal fun resolveHomeHubProfileSection(
+    sections: List<HomeHubSection>,
+    selectedSection: HomeHubSection,
+): HomeHubSection {
+    return selectedSection.takeIf { it in sections } ?: sections.first()
+}
+
+@Composable
+private fun resolveHomeHubDefaultNickname(section: HomeHubSection): String {
+    return when (section) {
+        HomeHubSection.Anime -> stringResource(AYMR.strings.home_hub_default_nickname_anime)
+        HomeHubSection.Manga -> stringResource(AYMR.strings.home_hub_default_nickname_manga)
+        HomeHubSection.Novel -> stringResource(AYMR.strings.home_hub_default_nickname_novel)
+    }
 }
 
 internal fun resolveHomeStreakStylePickerOptions(): List<HomeStreakCounterStyle> {
@@ -755,12 +771,13 @@ object HomeHubTab : Tab {
         val mangaState by mangaScreenModel.state.collectAsState()
         val novelState by novelScreenModel.state.collectAsState()
 
-        val profileSection = sections.first()
+        val profileSection = resolveHomeHubProfileSection(sections, selectedSection)
         val (headerUserName, headerUserAvatar, headerGreeting) = when (profileSection) {
             HomeHubSection.Anime -> Triple(animeState.userName, animeState.userAvatar, animeState.greeting)
             HomeHubSection.Manga -> Triple(mangaState.userName, mangaState.userAvatar, mangaState.greeting)
             HomeHubSection.Novel -> Triple(novelState.userName, novelState.userAvatar, novelState.greeting)
         }
+        val headerDisplayUserName = headerUserName.ifBlank { resolveHomeHubDefaultNickname(profileSection) }
         val headerGreetingReady = when (profileSection) {
             HomeHubSection.Anime -> animeState.greetingReady
             HomeHubSection.Manga -> mangaState.greetingReady
@@ -789,7 +806,7 @@ object HomeHubTab : Tab {
                 HomeHubSection.Anime -> animeState.userName
                 HomeHubSection.Manga -> mangaState.userName
                 HomeHubSection.Novel -> novelState.userName
-            }
+            }.ifBlank { resolveHomeHubDefaultNickname(selectedSection) }
             NameDialog(
                 currentName = currentName,
                 currentStyle = nicknameStyle,
@@ -970,7 +987,7 @@ object HomeHubTab : Tab {
                         }
                     },
                     greeting = headerGreeting,
-                    userName = headerUserName,
+                    userName = headerDisplayUserName,
                     userAvatar = headerUserAvatar,
                     nicknameStyle = nicknameStyle,
                     greetingStyle = greetingStyle,

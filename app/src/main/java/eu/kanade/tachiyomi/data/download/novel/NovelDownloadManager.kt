@@ -47,40 +47,18 @@ class NovelDownloadManager(
     }
 
     fun isChapterDownloaded(novel: Novel, chapterId: Long): Boolean {
-        return chapterFile(novel, chapterId)?.exists() == true ||
+        return resolveChapterFile(novel, chapterId)?.exists() == true ||
             legacyChapterFile(novel, chapterId)?.exists() == true
     }
 
     fun getDownloadCount(novel: Novel): Int {
-        val scopedCount = novelDirectory(novel)?.listFiles()?.size ?: 0
-        if (scopedCount > 0) return scopedCount
-
-        val legacyNovelDir = legacyNovelDirectory(novel)
-        return if (legacyNovelDir?.exists() == true) {
-            legacyNovelDir.listFiles()?.size ?: 0
-        } else {
-            0
-        }
+        return calculateScopedDirectoryCount(novelDirectory(novel, create = false, useStablePath = true)) +
+            calculateScopedDirectoryCount(novelDirectory(novel, create = false, useStablePath = false)) +
+            calculateLegacyDirectoryCount(legacyNovelDirectory(novel))
     }
 
     fun getDownloadCount(): Int {
-        val scopedCount = rootDir
-            ?.listFiles()
-            ?.sumOf { sourceDir -> sourceDir.listFiles()?.size ?: 0 }
-            ?: 0
-        if (scopedCount > 0) return scopedCount
-
-        val legacyBaseDir = legacyRootDir
-        return if (legacyBaseDir?.exists() == true) {
-            legacyBaseDir.listFiles()
-                ?.sumOf { sourceDir ->
-                    sourceDir.listFiles()
-                        ?.sumOf { novelDir -> novelDir.listFiles()?.size ?: 0 }
-                        ?: 0
-                } ?: 0
-        } else {
-            0
-        }
+        return calculateScopedDirectoryCount(rootDir) + calculateLegacyDirectoryCount(legacyRootDir)
     }
 
     fun hasAnyDownloadedChapter(novel: Novel): Boolean {
@@ -88,27 +66,13 @@ class NovelDownloadManager(
     }
 
     fun getDownloadSize(novel: Novel): Long {
-        val scopedSize = novelDirectory(novel)?.let(::calculateScopedDirectorySize) ?: 0L
-        if (scopedSize > 0L) return scopedSize
-
-        val legacyNovelDir = legacyNovelDirectory(novel)
-        return if (legacyNovelDir?.exists() == true) {
-            calculateLegacyDirectorySize(legacyNovelDir)
-        } else {
-            0L
-        }
+        return calculateScopedDirectorySize(novelDirectory(novel, create = false, useStablePath = true)) +
+            calculateScopedDirectorySize(novelDirectory(novel, create = false, useStablePath = false)) +
+            calculateLegacyDirectorySize(legacyNovelDirectory(novel))
     }
 
     fun getDownloadSize(): Long {
-        val scopedSize = rootDir?.let(::calculateScopedDirectorySize) ?: 0L
-        if (scopedSize > 0L) return scopedSize
-
-        val legacyBaseDir = legacyRootDir
-        return if (legacyBaseDir?.exists() == true) {
-            calculateLegacyDirectorySize(legacyBaseDir)
-        } else {
-            0L
-        }
+        return calculateScopedDirectorySize(rootDir) + calculateLegacyDirectorySize(legacyRootDir)
     }
 
     suspend fun downloadChapter(novel: Novel, chapter: NovelChapter): Boolean {
@@ -159,7 +123,7 @@ class NovelDownloadManager(
     }
 
     fun deleteChapter(novel: Novel, chapterId: Long) {
-        chapterFile(novel, chapterId)?.delete()
+        findChapterFile(novel, chapterId)?.delete()
         legacyChapterFile(novel, chapterId)?.delete()
         cleanupDirectories(novel)
         downloadCache?.onChaptersChanged(
@@ -171,7 +135,7 @@ class NovelDownloadManager(
 
     fun deleteChapters(novel: Novel, chapterIds: Collection<Long>) {
         chapterIds.forEach { chapterId ->
-            chapterFile(novel, chapterId)?.delete()
+            findChapterFile(novel, chapterId)?.delete()
             legacyChapterFile(novel, chapterId)?.delete()
         }
         cleanupDirectories(novel)
@@ -188,6 +152,11 @@ class NovelDownloadManager(
             scopedDir.delete()
         }
 
+        val legacyScopedDir = novelDirectory(novel, create = false, useStablePath = false)
+        if (legacyScopedDir?.exists() == true) {
+            legacyScopedDir.delete()
+        }
+
         val legacyDir = legacyNovelDirectory(novel)
         if (legacyDir?.exists() == true) {
             legacyDir.deleteRecursively()
@@ -198,7 +167,7 @@ class NovelDownloadManager(
     }
 
     fun getDownloadedChapterText(novel: Novel, chapterId: Long): String? {
-        chapterFile(novel, chapterId)
+        resolveChapterFile(novel, chapterId)
             ?.takeIf { it.exists() }
             ?.let { file ->
                 runCatching {
@@ -217,8 +186,9 @@ class NovelDownloadManager(
         novel: Novel,
         chapterId: Long,
         create: Boolean = false,
+        useStablePath: Boolean = true,
     ): UniFile? {
-        val novelDir = novelDirectory(novel, create = create) ?: return null
+        val novelDir = novelDirectory(novel, create = create, useStablePath = useStablePath) ?: return null
         val chapterName = "$chapterId.html"
         return if (create) {
             novelDir.findFile(chapterName) ?: novelDir.createFile(chapterName)
@@ -227,34 +197,74 @@ class NovelDownloadManager(
         }
     }
 
-    private fun novelDirectory(novel: Novel, create: Boolean = false): UniFile? {
-        val baseDir = rootDir ?: return null
-        val sourceDir = if (create) {
-            baseDir.createDirectory(getSourceDirName(novel))
-        } else {
-            baseDir.findFile(getSourceDirName(novel))
-        } ?: return null
-        return if (create) {
-            sourceDir.createDirectory(getNovelDirName(novel))
-        } else {
-            sourceDir.findFile(getNovelDirName(novel))
-        }
+    private fun resolveChapterFile(novel: Novel, chapterId: Long): UniFile? {
+        chapterFile(novel, chapterId)?.let { return it }
+        val legacyFile = chapterFile(novel, chapterId, useStablePath = false) ?: return null
+        val stableFile = chapterFile(novel, chapterId, create = true) ?: return legacyFile
+        return runCatching {
+            legacyFile.openInputStream().use { input ->
+                stableFile.openOutputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            if (!legacyFile.delete()) {
+                logcat(LogPriority.WARN) {
+                    "NovelDownloadManager: migrated chapter=$chapterId but could not remove legacy file"
+                }
+            }
+            stableFile
+        }.getOrElse { legacyFile }
+    }
+
+    private fun findChapterFile(novel: Novel, chapterId: Long): UniFile? {
+        return chapterFile(novel, chapterId) ?: chapterFile(novel, chapterId, useStablePath = false)
     }
 
     private fun legacyChapterFile(novel: Novel, chapterId: Long): File? {
         return legacyNovelDirectory(novel)?.let { File(it, "$chapterId.html") }
     }
 
-    private fun legacyNovelDirectory(novel: Novel): File? {
-        val baseDir = legacyRootDir ?: return null
-        return File(baseDir, "${novel.source}/${novel.id}")
+    private fun novelDirectory(
+        novel: Novel,
+        create: Boolean = false,
+        useStablePath: Boolean = true,
+    ): UniFile? {
+        val baseDir = rootDir ?: return null
+        val sourceDirName = if (useStablePath) {
+            getStableSourceDirName(novel)
+        } else {
+            getLegacySourceDirName(novel)
+        }
+        val novelDirName = if (useStablePath) {
+            getStableNovelDirName(novel)
+        } else {
+            getLegacyNovelDirName(novel)
+        }
+        val sourceDir = if (create) {
+            baseDir.createDirectory(sourceDirName)
+        } else {
+            baseDir.findFile(sourceDirName)
+        } ?: return null
+        return if (create) {
+            sourceDir.createDirectory(novelDirName)
+        } else {
+            sourceDir.findFile(novelDirName)
+        }
     }
 
     private fun cleanupDirectories(novel: Novel) {
-        val baseDir = rootDir
-        if (baseDir != null) {
-            val sourceDirName = getSourceDirName(novel)
-            val novelDirName = getNovelDirName(novel)
+        listOf(true, false).forEach { useStablePath ->
+            val baseDir = rootDir ?: return@forEach
+            val sourceDirName = if (useStablePath) {
+                getStableSourceDirName(novel)
+            } else {
+                getLegacySourceDirName(novel)
+            }
+            val novelDirName = if (useStablePath) {
+                getStableNovelDirName(novel)
+            } else {
+                getLegacyNovelDirName(novel)
+            }
             val sourceDir = baseDir.findFile(sourceDirName)
             val novelDir = sourceDir?.findFile(novelDirName)
             if (novelDir != null && novelDir.isDirectory && novelDir.listFiles()?.isEmpty() == true) {
@@ -266,8 +276,8 @@ class NovelDownloadManager(
         }
 
         val legacyBaseDir = legacyRootDir ?: return
-        val legacyNovelDir = File(legacyBaseDir, "${novel.source}/${novel.id}")
-        if (legacyNovelDir.exists() && legacyNovelDir.listFiles().isNullOrEmpty()) {
+        val legacyNovelDir = legacyNovelDirectory(novel)
+        if (legacyNovelDir?.exists() == true && legacyNovelDir.listFiles().isNullOrEmpty()) {
             legacyNovelDir.delete()
         }
         val legacySourceDir = File(legacyBaseDir, "${novel.source}")
@@ -276,26 +286,52 @@ class NovelDownloadManager(
         }
     }
 
-    private fun calculateScopedDirectorySize(directory: UniFile): Long {
-        if (!directory.exists()) return 0L
+    private fun calculateScopedDirectoryCount(directory: UniFile?): Int {
+        if (directory == null || !directory.exists()) return 0
+        if (!directory.isDirectory) return 1
+        return directory.listFiles()?.sumOf(::calculateScopedDirectoryCount) ?: 0
+    }
+
+    private fun calculateScopedDirectorySize(directory: UniFile?): Long {
+        if (directory == null || !directory.exists()) return 0L
         if (!directory.isDirectory) return directory.length().takeIf { it > 0L } ?: 0L
         return directory.listFiles()?.sumOf(::calculateScopedDirectorySize) ?: 0L
     }
 
-    private fun calculateLegacyDirectorySize(directory: File): Long {
-        if (!directory.exists()) return 0L
+    private fun calculateLegacyDirectoryCount(directory: File?): Int {
+        if (directory == null || !directory.exists()) return 0
+        if (directory.isFile) return 1
+        return directory.listFiles()?.sumOf(::calculateLegacyDirectoryCount) ?: 0
+    }
+
+    private fun calculateLegacyDirectorySize(directory: File?): Long {
+        if (directory == null || !directory.exists()) return 0L
         if (directory.isFile) return directory.length()
         return directory.listFiles()?.sumOf(::calculateLegacyDirectorySize) ?: 0L
     }
 
-    private fun getSourceDirName(novel: Novel): String {
-        val sourceName = sourceManager?.get(novel.source)?.toString()?.ifBlank { null } ?: novel.source.toString()
+    private fun getStableSourceDirName(novel: Novel): String {
+        return DiskUtil.buildValidFilename(novel.source.toString())
+    }
+
+    private fun getStableNovelDirName(novel: Novel): String {
+        return DiskUtil.buildValidFilename(novel.id.toString())
+    }
+
+    private fun getLegacySourceDirName(novel: Novel): String {
+        val source = sourceManager?.getOrStub(novel.source)
+        val sourceName = source?.toString()?.ifBlank { null } ?: novel.source.toString()
         return DiskUtil.buildValidFilename(sourceName)
     }
 
-    private fun getNovelDirName(novel: Novel): String {
+    private fun getLegacyNovelDirName(novel: Novel): String {
         val title = novel.title.ifBlank { novel.id.toString() }
         return DiskUtil.buildValidFilename(title)
+    }
+
+    private fun legacyNovelDirectory(novel: Novel): File? {
+        val baseDir = legacyRootDir ?: return null
+        return File(baseDir, "${novel.source}/${novel.id}")
     }
 
     private companion object {

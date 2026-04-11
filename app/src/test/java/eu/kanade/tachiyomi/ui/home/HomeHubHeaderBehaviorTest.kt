@@ -176,7 +176,7 @@ class HomeHubHeaderBehaviorTest {
     @Test
     fun `shouldShowNicknameEditHint returns true for default untouched nickname`() {
         shouldShowNicknameEditHint(
-            currentName = "\u0417\u0440\u0438\u0442\u0435\u043b\u044c",
+            currentName = "",
             isNameEdited = false,
         ) shouldBe true
     }
@@ -244,5 +244,21 @@ class HomeHubHeaderBehaviorTest {
     @Test
     fun `resolveHomeHubHeaderTintSecondaryAlpha scales down primary alpha`() {
         resolveHomeHubHeaderTintSecondaryAlpha(primaryAlpha = 0.12f) shouldBe 0.06f
+    }
+
+    @Test
+    fun `resolveHomeHubProfileSection returns selected section when it exists`() {
+        resolveHomeHubProfileSection(
+            sections = listOf(HomeHubSection.Anime, HomeHubSection.Manga, HomeHubSection.Novel),
+            selectedSection = HomeHubSection.Novel,
+        ) shouldBe HomeHubSection.Novel
+    }
+
+    @Test
+    fun `resolveHomeHubProfileSection falls back to first section when selected is missing`() {
+        resolveHomeHubProfileSection(
+            sections = listOf(HomeHubSection.Manga, HomeHubSection.Novel),
+            selectedSection = HomeHubSection.Anime,
+        ) shouldBe HomeHubSection.Manga
     }
 }

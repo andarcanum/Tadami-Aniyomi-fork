@@ -20,7 +20,9 @@ import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.components.SearchToolbar
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.Pill
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.theme.active
@@ -37,6 +39,7 @@ fun LibraryToolbar(
     onClickRefresh: () -> Unit,
     onClickGlobalUpdate: () -> Unit,
     onClickOpenRandomEntry: () -> Unit,
+    onClickImportEpub: (() -> Unit)? = null,
     searchQuery: String?,
     onSearchQueryChange: (String?) -> Unit,
     scrollBehavior: TopAppBarScrollBehavior?,
@@ -57,6 +60,7 @@ fun LibraryToolbar(
         onClickRefresh = onClickRefresh,
         onClickGlobalUpdate = onClickGlobalUpdate,
         onClickOpenRandomEntry = onClickOpenRandomEntry,
+        onClickImportEpub = onClickImportEpub,
         scrollBehavior = scrollBehavior,
         navigateUp = navigateUp,
     )
@@ -72,6 +76,7 @@ private fun LibraryRegularToolbar(
     onClickRefresh: () -> Unit,
     onClickGlobalUpdate: () -> Unit,
     onClickOpenRandomEntry: () -> Unit,
+    onClickImportEpub: (() -> Unit)?,
     scrollBehavior: TopAppBarScrollBehavior?,
     navigateUp: (() -> Unit)?,
 ) {
@@ -98,27 +103,43 @@ private fun LibraryRegularToolbar(
         onChangeSearchQuery = onSearchQueryChange,
         actions = {
             val filterTint = if (hasFilters) MaterialTheme.colorScheme.active else LocalContentColor.current
-            AppBarActions(
-                persistentListOf(
-                    AppBar.Action(
-                        title = stringResource(MR.strings.action_filter),
-                        icon = Icons.Outlined.FilterList,
-                        iconTint = filterTint,
-                        onClick = onClickFilter,
-                    ),
+            val overflowActions = buildList {
+                add(
                     AppBar.OverflowAction(
                         title = stringResource(MR.strings.action_update_library),
                         onClick = onClickGlobalUpdate,
                     ),
+                )
+                add(
                     AppBar.OverflowAction(
                         title = stringResource(MR.strings.action_update_category),
                         onClick = onClickRefresh,
                     ),
+                )
+                add(
                     AppBar.OverflowAction(
                         title = stringResource(MR.strings.action_open_random_manga),
                         onClick = onClickOpenRandomEntry,
                     ),
-                ),
+                )
+                onClickImportEpub?.let { importAction ->
+                    add(
+                        AppBar.OverflowAction(
+                            title = stringResource(AYMR.strings.novel_library_import_epub),
+                            onClick = importAction,
+                        ),
+                    )
+                }
+            }
+            AppBarActions(
+                (
+                    overflowActions + AppBar.Action(
+                        title = stringResource(MR.strings.action_filter),
+                        icon = Icons.Outlined.FilterList,
+                        iconTint = filterTint,
+                        onClick = onClickFilter,
+                    )
+                    ).toImmutableList(),
             )
         },
         scrollBehavior = scrollBehavior,
