@@ -45,6 +45,20 @@ sealed interface NovelDownloadCacheEvent {
     ) : NovelDownloadCacheEvent
 }
 
+sealed interface NovelDownloadCacheEvent {
+    data object InvalidateAll : NovelDownloadCacheEvent
+
+    data class ChaptersChanged(
+        val novelId: Long,
+        val chapterIds: Set<Long>,
+        val downloaded: Boolean,
+    ) : NovelDownloadCacheEvent
+
+    data class NovelRemoved(
+        val novelId: Long,
+    ) : NovelDownloadCacheEvent
+}
+
 /**
  * Lightweight in-memory cache for per-novel download presence.
  *
