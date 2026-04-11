@@ -1,7 +1,8 @@
 package eu.kanade.tachiyomi.extension.novel
 
 import eu.kanade.tachiyomi.extension.novel.api.NovelPluginApiFacade
-import eu.kanade.tachiyomi.extension.novel.withNormalizedLang
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginCapabilities
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginCapabilitySource
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -71,6 +72,11 @@ class DefaultNovelExtensionManager(
 
     override fun getPluginIconUrlForSource(sourceId: Long): String? {
         return installedPluginIconUrls[sourceId]
+    }
+
+    override fun getCapabilitiesForSource(sourceId: Long): NovelPluginCapabilities? {
+        val source = installedSources.value.firstOrNull { it.id == sourceId } ?: return null
+        return (source as? NovelPluginCapabilitySource)?.pluginCapabilities
     }
 
     private fun applyInstalledSnapshot(normalized: List<NovelPlugin.Installed>) {

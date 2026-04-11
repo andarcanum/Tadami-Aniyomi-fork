@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.extension.novel
 
 import eu.kanade.tachiyomi.extension.novel.api.NovelPluginApiFacade
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginCapabilities
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginCapabilitySource
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.flow.Flow
@@ -187,6 +189,88 @@ class DefaultNovelExtensionManagerTest {
         stub?.name shouldBe installed.name
     }
 
+    @Test
+    fun `getCapabilitiesForSource returns capabilities for capability-bearing source`() = runTest {
+        val repo = FakePluginRepository()
+        val api = FakePluginApi(emptyList())
+        val installer = FakePluginInstaller(repo)
+        val expectedCapabilities = NovelPluginCapabilities(
+            hasParsePage = true,
+            hasResolveUrl = false,
+            hasFetchImage = true,
+        )
+        val sourceFactory = FakeSourceFactory(capabilities = expectedCapabilities)
+        val manager = DefaultNovelExtensionManager(repo, api, installer, sourceFactory)
+
+        val installed = NovelPlugin.Installed(
+            id = "capable-source",
+            name = "Capable Source",
+            site = "https://capable.example",
+            lang = "en",
+            version = 1,
+            url = "https://capable.example/plugin.js",
+            iconUrl = null,
+            customJs = null,
+            customCss = null,
+            hasSettings = false,
+            sha256 = "ddd",
+            repoUrl = "https://repo.capable",
+        )
+        repo.upsert(installed)
+
+        val sources = manager.installedSourcesFlow.first { it.isNotEmpty() }
+        val sourceId = sources.first().id
+
+        val capabilities = manager.getCapabilitiesForSource(sourceId)
+
+        capabilities shouldBe expectedCapabilities
+    }
+
+    @Test
+    fun `getCapabilitiesForSource returns null for non-capability source`() = runTest {
+        val repo = FakePluginRepository()
+        val api = FakePluginApi(emptyList())
+        val installer = FakePluginInstaller(repo)
+        val sourceFactory = FakeSourceFactory(capabilities = null)
+        val manager = DefaultNovelExtensionManager(repo, api, installer, sourceFactory)
+
+        val installed = NovelPlugin.Installed(
+            id = "basic-source",
+            name = "Basic Source",
+            site = "https://basic.example",
+            lang = "en",
+            version = 1,
+            url = "https://basic.example/plugin.js",
+            iconUrl = null,
+            customJs = null,
+            customCss = null,
+            hasSettings = false,
+            sha256 = "eee",
+            repoUrl = "https://repo.basic",
+        )
+        repo.upsert(installed)
+
+        val sources = manager.installedSourcesFlow.first { it.isNotEmpty() }
+        val sourceId = sources.first().id
+
+        val capabilities = manager.getCapabilitiesForSource(sourceId)
+
+        capabilities shouldBe null
+    }
+
+    @Test
+    fun `getCapabilitiesForSource returns null for unknown source id`() = runTest {
+        val repo = FakePluginRepository()
+        val api = FakePluginApi(emptyList())
+        val installer = FakePluginInstaller(repo)
+        val sourceFactory = FakeSourceFactory()
+        val manager = DefaultNovelExtensionManager(repo, api, installer, sourceFactory)
+
+        val capabilities = manager.getCapabilitiesForSource(999L)
+
+        capabilities shouldBe null
+    }
+
     private class FakePluginApi(
         private val plugins: List<NovelPlugin.Available>,
     ) : NovelPluginApiFacade {
@@ -228,9 +312,15 @@ class DefaultNovelExtensionManagerTest {
         }
     }
 
-    private class FakeSourceFactory : NovelPluginSourceFactory {
+    private class FakeSourceFactory(
+        private val capabilities: NovelPluginCapabilities? = null,
+    ) : NovelPluginSourceFactory {
         override fun create(plugin: NovelPlugin.Installed): NovelSource {
-            return FakeSource(sourceIdFor(plugin.id), plugin.name, plugin.lang)
+            return if (capabilities != null) {
+                FakeSourceWithCapabilities(sourceIdFor(plugin.id), plugin.name, plugin.lang, capabilities)
+            } else {
+                FakeSource(sourceIdFor(plugin.id), plugin.name, plugin.lang)
+            }
         }
 
         fun sourceIdFor(pluginId: String): Long = NovelPluginId.toSourceId(pluginId)
@@ -241,4 +331,13 @@ class DefaultNovelExtensionManagerTest {
         override val name: String,
         override val lang: String,
     ) : NovelSource
+
+    private data class FakeSourceWithCapabilities(
+        override val id: Long,
+        override val name: String,
+        override val lang: String,
+        private val caps: NovelPluginCapabilities,
+    ) : NovelSource, NovelPluginCapabilitySource {
+        override val pluginCapabilities: NovelPluginCapabilities = caps
+    }
 }

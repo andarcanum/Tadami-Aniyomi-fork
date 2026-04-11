@@ -13,12 +13,57 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 
+/**
+ * Structured logger for plugin compatibility issues.
+ * Logs include plugin id, operation, capability, and failure category
+ * to help debug compatibility issues with specific plugins.
+ */
+class CompatibilityLogger(
+    private val pluginId: String,
+) {
+    fun logOperation(operation: String, capability: String, details: String? = null) {
+        val message = buildString {
+            append("plugin=$pluginId")
+            append(" op=$operation")
+            append(" cap=$capability")
+            if (details != null) append(" details=$details")
+        }
+        Log.d(LOG_TAG, message)
+    }
+
+    fun logFailure(operation: String, capability: String, category: String, error: Throwable? = null) {
+        val message = buildString {
+            append("plugin=$pluginId")
+            append(" op=$operation")
+            append(" cap=$capability")
+            append(" failure=$category")
+            if (error != null) append(" error=${error.message}")
+        }
+        Log.e(LOG_TAG, message, error)
+    }
+
+    fun logCapabilityCheck(capability: String, supported: Boolean) {
+        val message = buildString {
+            append("plugin=$pluginId")
+            append(" cap=$capability")
+            append(" supported=$supported")
+        }
+        Log.i(LOG_TAG, message)
+    }
+
+    companion object {
+        private const val LOG_TAG = "NovelCompatibility"
+    }
+}
+
 // Runtime boundary: keep J2V8-specific details inside this class so callers only see the plugin API.
 class NovelJsRuntime(
     private val pluginId: String,
     private val nativeApi: NativeApi,
     private val moduleRegistry: NovelJsModuleRegistry = NovelJsModuleRegistry(),
 ) : Closeable {
+
+    private val compatibilityLogger = CompatibilityLogger(pluginId)
 
     private val runtimeExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "NovelJsRuntime-$pluginId").apply { isDaemon = true }
@@ -27,9 +72,11 @@ class NovelJsRuntime(
     private val v8: V8 = runOnRuntimeThread {
         V8.createV8Runtime().apply {
             Log.i(LOG_TAG, "Using J2V8 runtime for plugin id=$pluginId")
+            compatibilityLogger.logOperation("init", "runtime", "J2V8")
             bindNativeApi(this)
             executeVoidScript(bootstrapScript, "novel-js-runtime-bootstrap.js", 0)
             moduleRegistry.registerModules(this)
+            compatibilityLogger.logOperation("init", "modules", "registered=${moduleRegistry.modules().size}")
         }
     }
 
@@ -109,10 +156,14 @@ class NovelJsRuntime(
 
         nativeObject.registerJavaMethod(
             JavaCallback { _, parameters ->
-                nativeApi.fetch(
-                    parameters.stringArg(0),
-                    parameters.stringArgOrNull(1),
-                )
+                val url = parameters.stringArg(0)
+                compatibilityLogger.logOperation("fetch", "network", "url=$url")
+                try {
+                    nativeApi.fetch(url, parameters.stringArgOrNull(1))
+                } catch (e: Exception) {
+                    compatibilityLogger.logFailure("fetch", "network", "request_failed", e)
+                    throw e
+                }
             },
             "fetch",
         )
@@ -130,14 +181,18 @@ class NovelJsRuntime(
 
         nativeObject.registerJavaMethod(
             JavaCallback { _, parameters ->
-                nativeApi.storageGet(parameters.stringArg(0))
+                val key = parameters.stringArg(0)
+                compatibilityLogger.logOperation("storageGet", "storage", "key=$key")
+                nativeApi.storageGet(key)
             },
             "storageGet",
         )
 
         nativeObject.registerJavaMethod(
             JavaCallback { _, parameters ->
-                nativeApi.storageSet(parameters.stringArg(0), parameters.stringArg(1))
+                val key = parameters.stringArg(0)
+                compatibilityLogger.logOperation("storageSet", "storage", "key=$key")
+                nativeApi.storageSet(key, parameters.stringArg(1))
                 null
             },
             "storageSet",
@@ -145,7 +200,9 @@ class NovelJsRuntime(
 
         nativeObject.registerJavaMethod(
             JavaCallback { _, parameters ->
-                nativeApi.storageRemove(parameters.stringArg(0))
+                val key = parameters.stringArg(0)
+                compatibilityLogger.logOperation("storageRemove", "storage", "key=$key")
+                nativeApi.storageRemove(key)
                 null
             },
             "storageRemove",
@@ -153,6 +210,7 @@ class NovelJsRuntime(
 
         nativeObject.registerJavaMethod(
             JavaCallback { _, _ ->
+                compatibilityLogger.logOperation("storageClear", "storage")
                 nativeApi.storageClear()
                 null
             },
@@ -161,6 +219,7 @@ class NovelJsRuntime(
 
         nativeObject.registerJavaMethod(
             JavaCallback { _, _ ->
+                compatibilityLogger.logOperation("storageKeys", "storage")
                 nativeApi.storageKeys()
             },
             "storageKeys",
@@ -196,6 +255,7 @@ class NovelJsRuntime(
         // DOM Store methods
         nativeObject.registerJavaMethod(
             JavaCallback { _, parameters ->
+                compatibilityLogger.logOperation("domLoad", "dom")
                 nativeApi.domLoad(parameters.stringArg(0))
             },
             "domLoad",

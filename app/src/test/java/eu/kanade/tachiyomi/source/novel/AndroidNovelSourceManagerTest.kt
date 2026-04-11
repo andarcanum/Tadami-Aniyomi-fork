@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.source.novel
 
 import eu.kanade.tachiyomi.extension.novel.NovelExtensionManager
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginCapabilities
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.NovelFilterList
 import eu.kanade.tachiyomi.novelsource.model.NovelsPage
@@ -123,6 +124,8 @@ class AndroidNovelSourceManagerTest {
         override suspend fun getSourceData(id: Long): StubNovelSource? = null
 
         override fun getPluginIconUrlForSource(sourceId: Long): String? = null
+
+        override fun getCapabilitiesForSource(sourceId: Long): NovelPluginCapabilities? = null
     }
 
     private class FakeNovelStubSourceRepository : NovelStubSourceRepository {

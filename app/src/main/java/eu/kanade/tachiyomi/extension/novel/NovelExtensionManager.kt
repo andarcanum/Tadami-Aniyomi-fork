@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.extension.novel
 
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginCapabilities
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import kotlinx.coroutines.flow.Flow
 import tachiyomi.domain.extension.novel.model.NovelPlugin
@@ -20,4 +21,6 @@ interface NovelExtensionManager {
     suspend fun getSourceData(id: Long): StubNovelSource?
 
     fun getPluginIconUrlForSource(sourceId: Long): String?
+
+    fun getCapabilitiesForSource(sourceId: Long): NovelPluginCapabilities?
 }

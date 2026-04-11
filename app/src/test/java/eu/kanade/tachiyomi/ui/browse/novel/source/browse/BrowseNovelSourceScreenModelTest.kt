@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.novelsource.model.SNovel
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.novelsource.online.NovelHttpSource
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -586,5 +587,46 @@ class BrowseNovelSourceScreenModelTest {
         ) = TODO()
         override fun getPopularNovels(sourceId: Long, filterList: NovelFilterList) = TODO()
         override fun getLatestNovels(sourceId: Long, filterList: NovelFilterList) = TODO()
+    }
+
+    @Test
+    fun `novelSourcePreferencesScreenOrNull returns null for source without settings`() {
+        val source = FakeNovelCatalogueSource(id = 1L, name = "Novel", lang = "en")
+        val result = novelSourcePreferencesScreenOrNull(sourceId = 1L, source = source)
+        result shouldBe null
+    }
+
+    @Test
+    fun `novelSourcePreferencesScreenOrNull returns screen for configurable source`() {
+        val source = FakeConfigurableNovelCatalogueSource(id = 1L, name = "Novel", lang = "en")
+        val result = novelSourcePreferencesScreenOrNull(sourceId = 1L, source = source)
+        result shouldNotBe null
+    }
+
+    @Suppress("OVERRIDE_DEPRECATION")
+    private class FakeConfigurableNovelCatalogueSource(
+        override val id: Long,
+        override val name: String,
+        override val lang: String,
+    ) : NovelHttpSource, eu.kanade.tachiyomi.novelsource.ConfigurableNovelSource {
+        override val supportsLatest: Boolean = true
+        override fun fetchPopularNovels(page: Int): Observable<NovelsPage> =
+            Observable.just(NovelsPage(emptyList(), false))
+        override fun fetchSearchNovels(
+            page: Int,
+            query: String,
+            filters: NovelFilterList,
+        ): Observable<NovelsPage> =
+            Observable.just(NovelsPage(emptyList(), false))
+        override fun fetchLatestUpdates(page: Int): Observable<NovelsPage> =
+            Observable.just(NovelsPage(emptyList(), false))
+        override fun getFilterList(): NovelFilterList = NovelFilterList()
+        override fun fetchNovelDetails(novel: SNovel): Observable<SNovel> = Observable.just(novel)
+        override fun fetchChapterList(novel: SNovel): Observable<List<SNovelChapter>> =
+            Observable.just(emptyList())
+        override fun fetchChapterText(chapter: SNovelChapter): Observable<String> = Observable.just("")
+        override fun setupPreferenceScreen(screen: androidx.preference.PreferenceScreen) {
+            // No-op for test
+        }
     }
 }

@@ -1,6 +1,11 @@
 package eu.kanade.tachiyomi.extension.novel.runtime
 
 import android.util.Log
+import androidx.preference.CheckBoxPreference
+import androidx.preference.EditTextPreference
+import androidx.preference.ListPreference
+import androidx.preference.MultiSelectListPreference
+import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.extension.novel.NovelPluginId
 import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
 import eu.kanade.tachiyomi.novelsource.model.NovelFilter
@@ -51,20 +56,31 @@ class NovelJsSource internal constructor(
     private val filterMapper: NovelPluginFilterMapper,
     private val resultNormalizer: NovelPluginResultNormalizer,
     private val runtimeOverride: NovelPluginRuntimeOverride,
-) : NovelCatalogueSource, NovelSiteSource, NovelWebUrlSource, NovelPluginImageSource, NovelImageRequestSource {
+    private val settingsBridge: NovelPluginSettingsBridge,
+) : NovelCatalogueSource,
+    NovelSiteSource,
+    NovelWebUrlSource,
+    NovelPluginImageSource,
+    NovelImageRequestSource,
+    NovelPluginCapabilitySource,
+    NovelPluginSettingsSource,
+    NovelPluginIdentitySource {
     override val id: Long = NovelPluginId.toSourceId(plugin.id)
     override val name: String = plugin.name
     override val lang: String = plugin.lang
     override val supportsLatest: Boolean = true
     override val siteUrl: String? = plugin.site
+    override val pluginId: String = plugin.id
 
     private val mutex = Mutex()
     private var runtime: NovelJsRuntime? = null
-    private var hasParsePage: Boolean? = null
-    private var hasResolveUrl: Boolean? = null
-    private var hasFetchImage: Boolean? = null
     private var cachedFiltersPayload: String? = null
     private var cachedImageRequestHeaders: Map<String, String>? = null
+    private var capabilities: NovelPluginCapabilities? = null
+    private var settingsSchema: List<PluginSettingDefinition> = emptyList()
+
+    override val pluginCapabilities: NovelPluginCapabilities?
+        get() = capabilities
 
     override fun getFilterList(): NovelFilterList {
         NovelPluginFilters.decodeFilterList(
@@ -88,6 +104,113 @@ class NovelJsSource internal constructor(
                 } ?: loadFiltersWithIsolatedRuntime()
             }
         }
+    }
+
+    fun setupPreferenceScreen(screen: PreferenceScreen) {
+        if (!hasPluginSettings(discoverRuntime = true)) return
+
+        runCatching {
+            runBlocking {
+                mutex.withLock { ensureRuntimeLocked() }
+            }
+        }.onFailure { error ->
+            Log.w(LOG_TAG, "Failed to load plugin settings for ${plugin.id}", error)
+            return
+        }
+
+        if (settingsSchema.isEmpty()) return
+
+        settingsSchema.forEach { definition ->
+            val preference = when (definition.type.lowercase()) {
+                "text" -> EditTextPreference(screen.context).apply {
+                    key = definition.key
+                    title = definition.title
+                    summary = settingsBridge.getSettingWithDefault(definition.key) ?: ""
+                    setOnPreferenceChangeListener { _, newValue ->
+                        settingsBridge.setSetting(definition.key, newValue.toString())
+                        summary = newValue.toString()
+                        true
+                    }
+                }
+                "switch" -> CheckBoxPreference(screen.context).apply {
+                    key = definition.key
+                    title = definition.title
+                    isChecked = settingsBridge.getSettingBooleanWithDefault(definition.key)
+                    setOnPreferenceChangeListener { _, newValue ->
+                        settingsBridge.setSetting(definition.key, newValue.toString())
+                        true
+                    }
+                }
+                "checkbox" -> {
+                    if (!definition.values.isNullOrEmpty()) {
+                        MultiSelectListPreference(screen.context).apply {
+                            key = definition.key
+                            title = definition.title
+                            val options = definition.values.orEmpty()
+                            entries = options.toTypedArray()
+                            entryValues = options.toTypedArray()
+                            val selectedValues = settingsBridge.getSettingValuesWithDefault(definition.key)
+                            values = selectedValues
+                            summary = selectedValues.joinToString(", ")
+                            setOnPreferenceChangeListener { _, newValue ->
+                                val selected = (newValue as? Set<*>)?.mapNotNull { it as? String }.orEmpty()
+                                settingsBridge.setSettingValues(definition.key, selected)
+                                summary = selected.joinToString(", ")
+                                true
+                            }
+                        }
+                    } else {
+                        CheckBoxPreference(screen.context).apply {
+                            key = definition.key
+                            title = definition.title
+                            isChecked = settingsBridge.getSettingBooleanWithDefault(definition.key)
+                            setOnPreferenceChangeListener { _, newValue ->
+                                settingsBridge.setSetting(definition.key, newValue.toString())
+                                true
+                            }
+                        }
+                    }
+                }
+                "picker", "list" -> ListPreference(screen.context).apply {
+                    key = definition.key
+                    title = definition.title
+                    val options = definition.options ?: emptyList()
+                    entries = options.toTypedArray()
+                    entryValues = options.toTypedArray()
+                    val currentValue = settingsBridge.getSettingWithDefault(definition.key)
+                    value = currentValue
+                    summary = currentValue ?: ""
+                    setOnPreferenceChangeListener { _, newValue ->
+                        settingsBridge.setSetting(definition.key, newValue.toString())
+                        summary = newValue.toString()
+                        true
+                    }
+                }
+                else -> null
+            }
+            preference?.let { screen.addPreference(it) }
+        }
+    }
+
+    fun hasPluginSettings(): Boolean {
+        return hasPluginSettings(discoverRuntime = false)
+    }
+
+    override fun hasPluginSettings(discoverRuntime: Boolean): Boolean {
+        if (plugin.hasSettings || settingsSchema.isNotEmpty()) {
+            return true
+        }
+
+        if (!discoverRuntime) {
+            return false
+        }
+
+        return runCatching {
+            runBlocking {
+                mutex.withLock { ensureRuntimeLocked() }
+            }
+            settingsSchema.isNotEmpty()
+        }.getOrDefault(false)
     }
 
     @Deprecated("Use the non-RxJava API instead.")
@@ -270,14 +393,14 @@ class NovelJsSource internal constructor(
             }
 
             if (isJaomixPlugin()) {
-                if (hasParsePage != true) return@runPluginSafe emptyList()
+                if (capabilities?.hasParsePage != true) return@runPluginSafe emptyList()
                 val oldestPage = (sourceNovel.totalPages ?: 1).coerceAtLeast(1)
                 val firstPageChapters = collectChaptersFromParsePage(runtime, novel.url, oldestPage..oldestPage)
                 return@runPluginSafe normalizeChapters(firstPageChapters).mapNotNull { it.toSChapterOrNull() }
             }
 
             val totalPages = sourceNovel.totalPages ?: return@runPluginSafe emptyList()
-            if (hasParsePage != true) return@runPluginSafe emptyList()
+            if (capabilities?.hasParsePage != true) return@runPluginSafe emptyList()
 
             val collected = collectChaptersFromParsePage(runtime, novel.url, totalPages)
             normalizeChapters(collected).mapNotNull { it.toSChapterOrNull() }
@@ -304,7 +427,7 @@ class NovelJsSource internal constructor(
             var probePageResult: ParsedPluginPage? = null
 
             suspend fun parseSinglePage(pageNumber: Int): ParsedPluginPage? {
-                if (hasParsePage != true) return null
+                if (capabilities?.hasParsePage != true) return null
                 val payload = mutex.withLock {
                     callPlugin(runtime, "parsePage", toJsString(novel.url), toJsString(pageNumber.toString()))
                 }
@@ -327,7 +450,7 @@ class NovelJsSource internal constructor(
             val pageResult = when {
                 sourcePage == 1 && directChapters.isNotEmpty() -> directChapters
                 sourcePage == 1 && probePageResult != null -> probePageResult.chapters
-                hasParsePage == true -> parseSinglePage(sourcePage)?.chapters.orEmpty()
+                capabilities?.hasParsePage == true -> parseSinglePage(sourcePage)?.chapters.orEmpty()
                 else -> directChapters
             }
             val chapters = normalizeChapters(pageResult).mapNotNull { it.toSChapterOrNull() }
@@ -360,7 +483,7 @@ class NovelJsSource internal constructor(
         ) {
             mutex.withLock {
                 val runtime = ensureRuntimeLocked()
-                if (hasResolveUrl != true) return@withLock null
+                if (capabilities?.hasResolveUrl != true) return@withLock null
                 decodeResolvedUrl(
                     callPlugin(
                         runtime = runtime,
@@ -380,7 +503,7 @@ class NovelJsSource internal constructor(
         ) {
             mutex.withLock {
                 val runtime = ensureRuntimeLocked()
-                if (hasResolveUrl != true) return@withLock null
+                if (capabilities?.hasResolveUrl != true) return@withLock null
                 decodeResolvedUrl(
                     callPlugin(
                         runtime = runtime,
@@ -400,7 +523,7 @@ class NovelJsSource internal constructor(
         ) {
             mutex.withLock {
                 val runtime = ensureRuntimeLocked()
-                if (hasFetchImage != true) return@withLock null
+                if (capabilities?.hasFetchImage != true) return@withLock null
                 val payload = callPluginWithTimeout(
                     runtime = runtime,
                     functionName = "fetchImage",
@@ -454,8 +577,13 @@ class NovelJsSource internal constructor(
     }
 
     internal fun clearInMemoryCaches() {
+        runCatching { runtime?.close() }
+        runtime = null
         cachedFiltersPayload = null
         cachedImageRequestHeaders = null
+        settingsSchema = emptyList()
+        settingsBridge.clearSettingsSchema()
+        capabilities = null
     }
 
     private fun loadFiltersLocked(): NovelFilterList {
@@ -503,9 +631,23 @@ class NovelJsSource internal constructor(
             """.trimIndent(),
             "novel-plugin-init.js",
         )
-        hasParsePage = (instance.evaluate("typeof __plugin.parsePage === \"function\"") as? Boolean) == true
-        hasResolveUrl = (instance.evaluate("typeof __plugin.resolveUrl === \"function\"") as? Boolean) == true
-        hasFetchImage = (instance.evaluate("typeof __plugin.fetchImage === \"function\"") as? Boolean) == true
+        val hasSettings = (instance.evaluate("Array.isArray(__plugin && __plugin.settings)") as? Boolean) == true
+        if (hasSettings) {
+            val settingsPayload = instance.evaluate(
+                "JSON.stringify(__plugin.settings || [])",
+                "novel-plugin-settings.js",
+            ) as? String
+            if (!settingsPayload.isNullOrBlank() && settingsPayload != "null") {
+                settingsSchema = settingsBridge.parseSettingsSchema(settingsPayload)
+                settingsBridge.loadSettingsSchema(settingsPayload)
+            }
+        }
+        capabilities = NovelPluginCapabilities(
+            hasParsePage = (instance.evaluate("typeof __plugin.parsePage === \"function\"") as? Boolean) == true,
+            hasResolveUrl = (instance.evaluate("typeof __plugin.resolveUrl === \"function\"") as? Boolean) == true,
+            hasFetchImage = (instance.evaluate("typeof __plugin.fetchImage === \"function\"") as? Boolean) == true,
+            hasPluginSettings = hasSettings,
+        )
         runtime = instance
         return instance
     }
@@ -1237,7 +1379,7 @@ class NovelJsSource internal constructor(
         novelPath: String,
         pages: IntRange,
     ): List<ParsedPluginChapter> {
-        if (pages.isEmpty() || hasParsePage != true) return emptyList()
+        if (pages.isEmpty() || capabilities?.hasParsePage != true) return emptyList()
         val collected = mutableListOf<ParsedPluginChapter>()
         for (page in pages) {
             val payload = mutex.withLock {

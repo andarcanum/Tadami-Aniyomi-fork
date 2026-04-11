@@ -51,7 +51,9 @@ import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoUpdateInteractor
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelDomainAliasResolver
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelJsRuntimeFactory
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelJsSourceFactory
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginAssetBindings
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginRuntimeOverrides
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginWebViewCoordinator
 import eu.kanade.tachiyomi.network.JavaScriptEngine
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.source.anime.AndroidAnimeSourceManager
@@ -395,7 +397,9 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory { loadNovelPluginRuntimeOverrides(get()) }
         addSingletonFactory { NovelDomainAliasResolver(get()) }
         addSingletonFactory { NovelJsRuntimeFactory(app, get(), get(), get(), get()) }
-        addSingletonFactory<NovelPluginSourceFactory> { NovelJsSourceFactory(get(), get(), get(), get()) }
+        addSingletonFactory { NovelPluginAssetBindings(get()) }
+        addSingletonFactory { NovelPluginWebViewCoordinator(get()) }
+        addSingletonFactory<NovelPluginSourceFactory> { NovelJsSourceFactory(get(), get(), get(), get(), get(), get()) }
 
         addSingletonFactory<NovelExtensionManager> { DefaultNovelExtensionManager(get(), get(), get(), get()) }
         addSingletonFactory { NovelExtensionUpdateChecker() }
