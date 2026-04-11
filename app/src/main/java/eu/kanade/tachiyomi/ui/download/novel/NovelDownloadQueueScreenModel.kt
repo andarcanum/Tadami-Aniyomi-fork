@@ -8,7 +8,6 @@ import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState
 import eu.kanade.tachiyomi.data.download.novel.NovelQueuedDownload
 import eu.kanade.tachiyomi.data.download.novel.NovelQueuedDownloadStatus
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
@@ -32,9 +31,7 @@ class NovelDownloadQueueScreenModel(
                 }
             }
         }
-        screenModelScope.launch(Dispatchers.IO) {
-            refreshStorage()
-        }
+        refreshStorage()
     }
 
     fun refreshStorage() {

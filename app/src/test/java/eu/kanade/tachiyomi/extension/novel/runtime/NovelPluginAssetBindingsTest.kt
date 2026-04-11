@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.data.extension.novel.NovelPluginStorage
 import java.io.File
+import java.nio.file.Files
 
 class NovelPluginAssetBindingsTest {
 
@@ -179,9 +180,8 @@ class NovelPluginAssetBindingsTest {
     }
 
     private fun createTempDirectory(): File {
-        val tempDir =
-            File(System.getProperty("java.io.tmpdir"), "novel-plugin-asset-test-${System.currentTimeMillis()}")
-        tempDir.mkdirs()
+        val tempDir = Files.createTempDirectory("novel-plugin-asset-test-").toFile()
+        tempDir.deleteOnExit()
         return tempDir
     }
 

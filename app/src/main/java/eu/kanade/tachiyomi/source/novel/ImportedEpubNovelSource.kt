@@ -12,10 +12,16 @@ import uy.kohesive.injekt.api.get
 import java.io.File
 
 internal class ImportedEpubNovelSource(
-    private val novelRepository: NovelRepository = Injekt.get(),
-    private val chapterRepository: NovelChapterRepository = Injekt.get(),
+    private val novelRepository: NovelRepository? = runCatching { Injekt.get<NovelRepository>() }.getOrNull(),
+    private val chapterRepository: NovelChapterRepository? = runCatching {
+        Injekt.get<NovelChapterRepository>()
+    }.getOrNull(),
     private val storage: ImportedEpubStorage = ImportedEpubStorage(
-        File(Injekt.get<Application>().filesDir, IMPORTED_EPUB_STORAGE_DIR),
+        File(
+            runCatching { Injekt.get<Application>().filesDir }.getOrNull()
+                ?: File(System.getProperty("java.io.tmpdir") ?: "."),
+            IMPORTED_EPUB_STORAGE_DIR,
+        ),
     ),
 ) : NovelSource {
 
@@ -27,6 +33,8 @@ internal class ImportedEpubNovelSource(
     }
 
     override suspend fun getChapterList(novel: SNovel): List<SNovelChapter> {
+        val novelRepository = novelRepository ?: return emptyList()
+        val chapterRepository = chapterRepository ?: return emptyList()
         val novelId = novel.url.toLongOrNull()
             ?: novelRepository.getNovelByUrlAndSourceId(novel.url, id)?.id
             ?: return emptyList()
@@ -44,6 +52,7 @@ internal class ImportedEpubNovelSource(
     }
 
     override suspend fun getChapterText(chapter: SNovelChapter): String {
+        val chapterRepository = chapterRepository ?: return EMPTY_CHAPTER_HTML
         val chapterId = chapter.url.toLongOrNull() ?: return EMPTY_CHAPTER_HTML
         val localChapter = chapterRepository.getChapterById(chapterId) ?: return EMPTY_CHAPTER_HTML
         return storage.readChapterHtml(localChapter.novelId, localChapter.id)
