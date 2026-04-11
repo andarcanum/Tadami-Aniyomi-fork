@@ -353,6 +353,13 @@ internal fun shouldShowNicknameEditHint(
     return !isNameEdited && currentName.isBlank()
 }
 
+internal fun resolveHomeHubProfileSection(
+    sections: List<HomeHubSection>,
+    selectedSection: HomeHubSection,
+): HomeHubSection {
+    return selectedSection.takeIf { it in sections } ?: sections.first()
+}
+
 @Composable
 private fun resolveHomeHubDefaultNickname(section: HomeHubSection): String {
     return when (section) {
@@ -764,7 +771,7 @@ object HomeHubTab : Tab {
         val mangaState by mangaScreenModel.state.collectAsState()
         val novelState by novelScreenModel.state.collectAsState()
 
-        val profileSection = sections.first()
+        val profileSection = resolveHomeHubProfileSection(sections, selectedSection)
         val (headerUserName, headerUserAvatar, headerGreeting) = when (profileSection) {
             HomeHubSection.Anime -> Triple(animeState.userName, animeState.userAvatar, animeState.greeting)
             HomeHubSection.Manga -> Triple(mangaState.userName, mangaState.userAvatar, mangaState.greeting)

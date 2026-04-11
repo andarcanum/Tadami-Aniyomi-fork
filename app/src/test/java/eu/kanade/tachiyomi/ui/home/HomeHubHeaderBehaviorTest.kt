@@ -245,4 +245,20 @@ class HomeHubHeaderBehaviorTest {
     fun `resolveHomeHubHeaderTintSecondaryAlpha scales down primary alpha`() {
         resolveHomeHubHeaderTintSecondaryAlpha(primaryAlpha = 0.12f) shouldBe 0.06f
     }
+
+    @Test
+    fun `resolveHomeHubProfileSection returns selected section when it exists`() {
+        resolveHomeHubProfileSection(
+            sections = listOf(HomeHubSection.Anime, HomeHubSection.Manga, HomeHubSection.Novel),
+            selectedSection = HomeHubSection.Novel,
+        ) shouldBe HomeHubSection.Novel
+    }
+
+    @Test
+    fun `resolveHomeHubProfileSection falls back to first section when selected is missing`() {
+        resolveHomeHubProfileSection(
+            sections = listOf(HomeHubSection.Manga, HomeHubSection.Novel),
+            selectedSection = HomeHubSection.Anime,
+        ) shouldBe HomeHubSection.Manga
+    }
 }
