@@ -76,6 +76,14 @@ object Notifications {
     const val ID_INCOGNITO_MODE = -701
 
     /**
+     * Notification channel and ids used by the translation system.
+     */
+    const val CHANNEL_TRANSLATION_PROGRESS = "translation_progress"
+    const val ID_TRANSLATION_PROGRESS = -1003
+    const val ID_TRANSLATION_COMPLETE = -1004
+    const val ID_TRANSLATION_ERROR = -1005
+
+    /**
      * Notification channel and ids used for app and extension updates.
      */
     private const val GROUP_APK_UPDATES = "group_apk_updates"
