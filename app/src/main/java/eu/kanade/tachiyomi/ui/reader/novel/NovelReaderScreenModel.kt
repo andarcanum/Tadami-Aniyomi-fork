@@ -8,11 +8,11 @@ import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSourc
 import eu.kanade.domain.items.novelchapter.model.toSNovelChapter
 import eu.kanade.presentation.reader.novel.NovelReaderTtsChapterHandoffPolicy
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
-import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
-import eu.kanade.tachiyomi.data.translation.TranslationStatus
 import eu.kanade.tachiyomi.data.prefetch.AllowAllContentPrefetchEnvironment
 import eu.kanade.tachiyomi.data.prefetch.AndroidContentPrefetchEnvironment
 import eu.kanade.tachiyomi.data.prefetch.ContentPrefetchService
+import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
+import eu.kanade.tachiyomi.data.translation.TranslationStatus
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelJsSource
 import eu.kanade.tachiyomi.extension.novel.runtime.resolveUrl
@@ -89,6 +89,9 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -481,34 +484,38 @@ class NovelReaderScreenModel(
     private fun subscribeToQueueProgress(chapterId: Long) {
         queueProgressJob?.cancel()
         queueProgressJob = screenModelScope.launch {
-            translationQueueManager.progressUpdates.collect { update ->
-                if (update.chapterId != chapterId) return@collect
-                when (update.status) {
-                    TranslationStatus.IN_PROGRESS -> {
-                        isGeminiTranslating = true
-                        geminiTranslationProgress = update.progress
-                        refreshGeminiUiState()
-                    }
-                    TranslationStatus.COMPLETED -> {
-                        isGeminiTranslating = false
-                        geminiTranslationProgress = 100
-                        refreshGeminiUiState()
-                        queueProgressJob?.cancel()
-                    }
-                    TranslationStatus.FAILED -> {
-                        isGeminiTranslating = false
-                        geminiTranslationProgress = 0
-                        addGeminiLog("Queue translation failed: ${update.errorMessage ?: "Unknown error"}")
-                        refreshGeminiUiState()
-                        queueProgressJob?.cancel()
-                    }
-                    TranslationStatus.PENDING -> {
-                        isGeminiTranslating = true
-                        geminiTranslationProgress = 0
-                        refreshGeminiUiState()
+            translationQueueManager.progressUpdates
+                .filter { it.chapterId == chapterId }
+                .onEach { update ->
+                    when (update.status) {
+                        TranslationStatus.IN_PROGRESS -> {
+                            isGeminiTranslating = true
+                            geminiTranslationProgress = update.progress
+                            refreshGeminiUiState()
+                        }
+                        TranslationStatus.COMPLETED -> {
+                            isGeminiTranslating = false
+                            geminiTranslationProgress = 100
+                            refreshGeminiUiState()
+                        }
+                        TranslationStatus.FAILED -> {
+                            isGeminiTranslating = false
+                            geminiTranslationProgress = 0
+                            addGeminiLog("Queue translation failed: ${update.errorMessage ?: "Unknown error"}")
+                            refreshGeminiUiState()
+                        }
+                        TranslationStatus.PENDING -> {
+                            isGeminiTranslating = true
+                            geminiTranslationProgress = 0
+                            refreshGeminiUiState()
+                        }
                     }
                 }
-            }
+                .takeWhile { update ->
+                    update.status != TranslationStatus.COMPLETED &&
+                        update.status != TranslationStatus.FAILED
+                }
+                .collect { }
         }
     }
     private fun scheduleNextChapterPrefetch(

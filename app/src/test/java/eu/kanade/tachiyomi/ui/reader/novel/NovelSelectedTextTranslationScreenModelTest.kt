@@ -2,6 +2,8 @@ package eu.kanade.tachiyomi.ui.reader.novel
 
 import android.app.Application
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
+import eu.kanade.tachiyomi.data.translation.TranslationQueueItem
+import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginPackage
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
 import eu.kanade.tachiyomi.novelsource.NovelSource
@@ -21,6 +23,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -78,7 +81,21 @@ class NovelSelectedTextTranslationScreenModelTest {
         @BeforeAll
         fun setupInjektApplication() {
             runCatching { Injekt.get<Application>() }
-                .getOrElse { Injekt.addSingleton(fullType<Application>(), TestApplication()) }
+                .getOrElse {
+                    val cacheDir = java.io.File(System.getProperty("java.io.tmpdir"), "novel-translation-test-cache")
+                        .apply { mkdirs() }
+                    val application = mockk<Application>(relaxed = true)
+                    every { application.cacheDir } returns cacheDir
+                    Injekt.addSingleton(fullType<Application>(), application)
+                }
+            runCatching { Injekt.get<TranslationQueueManager>() }
+                .getOrElse {
+                    val translationQueueManager = mockk<TranslationQueueManager>(relaxed = true)
+                    every {
+                        translationQueueManager.activeTranslation
+                    } returns MutableStateFlow<TranslationQueueItem?>(null)
+                    Injekt.addSingleton(fullType<TranslationQueueManager>(), translationQueueManager)
+                }
         }
 
         @JvmStatic

@@ -2,6 +2,8 @@ package eu.kanade.tachiyomi.ui.reader.novel
 
 import android.app.Application
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
+import eu.kanade.tachiyomi.data.translation.TranslationQueueItem
+import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginPackage
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoEntry
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
@@ -2666,7 +2668,13 @@ class NovelReaderScreenModelTest {
 
     private fun ensureReaderScreenModelDependencies() {
         runCatching { Injekt.get<Application>() }
-            .getOrElse { Injekt.addSingleton(fullType<Application>(), TestApplication()) }
+            .getOrElse {
+                val cacheDir = java.io.File(System.getProperty("java.io.tmpdir"), "novel-reader-test-cache")
+                    .apply { mkdirs() }
+                val application = mockk<Application>(relaxed = true)
+                every { application.cacheDir } returns cacheDir
+                Injekt.addSingleton(fullType<Application>(), application)
+            }
         runCatching { Injekt.get<NetworkHelper>() }
             .getOrElse {
                 val networkHelper = mockk<NetworkHelper>()
@@ -2676,6 +2684,14 @@ class NovelReaderScreenModelTest {
         runCatching { Injekt.get<Json>() }
             .getOrElse {
                 Injekt.addSingleton(fullType<Json>(), Json { encodeDefaults = true })
+            }
+        runCatching { Injekt.get<TranslationQueueManager>() }
+            .getOrElse {
+                val translationQueueManager = mockk<TranslationQueueManager>(relaxed = true)
+                every {
+                    translationQueueManager.activeTranslation
+                } returns MutableStateFlow<TranslationQueueItem?>(null)
+                Injekt.addSingleton(fullType<TranslationQueueManager>(), translationQueueManager)
             }
     }
 

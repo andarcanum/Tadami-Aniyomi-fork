@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.extension.novel.NovelPluginId
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.awaitSuccess
+import eu.kanade.tachiyomi.util.safeCacheDir
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -306,7 +307,8 @@ object NovelPluginImageResolver {
 
     private val diskCacheLock = Any()
     private val diskCacheDir by lazy {
-        File(app.cacheDir, DISK_CACHE_DIR_NAME).apply { mkdirs() }
+        val cacheRoot = app.safeCacheDir()
+        File(cacheRoot, DISK_CACHE_DIR_NAME).apply { mkdirs() }
     }
 
     suspend fun resolve(url: String): NovelPluginImagePayload? {
