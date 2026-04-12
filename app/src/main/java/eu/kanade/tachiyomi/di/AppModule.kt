@@ -507,7 +507,8 @@ class AppModule(val app: Application) : InjektModule {
         }
 
         // Achievement system managers and handlers
-        addSingletonFactory { tachiyomi.data.achievement.loader.AchievementLoader(app, get(), get()) }
+        addSingletonFactory { eu.kanade.tachiyomi.data.achievement.localization.AchievementTextResolverImpl(app) }
+        addSingletonFactory { tachiyomi.data.achievement.loader.AchievementLoader(app, get(), get(), get()) }
         addSingletonFactory { tachiyomi.data.achievement.handler.PointsManager(get()) }
         addSingletonFactory { tachiyomi.data.achievement.UserProfileManager(get()) }
         addSingletonFactory {

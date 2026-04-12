@@ -9,6 +9,7 @@ import kotlinx.serialization.json.Json
 import logcat.LogPriority
 import logcat.logcat
 import tachiyomi.data.achievement.handler.AchievementCalculator
+import tachiyomi.data.achievement.localization.AchievementTextResolver
 import tachiyomi.data.achievement.model.AchievementDefinitions
 import tachiyomi.data.achievement.model.AchievementJson
 import tachiyomi.domain.achievement.model.Achievement
@@ -19,6 +20,7 @@ import tachiyomi.domain.achievement.repository.AchievementRepository
 class AchievementLoader(
     private val context: Context,
     private val repository: AchievementRepository,
+    private val textResolver: AchievementTextResolver,
     private val calculator: AchievementCalculator? = null,
     private val json: Json = Json {
         ignoreUnknownKeys = true
@@ -147,14 +149,15 @@ class AchievementLoader(
     }
 
     private fun AchievementJson.toDomainModel(): Achievement {
+        val localizedText = textResolver.resolve(this)
         return Achievement(
             id = id,
             type = AchievementType.valueOf(type.uppercase()),
             category = AchievementCategory.valueOf(category.uppercase()),
             threshold = threshold,
             points = points,
-            title = title,
-            description = description,
+            title = localizedText.title,
+            description = localizedText.description,
             badgeIcon = badgeIcon,
             isHidden = isHidden,
             isSecret = isSecret,

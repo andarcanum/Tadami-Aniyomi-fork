@@ -331,16 +331,3 @@ private fun AuroraStatCard(
         }
     }
 }
-
-/**
- * Format minutes to hours and minutes string
- */
-private fun formatTimeMinutes(minutes: Int): String {
-    val hours = minutes / 60
-    val mins = minutes % 60
-    return when {
-        hours > 0 && mins > 0 -> "${hours}ч ${mins}м"
-        hours > 0 -> "${hours}ч"
-        else -> "${mins}м"
-    }
-}
