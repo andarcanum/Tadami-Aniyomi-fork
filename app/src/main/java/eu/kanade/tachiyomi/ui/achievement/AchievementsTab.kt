@@ -47,6 +47,9 @@ data object AchievementsTab : Tab {
             onDialogDismiss = {
                 screenModel.onDialogDismiss()
             },
+            onLocaleChanged = {
+                screenModel.refreshAchievements()
+            },
             modifier = Modifier.fillMaxSize(),
         )
 

@@ -41,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
@@ -55,6 +56,7 @@ import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
 import java.util.Locale
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -64,6 +66,7 @@ fun AchievementActivityGraph(
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
+    val locale = LocalContext.current.resources.configuration.locales[0] ?: Locale.getDefault()
 
     // Группировка месяцев по полугодиям с сортировкой
     val firstHalf = yearlyStats
@@ -138,6 +141,7 @@ fun AchievementActivityGraph(
                 MonthBarChart(
                     months = monthsToShow,
                     maxActivity = maxActivity,
+                    locale = locale,
                 )
             }
 
@@ -175,6 +179,7 @@ fun AchievementActivityGraph(
 private fun MonthBarChart(
     months: List<Pair<YearMonth, MonthStats>>,
     maxActivity: Int,
+    locale: Locale,
     modifier: Modifier = Modifier,
 ) {
     // Animation state
@@ -212,6 +217,7 @@ private fun MonthBarChart(
                 animationProgress = animationProgress,
                 index = index,
                 totalItems = months.size,
+                locale = locale,
             )
         }
     }
@@ -246,6 +252,7 @@ private fun ActivityBar(
     animationProgress: Float,
     index: Int,
     totalItems: Int,
+    locale: Locale,
 ) {
     val colors = AuroraTheme.colors
     val coroutineScope = rememberCoroutineScope()
@@ -270,15 +277,15 @@ private fun ActivityBar(
         label = "bar_color",
     )
 
-    // Month formatter for short month names in Russian
-    val monthFormatter = remember { DateTimeFormatter.ofPattern("MMM", Locale.forLanguageTag("ru")) }
-    val monthLabel = month.format(monthFormatter).lowercase().take(3)
+    val monthLabel = remember(month, locale) {
+        formatMonthShortLabel(month, locale)
+    }
 
     TooltipBox(
         positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
         tooltip = {
             PlainTooltip {
-                ActivityTooltipContent(month = month, stats = stats)
+                ActivityTooltipContent(month = month, stats = stats, locale = locale)
             }
         },
         state = tooltipState,
@@ -342,13 +349,13 @@ private fun ActivityBar(
 private fun ActivityTooltipContent(
     month: YearMonth,
     stats: MonthStats,
+    locale: Locale,
 ) {
     val colors = AuroraTheme.colors
 
-    // Full month name formatter
-    val fullMonthFormatter = remember { DateTimeFormatter.ofPattern("LLLL yyyy", Locale.forLanguageTag("ru")) }
-    val monthName = month.format(fullMonthFormatter)
-        .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.forLanguageTag("ru")) else it.toString() }
+    val monthName = remember(month, locale) {
+        formatMonthYearLabel(month, locale)
+    }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -433,3 +440,22 @@ private fun ActivityTooltipContent(
  */
 private val MonthStats.totalActivity: Int
     get() = chaptersRead + episodesWatched
+
+internal fun formatMonthShortLabel(month: YearMonth, locale: Locale): String {
+    return month.month.getDisplayName(TextStyle.SHORT, locale)
+        .replace(".", "")
+        .lowercase(locale)
+        .take(3)
+}
+
+internal fun formatMonthYearLabel(month: YearMonth, locale: Locale): String {
+    val formatter = DateTimeFormatter.ofPattern("LLLL yyyy", locale)
+    return month.format(formatter)
+        .replaceFirstChar { char ->
+            if (char.isLowerCase()) {
+                char.titlecase(locale)
+            } else {
+                char.toString()
+            }
+        }
+}
