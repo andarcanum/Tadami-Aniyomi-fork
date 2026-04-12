@@ -90,14 +90,14 @@ class NovelScreenUrlResolverTest {
             genre = null,
         )
 
-            resolveNovelNeedsWebViewLoginHint(
-                novel = novel,
-                source = source,
-                chaptersCount = 0,
-                canOpenWebView = true,
-                isRefreshing = false,
-                hasCompletedChapterRefresh = true,
-            ) shouldBe true
+        resolveNovelNeedsWebViewLoginHint(
+            novel = novel,
+            source = source,
+            chaptersCount = 0,
+            canOpenWebView = true,
+            isRefreshing = false,
+            hasCompletedChapterRefresh = true,
+        ) shouldBe true
     }
 
     @Test
@@ -113,14 +113,14 @@ class NovelScreenUrlResolverTest {
             description = null,
         )
 
-            resolveNovelNeedsWebViewLoginHint(
-                novel = novel,
-                source = source,
-                chaptersCount = 2,
-                canOpenWebView = true,
-                isRefreshing = false,
-                hasCompletedChapterRefresh = true,
-            ) shouldBe false
+        resolveNovelNeedsWebViewLoginHint(
+            novel = novel,
+            source = source,
+            chaptersCount = 2,
+            canOpenWebView = true,
+            isRefreshing = false,
+            hasCompletedChapterRefresh = true,
+        ) shouldBe false
     }
 
     @Test
@@ -136,14 +136,14 @@ class NovelScreenUrlResolverTest {
             description = "Has description",
         )
 
-            resolveNovelNeedsWebViewLoginHint(
-                novel = novel,
-                source = source,
-                chaptersCount = 0,
-                canOpenWebView = true,
-                isRefreshing = false,
-                hasCompletedChapterRefresh = true,
-            ) shouldBe true
+        resolveNovelNeedsWebViewLoginHint(
+            novel = novel,
+            source = source,
+            chaptersCount = 0,
+            canOpenWebView = true,
+            isRefreshing = false,
+            hasCompletedChapterRefresh = true,
+        ) shouldBe true
     }
 
     @Test
@@ -160,14 +160,14 @@ class NovelScreenUrlResolverTest {
             description = "Has description",
         )
 
-            resolveNovelNeedsWebViewLoginHint(
-                novel = novel,
-                source = source,
-                chaptersCount = 0,
-                canOpenWebView = true,
-                isRefreshing = false,
-                hasCompletedChapterRefresh = true,
-            ) shouldBe false
+        resolveNovelNeedsWebViewLoginHint(
+            novel = novel,
+            source = source,
+            chaptersCount = 0,
+            canOpenWebView = true,
+            isRefreshing = false,
+            hasCompletedChapterRefresh = true,
+        ) shouldBe false
     }
 
     @Test
@@ -184,14 +184,14 @@ class NovelScreenUrlResolverTest {
             description = "Some short description",
         )
 
-            resolveNovelNeedsWebViewLoginHint(
-                novel = novel,
-                source = source,
-                chaptersCount = 0,
-                canOpenWebView = true,
-                isRefreshing = false,
-                hasCompletedChapterRefresh = true,
-            ) shouldBe true
+        resolveNovelNeedsWebViewLoginHint(
+            novel = novel,
+            source = source,
+            chaptersCount = 0,
+            canOpenWebView = true,
+            isRefreshing = false,
+            hasCompletedChapterRefresh = true,
+        ) shouldBe true
     }
 
     @Test

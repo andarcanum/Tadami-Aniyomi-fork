@@ -15,9 +15,9 @@ import eu.kanade.domain.items.novelchapter.interactor.GetNovelScanlatorChapterCo
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCacheEvent
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState
-import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
-import eu.kanade.tachiyomi.data.translation.TranslationQueueItem
 import eu.kanade.tachiyomi.data.track.TrackerManager
+import eu.kanade.tachiyomi.data.translation.TranslationQueueItem
+import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery

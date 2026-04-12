@@ -169,7 +169,7 @@ class TranslationJob(
         logcat(LogPriority.DEBUG) { "Completed translation for chapter ${item.chapterId}" }
     }
 
-        companion object {
+    companion object {
         private const val TAG = "TranslationJob"
 
         fun runImmediately(context: Context) {

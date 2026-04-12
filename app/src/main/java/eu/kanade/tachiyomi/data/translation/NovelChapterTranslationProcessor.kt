@@ -14,13 +14,13 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptModifiers
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePresets
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
-import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePresets
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheModelId
 import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock

@@ -261,29 +261,37 @@ class NovelScreen(
             )
             if (refreshedWebViewLoginHintKey == null) {
                 logcat {
-                    "Novel login hint skipped after stabilization id=${successState.novel.id} source=${successState.source.name} " +
-                        "reason=state-updated chapters=${refreshedState.chapters.size} " +
-                        "initialized=${refreshedState.novel.initialized} descBlank=${refreshedState.novel.description.isNullOrBlank()}"
+                    "Novel login hint skipped after stabilization id=${successState.novel.id} " +
+                        "source=${successState.source.name} " +
+                        "reason=state-updated " +
+                        "chapters=${refreshedState.chapters.size} " +
+                        "initialized=${refreshedState.novel.initialized} " +
+                        "descBlank=${refreshedState.novel.description.isNullOrBlank()}"
                 }
                 lastShownWebViewLoginHintKey = null
                 return@LaunchedEffect
             }
             if (refreshedWebViewLoginHintKey != webViewLoginHintKey) {
                 logcat {
-                    "Novel login hint skipped after stabilization id=${successState.novel.id} source=${successState.source.name} " +
-                        "reason=key-changed oldKey=$webViewLoginHintKey newKey=$refreshedWebViewLoginHintKey"
+                    "Novel login hint skipped after stabilization id=${successState.novel.id} " +
+                        "source=${successState.source.name} " +
+                        "reason=key-changed " +
+                        "oldKey=$webViewLoginHintKey " +
+                        "newKey=$refreshedWebViewLoginHintKey"
                 }
                 return@LaunchedEffect
             }
             if (lastShownWebViewLoginHintKey == refreshedWebViewLoginHintKey) {
                 logcat {
-                    "Novel login hint suppressed duplicate after stabilization id=${successState.novel.id} key=$refreshedWebViewLoginHintKey"
+                    "Novel login hint suppressed duplicate after stabilization id=${successState.novel.id} " +
+                        "key=$refreshedWebViewLoginHintKey"
                 }
                 return@LaunchedEffect
             }
             lastShownWebViewLoginHintKey = refreshedWebViewLoginHintKey
             logcat {
-                "Showing novel login hint id=${refreshedState.novel.id} source=${refreshedState.source.name} " +
+                "Showing novel login hint id=${refreshedState.novel.id} " +
+                    "source=${refreshedState.source.name} " +
                     "url=${refreshedState.novel.url}"
             }
             val result = screenModel.snackbarHostState.showSnackbar(

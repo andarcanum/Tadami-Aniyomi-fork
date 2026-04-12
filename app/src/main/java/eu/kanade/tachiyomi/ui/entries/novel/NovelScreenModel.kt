@@ -29,12 +29,12 @@ import eu.kanade.tachiyomi.data.download.novel.NovelQueuedDownloadStatus
 import eu.kanade.tachiyomi.data.download.novel.NovelQueuedDownloadType
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadManager
-import eu.kanade.tachiyomi.data.translation.TranslationJob
-import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.data.export.novel.NovelEpubExportOptions
 import eu.kanade.tachiyomi.data.export.novel.NovelEpubExporter
 import eu.kanade.tachiyomi.data.track.MangaTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
+import eu.kanade.tachiyomi.data.translation.TranslationJob
+import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelJsSource
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter

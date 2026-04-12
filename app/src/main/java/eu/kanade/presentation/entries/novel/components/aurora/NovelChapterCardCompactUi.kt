@@ -1,7 +1,6 @@
 package eu.kanade.presentation.entries.novel.components.aurora
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,8 +19,6 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Translate
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -202,7 +199,8 @@ object NovelChapterCardCompactUi {
                                         },
                                         onLongClick = onTranslatedDownloadLongClick,
                                         backgroundColor = colors.surface.copy(alpha = 0.24f),
-                                        showProgress = translatedDownloadState == NovelChapterActionIconState.InProgress,
+                                        showProgress =
+                                        translatedDownloadState == NovelChapterActionIconState.InProgress,
                                         progressColor = colors.accent,
                                         size = 32.dp,
                                         iconSize = 18.dp,

@@ -81,7 +81,17 @@ class TranslationQueueManager(
     suspend fun getNextPending(): TranslationQueueItem? {
         return try {
             handler.awaitOneOrNull { db ->
-                db.translation_queueQueries.getNextPending { id, chapterId, novelId, status, progress, errorMessage, createdAt, updatedAt, retryCount ->
+                db.translation_queueQueries.getNextPending {
+                        id,
+                        chapterId,
+                        novelId,
+                        status,
+                        progress,
+                        errorMessage,
+                        createdAt,
+                        updatedAt,
+                        retryCount,
+                    ->
                     TranslationQueueItem(
                         id = id,
                         chapterId = chapterId,
@@ -256,7 +266,17 @@ class TranslationQueueManager(
 
     private suspend fun getQueueItemByChapterId(chapterId: Long): TranslationQueueItem? {
         return handler.awaitOneOrNull { db ->
-            db.translation_queueQueries.getByChapterId(chapterId) { id, chapterId, novelId, status, progress, errorMessage, createdAt, updatedAt, retryCount ->
+            db.translation_queueQueries.getByChapterId(chapterId) {
+                    id,
+                    chapterId,
+                    novelId,
+                    status,
+                    progress,
+                    errorMessage,
+                    createdAt,
+                    updatedAt,
+                    retryCount,
+                ->
                 mapQueueItem(
                     id = id,
                     chapterId = chapterId,
