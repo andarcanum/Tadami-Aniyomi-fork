@@ -556,6 +556,11 @@
     <string name="novel_translated_download_no_available">Нет доступных переведённых глав для скачивания</string>
     <string name="novel_translated_download_choose_chapters">Выбрать главы для скачивания</string>
     <string name="novel_translated_download_select_title">Выбор переведённых глав</string>
+    <string name="novel_translated_download_options_title">Параметры скачивания</string>
+    <string name="novel_translated_download_options_message">Выберите действие для скачанного перевода</string>
+    <string name="novel_translated_download_redownload">Скачать повторно</string>
+    <string name="novel_translated_download_delete">Удалить</string>
+    <string name="novel_translated_download_deleted">Скачанный перевод удалён</string>
     <string name="novel_download_queue_started_count">Глав в очереди: %d</string>
     <string name="novel_download_queue_waiting">Ожидание запуска</string>
     <string name="novel_download_queue_progress">Загрузка... В ожидании: %1$d, Активно: %2$d</string>

@@ -134,6 +134,7 @@ fun NovelScreen(
     onChapterTranslateClick: (Long) -> Unit,
     onChapterTranslatedDownloadClick: (Long) -> Unit,
     onChapterTranslatedDownloadLongClick: (Long) -> Unit,
+    onChapterTranslatedDownloadOpenFolder: (Long) -> Unit,
     onChapterReadToggle: (Long) -> Unit,
     onChapterBookmarkToggle: (Long) -> Unit,
     onChapterDownloadToggle: (Long) -> Unit,
@@ -197,6 +198,7 @@ fun NovelScreen(
             onChapterTranslateClick = onChapterTranslateClick,
             onChapterTranslatedDownloadClick = onChapterTranslatedDownloadClick,
             onChapterTranslatedDownloadLongClick = onChapterTranslatedDownloadLongClick,
+            onChapterTranslatedDownloadOpenFolder = onChapterTranslatedDownloadOpenFolder,
             onChapterLongClick = onChapterLongClick,
             onChapterReadToggle = onChapterReadToggle,
             onChapterBookmarkToggle = onChapterBookmarkToggle,
@@ -815,6 +817,7 @@ fun NovelScreen(
                                 onTranslateClick = { onChapterTranslateClick(chapter.id) },
                                 onTranslatedDownloadClick = { onChapterTranslatedDownloadClick(chapter.id) },
                                 onTranslatedDownloadLongClick = { onChapterTranslatedDownloadLongClick(chapter.id) },
+                                onTranslatedDownloadOpenFolder = { onChapterTranslatedDownloadOpenFolder(chapter.id) },
                                 onToggleDownload = { onChapterDownloadToggle(chapter.id) },
                                 onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
                                 onToggleRead = { onChapterReadToggle(chapter.id) },
@@ -891,6 +894,7 @@ fun NovelScreen(
                                 onTranslateClick = { onChapterTranslateClick(chapter.id) },
                                 onTranslatedDownloadClick = { onChapterTranslatedDownloadClick(chapter.id) },
                                 onTranslatedDownloadLongClick = { onChapterTranslatedDownloadLongClick(chapter.id) },
+                                onTranslatedDownloadOpenFolder = { onChapterTranslatedDownloadOpenFolder(chapter.id) },
                                 onToggleDownload = { onChapterDownloadToggle(chapter.id) },
                                 onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
                                 onToggleRead = { onChapterReadToggle(chapter.id) },
@@ -1377,6 +1381,7 @@ private fun NovelClassicChapterRow(
     onTranslateClick: () -> Unit,
     onTranslatedDownloadClick: () -> Unit,
     onTranslatedDownloadLongClick: () -> Unit,
+    onTranslatedDownloadOpenFolder: () -> Unit,
     onToggleDownload: () -> Unit,
     onToggleBookmark: () -> Unit,
     onToggleRead: () -> Unit,
@@ -1483,7 +1488,11 @@ private fun NovelClassicChapterRow(
                                         NovelChapterActionIconState.InProgress -> MaterialTheme.colorScheme.tertiary
                                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                                     },
-                                    onClick = onTranslatedDownloadClick,
+                                    onClick = if (translatedDownloadState == NovelChapterActionIconState.Active) {
+                                        onTranslatedDownloadOpenFolder
+                                    } else {
+                                        onTranslatedDownloadClick
+                                    },
                                     onLongClick = onTranslatedDownloadLongClick,
                                     backgroundColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.24f),
                                     showProgress = translatedDownloadState == NovelChapterActionIconState.InProgress,

@@ -71,6 +71,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.NavigatorAdaptiveSheet
 import eu.kanade.presentation.entries.novel.NovelChapterSettingsDialog
 import eu.kanade.presentation.entries.novel.NovelScreen
+import eu.kanade.presentation.entries.novel.TranslatedDownloadOptionsDialog
 import eu.kanade.presentation.entries.novel.components.NovelTranslatedDownloadFormatSelector
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettings
@@ -141,6 +142,8 @@ class NovelScreen(
         var showTranslatedFormatDialog by remember { mutableStateOf(false) }
         var translatedFormatDialogChapterId by remember { mutableStateOf<Long?>(null) }
         var translatedFormatDialogFormat by remember { mutableStateOf(NovelTranslatedDownloadFormat.TXT) }
+        var showTranslatedOptionsDialog by remember { mutableStateOf(false) }
+        var translatedOptionsChapterId by remember { mutableStateOf<Long?>(null) }
         var showEpubExportDialog by remember { mutableStateOf(false) }
         val epubExportPreferences = screenModel.getEpubExportPreferences()
         BackHandler(enabled = screenModel.isAnyChapterSelected) {
@@ -297,6 +300,28 @@ class NovelScreen(
             }
         }
 
+        // Handle folder open intents from screen model
+        LaunchedEffect(Unit) {
+            screenModel.openTranslatedFolderEvents().collect { uri: android.net.Uri ->
+                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, "resource/folder")
+                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                try {
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    val fallbackIntent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                        data = uri
+                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    try {
+                        context.startActivity(fallbackIntent)
+                    } catch (e: Exception) {
+                    }
+                }
+            }
+        }
+
         NovelScreen(
             state = successState,
             isFromSource = fromSource,
@@ -388,9 +413,11 @@ class NovelScreen(
                 }
             },
             onChapterTranslatedDownloadLongClick = { chapterId ->
-                translatedFormatDialogChapterId = chapterId
-                translatedFormatDialogFormat = successState.translatedDownloadFormat
-                showTranslatedFormatDialog = true
+                translatedOptionsChapterId = chapterId
+                showTranslatedOptionsDialog = true
+            },
+            onChapterTranslatedDownloadOpenFolder = { chapterId ->
+                screenModel.openTranslatedFolder(chapterId)
             },
             onChapterReadToggle = screenModel::toggleChapterRead,
             onChapterBookmarkToggle = screenModel::toggleChapterBookmark,
@@ -547,6 +574,31 @@ class NovelScreen(
                     TextButton(onClick = { showTranslatedFormatDialog = false }) {
                         Text(text = stringResource(MR.strings.action_cancel))
                     }
+                },
+            )
+        }
+
+        if (showTranslatedOptionsDialog) {
+            TranslatedDownloadOptionsDialog(
+                onDismissRequest = {
+                    showTranslatedOptionsDialog = false
+                    translatedOptionsChapterId = null
+                },
+                onReDownload = {
+                    showTranslatedOptionsDialog = false
+                    translatedOptionsChapterId?.let { chapterId ->
+                        translatedFormatDialogChapterId = chapterId
+                        translatedFormatDialogFormat = successState.translatedDownloadFormat
+                        showTranslatedFormatDialog = true
+                    }
+                    translatedOptionsChapterId = null
+                },
+                onDelete = {
+                    showTranslatedOptionsDialog = false
+                    translatedOptionsChapterId?.let { chapterId ->
+                        screenModel.deleteTranslatedChapter(chapterId)
+                    }
+                    translatedOptionsChapterId = null
                 },
             )
         }

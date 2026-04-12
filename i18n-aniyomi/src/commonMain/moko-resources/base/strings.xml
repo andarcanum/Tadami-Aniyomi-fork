@@ -788,6 +788,11 @@
     <string name="novel_translated_download_no_available">No translated chapters available to download</string>
     <string name="novel_translated_download_choose_chapters">Choose chapters to download</string>
     <string name="novel_translated_download_select_title">Select translated chapters</string>
+    <string name="novel_translated_download_options_title">Download options</string>
+    <string name="novel_translated_download_options_message">Choose an action for the downloaded translation</string>
+    <string name="novel_translated_download_redownload">Re-download</string>
+    <string name="novel_translated_download_delete">Delete</string>
+    <string name="novel_translated_download_deleted">Downloaded translation deleted</string>
     <string name="novel_download_queue_started_count">Queued chapters: %d</string>
     <string name="novel_download_queue_waiting">Waiting to start</string>
     <string name="novel_download_queue_progress">Downloading... Pending: %1$d, Active: %2$d</string>

@@ -7,6 +7,7 @@ import androidx.lifecycle.flowWithLifecycle
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.base.BasePreferences
+import android.net.Uri
 import eu.kanade.domain.entries.novel.interactor.GetNovelExcludedScanlators
 import eu.kanade.domain.entries.novel.interactor.NovelRatingFetcher
 import eu.kanade.domain.entries.novel.interactor.SetNovelExcludedScanlators
@@ -56,6 +57,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.supervisorScope
 import logcat.LogPriority
@@ -202,6 +204,10 @@ class NovelScreenModel(
     val chapterSwipeEndAction = libraryPreferences.swipeNovelChapterStartAction().get()
 
     private var scanlatorSelectionJob: Job? = null
+
+    private val openTranslatedFolderChannel = kotlinx.coroutines.flow.MutableSharedFlow<android.net.Uri>()
+
+    fun openTranslatedFolderEvents() = openTranslatedFolderChannel.asSharedFlow()
 
     fun isReadingStarted(): Boolean {
         val state = successState ?: return false
@@ -1522,6 +1528,45 @@ class NovelScreenModel(
         if (currentFormat == format) return
 
         novelReaderPreferences.setTranslatedDownloadFormat(state.novel.id, format)
+        refreshChapterActionStatesAsync(delayMs = 100L)
+    }
+
+    fun openTranslatedFolder(chapterId: Long) {
+        val state = successState ?: return
+        val chapter = state.chapters.find { it.id == chapterId } ?: return
+        val format = novelReaderPreferences.translatedDownloadFormat(state.novel.id)
+
+        val file = novelTranslatedDownloadManager.getTranslatedFile(state.novel, chapter, format)
+        if (file == null) {
+            screenModelScope.launchIO {
+                snackbarHostState.showSnackbar(message = "File not found")
+            }
+            return
+        }
+
+        // Get parent folder URI to open the folder containing the file
+        val parentFile = file.getParentFile()
+        if (parentFile == null) {
+            screenModelScope.launchIO {
+                snackbarHostState.showSnackbar(message = "Unable to find folder")
+            }
+            return
+        }
+
+        screenModelScope.launchIO {
+            openTranslatedFolderChannel.emit(parentFile.uri)
+        }
+    }
+
+    fun deleteTranslatedChapter(chapterId: Long) {
+        val state = successState ?: return
+        val chapter = state.chapters.find { it.id == chapterId } ?: return
+        val format = novelReaderPreferences.translatedDownloadFormat(state.novel.id)
+
+        novelTranslatedDownloadManager.deleteTranslatedChapter(state.novel, chapter, format)
+        screenModelScope.launchIO {
+            snackbarHostState.showSnackbar(message = "Downloaded translation deleted")
+        }
         refreshChapterActionStatesAsync(delayMs = 100L)
     }
 

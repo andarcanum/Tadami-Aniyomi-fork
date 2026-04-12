@@ -3430,7 +3430,8 @@ fun NovelReaderScreen(
                                 imageVector = Icons.Outlined.Translate,
                                 contentDescription = stringResource(AYMR.strings.novel_reader_google_translate),
                                 tint = if (state.isGoogleTranslating ||
-                                    state.hasGoogleTranslationCache
+                                    state.hasGoogleTranslationCache ||
+                                    state.isGoogleTranslationVisible
                                 ) {
                                     MaterialTheme.colorScheme.primary
                                 } else {
