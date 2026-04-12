@@ -31,6 +31,8 @@ import eu.kanade.tachiyomi.data.download.manga.MangaDownloadProvider
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
 import eu.kanade.tachiyomi.data.saver.ImageSaver
 import eu.kanade.tachiyomi.data.track.TrackerManager
+import eu.kanade.tachiyomi.data.translation.TranslationNotificationManager
+import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
 import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import eu.kanade.tachiyomi.extension.novel.DefaultNovelExtensionManager
@@ -488,6 +490,10 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory { StorageManager(app, get()) }
 
         addSingletonFactory { ExternalIntents() }
+
+        // Translation system
+        addSingletonFactory { TranslationQueueManager() }
+        addSingletonFactory { TranslationNotificationManager() }
 
         // Achievement system repositories
         addSingletonFactory<tachiyomi.domain.achievement.repository.AchievementRepository> {

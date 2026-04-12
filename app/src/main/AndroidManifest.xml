@@ -279,6 +279,10 @@
             android:name="eu.kanade.tachiyomi.data.notification.NotificationReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name="eu.kanade.tachiyomi.data.translation.TranslationCancelReceiver"
+            android:exported="false" />
+
         <service
             android:name="eu.kanade.tachiyomi.extension.manga.util.MangaExtensionInstallService"
             android:exported="false"
