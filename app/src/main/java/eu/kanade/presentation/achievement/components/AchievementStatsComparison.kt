@@ -317,7 +317,6 @@ private fun StatItem(
     }
 }
 
-
 @Preview(showBackground = true)
 @Composable
 private fun AchievementStatsComparisonPreview() {

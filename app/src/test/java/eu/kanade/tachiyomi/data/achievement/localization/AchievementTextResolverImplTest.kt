@@ -1,9 +1,9 @@
 package eu.kanade.tachiyomi.data.achievement.localization
 
-import tachiyomi.i18n.aniyomi.AYMR
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
+import org.junit.jupiter.api.Test
+import tachiyomi.i18n.aniyomi.AYMR
 import kotlin.test.assertEquals
 
 class AchievementTextResolverImplTest {

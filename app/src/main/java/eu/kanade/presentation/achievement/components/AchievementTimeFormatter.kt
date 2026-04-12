@@ -2,7 +2,6 @@ package eu.kanade.presentation.achievement.components
 
 import androidx.compose.runtime.Composable
 import dev.icerock.moko.resources.StringResource
-import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.i18n.MR
 
 data class AchievementTimeStrings(

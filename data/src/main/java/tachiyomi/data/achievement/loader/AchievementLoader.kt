@@ -8,7 +8,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import logcat.LogPriority
 import logcat.logcat
-import java.util.Locale
 import tachiyomi.data.achievement.handler.AchievementCalculator
 import tachiyomi.data.achievement.localization.AchievementTextResolver
 import tachiyomi.data.achievement.model.AchievementDefinitions
@@ -17,6 +16,7 @@ import tachiyomi.domain.achievement.model.Achievement
 import tachiyomi.domain.achievement.model.AchievementCategory
 import tachiyomi.domain.achievement.model.AchievementType
 import tachiyomi.domain.achievement.repository.AchievementRepository
+import java.util.Locale
 
 class AchievementLoader(
     private val context: Context,
