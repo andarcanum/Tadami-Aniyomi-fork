@@ -1,5 +1,5 @@
 name: 🐞 Issue report
-description: Report an issue in Aniyomi
+description: Report an issue in Tadami
 labels: [Bug]
 body:
   - type: textarea
@@ -47,12 +47,12 @@ body:
         You can upload the crash log file as an attachment, or paste the crash logs in plain text if needed.
 
   - type: input
-    id: aniyomi-version
+    id: tadami-version
     attributes:
-      label: Aniyomi version
-      description: You can find your Aniyomi version in **More → About**.
+      label: Tadami version
+      description: You can find your Tadami version in **More → About**.
       placeholder: |
-        Example: "0.18.1.2"
+        Example: "0.36"
     validations:
       required: true
 
@@ -95,11 +95,11 @@ body:
           required: true
         - label: If this is an issue with an extension, I should be opening an issue in the extension's repository.
           required: true
-        - label: I have gone through the [FAQ](https://aniyomi.org/docs/faq/general) and [troubleshooting guide](https://aniyomi.org/docs/guides/troubleshooting/).
+        - label: I have checked the repository for similar issues.
           required: true
-        - label: I have updated the app to version **[0.18.1.2](https://github.com/aniyomiorg/aniyomi/releases/latest)**.
+        - label: I have updated the app to the **[latest version](https://github.com/andarcanum/Tadami-Aniyomi-fork/releases/latest)**.
           required: true
         - label: I have filled out all of the requested information in this form, including specific version numbers.
           required: true
-        - label: I understand that **Aniyomi does not have or fix any extensions**, and I **will not receive help** for any issues related to sources or extensions.
+        - label: I understand that **Tadami does not have or fix any extensions**, and I **will not receive help** for any issues related to sources or extensions.
           required: true
