@@ -8,6 +8,8 @@ import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSourc
 import eu.kanade.domain.items.novelchapter.model.toSNovelChapter
 import eu.kanade.presentation.reader.novel.NovelReaderTtsChapterHandoffPolicy
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
+import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
+import eu.kanade.tachiyomi.data.translation.TranslationStatus
 import eu.kanade.tachiyomi.data.prefetch.AllowAllContentPrefetchEnvironment
 import eu.kanade.tachiyomi.data.prefetch.AndroidContentPrefetchEnvironment
 import eu.kanade.tachiyomi.data.prefetch.ContentPrefetchService
@@ -54,8 +56,8 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationServ
 import eu.kanade.tachiyomi.ui.reader.novel.translation.buildNovelSelectedTextTranslationRequestKey
 import eu.kanade.tachiyomi.ui.reader.novel.translation.formatGeminiThrowableForLog
 import eu.kanade.tachiyomi.ui.reader.novel.translation.normalizeGeminiModelId
-import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheModelId
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toTranslationCacheRequirements
+import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheModelId
 import eu.kanade.tachiyomi.ui.reader.novel.tts.AndroidNovelTtsAudioFocusBridge
 import eu.kanade.tachiyomi.ui.reader.novel.tts.AndroidNovelTtsEngineInfoSource
 import eu.kanade.tachiyomi.ui.reader.novel.tts.AndroidNovelTtsPlatformFactory
@@ -228,6 +230,7 @@ class NovelReaderScreenModel(
         val networkHelper = Injekt.get<NetworkHelper>()
         GoogleTranslationService(client = networkHelper.client)
     },
+    private val translationQueueManager: TranslationQueueManager = Injekt.get(),
 ) : StateScreenModel<NovelReaderScreenModel.State>(State.Loading()) {
     private val contentPrefetchService = ContentPrefetchService(
         environment = runCatching {
@@ -303,6 +306,7 @@ class NovelReaderScreenModel(
     private var hasTriggeredGeminiAutoStart: Boolean = false
     private var pendingAutoStartGeminiTranslation: Boolean = autoStartGeminiTranslation
     private var geminiTranslationJob: Job? = null
+    private var queueProgressJob: Job? = null
     private var geminiTranslatedByIndex: Map<Int, String> = emptyMap()
     private var isGeminiTranslating: Boolean = false
     private var geminiTranslationProgress: Int = 0
@@ -436,6 +440,7 @@ class NovelReaderScreenModel(
             chapterId = chapter.id,
             settings = initialSettings,
         )
+        subscribeToQueueProgress(chapter.id)
         settingsJob?.cancel()
         settingsJob = screenModelScope.launch {
             var skippedInitialEmission = false
@@ -472,6 +477,39 @@ class NovelReaderScreenModel(
     }
     private fun setError(message: String?) {
         mutableState.value = State.Error(message)
+    }
+    private fun subscribeToQueueProgress(chapterId: Long) {
+        queueProgressJob?.cancel()
+        queueProgressJob = screenModelScope.launch {
+            translationQueueManager.progressUpdates.collect { update ->
+                if (update.chapterId != chapterId) return@collect
+                when (update.status) {
+                    TranslationStatus.IN_PROGRESS -> {
+                        isGeminiTranslating = true
+                        geminiTranslationProgress = update.progress
+                        refreshGeminiUiState()
+                    }
+                    TranslationStatus.COMPLETED -> {
+                        isGeminiTranslating = false
+                        geminiTranslationProgress = 100
+                        refreshGeminiUiState()
+                        queueProgressJob?.cancel()
+                    }
+                    TranslationStatus.FAILED -> {
+                        isGeminiTranslating = false
+                        geminiTranslationProgress = 0
+                        addGeminiLog("Queue translation failed: ${update.errorMessage ?: "Unknown error"}")
+                        refreshGeminiUiState()
+                        queueProgressJob?.cancel()
+                    }
+                    TranslationStatus.PENDING -> {
+                        isGeminiTranslating = true
+                        geminiTranslationProgress = 0
+                        refreshGeminiUiState()
+                    }
+                }
+            }
+        }
     }
     private fun scheduleNextChapterPrefetch(
         novel: Novel,
@@ -1662,6 +1700,8 @@ class NovelReaderScreenModel(
         nextChapterGeminiPrefetchJob = null
         geminiTranslationJob?.cancel()
         geminiTranslationJob = null
+        queueProgressJob?.cancel()
+        queueProgressJob = null
         googleTranslationJob?.cancel()
         googleTranslationJob = null
         clearSelectedTextTranslationSelection(refreshUi = false)
