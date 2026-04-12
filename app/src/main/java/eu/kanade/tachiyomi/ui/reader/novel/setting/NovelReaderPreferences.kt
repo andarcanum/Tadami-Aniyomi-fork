@@ -13,6 +13,7 @@ import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.preference.getEnum
@@ -692,6 +693,20 @@ class NovelReaderPreferences(
     fun translationProvider() =
         preferenceStore.getEnum("novel_reader_translation_provider", NovelTranslationProvider.GEMINI)
 
+    fun translatedDownloadFormat(novelId: Long): NovelTranslatedDownloadFormat {
+        val stored = preferenceStore.getString(translatedDownloadFormatKey(novelId), NovelTranslatedDownloadFormat.TXT.name).get()
+        return runCatching { NovelTranslatedDownloadFormat.valueOf(stored) }
+            .getOrDefault(NovelTranslatedDownloadFormat.TXT)
+    }
+
+    fun setTranslatedDownloadFormat(
+        novelId: Long,
+        format: NovelTranslatedDownloadFormat,
+    ) {
+        preferenceStore.getString(translatedDownloadFormatKey(novelId), NovelTranslatedDownloadFormat.TXT.name)
+            .set(format.name)
+    }
+
     fun airforceBaseUrl() = preferenceStore.getString("novel_reader_airforce_base_url", "https://api.airforce")
 
     fun airforceApiKey() = preferenceStore.getString("novel_reader_airforce_api_key", "")
@@ -712,6 +727,10 @@ class NovelReaderPreferences(
     fun deepSeekApiKey() = preferenceStore.getString("novel_reader_deepseek_api_key", "")
 
     fun deepSeekModel() = preferenceStore.getString("novel_reader_deepseek_model", "deepseek-chat")
+
+    private fun translatedDownloadFormatKey(novelId: Long): String {
+        return "novel_reader_translated_download_format_$novelId"
+    }
 
     // Google Translation
     fun googleTranslationEnabled() = preferenceStore.getBoolean("novel_reader_google_translation_enabled", false)

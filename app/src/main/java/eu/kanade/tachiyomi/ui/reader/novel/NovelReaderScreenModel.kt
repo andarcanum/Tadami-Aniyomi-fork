@@ -42,6 +42,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationSessionCache
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleUnofficialSelectedTextTranslationProvider
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationCacheResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationProviderOutcome
@@ -52,6 +53,9 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationPara
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.buildNovelSelectedTextTranslationRequestKey
 import eu.kanade.tachiyomi.ui.reader.novel.translation.formatGeminiThrowableForLog
+import eu.kanade.tachiyomi.ui.reader.novel.translation.normalizeGeminiModelId
+import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheModelId
+import eu.kanade.tachiyomi.ui.reader.novel.translation.toTranslationCacheRequirements
 import eu.kanade.tachiyomi.ui.reader.novel.tts.AndroidNovelTtsAudioFocusBridge
 import eu.kanade.tachiyomi.ui.reader.novel.tts.AndroidNovelTtsEngineInfoSource
 import eu.kanade.tachiyomi.ui.reader.novel.tts.AndroidNovelTtsPlatformFactory
@@ -124,6 +128,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 class NovelReaderScreenModel(
     private val chapterId: Long,
+    private val autoStartGeminiTranslation: Boolean = false,
     private val novelChapterRepository: NovelChapterRepository = Injekt.get(),
     private val syncNovelChaptersWithSource: SyncNovelChaptersWithSource = Injekt.get(),
     private val getNovel: GetNovel = Injekt.get(),
@@ -296,6 +301,7 @@ class NovelReaderScreenModel(
     private val attemptedJaomixPages = mutableSetOf<Int>()
     private var hasTriggeredNextChapterGeminiPrefetch: Boolean = false
     private var hasTriggeredGeminiAutoStart: Boolean = false
+    private var pendingAutoStartGeminiTranslation: Boolean = autoStartGeminiTranslation
     private var geminiTranslationJob: Job? = null
     private var geminiTranslatedByIndex: Map<Int, String> = emptyMap()
     private var isGeminiTranslating: Boolean = false
@@ -492,12 +498,15 @@ class NovelReaderScreenModel(
     }
     private fun maybeAutoStartGeminiTranslation(settings: NovelReaderSettings) {
         if (hasTriggeredGeminiAutoStart) return
-        if (!settings.geminiEnabled || !settings.geminiAutoTranslateEnglishSource) return
-        if (!isGeminiSourceLanguageEnglish(settings.geminiSourceLang)) return
+        val requestedAutoStart = pendingAutoStartGeminiTranslation
+        val englishSourceAutoStart = settings.geminiAutoTranslateEnglishSource &&
+            isGeminiSourceLanguageEnglish(settings.geminiSourceLang)
+        if (!settings.geminiEnabled || !(requestedAutoStart || englishSourceAutoStart)) return
         if (!settings.hasConfiguredTranslationProvider()) return
         if (currentParsedTextBlocks().isEmpty()) return
         if (isGeminiTranslating || hasGeminiTranslationCache || geminiTranslatedByIndex.isNotEmpty()) return
         hasTriggeredGeminiAutoStart = true
+        pendingAutoStartGeminiTranslation = false
         addGeminiLog("?? Auto-start translation for English source")
         startGeminiTranslation()
     }
@@ -2549,26 +2558,16 @@ class NovelReaderScreenModel(
         chapterId: Long,
         settings: NovelReaderSettings,
     ) {
-        if (!settings.geminiEnabled) {
-            hasGeminiTranslationCache = false
-            return
-        }
-        if (settings.geminiDisableCache) {
-            hasGeminiTranslationCache = false
-            return
-        }
         val cached = NovelReaderTranslationDiskCacheStore.get(chapterId)
         if (cached == null) {
             hasGeminiTranslationCache = false
             return
         }
-        val settingsMatch = cached.provider == settings.translationProvider &&
-            cached.model == settings.translationCacheModelId() &&
-            cached.sourceLang == settings.geminiSourceLang &&
-            cached.targetLang == settings.geminiTargetLang &&
-            cached.promptMode == settings.geminiPromptMode &&
-            cached.stylePreset == settings.geminiStylePreset
-        if (!settingsMatch || cached.translatedByIndex.isEmpty()) {
+        val settingsMatch = NovelReaderTranslationCacheResolver.matches(
+            cached = cached,
+            requirements = settings.toTranslationCacheRequirements(),
+        )
+        if (!settingsMatch) {
             hasGeminiTranslationCache = false
             return
         }
@@ -2922,15 +2921,6 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.DEEPSEEK -> geminiConcurrency.coerceIn(1, MAX_DEEPSEEK_CONCURRENCY)
         }
     }
-    private fun NovelReaderSettings.translationCacheModelId(): String {
-        return when (translationProvider) {
-            NovelTranslationProvider.GEMINI -> geminiModel.normalizeGeminiModelId()
-            NovelTranslationProvider.GEMINI_PRIVATE -> geminiModel.normalizeGeminiModelId()
-            NovelTranslationProvider.AIRFORCE -> airforceModel.trim()
-            NovelTranslationProvider.OPENROUTER -> openRouterModel.trim()
-            NovelTranslationProvider.DEEPSEEK -> deepSeekModel.trim()
-        }
-    }
     private fun NovelReaderSettings.shouldUseSinglePrivateChapterRequestMode(): Boolean {
         return translationProvider == NovelTranslationProvider.GEMINI_PRIVATE &&
             GeminiPrivateBridge.isInstalled() &&
@@ -2943,14 +2933,6 @@ class NovelReaderScreenModel(
     private fun NovelReaderSettings.isPrivateBridgeUnlocked(): Boolean {
         if (!requiresPrivateBridgeUnlock()) return true
         return geminiPrivateUnlocked || GeminiPrivateBridge.isUnlocked()
-    }
-    private fun String.normalizeGeminiModelId(): String {
-        return when (trim()) {
-            // Legacy key kept for backward compatibility with old settings.
-            "gemini-3-flash" -> "gemini-3-flash-preview"
-            "gemini-2.5-flash" -> "gemini-3.1-flash-lite-preview"
-            else -> this
-        }
     }
     private fun extractTextBlocks(rawHtml: String): List<String> {
         val document = Jsoup.parse(rawHtml)
