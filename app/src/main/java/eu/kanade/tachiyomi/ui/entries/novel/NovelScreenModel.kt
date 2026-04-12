@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.entries.novel
 
+import android.app.Application
 import android.net.Uri
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Immutable
@@ -28,6 +29,7 @@ import eu.kanade.tachiyomi.data.download.novel.NovelQueuedDownloadStatus
 import eu.kanade.tachiyomi.data.download.novel.NovelQueuedDownloadType
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadManager
+import eu.kanade.tachiyomi.data.translation.TranslationJob
 import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.data.export.novel.NovelEpubExportOptions
 import eu.kanade.tachiyomi.data.export.novel.NovelEpubExporter
@@ -56,6 +58,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
@@ -116,12 +119,13 @@ internal fun buildNovelChapterActionUiStates(
     hasTranslationCache: (NovelChapter) -> Boolean,
     isTranslatedDownloaded: (NovelChapter) -> Boolean,
     isTranslatedDownloading: (NovelChapter) -> Boolean,
+    isTranslating: (NovelChapter) -> Boolean = { false },
 ): Map<Long, NovelChapterActionUiState> {
     return chapters.associate { chapter ->
         chapter.id to NovelChapterActionStateResolver.resolve(
             geminiEnabled = geminiEnabled,
             hasTranslationCache = hasTranslationCache(chapter),
-            isTranslating = false,
+            isTranslating = isTranslating(chapter),
             isTranslatedDownloaded = isTranslatedDownloaded(chapter),
             isTranslatedDownloading = isTranslatedDownloading(chapter),
             translatedDownloadFormat = translatedDownloadFormat,
@@ -427,6 +431,14 @@ class NovelScreenModel(
                     }
             }
 
+            screenModelScope.launchIO {
+                translationQueueManager.activeTranslation
+                    .drop(1)
+                    .collectLatest {
+                        refreshChapterActionStatesAsync(delayMs = 100L)
+                    }
+            }
+
             logRefreshSnapshot(
                 stage = "initial-state",
                 source = source,
@@ -679,6 +691,7 @@ class NovelScreenModel(
         val translationCacheRequirements = readerSettings.toTranslationCacheRequirements()
         val translatedDownloadedIds = mutableSetOf<Long>()
         val translatedNotDownloadedIds = mutableSetOf<Long>()
+        val translatingChapterId = translationQueueManager.activeTranslation.value?.chapterId
 
         return copy(
             geminiEnabled = readerSettings.geminiEnabled,
@@ -714,6 +727,9 @@ class NovelScreenModel(
                 },
                 isTranslatedDownloading = { chapter ->
                     chapter.id in translatedQueueChapterIds
+                },
+                isTranslating = { chapter ->
+                    chapter.id == translatingChapterId
                 },
             ),
         )
@@ -1578,7 +1594,14 @@ class NovelScreenModel(
     fun addToTranslationQueue(chapterId: Long) {
         val state = successState ?: return
         screenModelScope.launchIO {
-            translationQueueManager.addToQueue(listOf(chapterId), state.novel.id)
+            try {
+                translationQueueManager.addToQueue(listOf(chapterId), state.novel.id)
+                val appContext = Injekt.get<Application>()
+                TranslationJob.runImmediately(appContext)
+            } catch (e: Exception) {
+                snackbarHostState.showSnackbar(message = "Ошибка запуска: ${e.message}")
+                return@launchIO
+            }
             snackbarHostState.showSnackbar(message = "Перевод добавлен в очередь")
         }
     }

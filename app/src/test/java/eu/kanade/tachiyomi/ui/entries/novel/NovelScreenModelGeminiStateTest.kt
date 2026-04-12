@@ -62,6 +62,23 @@ class NovelScreenModelGeminiStateTest {
     }
 
     @Test
+    fun `active translation marks translate action in progress`() {
+        val chapter = NovelChapter.create().copy(id = 5L, novelId = 10L)
+
+        val states = buildNovelChapterActionUiStates(
+            geminiEnabled = true,
+            chapters = listOf(chapter),
+            translatedDownloadFormat = NovelTranslatedDownloadFormat.TXT,
+            hasTranslationCache = { false },
+            isTranslatedDownloaded = { false },
+            isTranslatedDownloading = { false },
+            isTranslating = { true },
+        )
+
+        states[chapter.id]?.translateState shouldBe NovelChapterActionIconState.InProgress
+    }
+
+    @Test
     fun `queued translated export marks download action in progress`() {
         val chapter = NovelChapter.create().copy(id = 4L, novelId = 10L)
 

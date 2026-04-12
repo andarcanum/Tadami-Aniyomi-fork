@@ -74,7 +74,6 @@ import eu.kanade.presentation.entries.novel.NovelScreen
 import eu.kanade.presentation.entries.novel.TranslatedDownloadOptionsDialog
 import eu.kanade.presentation.entries.novel.components.NovelTranslatedDownloadFormatSelector
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
-import eu.kanade.tachiyomi.data.translation.TranslationJob
 import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettings
 import eu.kanade.tachiyomi.extension.novel.runtime.resolveUrl
 import eu.kanade.tachiyomi.novelsource.NovelSource
@@ -393,7 +392,6 @@ class NovelScreen(
             onChapterTranslateClick = { chapterId ->
                 if (isTranslatorEnabled) {
                     screenModel.addToTranslationQueue(chapterId)
-                    TranslationJob.runImmediately(context)
                 }
             },
             onChapterTranslatedDownloadClick = { chapterId ->

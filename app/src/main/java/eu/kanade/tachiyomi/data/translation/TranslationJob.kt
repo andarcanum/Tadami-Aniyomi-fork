@@ -12,9 +12,15 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import eu.kanade.tachiyomi.data.notification.Notifications
+import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreenModel
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationCacheEntry
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
+import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheModelId
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterRepository
 import eu.kanade.tachiyomi.util.system.notificationBuilder
 import eu.kanade.tachiyomi.util.system.setForegroundSafely
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import logcat.LogPriority
@@ -29,6 +35,9 @@ class TranslationJob(
 
     private val queueManager: TranslationQueueManager = Injekt.get()
     private val notificationManager: TranslationNotificationManager = Injekt.get()
+    private val chapterRepository: NovelTtsChapterRepository = NovelTtsChapterRepository()
+    private val readerPreferences: NovelReaderPreferences = Injekt.get()
+    private val translationProcessor: NovelChapterTranslationProcessor = NovelChapterTranslationProcessor()
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
         val notification = applicationContext.notificationBuilder(Notifications.CHANNEL_TRANSLATION_PROGRESS) {
@@ -47,6 +56,9 @@ class TranslationJob(
     }
 
     override suspend fun doWork(): Result {
+        logcat(LogPriority.DEBUG) { "TranslationJob.doWork() started" }
+
+        // Set foreground first - required for foreground service workers
         setForegroundSafely()
 
         try {
@@ -55,28 +67,17 @@ class TranslationJob(
 
                 logcat(LogPriority.DEBUG) { "Processing translation for chapter ${item.chapterId}" }
 
-                queueManager.setActiveTranslation(item)
-                queueManager.updateStatus(item.chapterId, TranslationStatus.IN_PROGRESS)
-
-                simulateTranslation(item)
-
-                if (isStopped) {
-                    logcat(LogPriority.DEBUG) { "Translation job stopped during processing" }
-                    queueManager.updateStatus(item.chapterId, TranslationStatus.PENDING)
-                    break
-                }
-
-                queueManager.updateStatus(item.chapterId, TranslationStatus.COMPLETED)
-                queueManager.setActiveTranslation(null)
-
-                notificationManager.showComplete(
-                    chapterName = "Chapter ${item.chapterId}",
-                    chapterId = item.chapterId,
-                )
-
-                logcat(LogPriority.DEBUG) { "Completed translation for chapter ${item.chapterId}" }
+                processItem(item)
             }
 
+            return Result.success()
+        } catch (_: CancellationException) {
+            val activeItem = queueManager.activeTranslation.value
+            if (activeItem != null) {
+                queueManager.updateStatus(activeItem.chapterId, TranslationStatus.PENDING)
+                queueManager.setActiveTranslation(null)
+            }
+            logcat(LogPriority.DEBUG) { "Translation job cancelled" }
             return Result.success()
         } catch (e: Exception) {
             logcat(LogPriority.ERROR) { "Translation job failed: ${e.message}" }
@@ -84,6 +85,7 @@ class TranslationJob(
             val activeItem = queueManager.activeTranslation.value
             if (activeItem != null) {
                 queueManager.setError(activeItem.chapterId, e.message ?: "Unknown error")
+                queueManager.updateStatus(activeItem.chapterId, TranslationStatus.FAILED)
                 queueManager.setActiveTranslation(null)
 
                 notificationManager.showError(
@@ -97,43 +99,87 @@ class TranslationJob(
         }
     }
 
-    // TODO: Replace with actual GeminiTranslator integration in later phase
-    private suspend fun simulateTranslation(item: TranslationQueueItem) {
-        for (progress in 0..100 step 10) {
-            if (isStopped) break
+    private suspend fun processItem(item: TranslationQueueItem) {
+        queueManager.setActiveTranslation(item)
+        queueManager.updateStatus(item.chapterId, TranslationStatus.IN_PROGRESS)
 
-            queueManager.updateProgress(
-                chapterId = item.chapterId,
-                progress = progress,
-                status = TranslationStatus.IN_PROGRESS,
-            )
+        val snapshot = chapterRepository.loadChapterSnapshot(item.chapterId)
+        val settings = readerPreferences.resolveSettings(snapshot.novel.source)
+        val textSegments = snapshot.contentBlocks
+            .asSequence()
+            .filterIsInstance<NovelReaderScreenModel.ContentBlock.Text>()
+            .map { it.text }
+            .toList()
 
-            notificationManager.showProgress(
-                TranslationProgressUpdate(
+        if (textSegments.isEmpty()) {
+            throw IllegalStateException("Chapter has no translatable text")
+        }
+
+        val chapterName = snapshot.chapter.name.ifBlank { "Chapter ${item.chapterId}" }
+        val translatedByIndex = translationProcessor.translateSegments(
+            segments = textSegments,
+            settings = settings,
+            onLog = { message ->
+                logcat(LogPriority.DEBUG) { "TranslationJob[${item.chapterId}]: $message" }
+            },
+            onProgress = { progress ->
+                queueManager.updateProgress(
                     chapterId = item.chapterId,
-                    novelId = item.novelId,
-                    status = TranslationStatus.IN_PROGRESS,
                     progress = progress,
-                    currentChunk = progress / 10,
-                    totalChunks = 10,
-                    chapterName = "Chapter ${item.chapterId}",
-                    errorMessage = null,
+                    status = TranslationStatus.IN_PROGRESS,
+                )
+                notificationManager.showProgress(
+                    TranslationProgressUpdate(
+                        chapterId = item.chapterId,
+                        novelId = item.novelId,
+                        status = TranslationStatus.IN_PROGRESS,
+                        progress = progress,
+                        currentChunk = 0,
+                        totalChunks = 0,
+                        chapterName = chapterName,
+                        errorMessage = null,
+                    ),
+                )
+            },
+        )
+
+        if (!settings.geminiDisableCache) {
+            NovelReaderTranslationDiskCacheStore.put(
+                GeminiTranslationCacheEntry(
+                    chapterId = item.chapterId,
+                    translatedByIndex = translatedByIndex,
+                    provider = settings.translationProvider,
+                    model = settings.translationCacheModelId(),
+                    sourceLang = settings.geminiSourceLang,
+                    targetLang = settings.geminiTargetLang,
+                    promptMode = settings.geminiPromptMode,
+                    stylePreset = settings.geminiStylePreset,
                 ),
             )
-
-            delay(200)
         }
+
+        queueManager.updateStatus(item.chapterId, TranslationStatus.COMPLETED)
+        queueManager.setActiveTranslation(null)
+
+        notificationManager.showComplete(
+            chapterName = chapterName,
+            chapterId = item.chapterId,
+        )
+
+        logcat(LogPriority.DEBUG) { "Completed translation for chapter ${item.chapterId}" }
     }
 
-    companion object {
+        companion object {
         private const val TAG = "TranslationJob"
 
         fun runImmediately(context: Context) {
+            logcat(LogPriority.DEBUG) { "TranslationJob.runImmediately() called" }
             val request = OneTimeWorkRequestBuilder<TranslationJob>()
                 .addTag(TAG)
                 .build()
             WorkManager.getInstance(context)
                 .enqueueUniqueWork(TAG, ExistingWorkPolicy.REPLACE, request)
+            logcat(LogPriority.DEBUG) { "TranslationJob work request enqueued" }
         }
 
         fun start(context: Context) {

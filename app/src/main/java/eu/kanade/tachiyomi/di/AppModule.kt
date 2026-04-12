@@ -493,7 +493,7 @@ class AppModule(val app: Application) : InjektModule {
 
         // Translation system
         addSingletonFactory { TranslationQueueManager() }
-        addSingletonFactory { TranslationNotificationManager() }
+        addSingletonFactory { TranslationNotificationManager(app) }
 
         // Achievement system repositories
         addSingletonFactory<tachiyomi.domain.achievement.repository.AchievementRepository> {

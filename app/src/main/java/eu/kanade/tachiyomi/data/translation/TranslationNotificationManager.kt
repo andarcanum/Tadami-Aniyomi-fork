@@ -1,7 +1,7 @@
 package eu.kanade.tachiyomi.data.translation
 
+import android.app.Application
 import android.app.PendingIntent
-import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationChannelCompat
@@ -16,7 +16,7 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
 class TranslationNotificationManager(
-    private val context: Context = Injekt.get(),
+    private val context: Application,
     private val queueManager: TranslationQueueManager = Injekt.get(),
 ) {
 

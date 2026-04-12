@@ -15,6 +15,8 @@ import eu.kanade.domain.items.novelchapter.interactor.GetNovelScanlatorChapterCo
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCacheEvent
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState
+import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
+import eu.kanade.tachiyomi.data.translation.TranslationQueueItem
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import io.kotest.matchers.shouldBe
@@ -55,6 +57,7 @@ import tachiyomi.domain.track.novel.model.NovelTrack
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.fullType
 import uy.kohesive.injekt.api.get
+import java.io.File
 
 class NovelScreenModelTest {
     private class TestApplication : Application()
@@ -64,10 +67,28 @@ class NovelScreenModelTest {
         @BeforeAll
         fun setupInjektBindings() {
             runCatching { Injekt.get<Application>() }
-                .getOrElse { Injekt.addSingleton(fullType<Application>(), TestApplication()) }
+                .getOrElse {
+                    val cacheDir = File(System.getProperty("java.io.tmpdir"), "novel-screen-model-test-cache")
+                        .apply { mkdirs() }
+                    val application = mockk<Application>(relaxed = true)
+                    every { application.cacheDir } returns cacheDir
+                    Injekt.addSingleton(fullType<Application>(), application)
+                }
+            runCatching { Injekt.get<Json>() }
+                .getOrElse {
+                    Injekt.addSingleton(fullType<Json>(), Json { encodeDefaults = true })
+                }
             runCatching { Injekt.get<NovelRatingFetcher>() }
                 .getOrElse {
                     Injekt.addSingleton(fullType<NovelRatingFetcher>(), mockk<NovelRatingFetcher>(relaxed = true))
+                }
+            runCatching { Injekt.get<TranslationQueueManager>() }
+                .getOrElse {
+                    val translationQueueManager = mockk<TranslationQueueManager>(relaxed = true)
+                    every {
+                        translationQueueManager.activeTranslation
+                    } returns MutableStateFlow<TranslationQueueItem?>(null)
+                    Injekt.addSingleton(fullType<TranslationQueueManager>(), translationQueueManager)
                 }
         }
 

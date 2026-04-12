@@ -28,7 +28,7 @@ class TranslationQueueManager(
     private val _activeTranslation = MutableStateFlow<TranslationQueueItem?>(null)
     val activeTranslation: StateFlow<TranslationQueueItem?> = _activeTranslation.asStateFlow()
 
-    private val _progressUpdates = MutableSharedFlow<TranslationProgressUpdate>()
+    private val _progressUpdates = MutableSharedFlow<TranslationProgressUpdate>(extraBufferCapacity = 64)
     val progressUpdates: SharedFlow<TranslationProgressUpdate> = _progressUpdates.asSharedFlow()
 
     init {
@@ -39,19 +39,7 @@ class TranslationQueueManager(
         scope.launch {
             try {
                 val items = handler.awaitList { db ->
-                    db.translation_queueQueries.getPending { id, chapterId, novelId, status, progress, errorMessage, createdAt, updatedAt, retryCount ->
-                        TranslationQueueItem(
-                            id = id,
-                            chapterId = chapterId,
-                            novelId = novelId,
-                            status = TranslationStatus.entries[status.toInt()],
-                            progress = progress.toInt(),
-                            errorMessage = errorMessage,
-                            retryCount = retryCount.toInt(),
-                            createdAt = createdAt,
-                            updatedAt = updatedAt,
-                        )
-                    }
+                    db.translation_queueQueries.getPending(::mapQueueItem)
                 }
                 _queue.value = items
                 logcat(LogPriority.DEBUG) { "Loaded ${items.size} items from translation queue" }
@@ -62,22 +50,18 @@ class TranslationQueueManager(
     }
 
     suspend fun addToQueue(chapterIds: List<Long>, novelId: Long) {
-        try {
-            val currentTime = System.currentTimeMillis()
-            chapterIds.forEach { chapterId ->
-                handler.await { db ->
-                    db.translation_queueQueries.insert(
-                        chapterId = chapterId,
-                        novelId = novelId,
-                        createdAt = currentTime,
-                    )
-                }
+        val currentTime = System.currentTimeMillis()
+        chapterIds.forEach { chapterId ->
+            handler.await { db ->
+                db.translation_queueQueries.insert(
+                    chapterId = chapterId,
+                    novelId = novelId,
+                    createdAt = currentTime,
+                )
             }
-            refreshQueue()
-            logcat(LogPriority.DEBUG) { "Added ${chapterIds.size} chapters to translation queue" }
-        } catch (e: Exception) {
-            logcat(LogPriority.ERROR) { "Failed to add chapters to queue: ${e.message}" }
         }
+        refreshQueue()
+        logcat(LogPriority.DEBUG) { "Added ${chapterIds.size} chapters to translation queue" }
     }
 
     fun removeFromQueue(chapterId: Long) {
@@ -128,6 +112,20 @@ class TranslationQueueManager(
                     )
                 }
                 refreshQueue()
+                getQueueItemByChapterId(chapterId)?.let { item ->
+                    _progressUpdates.tryEmit(
+                        TranslationProgressUpdate(
+                            chapterId = item.chapterId,
+                            novelId = item.novelId,
+                            status = status,
+                            progress = item.progress,
+                            currentChunk = 0,
+                            totalChunks = 0,
+                            chapterName = "",
+                            errorMessage = item.errorMessage,
+                        ),
+                    )
+                }
                 logcat(LogPriority.DEBUG) { "Updated chapter $chapterId status to $status" }
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR) { "Failed to update chapter status: ${e.message}" }
@@ -147,10 +145,8 @@ class TranslationQueueManager(
                     )
                 }
                 refreshQueue()
-
-                val item = _queue.value.find { it.chapterId == chapterId }
-                if (item != null) {
-                    _progressUpdates.emit(
+                getQueueItemByChapterId(chapterId)?.let { item ->
+                    _progressUpdates.tryEmit(
                         TranslationProgressUpdate(
                             chapterId = chapterId,
                             novelId = item.novelId,
@@ -180,6 +176,20 @@ class TranslationQueueManager(
                     )
                 }
                 refreshQueue()
+                getQueueItemByChapterId(chapterId)?.let { item ->
+                    _progressUpdates.tryEmit(
+                        TranslationProgressUpdate(
+                            chapterId = chapterId,
+                            novelId = item.novelId,
+                            status = TranslationStatus.FAILED,
+                            progress = item.progress,
+                            currentChunk = 0,
+                            totalChunks = 0,
+                            chapterName = "",
+                            errorMessage = error,
+                        ),
+                    )
+                }
                 logcat(LogPriority.DEBUG) { "Set error for chapter $chapterId: $error" }
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR) { "Failed to set chapter error: ${e.message}" }
@@ -236,23 +246,53 @@ class TranslationQueueManager(
     private suspend fun refreshQueue() {
         try {
             val items = handler.awaitList { db ->
-                db.translation_queueQueries.getPending { id, chapterId, novelId, status, progress, errorMessage, createdAt, updatedAt, retryCount ->
-                    TranslationQueueItem(
-                        id = id,
-                        chapterId = chapterId,
-                        novelId = novelId,
-                        status = TranslationStatus.entries[status.toInt()],
-                        progress = progress.toInt(),
-                        errorMessage = errorMessage,
-                        retryCount = retryCount.toInt(),
-                        createdAt = createdAt,
-                        updatedAt = updatedAt,
-                    )
-                }
+                db.translation_queueQueries.getPending(::mapQueueItem)
             }
             _queue.value = items
         } catch (e: Exception) {
             logcat(LogPriority.ERROR) { "Failed to refresh queue: ${e.message}" }
         }
+    }
+
+    private suspend fun getQueueItemByChapterId(chapterId: Long): TranslationQueueItem? {
+        return handler.awaitOneOrNull { db ->
+            db.translation_queueQueries.getByChapterId(chapterId) { id, chapterId, novelId, status, progress, errorMessage, createdAt, updatedAt, retryCount ->
+                mapQueueItem(
+                    id = id,
+                    chapterId = chapterId,
+                    novelId = novelId,
+                    status = status,
+                    progress = progress,
+                    errorMessage = errorMessage,
+                    createdAt = createdAt,
+                    updatedAt = updatedAt,
+                    retryCount = retryCount,
+                )
+            }
+        }
+    }
+
+    private fun mapQueueItem(
+        id: Long,
+        chapterId: Long,
+        novelId: Long,
+        status: Long,
+        progress: Long,
+        errorMessage: String?,
+        createdAt: Long,
+        updatedAt: Long,
+        retryCount: Long,
+    ): TranslationQueueItem {
+        return TranslationQueueItem(
+            id = id,
+            chapterId = chapterId,
+            novelId = novelId,
+            status = TranslationStatus.entries[status.toInt()],
+            progress = progress.toInt(),
+            errorMessage = errorMessage,
+            retryCount = retryCount.toInt(),
+            createdAt = createdAt,
+            updatedAt = updatedAt,
+        )
     }
 }
