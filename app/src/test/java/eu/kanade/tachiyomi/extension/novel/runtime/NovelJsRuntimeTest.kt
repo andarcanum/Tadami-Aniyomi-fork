@@ -219,15 +219,21 @@ class NovelJsRuntimeTest {
     }
 
     @Test
-    fun `storage module exports localStorage stub`() {
+    fun `storage module exports localStorage bridge`() {
         val script = NovelJsModuleRegistry().modules().first { it.name == "storage.js" }.script
-        script.shouldContain("var localStorage = { get: function() { return {}; } }")
+        script.shouldContain("var localStorage = createStorage(")
+        script.shouldContain("__native.localStorageGet")
+        script.shouldContain("__native.localStorageSet")
+        script.shouldContain("__native.localStorageKeys")
     }
 
     @Test
-    fun `storage module exports sessionStorage stub`() {
+    fun `storage module exports sessionStorage bridge`() {
         val script = NovelJsModuleRegistry().modules().first { it.name == "storage.js" }.script
-        script.shouldContain("var sessionStorage = { get: function() { return {}; } }")
+        script.shouldContain("var sessionStorage = createStorage(")
+        script.shouldContain("__native.sessionStorageGet")
+        script.shouldContain("__native.sessionStorageSet")
+        script.shouldContain("__native.sessionStorageKeys")
     }
 
     @Test
@@ -277,6 +283,12 @@ class NovelJsRuntimeTest {
     fun `storage module returns raw parsed value when raw flag set`() {
         val script = NovelJsModuleRegistry().modules().first { it.name == "storage.js" }.script
         script.shouldContain("return raw ? parsed : parsed.value")
+    }
+
+    @Test
+    fun `storage module returns snapshot when key omitted`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "storage.js" }.script
+        script.shouldContain("if (typeof key === \"undefined\") return readAll();")
     }
 
     // ── Capability-aware module exports ──────────────────────────────────

@@ -4,10 +4,12 @@ import eu.kanade.tachiyomi.network.NetworkHelper
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import io.mockk.mockk
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.protobuf.ProtoBuf
 import kotlinx.serialization.protobuf.ProtoIntegerType
@@ -362,6 +364,98 @@ class NovelJsRuntimeFactoryTest {
 
         store.get("plugin-a", "storage:cache_key") shouldBe null
         store.get("plugin-a", "setting:apiKey") shouldBe "persisted-settings"
+    }
+
+    @Test
+    fun `localStorage methods preserve stored values`() {
+        val nativeApiClass = Class.forName(
+            "eu.kanade.tachiyomi.extension.novel.runtime.NovelJsRuntimeFactory\$NativeApiImpl",
+        )
+        val constructor = nativeApiClass.getDeclaredConstructor(
+            String::class.java,
+            NetworkHelper::class.java,
+            NovelPluginKeyValueStore::class.java,
+            Json::class.java,
+            NovelDomainAliasResolver::class.java,
+        ).apply {
+            isAccessible = true
+        }
+        val nativeApi = constructor.newInstance(
+            "plugin-a",
+            mockk<NetworkHelper>(relaxed = true),
+            InMemoryStore(),
+            Json { ignoreUnknownKeys = true },
+            NovelDomainAliasResolver(NovelPluginRuntimeOverrides()),
+        )
+
+        val setMethod = nativeApiClass.getDeclaredMethod(
+            "localStorageSet",
+            String::class.java,
+            String::class.java,
+        ).apply {
+            isAccessible = true
+        }
+        val getMethod = nativeApiClass.getDeclaredMethod(
+            "localStorageGet",
+            String::class.java,
+        ).apply {
+            isAccessible = true
+        }
+        val keysMethod = nativeApiClass.getDeclaredMethod("localStorageKeys").apply {
+            isAccessible = true
+        }
+
+        setMethod.invoke(nativeApi, "chapter_state", """{"branches":["a","b"]}""")
+        getMethod.invoke(nativeApi, "chapter_state") shouldBe """{"branches":["a","b"]}"""
+
+        val keys = Json.decodeFromString<List<String>>(keysMethod.invoke(nativeApi) as String)
+        keys.shouldContain("chapter_state")
+    }
+
+    @Test
+    fun `sessionStorage methods preserve stored values`() {
+        val nativeApiClass = Class.forName(
+            "eu.kanade.tachiyomi.extension.novel.runtime.NovelJsRuntimeFactory\$NativeApiImpl",
+        )
+        val constructor = nativeApiClass.getDeclaredConstructor(
+            String::class.java,
+            NetworkHelper::class.java,
+            NovelPluginKeyValueStore::class.java,
+            Json::class.java,
+            NovelDomainAliasResolver::class.java,
+        ).apply {
+            isAccessible = true
+        }
+        val nativeApi = constructor.newInstance(
+            "plugin-a",
+            mockk<NetworkHelper>(relaxed = true),
+            InMemoryStore(),
+            Json { ignoreUnknownKeys = true },
+            NovelDomainAliasResolver(NovelPluginRuntimeOverrides()),
+        )
+
+        val setMethod = nativeApiClass.getDeclaredMethod(
+            "sessionStorageSet",
+            String::class.java,
+            String::class.java,
+        ).apply {
+            isAccessible = true
+        }
+        val getMethod = nativeApiClass.getDeclaredMethod(
+            "sessionStorageGet",
+            String::class.java,
+        ).apply {
+            isAccessible = true
+        }
+        val clearMethod = nativeApiClass.getDeclaredMethod("sessionStorageClear").apply {
+            isAccessible = true
+        }
+
+        setMethod.invoke(nativeApi, "auth_state", """{"token":"abc"}""")
+        getMethod.invoke(nativeApi, "auth_state") shouldBe """{"token":"abc"}"""
+
+        clearMethod.invoke(nativeApi)
+        (getMethod.invoke(nativeApi, "auth_state") as String?).shouldBeNull()
     }
 
     private class InMemoryStore : NovelPluginKeyValueStore {

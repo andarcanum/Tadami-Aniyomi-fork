@@ -40,7 +40,9 @@ import kotlinx.serialization.json.put
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import rx.Observable
+import logcat.LogPriority
 import tachiyomi.domain.extension.novel.model.NovelPlugin
+import tachiyomi.core.common.util.system.logcat
 import java.net.URLDecoder
 import java.time.Instant
 import java.time.LocalDate
@@ -327,7 +329,16 @@ class NovelJsSource internal constructor(
             mutex.withLock {
                 val runtime = ensureRuntimeLocked()
                 val payload = callPlugin(runtime, "parseNovel", toJsString(novel.url))
+                logcat(LogPriority.DEBUG) {
+                    "Novel parseNovel payload plugin=${plugin.id} url=${novel.url} " +
+                        "bytes=${payload.length} preview=${payload.take(240)}"
+                }
                 val parsed = NovelJsPayloadParser.parseNovel(json, payload)
+                logcat(LogPriority.DEBUG) {
+                    "Novel parseNovel result plugin=${plugin.id} url=${novel.url} " +
+                        "name=${parsed?.name ?: "null"} path=${parsed?.path ?: "null"} " +
+                        "chapters=${parsed?.chapters?.size ?: 0} totalPages=${parsed?.totalPages?.toString() ?: "null"}"
+                }
                 parsed?.let { enrichNovelDetails(runtime, novel.url, it) }
             }
         } ?: return novel
@@ -353,42 +364,84 @@ class NovelJsSource internal constructor(
             val sourceNovel = runCatching {
                 mutex.withLock {
                     val payload = callPlugin(runtime, "parseNovel", toJsString(novel.url))
-                    NovelJsPayloadParser.parseNovel(json, payload)
+                    logcat(LogPriority.DEBUG) {
+                        "Novel chapterList parseNovel payload plugin=${plugin.id} url=${novel.url} " +
+                            "bytes=${payload.length} preview=${payload.take(240)}"
+                    }
+                    NovelJsPayloadParser.parseNovel(json, payload).also { parsed ->
+                        logcat(LogPriority.DEBUG) {
+                            "Novel chapterList parseNovel result plugin=${plugin.id} url=${novel.url} " +
+                                "name=${parsed?.name ?: "null"} path=${parsed?.path ?: "null"} " +
+                                "chapters=${parsed?.chapters?.size ?: 0} totalPages=${parsed?.totalPages?.toString() ?: "null"}"
+                        }
+                    }
                 }
             }.getOrNull()
 
             if (sourceNovel == null) {
+                logcat(LogPriority.WARN) {
+                    "Novel chapterList parseNovel failed plugin=${plugin.id} url=${novel.url}; " +
+                        "trying fallbacks"
+                }
                 val novelUpdatesChapters = fetchNovelUpdatesChapterFallback(runtime, novel.url)
                 if (novelUpdatesChapters.isNotEmpty()) {
+                    logcat(LogPriority.DEBUG) {
+                        "Novel chapterList fallback=novelUpdates plugin=${plugin.id} " +
+                            "url=${novel.url} count=${novelUpdatesChapters.size}"
+                    }
                     return@runPluginSafe normalizeChapters(novelUpdatesChapters).mapNotNull { it.toSChapterOrNull() }
                 }
 
                 val endpointChapters = fetchRulateFamilyChapterEndpointFallback(runtime, novel.url)
                 if (endpointChapters.isNotEmpty()) {
+                    logcat(LogPriority.DEBUG) {
+                        "Novel chapterList fallback=rulateEndpoint plugin=${plugin.id} " +
+                            "url=${novel.url} count=${endpointChapters.size}"
+                    }
                     return@runPluginSafe normalizeChapters(endpointChapters).mapNotNull { it.toSChapterOrNull() }
                 }
 
                 val htmlFallbackChapters = fetchHtmlChapterListFallback(runtime, novel.url)
+                logcat(LogPriority.DEBUG) {
+                    "Novel chapterList fallback=html plugin=${plugin.id} url=${novel.url} " +
+                        "count=${htmlFallbackChapters.size}"
+                }
                 return@runPluginSafe normalizeChapters(htmlFallbackChapters).mapNotNull { it.toSChapterOrNull() }
             }
 
             val directChapters = sourceNovel.chapters ?: emptyList()
             if (directChapters.isNotEmpty()) {
+                logcat(LogPriority.DEBUG) {
+                    "Novel chapterList direct plugin=${plugin.id} url=${novel.url} " +
+                        "count=${directChapters.size} totalPages=${sourceNovel.totalPages?.toString() ?: "null"}"
+                }
                 return@runPluginSafe normalizeChapters(directChapters).mapNotNull { it.toSChapterOrNull() }
             }
 
             val novelUpdatesChapters = fetchNovelUpdatesChapterFallback(runtime, sourceNovel.path ?: novel.url)
             if (novelUpdatesChapters.isNotEmpty()) {
+                logcat(LogPriority.DEBUG) {
+                    "Novel chapterList fallback=novelUpdates plugin=${plugin.id} " +
+                        "url=${novel.url} count=${novelUpdatesChapters.size}"
+                }
                 return@runPluginSafe normalizeChapters(novelUpdatesChapters).mapNotNull { it.toSChapterOrNull() }
             }
 
             val endpointChapters = fetchRulateFamilyChapterEndpointFallback(runtime, novel.url)
             if (endpointChapters.isNotEmpty()) {
+                logcat(LogPriority.DEBUG) {
+                    "Novel chapterList fallback=rulateEndpoint plugin=${plugin.id} " +
+                        "url=${novel.url} count=${endpointChapters.size}"
+                }
                 return@runPluginSafe normalizeChapters(endpointChapters).mapNotNull { it.toSChapterOrNull() }
             }
 
             val htmlFallbackChapters = fetchHtmlChapterListFallback(runtime, novel.url)
             if (htmlFallbackChapters.isNotEmpty()) {
+                logcat(LogPriority.DEBUG) {
+                    "Novel chapterList fallback=html plugin=${plugin.id} url=${novel.url} " +
+                        "count=${htmlFallbackChapters.size}"
+                }
                 return@runPluginSafe normalizeChapters(htmlFallbackChapters).mapNotNull { it.toSChapterOrNull() }
             }
 
@@ -396,6 +449,10 @@ class NovelJsSource internal constructor(
                 if (capabilities?.hasParsePage != true) return@runPluginSafe emptyList()
                 val oldestPage = (sourceNovel.totalPages ?: 1).coerceAtLeast(1)
                 val firstPageChapters = collectChaptersFromParsePage(runtime, novel.url, oldestPage..oldestPage)
+                logcat(LogPriority.DEBUG) {
+                    "Novel chapterList fallback=jaomixFirstPage plugin=${plugin.id} url=${novel.url} " +
+                        "count=${firstPageChapters.size} totalPages=${sourceNovel.totalPages?.toString() ?: "null"}"
+                }
                 return@runPluginSafe normalizeChapters(firstPageChapters).mapNotNull { it.toSChapterOrNull() }
             }
 
@@ -403,6 +460,10 @@ class NovelJsSource internal constructor(
             if (capabilities?.hasParsePage != true) return@runPluginSafe emptyList()
 
             val collected = collectChaptersFromParsePage(runtime, novel.url, totalPages)
+            logcat(LogPriority.DEBUG) {
+                "Novel chapterList parsePage plugin=${plugin.id} url=${novel.url} " +
+                    "count=${collected.size} totalPages=$totalPages"
+            }
             normalizeChapters(collected).mapNotNull { it.toSChapterOrNull() }
         }
     }

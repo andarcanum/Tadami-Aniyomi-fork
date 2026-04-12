@@ -23,6 +23,10 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.jsoup.Jsoup
+import logcat.LogPriority
+import tachiyomi.core.common.util.system.logcat
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import tachiyomi.data.extension.novel.NovelPluginKeyValueStore
 import java.util.Base64
 
@@ -53,6 +57,13 @@ class NovelJsRuntimeFactory(
 
         private val domStore = NovelJsDomStore()
         private val storagePrefix = "storage:"
+        private val webStorageBridge by lazy {
+            runCatching {
+                Injekt.get<NovelPluginWebViewCoordinator>().getStorageBridge(pluginId)
+            }.getOrElse {
+                NovelPluginWebStorageBridge(pluginId, keyValueStore)
+            }
+        }
 
         override fun fetch(url: String, optionsJson: String?): String {
             val resolvedUrl = resolveAlias(url)
@@ -66,6 +77,13 @@ class NovelJsRuntimeFactory(
                     val bodyBytes = responseBody.bytes()
                     val body = bodyBytes.toString(bodyCharset)
                     val bodyBase64 = Base64.getEncoder().encodeToString(bodyBytes)
+                    if (!response.isSuccessful) {
+                        logcat(LogPriority.WARN) {
+                            "Novel plugin fetch ${pluginId}: HTTP ${response.code} " +
+                                "url=${response.request.url} resolved=$resolvedUrl " +
+                                "body=${body.take(240)}"
+                        }
+                    }
                     json.encodeToString(
                         JsFetchResponse(
                             status = response.code,
@@ -77,6 +95,9 @@ class NovelJsRuntimeFactory(
                     )
                 }
             }.getOrElse { error ->
+                logcat(LogPriority.WARN, error) {
+                    "Novel plugin fetch ${pluginId}: request failed url=$resolvedUrl"
+                }
                 json.encodeToString(
                     JsFetchResponse(
                         status = 0,
@@ -145,8 +166,48 @@ class NovelJsRuntimeFactory(
                     .filter { isManagedStorageKey(it) }
                     .map { storageKeyToPublicKey(it) }
                     .distinct()
-                    .toList(),
+                .toList(),
             )
+        }
+
+        override fun localStorageGet(key: String): String? {
+            return webStorageBridge.localStorageGet(key)
+        }
+
+        override fun localStorageSet(key: String, value: String) {
+            webStorageBridge.localStorageSet(key, value)
+        }
+
+        override fun localStorageRemove(key: String) {
+            webStorageBridge.localStorageRemove(key)
+        }
+
+        override fun localStorageClear() {
+            webStorageBridge.localStorageClear()
+        }
+
+        override fun localStorageKeys(): String {
+            return json.encodeToString(webStorageBridge.localStorageKeys().toList())
+        }
+
+        override fun sessionStorageGet(key: String): String? {
+            return webStorageBridge.sessionStorageGet(key)
+        }
+
+        override fun sessionStorageSet(key: String, value: String) {
+            webStorageBridge.sessionStorageSet(key, value)
+        }
+
+        override fun sessionStorageRemove(key: String) {
+            webStorageBridge.sessionStorageRemove(key)
+        }
+
+        override fun sessionStorageClear() {
+            webStorageBridge.sessionStorageClear()
+        }
+
+        override fun sessionStorageKeys(): String {
+            return json.encodeToString(webStorageBridge.sessionStorageKeys().toList())
         }
 
         override fun resolveUrl(url: String, base: String?): String {
