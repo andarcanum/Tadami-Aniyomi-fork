@@ -533,9 +533,15 @@ fun NovelScreenAuroraImpl(
                                                     onClick = { onChapterClick(chapter.id) },
                                                     onLongClick = { onChapterLongClick(chapter.id) },
                                                     onTranslateClick = { onChapterTranslateClick(chapter.id) },
-                                                    onTranslatedDownloadClick = { onChapterTranslatedDownloadClick(chapter.id) },
-                                                    onTranslatedDownloadLongClick = { onChapterTranslatedDownloadLongClick(chapter.id) },
-                                                    onTranslatedDownloadOpenFolder = { onChapterTranslatedDownloadOpenFolder(chapter.id) },
+                                                    onTranslatedDownloadClick = {
+                                                        onChapterTranslatedDownloadClick(chapter.id)
+                                                    },
+                                                    onTranslatedDownloadLongClick = {
+                                                        onChapterTranslatedDownloadLongClick(chapter.id)
+                                                    },
+                                                    onTranslatedDownloadOpenFolder = {
+                                                        onChapterTranslatedDownloadOpenFolder(chapter.id)
+                                                    },
                                                     onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
                                                     onToggleRead = { onChapterReadToggle(chapter.id) },
                                                     onToggleDownload = { onChapterDownloadToggle(chapter.id) },
@@ -604,9 +610,15 @@ fun NovelScreenAuroraImpl(
                                                     onClick = { onChapterClick(chapter.id) },
                                                     onLongClick = { onChapterLongClick(chapter.id) },
                                                     onTranslateClick = { onChapterTranslateClick(chapter.id) },
-                                                    onTranslatedDownloadClick = { onChapterTranslatedDownloadClick(chapter.id) },
-                                                    onTranslatedDownloadLongClick = { onChapterTranslatedDownloadLongClick(chapter.id) },
-                                                    onTranslatedDownloadOpenFolder = { onChapterTranslatedDownloadOpenFolder(chapter.id) },
+                                                    onTranslatedDownloadClick = {
+                                                        onChapterTranslatedDownloadClick(chapter.id)
+                                                    },
+                                                    onTranslatedDownloadLongClick = {
+                                                        onChapterTranslatedDownloadLongClick(chapter.id)
+                                                    },
+                                                    onTranslatedDownloadOpenFolder = {
+                                                        onChapterTranslatedDownloadOpenFolder(chapter.id)
+                                                    },
                                                     onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
                                                     onToggleRead = { onChapterReadToggle(chapter.id) },
                                                     onToggleDownload = { onChapterDownloadToggle(chapter.id) },
@@ -995,23 +1007,29 @@ fun NovelScreenAuroraImpl(
                             when (row) {
                                 is NovelChapterDisplayRow.BranchChapter -> {
                                     val chapter = row.chapter
-                                                NovelChapterCardCompactUi.Render(
-                                                    novel = novel,
-                                                    chapter = chapter,
-                                                    displayNumber = row.displayNumber,
-                                                    selected = chapter.id in selectedIds,
-                                                    chapterActionState = state.chapterActionStates[chapter.id],
-                                                    isNew = chapter.id in state.newChapterIds,
-                                                    selectionMode = isSelectionMode,
-                                                    onClick = { onChapterClick(chapter.id) },
-                                                    onLongClick = { onChapterLongClick(chapter.id) },
-                                                    onTranslateClick = { onChapterTranslateClick(chapter.id) },
-                                                    onTranslatedDownloadClick = { onChapterTranslatedDownloadClick(chapter.id) },
-                                                    onTranslatedDownloadLongClick = { onChapterTranslatedDownloadLongClick(chapter.id) },
-                                                    onTranslatedDownloadOpenFolder = { onChapterTranslatedDownloadOpenFolder(chapter.id) },
-                                                    onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
-                                                    onToggleRead = { onChapterReadToggle(chapter.id) },
-                                                    onToggleDownload = { onChapterDownloadToggle(chapter.id) },
+                                    NovelChapterCardCompactUi.Render(
+                                        novel = novel,
+                                        chapter = chapter,
+                                        displayNumber = row.displayNumber,
+                                        selected = chapter.id in selectedIds,
+                                        chapterActionState = state.chapterActionStates[chapter.id],
+                                        isNew = chapter.id in state.newChapterIds,
+                                        selectionMode = isSelectionMode,
+                                        onClick = { onChapterClick(chapter.id) },
+                                        onLongClick = { onChapterLongClick(chapter.id) },
+                                        onTranslateClick = { onChapterTranslateClick(chapter.id) },
+                                        onTranslatedDownloadClick = {
+                                            onChapterTranslatedDownloadClick(chapter.id)
+                                        },
+                                        onTranslatedDownloadLongClick = {
+                                            onChapterTranslatedDownloadLongClick(chapter.id)
+                                        },
+                                        onTranslatedDownloadOpenFolder = {
+                                            onChapterTranslatedDownloadOpenFolder(chapter.id)
+                                        },
+                                        onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
+                                        onToggleRead = { onChapterReadToggle(chapter.id) },
+                                        onToggleDownload = { onChapterDownloadToggle(chapter.id) },
                                         chapterSwipeStartAction = chapterSwipeStartAction,
                                         chapterSwipeEndAction = chapterSwipeEndAction,
                                         onChapterSwipe = { action -> onChapterSwipe(chapter.id, action) },
@@ -1067,24 +1085,30 @@ fun NovelScreenAuroraImpl(
                                             }
                                             "$scanlator · $baseTitle"
                                         }
-                                                NovelChapterCardCompactUi.Render(
-                                                    novel = novel,
-                                                    chapter = chapter,
-                                                    displayNumber = row.displayNumber,
-                                                    titleOverride = variantTitle,
-                                                    selected = chapter.id in selectedIds,
-                                                    chapterActionState = state.chapterActionStates[chapter.id],
-                                                    isNew = chapter.id in state.newChapterIds,
-                                                    selectionMode = isSelectionMode,
-                                                    onClick = { onChapterClick(chapter.id) },
-                                                    onLongClick = { onChapterLongClick(chapter.id) },
-                                                    onTranslateClick = { onChapterTranslateClick(chapter.id) },
-                                                    onTranslatedDownloadClick = { onChapterTranslatedDownloadClick(chapter.id) },
-                                                    onTranslatedDownloadLongClick = { onChapterTranslatedDownloadLongClick(chapter.id) },
-                                                    onTranslatedDownloadOpenFolder = { onChapterTranslatedDownloadOpenFolder(chapter.id) },
-                                                    onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
-                                                    onToggleRead = { onChapterReadToggle(chapter.id) },
-                                                    onToggleDownload = { onChapterDownloadToggle(chapter.id) },
+                                    NovelChapterCardCompactUi.Render(
+                                        novel = novel,
+                                        chapter = chapter,
+                                        displayNumber = row.displayNumber,
+                                        titleOverride = variantTitle,
+                                        selected = chapter.id in selectedIds,
+                                        chapterActionState = state.chapterActionStates[chapter.id],
+                                        isNew = chapter.id in state.newChapterIds,
+                                        selectionMode = isSelectionMode,
+                                        onClick = { onChapterClick(chapter.id) },
+                                        onLongClick = { onChapterLongClick(chapter.id) },
+                                        onTranslateClick = { onChapterTranslateClick(chapter.id) },
+                                        onTranslatedDownloadClick = {
+                                            onChapterTranslatedDownloadClick(chapter.id)
+                                        },
+                                        onTranslatedDownloadLongClick = {
+                                            onChapterTranslatedDownloadLongClick(chapter.id)
+                                        },
+                                        onTranslatedDownloadOpenFolder = {
+                                            onChapterTranslatedDownloadOpenFolder(chapter.id)
+                                        },
+                                        onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
+                                        onToggleRead = { onChapterReadToggle(chapter.id) },
+                                        onToggleDownload = { onChapterDownloadToggle(chapter.id) },
                                         chapterSwipeStartAction = chapterSwipeStartAction,
                                         chapterSwipeEndAction = chapterSwipeEndAction,
                                         onChapterSwipe = { action -> onChapterSwipe(chapter.id, action) },

@@ -257,6 +257,7 @@ class NovelCoverFetcher(
         File,
         URL,
         URI,
+
         /** A path starting with '/' that should be resolved against the source's site URL. */
         RELATIVE,
     }

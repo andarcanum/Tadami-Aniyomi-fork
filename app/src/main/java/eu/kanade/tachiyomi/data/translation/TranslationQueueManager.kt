@@ -61,24 +61,22 @@ class TranslationQueueManager(
         }
     }
 
-    fun addToQueue(chapterIds: List<Long>, novelId: Long) {
-        scope.launch {
-            try {
-                val currentTime = System.currentTimeMillis()
-                chapterIds.forEach { chapterId ->
-                    handler.await { db ->
-                        db.translation_queueQueries.insert(
-                            chapterId = chapterId,
-                            novelId = novelId,
-                            createdAt = currentTime,
-                        )
-                    }
+    suspend fun addToQueue(chapterIds: List<Long>, novelId: Long) {
+        try {
+            val currentTime = System.currentTimeMillis()
+            chapterIds.forEach { chapterId ->
+                handler.await { db ->
+                    db.translation_queueQueries.insert(
+                        chapterId = chapterId,
+                        novelId = novelId,
+                        createdAt = currentTime,
+                    )
                 }
-                refreshQueue()
-                logcat(LogPriority.DEBUG) { "Added ${chapterIds.size} chapters to translation queue" }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR) { "Failed to add chapters to queue: ${e.message}" }
             }
+            refreshQueue()
+            logcat(LogPriority.DEBUG) { "Added ${chapterIds.size} chapters to translation queue" }
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR) { "Failed to add chapters to queue: ${e.message}" }
         }
     }
 

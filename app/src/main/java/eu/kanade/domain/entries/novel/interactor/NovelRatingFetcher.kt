@@ -10,11 +10,11 @@ import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.source.novel.NovelSiteSource
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
+import kotlinx.coroutines.CancellationException
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
 import tachiyomi.domain.entries.novel.model.Novel
 import uy.kohesive.injekt.injectLazy
-import kotlinx.coroutines.CancellationException
 import java.util.Locale
 import java.util.TimeZone
 

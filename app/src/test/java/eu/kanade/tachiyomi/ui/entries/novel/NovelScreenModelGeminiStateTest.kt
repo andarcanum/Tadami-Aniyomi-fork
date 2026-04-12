@@ -1,8 +1,8 @@
 package eu.kanade.tachiyomi.ui.entries.novel
 
+import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
-import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 
 class NovelScreenModelGeminiStateTest {

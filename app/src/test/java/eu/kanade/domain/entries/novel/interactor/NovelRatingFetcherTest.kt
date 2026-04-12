@@ -2,6 +2,7 @@ package eu.kanade.domain.entries.novel.interactor
 
 import eu.kanade.domain.entries.rating.EntryRatingCache
 import eu.kanade.tachiyomi.network.HttpException
+import eu.kanade.tachiyomi.novelsource.NovelSource
 import io.kotest.matchers.shouldBe
 import io.mockk.clearMocks
 import io.mockk.coEvery
@@ -13,7 +14,6 @@ import org.junit.jupiter.api.Test
 import tachiyomi.domain.entries.novel.model.Novel
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.fullType
-import eu.kanade.tachiyomi.novelsource.NovelSource
 
 class NovelRatingFetcherTest {
     companion object {

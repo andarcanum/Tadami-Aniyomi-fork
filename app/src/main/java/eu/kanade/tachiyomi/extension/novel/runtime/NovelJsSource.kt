@@ -37,12 +37,12 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.put
+import logcat.LogPriority
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import rx.Observable
-import logcat.LogPriority
-import tachiyomi.domain.extension.novel.model.NovelPlugin
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.extension.novel.model.NovelPlugin
 import java.net.URLDecoder
 import java.time.Instant
 import java.time.LocalDate

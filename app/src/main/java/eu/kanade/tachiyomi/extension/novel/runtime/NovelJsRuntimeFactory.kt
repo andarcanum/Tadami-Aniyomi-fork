@@ -18,16 +18,16 @@ import kotlinx.serialization.protobuf.ProtoBuf
 import kotlinx.serialization.protobuf.ProtoIntegerType
 import kotlinx.serialization.protobuf.ProtoNumber
 import kotlinx.serialization.protobuf.ProtoType
+import logcat.LogPriority
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.jsoup.Jsoup
-import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.data.extension.novel.NovelPluginKeyValueStore
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import tachiyomi.data.extension.novel.NovelPluginKeyValueStore
 import java.util.Base64
 
 class NovelJsRuntimeFactory(
@@ -79,7 +79,7 @@ class NovelJsRuntimeFactory(
                     val bodyBase64 = Base64.getEncoder().encodeToString(bodyBytes)
                     if (!response.isSuccessful) {
                         logcat(LogPriority.WARN) {
-                            "Novel plugin fetch ${pluginId}: HTTP ${response.code} " +
+                            "Novel plugin fetch $pluginId: HTTP ${response.code} " +
                                 "url=${response.request.url} resolved=$resolvedUrl " +
                                 "body=${body.take(240)}"
                         }
@@ -96,7 +96,7 @@ class NovelJsRuntimeFactory(
                 }
             }.getOrElse { error ->
                 logcat(LogPriority.WARN, error) {
-                    "Novel plugin fetch ${pluginId}: request failed url=$resolvedUrl"
+                    "Novel plugin fetch $pluginId: request failed url=$resolvedUrl"
                 }
                 json.encodeToString(
                     JsFetchResponse(
@@ -166,7 +166,7 @@ class NovelJsRuntimeFactory(
                     .filter { isManagedStorageKey(it) }
                     .map { storageKeyToPublicKey(it) }
                     .distinct()
-                .toList(),
+                    .toList(),
             )
         }
 

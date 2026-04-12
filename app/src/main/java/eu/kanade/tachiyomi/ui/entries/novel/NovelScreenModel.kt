@@ -1577,8 +1577,8 @@ class NovelScreenModel(
 
     fun addToTranslationQueue(chapterId: Long) {
         val state = successState ?: return
-        translationQueueManager.addToQueue(listOf(chapterId), state.novel.id)
         screenModelScope.launchIO {
+            translationQueueManager.addToQueue(listOf(chapterId), state.novel.id)
             snackbarHostState.showSnackbar(message = "Перевод добавлен в очередь")
         }
     }

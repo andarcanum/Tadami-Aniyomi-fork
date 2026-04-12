@@ -3,8 +3,8 @@ package eu.kanade.tachiyomi.extension.novel.runtime
 import eu.kanade.tachiyomi.network.NetworkHelper
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContain
-import io.kotest.matchers.shouldBe
 import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import io.mockk.mockk

@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.novel.setting
 
+import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -13,7 +14,6 @@ import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.preference.getEnum
@@ -694,7 +694,10 @@ class NovelReaderPreferences(
         preferenceStore.getEnum("novel_reader_translation_provider", NovelTranslationProvider.GEMINI)
 
     fun translatedDownloadFormat(novelId: Long): NovelTranslatedDownloadFormat {
-        val stored = preferenceStore.getString(translatedDownloadFormatKey(novelId), NovelTranslatedDownloadFormat.TXT.name).get()
+        val stored = preferenceStore.getString(
+            translatedDownloadFormatKey(novelId),
+            NovelTranslatedDownloadFormat.TXT.name,
+        ).get()
         return runCatching { NovelTranslatedDownloadFormat.valueOf(stored) }
             .getOrDefault(NovelTranslatedDownloadFormat.TXT)
     }
