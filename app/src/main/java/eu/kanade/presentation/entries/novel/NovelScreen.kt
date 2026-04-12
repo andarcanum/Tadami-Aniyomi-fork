@@ -77,6 +77,7 @@ import eu.kanade.presentation.entries.components.EntryToolbar
 import eu.kanade.presentation.entries.components.ItemCover
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
+import eu.kanade.presentation.entries.novel.components.NovelChapterActionButton
 import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
 import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.novel.buildNovelCoverImageRequest
@@ -84,6 +85,8 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.formatChapterNumber
 import eu.kanade.tachiyomi.data.coil.staticBlur
 import eu.kanade.tachiyomi.source.model.SManga
+import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterActionIconState
+import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterActionUiState
 import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterDisplayRow
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
 import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterDisplayData
@@ -128,6 +131,9 @@ fun NovelScreen(
     onOpenTranslatedDownloadDialog: (() -> Unit)?,
     onOpenEpubExportDialog: (() -> Unit)?,
     onChapterClick: (Long) -> Unit,
+    onChapterTranslateClick: (Long) -> Unit,
+    onChapterTranslatedDownloadClick: (Long) -> Unit,
+    onChapterTranslatedDownloadLongClick: (Long) -> Unit,
     onChapterReadToggle: (Long) -> Unit,
     onChapterBookmarkToggle: (Long) -> Unit,
     onChapterDownloadToggle: (Long) -> Unit,
@@ -188,6 +194,9 @@ fun NovelScreen(
             onOpenTranslatedDownloadDialog = onOpenTranslatedDownloadDialog,
             onOpenEpubExportDialog = onOpenEpubExportDialog,
             onChapterClick = onChapterClick,
+            onChapterTranslateClick = onChapterTranslateClick,
+            onChapterTranslatedDownloadClick = onChapterTranslatedDownloadClick,
+            onChapterTranslatedDownloadLongClick = onChapterTranslatedDownloadLongClick,
             onChapterLongClick = onChapterLongClick,
             onChapterReadToggle = onChapterReadToggle,
             onChapterBookmarkToggle = onChapterBookmarkToggle,
@@ -793,6 +802,7 @@ fun NovelScreen(
                                 chapter = chapter,
                                 displayNumber = row.displayNumber,
                                 selected = chapter.id in selectedIds,
+                                chapterActionState = state.chapterActionStates[chapter.id],
                                 downloaded = chapter.id in state.downloadedChapterIds,
                                 downloading = chapter.id in state.downloadingChapterIds,
                                 selectionMode = isAnySelected,
@@ -802,6 +812,9 @@ fun NovelScreen(
                                     .padding(horizontal = MaterialTheme.padding.medium, vertical = 4.dp),
                                 onClick = { onChapterClick(chapter.id) },
                                 onLongClick = { onChapterLongClick(chapter.id) },
+                                onTranslateClick = { onChapterTranslateClick(chapter.id) },
+                                onTranslatedDownloadClick = { onChapterTranslatedDownloadClick(chapter.id) },
+                                onTranslatedDownloadLongClick = { onChapterTranslatedDownloadLongClick(chapter.id) },
                                 onToggleDownload = { onChapterDownloadToggle(chapter.id) },
                                 onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
                                 onToggleRead = { onChapterReadToggle(chapter.id) },
@@ -859,6 +872,7 @@ fun NovelScreen(
                                 chapter = chapter,
                                 displayNumber = row.displayNumber,
                                 selected = chapter.id in selectedIds,
+                                chapterActionState = state.chapterActionStates[chapter.id],
                                 downloaded = chapter.id in state.downloadedChapterIds,
                                 downloading = chapter.id in state.downloadingChapterIds,
                                 selectionMode = isAnySelected,
@@ -874,6 +888,9 @@ fun NovelScreen(
                                     ),
                                 onClick = { onChapterClick(chapter.id) },
                                 onLongClick = { onChapterLongClick(chapter.id) },
+                                onTranslateClick = { onChapterTranslateClick(chapter.id) },
+                                onTranslatedDownloadClick = { onChapterTranslatedDownloadClick(chapter.id) },
+                                onTranslatedDownloadLongClick = { onChapterTranslatedDownloadLongClick(chapter.id) },
                                 onToggleDownload = { onChapterDownloadToggle(chapter.id) },
                                 onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
                                 onToggleRead = { onChapterReadToggle(chapter.id) },
@@ -1348,6 +1365,7 @@ private fun NovelClassicChapterRow(
     chapter: tachiyomi.domain.items.novelchapter.model.NovelChapter,
     displayNumber: Int,
     selected: Boolean,
+    chapterActionState: NovelChapterActionUiState?,
     downloaded: Boolean,
     downloading: Boolean,
     selectionMode: Boolean,
@@ -1356,6 +1374,9 @@ private fun NovelClassicChapterRow(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    onTranslateClick: () -> Unit,
+    onTranslatedDownloadClick: () -> Unit,
+    onTranslatedDownloadLongClick: () -> Unit,
     onToggleDownload: () -> Unit,
     onToggleBookmark: () -> Unit,
     onToggleRead: () -> Unit,
@@ -1429,51 +1450,93 @@ private fun NovelClassicChapterRow(
                     }
                 }
                 if (!selectionMode) {
-                    IconButton(
-                        onClick = onToggleDownload,
-                        modifier = Modifier.padding(start = 2.dp),
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        Icon(
-                            imageVector = when {
-                                downloading -> Icons.Outlined.FileDownloadOff
-                                downloaded -> Icons.Outlined.Delete
-                                else -> Icons.Outlined.Download
-                            },
-                            contentDescription = null,
-                            tint = when {
-                                downloading -> MaterialTheme.colorScheme.tertiary
-                                downloaded -> MaterialTheme.colorScheme.error
-                                else -> MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        )
-                    }
-                    IconButton(
-                        onClick = onToggleBookmark,
-                        modifier = Modifier.padding(start = 2.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Bookmark,
-                            contentDescription = null,
-                            tint = if (chapter.bookmark) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        )
-                    }
-                    IconButton(
-                        onClick = onToggleRead,
-                        modifier = Modifier.padding(start = 2.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.CheckCircle,
-                            contentDescription = null,
-                            tint = if (chapter.read) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        )
+                        if (chapterActionState?.showGeminiRow == true) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                val translateState = chapterActionState.translateState
+                                NovelChapterActionButton(
+                                    icon = Icons.Outlined.Translate,
+                                    iconTint = when (translateState) {
+                                        NovelChapterActionIconState.Active -> MaterialTheme.colorScheme.primary
+                                        NovelChapterActionIconState.InProgress -> MaterialTheme.colorScheme.tertiary
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    onClick = onTranslateClick,
+                                    backgroundColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.24f),
+                                    showProgress = translateState == NovelChapterActionIconState.InProgress,
+                                    progressColor = MaterialTheme.colorScheme.primary,
+                                    size = 32.dp,
+                                    iconSize = 18.dp,
+                                )
+                                val translatedDownloadState = chapterActionState.downloadTranslatedState
+                                NovelChapterActionButton(
+                                    icon = if (translatedDownloadState == NovelChapterActionIconState.Active) {
+                                        Icons.Outlined.Download
+                                    } else {
+                                        Icons.Outlined.Download
+                                    },
+                                    iconTint = when (translatedDownloadState) {
+                                        NovelChapterActionIconState.Active -> MaterialTheme.colorScheme.primary
+                                        NovelChapterActionIconState.InProgress -> MaterialTheme.colorScheme.tertiary
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    onClick = onTranslatedDownloadClick,
+                                    onLongClick = onTranslatedDownloadLongClick,
+                                    backgroundColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.24f),
+                                    showProgress = translatedDownloadState == NovelChapterActionIconState.InProgress,
+                                    progressColor = MaterialTheme.colorScheme.primary,
+                                    size = 32.dp,
+                                    iconSize = 18.dp,
+                                )
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            NovelChapterActionButton(
+                                icon = when {
+                                    downloading -> Icons.Outlined.FileDownloadOff
+                                    downloaded -> Icons.Outlined.Download
+                                    else -> Icons.Outlined.Download
+                                },
+                                iconTint = when {
+                                    downloading -> MaterialTheme.colorScheme.tertiary
+                                    downloaded -> MaterialTheme.colorScheme.error
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                onClick = onToggleDownload,
+                                backgroundColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.24f),
+                                showProgress = downloading,
+                                progressColor = MaterialTheme.colorScheme.primary,
+                                size = 32.dp,
+                                iconSize = 18.dp,
+                            )
+                            NovelChapterActionButton(
+                                icon = Icons.Outlined.Bookmark,
+                                iconTint = if (chapter.bookmark) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                onClick = onToggleBookmark,
+                                backgroundColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.24f),
+                                size = 32.dp,
+                                iconSize = 18.dp,
+                            )
+                            NovelChapterActionButton(
+                                icon = Icons.Outlined.CheckCircle,
+                                iconTint = if (chapter.read) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                onClick = onToggleRead,
+                                backgroundColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.24f),
+                                size = 32.dp,
+                                iconSize = 18.dp,
+                            )
+                        }
                     }
                 }
             }

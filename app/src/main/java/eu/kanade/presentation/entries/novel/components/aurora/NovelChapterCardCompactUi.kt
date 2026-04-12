@@ -19,6 +19,7 @@ import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -38,11 +39,14 @@ import eu.kanade.presentation.components.relativeDateTimeText
 import eu.kanade.presentation.entries.components.aurora.AURORA_DIMMED_ITEM_ALPHA
 import eu.kanade.presentation.entries.components.aurora.AURORA_NEW_ITEM_HIGHLIGHT_ALPHA
 import eu.kanade.presentation.entries.manga.components.aurora.GlassmorphismCard
+import eu.kanade.presentation.entries.novel.components.NovelChapterActionButton
 import eu.kanade.presentation.entries.novel.novelChapterDateText
 import eu.kanade.presentation.entries.novel.novelSwipeAction
 import eu.kanade.presentation.entries.novel.novelSwipeActionThreshold
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.formatChapterNumber
+import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterActionIconState
+import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterActionUiState
 import me.saket.swipe.SwipeableActionsBox
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
@@ -59,10 +63,14 @@ object NovelChapterCardCompactUi {
         displayNumber: Int? = null,
         titleOverride: String? = null,
         selected: Boolean,
+        chapterActionState: NovelChapterActionUiState? = null,
         isNew: Boolean,
         selectionMode: Boolean,
         onClick: () -> Unit,
         onLongClick: () -> Unit,
+        onTranslateClick: () -> Unit,
+        onTranslatedDownloadClick: () -> Unit,
+        onTranslatedDownloadLongClick: () -> Unit,
         onToggleBookmark: () -> Unit,
         onToggleRead: () -> Unit,
         onToggleDownload: () -> Unit,
@@ -156,58 +164,81 @@ object NovelChapterCardCompactUi {
                     }
 
                     if (!selectionMode) {
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(colors.surface.copy(alpha = 0.24f))
-                                .clickable(onClick = onToggleDownload),
-                            contentAlignment = Alignment.Center,
+                        Column(
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            if (downloading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(14.dp),
-                                    strokeWidth = 1.5.dp,
-                                    color = colors.accent,
+                            if (chapterActionState?.showGeminiRow == true) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    val translateState = chapterActionState.translateState
+                                    NovelChapterActionButton(
+                                        icon = Icons.Outlined.Translate,
+                                        iconTint = when (translateState) {
+                                            NovelChapterActionIconState.Active -> colors.accent
+                                            NovelChapterActionIconState.InProgress -> colors.accent
+                                            else -> colors.textSecondary
+                                        },
+                                        onClick = onTranslateClick,
+                                        backgroundColor = colors.surface.copy(alpha = 0.24f),
+                                        showProgress = translateState == NovelChapterActionIconState.InProgress,
+                                        progressColor = colors.accent,
+                                        size = 32.dp,
+                                        iconSize = 18.dp,
+                                    )
+                                    val translatedDownloadState = chapterActionState.downloadTranslatedState
+                                    NovelChapterActionButton(
+                                        icon = Icons.Outlined.Download,
+                                        iconTint = when (translatedDownloadState) {
+                                            NovelChapterActionIconState.Active -> colors.accent
+                                            NovelChapterActionIconState.InProgress -> colors.accent
+                                            else -> colors.textSecondary
+                                        },
+                                        onClick = onTranslatedDownloadClick,
+                                        onLongClick = onTranslatedDownloadLongClick,
+                                        backgroundColor = colors.surface.copy(alpha = 0.24f),
+                                        showProgress = translatedDownloadState == NovelChapterActionIconState.InProgress,
+                                        progressColor = colors.accent,
+                                        size = 32.dp,
+                                        iconSize = 18.dp,
+                                    )
+                                }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                NovelChapterActionButton(
+                                    icon = when {
+                                        downloading -> Icons.Outlined.Delete
+                                        downloaded -> Icons.Outlined.Download
+                                        else -> Icons.Outlined.Download
+                                    },
+                                    iconTint = when {
+                                        downloading -> colors.accent
+                                        downloaded -> colors.error
+                                        else -> colors.textSecondary
+                                    },
+                                    onClick = onToggleDownload,
+                                    backgroundColor = colors.surface.copy(alpha = 0.24f),
+                                    showProgress = downloading,
+                                    progressColor = colors.accent,
+                                    size = 32.dp,
+                                    iconSize = 18.dp,
                                 )
-                            } else {
-                                Icon(
-                                    imageVector = if (downloaded) Icons.Outlined.Delete else Icons.Outlined.Download,
-                                    contentDescription = null,
-                                    tint = if (downloaded) colors.error else colors.textSecondary,
-                                    modifier = Modifier.size(16.dp),
+                                NovelChapterActionButton(
+                                    icon = Icons.Outlined.Bookmark,
+                                    iconTint = if (chapter.bookmark) colors.accent else colors.textSecondary,
+                                    onClick = onToggleBookmark,
+                                    backgroundColor = colors.surface.copy(alpha = 0.24f),
+                                    size = 32.dp,
+                                    iconSize = 18.dp,
+                                )
+                                NovelChapterActionButton(
+                                    icon = Icons.Outlined.CheckCircle,
+                                    iconTint = if (chapter.read) colors.accent else colors.textSecondary,
+                                    onClick = onToggleRead,
+                                    backgroundColor = colors.surface.copy(alpha = 0.24f),
+                                    size = 32.dp,
+                                    iconSize = 18.dp,
                                 )
                             }
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(colors.surface.copy(alpha = 0.24f))
-                                .clickable(onClick = onToggleBookmark),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Bookmark,
-                                contentDescription = null,
-                                tint = if (chapter.bookmark) colors.accent else colors.textSecondary,
-                                modifier = Modifier.size(16.dp),
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(colors.surface.copy(alpha = 0.24f))
-                                .clickable(onClick = onToggleRead),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.CheckCircle,
-                                contentDescription = null,
-                                tint = if (chapter.read) colors.accent else colors.textSecondary,
-                                modifier = Modifier.size(16.dp),
-                            )
                         }
                     }
                 }
