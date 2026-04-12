@@ -1,0 +1,78 @@
+import kotlin.Boolean;
+import kotlin.Int;
+
+CREATE TABLE translation_queue(
+    _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    chapter_id INTEGER NOT NULL UNIQUE,
+    novel_id INTEGER NOT NULL,
+    status INTEGER NOT NULL DEFAULT 0,
+    progress INTEGER NOT NULL DEFAULT 0,
+    error_message TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL DEFAULT 0,
+    retry_count INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX translation_queue_status_index ON translation_queue(status);
+CREATE INDEX translation_queue_chapter_id_index ON translation_queue(chapter_id);
+
+-- Queries
+insert:
+INSERT INTO translation_queue(chapter_id, novel_id, status, progress, created_at, updated_at, retry_count)
+VALUES (:chapterId, :novelId, 0, 0, :createdAt, :createdAt, 0);
+
+getByChapterId:
+SELECT * FROM translation_queue
+WHERE chapter_id = :chapterId;
+
+getByStatus:
+SELECT * FROM translation_queue
+WHERE status = :status;
+
+getPending:
+SELECT * FROM translation_queue
+WHERE status = 0
+ORDER BY created_at ASC;
+
+getInProgress:
+SELECT * FROM translation_queue
+WHERE status = 1;
+
+getNextPending:
+SELECT * FROM translation_queue
+WHERE status = 0
+ORDER BY created_at ASC
+LIMIT 1;
+
+updateStatus:
+UPDATE translation_queue
+SET status = :status, updated_at = :updatedAt
+WHERE chapter_id = :chapterId;
+
+updateProgress:
+UPDATE translation_queue
+SET progress = :progress, updated_at = :updatedAt
+WHERE chapter_id = :chapterId;
+
+updateStatusAndProgress:
+UPDATE translation_queue
+SET status = :status, progress = :progress, updated_at = :updatedAt
+WHERE chapter_id = :chapterId;
+
+setError:
+UPDATE translation_queue
+SET status = 3, error_message = :error, updated_at = :updatedAt
+WHERE chapter_id = :chapterId;
+
+incrementRetry:
+UPDATE translation_queue
+SET retry_count = retry_count + 1, status = 0, updated_at = :updatedAt
+WHERE chapter_id = :chapterId;
+
+delete:
+DELETE FROM translation_queue
+WHERE chapter_id = :chapterId;
+
+deleteCompleted:
+DELETE FROM translation_queue
+WHERE status = 2;
