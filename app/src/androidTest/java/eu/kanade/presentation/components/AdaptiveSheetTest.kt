@@ -95,6 +95,30 @@ class AdaptiveSheetTest {
     }
 
     @Test
+    fun back_press_while_sheet_is_animating_still_dismisses() {
+        val dismissCount = AtomicInteger(0)
+        composeTestRule.mainClock.autoAdvance = false
+
+        composeTestRule.setContent {
+            AdaptiveSheet(
+                onDismissRequest = { dismissCount.incrementAndGet() },
+                enableSwipeDismiss = false,
+            ) {
+                Text("Animating content", Modifier.testTag("animating_content"))
+            }
+        }
+
+        composeTestRule.mainClock.advanceTimeBy(100)
+        composeTestRule.waitForIdle()
+
+        composeTestRule.activity.onBackPressedDispatcher.onBackPressed()
+        composeTestRule.mainClock.advanceTimeBy(500)
+        composeTestRule.waitForIdle()
+
+        assertEquals(1, dismissCount.get())
+    }
+
+    @Test
     fun nested_navigator_back_pops_before_dismiss() {
         val dismissCount = AtomicInteger(0)
         composeTestRule.mainClock.autoAdvance = false

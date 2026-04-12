@@ -1,4 +1,4 @@
-﻿package eu.kanade.presentation.reader.novel
+package eu.kanade.presentation.reader.novel
 
 import android.app.Activity
 import android.content.BroadcastReceiver
@@ -4009,6 +4009,7 @@ private fun GeminiTranslationDialog(
     TabbedDialog(
         onDismissRequest = onDismiss,
         tabTitles = tabTitles,
+        enableSwipeDismiss = false,
     ) { page ->
         Column(
             modifier = Modifier

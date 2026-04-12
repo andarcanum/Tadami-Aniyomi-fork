@@ -43,6 +43,7 @@ class NovelReaderTtsUiTest {
                     onSetLocaleTag = {},
                     onSetSpeechRate = {},
                     onSetPitch = {},
+                    onDisableTts = {},
                 )
             }
         }
