@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.entries.novel
 
+import android.net.Uri
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.Lifecycle
@@ -7,7 +8,6 @@ import androidx.lifecycle.flowWithLifecycle
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.base.BasePreferences
-import android.net.Uri
 import eu.kanade.domain.entries.novel.interactor.GetNovelExcludedScanlators
 import eu.kanade.domain.entries.novel.interactor.NovelRatingFetcher
 import eu.kanade.domain.entries.novel.interactor.SetNovelExcludedScanlators
@@ -19,19 +19,18 @@ import eu.kanade.domain.items.novelchapter.interactor.GetAvailableNovelScanlator
 import eu.kanade.domain.items.novelchapter.interactor.GetNovelScanlatorChapterCounts
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.presentation.util.TargetChapterCalculator
-import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCacheEvent
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState
 import eu.kanade.tachiyomi.data.download.novel.NovelQueuedDownloadStatus
 import eu.kanade.tachiyomi.data.download.novel.NovelQueuedDownloadType
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadManager
+import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.data.export.novel.NovelEpubExportOptions
 import eu.kanade.tachiyomi.data.export.novel.NovelEpubExporter
-import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterActionStateResolver
-import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterActionUiState
 import eu.kanade.tachiyomi.data.track.MangaTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelJsSource
@@ -40,6 +39,8 @@ import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.source.novel.NovelSiteSource
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
 import eu.kanade.tachiyomi.ui.entries.mergeNewItemIds
+import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterActionStateResolver
+import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterActionUiState
 import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationCacheResolver
@@ -50,6 +51,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -57,7 +59,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.supervisorScope
 import logcat.LogPriority
@@ -171,6 +172,7 @@ class NovelScreenModel(
     },
     private val novelEpubExporter: NovelEpubExporter = NovelEpubExporter(),
     private val novelReaderPreferences: NovelReaderPreferences = Injekt.get(),
+    private val translationQueueManager: TranslationQueueManager = Injekt.get(),
     private val eventBus: AchievementEventBus? = runCatching { Injekt.get<AchievementEventBus>() }.getOrNull(),
     val snackbarHostState: SnackbarHostState = SnackbarHostState(),
 ) : StateScreenModel<NovelScreenModel.State>(State.Loading) {
@@ -466,7 +468,7 @@ class NovelScreenModel(
                 State.Loading -> it
                 is State.Success -> func(it)
                     .also(::cacheState)
-                }
+            }
         }
     }
 
@@ -701,8 +703,11 @@ class NovelScreenModel(
                                 chapter = chapter,
                                 format = translatedDownloadFormat,
                             )
-                            if (downloaded) translatedDownloadedIds.add(chapter.id)
-                            else translatedNotDownloadedIds.add(chapter.id)
+                            if (downloaded) {
+                                translatedDownloadedIds.add(chapter.id)
+                            } else {
+                                translatedNotDownloadedIds.add(chapter.id)
+                            }
                             downloaded
                         }
                     }
@@ -1568,6 +1573,14 @@ class NovelScreenModel(
             snackbarHostState.showSnackbar(message = "Downloaded translation deleted")
         }
         refreshChapterActionStatesAsync(delayMs = 100L)
+    }
+
+    fun addToTranslationQueue(chapterId: Long) {
+        val state = successState ?: return
+        translationQueueManager.addToQueue(listOf(chapterId), state.novel.id)
+        screenModelScope.launchIO {
+            snackbarHostState.showSnackbar(message = "Перевод добавлен в очередь")
+        }
     }
 
     fun deleteDownloadedSelectedChapters() {
