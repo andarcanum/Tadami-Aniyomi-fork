@@ -9,9 +9,9 @@ import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.domain.category.manga.interactor.GetMangaCategories
 import tachiyomi.domain.entries.manga.interactor.GetLibraryManga
 import tachiyomi.domain.entries.manga.model.MangaCover
 import tachiyomi.domain.history.manga.interactor.GetMangaHistory
@@ -29,6 +29,7 @@ class MangaHomeHubScreenModel(
     private val getMangaHistory: GetMangaHistory = Injekt.get(),
     private val getNextChapters: GetNextChapters = Injekt.get(),
     private val getLibraryManga: GetLibraryManga = Injekt.get(),
+    private val getMangaCategories: GetMangaCategories = Injekt.get(),
     private val userProfilePreferences: UserProfilePreferences = Injekt.get(),
     private val sourcePreferences: SourcePreferences = Injekt.get(),
     private val sourceManager: MangaSourceManager = Injekt.get(),
@@ -56,6 +57,9 @@ class MangaHomeHubScreenModel(
 
         val showWelcome: Boolean
             get() = !isInitialized && isEmpty && !isLoading
+
+        val showFilteredEmpty: Boolean
+            get() = isInitialized && isEmpty && !isLoading
     }
 
     data class HeroData(
@@ -117,29 +121,51 @@ class MangaHomeHubScreenModel(
             combine(
                 userProfilePreferences.name().changes(),
                 userProfilePreferences.avatarUrl().changes(),
-                getMangaHistory.subscribe("").map { it.take(7) },
-                getLibraryManga.subscribe().map { list ->
-                    list.filter { it.manga.favorite }
-                        .take(10)
-                },
-            ) { name, avatar, historyList, mangaList ->
-                LiveData(name, avatar, historyList, mangaList)
+                getMangaCategories.subscribe(),
+                getMangaHistory.subscribe(""),
+                getLibraryManga.subscribe(),
+            ) { name, avatar, categories, historyList, mangaList ->
+                LiveData(name, avatar, categories, historyList, mangaList)
             }.collectLatest { data ->
-                val hero = data.historyList.firstOrNull()
-                val history = if (data.historyList.size > 1) data.historyList.drop(1) else emptyList()
+                val hiddenCategoryIds = data.categories
+                    .filter { it.hiddenFromHomeHub }
+                    .map { it.id }
+                    .toSet()
+                val mangaCategoryIdsByMangaId = data.mangaList
+                    .groupBy { it.manga.id }
+                    .mapValues { (_, items) -> items.map { it.category } }
 
-                val hasData = hero != null || history.isNotEmpty() || data.mangaList.isNotEmpty()
+                val filteredHistory = filterHomeHubEntriesBy(
+                    items = data.historyList,
+                    keySelector = { it.mangaId },
+                    entryCategoryIds = mangaCategoryIdsByMangaId,
+                    hiddenCategoryIds = hiddenCategoryIds,
+                )
+
+                val filteredManga = filterHomeHubEntriesBy(
+                    items = data.mangaList,
+                    keySelector = { it.manga.id },
+                    entryCategoryIds = mangaCategoryIdsByMangaId,
+                    hiddenCategoryIds = hiddenCategoryIds,
+                ).distinctBy { it.manga.id }
+
+                val hero = filteredHistory.firstOrNull()
+                val history = if (filteredHistory.size > 1) filteredHistory.drop(1).take(6) else emptyList()
+
+                val hasData = hero != null || history.isNotEmpty() || filteredManga.isNotEmpty()
                 if (hasData && !state.value.isInitialized) {
                     fastCache.markInitialized()
                 }
 
                 val previousHeroId = mutableState.value.hero?.mangaId
 
+                val mangaRecommendations = filteredManga.take(10)
+
                 mutableState.update {
                     it.copy(
                         hero = hero?.toHeroData(),
                         history = history.map { h -> h.toHistoryData() },
-                        recommendations = data.mangaList.map { m -> m.toRecommendationData() },
+                        recommendations = mangaRecommendations.map { m -> m.toRecommendationData() },
                         userName = data.name,
                         userAvatar = data.avatar,
                         isInitialized = hasData || it.isInitialized,
@@ -222,6 +248,7 @@ class MangaHomeHubScreenModel(
     private data class LiveData(
         val name: String,
         val avatar: String,
+        val categories: List<tachiyomi.domain.category.model.Category>,
         val historyList: List<MangaHistoryWithRelations>,
         val mangaList: List<LibraryManga>,
     )

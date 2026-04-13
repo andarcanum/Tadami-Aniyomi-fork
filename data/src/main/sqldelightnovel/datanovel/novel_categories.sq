@@ -3,7 +3,8 @@ CREATE TABLE novel_categories(
     name TEXT NOT NULL,
     sort INTEGER NOT NULL,
     flags INTEGER NOT NULL,
-    hidden INTEGER NOT NULL DEFAULT 0
+    hidden INTEGER NOT NULL DEFAULT 0,
+    hidden_from_home_hub INTEGER NOT NULL DEFAULT 0
 );
 
 -- Insert system category
@@ -29,7 +30,8 @@ _id AS id,
 name,
 sort AS `order`,
 flags,
-hidden
+hidden,
+hidden_from_home_hub
 FROM novel_categories
 ORDER BY sort;
 
@@ -39,7 +41,8 @@ _id AS id,
 name,
 sort AS `order`,
 flags,
-hidden
+hidden,
+hidden_from_home_hub
 FROM novel_categories
 WHERE hidden = 0
 ORDER BY sort;
@@ -50,7 +53,8 @@ C._id AS id,
 C.name,
 C.sort AS `order`,
 C.flags,
-C.hidden
+C.hidden,
+C.hidden_from_home_hub
 FROM novel_categories C
 JOIN novels_categories NC
 ON C._id = NC.category_id
@@ -62,19 +66,20 @@ C._id AS id,
 C.name,
 C.sort AS `order`,
 C.flags,
-C.hidden
+C.hidden,
+C.hidden_from_home_hub
 FROM novel_categories C
 JOIN novels_categories NC
 ON C._id = NC.category_id
 WHERE NC.novel_id = :novelId AND C.hidden = 0;
 
 insert:
-INSERT INTO novel_categories(name, sort, flags)
-VALUES (:name, :order, :flags);
+INSERT INTO novel_categories(name, sort, flags, hidden, hidden_from_home_hub)
+VALUES (:name, :order, :flags, :hidden, :hidden_from_home_hub);
 
 insertOrIgnoreWithId:
-INSERT OR IGNORE INTO novel_categories(_id, name, sort, flags, hidden)
-VALUES (:id, :name, :order, :flags, :hidden);
+INSERT OR IGNORE INTO novel_categories(_id, name, sort, flags, hidden, hidden_from_home_hub)
+VALUES (:id, :name, :order, :flags, :hidden, :hidden_from_home_hub);
 
 delete:
 DELETE FROM novel_categories
@@ -85,7 +90,8 @@ UPDATE novel_categories
 SET name = coalesce(:name, name),
     sort = coalesce(:order, sort),
     flags = coalesce(:flags, flags),
-    hidden = coalesce(:hidden, hidden)
+    hidden = coalesce(:hidden, hidden),
+    hidden_from_home_hub = coalesce(:hidden_from_home_hub, hidden_from_home_hub)
 WHERE _id = :categoryId;
 
 updateAllFlags:

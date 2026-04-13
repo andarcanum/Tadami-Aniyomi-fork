@@ -590,6 +590,7 @@ class NovelLibraryScreenModel(
                     order = it.order,
                     flags = it.flags,
                     hidden = it.hidden,
+                    hiddenFromHomeHub = false,
                 )
             }
             .filterNot(Category::isSystemCategory)
@@ -610,6 +611,7 @@ class NovelLibraryScreenModel(
                     order = it.order,
                     flags = it.flags,
                     hidden = it.hidden,
+                    hiddenFromHomeHub = false,
                 )
             }
             .filterNot(Category::isSystemCategory)
@@ -726,6 +728,7 @@ class NovelLibraryScreenModel(
                     order = it.order,
                     flags = it.flags,
                     hidden = it.hidden,
+                    hiddenFromHomeHub = false,
                 )
             }
             .filterNot(Category::isSystemCategory)

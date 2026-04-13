@@ -39,6 +39,7 @@ fun MangaCategoryScreen(
     onClickCreate: () -> Unit,
     onClickRename: (Category) -> Unit,
     onClickHide: (Category) -> Unit,
+    onClickToggleHomeHub: (Category) -> Unit,
     onClickDelete: (Category) -> Unit,
     onChangeOrder: (Category, Int) -> Unit,
 ) {
@@ -69,6 +70,7 @@ fun MangaCategoryScreen(
             paddingValues = paddingValues,
             onClickRename = onClickRename,
             onClickHide = onClickHide,
+            onClickToggleHomeHub = onClickToggleHomeHub,
             onClickDelete = onClickDelete,
             onChangeOrder = onChangeOrder,
             isAurora = isAurora,
@@ -83,6 +85,7 @@ private fun CategoryContent(
     paddingValues: PaddingValues,
     onClickRename: (Category) -> Unit,
     onClickHide: (Category) -> Unit,
+    onClickToggleHomeHub: (Category) -> Unit,
     onClickDelete: (Category) -> Unit,
     onChangeOrder: (Category, Int) -> Unit,
     isAurora: Boolean,
@@ -127,6 +130,7 @@ private fun CategoryContent(
                     category = category,
                     onRename = { onClickRename(category) },
                     onHide = { onClickHide(category) },
+                    onToggleHomeHub = { onClickToggleHomeHub(category) },
                     onDelete = { onClickDelete(category) },
                 )
             }

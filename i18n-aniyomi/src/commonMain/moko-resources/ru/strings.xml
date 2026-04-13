@@ -233,6 +233,7 @@
     <string name="trackers_updated_summary_anime">Сервисы отслеживания обновлены до %d-го эпизода</string>
     <string name="download_notifier_download_finish">Загрузка завершена</string>
     <string name="action_hide">Скрыть</string>
+    <string name="action_hide_from_home_hub">Скрыть с Home Hub</string>
     <string name="label_all">Все</string>
     <string name="label_category">Категория</string>
     <string name="manga_categories">Категории манги</string>

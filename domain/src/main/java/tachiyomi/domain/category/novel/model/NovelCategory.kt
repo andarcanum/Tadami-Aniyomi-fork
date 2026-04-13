@@ -6,6 +6,7 @@ data class NovelCategory(
     val order: Long,
     val flags: Long,
     val hidden: Boolean,
+    val hiddenFromHomeHub: Boolean,
 ) {
     companion object {
         fun createDefault(id: Long) = NovelCategory(
@@ -14,6 +15,7 @@ data class NovelCategory(
             order = 0,
             flags = 0,
             hidden = false,
+            hiddenFromHomeHub = false,
         )
     }
 }

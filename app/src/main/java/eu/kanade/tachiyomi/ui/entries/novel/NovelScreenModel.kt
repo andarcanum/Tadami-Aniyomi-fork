@@ -271,6 +271,7 @@ class NovelScreenModel(
                     }
                     if (chapterIdsChanged) {
                         syncDownloadedState()
+                        refreshChapterActionStatesAsync(delayMs = 100L)
                     }
                 }
         }
@@ -376,6 +377,8 @@ class NovelScreenModel(
 
             val chapters = getNovelWithChapters.awaitChapters(novelId, applyScanlatorFilter = true)
             val source = sourceManager.getOrStub(novel.source)
+            val readerSettings = novelReaderPreferences.resolveSettings(novel.source)
+            val translatedDownloadFormat = novelReaderPreferences.translatedDownloadFormat(novel.id)
             val isJaomixPagedSource = source.isJaomixPagedSource()
             val shouldAutoRefreshNovel = !novel.initialized
             val shouldAutoRefreshChapters = chapters.isEmpty() || isJaomixPagedSource
@@ -392,14 +395,22 @@ class NovelScreenModel(
                 scanlatorChapterCounts = scanlatorChapterCounts,
                 excludedScanlators = initialExcludedScanlators,
                 downloadedOnly = basePreferences.downloadedOnly().get(),
-                geminiEnabled = novelReaderPreferences.geminiEnabled().get(),
-                translatedDownloadFormat = novelReaderPreferences.translatedDownloadFormat(novel.id),
+                geminiEnabled = readerSettings.geminiEnabled,
+                translatedDownloadFormat = translatedDownloadFormat,
                 isRefreshingData = shouldAutoRefreshNovel || shouldAutoRefreshChapters,
                 dialog = null,
                 selectedChapterIds = emptySet(),
                 downloadedChapterIds = currentDownloadedIds,
                 downloadingChapterIds = emptySet(),
-                chapterActionStates = emptyMap(),
+                chapterActionStates = buildNovelChapterActionUiStates(
+                    geminiEnabled = readerSettings.geminiEnabled,
+                    chapters = chapters,
+                    translatedDownloadFormat = translatedDownloadFormat,
+                    hasTranslationCache = { false },
+                    isTranslatedDownloaded = { false },
+                    isTranslatedDownloading = { false },
+                    isTranslating = { false },
+                ),
                 chapterPageEnabled = isJaomixPagedSource,
                 chapterPageEstimatedTotal = if (isJaomixPagedSource && chapters.isNotEmpty()) {
                     chapters.size
@@ -413,10 +424,13 @@ class NovelScreenModel(
                     emptySet()
                 },
                 hasCompletedChapterRefresh = chapters.isNotEmpty(),
-            ).withResolvedChapterActionStates()
+            )
             mutableState.update {
                 initialState
             }
+            // Seed the UI with lightweight neutral Gemini actions immediately, then
+            // resolve translated download and translation cache state in the background.
+            refreshChapterActionStatesAsync()
             screenModelScope.launchIO {
                 basePreferences.downloadedOnly().changes()
                     .collectLatest { downloadedOnly ->
@@ -583,6 +597,7 @@ class NovelScreenModel(
                     },
                 )
             }
+            refreshChapterActionStatesAsync(delayMs = 100L)
         }
     }
 
@@ -827,6 +842,7 @@ class NovelScreenModel(
                     order = it.order,
                     flags = it.flags,
                     hidden = it.hidden,
+                    hiddenFromHomeHub = false,
                 )
             }
             .filterNot(Category::isSystemCategory)

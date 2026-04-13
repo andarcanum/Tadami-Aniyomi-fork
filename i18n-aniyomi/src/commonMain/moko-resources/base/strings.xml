@@ -376,6 +376,7 @@
     <!-- Other -->
     <string name="download_notifier_download_finish">Download completed</string>
     <string name="action_hide">Hide</string>
+    <string name="action_hide_from_home_hub">Hide from Home Hub</string>
     <string name="label_all">All</string>
     <string name="label_category">Category</string>
     <string name="manga_categories">Manga Categories</string>

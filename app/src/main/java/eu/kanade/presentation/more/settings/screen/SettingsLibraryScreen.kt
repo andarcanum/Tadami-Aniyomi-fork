@@ -554,6 +554,7 @@ private fun List<NovelCategory>.toCategoryList(): List<Category> {
             order = it.order,
             flags = it.flags,
             hidden = it.hidden,
+            hiddenFromHomeHub = false,
         )
     }
 }

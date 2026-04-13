@@ -6,4 +6,5 @@ data class NovelCategoryUpdate(
     val order: Long? = null,
     val flags: Long? = null,
     val hidden: Boolean? = null,
+    val hiddenFromHomeHub: Boolean? = null,
 )

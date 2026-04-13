@@ -7,9 +7,9 @@ import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.domain.category.novel.interactor.GetNovelCategories
 import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
 import tachiyomi.domain.entries.novel.interactor.GetNovel
 import tachiyomi.domain.entries.novel.model.NovelCover
@@ -29,6 +29,7 @@ class NovelHomeHubScreenModel(
     private val historyRepository: NovelHistoryRepository = Injekt.get(),
     private val getLibraryNovel: GetLibraryNovel = Injekt.get(),
     private val getNovel: GetNovel = Injekt.get(),
+    private val getNovelCategories: GetNovelCategories = Injekt.get(),
     private val chapterRepository: NovelChapterRepository = Injekt.get(),
     private val userProfilePreferences: UserProfilePreferences = Injekt.get(),
     private val sourcePreferences: SourcePreferences = Injekt.get(),
@@ -57,6 +58,9 @@ class NovelHomeHubScreenModel(
 
         val showWelcome: Boolean
             get() = !isInitialized && isEmpty && !isLoading
+
+        val showFilteredEmpty: Boolean
+            get() = isInitialized && isEmpty && !isLoading
     }
 
     data class HeroData(
@@ -127,25 +131,50 @@ class NovelHomeHubScreenModel(
             combine(
                 userProfilePreferences.name().changes(),
                 userProfilePreferences.avatarUrl().changes(),
-                historyRepository.getNovelHistory("").map { it.take(7) },
-                getLibraryNovel.subscribe().map { it.take(10) },
-            ) { name, avatar, historyList, novelList ->
-                LiveData(name, avatar, historyList, novelList)
+                getNovelCategories.subscribe(),
+                historyRepository.getNovelHistory(""),
+                getLibraryNovel.subscribe(),
+            ) { name, avatar, categories, historyList, novelList ->
+                LiveData(name, avatar, categories, historyList, novelList)
             }.collectLatest { data ->
-                val hero = data.historyList.firstOrNull()
-                val history = if (data.historyList.size > 1) data.historyList.drop(1) else emptyList()
+                val hiddenCategoryIds = data.categories
+                    .filter { it.hiddenFromHomeHub }
+                    .map { it.id }
+                    .toSet()
+                val novelCategoryIdsByNovelId = data.novelList
+                    .groupBy { it.novel.id }
+                    .mapValues { (_, items) -> items.map { it.category } }
 
-                val hasData = hero != null || history.isNotEmpty() || data.novelList.isNotEmpty()
+                val filteredHistory = filterHomeHubEntriesBy(
+                    items = data.historyList,
+                    keySelector = { it.novelId },
+                    entryCategoryIds = novelCategoryIdsByNovelId,
+                    hiddenCategoryIds = hiddenCategoryIds,
+                )
+
+                val filteredNovel = filterHomeHubEntriesBy(
+                    items = data.novelList,
+                    keySelector = { it.novel.id },
+                    entryCategoryIds = novelCategoryIdsByNovelId,
+                    hiddenCategoryIds = hiddenCategoryIds,
+                ).distinctBy { it.novel.id }
+
+                val hero = filteredHistory.firstOrNull()
+                val history = if (filteredHistory.size > 1) filteredHistory.drop(1).take(6) else emptyList()
+
+                val hasData = hero != null || history.isNotEmpty() || filteredNovel.isNotEmpty()
                 if (hasData && !state.value.isInitialized) {
                     fastCache.markInitialized()
                 }
                 val previousHero = mutableState.value.hero
 
+                val novelRecommendations = filteredNovel.take(10)
+
                 mutableState.update {
                     it.copy(
                         hero = hero?.toHeroData(),
                         history = history.map { h -> h.toHistoryData() },
-                        recommendations = data.novelList.map { n -> n.toRecommendationData() },
+                        recommendations = novelRecommendations.map { n -> n.toRecommendationData() },
                         userName = data.name,
                         userAvatar = data.avatar,
                         isInitialized = hasData || it.isInitialized,
@@ -235,6 +264,7 @@ class NovelHomeHubScreenModel(
     private data class LiveData(
         val name: String,
         val avatar: String,
+        val categories: List<tachiyomi.domain.category.novel.model.NovelCategory>,
         val historyList: List<NovelHistoryWithRelations>,
         val novelList: List<LibraryNovel>,
     )

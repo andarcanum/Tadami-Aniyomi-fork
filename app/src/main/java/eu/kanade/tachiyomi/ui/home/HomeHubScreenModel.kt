@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.domain.category.anime.interactor.GetAnimeCategories
 import tachiyomi.domain.entries.anime.interactor.GetLibraryAnime
 import tachiyomi.domain.entries.anime.model.AnimeCover
 import tachiyomi.domain.history.anime.interactor.GetAnimeHistory
@@ -28,6 +29,7 @@ class HomeHubScreenModel(
     private val getAnimeHistory: GetAnimeHistory = Injekt.get(),
     private val getNextEpisodes: GetNextEpisodes = Injekt.get(),
     private val getLibraryAnime: GetLibraryAnime = Injekt.get(),
+    private val getAnimeCategories: GetAnimeCategories = Injekt.get(),
     private val userProfilePreferences: UserProfilePreferences = Injekt.get(),
     private val sourcePreferences: SourcePreferences = Injekt.get(),
     private val sourceManager: AnimeSourceManager = Injekt.get(),
@@ -58,6 +60,9 @@ class HomeHubScreenModel(
 
         val showWelcome: Boolean
             get() = !isInitialized && isEmpty && !isLoading
+
+        val showFilteredEmpty: Boolean
+            get() = isInitialized && isEmpty && !isLoading
     }
 
     data class HeroData(
@@ -134,26 +139,51 @@ class HomeHubScreenModel(
             combine(
                 userProfilePreferences.name().changes(),
                 userProfilePreferences.avatarUrl().changes(),
-                getAnimeHistory.subscribeRecent(limit = 7),
-                getLibraryAnime.subscribeRecent(10),
-            ) { name, avatar, historyList, animeList ->
-                LiveData(name, avatar, historyList, animeList)
+                getAnimeCategories.subscribe(),
+                getAnimeHistory.subscribe(""),
+                getLibraryAnime.subscribe(),
+            ) { name, avatar, categories, historyList, animeList ->
+                LiveData(name, avatar, categories, historyList, animeList)
             }.collectLatest { data ->
-                val hero = data.historyList.firstOrNull()
-                val history = if (data.historyList.size > 1) data.historyList.drop(1) else emptyList()
+                val hiddenCategoryIds = data.categories
+                    .filter { it.hiddenFromHomeHub }
+                    .map { it.id }
+                    .toSet()
+                val animeCategoryIdsByAnimeId = data.animeList
+                    .groupBy { it.anime.id }
+                    .mapValues { (_, items) -> items.map { it.category } }
 
-                val hasData = hero != null || history.isNotEmpty() || data.animeList.isNotEmpty()
+                val filteredHistory = filterHomeHubEntriesBy(
+                    items = data.historyList,
+                    keySelector = { it.animeId },
+                    entryCategoryIds = animeCategoryIdsByAnimeId,
+                    hiddenCategoryIds = hiddenCategoryIds,
+                )
+
+                val filteredAnime = filterHomeHubEntriesBy(
+                    items = data.animeList,
+                    keySelector = { it.anime.id },
+                    entryCategoryIds = animeCategoryIdsByAnimeId,
+                    hiddenCategoryIds = hiddenCategoryIds,
+                ).distinctBy { it.anime.id }
+
+                val hero = filteredHistory.firstOrNull()
+                val history = if (filteredHistory.size > 1) filteredHistory.drop(1).take(6) else emptyList()
+
+                val hasData = hero != null || history.isNotEmpty() || filteredAnime.isNotEmpty()
                 if (hasData && !state.value.isInitialized) {
                     fastCache.markInitialized()
                 }
 
                 val previousHeroId = mutableState.value.hero?.animeId
 
+                val animeRecommendations = filteredAnime.take(10)
+
                 mutableState.update {
                     it.copy(
                         hero = hero?.toHeroData(),
                         history = history.map { h -> h.toHistoryData() },
-                        recommendations = data.animeList.map { a -> a.toRecommendationData() },
+                        recommendations = animeRecommendations.map { a -> a.toRecommendationData() },
                         userName = data.name,
                         userAvatar = data.avatar,
                         isInitialized = hasData || it.isInitialized,
@@ -237,6 +267,7 @@ class HomeHubScreenModel(
     private data class LiveData(
         val name: String,
         val avatar: String,
+        val categories: List<tachiyomi.domain.category.model.Category>,
         val historyList: List<AnimeHistoryWithRelations>,
         val animeList: List<LibraryAnime>,
     )

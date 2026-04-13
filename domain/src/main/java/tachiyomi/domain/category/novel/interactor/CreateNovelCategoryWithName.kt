@@ -14,6 +14,7 @@ class CreateNovelCategoryWithName(
                 order = order,
                 flags = flags,
                 hidden = false,
+                hiddenFromHomeHub = false,
             ),
         )
     }

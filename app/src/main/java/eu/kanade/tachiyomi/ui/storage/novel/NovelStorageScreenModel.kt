@@ -31,11 +31,11 @@ class NovelStorageScreenModel(
     categories = { hideHiddenCategories ->
         if (hideHiddenCategories) {
             getVisibleCategories.subscribe().map { categories ->
-                categories.map { Category(it.id, it.name, it.order, it.flags, it.hidden) }
+                categories.map { Category(it.id, it.name, it.order, it.flags, it.hidden, it.hiddenFromHomeHub) }
             }
         } else {
             getCategories.subscribe().map { categories ->
-                categories.map { Category(it.id, it.name, it.order, it.flags, it.hidden) }
+                categories.map { Category(it.id, it.name, it.order, it.flags, it.hidden, it.hiddenFromHomeHub) }
             }
         }
     },

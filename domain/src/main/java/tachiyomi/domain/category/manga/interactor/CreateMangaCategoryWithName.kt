@@ -27,6 +27,7 @@ class CreateMangaCategoryWithName(
             order = nextOrder,
             flags = initialFlags,
             hidden = false,
+            hiddenFromHomeHub = false,
         )
 
         try {

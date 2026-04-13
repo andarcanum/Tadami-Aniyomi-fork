@@ -1696,5 +1696,6 @@ private fun NovelCategory.toCategory(): Category {
         order = order,
         flags = flags,
         hidden = hidden,
+        hiddenFromHomeHub = false,
     )
 }

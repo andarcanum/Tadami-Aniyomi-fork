@@ -36,6 +36,7 @@ class NovelCategoriesRestorer(
                                 order = order,
                                 flags = it.flags,
                                 hidden = false,
+                                hiddenFromHomeHub = it.hiddenFromHomeHub,
                             )
                         }
                 }

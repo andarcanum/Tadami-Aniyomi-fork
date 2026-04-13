@@ -85,6 +85,7 @@ class AnimeCategoryRepositoryImpl(
             order = update.order,
             flags = update.flags,
             hidden = update.hidden?.let { if (it) 1L else 0L },
+            hidden_from_home_hub = update.hiddenFromHomeHub?.let { if (it) 1L else 0L },
             categoryId = update.id,
         )
     }
@@ -109,6 +110,7 @@ class AnimeCategoryRepositoryImpl(
         order: Long,
         flags: Long,
         hidden: Long,
+        hiddenFromHomeHub: Long,
     ): Category {
         return Category(
             id = id,
@@ -116,6 +118,7 @@ class AnimeCategoryRepositoryImpl(
             order = order,
             flags = flags,
             hidden = hidden == 1L,
+            hiddenFromHomeHub = hiddenFromHomeHub == 1L,
         )
     }
 }

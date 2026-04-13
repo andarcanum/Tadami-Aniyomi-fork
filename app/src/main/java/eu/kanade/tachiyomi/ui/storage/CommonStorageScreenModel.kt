@@ -117,6 +117,7 @@ abstract class CommonStorageScreenModel<T>(
             order = 0L,
             flags = 0L,
             hidden = false,
+            hiddenFromHomeHub = false,
         )
     }
 }

@@ -17,9 +17,11 @@ import tachiyomi.domain.category.novel.interactor.DeleteNovelCategory
 import tachiyomi.domain.category.novel.interactor.GetNovelCategories
 import tachiyomi.domain.category.novel.interactor.GetVisibleNovelCategories
 import tachiyomi.domain.category.novel.interactor.HideNovelCategory
-import tachiyomi.domain.category.novel.interactor.RenameNovelCategory
 import tachiyomi.domain.category.novel.interactor.ReorderNovelCategory
+import tachiyomi.domain.category.novel.interactor.RenameNovelCategory
+import tachiyomi.domain.category.novel.interactor.UpdateNovelCategory
 import tachiyomi.domain.category.novel.model.NovelCategory
+import tachiyomi.domain.category.novel.model.NovelCategoryUpdate
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
@@ -33,6 +35,7 @@ class NovelCategoryScreenModel(
     private val deleteCategory: DeleteNovelCategory = Injekt.get(),
     private val reorderCategory: ReorderNovelCategory = Injekt.get(),
     private val renameCategory: RenameNovelCategory = Injekt.get(),
+    private val updateCategory: UpdateNovelCategory = Injekt.get(),
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
 ) : StateScreenModel<NovelCategoryScreenState>(NovelCategoryScreenState.Loading) {
 
@@ -72,6 +75,19 @@ class NovelCategoryScreenModel(
         screenModelScope.launch {
             runCatching { hideCategory.await(category.id, !category.hidden) }
                 .onFailure { _events.send(NovelCategoryEvent.InternalError) }
+        }
+    }
+
+    fun toggleHomeHubCategory(category: Category) {
+        screenModelScope.launch {
+            runCatching {
+                updateCategory.await(
+                    NovelCategoryUpdate(
+                        id = category.id,
+                        hiddenFromHomeHub = !category.hiddenFromHomeHub,
+                    ),
+                )
+            }.onFailure { _events.send(NovelCategoryEvent.InternalError) }
         }
     }
 
@@ -159,5 +175,6 @@ private fun NovelCategory.toCategory(): Category {
         order = order,
         flags = flags,
         hidden = hidden,
+        hiddenFromHomeHub = hiddenFromHomeHub,
     )
 }
