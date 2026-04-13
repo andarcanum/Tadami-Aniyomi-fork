@@ -8,10 +8,12 @@ import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState
 import eu.kanade.tachiyomi.data.download.novel.NovelQueuedDownload
 import eu.kanade.tachiyomi.data.download.novel.NovelQueuedDownloadStatus
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class NovelDownloadQueueScreenModel(
     private val downloadManager: NovelDownloadManager = NovelDownloadManager(),
@@ -35,11 +37,15 @@ class NovelDownloadQueueScreenModel(
     }
 
     fun refreshStorage() {
-        mutableState.update {
-            it.copy(
-                downloadCount = getDownloadCount(),
-                downloadSize = getDownloadSize(),
-            )
+        screenModelScope.launch {
+            val count = withContext(Dispatchers.IO) { getDownloadCount() }
+            val size = withContext(Dispatchers.IO) { getDownloadSize() }
+            mutableState.update {
+                it.copy(
+                    downloadCount = count,
+                    downloadSize = size,
+                )
+            }
         }
     }
 

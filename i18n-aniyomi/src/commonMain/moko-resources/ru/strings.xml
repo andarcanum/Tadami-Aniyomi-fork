@@ -1200,6 +1200,9 @@
     <string name="novel_downloads_info_not_queue">Здесь показаны локально сохранённые главы ранобэ, а не активная очередь.</string>
     <string name="novel_downloads_failed">Ошибки</string>
     <string name="novel_downloads_info_with_queue">Очередь показывает активные задачи. Сохранённые главы указаны ниже.</string>
+    <string name="action_open_download_folder">Открыть папку</string>
+    <string name="download_folder_not_set">Папка загрузок не задана</string>
+    <string name="no_file_manager_found">Файловый менеджер не найден</string>
     <string name="aurora_updating_library">Обновление всей библиотеки</string>
     <string name="aurora_update_already_running">Обновление уже запущено</string>
 

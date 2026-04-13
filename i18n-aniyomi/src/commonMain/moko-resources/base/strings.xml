@@ -1342,6 +1342,9 @@
     <string name="novel_downloads_info_not_queue">Shows locally saved novel chapters, not an active queue.</string>
     <string name="novel_downloads_failed">Failed</string>
     <string name="novel_downloads_info_with_queue">Queue shows active tasks. Saved chapters are shown below.</string>
+    <string name="action_open_download_folder">Open folder</string>
+    <string name="download_folder_not_set">Download folder not set</string>
+    <string name="no_file_manager_found">No file manager found</string>
     <string name="aurora_updating_library">Updating whole library</string>
     <string name="aurora_update_already_running">Update already running</string>
 

@@ -30,6 +30,16 @@ class NovelDownloadManager(
     },
 ) {
 
+    @Volatile
+    private var cachedTotalCount: Int? = null
+    @Volatile
+    private var cachedTotalSize: Long? = null
+
+    fun invalidateCache() {
+        cachedTotalCount = null
+        cachedTotalSize = null
+    }
+
     private val legacyRootDir: File?
         get() = runCatching { application?.filesDir }.getOrNull()?.let { File(it, ROOT_DIR_NAME) }
 
@@ -58,7 +68,10 @@ class NovelDownloadManager(
     }
 
     fun getDownloadCount(): Int {
-        return calculateScopedDirectoryCount(rootDir) + calculateLegacyDirectoryCount(legacyRootDir)
+        cachedTotalCount?.let { return it }
+        val count = calculateScopedDirectoryCount(rootDir) + calculateLegacyDirectoryCount(legacyRootDir)
+        cachedTotalCount = count
+        return count
     }
 
     fun hasAnyDownloadedChapter(novel: Novel): Boolean {
@@ -72,7 +85,10 @@ class NovelDownloadManager(
     }
 
     fun getDownloadSize(): Long {
-        return calculateScopedDirectorySize(rootDir) + calculateLegacyDirectorySize(legacyRootDir)
+        cachedTotalSize?.let { return it }
+        val size = calculateScopedDirectorySize(rootDir) + calculateLegacyDirectorySize(legacyRootDir)
+        cachedTotalSize = size
+        return size
     }
 
     suspend fun downloadChapter(novel: Novel, chapter: NovelChapter): Boolean {
@@ -103,6 +119,7 @@ class NovelDownloadManager(
         logcat(LogPriority.DEBUG) {
             "Novel download completed: novel=${novel.id}, chapter=${chapter.id}, fetchMs=$fetchElapsed, writeMs=$writeElapsed, chars=${text.length}"
         }
+        invalidateCache()
         downloadCache?.onChaptersChanged(
             novel = novel,
             chapterIds = setOf(chapter.id),
@@ -125,6 +142,7 @@ class NovelDownloadManager(
     fun deleteChapter(novel: Novel, chapterId: Long) {
         findChapterFile(novel, chapterId)?.delete()
         legacyChapterFile(novel, chapterId)?.delete()
+        invalidateCache()
         cleanupDirectories(novel)
         downloadCache?.onChaptersChanged(
             novel = novel,
@@ -138,6 +156,7 @@ class NovelDownloadManager(
             findChapterFile(novel, chapterId)?.delete()
             legacyChapterFile(novel, chapterId)?.delete()
         }
+        invalidateCache()
         cleanupDirectories(novel)
         downloadCache?.onChaptersChanged(
             novel = novel,
@@ -162,6 +181,7 @@ class NovelDownloadManager(
             legacyDir.deleteRecursively()
         }
 
+        invalidateCache()
         cleanupDirectories(novel)
         downloadCache?.onNovelRemoved(novel)
     }
