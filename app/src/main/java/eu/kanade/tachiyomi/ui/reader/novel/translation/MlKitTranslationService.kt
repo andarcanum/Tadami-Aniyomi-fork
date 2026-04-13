@@ -9,8 +9,7 @@ import eu.kanade.tachiyomi.extension.novel.normalizeNovelLang
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class MlKitTranslationService(
-) {
+class MlKitTranslationService() {
     private val modelManager: MlKitModelManager by lazy { MlKitModelManager() }
 
     private val languageIdentifier: LanguageIdentifier by lazy {

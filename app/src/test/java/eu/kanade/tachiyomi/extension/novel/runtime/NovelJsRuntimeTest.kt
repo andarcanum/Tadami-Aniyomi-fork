@@ -415,4 +415,12 @@ class NovelJsRuntimeTest {
         script.shouldContain("localStorage")
         script.shouldContain("sessionStorage")
     }
+
+    @Test
+    fun `cheerio module defines element name property in wrapHandles`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "cheerio.js" }.script
+
+        script.shouldContain("name: __native.domTagName(handles[i])")
+        script.shouldContain("name: __native.domTagName(handles[index])")
+    }
 }

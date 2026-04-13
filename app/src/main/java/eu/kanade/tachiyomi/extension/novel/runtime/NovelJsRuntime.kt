@@ -1526,6 +1526,7 @@ class NovelJsModuleRegistry(
                 for (var i = 0; i < handles.length; i++) {
                   arr.push({
                     tagName: __native.domTagName(handles[i]),
+                    name: __native.domTagName(handles[i]),
                     attribs: JSON.parse(__native.domAttrs(handles[i]))
                   });
                 }
@@ -1537,6 +1538,7 @@ class NovelJsModuleRegistry(
                 if (!handles[index] && handles[index] !== 0) return undefined;
                 return {
                   tagName: __native.domTagName(handles[index]),
+                  name: __native.domTagName(handles[index]),
                   attribs: JSON.parse(__native.domAttrs(handles[index]))
                 };
               },

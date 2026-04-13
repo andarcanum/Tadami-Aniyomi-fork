@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.widget.BasePreferenceWidget
 import eu.kanade.presentation.more.settings.widget.PrefsHorizontalPadding
+import eu.kanade.presentation.reader.novel.MlKitTranslationModelsDialog
 import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_AGED_PAGE_ID
 import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_AGED_PARCHMENT_ID
 import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_CRUMPLED_SHEET_ID
@@ -67,7 +68,6 @@ import eu.kanade.presentation.reader.novel.ensureLegacyNovelReaderBackgroundItem
 import eu.kanade.presentation.reader.novel.importNovelReaderCustomBackgroundItem
 import eu.kanade.presentation.reader.novel.importNovelReaderCustomFont
 import eu.kanade.presentation.reader.novel.intervalToAutoScrollSpeed
-import eu.kanade.presentation.reader.novel.MlKitTranslationModelsDialog
 import eu.kanade.presentation.reader.novel.novelBookFlipAnimationSpeedEntries
 import eu.kanade.presentation.reader.novel.novelBookFlipAnimationSpeedSliderIndex
 import eu.kanade.presentation.reader.novel.novelPageTransitionStyleEntries
