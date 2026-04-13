@@ -1041,11 +1041,11 @@ private fun encodeReaderFontUrlPath(
     preserveSlashes: Boolean = false,
 ): String {
     return if (!preserveSlashes) {
-        URLEncoder.encode(value, Charsets.UTF_8).replace("+", "%20")
+        URLEncoder.encode(value, StandardCharsets.UTF_8.name()).replace("+", "%20")
     } else {
         value.split('/')
             .joinToString("/") { segment ->
-                URLEncoder.encode(segment, Charsets.UTF_8).replace("+", "%20")
+                URLEncoder.encode(segment, StandardCharsets.UTF_8.name()).replace("+", "%20")
             }
     }
 }
