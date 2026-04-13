@@ -277,6 +277,8 @@ fun NovelReaderScreen(
     onSetGeminiTopP: (Float) -> Unit = {},
     onSetGeminiTopK: (Int) -> Unit = {},
     onSetGeminiPromptMode: (GeminiPromptMode) -> Unit = {},
+    onSetGeminiSourceLang: (String) -> Unit = {},
+    onSetGeminiTargetLang: (String) -> Unit = {},
     onSetGeminiStylePreset: (NovelTranslationStylePreset) -> Unit = {},
     onSetGeminiEnabledPromptModifiers: (List<String>) -> Unit = {},
     onSetGeminiCustomPromptModifier: (String) -> Unit = {},
@@ -3504,6 +3506,8 @@ fun NovelReaderScreen(
                 onSetGeminiTopP = onSetGeminiTopP,
                 onSetGeminiTopK = onSetGeminiTopK,
                 onSetGeminiPromptMode = onSetGeminiPromptMode,
+                onSetGeminiSourceLang = onSetGeminiSourceLang,
+                onSetGeminiTargetLang = onSetGeminiTargetLang,
                 onSetGeminiStylePreset = onSetGeminiStylePreset,
                 onSetGeminiEnabledPromptModifiers = onSetGeminiEnabledPromptModifiers,
                 onSetGeminiCustomPromptModifier = onSetGeminiCustomPromptModifier,
@@ -3634,6 +3638,8 @@ private fun GeminiTranslationDialog(
     onSetGeminiTopP: (Float) -> Unit,
     onSetGeminiTopK: (Int) -> Unit,
     onSetGeminiPromptMode: (GeminiPromptMode) -> Unit,
+    onSetGeminiSourceLang: (String) -> Unit,
+    onSetGeminiTargetLang: (String) -> Unit,
     onSetGeminiStylePreset: (NovelTranslationStylePreset) -> Unit,
     onSetGeminiEnabledPromptModifiers: (List<String>) -> Unit,
     onSetGeminiCustomPromptModifier: (String) -> Unit,
@@ -3733,6 +3739,8 @@ private fun GeminiTranslationDialog(
     var tempTopP by remember(readerSettings.geminiTopP) { mutableStateOf(readerSettings.geminiTopP.toString()) }
     var tempTopK by remember(readerSettings.geminiTopK) { mutableStateOf(readerSettings.geminiTopK.toString()) }
     var tempPromptMode by remember(readerSettings.geminiPromptMode) { mutableStateOf(readerSettings.geminiPromptMode) }
+    var tempSourceLang by remember(readerSettings.geminiSourceLang) { mutableStateOf(readerSettings.geminiSourceLang) }
+    var tempTargetLang by remember(readerSettings.geminiTargetLang) { mutableStateOf(readerSettings.geminiTargetLang) }
     var tempStylePreset by remember(readerSettings.geminiStylePreset) {
         mutableStateOf(readerSettings.geminiStylePreset)
     }
@@ -3786,13 +3794,15 @@ private fun GeminiTranslationDialog(
     val topKLabel = stringResource(AYMR.strings.novel_reader_gemini_top_k)
     val relaxedStateLabel = stringResource(AYMR.strings.novel_reader_ai_translator_relaxed_state)
     val cacheStateLabel = stringResource(AYMR.strings.novel_reader_ai_translator_cache_state)
-    val airforceHiddenSwitchedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_airforce_hidden_switched)
+    val airforceHiddenSwitchedLabel =
+        stringResource(AYMR.strings.novel_reader_ai_translator_log_airforce_hidden_switched)
     val bridgeLockedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_bridge_locked)
     val bridgeEnterPasswordLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_bridge_enter_password)
     val bridgeUnlockedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_bridge_unlocked)
     val bridgeDebugLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_bridge_debug)
     val invalidBridgePasswordLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_invalid_bridge_password)
-    val openRouterSettingsSavedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_openrouter_settings_saved)
+    val openRouterSettingsSavedLabel =
+        stringResource(AYMR.strings.novel_reader_ai_translator_log_openrouter_settings_saved)
     val deepSeekSettingsSavedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_deepseek_settings_saved)
     val geminiApiKeySavedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_gemini_api_key_saved)
     val cacheClearedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_cache_cleared)
@@ -4185,6 +4195,39 @@ private fun GeminiTranslationDialog(
                 ) {
                     if (page == 0) {
                         Text(
+                            text = stringResource(AYMR.strings.novel_reader_translation_languages),
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Text(
+                            text = stringResource(AYMR.strings.novel_reader_translation_languages_summary),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        OutlinedTextField(
+                            value = tempSourceLang,
+                            onValueChange = {
+                                tempSourceLang = it
+                                onSetGeminiSourceLang(it)
+                            },
+                            label = {
+                                Text(stringResource(AYMR.strings.novel_reader_gemini_source_lang))
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                        )
+                        OutlinedTextField(
+                            value = tempTargetLang,
+                            onValueChange = {
+                                tempTargetLang = it
+                                onSetGeminiTargetLang(it)
+                            },
+                            label = {
+                                Text(stringResource(AYMR.strings.novel_reader_gemini_target_lang))
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                        )
+                        Text(
                             stringResource(AYMR.strings.novel_reader_translation_provider),
                             style = MaterialTheme.typography.labelLarge,
                         )
@@ -4260,9 +4303,9 @@ private fun GeminiTranslationDialog(
                                 modifier = Modifier.fillMaxWidth(),
                                 color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f),
                                 shape = RoundedCornerShape(12.dp),
-                                ) {
-                                    Text(
-                                        text = if (isPrivateProviderUnlocked) {
+                            ) {
+                                Text(
+                                    text = if (isPrivateProviderUnlocked) {
                                         stringResource(
                                             AYMR.strings.novel_reader_gemini_private_bridge_connected_unlocked,
                                         ).format(privateProviderLabel)
@@ -4500,7 +4543,7 @@ private fun GeminiTranslationDialog(
                                         onClick = {
                                             tempPromptMode = option.first
                                             onSetGeminiPromptMode(option.first)
-                                        logPair(promptModeLabel, option.second)
+                                            logPair(promptModeLabel, option.second)
                                         },
                                     ) {
                                         Text(if (selected) "• ${option.second}" else option.second)
@@ -4520,7 +4563,7 @@ private fun GeminiTranslationDialog(
                                         onClick = {
                                             tempStylePreset = preset.id
                                             onSetGeminiStylePreset(preset.id)
-                                        logPair(styleLabel, presetTitle)
+                                            logPair(styleLabel, presetTitle)
                                         },
                                     ) {
                                         Text(if (selected) "• $presetTitle" else presetTitle)
@@ -4528,7 +4571,9 @@ private fun GeminiTranslationDialog(
                                 }
                             }
                             val selectedStylePreset = stylePresets.firstOrNull { it.id == tempStylePreset }
-                            val selectedStylePresetTitle = stringResource(selectedStylePreset?.titleRes ?: stylePresets.first().titleRes)
+                            val selectedStylePresetTitle = stringResource(
+                                selectedStylePreset?.titleRes ?: stylePresets.first().titleRes,
+                            )
                             if (selectedStylePreset != null) {
                                 Surface(
                                     modifier = Modifier.fillMaxWidth(),
@@ -4837,7 +4882,9 @@ private fun GeminiTranslationDialog(
                             label = {
                                 Text(
                                     when {
-                                        isOpenRouterSelected -> stringResource(AYMR.strings.novel_reader_openrouter_api_key)
+                                        isOpenRouterSelected -> stringResource(
+                                            AYMR.strings.novel_reader_openrouter_api_key,
+                                        )
                                         isDeepSeekSelected -> stringResource(AYMR.strings.novel_reader_deepseek_api_key)
                                         else -> stringResource(AYMR.strings.novel_reader_gemini_api_key)
                                     },
@@ -4916,18 +4963,18 @@ private fun GeminiTranslationDialog(
                                     } else {
                                         isTestingDeepSeekConnection
                                     }
-                                        Text(
-                                            if (isTesting) {
-                                                stringResource(
-                                                    AYMR.strings.novel_reader_ai_translator_testing_connection,
-                                                )
-                                            } else {
-                                                stringResource(
-                                                    AYMR.strings.novel_reader_ai_translator_test_connection,
-                                                )
-                                            },
-                                        )
-                                    }
+                                    Text(
+                                        if (isTesting) {
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_testing_connection,
+                                            )
+                                        } else {
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_test_connection,
+                                            )
+                                        },
+                                    )
+                                }
                                 TextButton(
                                     onClick = if (isOpenRouterSelected) {
                                         onRefreshOpenRouterModels
@@ -4946,18 +4993,18 @@ private fun GeminiTranslationDialog(
                                     } else {
                                         isDeepSeekModelsLoading
                                     }
-                                        Text(
-                                            if (isLoading) {
-                                                stringResource(
-                                                    AYMR.strings.novel_reader_ai_translator_loading_models,
-                                                )
-                                            } else {
-                                                stringResource(
-                                                    AYMR.strings.novel_reader_ai_translator_refresh_models,
-                                                )
-                                            },
-                                        )
-                                    }
+                                    Text(
+                                        if (isLoading) {
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_loading_models,
+                                            )
+                                        } else {
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_refresh_models,
+                                            )
+                                        },
+                                    )
+                                }
                             }
                         }
                         Row(

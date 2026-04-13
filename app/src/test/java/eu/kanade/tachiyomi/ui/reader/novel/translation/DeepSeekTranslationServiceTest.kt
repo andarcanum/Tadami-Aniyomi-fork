@@ -37,7 +37,7 @@ class DeepSeekTranslationServiceTest {
         val service = DeepSeekTranslationService(
             client = OkHttpClient(),
             json = Json { ignoreUnknownKeys = true },
-            resolveSystemPrompt = { mode ->
+            resolveSystemPrompt = { mode, _ ->
                 when (mode) {
                     GeminiPromptMode.CLASSIC -> "classic_system"
                     GeminiPromptMode.ADULT_18 -> "adult_system"
@@ -73,7 +73,7 @@ class DeepSeekTranslationServiceTest {
         val service = DeepSeekTranslationService(
             client = OkHttpClient(),
             json = Json { ignoreUnknownKeys = true },
-            resolveSystemPrompt = { "system" },
+            resolveSystemPrompt = { _, _ -> "system" },
         )
 
         val translated = service.translateBatch(

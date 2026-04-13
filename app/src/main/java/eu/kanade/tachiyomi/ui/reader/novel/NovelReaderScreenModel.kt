@@ -52,6 +52,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDis
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationProviderOutcome
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationRequest
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationPromptFamily
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePresets
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationParams
@@ -60,6 +61,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.TranslationPhase
 import eu.kanade.tachiyomi.ui.reader.novel.translation.buildNovelSelectedTextTranslationRequestKey
 import eu.kanade.tachiyomi.ui.reader.novel.translation.formatGeminiThrowableForLog
 import eu.kanade.tachiyomi.ui.reader.novel.translation.normalizeGeminiModelId
+import eu.kanade.tachiyomi.ui.reader.novel.translation.resolveNovelTranslationPromptFamily
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toTranslationCacheRequirements
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheModelId
 import eu.kanade.tachiyomi.ui.reader.novel.tts.AndroidNovelTtsAudioFocusBridge
@@ -214,7 +216,9 @@ class NovelReaderScreenModel(
         DeepSeekTranslationService(
             client = deepSeekClient,
             json = json,
-            resolveSystemPrompt = DeepSeekPromptResolver(app)::resolveSystemPrompt,
+            resolveSystemPrompt = { mode, family ->
+                DeepSeekPromptResolver(app).resolveSystemPrompt(mode, family)
+            },
         )
     },
     private val deepSeekModelsService: DeepSeekModelsService = run {
@@ -1815,6 +1819,14 @@ class NovelReaderScreenModel(
         setGlobal = { novelReaderPreferences.geminiPromptMode().set(value) },
         setOverride = { it.copy(geminiPromptMode = value) },
     )
+    fun setGeminiSourceLang(value: String) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.geminiSourceLang().set(value) },
+        setOverride = { it.copy(geminiSourceLang = value) },
+    )
+    fun setGeminiTargetLang(value: String) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.geminiTargetLang().set(value) },
+        setOverride = { it.copy(geminiTargetLang = value) },
+    )
     fun setGeminiStylePreset(value: NovelTranslationStylePreset) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.geminiStylePreset().set(value) },
         setOverride = { it.copy(geminiStylePreset = value) },
@@ -2859,12 +2871,30 @@ class NovelReaderScreenModel(
             extractTextBlocks(html).map(ContentBlock::Text)
         }
     }
-    private fun NovelReaderSettings.resolveTranslationPromptModifiers(): String {
+    private fun NovelReaderSettings.translationPromptFamily(): NovelTranslationPromptFamily {
+        return when (translationProvider) {
+            NovelTranslationProvider.GEMINI_PRIVATE,
+            NovelTranslationProvider.AIRFORCE,
+            -> NovelTranslationPromptFamily.RUSSIAN
+            NovelTranslationProvider.GEMINI,
+            NovelTranslationProvider.OPENROUTER,
+            NovelTranslationProvider.DEEPSEEK,
+            -> resolveNovelTranslationPromptFamily(geminiTargetLang)
+        }
+    }
+
+    private fun NovelReaderSettings.resolveTranslationPromptModifiers(
+        family: NovelTranslationPromptFamily = NovelTranslationPromptFamily.RUSSIAN,
+    ): String {
         val modifierText = GeminiPromptModifiers.buildPromptText(
             enabledIds = geminiEnabledPromptModifiers,
             customModifier = geminiCustomPromptModifier,
+            family = family,
         )
-        val styleDirective = NovelTranslationStylePresets.promptDirective(geminiStylePreset).trim()
+        val styleDirective = NovelTranslationStylePresets.promptDirective(
+            geminiStylePreset,
+            family = family,
+        ).trim()
         return listOf(
             styleDirective,
             modifierText,
@@ -2884,7 +2914,7 @@ class NovelReaderScreenModel(
             topP = geminiTopP,
             topK = geminiTopK,
             promptMode = geminiPromptMode,
-            promptModifiers = resolveTranslationPromptModifiers(),
+            promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
             provider = translationProvider,
             privateUnlocked = geminiPrivateUnlocked,
             privatePythonLikeMode = geminiPrivatePythonLikeMode,
@@ -2911,7 +2941,7 @@ class NovelReaderScreenModel(
             sourceLang = geminiSourceLang,
             targetLang = geminiTargetLang,
             promptMode = geminiPromptMode,
-            promptModifiers = resolveTranslationPromptModifiers(),
+            promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
             temperature = geminiTemperature,
             topP = geminiTopP,
         )
@@ -2924,7 +2954,7 @@ class NovelReaderScreenModel(
             sourceLang = geminiSourceLang,
             targetLang = geminiTargetLang,
             promptMode = geminiPromptMode,
-            promptModifiers = resolveTranslationPromptModifiers(),
+            promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
             temperature = geminiTemperature.coerceIn(DEEPSEEK_TEMPERATURE_MIN, DEEPSEEK_TEMPERATURE_MAX),
             topP = geminiTopP.coerceIn(DEEPSEEK_TOP_P_MIN, DEEPSEEK_TOP_P_MAX),
             presencePenalty = DEEPSEEK_DEFAULT_PRESENCE_PENALTY,

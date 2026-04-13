@@ -14,9 +14,11 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptModifiers
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationPromptFamily
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePresets
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.resolveNovelTranslationPromptFamily
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheModelId
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -71,7 +73,9 @@ class NovelChapterTranslationProcessor(
                 .readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
                 .build(),
             json = json,
-            resolveSystemPrompt = DeepSeekPromptResolver(application)::resolveSystemPrompt,
+            resolveSystemPrompt = { mode, family ->
+                DeepSeekPromptResolver(application).resolveSystemPrompt(mode, family)
+            },
         )
     },
 ) {
@@ -242,12 +246,30 @@ class NovelChapterTranslationProcessor(
     }
 }
 
-private fun NovelReaderSettings.resolveTranslationPromptModifiers(): String {
+private fun NovelReaderSettings.translationPromptFamily(): NovelTranslationPromptFamily {
+    return when (translationProvider) {
+        NovelTranslationProvider.GEMINI_PRIVATE,
+        NovelTranslationProvider.AIRFORCE,
+        -> NovelTranslationPromptFamily.RUSSIAN
+        NovelTranslationProvider.GEMINI,
+        NovelTranslationProvider.OPENROUTER,
+        NovelTranslationProvider.DEEPSEEK,
+        -> resolveNovelTranslationPromptFamily(geminiTargetLang)
+    }
+}
+
+private fun NovelReaderSettings.resolveTranslationPromptModifiers(
+    family: NovelTranslationPromptFamily = NovelTranslationPromptFamily.RUSSIAN,
+): String {
     val modifierText = GeminiPromptModifiers.buildPromptText(
         enabledIds = geminiEnabledPromptModifiers,
         customModifier = geminiCustomPromptModifier,
+        family = family,
     )
-    val styleDirective = NovelTranslationStylePresets.promptDirective(geminiStylePreset).trim()
+    val styleDirective = NovelTranslationStylePresets.promptDirective(
+        geminiStylePreset,
+        family = family,
+    ).trim()
     return listOf(
         styleDirective,
         modifierText,
@@ -268,7 +290,7 @@ private fun NovelReaderSettings.toGeminiTranslationParams(): GeminiTranslationPa
         topP = geminiTopP,
         topK = geminiTopK,
         promptMode = geminiPromptMode,
-        promptModifiers = resolveTranslationPromptModifiers(),
+        promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
         provider = translationProvider,
         privateUnlocked = geminiPrivateUnlocked,
         privatePythonLikeMode = geminiPrivatePythonLikeMode,
@@ -297,7 +319,7 @@ private fun NovelReaderSettings.toOpenRouterTranslationParams(): OpenRouterTrans
         sourceLang = geminiSourceLang,
         targetLang = geminiTargetLang,
         promptMode = geminiPromptMode,
-        promptModifiers = resolveTranslationPromptModifiers(),
+        promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
         temperature = geminiTemperature,
         topP = geminiTopP,
     )
@@ -311,7 +333,7 @@ private fun NovelReaderSettings.toDeepSeekTranslationParams(): DeepSeekTranslati
         sourceLang = geminiSourceLang,
         targetLang = geminiTargetLang,
         promptMode = geminiPromptMode,
-        promptModifiers = resolveTranslationPromptModifiers(),
+        promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
         temperature = geminiTemperature.coerceIn(DEEPSEEK_TEMPERATURE_MIN, DEEPSEEK_TEMPERATURE_MAX),
         topP = geminiTopP.coerceIn(DEEPSEEK_TOP_P_MIN, DEEPSEEK_TOP_P_MAX),
         presencePenalty = DEEPSEEK_DEFAULT_PRESENCE_PENALTY,

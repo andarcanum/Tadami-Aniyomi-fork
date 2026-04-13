@@ -477,6 +477,8 @@
     <string name="novel_reader_gemini_top_k">Top K</string>
     <string name="novel_reader_gemini_source_lang">Язык источника</string>
     <string name="novel_reader_gemini_target_lang">Язык перевода</string>
+    <string name="novel_reader_translation_languages">Языки перевода</string>
+    <string name="novel_reader_translation_languages_summary">Выберите язык исходного текста и язык, на который нужно переводить.</string>
     <string name="novel_reader_gemini_prompt_mode">Режим промпта</string>
     <string name="novel_reader_gemini_prompt_mode_classic">Классический</string>
     <string name="novel_reader_gemini_prompt_mode_adult">18+ (оригинальный промпт)</string>

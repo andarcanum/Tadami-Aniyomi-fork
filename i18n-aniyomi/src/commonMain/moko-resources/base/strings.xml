@@ -708,6 +708,8 @@
     <string name="novel_reader_gemini_top_k">Top K</string>
     <string name="novel_reader_gemini_source_lang">Source language</string>
     <string name="novel_reader_gemini_target_lang">Target language</string>
+    <string name="novel_reader_translation_languages">Translation languages</string>
+    <string name="novel_reader_translation_languages_summary">Choose the source language and the language you want to translate into.</string>
     <string name="novel_reader_gemini_prompt_mode">Prompt mode</string>
     <string name="novel_reader_gemini_prompt_mode_classic">Classic</string>
     <string name="novel_reader_gemini_prompt_mode_adult">18+ (Original prompt)</string>
