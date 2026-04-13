@@ -441,6 +441,7 @@ class NovelScreen(
             onInvertSelection = screenModel::invertSelection,
             onMultiBookmarkClicked = screenModel::bookmarkChapters,
             onMultiMarkAsReadClicked = screenModel::markChaptersRead,
+            onMarkPreviousAsReadClicked = screenModel::markPreviousChapterRead,
             onMultiDownloadClicked = screenModel::downloadSelectedChapters,
             onMultiDeleteClicked = screenModel::deleteDownloadedSelectedChapters,
             onSaveScrollPosition = screenModel::saveScrollPosition,

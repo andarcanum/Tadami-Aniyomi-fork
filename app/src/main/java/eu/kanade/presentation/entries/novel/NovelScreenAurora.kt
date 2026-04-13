@@ -157,6 +157,7 @@ fun NovelScreenAuroraImpl(
     onInvertSelection: () -> Unit,
     onMultiBookmarkClicked: (Boolean) -> Unit,
     onMultiMarkAsReadClicked: (Boolean) -> Unit,
+    onMarkPreviousAsReadClicked: (NovelChapter) -> Unit,
     onMultiDownloadClicked: () -> Unit,
     onMultiDeleteClicked: () -> Unit,
     isAutoJumpToNextEnabled: Boolean,
@@ -801,6 +802,7 @@ fun NovelScreenAuroraImpl(
                     onCancel = { onToggleAllSelection(false) },
                     onMultiBookmarkClicked = onMultiBookmarkClicked,
                     onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
+                    onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
                     onMultiDownloadClicked = onMultiDownloadClicked,
                     onMultiDeleteClicked = onMultiDeleteClicked,
                     fillFraction = 0.5f,
@@ -1338,6 +1340,7 @@ fun NovelScreenAuroraImpl(
                 onCancel = { onToggleAllSelection(false) },
                 onMultiBookmarkClicked = onMultiBookmarkClicked,
                 onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
+                onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
                 onMultiDownloadClicked = onMultiDownloadClicked,
                 onMultiDeleteClicked = onMultiDeleteClicked,
                 fillFraction = 1f,
@@ -1639,6 +1642,7 @@ private fun AuroraNovelSelectionBottomStack(
     onCancel: () -> Unit,
     onMultiBookmarkClicked: (Boolean) -> Unit,
     onMultiMarkAsReadClicked: (Boolean) -> Unit,
+    onMarkPreviousAsReadClicked: (NovelChapter) -> Unit,
     onMultiDownloadClicked: () -> Unit,
     onMultiDeleteClicked: () -> Unit,
     fillFraction: Float,
@@ -1704,6 +1708,9 @@ private fun AuroraNovelSelectionBottomStack(
             onMarkAsUnviewedClicked = {
                 onMultiMarkAsReadClicked(false)
             }.takeIf { selected.any { it.read || it.lastPageRead > 0L } },
+            onMarkPreviousAsViewedClicked = {
+                onMarkPreviousAsReadClicked(selected.first())
+            }.takeIf { selected.size == 1 },
             onDownloadClicked = onMultiDownloadClicked.takeIf {
                 selected.any { it.id !in downloadedChapterIds }
             },

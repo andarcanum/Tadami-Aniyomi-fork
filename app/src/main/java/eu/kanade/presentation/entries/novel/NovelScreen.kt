@@ -92,6 +92,7 @@ import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterDisplayData
 import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterRowIndex
 import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelVisibleChapterRows
 import me.saket.swipe.SwipeableActionsBox
+import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
@@ -154,6 +155,7 @@ fun NovelScreen(
     onInvertSelection: () -> Unit,
     onMultiBookmarkClicked: (Boolean) -> Unit,
     onMultiMarkAsReadClicked: (Boolean) -> Unit,
+    onMarkPreviousAsReadClicked: (NovelChapter) -> Unit,
     onMultiDownloadClicked: () -> Unit,
     onMultiDeleteClicked: () -> Unit,
     onSaveScrollPosition: (Int, Int) -> Unit = { _, _ -> },
@@ -218,6 +220,7 @@ fun NovelScreen(
             onInvertSelection = onInvertSelection,
             onMultiBookmarkClicked = onMultiBookmarkClicked,
             onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
+            onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
             onMultiDownloadClicked = onMultiDownloadClicked,
             onMultiDeleteClicked = onMultiDeleteClicked,
             isAutoJumpToNextEnabled = autoJumpToNextEnabled,
@@ -386,6 +389,9 @@ fun NovelScreen(
                 onMarkAsUnviewedClicked = {
                     onMultiMarkAsReadClicked(false)
                 }.takeIf { selectedChapters.any { it.read || it.lastPageRead > 0L } },
+                onMarkPreviousAsViewedClicked = {
+                    onMarkPreviousAsReadClicked(selectedChapters.first())
+                }.takeIf { selectedChapters.size == 1 },
                 onDownloadClicked = onMultiDownloadClicked.takeIf {
                     selectedChapters.any { chapter -> chapter.id !in downloadedChapterIds }
                 },

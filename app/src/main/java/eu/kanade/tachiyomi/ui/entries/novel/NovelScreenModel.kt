@@ -1379,6 +1379,49 @@ class NovelScreenModel(
         }
     }
 
+    fun markPreviousChapterRead(pointer: NovelChapter) {
+        val state = successState ?: return
+        val novel = state.novel
+        val chapters = state.processedChapters
+        val prevChapters = if (novel.sortDescending()) chapters.asReversed() else chapters
+        val pointerPos = prevChapters.indexOf(pointer)
+        if (pointerPos == -1) return
+        val chaptersToMark = prevChapters.take(pointerPos)
+        if (chaptersToMark.isEmpty()) return
+        val chaptersToAchieve = chaptersToMark.filter { !it.read }
+        val updates = chaptersToMark
+            .asSequence()
+            .filter { it.read != true || it.lastPageRead > 0L }
+            .map {
+                NovelChapterUpdate(
+                    id = it.id,
+                    read = true,
+                    lastPageRead = 0L,
+                )
+            }
+            .toList()
+        screenModelScope.launchIO {
+            novelChapterRepository.updateAllChapters(updates)
+            updateNewChapterIds(clearedIds = chaptersToMark.map { it.id })
+            if (chaptersToAchieve.isNotEmpty()) {
+                chaptersToAchieve.forEach { chapter ->
+                    eventBus?.tryEmit(
+                        AchievementEvent.NovelChapterRead(
+                            novelId = chapter.novelId,
+                            chapterNumber = chapter.chapterNumber.toInt(),
+                        ),
+                    )
+                }
+                val markedIds = chaptersToAchieve.mapTo(hashSetOf()) { it.id }
+                val willComplete = state.chapters.all { it.read || it.id in markedIds }
+                if (willComplete) {
+                    eventBus?.tryEmit(AchievementEvent.NovelCompleted(chaptersToAchieve.first().novelId))
+                }
+            }
+            toggleAllSelection(false)
+        }
+    }
+
     fun toggleChapterDownload(chapterId: Long) {
         val state = successState ?: return
         val chapter = state.chapters.firstOrNull { it.id == chapterId } ?: return
