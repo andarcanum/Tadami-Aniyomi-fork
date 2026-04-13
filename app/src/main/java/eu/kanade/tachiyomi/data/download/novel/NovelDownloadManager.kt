@@ -32,6 +32,7 @@ class NovelDownloadManager(
 
     @Volatile
     private var cachedTotalCount: Int? = null
+
     @Volatile
     private var cachedTotalSize: Long? = null
 

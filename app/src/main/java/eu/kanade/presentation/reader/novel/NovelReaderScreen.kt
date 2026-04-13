@@ -309,6 +309,7 @@ fun NovelReaderScreen(
     onSetGoogleTranslationAutoStart: (Boolean) -> Unit = {},
     onSetGoogleTranslationSourceLang: (String) -> Unit = {},
     onSetGoogleTranslationTargetLang: (String) -> Unit = {},
+    onSetMlKitPreferOffline: (Boolean) -> Unit = {},
     onToggleTtsPlayback: (NovelTtsPlaybackStartRequest) -> Unit = {},
     onStopTtsPlayback: () -> Unit = {},
     onSkipPreviousTts: () -> Unit = {},
@@ -3543,6 +3544,7 @@ fun NovelReaderScreen(
                 readerSettings = state.readerSettings,
                 isTranslating = state.isGoogleTranslating,
                 translationProgress = state.googleTranslationProgress,
+                translationPhase = state.translationPhase,
                 isVisible = state.isGoogleTranslationVisible,
                 hasCache = state.hasGoogleTranslationCache,
                 onStart = { requestGoogleTranslationStart() },
@@ -3553,6 +3555,7 @@ fun NovelReaderScreen(
                 onSetAutoStart = onSetGoogleTranslationAutoStart,
                 onSetSourceLang = onSetGoogleTranslationSourceLang,
                 onSetTargetLang = onSetGoogleTranslationTargetLang,
+                onSetMlKitPreferOffline = onSetMlKitPreferOffline,
                 onDismiss = { showGoogleDialog = false },
             )
         }

@@ -17,8 +17,8 @@ import tachiyomi.domain.category.novel.interactor.DeleteNovelCategory
 import tachiyomi.domain.category.novel.interactor.GetNovelCategories
 import tachiyomi.domain.category.novel.interactor.GetVisibleNovelCategories
 import tachiyomi.domain.category.novel.interactor.HideNovelCategory
-import tachiyomi.domain.category.novel.interactor.ReorderNovelCategory
 import tachiyomi.domain.category.novel.interactor.RenameNovelCategory
+import tachiyomi.domain.category.novel.interactor.ReorderNovelCategory
 import tachiyomi.domain.category.novel.interactor.UpdateNovelCategory
 import tachiyomi.domain.category.novel.model.NovelCategory
 import tachiyomi.domain.category.novel.model.NovelCategoryUpdate

@@ -30,6 +30,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.ChapterTranslationBackend
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekPromptResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationParams
@@ -44,6 +45,8 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationSessionCache
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleUnofficialSelectedTextTranslationProvider
+import eu.kanade.tachiyomi.ui.reader.novel.translation.MlKitMissingModelsException
+import eu.kanade.tachiyomi.ui.reader.novel.translation.MlKitTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationCacheResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationProvider
@@ -53,6 +56,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePres
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.TranslationPhase
 import eu.kanade.tachiyomi.ui.reader.novel.translation.buildNovelSelectedTextTranslationRequestKey
 import eu.kanade.tachiyomi.ui.reader.novel.translation.formatGeminiThrowableForLog
 import eu.kanade.tachiyomi.ui.reader.novel.translation.normalizeGeminiModelId
@@ -233,6 +237,10 @@ class NovelReaderScreenModel(
         val networkHelper = Injekt.get<NetworkHelper>()
         GoogleTranslationService(client = networkHelper.client)
     },
+    private val mlKitTranslationService: MlKitTranslationService = run {
+        val networkHelper = Injekt.get<NetworkHelper>()
+        MlKitTranslationService()
+    },
     private val translationQueueManager: TranslationQueueManager = Injekt.get(),
 ) : StateScreenModel<NovelReaderScreenModel.State>(State.Loading()) {
     private val contentPrefetchService = ContentPrefetchService(
@@ -326,6 +334,7 @@ class NovelReaderScreenModel(
     private var hasGoogleTranslationCache: Boolean = false
     private var googleLogs: List<String> = emptyList()
     private var googleRateLimited: Boolean = false
+    private var translationPhase: TranslationPhase = TranslationPhase.IDLE
     private val googleSessionCache = GoogleTranslationSessionCache()
     private var ttsUiState: NovelReaderTtsUiState = NovelReaderTtsUiState()
     private var initializedTtsEnginePackage: String? = null
@@ -763,6 +772,7 @@ class NovelReaderScreenModel(
             isGoogleTranslationVisible = googleVisibleInUi,
             hasGoogleTranslationCache = googleCacheAvailableInUi,
             googleLogs = googleLogs,
+            translationPhase = translationPhase,
             ttsUiState = ttsUiState.copy(
                 enabled = settings.ttsEnabled,
                 selectedEnginePackage = settings.ttsEnginePackage,
@@ -1856,6 +1866,9 @@ class NovelReaderScreenModel(
     fun setGoogleTranslationTargetLang(value: String) {
         novelReaderPreferences.googleTranslationTargetLang().set(value)
     }
+    fun setMlKitPreferOffline(value: Boolean) {
+        novelReaderPreferences.mlKitPreferOffline().set(value)
+    }
     fun setAirforceBaseUrl(value: String) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.airforceBaseUrl().set(value) },
         setOverride = { it.copy(airforceBaseUrl = value) },
@@ -2437,9 +2450,74 @@ class NovelReaderScreenModel(
         googleTranslationProgress = 0
         googleLogs = emptyList()
         googleRateLimited = false
+        translationPhase = TranslationPhase.PREPARING_MODEL
         updateContent(settings)
 
         googleTranslationJob = screenModelScope.launch {
+            var usedBackend: ChapterTranslationBackend = ChapterTranslationBackend.GOOGLE
+
+            val preferOffline = settings.mlKitPreferOffline
+
+            if (preferOffline) {
+                try {
+                    addGoogleLog("Trying ML Kit translation (offline mode)...")
+                    val mlKitResponse = mlKitTranslationService.translateBatch(
+                        texts = baseTextBlocks,
+                        params = params,
+                        onProgress = onProgress@{ phase, progress ->
+                            translationPhase = phase
+                            googleTranslationProgress = progress
+                            updateContent(settings)
+                        },
+                    )
+                    val results = baseTextBlocks.mapIndexedNotNull { index, text ->
+                        mlKitResponse.translatedByText[text]?.takeIf { it.isNotBlank() }?.let { translated ->
+                            index to translated
+                        }
+                    }.toMap()
+                    addGoogleLog(
+                        "ML Kit succeeded: translatedSegments=${results.values.count {
+                            it.isNotBlank()
+                        }}/$baseTextBlocks.size",
+                    )
+                    googleTranslatedByIndex = results
+                    val chapter = currentChapter
+                    if (chapter != null) {
+                        googleSessionCache.put(
+                            chapterId = chapter.id,
+                            sourceLang = params.sourceLang,
+                            targetLang = params.targetLang,
+                            backend = ChapterTranslationBackend.ML_KIT,
+                            translatedByIndex = results,
+                        )
+                    }
+                    hasGoogleTranslationCache = results.isNotEmpty()
+                    isGoogleTranslating = false
+                    googleTranslationProgress = 100
+                    translationPhase = TranslationPhase.IDLE
+                    if (results.isNotEmpty()) {
+                        isGoogleTranslationVisible = true
+                    }
+                    updateContent(settings)
+                    return@launch
+                } catch (e: MlKitMissingModelsException) {
+                    addGoogleLog(
+                        "ML Kit models missing: ${e.missingLanguageCodes.joinToString()}",
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    addGoogleLog("ML Kit failed: ${e.message ?: e::class.java.simpleName}")
+                }
+                isGoogleTranslating = false
+                googleTranslationProgress = 0
+                translationPhase = TranslationPhase.IDLE
+                updateContent(settings)
+                return@launch
+            } else {
+                addGoogleLog("Using Google Translate (offline mode disabled)")
+            }
+
             try {
                 val response = googleTranslationService.translateBatch(
                     texts = baseTextBlocks,
@@ -2447,6 +2525,11 @@ class NovelReaderScreenModel(
                     onLog = { log ->
                         addGoogleLog(log)
                         updateGoogleProgressFromLog(log)
+                        updateContent(settings)
+                    },
+                    onProgress = onProgress@{ phase, percent ->
+                        translationPhase = phase
+                        googleTranslationProgress = percent
                         updateContent(settings)
                     },
                 )
@@ -2467,12 +2550,14 @@ class NovelReaderScreenModel(
                         chapterId = chapter.id,
                         sourceLang = params.sourceLang,
                         targetLang = params.targetLang,
+                        backend = usedBackend,
                         translatedByIndex = results,
                     )
                 }
                 hasGoogleTranslationCache = results.isNotEmpty()
                 isGoogleTranslating = false
                 googleTranslationProgress = 100
+                translationPhase = TranslationPhase.IDLE
                 if (results.isNotEmpty()) {
                     isGoogleTranslationVisible = true
                 }
@@ -2480,10 +2565,11 @@ class NovelReaderScreenModel(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
-                addGoogleLog("Simple translation failed: ${error.message ?: error::class.java.simpleName}")
+                addGoogleLog("Google translation failed: ${error.message ?: error::class.java.simpleName}")
                 googleRateLimited = false
                 isGoogleTranslating = false
                 googleTranslationProgress = 0
+                translationPhase = TranslationPhase.IDLE
                 updateContent(settings)
             }
         }
@@ -2522,12 +2608,14 @@ class NovelReaderScreenModel(
         hasGoogleTranslationCache = false
         googleLogs = emptyList()
         googleRateLimited = false
+        translationPhase = TranslationPhase.IDLE
         googleSessionCache.remove(
             chapterId = chapter.id,
             sourceLang =
             (mutableState.value as? State.Success)?.readerSettings?.googleTranslationSourceLang ?: "auto",
             targetLang =
             (mutableState.value as? State.Success)?.readerSettings?.googleTranslationTargetLang ?: "Russian",
+            backend = ChapterTranslationBackend.GOOGLE,
         )
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         updateContent(settings)
@@ -2539,6 +2627,7 @@ class NovelReaderScreenModel(
             chapterId = chapter.id,
             sourceLang = settings.googleTranslationSourceLang,
             targetLang = settings.googleTranslationTargetLang,
+            backend = ChapterTranslationBackend.GOOGLE,
         )
         if (cached != null && cached.isNotEmpty()) {
             googleTranslatedByIndex = cached
@@ -3771,6 +3860,7 @@ class NovelReaderScreenModel(
             val isGoogleTranslationVisible: Boolean = false,
             val hasGoogleTranslationCache: Boolean = false,
             val googleLogs: List<String> = emptyList(),
+            val translationPhase: TranslationPhase = TranslationPhase.IDLE,
             val ttsUiState: NovelReaderTtsUiState = NovelReaderTtsUiState(),
             val airforceModelIds: List<String> = emptyList(),
             val isAirforceModelsLoading: Boolean = false,

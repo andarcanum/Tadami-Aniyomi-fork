@@ -144,7 +144,14 @@ class NovelCategoryRepositoryImplTest {
             NovelCategory(id = 0, name = "Visible", order = 0, flags = 0, hidden = false, hiddenFromHomeHub = false),
         )
         categoryRepository.insertCategory(
-            NovelCategory(id = 0, name = "HiddenFromHub", order = 1, flags = 0, hidden = false, hiddenFromHomeHub = true),
+            NovelCategory(
+                id = 0,
+                name = "HiddenFromHub",
+                order = 1,
+                flags = 0,
+                hidden = false,
+                hiddenFromHomeHub = true,
+            ),
         )
 
         val categories = categoryRepository.getCategories()

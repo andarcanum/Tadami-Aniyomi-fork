@@ -67,6 +67,7 @@ import eu.kanade.presentation.reader.novel.ensureLegacyNovelReaderBackgroundItem
 import eu.kanade.presentation.reader.novel.importNovelReaderCustomBackgroundItem
 import eu.kanade.presentation.reader.novel.importNovelReaderCustomFont
 import eu.kanade.presentation.reader.novel.intervalToAutoScrollSpeed
+import eu.kanade.presentation.reader.novel.MlKitTranslationModelsDialog
 import eu.kanade.presentation.reader.novel.novelBookFlipAnimationSpeedEntries
 import eu.kanade.presentation.reader.novel.novelBookFlipAnimationSpeedSliderIndex
 import eu.kanade.presentation.reader.novel.novelPageTransitionStyleEntries
@@ -1284,6 +1285,8 @@ object SettingsNovelReaderScreen : SearchableSettings {
     private fun getAdvancedGroup(prefs: NovelReaderPreferences): Preference.PreferenceGroup {
         val translationProviderPref = prefs.translationProvider()
         val translationProvider by translationProviderPref.collectAsState()
+        val googleTranslationEnabled by prefs.googleTranslationEnabled().collectAsState()
+        var showMlKitModelsDialog by rememberSaveable { mutableStateOf(false) }
         val privateProviderLabel = if (GeminiPrivateBridge.isInstalled()) {
             GeminiPrivateBridge.providerLabel()
         } else {
@@ -1373,22 +1376,43 @@ object SettingsNovelReaderScreen : SearchableSettings {
             )
         }
 
-        items += Preference.PreferenceItem.EditTextInfoPreference(
-            preference = prefs.googleTranslationSourceLang(),
-            dialogSubtitle = null,
-            title = stringResource(AYMR.strings.novel_reader_google_translate_source),
-            subtitle = "%s",
-        )
-        items += Preference.PreferenceItem.EditTextInfoPreference(
-            preference = prefs.googleTranslationTargetLang(),
-            dialogSubtitle = null,
-            title = stringResource(AYMR.strings.novel_reader_google_translate_target),
-            subtitle = "%s",
-        )
-        items += Preference.PreferenceItem.SwitchPreference(
-            preference = prefs.googleTranslationAutoStart(),
-            title = stringResource(AYMR.strings.novel_reader_google_translate_auto_start),
-        )
+        if (googleTranslationEnabled) {
+            items += Preference.PreferenceItem.EditTextInfoPreference(
+                preference = prefs.googleTranslationSourceLang(),
+                dialogSubtitle = null,
+                title = stringResource(AYMR.strings.novel_reader_google_translate_source),
+                subtitle = "%s",
+            )
+            items += Preference.PreferenceItem.EditTextInfoPreference(
+                preference = prefs.googleTranslationTargetLang(),
+                dialogSubtitle = null,
+                title = stringResource(AYMR.strings.novel_reader_google_translate_target),
+                subtitle = "%s",
+            )
+            items += Preference.PreferenceItem.SwitchPreference(
+                preference = prefs.googleTranslationAutoStart(),
+                title = stringResource(AYMR.strings.novel_reader_google_translate_auto_start),
+            )
+            items += Preference.PreferenceItem.TextPreference(
+                title = stringResource(AYMR.strings.novel_reader_mlkit_settings),
+            )
+            items += Preference.PreferenceItem.SwitchPreference(
+                preference = prefs.mlKitPreferOffline(),
+                title = stringResource(AYMR.strings.novel_reader_mlkit_prefer_offline),
+                subtitle = stringResource(AYMR.strings.novel_reader_mlkit_prefer_offline_summary),
+            )
+            items += Preference.PreferenceItem.TextPreference(
+                title = stringResource(AYMR.strings.novel_reader_mlkit_manage_models),
+                subtitle = stringResource(AYMR.strings.novel_reader_mlkit_models_description),
+                onClick = { showMlKitModelsDialog = true },
+                widget = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                    )
+                },
+            )
+        }
         items += Preference.PreferenceItem.MultiLineEditTextPreference(
             preference = prefs.customCSS(),
             title = stringResource(AYMR.strings.novel_reader_custom_css),
@@ -1402,10 +1426,16 @@ object SettingsNovelReaderScreen : SearchableSettings {
             canBeBlank = true,
         )
 
-        return Preference.PreferenceGroup(
+        val group = Preference.PreferenceGroup(
             title = stringResource(AYMR.strings.novel_reader_advanced),
             preferenceItems = items.toImmutableList(),
         )
+        if (showMlKitModelsDialog) {
+            MlKitTranslationModelsDialog(
+                onDismiss = { showMlKitModelsDialog = false },
+            )
+        }
+        return group
     }
 
     @Composable

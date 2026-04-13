@@ -261,6 +261,7 @@ class NovelReaderScreen(
                     onSetGoogleTranslationAutoStart = screenModel::setGoogleTranslationAutoStart,
                     onSetGoogleTranslationSourceLang = screenModel::setGoogleTranslationSourceLang,
                     onSetGoogleTranslationTargetLang = screenModel::setGoogleTranslationTargetLang,
+                    onSetMlKitPreferOffline = screenModel::setMlKitPreferOffline,
                     onToggleTtsPlayback = screenModel::toggleTtsPlayback,
                     onStopTtsPlayback = screenModel::stopTtsPlayback,
                     onSkipPreviousTts = screenModel::skipToPreviousTtsSegment,

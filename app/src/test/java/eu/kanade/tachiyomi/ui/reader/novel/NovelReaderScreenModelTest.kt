@@ -20,10 +20,15 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationServic
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationBatchResponse
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.MlKitTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
@@ -78,6 +83,8 @@ class NovelReaderScreenModelTest {
     private val openRouterModelsService = mockk<OpenRouterModelsService>(relaxed = true)
     private val deepSeekTranslationService = mockk<DeepSeekTranslationService>(relaxed = true)
     private val deepSeekModelsService = mockk<DeepSeekModelsService>(relaxed = true)
+    private val googleTranslationService = mockk<GoogleTranslationService>(relaxed = true)
+    private val mlKitTranslationService = mockk<MlKitTranslationService>(relaxed = true)
 
     @AfterEach
     fun tearDown() {
@@ -2444,6 +2451,257 @@ class NovelReaderScreenModelTest {
         }
     }
 
+    @Test
+    fun `ml kit translation success uses ml kit cache backend`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+            val mockMlKit = mockk<MlKitTranslationService>()
+            coEvery {
+                mockMlKit.translateBatch(
+                    texts = any(),
+                    params = any(),
+                    onLog = any(),
+                    onProgress = any(),
+                )
+            } returns GoogleTranslationBatchResponse(
+                translatedByText = mapOf("Hello" to "Привет", "World" to "Мир"),
+                detectedSourceLanguage = "en",
+            )
+
+            val prefs = createNovelReaderPreferences().also {
+                it.googleTranslationEnabled().set(true)
+                it.googleTranslationSourceLang().set("en")
+                it.googleTranslationTargetLang().set("ru")
+            }
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(
+                    sourceId = novel.source,
+                    chapterHtml = "<p>Hello</p><p>World</p>",
+                ),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = prefs,
+                isSystemDark = { false },
+                mlKitTranslationService = mockMlKit,
+                googleTranslationService = googleTranslationService,
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            screenModel.startGoogleTranslation()
+
+            withTimeout(5_000) {
+                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.isGoogleTranslating ==
+                    true
+                ) {
+                    yield()
+                }
+            }
+
+            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            state.googleLogs.any { it.contains("ML Kit succeeded") } shouldBe true
+            coVerify {
+                mockMlKit.translateBatch(
+                    texts = any(),
+                    params = any(),
+                    onLog = any(),
+                    onProgress = any(),
+                )
+            }
+            coVerify(exactly = 0) {
+                googleTranslationService.translateBatch(
+                    texts = any(),
+                    params = any(),
+                    onLog = any(),
+                    onProgress = any(),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `ml kit failure falls back to google translation`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+            val mockMlKit = mockk<MlKitTranslationService>()
+            coEvery {
+                mockMlKit.translateBatch(
+                    texts = any(),
+                    params = any(),
+                    onLog = any(),
+                    onProgress = any(),
+                )
+            } throws Exception("ML Kit unavailable")
+
+            val mockGoogle = mockk<GoogleTranslationService>()
+            coEvery {
+                mockGoogle.translateBatch(
+                    texts = any(),
+                    params = any(),
+                    onLog = any(),
+                    onProgress = any(),
+                )
+            } returns GoogleTranslationBatchResponse(
+                translatedByText = mapOf("Hello" to "Привет", "World" to "Мир"),
+                detectedSourceLanguage = "en",
+            )
+
+            val prefs = createNovelReaderPreferences().also {
+                it.googleTranslationEnabled().set(true)
+                it.googleTranslationSourceLang().set("en")
+                it.googleTranslationTargetLang().set("ru")
+            }
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(
+                    sourceId = novel.source,
+                    chapterHtml = "<p>Hello</p><p>World</p>",
+                ),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = prefs,
+                isSystemDark = { false },
+                mlKitTranslationService = mockMlKit,
+                googleTranslationService = mockGoogle,
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            screenModel.startGoogleTranslation()
+
+            withTimeout(5_000) {
+                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.isGoogleTranslating ==
+                    true
+                ) {
+                    yield()
+                }
+            }
+
+            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            state.googleLogs.any { it.contains("ML Kit failed") } shouldBe true
+            state.googleLogs.any { it.contains("falling back to Google") } shouldBe true
+            coVerify {
+                mockMlKit.translateBatch(
+                    texts = any(),
+                    params = any(),
+                    onLog = any(),
+                    onProgress = any(),
+                )
+            }
+            coVerify {
+                mockGoogle.translateBatch(
+                    texts = any(),
+                    params = any(),
+                    onLog = any(),
+                    onProgress = any(),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `stop google translation cancels ml kit translation`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+            val mockMlKit = mockk<MlKitTranslationService>()
+            coEvery {
+                mockMlKit.translateBatch(
+                    texts = any(),
+                    params = any(),
+                    onLog = any(),
+                    onProgress = any(),
+                )
+            } coAnswers {
+                delay(10_000)
+                GoogleTranslationBatchResponse(
+                    translatedByText = mapOf("Hello" to "Привет"),
+                    detectedSourceLanguage = "en",
+                )
+            }
+
+            val prefs = createNovelReaderPreferences().also {
+                it.googleTranslationEnabled().set(true)
+                it.googleTranslationSourceLang().set("en")
+                it.googleTranslationTargetLang().set("ru")
+            }
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(
+                    sourceId = novel.source,
+                    chapterHtml = "<p>Hello</p>",
+                ),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = prefs,
+                isSystemDark = { false },
+                mlKitTranslationService = mockMlKit,
+                googleTranslationService = googleTranslationService,
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            screenModel.startGoogleTranslation()
+
+            withTimeout(500) {
+                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.isGoogleTranslating !=
+                    true
+                ) {
+                    yield()
+                }
+            }
+
+            screenModel.stopGoogleTranslation()
+
+            withTimeout(500) {
+                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.isGoogleTranslating ==
+                    true
+                ) {
+                    yield()
+                }
+            }
+
+            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            state.isGoogleTranslating shouldBe false
+        }
+    }
+
     private fun setPrivateField(target: Any, name: String, value: Any?) {
         val field = target.javaClass.getDeclaredField(name)
         field.isAccessible = true
@@ -2644,6 +2902,8 @@ class NovelReaderScreenModelTest {
         novelReaderPreferences: NovelReaderPreferences,
         isSystemDark: () -> Boolean,
         historyRepository: NovelHistoryRepository = FakeNovelHistoryRepository(),
+        googleTranslationService: GoogleTranslationService = this.googleTranslationService,
+        mlKitTranslationService: MlKitTranslationService = this.mlKitTranslationService,
     ): NovelReaderScreenModel {
         ensureReaderScreenModelDependencies()
         return NovelReaderScreenModel(
@@ -2663,6 +2923,8 @@ class NovelReaderScreenModelTest {
             openRouterModelsService = openRouterModelsService,
             deepSeekTranslationService = deepSeekTranslationService,
             deepSeekModelsService = deepSeekModelsService,
+            googleTranslationService = googleTranslationService,
+            mlKitTranslationService = mlKitTranslationService,
         ).also(activeScreenModels::add)
     }
 

@@ -87,16 +87,16 @@ import eu.kanade.tachiyomi.ui.download.novel.NovelDownloadQueueScreenModel
 import eu.kanade.tachiyomi.ui.download.novel.novelDownloadTab
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
+import tachiyomi.domain.storage.service.StorageManager
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.Pill
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.components.material.TabText
 import tachiyomi.presentation.core.i18n.stringResource
-import tachiyomi.core.common.i18n.stringResource as stringResourceCtx
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import tachiyomi.domain.storage.service.StorageManager
+import tachiyomi.core.common.i18n.stringResource as stringResourceCtx
 import tachiyomi.presentation.core.util.collectAsState as preferenceCollectAsState
 
 private fun openDownloadFolder(context: android.content.Context, subdirectory: String? = null) {
@@ -108,7 +108,11 @@ private fun openDownloadFolder(context: android.content.Context, subdirectory: S
     }
 
     if (dir == null) {
-        Toast.makeText(context, context.stringResourceCtx(AYMR.strings.download_folder_not_set), Toast.LENGTH_SHORT).show()
+        Toast.makeText(
+            context,
+            context.stringResourceCtx(AYMR.strings.download_folder_not_set),
+            Toast.LENGTH_SHORT,
+        ).show()
         return
     }
 
@@ -127,7 +131,11 @@ private fun openDownloadFolder(context: android.content.Context, subdirectory: S
         try {
             context.startActivity(fallbackIntent)
         } catch (_: Exception) {
-            Toast.makeText(context, context.stringResourceCtx(AYMR.strings.no_file_manager_found), Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                context,
+                context.stringResourceCtx(AYMR.strings.no_file_manager_found),
+                Toast.LENGTH_SHORT,
+            ).show()
         }
     }
 }

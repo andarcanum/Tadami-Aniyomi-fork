@@ -24,10 +24,10 @@ class HomeHubCategoryFiltersTest {
     fun `filterHomeHubEntries removes entries whose category is hidden`() {
         val entryIds = listOf(1L, 2L, 3L, 4L)
         val entryCategoryIds = mapOf(
-            1L to listOf(1L),       // category 1 visible
-            2L to listOf(2L),       // category 2 HIDDEN
-            3L to listOf(1L, 2L),   // has hidden category 2
-            4L to listOf(3L),       // category 3 visible
+            1L to listOf(1L), // category 1 visible
+            2L to listOf(2L), // category 2 HIDDEN
+            3L to listOf(1L, 2L), // has hidden category 2
+            4L to listOf(3L), // category 3 visible
         )
         val hiddenCategoryIds = setOf(2L)
 
@@ -40,8 +40,8 @@ class HomeHubCategoryFiltersTest {
     fun `filterHomeHubEntries keeps entries with system category`() {
         val entryIds = listOf(1L, 2L)
         val entryCategoryIds = mapOf(
-            1L to listOf(0L),       // system category
-            2L to listOf(1L),       // visible category
+            1L to listOf(0L), // system category
+            2L to listOf(1L), // visible category
         )
         val hiddenCategoryIds = setOf(2L)
 
@@ -54,9 +54,9 @@ class HomeHubCategoryFiltersTest {
     fun `filterHomeHubEntries removes entries that ONLY have hidden categories`() {
         val entryIds = listOf(1L, 2L, 3L)
         val entryCategoryIds = mapOf(
-            1L to listOf(1L),       // HIDDEN
-            2L to listOf(1L, 2L),   // has hidden + visible -> hidden wins
-            3L to listOf(2L),       // visible
+            1L to listOf(1L), // HIDDEN
+            2L to listOf(1L, 2L), // has hidden + visible -> hidden wins
+            3L to listOf(2L), // visible
         )
         val hiddenCategoryIds = setOf(1L)
 

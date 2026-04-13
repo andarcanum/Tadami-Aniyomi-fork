@@ -81,8 +81,11 @@ class GoogleTranslationService(
         texts: List<String>,
         params: GoogleTranslationParams,
         onLog: ((String) -> Unit)? = null,
+        onProgress: ((TranslationPhase, Int) -> Unit)? = null,
     ): GoogleTranslationBatchResponse = withContext(Dispatchers.IO) {
         if (texts.isEmpty()) return@withContext GoogleTranslationBatchResponse(emptyMap())
+
+        onProgress?.invoke(TranslationPhase.IDLE, 0)
 
         val normalizedSource = normalizeSourceLanguage(params.sourceLang)
         val normalizedTarget = normalizeTargetLanguage(params.targetLang)
@@ -96,6 +99,8 @@ class GoogleTranslationService(
         coroutineScope {
             chunks.mapIndexed { chunkIndex, chunk ->
                 async {
+                    val percent = ((chunkIndex + 1) * 100) / chunks.size
+                    onProgress?.invoke(TranslationPhase.TRANSLATING, percent)
                     onLog?.invoke(
                         "Simple chunk ${chunkIndex + 1}/${chunks.size}: paragraphs=${chunk.size}, chars=${chunk.sumOf {
                             it.second.length
