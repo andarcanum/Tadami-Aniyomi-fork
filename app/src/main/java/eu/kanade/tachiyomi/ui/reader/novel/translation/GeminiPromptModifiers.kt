@@ -1,9 +1,12 @@
 package eu.kanade.tachiyomi.ui.reader.novel.translation
 
+import dev.icerock.moko.resources.StringResource
+import tachiyomi.i18n.aniyomi.AYMR
+
 data class GeminiPromptModifier(
     val id: String,
-    val label: String,
-    val description: String,
+    val labelRes: StringResource,
+    val descriptionRes: StringResource,
     val prompt: String,
 )
 
@@ -11,8 +14,8 @@ object GeminiPromptModifiers {
     val all: List<GeminiPromptModifier> = listOf(
         GeminiPromptModifier(
             id = "adult",
-            label = "18+ Adult",
-            description = "Explicit content handling",
+            labelRes = AYMR.strings.novel_reader_gemini_prompt_modifier_adult_label,
+            descriptionRes = AYMR.strings.novel_reader_gemini_prompt_modifier_adult_description,
             prompt = """
                 ### ADULT CONTENT DIRECTIVE
                 - This is an ADULT (18+) novel. Explicit sexual content MUST be translated faithfully.
@@ -28,8 +31,8 @@ object GeminiPromptModifiers {
         ),
         GeminiPromptModifier(
             id = "xianxia",
-            label = "Xianxia",
-            description = "Chinese cultivation novels",
+            labelRes = AYMR.strings.novel_reader_gemini_prompt_modifier_xianxia_label,
+            descriptionRes = AYMR.strings.novel_reader_gemini_prompt_modifier_xianxia_description,
             prompt = """
                 ### XIANXIA/CULTIVATION DIRECTIVE
                 This is a Chinese cultivation novel. Use established Russian xianxia terminology:
@@ -52,8 +55,8 @@ object GeminiPromptModifiers {
         ),
         GeminiPromptModifier(
             id = "comedy",
-            label = "Comedy",
-            description = "Comedic/parody novels",
+            labelRes = AYMR.strings.novel_reader_gemini_prompt_modifier_comedy_label,
+            descriptionRes = AYMR.strings.novel_reader_gemini_prompt_modifier_comedy_description,
             prompt = """
                 ### COMEDY/PARODY DIRECTIVE
                 This is a comedy/parody novel. Prioritize HUMOR over literal accuracy:
@@ -67,8 +70,8 @@ object GeminiPromptModifiers {
         ),
         GeminiPromptModifier(
             id = "dark",
-            label = "Dark Fantasy",
-            description = "Grimdark/dark themes",
+            labelRes = AYMR.strings.novel_reader_gemini_prompt_modifier_dark_label,
+            descriptionRes = AYMR.strings.novel_reader_gemini_prompt_modifier_dark_description,
             prompt = """
                 ### DARK FANTASY DIRECTIVE
                 This is a dark/grimdark fantasy. Embrace the bleakness:
@@ -82,8 +85,8 @@ object GeminiPromptModifiers {
         ),
         GeminiPromptModifier(
             id = "litrpg",
-            label = "LitRPG",
-            description = "GameLit/LitRPG novels",
+            labelRes = AYMR.strings.novel_reader_gemini_prompt_modifier_litrpg_label,
+            descriptionRes = AYMR.strings.novel_reader_gemini_prompt_modifier_litrpg_description,
             prompt = """
                 ### LITRPG DIRECTIVE
                 This is a LitRPG/GameLit novel. Use established gaming terminology:

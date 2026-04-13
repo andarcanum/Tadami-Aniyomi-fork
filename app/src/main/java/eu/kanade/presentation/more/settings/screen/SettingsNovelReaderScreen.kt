@@ -1287,10 +1287,13 @@ object SettingsNovelReaderScreen : SearchableSettings {
         val translationProvider by translationProviderPref.collectAsState()
         val googleTranslationEnabled by prefs.googleTranslationEnabled().collectAsState()
         var showMlKitModelsDialog by rememberSaveable { mutableStateOf(false) }
+        val privateProviderFallbackLabel = stringResource(
+            AYMR.strings.novel_reader_translation_provider_gemini_private,
+        )
         val privateProviderLabel = if (GeminiPrivateBridge.isInstalled()) {
             GeminiPrivateBridge.providerLabel()
         } else {
-            "Gemini Private"
+            privateProviderFallbackLabel
         }
         val items = mutableListOf<Preference.PreferenceItem<out Any>>(
             Preference.PreferenceItem.TextPreference(
