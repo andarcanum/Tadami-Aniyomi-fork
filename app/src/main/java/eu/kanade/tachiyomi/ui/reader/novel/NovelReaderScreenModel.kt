@@ -11,6 +11,7 @@ import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.prefetch.AllowAllContentPrefetchEnvironment
 import eu.kanade.tachiyomi.data.prefetch.AndroidContentPrefetchEnvironment
 import eu.kanade.tachiyomi.data.prefetch.ContentPrefetchService
+import eu.kanade.tachiyomi.data.translation.TranslationJob
 import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.data.translation.TranslationStatus
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
@@ -30,7 +31,6 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationService
-import eu.kanade.tachiyomi.ui.reader.novel.translation.ChapterTranslationBackend
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekPromptResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationParams
@@ -45,8 +45,6 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationSessionCache
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleUnofficialSelectedTextTranslationProvider
-import eu.kanade.tachiyomi.ui.reader.novel.translation.MlKitMissingModelsException
-import eu.kanade.tachiyomi.ui.reader.novel.translation.MlKitTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationCacheResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationProvider
@@ -240,10 +238,6 @@ class NovelReaderScreenModel(
     private val googleTranslationService: GoogleTranslationService = run {
         val networkHelper = Injekt.get<NetworkHelper>()
         GoogleTranslationService(client = networkHelper.client)
-    },
-    private val mlKitTranslationService: MlKitTranslationService = run {
-        val networkHelper = Injekt.get<NetworkHelper>()
-        MlKitTranslationService()
     },
     private val translationQueueManager: TranslationQueueManager = Injekt.get(),
 ) : StateScreenModel<NovelReaderScreenModel.State>(State.Loading()) {
@@ -509,6 +503,11 @@ class NovelReaderScreenModel(
                         TranslationStatus.COMPLETED -> {
                             isGeminiTranslating = false
                             geminiTranslationProgress = 100
+                            val settings = (mutableState.value as? State.Success)?.readerSettings
+                            if (settings != null) {
+                                restoreGeminiTranslationFromCache(update.chapterId, settings)
+                                updateContent(settings)
+                            }
                             refreshGeminiUiState()
                         }
                         TranslationStatus.FAILED -> {
@@ -1878,9 +1877,6 @@ class NovelReaderScreenModel(
     fun setGoogleTranslationTargetLang(value: String) {
         novelReaderPreferences.googleTranslationTargetLang().set(value)
     }
-    fun setMlKitPreferOffline(value: Boolean) {
-        novelReaderPreferences.mlKitPreferOffline().set(value)
-    }
     fun setAirforceBaseUrl(value: String) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.airforceBaseUrl().set(value) },
         setOverride = { it.copy(airforceBaseUrl = value) },
@@ -2238,164 +2234,48 @@ class NovelReaderScreenModel(
         hasGeminiTranslationCache = false
         isGeminiTranslating = true
         geminiTranslationProgress = 0
-        addGeminiLog("Gemini translation stopped because Gemini is disabled.")
         geminiTranslationJob?.cancel()
-        geminiTranslationJob = screenModelScope.launch {
-            val translated = mutableMapOf<Int, String>()
-            val indexedBlocks = baseTextBlocks.mapIndexed { index, text -> index to text }
-            val updateMutex = Mutex()
-            suspend fun runChunkedTranslation(
-                chunks: List<List<Pair<Int, String>>>,
-                chunkSize: Int,
-                concurrencyLimit: Int,
-                strictOnNull: Boolean,
-            ) {
-                val semaphore = Semaphore(concurrencyLimit)
-                var completedChunks = 0
-                addGeminiLog(
-                    "?? Split into ${chunks.size} chunks. Batch: $chunkSize, Concurrency: $concurrencyLimit",
-                )
-                coroutineScope {
-                    chunks.mapIndexed { chunkIndex, chunk ->
-                        async {
-                            semaphore.withPermit {
-                                addGeminiLog("?? Requesting chunk ${chunkIndex + 1}/${chunks.size}")
-                                val result = requestTranslationBatch(
-                                    segments = chunk.map { it.second },
-                                    settings = settings,
-                                    onLog = { message -> addGeminiLog(message) },
-                                )
-                                if (result == null && strictOnNull) {
-                                    throw IllegalStateException(
-                                        "${settings.translationProvider} returned empty response for chunk ${chunkIndex + 1}",
-                                    )
-                                }
-                                updateMutex.withLock {
-                                    if (result != null) {
-                                        var successCount = 0
-                                        result.forEachIndexed { localIndex, text ->
-                                            val originalIndex =
-                                                chunk.getOrNull(localIndex)?.first ?: return@forEachIndexed
-                                            if (!text.isNullOrBlank()) {
-                                                translated[originalIndex] = text
-                                                successCount += 1
-                                            }
-                                        }
-                                        addGeminiLog("? Chunk ${chunkIndex + 1} applied ($successCount/${chunk.size})")
-                                    } else {
-                                        addGeminiLog("?? Chunk ${chunkIndex + 1} returned empty result")
-                                    }
-                                    completedChunks += 1
-                                    geminiTranslationProgress =
-                                        (((completedChunks).toFloat() / chunks.size.toFloat()) * 100f)
-                                            .toInt()
-                                            .coerceIn(0, 100)
-                                    if (translated.isNotEmpty()) {
-                                        geminiTranslatedByIndex = translated.toMap()
-                                    }
-                                    updateContent(settings)
-                                }
-                            }
-                        }
-                    }.awaitAll()
-                }
-            }
+        geminiTranslationJob = null
+        addGeminiLog("Gemini translation queued in background.")
+        refreshGeminiUiState()
+        geminiTranslationJob = screenModelScope.launch(Dispatchers.IO) {
             try {
-                if (settings.shouldUseSinglePrivateChapterRequestMode()) {
-                    addGeminiLog("?? Private Gemini mode: forcing one request for the whole chapter")
-                    val singleResult = requestTranslationBatch(
-                        segments = indexedBlocks.map { it.second },
-                        settings = settings,
-                        onLog = { message -> addGeminiLog(message) },
-                    )
-                    val singleSuccess = singleResult?.any { !it.isNullOrBlank() } == true
-                    if (singleSuccess) {
-                        var successCount = 0
-                        singleResult.orEmpty().forEachIndexed { index, text ->
-                            if (!text.isNullOrBlank()) {
-                                translated[index] = text
-                                successCount += 1
-                            }
-                        }
-                        addGeminiLog("? Single chapter request applied ($successCount/${indexedBlocks.size})")
-                        geminiTranslationProgress = 100
-                        if (translated.isNotEmpty()) {
-                            geminiTranslatedByIndex = translated.toMap()
-                        }
-                        updateContent(settings)
+                val alreadyQueued = translationQueueManager.hasPendingOrActive(chapter.id)
+                if (!alreadyQueued) {
+                    translationQueueManager.addToQueue(listOf(chapter.id), currentState.novel.id)
+                }
+                if (!isActive) return@launch
+                val appContext = Injekt.get<Application>()
+                if (!TranslationJob.isRunning(appContext)) {
+                    TranslationJob.runImmediately(appContext)
+                }
+                addGeminiLog(
+                    if (alreadyQueued) {
+                        "Gemini translation is already queued."
                     } else {
-                        addGeminiLog(
-                            "?? Single chapter request failed, fallback to chunked mode " +
-                                "(batch=$PRIVATE_FALLBACK_CHUNK_SIZE, concurrency=$PRIVATE_FALLBACK_CONCURRENCY)",
-                        )
-                        geminiTranslationProgress = 0
-                        updateContent(settings)
-                        val fallbackChunks = indexedBlocks.chunked(PRIVATE_FALLBACK_CHUNK_SIZE)
-                        runChunkedTranslation(
-                            chunks = fallbackChunks,
-                            chunkSize = PRIVATE_FALLBACK_CHUNK_SIZE,
-                            concurrencyLimit = PRIVATE_FALLBACK_CONCURRENCY,
-                            strictOnNull = !settings.geminiRelaxedMode,
-                        )
-                    }
-                } else {
-                    val chunkSize = settings.geminiBatchSize.coerceIn(1, 80)
-                    val chunks = indexedBlocks.chunked(chunkSize)
-                    runChunkedTranslation(
-                        chunks = chunks,
-                        chunkSize = chunkSize,
-                        concurrencyLimit = settings.translationConcurrencyLimit(),
-                        strictOnNull = !settings.geminiRelaxedMode,
-                    )
-                }
-                if (translated.isNotEmpty()) {
-                    geminiTranslatedByIndex = translated.toMap()
-                    hasGeminiTranslationCache = true
-                    isGeminiTranslationVisible = true
-                    geminiTranslationProgress = 100
-                    if (!settings.geminiDisableCache) {
-                        NovelReaderTranslationDiskCacheStore.put(
-                            GeminiTranslationCacheEntry(
-                                chapterId = chapter.id,
-                                translatedByIndex = geminiTranslatedByIndex,
-                                provider = settings.translationProvider,
-                                model = settings.translationCacheModelId(),
-                                sourceLang = settings.geminiSourceLang,
-                                targetLang = settings.geminiTargetLang,
-                                promptMode = settings.geminiPromptMode,
-                                stylePreset = settings.geminiStylePreset,
-                            ),
-                        )
-                        addGeminiLog("?? Cache saved for chapter ${chapter.id}")
-                    }
-                    addGeminiLog("?? ${settings.translationProvider} complete. Translated blocks: ${translated.size}")
-                } else {
-                    geminiTranslationProgress = 0
-                    addGeminiLog("?? ${settings.translationProvider} finished with no translated blocks")
-                }
+                        "Gemini translation started in background."
+                    },
+                )
             } catch (_: CancellationException) {
-                // Job cancelled intentionally by user.
-                addGeminiLog("?? ${settings.translationProvider} translation cancelled")
+                // Job cancelled intentionally by the user or screen teardown.
             } catch (error: Exception) {
-                logcat(LogPriority.WARN, error) { "Translation failed for chapter=${chapter.id}" }
-                addGeminiLog("? ${settings.translationProvider} failed: ${formatGeminiThrowableForLog(error)}")
-                if (translated.isEmpty()) {
-                    geminiTranslatedByIndex = emptyMap()
-                    hasGeminiTranslationCache = false
-                    isGeminiTranslationVisible = false
-                    geminiTranslationProgress = 0
-                }
-            } finally {
+                logcat(LogPriority.WARN, error) { "Failed to queue Gemini translation for chapter=${chapter.id}" }
+                addGeminiLog("Failed to start background translation: ${error.message ?: error::class.java.simpleName}")
                 isGeminiTranslating = false
-                updateContent(settings)
+                geminiTranslationProgress = 0
+                refreshGeminiUiState()
             }
         }
     }
     fun stopGeminiTranslation() {
+        val chapter = currentChapter ?: return
+        translationQueueManager.removeFromQueue(chapter.id)
+        TranslationJob.stop(Injekt.get<Application>())
         geminiTranslationJob?.cancel()
         geminiTranslationJob = null
         isGeminiTranslating = false
         isGeminiTranslationVisible = false
+        geminiTranslationProgress = 0
         addGeminiLog("?? Stop requested")
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         updateContent(settings)
@@ -2409,6 +2289,9 @@ class NovelReaderScreenModel(
     }
     fun clearGeminiTranslation() {
         val chapter = currentChapter ?: return
+        if (isGeminiTranslating) {
+            stopGeminiTranslation()
+        }
         geminiTranslationJob?.cancel()
         geminiTranslationJob = null
         geminiTranslatedByIndex = emptyMap()
@@ -2462,74 +2345,10 @@ class NovelReaderScreenModel(
         googleTranslationProgress = 0
         googleLogs = emptyList()
         googleRateLimited = false
-        translationPhase = TranslationPhase.PREPARING_MODEL
+        translationPhase = TranslationPhase.IDLE
         updateContent(settings)
 
         googleTranslationJob = screenModelScope.launch {
-            var usedBackend: ChapterTranslationBackend = ChapterTranslationBackend.GOOGLE
-
-            val preferOffline = settings.mlKitPreferOffline
-
-            if (preferOffline) {
-                try {
-                    addGoogleLog("Trying ML Kit translation (offline mode)...")
-                    val mlKitResponse = mlKitTranslationService.translateBatch(
-                        texts = baseTextBlocks,
-                        params = params,
-                        onProgress = onProgress@{ phase, progress ->
-                            translationPhase = phase
-                            googleTranslationProgress = progress
-                            updateContent(settings)
-                        },
-                    )
-                    val results = baseTextBlocks.mapIndexedNotNull { index, text ->
-                        mlKitResponse.translatedByText[text]?.takeIf { it.isNotBlank() }?.let { translated ->
-                            index to translated
-                        }
-                    }.toMap()
-                    addGoogleLog(
-                        "ML Kit succeeded: translatedSegments=${results.values.count {
-                            it.isNotBlank()
-                        }}/$baseTextBlocks.size",
-                    )
-                    googleTranslatedByIndex = results
-                    val chapter = currentChapter
-                    if (chapter != null) {
-                        googleSessionCache.put(
-                            chapterId = chapter.id,
-                            sourceLang = params.sourceLang,
-                            targetLang = params.targetLang,
-                            backend = ChapterTranslationBackend.ML_KIT,
-                            translatedByIndex = results,
-                        )
-                    }
-                    hasGoogleTranslationCache = results.isNotEmpty()
-                    isGoogleTranslating = false
-                    googleTranslationProgress = 100
-                    translationPhase = TranslationPhase.IDLE
-                    if (results.isNotEmpty()) {
-                        isGoogleTranslationVisible = true
-                    }
-                    updateContent(settings)
-                    return@launch
-                } catch (e: MlKitMissingModelsException) {
-                    addGoogleLog(
-                        "ML Kit models missing: ${e.missingLanguageCodes.joinToString()}",
-                    )
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    addGoogleLog("ML Kit failed: ${e.message ?: e::class.java.simpleName}")
-                }
-                isGoogleTranslating = false
-                googleTranslationProgress = 0
-                translationPhase = TranslationPhase.IDLE
-                updateContent(settings)
-                return@launch
-            } else {
-                addGoogleLog("Using Google Translate (offline mode disabled)")
-            }
-
             try {
                 val response = googleTranslationService.translateBatch(
                     texts = baseTextBlocks,
@@ -2562,7 +2381,6 @@ class NovelReaderScreenModel(
                         chapterId = chapter.id,
                         sourceLang = params.sourceLang,
                         targetLang = params.targetLang,
-                        backend = usedBackend,
                         translatedByIndex = results,
                     )
                 }
@@ -2627,7 +2445,6 @@ class NovelReaderScreenModel(
             (mutableState.value as? State.Success)?.readerSettings?.googleTranslationSourceLang ?: "auto",
             targetLang =
             (mutableState.value as? State.Success)?.readerSettings?.googleTranslationTargetLang ?: "Russian",
-            backend = ChapterTranslationBackend.GOOGLE,
         )
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         updateContent(settings)
@@ -2639,14 +2456,13 @@ class NovelReaderScreenModel(
             chapterId = chapter.id,
             sourceLang = settings.googleTranslationSourceLang,
             targetLang = settings.googleTranslationTargetLang,
-            backend = ChapterTranslationBackend.GOOGLE,
         )
         if (cached != null && cached.isNotEmpty()) {
             googleTranslatedByIndex = cached
             hasGoogleTranslationCache = true
             isGoogleTranslationVisible = true
             addGoogleLog(
-                "Restored session cache: segments=${cached.size}, source=${settings.googleTranslationSourceLang}, target=${settings.googleTranslationTargetLang}, backend=simple",
+                "Restored session cache: segments=${cached.size}, source=${settings.googleTranslationSourceLang}, target=${settings.googleTranslationTargetLang}",
             )
             updateContent(settings)
         }

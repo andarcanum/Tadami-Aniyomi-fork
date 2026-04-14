@@ -84,9 +84,6 @@ aboutLibraries-compose = { module = "com.mikepenz:aboutlibraries-compose-m3", ve
 shizuku-api = { module = "dev.rikka.shizuku:api", version.ref = "shizuku_version" }
 shizuku-provider = { module = "dev.rikka.shizuku:provider", version.ref = "shizuku_version" }
 
-mlkit-translate = "com.google.mlkit:translate:17.0.3"
-mlkit-language-id = "com.google.mlkit:language-id:17.0.6"
-
 leakcanary-android = { module = "com.squareup.leakcanary:leakcanary-android", version.ref = "leakcanary" }
 leakcanary-plumber = { module = "com.squareup.leakcanary:plumber-android", version.ref = "leakcanary" }
 

@@ -218,6 +218,17 @@ class TranslationQueueManager(
         }
     }
 
+    suspend fun hasPendingOrActive(chapterId: Long): Boolean {
+        return try {
+            getQueueItemByChapterId(chapterId)?.status.let { status ->
+                status == TranslationStatus.PENDING || status == TranslationStatus.IN_PROGRESS
+            }
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR) { "Failed to check chapter $chapterId queue state: ${e.message}" }
+            false
+        }
+    }
+
     fun setActiveTranslation(item: TranslationQueueItem?) {
         _activeTranslation.value = item
     }

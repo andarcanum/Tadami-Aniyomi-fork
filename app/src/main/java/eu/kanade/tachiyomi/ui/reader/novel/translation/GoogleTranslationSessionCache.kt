@@ -15,19 +15,17 @@ class GoogleTranslationSessionCache {
         chapterId: Long,
         sourceLang: String,
         targetLang: String,
-        backend: ChapterTranslationBackend,
     ): String {
-        return "$chapterId|$sourceLang|$targetLang|${backend.fingerprint()}"
+        return "$chapterId|$sourceLang|$targetLang"
     }
 
     fun get(
         chapterId: Long,
         sourceLang: String,
         targetLang: String,
-        backend: ChapterTranslationBackend,
     ): Map<Int, String>? {
         return synchronized(cache) {
-            cache[buildKey(chapterId, sourceLang, targetLang, backend)]
+            cache[buildKey(chapterId, sourceLang, targetLang)]
         }
     }
 
@@ -35,11 +33,10 @@ class GoogleTranslationSessionCache {
         chapterId: Long,
         sourceLang: String,
         targetLang: String,
-        backend: ChapterTranslationBackend,
         translatedByIndex: Map<Int, String>,
     ) {
         synchronized(cache) {
-            cache[buildKey(chapterId, sourceLang, targetLang, backend)] = translatedByIndex
+            cache[buildKey(chapterId, sourceLang, targetLang)] = translatedByIndex
         }
     }
 
@@ -47,10 +44,9 @@ class GoogleTranslationSessionCache {
         chapterId: Long,
         sourceLang: String,
         targetLang: String,
-        backend: ChapterTranslationBackend,
     ) {
         synchronized(cache) {
-            cache.remove(buildKey(chapterId, sourceLang, targetLang, backend))
+            cache.remove(buildKey(chapterId, sourceLang, targetLang))
         }
     }
 

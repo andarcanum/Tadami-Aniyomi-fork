@@ -6,9 +6,11 @@ import eu.kanade.tachiyomi.data.translation.TranslationQueueItem
 import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginPackage
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
+import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
+import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderChapterPrefetchCache
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationErrorReason
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceModelsService
@@ -16,6 +18,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationServic
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationProviderOutcome
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationRequest
@@ -25,6 +28,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.unmockkAll
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,13 +38,17 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import kotlinx.serialization.json.Json
+import okhttp3.OkHttpClient
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.parallel.Isolated
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.domain.entries.novel.interactor.GetNovel
@@ -57,6 +65,7 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.fullType
 import uy.kohesive.injekt.api.get
 
+@Isolated
 class NovelSelectedTextTranslationScreenModelTest {
     private class TestApplication : Application()
 
@@ -74,34 +83,47 @@ class NovelSelectedTextTranslationScreenModelTest {
     fun tearDown() {
         activeScreenModels.forEach { it.onDispose() }
         activeScreenModels.clear()
+        NovelReaderChapterPrefetchCache.clear()
+        NovelReaderTranslationDiskCacheStore.clear()
+        unmockkAll()
+    }
+
+    @BeforeEach
+    fun clearReaderCaches() {
+        Dispatchers.setMain(Dispatchers.Unconfined)
+        setupInjektApplication()
+        NovelReaderChapterPrefetchCache.clear()
+        NovelReaderTranslationDiskCacheStore.clear()
+    }
+
+    private fun setupInjektApplication() {
+        val application = mockk<Application>(relaxed = true)
+        val filesDir = java.io.File(System.getProperty("java.io.tmpdir"), "novel-translation-test-files")
+            .apply { mkdirs() }
+        val cacheDir = java.io.File(System.getProperty("java.io.tmpdir"), "novel-translation-test-cache")
+            .apply { mkdirs() }
+        every { application.filesDir } returns filesDir
+        every { application.cacheDir } returns cacheDir
+        Injekt.addSingleton(fullType<Application>(), application)
+
+        val translationQueueManager = mockk<TranslationQueueManager>(relaxed = true)
+        every {
+            translationQueueManager.activeTranslation
+        } returns MutableStateFlow<TranslationQueueItem?>(null)
+        Injekt.addSingleton(fullType<TranslationQueueManager>(), translationQueueManager)
+
+        val networkHelper = mockk<NetworkHelper>()
+        every { networkHelper.client } returns OkHttpClient()
+        Injekt.addSingleton(fullType<NetworkHelper>(), networkHelper)
+
+        Injekt.addSingleton(fullType<Json>(), Json { encodeDefaults = true })
     }
 
     companion object {
         @JvmStatic
-        @BeforeAll
-        fun setupInjektApplication() {
-            runCatching { Injekt.get<Application>() }
-                .getOrElse {
-                    val cacheDir = java.io.File(System.getProperty("java.io.tmpdir"), "novel-translation-test-cache")
-                        .apply { mkdirs() }
-                    val application = mockk<Application>(relaxed = true)
-                    every { application.cacheDir } returns cacheDir
-                    Injekt.addSingleton(fullType<Application>(), application)
-                }
-            runCatching { Injekt.get<TranslationQueueManager>() }
-                .getOrElse {
-                    val translationQueueManager = mockk<TranslationQueueManager>(relaxed = true)
-                    every {
-                        translationQueueManager.activeTranslation
-                    } returns MutableStateFlow<TranslationQueueItem?>(null)
-                    Injekt.addSingleton(fullType<TranslationQueueManager>(), translationQueueManager)
-                }
-        }
-
-        @JvmStatic
-        @BeforeAll
-        fun setupMainDispatcher() {
-            Dispatchers.setMain(Dispatchers.Unconfined)
+        @AfterAll
+        fun resetMainDispatcher() {
+            Dispatchers.resetMain()
         }
     }
 
@@ -411,12 +433,17 @@ class NovelSelectedTextTranslationScreenModelTest {
         selectedTextTranslationProvider: NovelSelectedTextTranslationProvider,
         selectedTextTranslationEnabled: Boolean = true,
     ): NovelReaderScreenModel {
-        val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+        val novel = Novel.create().copy(
+            id = 1L,
+            source = 10L,
+            title = "Novel",
+            url = "https://example.org/novel/",
+        )
         val chapter = NovelChapter.create().copy(
             id = 5L,
             novelId = 1L,
             name = "Chapter 1",
-            url = "https://example.org/ch1",
+            url = "https://example.org/novel/ch1",
         )
 
         val model = NovelReaderScreenModel(
@@ -596,7 +623,10 @@ class NovelSelectedTextTranslationScreenModelTest {
         private val chapterHtml: String,
     ) : NovelSource, NovelWebUrlSource {
         override val name: String = "NovelSource"
-        override suspend fun getChapterText(chapter: SNovelChapter): String = chapterHtml
+        override suspend fun getChapterText(chapter: SNovelChapter): String {
+            println("FakeNovelSource.getChapterText url=${chapter.url}")
+            return chapterHtml
+        }
         override suspend fun getNovelWebUrl(novelPath: String): String? = null
         override suspend fun getChapterWebUrl(chapterPath: String, novelPath: String?): String? = null
     }

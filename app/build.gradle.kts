@@ -321,10 +321,6 @@ dependencies {
     // Shizuku
     implementation(libs.bundles.shizuku)
 
-    // ML Kit Translation
-    implementation(libs.mlkit.translate)
-    implementation(libs.mlkit.language.id)
-
     // Tests
     testImplementation(libs.bundles.test)
     testRuntimeOnly(libs.junitVintageEngine)

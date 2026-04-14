@@ -9,6 +9,7 @@ import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
@@ -24,6 +25,12 @@ class NovelDownloadQueueScreenModelTest {
         @BeforeAll
         fun setupMainDispatcher() {
             Dispatchers.setMain(Dispatchers.Unconfined)
+        }
+
+        @JvmStatic
+        @org.junit.jupiter.api.AfterAll
+        fun resetMainDispatcher() {
+            Dispatchers.resetMain()
         }
     }
 
@@ -46,6 +53,12 @@ class NovelDownloadQueueScreenModelTest {
             )
 
             try {
+                withTimeout(1_000) {
+                    while (screenModel.state.value.downloadCount != 5 || screenModel.state.value.downloadSize != 10L) {
+                        yield()
+                    }
+                }
+
                 downloadCountCalls shouldBe 1
                 downloadSizeCalls shouldBe 1
 
@@ -85,7 +98,23 @@ class NovelDownloadQueueScreenModelTest {
         )
 
         try {
+            runBlocking {
+                withTimeout(1_000) {
+                    while (downloadCountCalls != 1 || downloadSizeCalls != 1) {
+                        yield()
+                    }
+                }
+            }
+
             screenModel.refreshStorage()
+
+            runBlocking {
+                withTimeout(1_000) {
+                    while (screenModel.state.value.downloadCount != 7 || screenModel.state.value.downloadSize != 14L) {
+                        yield()
+                    }
+                }
+            }
 
             downloadCountCalls shouldBe 2
             downloadSizeCalls shouldBe 2

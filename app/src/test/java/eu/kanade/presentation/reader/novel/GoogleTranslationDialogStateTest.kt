@@ -5,14 +5,11 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
-private const val PREPARING_MODEL_STRING = "Preparing translation model…"
-
 class GoogleTranslationDialogStateTest {
 
     @Test
     fun `translation phase enum has expected values`() {
-        assertEquals(3, TranslationPhase.entries.size)
-        assertTrue(TranslationPhase.entries.contains(TranslationPhase.PREPARING_MODEL))
+        assertEquals(2, TranslationPhase.entries.size)
         assertTrue(TranslationPhase.entries.contains(TranslationPhase.TRANSLATING))
         assertTrue(TranslationPhase.entries.contains(TranslationPhase.IDLE))
     }
@@ -39,26 +36,5 @@ class GoogleTranslationDialogStateTest {
 
         assertEquals(true, state.committedValue)
         assertEquals(true, state.draftValue)
-    }
-
-    @Test
-    fun `language suggestions match english aliases in latin and cyrillic`() {
-        val englishByLatin = googleTranslationLanguageSuggestions("Eng")
-        val englishByCyrillic = googleTranslationLanguageSuggestions("Англ")
-
-        assertTrue(englishByLatin.any { it.canonicalName == "English" })
-        assertTrue(englishByCyrillic.any { it.canonicalName == "English" })
-    }
-
-    @Test
-    fun `language suggestions match russian alias`() {
-        val russianSuggestions = googleTranslationLanguageSuggestions("рус")
-
-        assertTrue(russianSuggestions.any { it.canonicalName == "Russian" })
-    }
-
-    @Test
-    fun `preparing model phase string is non-empty`() {
-        assertTrue(PREPARING_MODEL_STRING.isNotEmpty())
     }
 }

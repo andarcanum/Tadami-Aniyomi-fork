@@ -135,13 +135,6 @@ data class NovelReaderSettings(
     val googleTranslationTargetLang: String = "Russian",
     val googleTranslationAutoStart: Boolean = false,
 
-    // ML Kit Translation
-    val mlKitTranslationEnabled: Boolean = true,
-    val mlKitTranslationSourceLang: String = "auto",
-    val mlKitTranslationTargetLang: String = "Russian",
-    val mlKitTranslationAutoStart: Boolean = false,
-    val mlKitPreferOffline: Boolean = false,
-
     // TTS
     val ttsEnabled: Boolean = false,
     val ttsEnginePackage: String = "",
@@ -388,13 +381,6 @@ data class NovelReaderOverride(
     val googleTranslationSourceLang: String? = null,
     val googleTranslationTargetLang: String? = null,
     val googleTranslationAutoStart: Boolean? = null,
-
-    // ML Kit Translation
-    val mlKitTranslationEnabled: Boolean? = null,
-    val mlKitTranslationSourceLang: String? = null,
-    val mlKitTranslationTargetLang: String? = null,
-    val mlKitTranslationAutoStart: Boolean? = null,
-    val mlKitPreferOffline: Boolean? = null,
 
     // TTS
     val ttsEnabled: Boolean? = null,
@@ -761,20 +747,6 @@ class NovelReaderPreferences(
 
     fun googleTranslationAutoStart() = preferenceStore.getBoolean("novel_reader_google_translation_auto_start", false)
 
-    // ML Kit Translation
-    fun mlKitTranslationEnabled() = preferenceStore.getBoolean("novel_reader_mlkit_translation_enabled", true)
-
-    fun mlKitTranslationSourceLang() = preferenceStore.getString("novel_reader_mlkit_translation_source_lang", "auto")
-
-    fun mlKitTranslationTargetLang() = preferenceStore.getString(
-        "novel_reader_mlkit_translation_target_lang",
-        "Russian",
-    )
-
-    fun mlKitTranslationAutoStart() = preferenceStore.getBoolean("novel_reader_mlkit_translation_auto_start", false)
-
-    fun mlKitPreferOffline() = preferenceStore.getBoolean("novel_reader_mlkit_prefer_offline", false)
-
     // EPUB export
     fun epubExportLocation() = preferenceStore.getString("novel_epub_export_location", "")
 
@@ -937,11 +909,6 @@ class NovelReaderPreferences(
                 googleTranslationSourceLang = googleTranslationSourceLang().get(),
                 googleTranslationTargetLang = googleTranslationTargetLang().get(),
                 googleTranslationAutoStart = googleTranslationAutoStart().get(),
-                mlKitTranslationEnabled = mlKitTranslationEnabled().get(),
-                mlKitTranslationSourceLang = mlKitTranslationSourceLang().get(),
-                mlKitTranslationTargetLang = mlKitTranslationTargetLang().get(),
-                mlKitTranslationAutoStart = mlKitTranslationAutoStart().get(),
-                mlKitPreferOffline = mlKitPreferOffline().get(),
                 ttsEnabled = ttsEnabled().get(),
                 ttsEnginePackage = ttsEnginePackage().get(),
                 ttsVoiceId = ttsVoiceId().get(),
@@ -1080,11 +1047,6 @@ class NovelReaderPreferences(
             googleTranslationSourceLang = override?.googleTranslationSourceLang ?: googleTranslationSourceLang().get(),
             googleTranslationTargetLang = override?.googleTranslationTargetLang ?: googleTranslationTargetLang().get(),
             googleTranslationAutoStart = override?.googleTranslationAutoStart ?: googleTranslationAutoStart().get(),
-            mlKitTranslationEnabled = override?.mlKitTranslationEnabled ?: mlKitTranslationEnabled().get(),
-            mlKitTranslationSourceLang = override?.mlKitTranslationSourceLang ?: mlKitTranslationSourceLang().get(),
-            mlKitTranslationTargetLang = override?.mlKitTranslationTargetLang ?: mlKitTranslationTargetLang().get(),
-            mlKitTranslationAutoStart = override?.mlKitTranslationAutoStart ?: mlKitTranslationAutoStart().get(),
-            mlKitPreferOffline = override?.mlKitPreferOffline ?: mlKitPreferOffline().get(),
             ttsEnabled = override?.ttsEnabled ?: ttsEnabled().get(),
             ttsEnginePackage = override?.ttsEnginePackage ?: ttsEnginePackage().get(),
             ttsVoiceId = override?.ttsVoiceId ?: ttsVoiceId().get(),

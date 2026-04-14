@@ -14,7 +14,6 @@ import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -50,7 +49,6 @@ fun GoogleTranslationDialog(
     onSetAutoStart: (Boolean) -> Unit,
     onSetSourceLang: (String) -> Unit,
     onSetTargetLang: (String) -> Unit,
-    onSetMlKitPreferOffline: ((Boolean) -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     @Suppress("UNUSED_PARAMETER")
@@ -69,7 +67,6 @@ fun GoogleTranslationDialog(
     }
     var sourceExpanded by remember { mutableStateOf(false) }
     var targetExpanded by remember { mutableStateOf(false) }
-    var showMlKitModelsDialog by remember { mutableStateOf(false) }
     var autoStartDraft by remember {
         mutableStateOf(readerSettings.googleTranslationAutoStart)
     }
@@ -125,45 +122,6 @@ fun GoogleTranslationDialog(
 
                 Text(stringResource(AYMR.strings.novel_reader_google_translate_backend_simple))
 
-                if (onSetMlKitPreferOffline != null) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(AYMR.strings.novel_reader_mlkit_prefer_offline),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                        }
-                        Switch(
-                            checked = readerSettings.mlKitPreferOffline,
-                            onCheckedChange = { onSetMlKitPreferOffline(it) },
-                            enabled = !isTranslating,
-                        )
-                    }
-                }
-
-                if (onSetMlKitPreferOffline != null) {
-                    Text(
-                        text = stringResource(AYMR.strings.novel_reader_mlkit_prefer_offline_summary),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    OutlinedButton(
-                        onClick = { showMlKitModelsDialog = true },
-                        enabled = !isTranslating,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            text = stringResource(AYMR.strings.novel_reader_mlkit_manage_models),
-                            maxLines = 2,
-                            textAlign = TextAlign.Center,
-                        )
-                    }
-                }
-
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -189,13 +147,7 @@ fun GoogleTranslationDialog(
                         progress = { translationProgress.coerceIn(0, 100) / 100f },
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    Text(
-                        text = if (translationPhase == TranslationPhase.PREPARING_MODEL) {
-                            stringResource(AYMR.strings.novel_reader_translation_preparing_model)
-                        } else {
-                            stringResource(AYMR.strings.novel_reader_google_translate_progress, translationProgress)
-                        },
-                    )
+                    Text(stringResource(AYMR.strings.novel_reader_google_translate_progress, translationProgress))
                 }
 
                 if (hasCache) {
@@ -328,12 +280,6 @@ fun GoogleTranslationDialog(
             }
         },
     )
-
-    if (showMlKitModelsDialog) {
-        MlKitTranslationModelsDialog(
-            onDismiss = { showMlKitModelsDialog = false },
-        )
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

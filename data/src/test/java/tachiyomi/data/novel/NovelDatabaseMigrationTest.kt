@@ -12,7 +12,7 @@ class NovelDatabaseMigrationTest {
 
     @Test
     fun `schema version increments for narrowed novel triggers`() {
-        NovelDatabase.Schema.version shouldBe 5L
+        NovelDatabase.Schema.version shouldBe 7L
     }
 
     @Test
@@ -102,6 +102,32 @@ class NovelDatabaseMigrationTest {
                     is_syncing INTEGER NOT NULL DEFAULT 0,
                     FOREIGN KEY(novel_id) REFERENCES novels (_id)
                     ON DELETE CASCADE
+                )
+            """.trimIndent(),
+            parameters = 0,
+        )
+        driver.execute(
+            identifier = null,
+            sql = """
+                CREATE TABLE categories(
+                    _id INTEGER NOT NULL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    sort INTEGER NOT NULL,
+                    flags INTEGER NOT NULL,
+                    hidden INTEGER NOT NULL DEFAULT 0
+                )
+            """.trimIndent(),
+            parameters = 0,
+        )
+        driver.execute(
+            identifier = null,
+            sql = """
+                CREATE TABLE novel_categories(
+                    _id INTEGER NOT NULL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    sort INTEGER NOT NULL,
+                    flags INTEGER NOT NULL,
+                    hidden INTEGER NOT NULL DEFAULT 0
                 )
             """.trimIndent(),
             parameters = 0,

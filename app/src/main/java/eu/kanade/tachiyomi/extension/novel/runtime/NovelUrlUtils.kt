@@ -8,9 +8,27 @@ fun resolveUrl(input: String, base: String?): String {
     return runCatching {
         val inputUri = URI(inputValue)
         if (inputUri.isAbsolute) return inputUri.toString()
-        val baseUri = if (baseValue.isNotBlank()) URI(baseValue) else URI("")
+        if (baseValue.isBlank()) return inputValue
+        val baseUri = if (baseValue.isNotBlank()) {
+            ensureResolvableBaseUri(URI(baseValue))
+        } else {
+            URI("")
+        }
         baseUri.resolve(inputUri).toString()
     }.getOrElse { inputValue }
+}
+
+private fun ensureResolvableBaseUri(baseUri: URI): URI {
+    if (!baseUri.isAbsolute || !baseUri.path.isNullOrEmpty()) {
+        return baseUri
+    }
+    return URI(
+        baseUri.scheme,
+        baseUri.authority,
+        "/",
+        baseUri.query,
+        baseUri.fragment,
+    )
 }
 
 fun getPathname(url: String): String {

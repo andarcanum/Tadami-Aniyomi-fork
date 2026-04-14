@@ -49,7 +49,6 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.widget.BasePreferenceWidget
 import eu.kanade.presentation.more.settings.widget.PrefsHorizontalPadding
-import eu.kanade.presentation.reader.novel.MlKitTranslationModelsDialog
 import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_AGED_PAGE_ID
 import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_AGED_PARCHMENT_ID
 import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_CRUMPLED_SHEET_ID
@@ -1286,7 +1285,6 @@ object SettingsNovelReaderScreen : SearchableSettings {
         val translationProviderPref = prefs.translationProvider()
         val translationProvider by translationProviderPref.collectAsState()
         val googleTranslationEnabled by prefs.googleTranslationEnabled().collectAsState()
-        var showMlKitModelsDialog by rememberSaveable { mutableStateOf(false) }
         val privateProviderFallbackLabel = stringResource(
             AYMR.strings.novel_reader_translation_provider_gemini_private,
         )
@@ -1396,25 +1394,6 @@ object SettingsNovelReaderScreen : SearchableSettings {
                 preference = prefs.googleTranslationAutoStart(),
                 title = stringResource(AYMR.strings.novel_reader_google_translate_auto_start),
             )
-            items += Preference.PreferenceItem.TextPreference(
-                title = stringResource(AYMR.strings.novel_reader_mlkit_settings),
-            )
-            items += Preference.PreferenceItem.SwitchPreference(
-                preference = prefs.mlKitPreferOffline(),
-                title = stringResource(AYMR.strings.novel_reader_mlkit_prefer_offline),
-                subtitle = stringResource(AYMR.strings.novel_reader_mlkit_prefer_offline_summary),
-            )
-            items += Preference.PreferenceItem.TextPreference(
-                title = stringResource(AYMR.strings.novel_reader_mlkit_manage_models),
-                subtitle = stringResource(AYMR.strings.novel_reader_mlkit_models_description),
-                onClick = { showMlKitModelsDialog = true },
-                widget = {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = null,
-                    )
-                },
-            )
         }
         items += Preference.PreferenceItem.MultiLineEditTextPreference(
             preference = prefs.customCSS(),
@@ -1433,11 +1412,6 @@ object SettingsNovelReaderScreen : SearchableSettings {
             title = stringResource(AYMR.strings.novel_reader_advanced),
             preferenceItems = items.toImmutableList(),
         )
-        if (showMlKitModelsDialog) {
-            MlKitTranslationModelsDialog(
-                onDismiss = { showMlKitModelsDialog = false },
-            )
-        }
         return group
     }
 

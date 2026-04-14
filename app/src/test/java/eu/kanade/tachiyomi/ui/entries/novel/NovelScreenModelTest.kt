@@ -32,10 +32,12 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import kotlinx.serialization.json.Json
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import tachiyomi.core.common.preference.Preference
@@ -70,9 +72,12 @@ class NovelScreenModelTest {
         fun setupInjektBindings() {
             runCatching { Injekt.get<Application>() }
                 .getOrElse {
+                    val filesDir = File(System.getProperty("java.io.tmpdir"), "novel-screen-model-test-files")
+                        .apply { mkdirs() }
                     val cacheDir = File(System.getProperty("java.io.tmpdir"), "novel-screen-model-test-cache")
                         .apply { mkdirs() }
                     val application = mockk<Application>(relaxed = true)
+                    every { application.filesDir } returns filesDir
                     every { application.cacheDir } returns cacheDir
                     Injekt.addSingleton(fullType<Application>(), application)
                 }
@@ -98,6 +103,12 @@ class NovelScreenModelTest {
         @BeforeAll
         fun setupMainDispatcher() {
             Dispatchers.setMain(Dispatchers.Unconfined)
+        }
+
+        @JvmStatic
+        @AfterAll
+        fun resetMainDispatcher() {
+            Dispatchers.resetMain()
         }
     }
 

@@ -74,7 +74,9 @@ class TranslationJob(
         } catch (_: CancellationException) {
             val activeItem = queueManager.activeTranslation.value
             if (activeItem != null) {
-                queueManager.updateStatus(activeItem.chapterId, TranslationStatus.PENDING)
+                if (queueManager.hasPendingOrActive(activeItem.chapterId)) {
+                    queueManager.updateStatus(activeItem.chapterId, TranslationStatus.PENDING)
+                }
                 queueManager.setActiveTranslation(null)
             }
             logcat(LogPriority.DEBUG) { "Translation job cancelled" }
