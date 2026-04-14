@@ -4,6 +4,7 @@ import android.app.Application
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationStylePreset
+import eu.kanade.tachiyomi.util.safeCacheDir
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -109,8 +110,9 @@ internal object NovelReaderTranslationDiskCacheStore {
     private val json by lazy { Injekt.get<Json>() }
     private val cache by lazy {
         val app = Injekt.get<Application>()
+        val cacheRoot = app.safeCacheDir()
         NovelReaderTranslationDiskCache(
-            directory = File(app.cacheDir, "novel_reader_translation_cache"),
+            directory = File(cacheRoot, "novel_reader_translation_cache"),
             json = json,
         )
     }

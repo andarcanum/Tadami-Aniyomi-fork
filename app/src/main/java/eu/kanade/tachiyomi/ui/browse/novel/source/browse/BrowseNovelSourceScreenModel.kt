@@ -342,6 +342,7 @@ class BrowseNovelSourceScreenModel(
                     order = it.order,
                     flags = it.flags,
                     hidden = it.hidden,
+                    hiddenFromHomeHub = false,
                 )
             }
             .filterNot(Category::isSystemCategory)

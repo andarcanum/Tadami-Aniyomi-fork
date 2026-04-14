@@ -10,6 +10,7 @@ import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.source.novel.NovelSiteSource
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
+import kotlinx.coroutines.CancellationException
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
 import tachiyomi.domain.entries.novel.model.Novel
@@ -36,21 +37,34 @@ class NovelRatingFetcher {
             return null
         }
 
-        val rating = ratingCache.resolve(
-            contentType = CONTENT_TYPE,
-            sourceName = source.name,
-            url = requestUrl.toString(),
-            forceRefresh = forceRefresh,
-        ) {
-            when (requestUrl.host.lowercase(Locale.ROOT)) {
-                "ranobelib.me" -> fetchRanobeLibRating(requestUrl)
-                else -> fetchHtmlRating(requestUrl)
+        return try {
+            val rating = ratingCache.resolve(
+                contentType = CONTENT_TYPE,
+                sourceName = source.name,
+                url = requestUrl.toString(),
+                forceRefresh = forceRefresh,
+            ) {
+                when (requestUrl.host.lowercase(Locale.ROOT)) {
+                    "ranobelib.me" -> fetchRanobeLibRating(requestUrl)
+                    else -> fetchHtmlRating(requestUrl)
+                }
             }
+            debugLog(
+                "await: source=${source.name} novelUrl=$requestUrl rating=${rating.previewFloat()}",
+            )
+            rating
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            debugLog(
+                "await: failed source=${source.name} novelUrl=$requestUrl error=${error.message}",
+            )
+            ratingCache.peek(
+                contentType = CONTENT_TYPE,
+                sourceName = source.name,
+                url = requestUrl.toString(),
+            )
         }
-        debugLog(
-            "await: source=${source.name} novelUrl=$requestUrl rating=${rating.previewFloat()}",
-        )
-        return rating
     }
 
     private suspend fun fetchHtmlRating(requestUrl: okhttp3.HttpUrl): Float? {

@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.novel.setting
 
+import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
@@ -89,6 +90,25 @@ class NovelReaderPreferencesTest {
         prefs.deepSeekBaseUrl().get() shouldBe "https://api.deepseek.com"
         prefs.deepSeekApiKey().get() shouldBe ""
         prefs.deepSeekModel().get() shouldBe "deepseek-chat"
+    }
+
+    @Test
+    fun `translated download format defaults to txt per novel`() {
+        val prefs = createPrefs()
+
+        prefs.translatedDownloadFormat(1L) shouldBe NovelTranslatedDownloadFormat.TXT
+        prefs.translatedDownloadFormat(2L) shouldBe NovelTranslatedDownloadFormat.TXT
+    }
+
+    @Test
+    fun `translated download format is stored per novel`() {
+        val prefs = createPrefs()
+
+        prefs.setTranslatedDownloadFormat(1L, NovelTranslatedDownloadFormat.DOCX)
+        prefs.setTranslatedDownloadFormat(2L, NovelTranslatedDownloadFormat.TXT)
+
+        prefs.translatedDownloadFormat(1L) shouldBe NovelTranslatedDownloadFormat.DOCX
+        prefs.translatedDownloadFormat(2L) shouldBe NovelTranslatedDownloadFormat.TXT
     }
 
     @Test

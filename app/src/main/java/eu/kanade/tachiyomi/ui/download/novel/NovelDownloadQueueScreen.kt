@@ -3,9 +3,9 @@ package eu.kanade.tachiyomi.ui.download.novel
 import android.text.format.Formatter
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -15,6 +15,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -43,6 +44,7 @@ fun NovelDownloadQueueScreen(
     contentPadding: PaddingValues,
     state: NovelDownloadQueueScreenModel.State,
     onRefresh: () -> Unit,
+    onOpenFolder: () -> Unit,
     nestedScrollConnection: NestedScrollConnection,
 ) {
     val uiPreferences = Injekt.get<UiPreferences>()
@@ -145,7 +147,10 @@ fun NovelDownloadQueueScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = secondaryTextColor,
                     )
-                    Box(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
+                    ) {
                         if (isAurora) {
                             Button(
                                 onClick = onRefresh,
@@ -153,12 +158,32 @@ fun NovelDownloadQueueScreen(
                                     containerColor = auroraColors.accent,
                                     contentColor = auroraColors.textOnAccent,
                                 ),
+                                modifier = Modifier.weight(1f),
                             ) {
                                 Text(text = stringResource(MR.strings.ext_update))
                             }
+                            Button(
+                                onClick = onOpenFolder,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = auroraColors.accent.copy(alpha = 0.15f),
+                                    contentColor = auroraColors.accent,
+                                ),
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text(text = stringResource(AYMR.strings.action_open_download_folder))
+                            }
                         } else {
-                            Button(onClick = onRefresh) {
+                            Button(
+                                onClick = onRefresh,
+                                modifier = Modifier.weight(1f),
+                            ) {
                                 Text(text = stringResource(MR.strings.ext_update))
+                            }
+                            OutlinedButton(
+                                onClick = onOpenFolder,
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text(text = stringResource(AYMR.strings.action_open_download_folder))
                             }
                         }
                     }

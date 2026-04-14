@@ -17,6 +17,7 @@ class NovelCategoriesBackupCreator(
                     id = it.id,
                     name = it.name,
                     order = it.order,
+                    hiddenFromHomeHub = it.hiddenFromHomeHub,
                     flags = it.flags,
                 )
             }

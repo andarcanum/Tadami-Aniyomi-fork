@@ -71,6 +71,8 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.NavigatorAdaptiveSheet
 import eu.kanade.presentation.entries.novel.NovelChapterSettingsDialog
 import eu.kanade.presentation.entries.novel.NovelScreen
+import eu.kanade.presentation.entries.novel.TranslatedDownloadOptionsDialog
+import eu.kanade.presentation.entries.novel.components.NovelTranslatedDownloadFormatSelector
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettings
 import eu.kanade.tachiyomi.extension.novel.runtime.resolveUrl
@@ -91,6 +93,7 @@ import eu.kanade.tachiyomi.ui.webview.WebViewScreen
 import eu.kanade.tachiyomi.util.storage.getUriCompat
 import eu.kanade.tachiyomi.util.system.toShareIntent
 import eu.kanade.tachiyomi.util.system.toast
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import logcat.logcat
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -136,6 +139,11 @@ class NovelScreen(
         var showTranslatedChapterPickerDialog by remember { mutableStateOf(false) }
         var translatedPickerFormat by remember { mutableStateOf(NovelTranslatedDownloadFormat.TXT) }
         var translatedPickerChapters by remember { mutableStateOf<List<DomainNovelChapter>>(emptyList()) }
+        var showTranslatedFormatDialog by remember { mutableStateOf(false) }
+        var translatedFormatDialogChapterId by remember { mutableStateOf<Long?>(null) }
+        var translatedFormatDialogFormat by remember { mutableStateOf(NovelTranslatedDownloadFormat.TXT) }
+        var showTranslatedOptionsDialog by remember { mutableStateOf(false) }
+        var translatedOptionsChapterId by remember { mutableStateOf<Long?>(null) }
         var showEpubExportDialog by remember { mutableStateOf(false) }
         val epubExportPreferences = screenModel.getEpubExportPreferences()
         BackHandler(enabled = screenModel.isAnyChapterSelected) {
@@ -202,6 +210,7 @@ class NovelScreen(
             chaptersCount = successState.chapters.size,
             canOpenWebView = openInWebViewAction != null,
             isRefreshing = successState.isRefreshingData,
+            hasCompletedChapterRefresh = successState.hasCompletedChapterRefresh,
         )
         val webViewLoginHintKey = resolveNovelWebViewLoginHintKey(
             novelId = successState.novel.id,
@@ -226,22 +235,98 @@ class NovelScreen(
                 }
                 return@LaunchedEffect
             }
-            lastShownWebViewLoginHintKey = webViewLoginHintKey
+            delay(300)
+
+            val refreshedState = screenModel.state.value as? NovelScreenModel.State.Success
+            if (refreshedState == null) {
+                logcat {
+                    "Novel login hint skipped after stabilization id=${successState.novel.id} source=${successState.source.name} reason=state-not-success"
+                }
+                return@LaunchedEffect
+            }
+
+            val refreshedNeedsWebViewLoginHint = resolveNovelNeedsWebViewLoginHint(
+                novel = refreshedState.novel,
+                source = refreshedState.source,
+                chaptersCount = refreshedState.chapters.size,
+                canOpenWebView = openInWebViewAction != null,
+                isRefreshing = refreshedState.isRefreshingData,
+                hasCompletedChapterRefresh = refreshedState.hasCompletedChapterRefresh,
+            )
+            val refreshedWebViewLoginHintKey = resolveNovelWebViewLoginHintKey(
+                novelId = refreshedState.novel.id,
+                chaptersCount = refreshedState.chapters.size,
+                description = refreshedState.novel.description,
+                needsLoginHint = refreshedNeedsWebViewLoginHint,
+            )
+            if (refreshedWebViewLoginHintKey == null) {
+                logcat {
+                    "Novel login hint skipped after stabilization id=${successState.novel.id} " +
+                        "source=${successState.source.name} " +
+                        "reason=state-updated " +
+                        "chapters=${refreshedState.chapters.size} " +
+                        "initialized=${refreshedState.novel.initialized} " +
+                        "descBlank=${refreshedState.novel.description.isNullOrBlank()}"
+                }
+                lastShownWebViewLoginHintKey = null
+                return@LaunchedEffect
+            }
+            if (refreshedWebViewLoginHintKey != webViewLoginHintKey) {
+                logcat {
+                    "Novel login hint skipped after stabilization id=${successState.novel.id} " +
+                        "source=${successState.source.name} " +
+                        "reason=key-changed " +
+                        "oldKey=$webViewLoginHintKey " +
+                        "newKey=$refreshedWebViewLoginHintKey"
+                }
+                return@LaunchedEffect
+            }
+            if (lastShownWebViewLoginHintKey == refreshedWebViewLoginHintKey) {
+                logcat {
+                    "Novel login hint suppressed duplicate after stabilization id=${successState.novel.id} " +
+                        "key=$refreshedWebViewLoginHintKey"
+                }
+                return@LaunchedEffect
+            }
+            lastShownWebViewLoginHintKey = refreshedWebViewLoginHintKey
             logcat {
-                "Showing novel login hint id=${successState.novel.id} source=${successState.source.name} " +
-                    "url=${successState.novel.url}"
+                "Showing novel login hint id=${refreshedState.novel.id} " +
+                    "source=${refreshedState.source.name} " +
+                    "url=${refreshedState.novel.url}"
             }
             val result = screenModel.snackbarHostState.showSnackbar(
-                message = context.contextStringResource(MR.strings.login_title, successState.source.name),
+                message = context.contextStringResource(MR.strings.login_title, refreshedState.source.name),
                 actionLabel = context.contextStringResource(MR.strings.action_open_in_web_view),
                 withDismissAction = true,
                 duration = SnackbarDuration.Long,
             )
             logcat {
-                "Novel login hint result id=${successState.novel.id} source=${successState.source.name} result=$result"
+                "Novel login hint result id=${refreshedState.novel.id} source=${refreshedState.source.name} result=$result"
             }
             if (result == SnackbarResult.ActionPerformed) {
                 openWebViewLoginAction?.invoke()
+            }
+        }
+
+        // Handle folder open intents from screen model
+        LaunchedEffect(Unit) {
+            screenModel.openTranslatedFolderEvents().collect { uri: android.net.Uri ->
+                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, "resource/folder")
+                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                try {
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    val fallbackIntent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                        data = uri
+                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    try {
+                        context.startActivity(fallbackIntent)
+                    } catch (e: Exception) {
+                    }
+                }
             }
         }
 
@@ -312,6 +397,30 @@ class NovelScreen(
                     navigator.push(NovelReaderScreen(chapterId, successState.source.id))
                 }
             },
+            onChapterTranslateClick = { chapterId ->
+                if (isTranslatorEnabled) {
+                    screenModel.addToTranslationQueue(chapterId)
+                }
+            },
+            onChapterTranslatedDownloadClick = { chapterId ->
+                val format = successState.translatedDownloadFormat
+                val added = screenModel.runTranslatedDownloadForChapterIds(
+                    chapterIds = setOf(chapterId),
+                    format = format,
+                )
+                if (added == 0) {
+                    context.toast(
+                        context.contextStringResource(AYMR.strings.novel_translated_download_no_available),
+                    )
+                }
+            },
+            onChapterTranslatedDownloadLongClick = { chapterId ->
+                translatedOptionsChapterId = chapterId
+                showTranslatedOptionsDialog = true
+            },
+            onChapterTranslatedDownloadOpenFolder = { chapterId ->
+                screenModel.openTranslatedFolder(chapterId)
+            },
             onChapterReadToggle = screenModel::toggleChapterRead,
             onChapterBookmarkToggle = screenModel::toggleChapterBookmark,
             onChapterDownloadToggle = screenModel::toggleChapterDownload,
@@ -332,6 +441,7 @@ class NovelScreen(
             onInvertSelection = screenModel::invertSelection,
             onMultiBookmarkClicked = screenModel::bookmarkChapters,
             onMultiMarkAsReadClicked = screenModel::markChaptersRead,
+            onMarkPreviousAsReadClicked = screenModel::markPreviousChapterRead,
             onMultiDownloadClicked = screenModel::downloadSelectedChapters,
             onMultiDeleteClicked = screenModel::deleteDownloadedSelectedChapters,
             onSaveScrollPosition = screenModel::saveScrollPosition,
@@ -425,6 +535,73 @@ class NovelScreen(
                         )
                     }
                     showTranslatedChapterPickerDialog = false
+                },
+            )
+        }
+
+        if (showTranslatedFormatDialog) {
+            AlertDialog(
+                onDismissRequest = { showTranslatedFormatDialog = false },
+                title = { Text(text = stringResource(AYMR.strings.novel_translated_download_title)) },
+                text = {
+                    NovelTranslatedDownloadFormatSelector(
+                        format = translatedFormatDialogFormat,
+                        onFormatSelected = { translatedFormatDialogFormat = it },
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = translatedFormatDialogChapterId != null,
+                        onClick = {
+                            val chapterId = translatedFormatDialogChapterId ?: return@TextButton
+                            val format = translatedFormatDialogFormat
+                            screenModel.setTranslatedDownloadFormat(format)
+                            val added = screenModel.runTranslatedDownloadForChapterIds(
+                                chapterIds = setOf(chapterId),
+                                format = format,
+                            )
+                            if (added == 0) {
+                                context.toast(
+                                    context.contextStringResource(
+                                        AYMR.strings.novel_translated_download_no_available,
+                                    ),
+                                )
+                            }
+                            showTranslatedFormatDialog = false
+                        },
+                    ) {
+                        Text(text = stringResource(MR.strings.action_download))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showTranslatedFormatDialog = false }) {
+                        Text(text = stringResource(MR.strings.action_cancel))
+                    }
+                },
+            )
+        }
+
+        if (showTranslatedOptionsDialog) {
+            TranslatedDownloadOptionsDialog(
+                onDismissRequest = {
+                    showTranslatedOptionsDialog = false
+                    translatedOptionsChapterId = null
+                },
+                onReDownload = {
+                    showTranslatedOptionsDialog = false
+                    translatedOptionsChapterId?.let { chapterId ->
+                        translatedFormatDialogChapterId = chapterId
+                        translatedFormatDialogFormat = successState.translatedDownloadFormat
+                        showTranslatedFormatDialog = true
+                    }
+                    translatedOptionsChapterId = null
+                },
+                onDelete = {
+                    showTranslatedOptionsDialog = false
+                    translatedOptionsChapterId?.let { chapterId ->
+                        screenModel.deleteTranslatedChapter(chapterId)
+                    }
+                    translatedOptionsChapterId = null
                 },
             )
         }
@@ -594,8 +771,9 @@ internal fun resolveNovelNeedsWebViewLoginHint(
     chaptersCount: Int,
     canOpenWebView: Boolean,
     isRefreshing: Boolean,
+    hasCompletedChapterRefresh: Boolean,
 ): Boolean {
-    if (!canOpenWebView || isRefreshing || chaptersCount > 0) return false
+    if (!canOpenWebView || isRefreshing || !hasCompletedChapterRefresh || chaptersCount > 0) return false
     val sourceSupportsWeb = source is NovelWebUrlSource || source is NovelSiteSource
     val hasAbsoluteUrl = novel.url.toHttpUrlOrNull() != null
     val hasRelativePathUrl = novel.url.isNotBlank() && !hasAbsoluteUrl
@@ -814,79 +992,11 @@ internal fun NovelTranslatedDownloadDialog(
                         modifier = Modifier.fillMaxWidth(),
                     )
 
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 10.dp)
-                            .background(
-                                color = colorScheme.surfaceVariant.copy(alpha = 0.75f),
-                                shape = RoundedCornerShape(12.dp),
-                            )
-                            .padding(2.dp),
-                    ) {
-                        val selectedColor = accentColor
-                        val unselectedColor = Color.Transparent
-                        Button(
-                            modifier = Modifier.weight(1f),
-                            onClick = { format = NovelTranslatedDownloadFormat.TXT },
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (format ==
-                                    NovelTranslatedDownloadFormat.TXT
-                                ) {
-                                    selectedColor
-                                } else {
-                                    unselectedColor
-                                },
-                                contentColor = if (format == NovelTranslatedDownloadFormat.TXT) {
-                                    onAccentColor
-                                } else {
-                                    colorScheme.onSurface
-                                },
-                            ),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp),
-                        ) {
-                            Text(
-                                text = if (format == NovelTranslatedDownloadFormat.TXT) {
-                                    "* ${stringResource(AYMR.strings.novel_translated_download_format_txt)}"
-                                } else {
-                                    stringResource(AYMR.strings.novel_translated_download_format_txt)
-                                },
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                        }
-                        Button(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(start = 4.dp),
-                            onClick = { format = NovelTranslatedDownloadFormat.DOCX },
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (format ==
-                                    NovelTranslatedDownloadFormat.DOCX
-                                ) {
-                                    selectedColor
-                                } else {
-                                    unselectedColor
-                                },
-                                contentColor = if (format == NovelTranslatedDownloadFormat.DOCX) {
-                                    onAccentColor
-                                } else {
-                                    colorScheme.onSurface
-                                },
-                            ),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp),
-                        ) {
-                            Text(
-                                text = if (format == NovelTranslatedDownloadFormat.DOCX) {
-                                    "* ${stringResource(AYMR.strings.novel_translated_download_format_docx)}"
-                                } else {
-                                    stringResource(AYMR.strings.novel_translated_download_format_docx)
-                                },
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                        }
-                    }
+                    NovelTranslatedDownloadFormatSelector(
+                        format = format,
+                        onFormatSelected = { format = it },
+                        modifier = Modifier.padding(top = 10.dp),
+                    )
 
                     val actionItems = listOf(
                         DownloadActionItem(

@@ -18,9 +18,19 @@ class DeepSeekPromptResolver(
         }.getOrElse { GeminiPromptResolver.CLASSIC_SYSTEM_PROMPT }
     }
 
-    fun resolveSystemPrompt(mode: GeminiPromptMode): String {
+    internal fun resolveSystemPrompt(mode: GeminiPromptMode): String {
+        return resolveSystemPrompt(mode, NovelTranslationPromptFamily.RUSSIAN)
+    }
+
+    internal fun resolveSystemPrompt(
+        mode: GeminiPromptMode,
+        family: NovelTranslationPromptFamily = NovelTranslationPromptFamily.RUSSIAN,
+    ): String {
         return when (mode) {
-            GeminiPromptMode.CLASSIC -> GeminiPromptResolver.CLASSIC_SYSTEM_PROMPT
+            GeminiPromptMode.CLASSIC -> when (family) {
+                NovelTranslationPromptFamily.RUSSIAN -> GeminiPromptResolver.CLASSIC_SYSTEM_PROMPT
+                NovelTranslationPromptFamily.ENGLISH -> GeminiPromptResolver.CLASSIC_SYSTEM_PROMPT_EN
+            }
             GeminiPromptMode.ADULT_18 -> adultPrompt
         }
     }

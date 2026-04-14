@@ -31,9 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -48,10 +46,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 const val ADAPTIVE_SHEET_SCRIM_TEST_TAG = "adaptive_sheet_scrim"
@@ -161,11 +155,11 @@ private fun PhoneAdaptiveSheet(
     maxWidth: androidx.compose.ui.unit.Dp,
     content: @Composable () -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
     val maxHeight = screenHeight * 0.95f
     var scrimTargetAlpha by remember { mutableFloatStateOf(0f) }
+    var dismissRequested by remember { mutableStateOf(false) }
     val scrimAlpha by animateFloatAsState(
         targetValue = scrimTargetAlpha,
         animationSpec = SHEET_ANIMATION_SPEC,
@@ -180,11 +174,8 @@ private fun PhoneAdaptiveSheet(
     )
 
     val internalOnDismissRequest: () -> Unit = {
-        if (anchoredDraggableState.settledValue == 0) {
-            scope.launch {
-                scrimTargetAlpha = 0f
-                anchoredDraggableState.animateTo(1)
-            }
+        if (!dismissRequested) {
+            dismissRequested = true
         }
     }
 
@@ -255,25 +246,21 @@ private fun PhoneAdaptiveSheet(
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
             BackHandler(
-                enabled = anchoredDraggableState.targetValue == 0,
+                enabled = !dismissRequested,
                 onBack = internalOnDismissRequest,
             )
             content()
         }
 
-        LaunchedEffect(Unit) {
-            scrimTargetAlpha = PHONE_SCRIM_ALPHA
-            anchoredDraggableState.animateTo(0)
-        }
-
-        LaunchedEffect(anchoredDraggableState) {
-            scope.launch { anchoredDraggableState.animateTo(0) }
-            snapshotFlow { anchoredDraggableState.settledValue }
-                .drop(1)
-                .filter { it == 1 }
-                .collectLatest {
-                    onDismissRequest()
-                }
+        LaunchedEffect(dismissRequested) {
+            if (dismissRequested) {
+                scrimTargetAlpha = 0f
+                anchoredDraggableState.animateTo(1)
+                onDismissRequest()
+            } else {
+                scrimTargetAlpha = PHONE_SCRIM_ALPHA
+                anchoredDraggableState.animateTo(0)
+            }
         }
     }
 }

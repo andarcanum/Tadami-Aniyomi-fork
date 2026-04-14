@@ -300,7 +300,7 @@ private fun HomeHubScreen(
     val hero = state.hero?.takeIf { matchesQuery(it.title) }
     val history = state.history.filter { matchesQuery(it.title) }
     val recommendations = state.recommendations.filter { matchesQuery(it.title) }
-    val showWelcome = state.showWelcome && !isFiltering
+    val showWelcome = (state.showWelcome || state.showFilteredEmpty) && !isFiltering
     val enableScroll = shouldEnableHomeHubScroll(
         showWelcome = showWelcome,
         historyCount = history.size,

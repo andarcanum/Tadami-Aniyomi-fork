@@ -620,6 +620,7 @@ internal data class HomeHubUiState(
     val greetingReady: Boolean,
     val isLoading: Boolean,
     val showWelcome: Boolean,
+    val showFilteredEmpty: Boolean = false,
 )
 
 internal data class HomeHubHero(
@@ -1044,6 +1045,7 @@ internal fun HomeHubScreenModel.State.toUiState(): HomeHubUiState {
         greetingReady = greetingReady,
         isLoading = isLoading,
         showWelcome = showWelcome,
+        showFilteredEmpty = showFilteredEmpty,
     )
 }
 
@@ -1080,6 +1082,7 @@ internal fun MangaHomeHubScreenModel.State.toUiState(): HomeHubUiState {
         greetingReady = greetingReady,
         isLoading = isLoading,
         showWelcome = showWelcome,
+        showFilteredEmpty = showFilteredEmpty,
     )
 }
 
@@ -1115,6 +1118,7 @@ internal fun NovelHomeHubScreenModel.State.toUiState(): HomeHubUiState {
         greetingReady = greetingReady,
         isLoading = isLoading,
         showWelcome = showWelcome,
+        showFilteredEmpty = showFilteredEmpty,
     )
 }
 

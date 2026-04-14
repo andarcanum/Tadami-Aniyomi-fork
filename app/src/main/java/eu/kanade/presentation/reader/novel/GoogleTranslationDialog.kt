@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
+import eu.kanade.tachiyomi.ui.reader.novel.translation.TranslationPhase
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 
@@ -37,6 +38,7 @@ fun GoogleTranslationDialog(
     readerSettings: NovelReaderSettings,
     isTranslating: Boolean,
     translationProgress: Int,
+    translationPhase: TranslationPhase = TranslationPhase.IDLE,
     isVisible: Boolean,
     hasCache: Boolean,
     onStart: () -> Unit,
@@ -145,12 +147,7 @@ fun GoogleTranslationDialog(
                         progress = { translationProgress.coerceIn(0, 100) / 100f },
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    Text(
-                        stringResource(
-                            AYMR.strings.novel_reader_google_translate_progress,
-                            translationProgress,
-                        ),
-                    )
+                    Text(stringResource(AYMR.strings.novel_reader_google_translate_progress, translationProgress))
                 }
 
                 if (hasCache) {

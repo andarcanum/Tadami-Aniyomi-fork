@@ -43,6 +43,11 @@ class GeminiTranslationService(
         val preparedSegments = if (usePrivateBridge) GeminiPrivateBridge.preprocessSegments(segments) else segments
 
         val usePrivatePythonLikeMode = usePrivateBridge && params.privatePythonLikeMode
+        val promptFamily = if (usePrivateBridge) {
+            NovelTranslationPromptFamily.RUSSIAN
+        } else {
+            resolveNovelTranslationPromptFamily(params.targetLang)
+        }
         val taggedInput = preparedSegments.mapIndexed { index, text ->
             "<s i='$index'>$text</s>"
         }.joinToString("\\n")
@@ -58,10 +63,12 @@ class GeminiTranslationService(
             sourceLang = params.sourceLang,
             targetLang = params.targetLang,
             taggedInput = taggedInput,
+            family = promptFamily,
         )
         val defaultSystemPrompt = buildSystemPrompt(
             mode = params.promptMode,
             modifiers = effectiveModifiers,
+            family = promptFamily,
         )
         val systemPrompt = if (usePrivateBridge) {
             GeminiPrivateBridge.systemPromptOverride() ?: defaultSystemPrompt
@@ -321,8 +328,12 @@ class GeminiTranslationService(
         return parsed
     }
 
-    private fun buildSystemPrompt(mode: GeminiPromptMode, modifiers: String): String {
-        val basePrompt = promptResolver.resolveSystemPrompt(mode)
+    private fun buildSystemPrompt(
+        mode: GeminiPromptMode,
+        modifiers: String,
+        family: NovelTranslationPromptFamily,
+    ): String {
+        val basePrompt = promptResolver.resolveSystemPrompt(mode, family = family)
         if (modifiers.isBlank()) return basePrompt
         return basePrompt + "\\n\\n" + modifiers.trim()
     }
@@ -331,15 +342,14 @@ class GeminiTranslationService(
         sourceLang: String,
         targetLang: String,
         taggedInput: String,
+        family: NovelTranslationPromptFamily,
     ): String {
-        return "TRANSLATE from $sourceLang to $targetLang.\\n" +
-            "Inject soul into the text. Make the reader believe this was written by a Russian author.\\n\\n" +
-            "Use popular genre terminology (Magic -> Магия, etc.). Make it sound like high-quality fiction.\\n\\n" +
-            "1. Keep the XML structure exactly as is (<s i='...'>...</s>).\\n" +
-            "2. NO PREAMBLE. NO ANALYSIS TEXT. NO MARKDOWN HEADERS.\\n" +
-            "3. Start your response IMMEDIATELY with the first XML tag.\\n\\n" +
-            "INPUT BLOCK:\\n" +
-            taggedInput
+        return buildNovelTranslationUserPrompt(
+            sourceLang = sourceLang,
+            targetLang = targetLang,
+            taggedInput = taggedInput,
+            family = family,
+        )
     }
 }
 

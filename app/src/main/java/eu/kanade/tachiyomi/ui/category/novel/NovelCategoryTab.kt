@@ -41,6 +41,7 @@ fun Screen.novelCategoryTab(): TabContent {
                     onClickCreate = { screenModel.showDialog(NovelCategoryDialog.Create) },
                     onClickRename = { screenModel.showDialog(NovelCategoryDialog.Rename(it)) },
                     onClickHide = screenModel::hideCategory,
+                    onClickToggleHomeHub = screenModel::toggleHomeHubCategory,
                     onClickDelete = { screenModel.showDialog(NovelCategoryDialog.Delete(it)) },
                     onChangeOrder = screenModel::changeOrder,
                 )

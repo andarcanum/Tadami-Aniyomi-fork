@@ -44,14 +44,17 @@ class OpenRouterTranslationService(
         val taggedInput = segments.mapIndexed { index, text ->
             "<s i='$index'>$text</s>"
         }.joinToString("\n")
+        val promptFamily = resolveNovelTranslationPromptFamily(params.targetLang)
         val systemPrompt = buildSystemPrompt(
             mode = params.promptMode,
             modifiers = params.promptModifiers,
+            family = promptFamily,
         )
         val userPrompt = buildUserPrompt(
             sourceLang = params.sourceLang,
             targetLang = params.targetLang,
             taggedInput = taggedInput,
+            family = promptFamily,
         )
         val requestBody = buildJsonObject {
             put("model", model)
@@ -158,10 +161,17 @@ class OpenRouterTranslationService(
     private fun buildSystemPrompt(
         mode: GeminiPromptMode,
         modifiers: String,
+        family: NovelTranslationPromptFamily,
     ): String {
         val basePrompt = when (mode) {
-            GeminiPromptMode.CLASSIC -> GeminiPromptResolver.CLASSIC_SYSTEM_PROMPT
-            GeminiPromptMode.ADULT_18 -> GeminiPromptResolver.CLASSIC_SYSTEM_PROMPT
+            GeminiPromptMode.CLASSIC -> when (family) {
+                NovelTranslationPromptFamily.RUSSIAN -> GeminiPromptResolver.CLASSIC_SYSTEM_PROMPT
+                NovelTranslationPromptFamily.ENGLISH -> GeminiPromptResolver.CLASSIC_SYSTEM_PROMPT_EN
+            }
+            GeminiPromptMode.ADULT_18 -> when (family) {
+                NovelTranslationPromptFamily.RUSSIAN -> GeminiPromptResolver.CLASSIC_SYSTEM_PROMPT
+                NovelTranslationPromptFamily.ENGLISH -> GeminiPromptResolver.CLASSIC_SYSTEM_PROMPT_EN
+            }
         }
         return if (modifiers.isBlank()) {
             basePrompt
@@ -174,15 +184,14 @@ class OpenRouterTranslationService(
         sourceLang: String,
         targetLang: String,
         taggedInput: String,
+        family: NovelTranslationPromptFamily,
     ): String {
-        return "TRANSLATE from $sourceLang to $targetLang.\n" +
-            "Inject soul into the text. Make the reader believe this was written by a Russian author.\n\n" +
-            "Use popular genre terminology (Magic -> Магия, etc.). Make it sound like high-quality fiction.\n\n" +
-            "1. Keep the XML structure exactly as is (<s i='...'>...</s>).\n" +
-            "2. NO PREAMBLE. NO ANALYSIS TEXT. NO MARKDOWN HEADERS.\n" +
-            "3. Start your response IMMEDIATELY with the first XML tag.\n\n" +
-            "INPUT BLOCK:\n" +
-            taggedInput
+        return buildNovelTranslationUserPrompt(
+            sourceLang = sourceLang,
+            targetLang = targetLang,
+            taggedInput = taggedInput,
+            family = family,
+        )
     }
 
     private suspend fun executeRequest(

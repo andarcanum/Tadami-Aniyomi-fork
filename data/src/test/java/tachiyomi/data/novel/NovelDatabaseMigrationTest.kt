@@ -12,7 +12,7 @@ class NovelDatabaseMigrationTest {
 
     @Test
     fun `schema version increments for narrowed novel triggers`() {
-        NovelDatabase.Schema.version shouldBe 4L
+        NovelDatabase.Schema.version shouldBe 7L
     }
 
     @Test
@@ -31,6 +31,22 @@ class NovelDatabaseMigrationTest {
             "AFTER UPDATE OF novel_id, url, name, scanlator, read, bookmark, last_page_read, chapter_number, source_order, date_fetch, date_upload, date_upload_raw ON novel_chapters"
         triggerSql(driver, "update_last_modified_at_novels") shouldContain
             "AFTER UPDATE OF source, url, author, description, genre, title, status, thumbnail_url, favorite, last_update, next_update, initialized, viewer, chapter_flags, cover_last_modified, date_added, update_strategy, calculate_interval ON novels"
+    }
+
+    @Test
+    fun `migration creates translation queue table`() {
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        createLegacyNovelVersionTables(driver)
+
+        NovelDatabase.Schema.migrate(
+            driver,
+            oldVersion = 1L,
+            newVersion = NovelDatabase.Schema.version,
+        )
+
+        columnNames(driver, "translation_queue") shouldContain "_id"
+        columnNames(driver, "translation_queue") shouldContain "chapter_id"
+        columnNames(driver, "translation_queue") shouldContain "novel_id"
     }
 
     private fun createLegacyNovelVersionTables(driver: JdbcSqliteDriver) {
@@ -86,6 +102,32 @@ class NovelDatabaseMigrationTest {
                     is_syncing INTEGER NOT NULL DEFAULT 0,
                     FOREIGN KEY(novel_id) REFERENCES novels (_id)
                     ON DELETE CASCADE
+                )
+            """.trimIndent(),
+            parameters = 0,
+        )
+        driver.execute(
+            identifier = null,
+            sql = """
+                CREATE TABLE categories(
+                    _id INTEGER NOT NULL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    sort INTEGER NOT NULL,
+                    flags INTEGER NOT NULL,
+                    hidden INTEGER NOT NULL DEFAULT 0
+                )
+            """.trimIndent(),
+            parameters = 0,
+        )
+        driver.execute(
+            identifier = null,
+            sql = """
+                CREATE TABLE novel_categories(
+                    _id INTEGER NOT NULL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    sort INTEGER NOT NULL,
+                    flags INTEGER NOT NULL,
+                    hidden INTEGER NOT NULL DEFAULT 0
                 )
             """.trimIndent(),
             parameters = 0,

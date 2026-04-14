@@ -3,7 +3,6 @@ package eu.kanade.presentation.webview
 import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -42,10 +41,7 @@ import eu.kanade.presentation.components.WarningBanner
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginAssetBindings
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginIdentitySource
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginWebViewCoordinator
-import eu.kanade.tachiyomi.network.NetworkHelper
-import eu.kanade.tachiyomi.util.system.WebViewUtil
 import eu.kanade.tachiyomi.util.system.getHtml
-import eu.kanade.tachiyomi.util.system.sanitizeCloudflareRequestHeaders
 import eu.kanade.tachiyomi.util.system.setDefaultSettings
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CoroutineScope
@@ -54,7 +50,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
-import okhttp3.Request
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
@@ -78,11 +73,9 @@ fun WebViewScreenContent(
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val scope = rememberCoroutineScope()
-    val network = remember { Injekt.get<NetworkHelper>() }
     val novelSourceManager = remember { Injekt.get<tachiyomi.domain.source.novel.service.NovelSourceManager>() }
     val pluginAssetBindings = remember { Injekt.get<NovelPluginAssetBindings>() }
     val webViewCoordinator = remember { Injekt.get<NovelPluginWebViewCoordinator>() }
-    val spoofedPackageName = remember { WebViewUtil.spoofedPackageName(context) }
     val novelPluginId = remember(novelSourceId) {
         novelSourceId?.let { novelSourceManager.get(it) as? NovelPluginIdentitySource }?.pluginId
     }
@@ -146,45 +139,10 @@ fun WebViewScreenContent(
                         return true
                     }
 
-                    // Continue with request, but with custom headers
                     view?.loadUrl(it.url.toString(), headers)
+                    return true
                 }
-                return super.shouldOverrideUrlLoading(view, request)
-            }
-
-            override fun shouldInterceptRequest(
-                view: WebView?,
-                request: WebResourceRequest?,
-            ): WebResourceResponse? {
-                return try {
-                    val internalRequest = Request.Builder().apply {
-                        url(request!!.url.toString())
-                        sanitizeCloudflareRequestHeaders(
-                            requestHeaders = request.requestHeaders,
-                            contextPackageName = context.packageName,
-                            spoofedPackageName = spoofedPackageName,
-                        ).forEach { (key, value) ->
-                            addHeader(key, value)
-                        }
-                        method(request.method, null)
-                    }.build()
-
-                    val response = network.nonCloudflareClient.newCall(internalRequest).execute()
-
-                    val contentType = response.body.contentType()?.let { "${it.type}/${it.subtype}" } ?: "text/html"
-                    val contentEncoding = response.body.contentType()?.charset()?.name() ?: "utf-8"
-
-                    WebResourceResponse(
-                        contentType,
-                        contentEncoding,
-                        response.code,
-                        response.message,
-                        response.headers.associate { it.first to it.second },
-                        response.body.byteStream(),
-                    )
-                } catch (e: Throwable) {
-                    super.shouldInterceptRequest(view, request)
-                }
+                return false
             }
         }
     }

@@ -73,6 +73,7 @@ class PreferenceRestorer(
                     order = it.order,
                     flags = it.flags,
                     hidden = it.hidden,
+                    hiddenFromHomeHub = false,
                 )
             }
         } else {

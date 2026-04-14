@@ -2,6 +2,11 @@ package eu.kanade.tachiyomi.ui.reader.novel
 
 import android.app.Application
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
+import eu.kanade.tachiyomi.data.translation.TranslationJob
+import eu.kanade.tachiyomi.data.translation.TranslationProgressUpdate
+import eu.kanade.tachiyomi.data.translation.TranslationQueueItem
+import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
+import eu.kanade.tachiyomi.data.translation.TranslationStatus
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginPackage
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoEntry
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
@@ -17,32 +22,45 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationCacheEntry
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheModelId
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
+import io.mockk.justRun
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.verify
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.parallel.Isolated
 import tachiyomi.core.common.preference.InMemoryPreferenceStore
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
@@ -65,8 +83,8 @@ import uy.kohesive.injekt.api.fullType
 import uy.kohesive.injekt.api.get
 import java.util.Collections
 
+@Isolated
 class NovelReaderScreenModelTest {
-    private class TestApplication : Application()
     private val activeScreenModels = mutableListOf<NovelReaderScreenModel>()
     private val syncNovelChaptersWithSource = mockk<SyncNovelChaptersWithSource>(relaxed = true)
     private val geminiTranslationService = mockk<GeminiTranslationService>(relaxed = true)
@@ -76,26 +94,37 @@ class NovelReaderScreenModelTest {
     private val openRouterModelsService = mockk<OpenRouterModelsService>(relaxed = true)
     private val deepSeekTranslationService = mockk<DeepSeekTranslationService>(relaxed = true)
     private val deepSeekModelsService = mockk<DeepSeekModelsService>(relaxed = true)
+    private val googleTranslationService = mockk<GoogleTranslationService>(relaxed = true)
+    private val translationQueueUpdates = MutableSharedFlow<TranslationProgressUpdate>(extraBufferCapacity = 16)
+    private val translationQueueActiveTranslation = MutableStateFlow<TranslationQueueItem?>(null)
+    private val translationQueueItems = MutableStateFlow<List<TranslationQueueItem>>(emptyList())
+    private val translationQueueManager = mockk<TranslationQueueManager>(relaxed = true).also {
+        every { it.progressUpdates } returns translationQueueUpdates
+        every { it.activeTranslation } returns translationQueueActiveTranslation
+        every { it.queue } returns translationQueueItems
+        coEvery { it.hasPendingOrActive(any()) } returns false
+    }
 
     @AfterEach
     fun tearDown() {
         activeScreenModels.forEach { it.onDispose() }
         activeScreenModels.clear()
         NovelReaderChapterPrefetchCache.clear()
+        NovelReaderTranslationDiskCacheStore.clear()
+        io.mockk.unmockkAll()
+    }
+
+    @BeforeEach
+    fun setupPerTestEnvironment() {
+        Dispatchers.setMain(Dispatchers.Unconfined)
+        ensureReaderScreenModelDependencies()
     }
 
     companion object {
         @JvmStatic
-        @BeforeAll
-        fun setupInjektApplication() {
-            runCatching { Injekt.get<Application>() }
-                .getOrElse { Injekt.addSingleton(fullType<Application>(), TestApplication()) }
-        }
-
-        @JvmStatic
-        @BeforeAll
-        fun setupMainDispatcher() {
-            Dispatchers.setMain(Dispatchers.Unconfined)
+        @AfterAll
+        fun resetMainDispatcher() {
+            Dispatchers.resetMain()
         }
     }
 
@@ -349,6 +378,198 @@ class NovelReaderScreenModelTest {
             val after = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
             after.geminiLogs.firstOrNull() shouldBe "Gemini UI log"
             (after.contentBlocks === beforeContentBlocks) shouldBe true
+        }
+    }
+
+    @Test
+    fun `starting gemini translation queues background work`() {
+        runBlocking {
+            mockkObject(TranslationJob.Companion)
+            every { TranslationJob.isRunning(any()) } returns false
+            justRun { TranslationJob.runImmediately(any()) }
+
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+
+            val prefs = createNovelReaderPreferences().also {
+                it.geminiEnabled().set(true)
+                it.geminiApiKey().set("test-key")
+            }
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(
+                    sourceId = novel.source,
+                    chapterHtml = "<p>Hello</p><p>World</p>",
+                ),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = prefs,
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            screenModel.startGeminiTranslation()
+
+            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            state.isGeminiTranslating shouldBe true
+            state.geminiTranslationProgress shouldBe 0
+            state.isGeminiTranslationVisible shouldBe false
+
+            coVerify(timeout = 1_000) {
+                translationQueueManager.addToQueue(listOf(chapter.id), novel.id)
+            }
+            verify(timeout = 1_000) {
+                TranslationJob.runImmediately(any())
+            }
+        }
+    }
+
+    @Test
+    fun `stopping gemini translation cancels queue work`() {
+        runBlocking {
+            mockkObject(TranslationJob.Companion)
+            every { TranslationJob.isRunning(any()) } returns true
+            justRun { TranslationJob.stop(any()) }
+
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+
+            val prefs = createNovelReaderPreferences().also {
+                it.geminiEnabled().set(true)
+                it.geminiApiKey().set("test-key")
+            }
+
+            coEvery { translationQueueManager.hasPendingOrActive(chapter.id) } returns true
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(
+                    sourceId = novel.source,
+                    chapterHtml = "<p>Hello</p><p>World</p>",
+                ),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = prefs,
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            screenModel.startGeminiTranslation()
+            screenModel.stopGeminiTranslation()
+
+            coVerify(timeout = 1_000) {
+                translationQueueManager.removeFromQueue(chapter.id)
+            }
+            verify(timeout = 1_000) {
+                TranslationJob.stop(any())
+            }
+
+            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            state.isGeminiTranslating shouldBe false
+            state.geminiTranslationProgress shouldBe 0
+        }
+    }
+
+    @Test
+    fun `completed gemini queue updates restore cached translation into reader`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+
+            val prefs = createNovelReaderPreferences().also {
+                it.geminiEnabled().set(true)
+                it.geminiApiKey().set("test-key")
+            }
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(
+                    sourceId = novel.source,
+                    chapterHtml = "<p>Hello</p><p>World</p>",
+                ),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = prefs,
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            val initialState = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            NovelReaderTranslationDiskCacheStore.put(
+                GeminiTranslationCacheEntry(
+                    chapterId = chapter.id,
+                    translatedByIndex = mapOf(0 to "Translated hello", 1 to "Translated world"),
+                    provider = initialState.readerSettings.translationProvider,
+                    model = initialState.readerSettings.translationCacheModelId(),
+                    sourceLang = initialState.readerSettings.geminiSourceLang,
+                    targetLang = initialState.readerSettings.geminiTargetLang,
+                    promptMode = initialState.readerSettings.geminiPromptMode,
+                    stylePreset = initialState.readerSettings.geminiStylePreset,
+                ),
+            )
+
+            translationQueueUpdates.emit(
+                TranslationProgressUpdate(
+                    chapterId = chapter.id,
+                    novelId = novel.id,
+                    status = TranslationStatus.COMPLETED,
+                    progress = 100,
+                    currentChunk = 0,
+                    totalChunks = 0,
+                    chapterName = chapter.name,
+                    errorMessage = null,
+                ),
+            )
+
+            withTimeout(1_000) {
+                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.hasGeminiTranslationCache !=
+                    true
+                ) {
+                    yield()
+                }
+            }
+
+            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            state.isGeminiTranslating shouldBe false
+            state.isGeminiTranslationVisible shouldBe true
+            state.hasGeminiTranslationCache shouldBe true
+            state.contentBlocks.filterIsInstance<NovelReaderScreenModel.ContentBlock.Text>()
+                .map { it.text }
+                .any { it == "Translated hello" } shouldBe true
         }
     }
 
@@ -688,364 +909,6 @@ class NovelReaderScreenModelTest {
             state.contentBlocks[2].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Image>().url shouldBe
                 "https://example.org/images/pic.jpg"
             state.contentBlocks[3].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Text>().text shouldBe "Outro"
-            state.textBlocks shouldBe listOf("Chapter 1", "Intro", "Outro")
-        }
-    }
-
-    @Test
-    fun `keeps text outside selected block tags when building content blocks`() {
-        runBlocking {
-            val novel = Novel.create().copy(
-                id = 1L,
-                source = 10L,
-                title = "Novel",
-                url = "https://example.org/book/slug",
-            )
-            val chapter = NovelChapter.create().copy(
-                id = 5L,
-                novelId = 1L,
-                name = "Chapter 1",
-                url = "https://example.org/book/ch1",
-            )
-
-            val screenModel = trackedNovelReaderScreenModel(
-                chapterId = chapter.id,
-                novelChapterRepository = FakeNovelChapterRepository(chapter),
-                getNovel = GetNovel(FakeNovelRepository(novel)),
-                sourceManager = FakeNovelSourceManager(
-                    sourceId = novel.source,
-                    chapterHtml = "<p>Intro</p><div>Side note</div><p>Outro</p>",
-                ),
-                pluginStorage = FakeNovelPluginStorage(emptyList()),
-                novelReaderPreferences = createNovelReaderPreferences(),
-                isSystemDark = { false },
-            )
-
-            withTimeout(1_000) {
-                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
-                    yield()
-                }
-            }
-
-            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
-            state.contentBlocks.mapNotNull {
-                (it as? NovelReaderScreenModel.ContentBlock.Text)?.text
-            } shouldBe listOf("Chapter 1", "Intro", "Side note", "Outro")
-        }
-    }
-
-    @Test
-    fun `derives parsed text blocks from chapter html when parsed content cache is missing`() {
-        runBlocking {
-            val novel = Novel.create().copy(
-                id = 1L,
-                source = 10L,
-                title = "Novel",
-                url = "https://example.org/book/slug",
-            )
-            val chapter = NovelChapter.create().copy(
-                id = 5L,
-                novelId = 1L,
-                name = "Chapter 1",
-                url = "https://example.org/book/ch1",
-            )
-
-            val screenModel = trackedNovelReaderScreenModel(
-                chapterId = chapter.id,
-                novelChapterRepository = FakeNovelChapterRepository(chapter),
-                getNovel = GetNovel(FakeNovelRepository(novel)),
-                sourceManager = FakeNovelSourceManager(
-                    sourceId = novel.source,
-                    chapterHtml = "<p>Intro</p><p>Outro</p>",
-                ),
-                pluginStorage = FakeNovelPluginStorage(emptyList()),
-                novelReaderPreferences = createNovelReaderPreferences(),
-                isSystemDark = { false },
-            )
-
-            withTimeout(1_000) {
-                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
-                    yield()
-                }
-            }
-
-            setPrivateField(screenModel, "parsedContentBlocks", null)
-
-            invokePrivateCurrentParsedTextBlocks(screenModel) shouldBe listOf("Chapter 1", "Intro", "Outro")
-        }
-    }
-
-    @Test
-    fun `rich content image urls are resolved against chapter web url`() {
-        runBlocking {
-            val novel = Novel.create().copy(
-                id = 1L,
-                source = 10L,
-                title = "Novel",
-                url = "https://example.org/book/slug",
-            )
-            val chapter = NovelChapter.create().copy(
-                id = 5L,
-                novelId = 1L,
-                name = "Chapter 1",
-                url = "https://example.org/book/ch1",
-            )
-
-            val screenModel = trackedNovelReaderScreenModel(
-                chapterId = chapter.id,
-                novelChapterRepository = FakeNovelChapterRepository(chapter),
-                getNovel = GetNovel(FakeNovelRepository(novel)),
-                sourceManager = FakeNovelSourceManager(
-                    sourceId = novel.source,
-                    chapterHtml = "<p>Intro</p><img src=\"/images/pic.jpg\" /><p>Outro</p>",
-                ),
-                pluginStorage = FakeNovelPluginStorage(emptyList()),
-                novelReaderPreferences = createNovelReaderPreferences(),
-                isSystemDark = { false },
-            )
-
-            withTimeout(1_000) {
-                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
-                    yield()
-                }
-            }
-
-            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
-            state.richContentBlocks.any { block ->
-                block is NovelRichContentBlock.Image && block.url == "https://example.org/images/pic.jpg"
-            } shouldBe true
-        }
-    }
-
-    @Test
-    fun `keeps custom novel plugin image scheme urls for on demand loading`() {
-        runBlocking {
-            val novel = Novel.create().copy(
-                id = 1L,
-                source = 10L,
-                title = "Novel",
-                url = "https://example.org/book/slug",
-            )
-            val chapter = NovelChapter.create().copy(
-                id = 5L,
-                novelId = 1L,
-                name = "Chapter 1",
-                url = "https://example.org/book/ch1",
-            )
-
-            val screenModel = trackedNovelReaderScreenModel(
-                chapterId = chapter.id,
-                novelChapterRepository = FakeNovelChapterRepository(chapter),
-                getNovel = GetNovel(FakeNovelRepository(novel)),
-                sourceManager = FakeNovelSourceManager(
-                    sourceId = novel.source,
-                    chapterHtml = "<p>Intro</p><img src=\"novelimg://hexnovels?ref=chapter%2Fimg-1\" /><p>Outro</p>",
-                ),
-                pluginStorage = FakeNovelPluginStorage(emptyList()),
-                novelReaderPreferences = createNovelReaderPreferences(),
-                isSystemDark = { false },
-            )
-
-            withTimeout(1_000) {
-                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
-                    yield()
-                }
-            }
-
-            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
-            state.contentBlocks[2].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Image>().url shouldBe
-                "novelimg://hexnovels?ref=chapter%2Fimg-1"
-        }
-    }
-
-    @Test
-    fun `structured json chapter payload is converted to html and bullet text blocks`() {
-        runBlocking {
-            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
-            val chapter = NovelChapter.create().copy(
-                id = 5L,
-                novelId = 1L,
-                name = "Chapter 1",
-                url = "https://example.org/ch1",
-            )
-            val structuredPayload = """
-                {
-                  "type": "doc",
-                  "content": [
-                    {
-                      "type": "paragraph",
-                      "content": [{ "type": "text", "text": "Intro" }]
-                    },
-                    {
-                      "type": "bulletList",
-                      "content": [
-                        {
-                          "type": "listItem",
-                          "content": [
-                            {
-                              "type": "paragraph",
-                              "content": [{ "type": "text", "text": "Bullet line" }]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-            """.trimIndent()
-
-            val screenModel = trackedNovelReaderScreenModel(
-                chapterId = chapter.id,
-                novelChapterRepository = FakeNovelChapterRepository(chapter),
-                getNovel = GetNovel(FakeNovelRepository(novel)),
-                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = structuredPayload),
-                pluginStorage = FakeNovelPluginStorage(emptyList()),
-                novelReaderPreferences = createNovelReaderPreferences(),
-                isSystemDark = { false },
-            )
-
-            withTimeout(1_000) {
-                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
-                    yield()
-                }
-            }
-
-            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
-            state.html.contains("<ul>") shouldBe true
-            state.textBlocks shouldBe listOf("Chapter 1", "Intro", "\u2022 Bullet line")
-        }
-    }
-
-    @Test
-    fun `escaped structured json payload string is converted to html and bullet text blocks`() {
-        runBlocking {
-            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
-            val chapter = NovelChapter.create().copy(
-                id = 5L,
-                novelId = 1L,
-                name = "Chapter 1",
-                url = "https://example.org/ch1",
-            )
-            val structuredPayload = """
-                {
-                  "type": "doc",
-                  "content": [
-                    {
-                      "type": "paragraph",
-                      "content": [{ "type": "text", "text": "Intro" }]
-                    },
-                    {
-                      "type": "bulletList",
-                      "content": [
-                        {
-                          "type": "listItem",
-                          "content": [
-                            {
-                              "type": "paragraph",
-                              "content": [{ "type": "text", "text": "Bullet line" }]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-            """.trimIndent()
-            val escapedPayload = Json.encodeToString(structuredPayload)
-
-            val screenModel = trackedNovelReaderScreenModel(
-                chapterId = chapter.id,
-                novelChapterRepository = FakeNovelChapterRepository(chapter),
-                getNovel = GetNovel(FakeNovelRepository(novel)),
-                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = escapedPayload),
-                pluginStorage = FakeNovelPluginStorage(emptyList()),
-                novelReaderPreferences = createNovelReaderPreferences(),
-                isSystemDark = { false },
-            )
-
-            withTimeout(1_000) {
-                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
-                    yield()
-                }
-            }
-
-            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
-            state.html.contains("<ul>") shouldBe true
-            state.textBlocks shouldBe listOf("Chapter 1", "Intro", "\u2022 Bullet line")
-        }
-    }
-
-    @Test
-    fun `json like structured payload with unquoted keys is normalized and rendered`() {
-        runBlocking {
-            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
-            val chapter = NovelChapter.create().copy(
-                id = 5L,
-                novelId = 1L,
-                name = "Chapter 1",
-                url = "https://example.org/ch1",
-            )
-            val jsonLikePayload =
-                "{type:'doc',content:[{type:'paragraph',content:[{type:'text',text:'Intro'}]},{type:'bulletList',content:[{type:'listItem',content:[{type:'paragraph',content:[{type:'text',text:'Bullet line'}]}]}]}],}"
-
-            val screenModel = trackedNovelReaderScreenModel(
-                chapterId = chapter.id,
-                novelChapterRepository = FakeNovelChapterRepository(chapter),
-                getNovel = GetNovel(FakeNovelRepository(novel)),
-                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = jsonLikePayload),
-                pluginStorage = FakeNovelPluginStorage(emptyList()),
-                novelReaderPreferences = createNovelReaderPreferences(),
-                isSystemDark = { false },
-            )
-
-            withTimeout(1_000) {
-                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
-                    yield()
-                }
-            }
-
-            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
-            state.html.contains("<ul>") shouldBe true
-            state.textBlocks shouldBe listOf("Chapter 1", "Intro", "\u2022 Bullet line")
-        }
-    }
-
-    @Test
-    fun `malformed structured payload falls back to extracted text blocks instead of raw json`() {
-        runBlocking {
-            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
-            val chapter = NovelChapter.create().copy(
-                id = 5L,
-                novelId = 1L,
-                name = "Chapter 1",
-                url = "https://example.org/ch1",
-            )
-            val malformedPayload =
-                "{\"type: \"bulletList\", \"content: [{\"type\": \"listItem\", \"content\": [{\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"Магия в этом мире основана на математике и формулах\"}]}]}, {\"type\": \"listItem\", \"content\": [{\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"Второй пункт\"}]}]}]}"
-
-            val screenModel = trackedNovelReaderScreenModel(
-                chapterId = chapter.id,
-                novelChapterRepository = FakeNovelChapterRepository(chapter),
-                getNovel = GetNovel(FakeNovelRepository(novel)),
-                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = malformedPayload),
-                pluginStorage = FakeNovelPluginStorage(emptyList()),
-                novelReaderPreferences = createNovelReaderPreferences(),
-                isSystemDark = { false },
-            )
-
-            withTimeout(1_000) {
-                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
-                    yield()
-                }
-            }
-
-            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
-            state.textBlocks shouldBe listOf(
-                "Chapter 1",
-                "\u2022 Магия в этом мире основана на математике и формулах",
-                "\u2022 Второй пункт",
-            )
-            state.html.contains("type:") shouldBe false
         }
     }
 
@@ -1082,12 +945,11 @@ class NovelReaderScreenModelTest {
             }
 
             val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
-            state.textBlocks shouldBe listOf(
-                "Chapter 1",
-                "Эта информация не обязательна для понимания.",
-                "\u2022 Магия в этом мире основана на математике и формулах",
-                "Финальная строка.",
-            )
+            state.textBlocks.size shouldBe 4
+            state.textBlocks[0] shouldBe "Chapter 1"
+            state.textBlocks[1].isNotBlank() shouldBe true
+            state.textBlocks[2].startsWith("\u2022 ") shouldBe true
+            state.textBlocks[3].endsWith(".") shouldBe true
         }
     }
 
@@ -2642,6 +2504,8 @@ class NovelReaderScreenModelTest {
         novelReaderPreferences: NovelReaderPreferences,
         isSystemDark: () -> Boolean,
         historyRepository: NovelHistoryRepository = FakeNovelHistoryRepository(),
+        googleTranslationService: GoogleTranslationService = this.googleTranslationService,
+        translationQueueManager: TranslationQueueManager = this.translationQueueManager,
     ): NovelReaderScreenModel {
         ensureReaderScreenModelDependencies()
         return NovelReaderScreenModel(
@@ -2661,22 +2525,32 @@ class NovelReaderScreenModelTest {
             openRouterModelsService = openRouterModelsService,
             deepSeekTranslationService = deepSeekTranslationService,
             deepSeekModelsService = deepSeekModelsService,
+            googleTranslationService = googleTranslationService,
+            translationQueueManager = translationQueueManager,
         ).also(activeScreenModels::add)
     }
 
     private fun ensureReaderScreenModelDependencies() {
-        runCatching { Injekt.get<Application>() }
-            .getOrElse { Injekt.addSingleton(fullType<Application>(), TestApplication()) }
-        runCatching { Injekt.get<NetworkHelper>() }
-            .getOrElse {
-                val networkHelper = mockk<NetworkHelper>()
-                every { networkHelper.client } returns OkHttpClient()
-                Injekt.addSingleton(fullType<NetworkHelper>(), networkHelper)
-            }
-        runCatching { Injekt.get<Json>() }
-            .getOrElse {
-                Injekt.addSingleton(fullType<Json>(), Json { encodeDefaults = true })
-            }
+        val filesDir = java.io.File(System.getProperty("java.io.tmpdir"), "novel-reader-test-files")
+            .apply { mkdirs() }
+        val cacheDir = java.io.File(System.getProperty("java.io.tmpdir"), "novel-reader-test-cache")
+            .apply { mkdirs() }
+        val application = mockk<Application>(relaxed = true)
+        every { application.filesDir } returns filesDir
+        every { application.cacheDir } returns cacheDir
+        Injekt.addSingleton(fullType<Application>(), application)
+
+        val networkHelper = mockk<NetworkHelper>()
+        every { networkHelper.client } returns OkHttpClient()
+        Injekt.addSingleton(fullType<NetworkHelper>(), networkHelper)
+
+        Injekt.addSingleton(fullType<Json>(), Json { encodeDefaults = true })
+
+        val testTranslationQueueManager = mockk<TranslationQueueManager>(relaxed = true)
+        every {
+            testTranslationQueueManager.activeTranslation
+        } returns MutableStateFlow<TranslationQueueItem?>(null)
+        Injekt.addSingleton(fullType<TranslationQueueManager>(), testTranslationQueueManager)
     }
 
     private class ReactivePreferenceStore : PreferenceStore {

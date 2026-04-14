@@ -18,6 +18,17 @@ class NovelUrlUtilsTest {
     }
 
     @Test
+    fun `resolveUrl resolves relative urls against base without trailing slash`() {
+        resolveUrl("path/item", "https://example.org") shouldBe
+            "https://example.org/path/item"
+    }
+
+    @Test
+    fun `resolveUrl keeps relative urls when base is blank`() {
+        resolveUrl("path/item", "") shouldBe "path/item"
+    }
+
+    @Test
     fun `getPathname extracts path`() {
         getPathname("https://example.org/a/b?c=1#d") shouldBe "/a/b"
     }

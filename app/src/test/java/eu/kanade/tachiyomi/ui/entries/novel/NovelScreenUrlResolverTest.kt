@@ -96,6 +96,7 @@ class NovelScreenUrlResolverTest {
             chaptersCount = 0,
             canOpenWebView = true,
             isRefreshing = false,
+            hasCompletedChapterRefresh = true,
         ) shouldBe true
     }
 
@@ -118,6 +119,7 @@ class NovelScreenUrlResolverTest {
             chaptersCount = 2,
             canOpenWebView = true,
             isRefreshing = false,
+            hasCompletedChapterRefresh = true,
         ) shouldBe false
     }
 
@@ -140,6 +142,7 @@ class NovelScreenUrlResolverTest {
             chaptersCount = 0,
             canOpenWebView = true,
             isRefreshing = false,
+            hasCompletedChapterRefresh = true,
         ) shouldBe true
     }
 
@@ -163,6 +166,7 @@ class NovelScreenUrlResolverTest {
             chaptersCount = 0,
             canOpenWebView = true,
             isRefreshing = false,
+            hasCompletedChapterRefresh = true,
         ) shouldBe false
     }
 
@@ -186,6 +190,7 @@ class NovelScreenUrlResolverTest {
             chaptersCount = 0,
             canOpenWebView = true,
             isRefreshing = false,
+            hasCompletedChapterRefresh = true,
         ) shouldBe true
     }
 

@@ -1,4 +1,4 @@
-﻿package eu.kanade.presentation.reader.novel
+package eu.kanade.presentation.reader.novel
 
 import android.app.Activity
 import android.content.BroadcastReceiver
@@ -277,6 +277,8 @@ fun NovelReaderScreen(
     onSetGeminiTopP: (Float) -> Unit = {},
     onSetGeminiTopK: (Int) -> Unit = {},
     onSetGeminiPromptMode: (GeminiPromptMode) -> Unit = {},
+    onSetGeminiSourceLang: (String) -> Unit = {},
+    onSetGeminiTargetLang: (String) -> Unit = {},
     onSetGeminiStylePreset: (NovelTranslationStylePreset) -> Unit = {},
     onSetGeminiEnabledPromptModifiers: (List<String>) -> Unit = {},
     onSetGeminiCustomPromptModifier: (String) -> Unit = {},
@@ -3430,7 +3432,8 @@ fun NovelReaderScreen(
                                 imageVector = Icons.Outlined.Translate,
                                 contentDescription = stringResource(AYMR.strings.novel_reader_google_translate),
                                 tint = if (state.isGoogleTranslating ||
-                                    state.hasGoogleTranslationCache
+                                    state.hasGoogleTranslationCache ||
+                                    state.isGoogleTranslationVisible
                                 ) {
                                     MaterialTheme.colorScheme.primary
                                 } else {
@@ -3502,6 +3505,8 @@ fun NovelReaderScreen(
                 onSetGeminiTopP = onSetGeminiTopP,
                 onSetGeminiTopK = onSetGeminiTopK,
                 onSetGeminiPromptMode = onSetGeminiPromptMode,
+                onSetGeminiSourceLang = onSetGeminiSourceLang,
+                onSetGeminiTargetLang = onSetGeminiTargetLang,
                 onSetGeminiStylePreset = onSetGeminiStylePreset,
                 onSetGeminiEnabledPromptModifiers = onSetGeminiEnabledPromptModifiers,
                 onSetGeminiCustomPromptModifier = onSetGeminiCustomPromptModifier,
@@ -3542,6 +3547,7 @@ fun NovelReaderScreen(
                 readerSettings = state.readerSettings,
                 isTranslating = state.isGoogleTranslating,
                 translationProgress = state.googleTranslationProgress,
+                translationPhase = state.translationPhase,
                 isVisible = state.isGoogleTranslationVisible,
                 hasCache = state.hasGoogleTranslationCache,
                 onStart = { requestGoogleTranslationStart() },
@@ -3590,12 +3596,12 @@ fun NovelReaderScreen(
                             }
                         },
                     ) {
-                        Text(text = "Switch")
+                        Text(text = stringResource(AYMR.strings.novel_reader_ai_translator_switch))
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { translationSwitchRequest = null }) {
-                        Text(text = "Cancel")
+                        Text(text = stringResource(AYMR.strings.novel_reader_ai_translator_cancel))
                     }
                 },
             )
@@ -3630,6 +3636,8 @@ private fun GeminiTranslationDialog(
     onSetGeminiTopP: (Float) -> Unit,
     onSetGeminiTopK: (Int) -> Unit,
     onSetGeminiPromptMode: (GeminiPromptMode) -> Unit,
+    onSetGeminiSourceLang: (String) -> Unit,
+    onSetGeminiTargetLang: (String) -> Unit,
     onSetGeminiStylePreset: (NovelTranslationStylePreset) -> Unit,
     onSetGeminiEnabledPromptModifiers: (List<String>) -> Unit,
     onSetGeminiCustomPromptModifier: (String) -> Unit,
@@ -3729,6 +3737,8 @@ private fun GeminiTranslationDialog(
     var tempTopP by remember(readerSettings.geminiTopP) { mutableStateOf(readerSettings.geminiTopP.toString()) }
     var tempTopK by remember(readerSettings.geminiTopK) { mutableStateOf(readerSettings.geminiTopK.toString()) }
     var tempPromptMode by remember(readerSettings.geminiPromptMode) { mutableStateOf(readerSettings.geminiPromptMode) }
+    var tempSourceLang by remember(readerSettings.geminiSourceLang) { mutableStateOf(readerSettings.geminiSourceLang) }
+    var tempTargetLang by remember(readerSettings.geminiTargetLang) { mutableStateOf(readerSettings.geminiTargetLang) }
     var tempStylePreset by remember(readerSettings.geminiStylePreset) {
         mutableStateOf(readerSettings.geminiStylePreset)
     }
@@ -3751,9 +3761,77 @@ private fun GeminiTranslationDialog(
         mutableStateOf(readerSettings.geminiPrivatePythonLikeMode)
     }
     val isPrivateProviderInstalled = remember { GeminiPrivateBridge.isInstalled() }
-    val privateProviderLabel = remember(isPrivateProviderInstalled) {
-        if (isPrivateProviderInstalled) GeminiPrivateBridge.providerLabel() else "Gemini Private"
+    val privateProviderFallbackLabel = stringResource(
+        AYMR.strings.novel_reader_translation_provider_gemini_private,
+    )
+    val privateProviderLabel = remember(isPrivateProviderInstalled, privateProviderFallbackLabel) {
+        if (isPrivateProviderInstalled) GeminiPrivateBridge.providerLabel() else privateProviderFallbackLabel
     }
+
+    val visibilityOnLabel = stringResource(AYMR.strings.novel_reader_gemini_visibility_on)
+    val visibilityOffLabel = stringResource(AYMR.strings.novel_reader_gemini_visibility_off)
+    val reasoningMinimalLabel = stringResource(AYMR.strings.novel_reader_gemini_reasoning_minimal)
+    val reasoningLowLabel = stringResource(AYMR.strings.novel_reader_gemini_reasoning_low)
+    val reasoningMediumLabel = stringResource(AYMR.strings.novel_reader_gemini_reasoning_medium)
+    val reasoningHighLabel = stringResource(AYMR.strings.novel_reader_gemini_reasoning_high)
+    val providerLabel = stringResource(AYMR.strings.novel_reader_translation_provider)
+    val geminiModelLabel = stringResource(AYMR.strings.novel_reader_gemini_model)
+    val openRouterModelLabel = stringResource(AYMR.strings.novel_reader_openrouter_model)
+    val deepSeekModelLabel = stringResource(AYMR.strings.novel_reader_deepseek_model)
+    val promptModeLabel = stringResource(AYMR.strings.novel_reader_gemini_prompt_mode)
+    val styleLabel = stringResource(AYMR.strings.novel_reader_ai_translator_style_title)
+    val speedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_speed_batch_parallelism)
+    val reasoningLabel = stringResource(AYMR.strings.novel_reader_gemini_reasoning_effort)
+    val autoEnglishLabel = stringResource(AYMR.strings.novel_reader_translation_auto_english_title)
+    val prefetchNextLabel = stringResource(AYMR.strings.novel_reader_translation_prefetch_next_title)
+    val privatePythonLikeLabel = stringResource(AYMR.strings.novel_reader_gemini_private_python_like_mode)
+    val geminiProviderLabel = stringResource(AYMR.strings.novel_reader_translation_provider_gemini)
+    val generationLabel = stringResource(AYMR.strings.novel_reader_ai_translator_generation_title)
+    val temperatureLabel = stringResource(AYMR.strings.novel_reader_gemini_temperature)
+    val topPLabel = stringResource(AYMR.strings.novel_reader_gemini_top_p)
+    val topKLabel = stringResource(AYMR.strings.novel_reader_gemini_top_k)
+    val relaxedStateLabel = stringResource(AYMR.strings.novel_reader_ai_translator_relaxed_state)
+    val cacheStateLabel = stringResource(AYMR.strings.novel_reader_ai_translator_cache_state)
+    val airforceHiddenSwitchedLabel =
+        stringResource(AYMR.strings.novel_reader_ai_translator_log_airforce_hidden_switched)
+    val bridgeLockedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_bridge_locked)
+    val bridgeEnterPasswordLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_bridge_enter_password)
+    val bridgeUnlockedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_bridge_unlocked)
+    val bridgeDebugLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_bridge_debug)
+    val invalidBridgePasswordLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_invalid_bridge_password)
+    val openRouterSettingsSavedLabel =
+        stringResource(AYMR.strings.novel_reader_ai_translator_log_openrouter_settings_saved)
+    val deepSeekSettingsSavedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_deepseek_settings_saved)
+    val geminiApiKeySavedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_gemini_api_key_saved)
+    val cacheClearedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_cache_cleared)
+    val customPromptUpdatedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_custom_prompt_updated)
+
+    fun visibilityStateLabel(enabled: Boolean): String = if (enabled) {
+        visibilityOnLabel
+    } else {
+        visibilityOffLabel
+    }
+
+    fun reasoningDisplayLabel(option: String): String = when (option) {
+        "minimal" -> reasoningMinimalLabel
+        "low" -> reasoningLowLabel
+        "medium" -> reasoningMediumLabel
+        "high" -> reasoningHighLabel
+        else -> option.uppercase()
+    }
+
+    fun logPair(prefix: String, value: String) {
+        onAddLog("$prefix: $value")
+    }
+
+    fun logState(prefix: String, enabled: Boolean) {
+        onAddLog("$prefix: ${visibilityStateLabel(enabled)}")
+    }
+
+    fun logTemplate(template: String, vararg args: Any?) {
+        onAddLog(template.format(*args))
+    }
+
     var tempPrivatePassword by remember { mutableStateOf("") }
     var isPrivateProviderUnlocked by remember(isPrivateProviderInstalled, readerSettings.geminiPrivateUnlocked) {
         mutableStateOf(
@@ -3794,101 +3872,82 @@ private fun GeminiTranslationDialog(
         val advantage: String,
     )
 
-    val defaultGenerationPresets = remember {
-        listOf(
-            GenerationPreset(
-                id = "anchor_plus",
-                title = "Канон+",
-                temperature = 0.62f,
-                topP = 0.9f,
-                topK = 36,
-                scenario = "Длинные главы с плотным лором " +
-                    "и терминами",
-                advantage = "Стабильный стиль, высокая " +
-                    "связность и минимум случайного шума",
-            ),
-            GenerationPreset(
-                id = "authorial",
-                title = "Авторский",
-                temperature = 0.76f,
-                topP = 0.93f,
-                topK = 48,
-                scenario = "Повседневные сцены, внутренние " +
-                    "монологи, драма",
-                advantage = "Более литературная подача и " +
-                    "живые формулировки без перегиба",
-            ),
-            GenerationPreset(
-                id = "dialogue_plus",
-                title = "Живые диалоги",
-                temperature = 0.88f,
-                topP = 0.95f,
-                topK = 56,
-                scenario = "Разговорные главы, пикировки, " +
-                    "юмор, флирт",
-                advantage = "Речь персонажей звучит естественнее " +
-                    "и эмоциональнее",
-            ),
-            GenerationPreset(
-                id = "private_pulse",
-                title = "18+ Импульс",
-                temperature = 0.98f,
-                topP = 0.97f,
-                topK = 72,
-                scenario = "Эротические и напряжённые сцены",
-                advantage = "Максимум чувственности, экспрессии " +
-                    "и «живого» ритма",
-            ),
-            GenerationPreset(
-                id = "unbound",
-                title = "Без тормозов",
-                temperature = 1.08f,
-                topP = 0.985f,
-                topK = 96,
-                scenario = "Экспериментальный режим для самых " +
-                    "дерзких глав",
-                advantage = "Пиковая креативность и вариативность " +
-                    "слога",
-            ),
-        )
-    }
-    val deepSeekGenerationPresets = remember {
-        listOf(
-            GenerationPreset(
-                id = "deepseek_balanced",
-                title = "DeepSeek Баланс",
-                temperature = 1.3f,
-                topP = 0.9f,
-                topK = null,
-                scenario = "Стабильный креативный перевод на " +
-                    "каждый день",
-                advantage = "Живой текст с контролируемым уровнем " +
-                    "вариативности",
-            ),
-            GenerationPreset(
-                id = "deepseek_expressive",
-                title = "DeepSeek Экспрессия",
-                temperature = 1.4f,
-                topP = 0.93f,
-                topK = null,
-                scenario = "Диалоги, эмоции, романтика и 18+ " +
-                    "сцены",
-                advantage = "Более яркая и естественная подача " +
-                    "реплик и тональности",
-            ),
-            GenerationPreset(
-                id = "deepseek_creative",
-                title = "DeepSeek Креатив",
-                temperature = 1.5f,
-                topP = 0.95f,
-                topK = null,
-                scenario = "Максимально смелый и вариативный " +
-                    "стиль",
-                advantage = "Пиковая творческая свобода без " +
-                    "переусложнения настроек",
-            ),
-        )
-    }
+    val defaultGenerationPresets = listOf(
+        GenerationPreset(
+            id = "anchor_plus",
+            title = stringResource(AYMR.strings.novel_reader_gemini_generation_anchor_plus_title),
+            temperature = 0.62f,
+            topP = 0.9f,
+            topK = 36,
+            scenario = stringResource(AYMR.strings.novel_reader_gemini_generation_anchor_plus_scenario),
+            advantage = stringResource(AYMR.strings.novel_reader_gemini_generation_anchor_plus_advantage),
+        ),
+        GenerationPreset(
+            id = "authorial",
+            title = stringResource(AYMR.strings.novel_reader_gemini_generation_authorial_title),
+            temperature = 0.76f,
+            topP = 0.93f,
+            topK = 48,
+            scenario = stringResource(AYMR.strings.novel_reader_gemini_generation_authorial_scenario),
+            advantage = stringResource(AYMR.strings.novel_reader_gemini_generation_authorial_advantage),
+        ),
+        GenerationPreset(
+            id = "dialogue_plus",
+            title = stringResource(AYMR.strings.novel_reader_gemini_generation_dialogue_plus_title),
+            temperature = 0.88f,
+            topP = 0.95f,
+            topK = 56,
+            scenario = stringResource(AYMR.strings.novel_reader_gemini_generation_dialogue_plus_scenario),
+            advantage = stringResource(AYMR.strings.novel_reader_gemini_generation_dialogue_plus_advantage),
+        ),
+        GenerationPreset(
+            id = "private_pulse",
+            title = stringResource(AYMR.strings.novel_reader_gemini_generation_private_pulse_title),
+            temperature = 0.98f,
+            topP = 0.97f,
+            topK = 72,
+            scenario = stringResource(AYMR.strings.novel_reader_gemini_generation_private_pulse_scenario),
+            advantage = stringResource(AYMR.strings.novel_reader_gemini_generation_private_pulse_advantage),
+        ),
+        GenerationPreset(
+            id = "unbound",
+            title = stringResource(AYMR.strings.novel_reader_gemini_generation_unbound_title),
+            temperature = 1.08f,
+            topP = 0.985f,
+            topK = 96,
+            scenario = stringResource(AYMR.strings.novel_reader_gemini_generation_unbound_scenario),
+            advantage = stringResource(AYMR.strings.novel_reader_gemini_generation_unbound_advantage),
+        ),
+    )
+    val deepSeekGenerationPresets = listOf(
+        GenerationPreset(
+            id = "deepseek_balanced",
+            title = stringResource(AYMR.strings.novel_reader_gemini_generation_deepseek_balanced_title),
+            temperature = 1.3f,
+            topP = 0.9f,
+            topK = null,
+            scenario = stringResource(AYMR.strings.novel_reader_gemini_generation_deepseek_balanced_scenario),
+            advantage = stringResource(AYMR.strings.novel_reader_gemini_generation_deepseek_balanced_advantage),
+        ),
+        GenerationPreset(
+            id = "deepseek_expressive",
+            title = stringResource(AYMR.strings.novel_reader_gemini_generation_deepseek_expressive_title),
+            temperature = 1.4f,
+            topP = 0.93f,
+            topK = null,
+            scenario = stringResource(AYMR.strings.novel_reader_gemini_generation_deepseek_expressive_scenario),
+            advantage = stringResource(AYMR.strings.novel_reader_gemini_generation_deepseek_expressive_advantage),
+        ),
+        GenerationPreset(
+            id = "deepseek_creative",
+            title = stringResource(AYMR.strings.novel_reader_gemini_generation_deepseek_creative_title),
+            temperature = 1.5f,
+            topP = 0.95f,
+            topK = null,
+            scenario = stringResource(AYMR.strings.novel_reader_gemini_generation_deepseek_creative_scenario),
+            advantage = stringResource(AYMR.strings.novel_reader_gemini_generation_deepseek_creative_advantage),
+        ),
+    )
     val stylePresets = remember { NovelTranslationStylePresets.all }
     fun resolveSelectedGenerationPresetId(
         provider: NovelTranslationProvider,
@@ -3985,7 +4044,10 @@ private fun GeminiTranslationDialog(
         if (tempProvider == NovelTranslationProvider.AIRFORCE) {
             tempProvider = NovelTranslationProvider.GEMINI
             onSetTranslationProvider(NovelTranslationProvider.GEMINI)
-            onAddLog("?? Airforce hidden. Switched to Gemini")
+            logTemplate(
+                airforceHiddenSwitchedLabel,
+                geminiProviderLabel,
+            )
         }
     }
 
@@ -4009,6 +4071,7 @@ private fun GeminiTranslationDialog(
     TabbedDialog(
         onDismissRequest = onDismiss,
         tabTitles = tabTitles,
+        enableSwipeDismiss = false,
     ) { page ->
         Column(
             modifier = Modifier
@@ -4017,13 +4080,13 @@ private fun GeminiTranslationDialog(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = "AI Переводчик",
+                text = stringResource(AYMR.strings.novel_reader_ai_translator_title),
                 style = MaterialTheme.typography.titleMedium,
             )
             if (page == 0) {
                 GeminiSettingsBlock(
-                    title = "Статус и действия",
-                    subtitle = "Запуск, остановка и переключение отображения",
+                    title = stringResource(AYMR.strings.novel_reader_ai_translator_status_title),
+                    subtitle = stringResource(AYMR.strings.novel_reader_ai_translator_status_summary),
                 ) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
@@ -4073,21 +4136,36 @@ private fun GeminiTranslationDialog(
                                     if (privateBridgeUnlocked) {
                                         onStart()
                                     } else {
-                                        onAddLog("🔒 $privateProviderLabel bridge is locked. Unlock it first.")
+                                        logTemplate(
+                                            bridgeLockedLabel,
+                                            privateProviderLabel,
+                                        )
                                     }
                                 }
                             },
                             enabled = isTranslating || privateBridgeUnlocked,
                             modifier = Modifier.weight(1f),
                         ) {
-                            Text(if (isTranslating) "Остановить" else "Запустить")
+                            Text(
+                                if (isTranslating) {
+                                    stringResource(AYMR.strings.novel_reader_ai_translator_action_stop)
+                                } else {
+                                    stringResource(AYMR.strings.novel_reader_gemini_action_start)
+                                },
+                            )
                         }
                         OutlinedButton(
                             onClick = onToggleVisibility,
                             enabled = hasTranslationResult,
                             modifier = Modifier.weight(1f),
                         ) {
-                            Text(if (isVisible) "Оригинал" else "Перевод")
+                            Text(
+                                if (isVisible) {
+                                    stringResource(AYMR.strings.novel_reader_gemini_show_original)
+                                } else {
+                                    stringResource(AYMR.strings.novel_reader_gemini_show_translation)
+                                },
+                            )
                         }
                     }
 
@@ -4097,7 +4175,11 @@ private fun GeminiTranslationDialog(
                             horizontalArrangement = Arrangement.End,
                         ) {
                             TextButton(onClick = onClear) {
-                                Text("Очистить кэш главы")
+                                Text(
+                                    stringResource(
+                                        AYMR.strings.novel_reader_ai_translator_clear_chapter_cache,
+                                    ),
+                                )
                             }
                         }
                     }
@@ -4106,19 +4188,58 @@ private fun GeminiTranslationDialog(
 
             if (page == 0 || page == 1) {
                 GeminiSettingsBlock(
-                    title = "Основные параметры",
-                    subtitle = "Модель, режим промпта и производительность",
+                    title = stringResource(AYMR.strings.novel_reader_ai_translator_core_title),
+                    subtitle = stringResource(AYMR.strings.novel_reader_ai_translator_core_summary),
                 ) {
                     if (page == 0) {
                         Text(
-                            "Провайдер",
+                            text = stringResource(AYMR.strings.novel_reader_translation_languages),
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Text(
+                            text = stringResource(AYMR.strings.novel_reader_translation_languages_summary),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        OutlinedTextField(
+                            value = tempSourceLang,
+                            onValueChange = {
+                                tempSourceLang = it
+                                onSetGeminiSourceLang(it)
+                            },
+                            label = {
+                                Text(stringResource(AYMR.strings.novel_reader_gemini_source_lang))
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                        )
+                        OutlinedTextField(
+                            value = tempTargetLang,
+                            onValueChange = {
+                                tempTargetLang = it
+                                onSetGeminiTargetLang(it)
+                            },
+                            label = {
+                                Text(stringResource(AYMR.strings.novel_reader_gemini_target_lang))
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                        )
+                        Text(
+                            stringResource(AYMR.strings.novel_reader_translation_provider),
                             style = MaterialTheme.typography.labelLarge,
                         )
                         val providerCards = listOf(
-                            NovelTranslationProvider.GEMINI to "Gemini",
+                            NovelTranslationProvider.GEMINI to stringResource(
+                                AYMR.strings.novel_reader_translation_provider_gemini,
+                            ),
                             NovelTranslationProvider.GEMINI_PRIVATE to privateProviderLabel,
-                            NovelTranslationProvider.OPENROUTER to "OpenRouter",
-                            NovelTranslationProvider.DEEPSEEK to "DeepSeek",
+                            NovelTranslationProvider.OPENROUTER to stringResource(
+                                AYMR.strings.novel_reader_translation_provider_openrouter,
+                            ),
+                            NovelTranslationProvider.DEEPSEEK to stringResource(
+                                AYMR.strings.novel_reader_translation_provider_deepseek,
+                            ),
                         )
                         providerCards.chunked(2).forEach { row ->
                             Row(
@@ -4133,7 +4254,7 @@ private fun GeminiTranslationDialog(
                                             .clickable {
                                                 tempProvider = option.first
                                                 onSetTranslationProvider(option.first)
-                                                onAddLog("?? Provider: ${option.second}")
+                                                logPair(providerLabel, option.second)
                                                 when (option.first) {
                                                     NovelTranslationProvider.GEMINI -> Unit
                                                     NovelTranslationProvider.GEMINI_PRIVATE -> Unit
@@ -4183,11 +4304,13 @@ private fun GeminiTranslationDialog(
                             ) {
                                 Text(
                                     text = if (isPrivateProviderUnlocked) {
-                                        "$privateProviderLabel bridge подключен " +
-                                            "и разблокирован."
+                                        stringResource(
+                                            AYMR.strings.novel_reader_gemini_private_bridge_connected_unlocked,
+                                        ).format(privateProviderLabel)
                                     } else {
-                                        "$privateProviderLabel bridge подключен. " +
-                                            "Для работы нужен unlock."
+                                        stringResource(
+                                            AYMR.strings.novel_reader_gemini_private_bridge_connected_unlock_required,
+                                        ).format(privateProviderLabel)
                                     },
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                     style = MaterialTheme.typography.bodySmall,
@@ -4199,7 +4322,13 @@ private fun GeminiTranslationDialog(
                             OutlinedTextField(
                                 value = tempPrivatePassword,
                                 onValueChange = { tempPrivatePassword = it },
-                                label = { Text("Пароль $privateProviderLabel bridge") },
+                                label = {
+                                    Text(
+                                        stringResource(
+                                            AYMR.strings.novel_reader_gemini_private_bridge_password_label,
+                                        ).format(privateProviderLabel),
+                                    )
+                                },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                             )
@@ -4208,29 +4337,39 @@ private fun GeminiTranslationDialog(
                                     onClick = {
                                         val password = tempPrivatePassword.trim()
                                         if (password.isBlank()) {
-                                            onAddLog("🔒 Enter bridge password")
+                                            logTemplate(
+                                                bridgeEnterPasswordLabel,
+                                                privateProviderLabel,
+                                            )
                                         } else {
                                             val unlocked = GeminiPrivateBridge.unlock(password)
                                             if (unlocked) {
                                                 isPrivateProviderUnlocked = true
                                                 onSetGeminiPrivateUnlocked(true)
                                                 tempPrivatePassword = ""
-                                                onAddLog("✅ $privateProviderLabel bridge unlocked")
+                                                logTemplate(
+                                                    bridgeUnlockedLabel,
+                                                    privateProviderLabel,
+                                                )
                                             } else {
-                                                onAddLog("🔎 ${GeminiPrivateBridge.debugInfo()}")
-                                                onAddLog("❌ Invalid bridge password")
+                                                logTemplate(
+                                                    bridgeDebugLabel,
+                                                    privateProviderLabel,
+                                                    GeminiPrivateBridge.debugInfo(),
+                                                )
+                                                onAddLog(invalidBridgePasswordLabel)
                                             }
                                         }
                                     },
                                 ) {
-                                    Text("Unlock")
+                                    Text(stringResource(AYMR.strings.novel_reader_gemini_action_unlock))
                                 }
                                 OutlinedButton(
                                     onClick = {
                                         tempPrivatePassword = ""
                                     },
                                 ) {
-                                    Text("Очистить")
+                                    Text(stringResource(AYMR.strings.novel_reader_gemini_action_clear))
                                 }
                             }
                         }
@@ -4240,41 +4379,48 @@ private fun GeminiTranslationDialog(
                             NovelTranslationProvider.GEMINI_PRIVATE,
                             -> {
                                 Text(
-                                    "Модель",
+                                    stringResource(AYMR.strings.novel_reader_gemini_model),
                                     style = MaterialTheme.typography.labelLarge,
                                 )
                                 eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
                                     value = tempModel,
-                                    title = "Текущая модель",
+                                    title = stringResource(
+                                        AYMR.strings.novel_reader_ai_translator_current_model,
+                                    ),
                                     subtitle = modelMap[tempModel] ?: tempModel,
                                     icon = null,
                                     entries = modelMap,
                                     onValueChange = { selected ->
                                         tempModel = selected
                                         onSetGeminiModel(selected)
-                                        onAddLog("?? Model: ${modelMap[selected] ?: selected}")
+                                        logPair(geminiModelLabel, modelMap[selected] ?: selected)
                                     },
                                 )
                             }
                             NovelTranslationProvider.OPENROUTER -> {
                                 Text(
-                                    "OpenRouter модели (free)",
+                                    stringResource(
+                                        AYMR.strings.novel_reader_ai_translator_openrouter_models_title,
+                                    ),
                                     style = MaterialTheme.typography.labelLarge,
                                 )
                                 if (openRouterAllModelEntries.isNotEmpty()) {
                                     eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
                                         value = tempOpenRouterModel,
-                                        title =
-                                        "Бесплатные модели (${openRouterAllModelEntries.size})",
+                                        title = stringResource(
+                                            AYMR.strings.novel_reader_ai_translator_openrouter_models_count,
+                                        ).format(openRouterAllModelEntries.size),
                                         subtitle = tempOpenRouterModel.ifBlank {
-                                            "Выберите free модель (:free)"
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_choose_free_model,
+                                            )
                                         },
                                         icon = null,
                                         entries = openRouterAllModelEntries,
                                         onValueChange = { selected ->
                                             tempOpenRouterModel = selected
                                             onSetOpenRouterModel(selected)
-                                            onAddLog("?? OpenRouter model: $selected")
+                                            logPair(openRouterModelLabel, selected)
                                         },
                                     )
                                 }
@@ -4282,9 +4428,13 @@ private fun GeminiTranslationDialog(
                                     OutlinedButton(onClick = onRefreshOpenRouterModels) {
                                         Text(
                                             if (isOpenRouterModelsLoading) {
-                                                "Загрузка моделей..."
+                                                stringResource(
+                                                    AYMR.strings.novel_reader_ai_translator_loading_models,
+                                                )
                                             } else {
-                                                "Обновить список"
+                                                stringResource(
+                                                    AYMR.strings.novel_reader_ai_translator_refresh_list,
+                                                )
                                             },
                                         )
                                     }
@@ -4295,26 +4445,40 @@ private fun GeminiTranslationDialog(
                                         tempOpenRouterModel = it
                                         onSetOpenRouterModel(it)
                                     },
-                                    label = { Text("Model ID (только :free)") },
+                                    label = {
+                                        Text(
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_model_id_free_only,
+                                            ),
+                                        )
+                                    },
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
                             NovelTranslationProvider.DEEPSEEK -> {
                                 Text(
-                                    "DeepSeek модели",
+                                    stringResource(
+                                        AYMR.strings.novel_reader_ai_translator_deepseek_models_title,
+                                    ),
                                     style = MaterialTheme.typography.labelLarge,
                                 )
                                 if (deepSeekAllModelEntries.isNotEmpty()) {
                                     eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
                                         value = tempDeepSeekModel,
-                                        title = "Модели (${deepSeekAllModelEntries.size})",
-                                        subtitle = tempDeepSeekModel.ifBlank { "Выберите модель" },
+                                        title = stringResource(
+                                            AYMR.strings.novel_reader_ai_translator_models_count,
+                                        ).format(deepSeekAllModelEntries.size),
+                                        subtitle = tempDeepSeekModel.ifBlank {
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_choose_model,
+                                            )
+                                        },
                                         icon = null,
                                         entries = deepSeekAllModelEntries,
                                         onValueChange = { selected ->
                                             tempDeepSeekModel = selected
                                             onSetDeepSeekModel(selected)
-                                            onAddLog("?? DeepSeek model: $selected")
+                                            logPair(deepSeekModelLabel, selected)
                                         },
                                     )
                                 }
@@ -4322,9 +4486,13 @@ private fun GeminiTranslationDialog(
                                     OutlinedButton(onClick = onRefreshDeepSeekModels) {
                                         Text(
                                             if (isDeepSeekModelsLoading) {
-                                                "Загрузка моделей..."
+                                                stringResource(
+                                                    AYMR.strings.novel_reader_ai_translator_loading_models,
+                                                )
                                             } else {
-                                                "Обновить список"
+                                                stringResource(
+                                                    AYMR.strings.novel_reader_ai_translator_refresh_list,
+                                                )
                                             },
                                         )
                                     }
@@ -4335,7 +4503,13 @@ private fun GeminiTranslationDialog(
                                         tempDeepSeekModel = it
                                         onSetDeepSeekModel(it)
                                     },
-                                    label = { Text("Model ID") },
+                                    label = {
+                                        Text(
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_model_id,
+                                            ),
+                                        )
+                                    },
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
@@ -4346,14 +4520,20 @@ private fun GeminiTranslationDialog(
                     if (page == 1) {
                         if (!isPrivateSingleRequestMode) {
                             Text(
-                                "Режим промпта",
+                                stringResource(AYMR.strings.novel_reader_gemini_prompt_mode),
                                 style = MaterialTheme.typography.labelLarge,
+                            )
+                            val promptModeClassicLabel = stringResource(
+                                AYMR.strings.novel_reader_gemini_prompt_mode_classic,
+                            )
+                            val promptModeAdultLabel = stringResource(
+                                AYMR.strings.novel_reader_gemini_prompt_mode_adult_short,
                             )
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 items(
                                     listOf(
-                                        GeminiPromptMode.CLASSIC to "Классический",
-                                        GeminiPromptMode.ADULT_18 to "18+",
+                                        GeminiPromptMode.CLASSIC to promptModeClassicLabel,
+                                        GeminiPromptMode.ADULT_18 to promptModeAdultLabel,
                                     ),
                                 ) { option ->
                                     val selected = tempPromptMode == option.first
@@ -4361,7 +4541,7 @@ private fun GeminiTranslationDialog(
                                         onClick = {
                                             tempPromptMode = option.first
                                             onSetGeminiPromptMode(option.first)
-                                            onAddLog("?? Prompt mode: ${option.second}")
+                                            logPair(promptModeLabel, option.second)
                                         },
                                     ) {
                                         Text(if (selected) "• ${option.second}" else option.second)
@@ -4370,24 +4550,28 @@ private fun GeminiTranslationDialog(
                             }
 
                             Text(
-                                "Стиль перевода",
+                                stringResource(AYMR.strings.novel_reader_ai_translator_style_title),
                                 style = MaterialTheme.typography.labelLarge,
                             )
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 items(stylePresets) { preset ->
                                     val selected = tempStylePreset == preset.id
+                                    val presetTitle = stringResource(preset.titleRes)
                                     OutlinedButton(
                                         onClick = {
                                             tempStylePreset = preset.id
                                             onSetGeminiStylePreset(preset.id)
-                                            onAddLog("?? Стиль: ${preset.title}")
+                                            logPair(styleLabel, presetTitle)
                                         },
                                     ) {
-                                        Text(if (selected) "• ${preset.title}" else preset.title)
+                                        Text(if (selected) "• $presetTitle" else presetTitle)
                                     }
                                 }
                             }
                             val selectedStylePreset = stylePresets.firstOrNull { it.id == tempStylePreset }
+                            val selectedStylePresetTitle = stringResource(
+                                selectedStylePreset?.titleRes ?: stylePresets.first().titleRes,
+                            )
                             if (selectedStylePreset != null) {
                                 Surface(
                                     modifier = Modifier.fillMaxWidth(),
@@ -4399,16 +4583,20 @@ private fun GeminiTranslationDialog(
                                         verticalArrangement = Arrangement.spacedBy(6.dp),
                                     ) {
                                         Text(
-                                            text = selectedStylePreset.title,
+                                            text = selectedStylePresetTitle,
                                             style = MaterialTheme.typography.labelLarge,
                                         )
                                         Text(
-                                            text = "Для чего: ${selectedStylePreset.scenario}",
+                                            text = stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_style_scenario_prefix,
+                                            ).format(stringResource(selectedStylePreset.scenarioRes)),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                         Text(
-                                            text = "Преимущество: ${selectedStylePreset.advantage}",
+                                            text = stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_style_advantage_prefix,
+                                            ).format(stringResource(selectedStylePreset.advantageRes)),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -4417,12 +4605,13 @@ private fun GeminiTranslationDialog(
                             }
 
                             Text(
-                                "Модификаторы промпта",
+                                stringResource(AYMR.strings.novel_reader_gemini_prompt_modifiers),
                                 style = MaterialTheme.typography.labelLarge,
                             )
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 items(GeminiPromptModifiers.all) { modifier ->
                                     val selected = tempEnabledModifiers.contains(modifier.id)
+                                    val modifierLabel = stringResource(modifier.labelRes)
                                     Surface(
                                         color = if (selected) {
                                             MaterialTheme.colorScheme.primaryContainer
@@ -4442,7 +4631,7 @@ private fun GeminiTranslationDialog(
                                         },
                                     ) {
                                         Text(
-                                            text = modifier.label,
+                                            text = modifierLabel,
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                             style = MaterialTheme.typography.labelMedium,
                                         )
@@ -4459,7 +4648,15 @@ private fun GeminiTranslationDialog(
                                         modifier = Modifier.clickable { showCustomPromptDialog = true },
                                     ) {
                                         Text(
-                                            text = if (tempCustomModifier.isBlank()) "+ Свой" else "Свой",
+                                            text = if (tempCustomModifier.isBlank()) {
+                                                stringResource(
+                                                    AYMR.strings.novel_reader_ai_translator_custom_modifier_add,
+                                                )
+                                            } else {
+                                                stringResource(
+                                                    AYMR.strings.novel_reader_ai_translator_custom_modifier_active,
+                                                )
+                                            },
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                             style = MaterialTheme.typography.labelMedium,
                                         )
@@ -4473,11 +4670,9 @@ private fun GeminiTranslationDialog(
                                 shape = RoundedCornerShape(12.dp),
                             ) {
                                 Text(
-                                    text =
-                                    "$privateProviderLabel: используются " +
-                                        "защищённые правила private bridge " +
-                                        "и авто-режим без пользовательских " +
-                                        "модификаторов.",
+                                    text = stringResource(
+                                        AYMR.strings.novel_reader_gemini_private_bridge_auto_rules,
+                                    ).format(privateProviderLabel),
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                     style = MaterialTheme.typography.bodySmall,
                                 )
@@ -4487,7 +4682,7 @@ private fun GeminiTranslationDialog(
 
                     if (page == 0 && !isPrivateSingleRequestMode) {
                         Text(
-                            "Скорость (батч-параллельность)",
+                            stringResource(AYMR.strings.novel_reader_ai_translator_speed_batch_parallelism),
                             style = MaterialTheme.typography.labelLarge,
                         )
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -4503,7 +4698,7 @@ private fun GeminiTranslationDialog(
                                         tempConcurrency = concurrency.toString()
                                         onSetGeminiBatchSize(batch)
                                         onSetGeminiConcurrency(concurrency)
-                                        onAddLog("?? Speed: $label")
+                                        logPair(speedLabel, label)
                                     },
                                 ) {
                                     Text(if (selected) "• $label" else label)
@@ -4554,7 +4749,7 @@ private fun GeminiTranslationDialog(
                                     onClick = {
                                         tempReasoning = option
                                         onSetGeminiReasoningEffort(option)
-                                        onAddLog("?? Reasoning: ${option.uppercase()}")
+                                        logPair(reasoningLabel, reasoningDisplayLabel(option))
                                     },
                                 ) {
                                     Text(
@@ -4573,8 +4768,8 @@ private fun GeminiTranslationDialog(
 
             if (page == 2) {
                 GeminiSettingsBlock(
-                    title = "Система и кэш",
-                    subtitle = "API ключ, кэш и ручной контроль потоков",
+                    title = stringResource(AYMR.strings.novel_reader_ai_translator_system_title),
+                    subtitle = stringResource(AYMR.strings.novel_reader_ai_translator_system_summary),
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -4582,7 +4777,7 @@ private fun GeminiTranslationDialog(
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "Автостарт перевода для English",
+                            text = stringResource(AYMR.strings.novel_reader_translation_auto_english_title),
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
                         )
@@ -4591,7 +4786,7 @@ private fun GeminiTranslationDialog(
                             onCheckedChange = { enabled ->
                                 tempAutoTranslateEnglish = enabled
                                 onSetGeminiAutoTranslateEnglishSource(enabled)
-                                onAddLog("?? Auto English: ${if (enabled) "ON" else "OFF"}")
+                                logState(autoEnglishLabel, enabled)
                             },
                         )
                     }
@@ -4601,7 +4796,7 @@ private fun GeminiTranslationDialog(
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "Превентивный перевод следующей главы (30%)",
+                            text = stringResource(AYMR.strings.novel_reader_translation_prefetch_next_title),
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
                         )
@@ -4610,7 +4805,7 @@ private fun GeminiTranslationDialog(
                             onCheckedChange = { enabled ->
                                 tempPrefetchNextChapterTranslation = enabled
                                 onSetGeminiPrefetchNextChapterTranslation(enabled)
-                                onAddLog("?? Next chapter pre-translation: ${if (enabled) "ON" else "OFF"}")
+                                logState(prefetchNextLabel, enabled)
                             },
                         )
                     }
@@ -4630,7 +4825,7 @@ private fun GeminiTranslationDialog(
                                 onCheckedChange = { enabled ->
                                     tempPrivatePythonLikeMode = enabled
                                     onSetGeminiPrivatePythonLikeMode(enabled)
-                                    onAddLog("🔀 Private Python-like: ${if (enabled) "ON" else "OFF"}")
+                                    logState(privatePythonLikeLabel, enabled)
                                 },
                             )
                         }
@@ -4655,7 +4850,15 @@ private fun GeminiTranslationDialog(
                                         tempDeepSeekBaseUrl = it
                                     }
                                 },
-                                label = { Text("Base URL") },
+                                label = {
+                                    Text(
+                                        if (isOpenRouterSelected) {
+                                            stringResource(AYMR.strings.novel_reader_openrouter_base_url)
+                                        } else {
+                                            stringResource(AYMR.strings.novel_reader_deepseek_base_url)
+                                        },
+                                    )
+                                },
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
@@ -4677,9 +4880,11 @@ private fun GeminiTranslationDialog(
                             label = {
                                 Text(
                                     when {
-                                        isOpenRouterSelected -> "OpenRouter API key"
-                                        isDeepSeekSelected -> "DeepSeek API key"
-                                        else -> "API ключ"
+                                        isOpenRouterSelected -> stringResource(
+                                            AYMR.strings.novel_reader_openrouter_api_key,
+                                        )
+                                        isDeepSeekSelected -> stringResource(AYMR.strings.novel_reader_deepseek_api_key)
+                                        else -> stringResource(AYMR.strings.novel_reader_gemini_api_key)
                                     },
                                 )
                             },
@@ -4695,30 +4900,42 @@ private fun GeminiTranslationDialog(
                                         onSetOpenRouterBaseUrl(tempOpenRouterBaseUrl)
                                         onSetOpenRouterApiKey(tempOpenRouterApiKey)
                                         onSetOpenRouterModel(tempOpenRouterModel)
-                                        onAddLog("?? OpenRouter settings saved")
+                                        onAddLog(openRouterSettingsSavedLabel)
                                     } else if (isDeepSeekSelected) {
                                         onSetDeepSeekBaseUrl(tempDeepSeekBaseUrl)
                                         onSetDeepSeekApiKey(tempDeepSeekApiKey)
                                         onSetDeepSeekModel(tempDeepSeekModel)
-                                        onAddLog("?? DeepSeek settings saved")
+                                        onAddLog(deepSeekSettingsSavedLabel)
                                     } else {
                                         onSetGeminiApiKey(tempKey)
-                                        onAddLog("?? API ключ сохранен")
+                                        onAddLog(geminiApiKeySavedLabel)
                                     }
                                 },
                                 modifier = Modifier.weight(1f),
                             ) {
-                                Text("Сохранить")
+                                Text(stringResource(AYMR.strings.novel_reader_ai_translator_save))
                             }
                             TextButton(
                                 onClick = {
                                     tempRelaxed = !tempRelaxed
                                     onSetGeminiRelaxedMode(tempRelaxed)
-                                    onAddLog("?? Relaxed: ${if (tempRelaxed) "ON" else "OFF"}")
+                                    onAddLog(relaxedStateLabel.format(visibilityStateLabel(tempRelaxed)))
                                 },
                                 modifier = Modifier.weight(1f),
                             ) {
-                                Text("Relaxed: ${if (tempRelaxed) "ON" else "OFF"}")
+                                Text(
+                                    stringResource(
+                                        AYMR.strings.novel_reader_ai_translator_relaxed_state,
+                                    ).format(
+                                        stringResource(
+                                            if (tempRelaxed) {
+                                                AYMR.strings.novel_reader_gemini_visibility_on
+                                            } else {
+                                                AYMR.strings.novel_reader_gemini_visibility_off
+                                            },
+                                        ),
+                                    ),
+                                )
                             }
                         }
                         if (isOpenRouterSelected || isDeepSeekSelected) {
@@ -4746,9 +4963,13 @@ private fun GeminiTranslationDialog(
                                     }
                                     Text(
                                         if (isTesting) {
-                                            "Проверка..."
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_testing_connection,
+                                            )
                                         } else {
-                                            "Тест подключения"
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_test_connection,
+                                            )
                                         },
                                     )
                                 }
@@ -4772,9 +4993,13 @@ private fun GeminiTranslationDialog(
                                     }
                                     Text(
                                         if (isLoading) {
-                                            "Обновление..."
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_loading_models,
+                                            )
                                         } else {
-                                            "Обновить модели"
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_refresh_models,
+                                            )
                                         },
                                     )
                                 }
@@ -4786,7 +5011,17 @@ private fun GeminiTranslationDialog(
                             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                         ) {
                             Text(
-                                text = "Кэш: ${if (tempDisableCache) "OFF" else "ON"}",
+                                text = stringResource(
+                                    AYMR.strings.novel_reader_ai_translator_cache_state,
+                                ).format(
+                                    stringResource(
+                                        if (tempDisableCache) {
+                                            AYMR.strings.novel_reader_gemini_visibility_off
+                                        } else {
+                                            AYMR.strings.novel_reader_gemini_visibility_on
+                                        },
+                                    ),
+                                ),
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.weight(1f),
                             )
@@ -4795,7 +5030,7 @@ private fun GeminiTranslationDialog(
                                 onCheckedChange = { enabled ->
                                     tempDisableCache = !enabled
                                     onSetGeminiDisableCache(tempDisableCache)
-                                    onAddLog("?? Кэш: ${if (tempDisableCache) "OFF" else "ON"}")
+                                    onAddLog(cacheStateLabel.format(visibilityStateLabel(!tempDisableCache)))
                                 },
                             )
                         }
@@ -4806,7 +5041,7 @@ private fun GeminiTranslationDialog(
                                     tempBatch = it
                                     applyBatchAndConcurrency()
                                 },
-                                label = { Text("Батч") },
+                                label = { Text(stringResource(AYMR.strings.novel_reader_gemini_batch_size)) },
                                 modifier = Modifier.weight(1f),
                             )
                             OutlinedTextField(
@@ -4815,15 +5050,15 @@ private fun GeminiTranslationDialog(
                                     tempConcurrency = it
                                     applyBatchAndConcurrency()
                                 },
-                                label = { Text("Потоки") },
+                                label = { Text(stringResource(AYMR.strings.novel_reader_gemini_concurrency)) },
                                 modifier = Modifier.weight(1f),
                             )
                         }
                         TextButton(onClick = {
                             onClearAllCache()
-                            onAddLog("??? Очищен весь кэш")
+                            onAddLog(cacheClearedLabel)
                         }) {
-                            Text("Очистить весь кэш")
+                            Text(stringResource(AYMR.strings.novel_reader_ai_translator_clear_all_cache))
                         }
                     }
                 }
@@ -4831,11 +5066,17 @@ private fun GeminiTranslationDialog(
 
             if (page == 1) {
                 GeminiSettingsBlock(
-                    title = "Генерация",
-                    subtitle = "Пресеты и ручные параметры sampling",
+                    title = stringResource(AYMR.strings.novel_reader_ai_translator_generation_title),
+                    subtitle = stringResource(AYMR.strings.novel_reader_ai_translator_generation_summary),
                 ) {
                     TextButton(onClick = { showGenerationConfig = !showGenerationConfig }) {
-                        Text(if (showGenerationConfig) "Скрыть генерацию" else "Генерация")
+                        Text(
+                            if (showGenerationConfig) {
+                                stringResource(AYMR.strings.novel_reader_ai_translator_generation_hide)
+                            } else {
+                                stringResource(AYMR.strings.novel_reader_ai_translator_generation_show)
+                            },
+                        )
                     }
                     if (showGenerationConfig) {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -4855,9 +5096,13 @@ private fun GeminiTranslationDialog(
                                         if (k != null) {
                                             tempTopK = k.toString()
                                             onSetGeminiTopK(k)
-                                            onAddLog("?? Preset: $name (T:$t P:$p K:$k)")
+                                            onAddLog(
+                                                "$generationLabel: $name (T:$t P:$p K:$k)",
+                                            )
                                         } else {
-                                            onAddLog("?? Preset: $name (T:$t P:$p)")
+                                            onAddLog(
+                                                "$generationLabel: $name (T:$t P:$p)",
+                                            )
                                         }
                                     },
                                 ) {
@@ -4881,12 +5126,16 @@ private fun GeminiTranslationDialog(
                                     style = MaterialTheme.typography.labelLarge,
                                 )
                                 Text(
-                                    text = "Для чего: ${selectedPreset.scenario}",
+                                    text = stringResource(
+                                        AYMR.strings.novel_reader_ai_translator_generation_scenario_prefix,
+                                    ).format(selectedPreset.scenario),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 Text(
-                                    text = "Преимущество: ${selectedPreset.advantage}",
+                                    text = stringResource(
+                                        AYMR.strings.novel_reader_ai_translator_generation_advantage_prefix,
+                                    ).format(selectedPreset.advantage),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -4904,10 +5153,10 @@ private fun GeminiTranslationDialog(
                                             value
                                         }
                                         onSetGeminiTemperature(normalized)
-                                        onAddLog("?? Temp: $normalized")
+                                        logPair(temperatureLabel, normalized.toString())
                                     }
                                 },
-                                label = { Text("Temperature") },
+                                label = { Text(stringResource(AYMR.strings.novel_reader_gemini_temperature)) },
                                 modifier = Modifier.weight(1f),
                             )
                             OutlinedTextField(
@@ -4921,10 +5170,10 @@ private fun GeminiTranslationDialog(
                                             value
                                         }
                                         onSetGeminiTopP(normalized)
-                                        onAddLog("?? TopP: $normalized")
+                                        logPair(topPLabel, normalized.toString())
                                     }
                                 },
-                                label = { Text("TopP") },
+                                label = { Text(stringResource(AYMR.strings.novel_reader_gemini_top_p)) },
                                 modifier = Modifier.weight(1f),
                             )
                             if (!isDeepSeekSelected) {
@@ -4934,19 +5183,17 @@ private fun GeminiTranslationDialog(
                                         tempTopK = it
                                         it.toIntOrNull()?.let { value ->
                                             onSetGeminiTopK(value)
-                                            onAddLog("?? TopK: $value")
+                                            logPair(topKLabel, value.toString())
                                         }
                                     },
-                                    label = { Text("TopK") },
+                                    label = { Text(stringResource(AYMR.strings.novel_reader_gemini_top_k)) },
                                     modifier = Modifier.weight(1f),
                                 )
                             }
                         }
                         if (isDeepSeekSelected) {
                             Text(
-                                text = "Для DeepSeek используется диапазон " +
-                                    "Temperature 1.3-1.5 и TopP 0.9-0.95. " +
-                                    "TopK не применяется.",
+                                text = stringResource(AYMR.strings.novel_reader_ai_translator_deepseek_hint),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -4957,8 +5204,8 @@ private fun GeminiTranslationDialog(
 
             if (page == 2) {
                 GeminiSettingsBlock(
-                    title = "Логи",
-                    subtitle = "Диагностика запросов и ответа модели",
+                    title = stringResource(AYMR.strings.novel_reader_ai_translator_logs_title),
+                    subtitle = stringResource(AYMR.strings.novel_reader_ai_translator_logs_summary),
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -4966,15 +5213,21 @@ private fun GeminiTranslationDialog(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "Логи (${logs.size})",
+                            text = stringResource(AYMR.strings.novel_reader_ai_translator_logs_count).format(logs.size),
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(onClick = { showLogs = !showLogs }) {
-                                Text(if (showLogs) "Скрыть" else "Показать")
+                                Text(
+                                    if (showLogs) {
+                                        stringResource(AYMR.strings.novel_reader_ai_translator_toggle_hide)
+                                    } else {
+                                        stringResource(AYMR.strings.novel_reader_ai_translator_toggle_show)
+                                    },
+                                )
                             }
                             TextButton(onClick = onClearLogs) {
-                                Text("Очистить")
+                                Text(stringResource(AYMR.strings.novel_reader_gemini_action_clear))
                             }
                         }
                     }
@@ -4987,7 +5240,10 @@ private fun GeminiTranslationDialog(
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             if (logs.isEmpty()) {
-                                Text("Логи пока пусты", style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    stringResource(AYMR.strings.novel_reader_ai_translator_logs_empty),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
                             } else {
                                 logs.forEach { log ->
                                     Text(log, style = MaterialTheme.typography.bodySmall)
@@ -5003,19 +5259,20 @@ private fun GeminiTranslationDialog(
     if (showCustomPromptDialog) {
         AlertDialog(
             onDismissRequest = { showCustomPromptDialog = false },
-            title = { Text("Свой модификатор промпта") },
+            title = { Text(stringResource(AYMR.strings.novel_reader_ai_translator_custom_modifier_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = tempCustomModifier,
                         onValueChange = { tempCustomModifier = it },
-                        label = { Text("Свои инструкции") },
+                        label = {
+                            Text(stringResource(AYMR.strings.novel_reader_ai_translator_custom_instructions))
+                        },
                         minLines = 4,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
-                        "Текст будет добавлен в системный " +
-                            "промпт как дополнительная инструкция.",
+                        stringResource(AYMR.strings.novel_reader_ai_translator_custom_modifier_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -5024,10 +5281,10 @@ private fun GeminiTranslationDialog(
             confirmButton = {
                 TextButton(onClick = {
                     onSetGeminiCustomPromptModifier(tempCustomModifier)
-                    onAddLog("?? Обновлен свой промпт")
+                    onAddLog(customPromptUpdatedLabel)
                     showCustomPromptDialog = false
                 }) {
-                    Text("Сохранить")
+                    Text(stringResource(AYMR.strings.novel_reader_ai_translator_save))
                 }
             },
             dismissButton = {
@@ -5036,8 +5293,10 @@ private fun GeminiTranslationDialog(
                         tempCustomModifier = ""
                         onSetGeminiCustomPromptModifier("")
                         showCustomPromptDialog = false
-                    }) { Text("Очистить") }
-                    TextButton(onClick = { showCustomPromptDialog = false }) { Text("Отмена") }
+                    }) { Text(stringResource(AYMR.strings.novel_reader_gemini_action_clear)) }
+                    TextButton(onClick = { showCustomPromptDialog = false }) {
+                        Text(stringResource(AYMR.strings.novel_reader_ai_translator_cancel))
+                    }
                 }
             },
         )

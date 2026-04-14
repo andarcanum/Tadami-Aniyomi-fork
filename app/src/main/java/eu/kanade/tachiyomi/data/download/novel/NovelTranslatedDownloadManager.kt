@@ -43,6 +43,15 @@ class NovelTranslatedDownloadManager(
         return translatedFile(novel, fileName)?.exists() == true
     }
 
+    fun getTranslatedFile(
+        novel: Novel,
+        chapter: NovelChapter,
+        format: NovelTranslatedDownloadFormat,
+    ): UniFile? {
+        val fileName = buildTranslatedFileName(chapter, format)
+        return translatedFile(novel, fileName)
+    }
+
     fun deleteTranslatedChapter(
         novel: Novel,
         chapter: NovelChapter,

@@ -18,9 +18,15 @@ class GeminiPromptResolver(
         }.getOrElse { CLASSIC_SYSTEM_PROMPT }
     }
 
-    fun resolveSystemPrompt(mode: GeminiPromptMode): String {
+    internal fun resolveSystemPrompt(
+        mode: GeminiPromptMode,
+        family: NovelTranslationPromptFamily = NovelTranslationPromptFamily.RUSSIAN,
+    ): String {
         return when (mode) {
-            GeminiPromptMode.CLASSIC -> CLASSIC_SYSTEM_PROMPT
+            GeminiPromptMode.CLASSIC -> when (family) {
+                NovelTranslationPromptFamily.RUSSIAN -> CLASSIC_SYSTEM_PROMPT
+                NovelTranslationPromptFamily.ENGLISH -> CLASSIC_SYSTEM_PROMPT_EN
+            }
             GeminiPromptMode.ADULT_18 -> adultPrompt
         }
     }
@@ -39,6 +45,24 @@ class GeminiPromptResolver(
                 "4. Keep honorifics and culture-specific terms only when they are important for context.\\n\\n" +
                 "### STYLE RULES\\n" +
                 "- Prefer idiomatic Russian syntax and punctuation.\\n" +
+                "- Avoid machine-like phrasing and over-literal word order.\\n" +
+                "- Keep dialogue natural and character-appropriate.\\n\\n" +
+                "### OUTPUT FORMAT\\n" +
+                "1. Return ONLY XML tags in the same shape as input: <s i='N'>...</s>.\\n" +
+                "2. No preamble, no explanations, no markdown.\\n" +
+                "3. Preserve the same indexes and segment count whenever possible."
+
+        internal const val CLASSIC_SYSTEM_PROMPT_EN =
+            "### ROLE\\n" +
+                "You are a professional literary translator for novels and light novels.\\n" +
+                "Your output must read naturally in English while preserving tone, intent, and narrative voice.\\n\\n" +
+                "### GOALS\\n" +
+                "1. Preserve meaning, plot details, and character voice.\\n" +
+                "2. Prioritize fluent English prose over literal calques.\\n" +
+                "3. Keep terminology consistent across segments.\\n" +
+                "4. Keep honorifics and culture-specific terms only when they are important for context.\\n\\n" +
+                "### STYLE RULES\\n" +
+                "- Prefer idiomatic English syntax and punctuation.\\n" +
                 "- Avoid machine-like phrasing and over-literal word order.\\n" +
                 "- Keep dialogue natural and character-appropriate.\\n\\n" +
                 "### OUTPUT FORMAT\\n" +

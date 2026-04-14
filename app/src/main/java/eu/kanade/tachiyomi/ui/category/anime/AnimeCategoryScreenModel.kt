@@ -18,7 +18,9 @@ import tachiyomi.domain.category.anime.interactor.GetVisibleAnimeCategories
 import tachiyomi.domain.category.anime.interactor.HideAnimeCategory
 import tachiyomi.domain.category.anime.interactor.RenameAnimeCategory
 import tachiyomi.domain.category.anime.interactor.ReorderAnimeCategory
+import tachiyomi.domain.category.anime.interactor.UpdateAnimeCategory
 import tachiyomi.domain.category.model.Category
+import tachiyomi.domain.category.model.CategoryUpdate
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
@@ -32,6 +34,7 @@ class AnimeCategoryScreenModel(
     private val deleteCategory: DeleteAnimeCategory = Injekt.get(),
     private val reorderCategory: ReorderAnimeCategory = Injekt.get(),
     private val renameCategory: RenameAnimeCategory = Injekt.get(),
+    private val updateCategory: UpdateAnimeCategory = Injekt.get(),
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
 ) : StateScreenModel<AnimeCategoryScreenState>(AnimeCategoryScreenState.Loading) {
 
@@ -77,6 +80,22 @@ class AnimeCategoryScreenModel(
                     AnimeCategoryEvent.InternalError,
                 )
                 else -> {}
+            }
+        }
+    }
+
+    fun toggleHomeHubCategory(category: Category) {
+        screenModelScope.launch {
+            when (
+                updateCategory.await(
+                    CategoryUpdate(
+                        id = category.id,
+                        hiddenFromHomeHub = !category.hiddenFromHomeHub,
+                    ),
+                )
+            ) {
+                is UpdateAnimeCategory.Result.Error -> _events.send(AnimeCategoryEvent.InternalError)
+                UpdateAnimeCategory.Result.Success -> {}
             }
         }
     }

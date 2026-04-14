@@ -1284,10 +1284,14 @@ object SettingsNovelReaderScreen : SearchableSettings {
     private fun getAdvancedGroup(prefs: NovelReaderPreferences): Preference.PreferenceGroup {
         val translationProviderPref = prefs.translationProvider()
         val translationProvider by translationProviderPref.collectAsState()
+        val googleTranslationEnabled by prefs.googleTranslationEnabled().collectAsState()
+        val privateProviderFallbackLabel = stringResource(
+            AYMR.strings.novel_reader_translation_provider_gemini_private,
+        )
         val privateProviderLabel = if (GeminiPrivateBridge.isInstalled()) {
             GeminiPrivateBridge.providerLabel()
         } else {
-            "Gemini Private"
+            privateProviderFallbackLabel
         }
         val items = mutableListOf<Preference.PreferenceItem<out Any>>(
             Preference.PreferenceItem.TextPreference(
@@ -1373,22 +1377,24 @@ object SettingsNovelReaderScreen : SearchableSettings {
             )
         }
 
-        items += Preference.PreferenceItem.EditTextInfoPreference(
-            preference = prefs.googleTranslationSourceLang(),
-            dialogSubtitle = null,
-            title = stringResource(AYMR.strings.novel_reader_google_translate_source),
-            subtitle = "%s",
-        )
-        items += Preference.PreferenceItem.EditTextInfoPreference(
-            preference = prefs.googleTranslationTargetLang(),
-            dialogSubtitle = null,
-            title = stringResource(AYMR.strings.novel_reader_google_translate_target),
-            subtitle = "%s",
-        )
-        items += Preference.PreferenceItem.SwitchPreference(
-            preference = prefs.googleTranslationAutoStart(),
-            title = stringResource(AYMR.strings.novel_reader_google_translate_auto_start),
-        )
+        if (googleTranslationEnabled) {
+            items += Preference.PreferenceItem.EditTextInfoPreference(
+                preference = prefs.googleTranslationSourceLang(),
+                dialogSubtitle = null,
+                title = stringResource(AYMR.strings.novel_reader_google_translate_source),
+                subtitle = "%s",
+            )
+            items += Preference.PreferenceItem.EditTextInfoPreference(
+                preference = prefs.googleTranslationTargetLang(),
+                dialogSubtitle = null,
+                title = stringResource(AYMR.strings.novel_reader_google_translate_target),
+                subtitle = "%s",
+            )
+            items += Preference.PreferenceItem.SwitchPreference(
+                preference = prefs.googleTranslationAutoStart(),
+                title = stringResource(AYMR.strings.novel_reader_google_translate_auto_start),
+            )
+        }
         items += Preference.PreferenceItem.MultiLineEditTextPreference(
             preference = prefs.customCSS(),
             title = stringResource(AYMR.strings.novel_reader_custom_css),
@@ -1402,10 +1408,11 @@ object SettingsNovelReaderScreen : SearchableSettings {
             canBeBlank = true,
         )
 
-        return Preference.PreferenceGroup(
+        val group = Preference.PreferenceGroup(
             title = stringResource(AYMR.strings.novel_reader_advanced),
             preferenceItems = items.toImmutableList(),
         )
+        return group
     }
 
     @Composable

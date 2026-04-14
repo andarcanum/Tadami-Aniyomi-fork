@@ -36,7 +36,7 @@ class UserProfilePreferences(
     )
     fun homeHeroCtaMode() = preferenceStore.getString(
         "user_profile_home_hero_cta_mode",
-        HomeHeroCtaMode.Classic.key,
+        HomeHeroCtaMode.Aurora.key,
     )
     fun homeHubRecentCardMode() = preferenceStore.getString(
         "user_profile_home_hub_recent_card_mode",
@@ -44,7 +44,7 @@ class UserProfilePreferences(
     )
     fun auroraTitleHeroCtaMode() = preferenceStore.getString(
         "user_profile_aurora_title_hero_cta_mode",
-        AuroraTitleHeroCtaMode.Classic.key,
+        AuroraTitleHeroCtaMode.Aurora.key,
     )
     fun homeHeaderGreetingAlignRight() = preferenceStore.getBoolean(
         "user_profile_home_header_greeting_align_right",

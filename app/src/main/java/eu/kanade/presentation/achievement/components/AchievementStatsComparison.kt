@@ -55,6 +55,7 @@ fun AchievementStatsComparison(
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
+    val timeStrings = achievementTimeStrings()
 
     Card(
         modifier = modifier
@@ -164,6 +165,7 @@ fun AchievementStatsComparison(
                             currentValue = currentMonth.timeInAppMinutes,
                             previousValue = previousMonth.timeInAppMinutes,
                             isTimeValue = true,
+                            timeStrings = timeStrings,
                             modifier = Modifier.weight(1f),
                         )
                         StatItem(
@@ -194,6 +196,7 @@ private fun StatItem(
     currentValue: Int,
     previousValue: Int,
     isTimeValue: Boolean = false,
+    timeStrings: AchievementTimeStrings? = null,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
@@ -245,7 +248,17 @@ private fun StatItem(
         // Value
         Text(
             text = if (isTimeValue) {
-                formatTimeMinutes(currentValue)
+                val strings = requireNotNull(timeStrings) {
+                    "timeStrings must be provided for time-based stats"
+                }
+                val hours = currentValue / 60
+                val minutes = currentValue % 60
+                formatAchievementTimeMinutes(
+                    currentValue,
+                    hoursMinutesText = stringResource(strings.hoursMinutes, hours, minutes),
+                    hoursText = stringResource(strings.hours, hours),
+                    minutesText = stringResource(strings.minutes, minutes),
+                )
             } else {
                 currentValue.toString()
             },
@@ -301,19 +314,6 @@ private fun StatItem(
                 fontSize = 11.sp,
             )
         }
-    }
-}
-
-/**
- * Format minutes to hours and minutes string
- */
-private fun formatTimeMinutes(minutes: Int): String {
-    val hours = minutes / 60
-    val mins = minutes % 60
-    return when {
-        hours > 0 && mins > 0 -> "${hours}ч ${mins}м"
-        hours > 0 -> "${hours}ч"
-        else -> "${mins}м"
     }
 }
 

@@ -47,11 +47,20 @@ class NovelCoverFetcher(
         get() = diskCacheKeyLazy.value
 
     override suspend fun fetch(): FetchResult {
-        val url = data.url ?: error("No cover specified")
-        return when (getResourceType(url)) {
-            Type.URL -> httpLoader(url)
-            Type.File -> fileLoader(File(url.substringAfter("file://")))
-            Type.URI -> uniFileLoader(url)
+        val rawUrl = data.url ?: error("No cover specified")
+        return when (getResourceType(rawUrl)) {
+            Type.URL -> httpLoader(rawUrl)
+            Type.RELATIVE -> {
+                val siteUrl = sourceSiteUrlLazy.value?.trimEnd('/')
+                if (siteUrl != null) {
+                    httpLoader("$siteUrl$rawUrl")
+                } else {
+                    // No base URL available; best-effort fallback – treat as HTTP
+                    httpLoader(rawUrl)
+                }
+            }
+            Type.File -> fileLoader(File(rawUrl.substringAfter("file://")))
+            Type.URI -> uniFileLoader(rawUrl)
             null -> error("Invalid image")
         }
     }
@@ -237,7 +246,8 @@ class NovelCoverFetcher(
         return when {
             cover.isNullOrEmpty() -> null
             cover.startsWith("http", true) || cover.startsWith("Custom-", true) -> Type.URL
-            cover.startsWith("/") || cover.startsWith("file://") -> Type.File
+            cover.startsWith("file://") -> Type.File
+            cover.startsWith("/") -> Type.RELATIVE
             cover.startsWith("content") -> Type.URI
             else -> null
         }
@@ -247,6 +257,9 @@ class NovelCoverFetcher(
         File,
         URL,
         URI,
+
+        /** A path starting with '/' that should be resolved against the source's site URL. */
+        RELATIVE,
     }
 
     class Factory(

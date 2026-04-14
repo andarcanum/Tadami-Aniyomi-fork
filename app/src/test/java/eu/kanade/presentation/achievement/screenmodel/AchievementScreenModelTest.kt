@@ -3,6 +3,7 @@ package eu.kanade.presentation.achievement.screenmodel
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +45,7 @@ class AchievementScreenModelTest {
 
         coEvery { repository.getAll() } returns flowOf(emptyList())
         coEvery { repository.getAllProgress() } returns flowOf(emptyList())
+        coEvery { loader.loadAchievements() } returns Result.success(0)
         every { pointsManager.subscribeToPoints() } returns flowOf(UserPoints())
         coEvery { activityDataRepository.getActivityData(any()) } returns flowOf(emptyList())
         coEvery { activityDataRepository.getCurrentMonthStats() } returns MonthStats(0, 0, 0, 0)
@@ -84,6 +86,22 @@ class AchievementScreenModelTest {
             state.shouldBeInstanceOf<AchievementScreenState.Success>()
             (state as AchievementScreenState.Success).activityData shouldBe activity
         }
+    }
+
+    @Test
+    fun `refreshAchievements delegates to loader`() = runTest {
+        val screenModel = AchievementScreenModel(
+            repository,
+            loader,
+            pointsManager,
+            activityDataRepository,
+        ).also(activeScreenModels::add)
+
+        screenModel.refreshAchievements()
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        coVerify(exactly = 1) { loader.loadAchievements() }
     }
 
     @Test

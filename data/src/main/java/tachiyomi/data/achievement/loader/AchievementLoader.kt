@@ -9,16 +9,19 @@ import kotlinx.serialization.json.Json
 import logcat.LogPriority
 import logcat.logcat
 import tachiyomi.data.achievement.handler.AchievementCalculator
+import tachiyomi.data.achievement.localization.AchievementTextResolver
 import tachiyomi.data.achievement.model.AchievementDefinitions
 import tachiyomi.data.achievement.model.AchievementJson
 import tachiyomi.domain.achievement.model.Achievement
 import tachiyomi.domain.achievement.model.AchievementCategory
 import tachiyomi.domain.achievement.model.AchievementType
 import tachiyomi.domain.achievement.repository.AchievementRepository
+import java.util.Locale
 
 class AchievementLoader(
     private val context: Context,
     private val repository: AchievementRepository,
+    private val textResolver: AchievementTextResolver,
     private val calculator: AchievementCalculator? = null,
     private val json: Json = Json {
         ignoreUnknownKeys = true
@@ -30,6 +33,7 @@ class AchievementLoader(
         private const val PREFS_NAME = "achievement_loader"
         private const val KEY_VERSION = "json_version"
         private const val KEY_CALCULATION_VERSION = "calculation_version"
+        private const val KEY_LOCALE_TAG = "locale_tag"
     }
 
     suspend fun loadAchievements(): Result<Int> {
@@ -39,6 +43,9 @@ class AchievementLoader(
 
             // Check version migration
             val currentVersion = getCurrentVersion()
+            val currentLocaleTag = getCurrentLocaleTag()
+            val savedLocaleTag = getSavedLocaleTag()
+            val localeChanged = shouldRefreshAchievementTexts(savedLocaleTag, currentLocaleTag)
             logcat(LogPriority.INFO) { "[ACHIEVEMENTS] JSON version: ${definitions.version}, current: $currentVersion" }
             logcat(LogPriority.INFO) {
                 "[ACHIEVEMENTS] JSON definitions decoded: ${definitions.achievements.size} achievements found in file"
@@ -48,25 +55,31 @@ class AchievementLoader(
                 logcat(LogPriority.INFO) {
                     "[ACHIEVEMENTS] Achievements already up to date (version $currentVersion), skipping load"
                 }
-                // Check if achievements exist in database
-                val existingCount = repository.getAll().first().size
-                logcat(LogPriority.INFO) {
-                    "[ACHIEVEMENTS] Existing achievements in database: $existingCount, JSON has: ${definitions.achievements.size}"
-                }
+                if (!localeChanged) {
+                    // Check if achievements exist in database
+                    val existingCount = repository.getAll().first().size
+                    logcat(LogPriority.INFO) {
+                        "[ACHIEVEMENTS] Existing achievements in database: $existingCount, JSON has: ${definitions.achievements.size}"
+                    }
 
-                // Force reload if counts don't match (new achievements added)
-                if (existingCount < definitions.achievements.size) {
-                    logcat(LogPriority.WARN) {
-                        "[ACHIEVEMENTS] WARNING: Database has fewer achievements than JSON! Forcing reload..."
+                    // Force reload if counts don't match (new achievements added)
+                    if (existingCount < definitions.achievements.size) {
+                        logcat(LogPriority.WARN) {
+                            "[ACHIEVEMENTS] WARNING: Database has fewer achievements than JSON! Forcing reload..."
+                        }
+                        saveVersion(0)
+                    } else if (existingCount == 0) {
+                        logcat(LogPriority.WARN) {
+                            "[ACHIEVEMENTS] WARNING: Version says up to date but database is empty! Forcing reload..."
+                        }
+                        saveVersion(0)
+                    } else {
+                        return Result.success(0)
                     }
-                    saveVersion(0)
-                } else if (existingCount == 0) {
-                    logcat(LogPriority.WARN) {
-                        "[ACHIEVEMENTS] WARNING: Version says up to date but database is empty! Forcing reload..."
-                    }
-                    saveVersion(0)
                 } else {
-                    return Result.success(0)
+                    logcat(LogPriority.INFO) {
+                        "[ACHIEVEMENTS] App locale changed from '$savedLocaleTag' to '$currentLocaleTag'; refreshing achievement texts"
+                    }
                 }
             }
 
@@ -89,6 +102,7 @@ class AchievementLoader(
 
             // Save version
             saveVersion(definitions.version)
+            saveLocaleTag(currentLocaleTag)
 
             // Trigger retroactive calculation on first load or version upgrade
             if (shouldCalculateInitialProgress(definitions.version)) {
@@ -129,6 +143,21 @@ class AchievementLoader(
         getPreferences().edit().putInt(KEY_VERSION, version).apply()
     }
 
+    private fun getSavedLocaleTag(): String {
+        return getPreferences().getString(KEY_LOCALE_TAG, "").orEmpty()
+    }
+
+    private fun saveLocaleTag(localeTag: String) {
+        getPreferences().edit().putString(KEY_LOCALE_TAG, localeTag).apply()
+    }
+
+    private fun getCurrentLocaleTag(): String {
+        return context.resources.configuration.locales[0]
+            ?.toLanguageTag()
+            ?.takeIf { it.isNotBlank() }
+            ?: Locale.getDefault().toLanguageTag()
+    }
+
     private fun shouldCalculateInitialProgress(jsonVersion: Int): Boolean {
         val calculationVersion = getCalculationVersion()
         return calculationVersion < jsonVersion
@@ -147,14 +176,15 @@ class AchievementLoader(
     }
 
     private fun AchievementJson.toDomainModel(): Achievement {
+        val localizedText = textResolver.resolve(this)
         return Achievement(
             id = id,
             type = AchievementType.valueOf(type.uppercase()),
             category = AchievementCategory.valueOf(category.uppercase()),
             threshold = threshold,
             points = points,
-            title = title,
-            description = description,
+            title = localizedText.title,
+            description = localizedText.description,
             badgeIcon = badgeIcon,
             isHidden = isHidden,
             isSecret = isSecret,
@@ -163,4 +193,11 @@ class AchievementLoader(
             createdAt = System.currentTimeMillis(),
         )
     }
+}
+
+internal fun shouldRefreshAchievementTexts(
+    savedLocaleTag: String?,
+    currentLocaleTag: String,
+): Boolean {
+    return savedLocaleTag.orEmpty() != currentLocaleTag
 }

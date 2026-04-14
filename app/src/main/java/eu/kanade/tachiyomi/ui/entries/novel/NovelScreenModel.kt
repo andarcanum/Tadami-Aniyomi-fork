@@ -1,5 +1,7 @@
 package eu.kanade.tachiyomi.ui.entries.novel
 
+import android.app.Application
+import android.net.Uri
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.Lifecycle
@@ -22,6 +24,7 @@ import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCacheEvent
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState
 import eu.kanade.tachiyomi.data.download.novel.NovelQueuedDownloadStatus
 import eu.kanade.tachiyomi.data.download.novel.NovelQueuedDownloadType
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
@@ -30,22 +33,32 @@ import eu.kanade.tachiyomi.data.export.novel.NovelEpubExportOptions
 import eu.kanade.tachiyomi.data.export.novel.NovelEpubExporter
 import eu.kanade.tachiyomi.data.track.MangaTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
+import eu.kanade.tachiyomi.data.translation.TranslationJob
+import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelJsSource
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.source.novel.NovelSiteSource
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
 import eu.kanade.tachiyomi.ui.entries.mergeNewItemIds
+import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterActionStateResolver
+import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterActionUiState
 import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationCacheResolver
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
+import eu.kanade.tachiyomi.ui.reader.novel.translation.toTranslationCacheRequirements
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
@@ -99,6 +112,27 @@ data class NovelEpubExportPreferencesState(
     val includeCustomJs: Boolean,
 )
 
+internal fun buildNovelChapterActionUiStates(
+    geminiEnabled: Boolean,
+    chapters: List<NovelChapter>,
+    translatedDownloadFormat: NovelTranslatedDownloadFormat,
+    hasTranslationCache: (NovelChapter) -> Boolean,
+    isTranslatedDownloaded: (NovelChapter) -> Boolean,
+    isTranslatedDownloading: (NovelChapter) -> Boolean,
+    isTranslating: (NovelChapter) -> Boolean = { false },
+): Map<Long, NovelChapterActionUiState> {
+    return chapters.associate { chapter ->
+        chapter.id to NovelChapterActionStateResolver.resolve(
+            geminiEnabled = geminiEnabled,
+            hasTranslationCache = hasTranslationCache(chapter),
+            isTranslating = isTranslating(chapter),
+            isTranslatedDownloaded = isTranslatedDownloaded(chapter),
+            isTranslatedDownloading = isTranslatedDownloading(chapter),
+            translatedDownloadFormat = translatedDownloadFormat,
+        )
+    }
+}
+
 class NovelScreenModel(
     private val lifecycle: Lifecycle,
     private val novelId: Long,
@@ -142,6 +176,7 @@ class NovelScreenModel(
     },
     private val novelEpubExporter: NovelEpubExporter = NovelEpubExporter(),
     private val novelReaderPreferences: NovelReaderPreferences = Injekt.get(),
+    private val translationQueueManager: TranslationQueueManager = Injekt.get(),
     private val eventBus: AchievementEventBus? = runCatching { Injekt.get<AchievementEventBus>() }.getOrNull(),
     val snackbarHostState: SnackbarHostState = SnackbarHostState(),
 ) : StateScreenModel<NovelScreenModel.State>(State.Loading) {
@@ -156,6 +191,8 @@ class NovelScreenModel(
     }
 
     private val downloadedStateVersion = AtomicLong(0L)
+    private var downloadedStateJob: Job? = null
+    private var chapterActionStatesJob: Job? = null
 
     private val successState: State.Success?
         get() = state.value as? State.Success
@@ -173,6 +210,10 @@ class NovelScreenModel(
     val chapterSwipeEndAction = libraryPreferences.swipeNovelChapterStartAction().get()
 
     private var scanlatorSelectionJob: Job? = null
+
+    private val openTranslatedFolderChannel = kotlinx.coroutines.flow.MutableSharedFlow<android.net.Uri>()
+
+    fun openTranslatedFolderEvents() = openTranslatedFolderChannel.asSharedFlow()
 
     fun isReadingStarted(): Boolean {
         val state = successState ?: return false
@@ -192,12 +233,19 @@ class NovelScreenModel(
     init {
         restoreStateFromCache(novelId)?.let {
             mutableState.value = it
+            // Refresh chapter action states (translate/download icons) asynchronously
+            // to avoid blocking the main thread with SAF filesystem operations.
+            refreshChapterActionStatesAsync()
         }
 
         screenModelScope.launchIO {
             getNovelWithChapters.subscribe(novelId, applyScanlatorFilter = true)
                 .distinctUntilChanged()
                 .collectLatest { (novel, chapters) ->
+                    logcat(LogPriority.DEBUG) {
+                        "Novel chapters flow emission id=${novel.id} source=${novel.source} " +
+                            "count=${chapters.size}"
+                    }
                     val chapterIds = chapters.mapTo(mutableSetOf()) { c -> c.id }
                     val chapterUrls = chapters.mapTo(mutableSetOf()) { c -> c.url }
                     val previousChapterIds = successState
@@ -223,6 +271,7 @@ class NovelScreenModel(
                     }
                     if (chapterIdsChanged) {
                         syncDownloadedState()
+                        refreshChapterActionStatesAsync(delayMs = 100L)
                     }
                 }
         }
@@ -302,6 +351,8 @@ class NovelScreenModel(
                         )
                     }
                 }
+                // Download queue changes may affect translated-download icon states.
+                refreshChapterActionStatesAsync()
             }
         }
 
@@ -326,6 +377,8 @@ class NovelScreenModel(
 
             val chapters = getNovelWithChapters.awaitChapters(novelId, applyScanlatorFilter = true)
             val source = sourceManager.getOrStub(novel.source)
+            val readerSettings = novelReaderPreferences.resolveSettings(novel.source)
+            val translatedDownloadFormat = novelReaderPreferences.translatedDownloadFormat(novel.id)
             val isJaomixPagedSource = source.isJaomixPagedSource()
             val shouldAutoRefreshNovel = !novel.initialized
             val shouldAutoRefreshChapters = chapters.isEmpty() || isJaomixPagedSource
@@ -333,41 +386,73 @@ class NovelScreenModel(
                 ?.downloadedChapterIds
                 ?.intersect(chapters.mapTo(mutableSetOf()) { it.id })
                 .orEmpty()
-            mutableState.update {
-                State.Success(
-                    novel = novel,
-                    source = source,
-                    rating = null,
+            val initialState = State.Success(
+                novel = novel,
+                source = source,
+                rating = null,
+                chapters = chapters,
+                availableScanlators = availableScanlators,
+                scanlatorChapterCounts = scanlatorChapterCounts,
+                excludedScanlators = initialExcludedScanlators,
+                downloadedOnly = basePreferences.downloadedOnly().get(),
+                geminiEnabled = readerSettings.geminiEnabled,
+                translatedDownloadFormat = translatedDownloadFormat,
+                isRefreshingData = shouldAutoRefreshNovel || shouldAutoRefreshChapters,
+                dialog = null,
+                selectedChapterIds = emptySet(),
+                downloadedChapterIds = currentDownloadedIds,
+                downloadingChapterIds = emptySet(),
+                chapterActionStates = buildNovelChapterActionUiStates(
+                    geminiEnabled = readerSettings.geminiEnabled,
                     chapters = chapters,
-                    availableScanlators = availableScanlators,
-                    scanlatorChapterCounts = scanlatorChapterCounts,
-                    excludedScanlators = initialExcludedScanlators,
-                    downloadedOnly = basePreferences.downloadedOnly().get(),
-                    isRefreshingData = shouldAutoRefreshNovel || shouldAutoRefreshChapters,
-                    dialog = null,
-                    selectedChapterIds = emptySet(),
-                    downloadedChapterIds = currentDownloadedIds,
-                    downloadingChapterIds = emptySet(),
-                    chapterPageEnabled = isJaomixPagedSource,
-                    chapterPageEstimatedTotal = if (isJaomixPagedSource && chapters.isNotEmpty()) {
-                        chapters.size
-                    } else {
-                        0
-                    },
-                    chapterPageNominalSize = if (isJaomixPagedSource) chapters.size else 0,
-                    chapterPageVisibleUrls = if (isJaomixPagedSource) {
-                        chapters.mapTo(mutableSetOf()) { it.url }
-                    } else {
-                        emptySet()
-                    },
-                )
+                    translatedDownloadFormat = translatedDownloadFormat,
+                    hasTranslationCache = { false },
+                    isTranslatedDownloaded = { false },
+                    isTranslatedDownloading = { false },
+                    isTranslating = { false },
+                ),
+                chapterPageEnabled = isJaomixPagedSource,
+                chapterPageEstimatedTotal = if (isJaomixPagedSource && chapters.isNotEmpty()) {
+                    chapters.size
+                } else {
+                    0
+                },
+                chapterPageNominalSize = if (isJaomixPagedSource) chapters.size else 0,
+                chapterPageVisibleUrls = if (isJaomixPagedSource) {
+                    chapters.mapTo(mutableSetOf()) { it.url }
+                } else {
+                    emptySet()
+                },
+                hasCompletedChapterRefresh = chapters.isNotEmpty(),
+            )
+            mutableState.update {
+                initialState
             }
+            // Seed the UI with lightweight neutral Gemini actions immediately, then
+            // resolve translated download and translation cache state in the background.
+            refreshChapterActionStatesAsync()
             screenModelScope.launchIO {
                 basePreferences.downloadedOnly().changes()
                     .collectLatest { downloadedOnly ->
                         updateSuccessState { it.copy(downloadedOnly = downloadedOnly) }
                     }
             }
+
+            screenModelScope.launchIO {
+                novelReaderPreferences.geminiEnabled().changes()
+                    .collectLatest {
+                        refreshChapterActionStatesAsync(delayMs = 100L)
+                    }
+            }
+
+            screenModelScope.launchIO {
+                translationQueueManager.activeTranslation
+                    .drop(1)
+                    .collectLatest {
+                        refreshChapterActionStatesAsync(delayMs = 100L)
+                    }
+            }
+
             logRefreshSnapshot(
                 stage = "initial-state",
                 source = source,
@@ -407,7 +492,66 @@ class NovelScreenModel(
         mutableState.update {
             when (it) {
                 State.Loading -> it
-                is State.Success -> func(it).also(::cacheState)
+                is State.Success -> func(it)
+                    .also(::cacheState)
+            }
+        }
+    }
+
+    /**
+     * Schedules a debounced, off-main-thread recomputation of chapter action
+     * states (translate/download icons).  This is intentionally decoupled from
+     * [updateSuccessState] because the resolution touches the filesystem
+     * (translation cache + translated-download existence checks) for every
+     * chapter, which is prohibitively expensive to run on every state update.
+     */
+    private fun refreshChapterActionStatesAsync(delayMs: Long = 300L) {
+        chapterActionStatesJob?.cancel()
+        chapterActionStatesJob = screenModelScope.launchIO {
+            delay(delayMs)
+            val current = successState ?: return@launchIO
+            val resolved = current.withResolvedChapterActionStates()
+            if (resolved.chapterActionStates != current.chapterActionStates ||
+                resolved.geminiEnabled != current.geminiEnabled ||
+                resolved.translatedDownloadFormat != current.translatedDownloadFormat
+            ) {
+                mutableState.update {
+                    when (it) {
+                        State.Loading -> it
+                        is State.Success -> it.copy(
+                            geminiEnabled = resolved.geminiEnabled,
+                            translatedDownloadFormat = resolved.translatedDownloadFormat,
+                            chapterActionStates = resolved.chapterActionStates,
+                        ).also(::cacheState)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun updateChapterState(
+        novel: Novel,
+        chapters: List<NovelChapter>,
+    ) {
+        val chapterIds = chapters.mapTo(mutableSetOf()) { it.id }
+        val chapterUrls = chapters.mapTo(mutableSetOf()) { it.url }
+        updateSuccessState { current ->
+            if (current.novel.id != novel.id) {
+                current
+            } else {
+                current.copy(
+                    novel = novel,
+                    chapters = chapters,
+                    selectedChapterIds = current.selectedChapterIds.intersect(chapterIds),
+                    downloadedChapterIds = current.downloadedChapterIds.intersect(chapterIds),
+                    downloadingChapterIds = current.downloadingChapterIds.intersect(chapterIds),
+                    chapterPageVisibleUrls = if (current.chapterPageEnabled) {
+                        current.chapterPageVisibleUrls.intersect(chapterUrls)
+                    } else {
+                        emptySet()
+                    },
+                    hasCompletedChapterRefresh = true,
+                )
             }
         }
     }
@@ -453,13 +597,19 @@ class NovelScreenModel(
                     },
                 )
             }
+            refreshChapterActionStatesAsync(delayMs = 100L)
         }
     }
 
     private fun syncDownloadedState() {
         val state = successState ?: return
         val requestVersion = downloadedStateVersion.incrementAndGet()
-        screenModelScope.launchIO {
+
+        downloadedStateJob?.cancel()
+
+        downloadedStateJob = screenModelScope.launchIO {
+            delay(500)
+
             var downloadedIds = emptySet<Long>()
 
             val downloadCache = runCatching { Injekt.get<NovelDownloadCache>() }.getOrNull()
@@ -542,6 +692,88 @@ class NovelScreenModel(
         }
     }
 
+    private fun State.Success.withResolvedChapterActionStates(
+        queueState: NovelDownloadQueueState = NovelDownloadQueueManager.state.value,
+    ): State.Success {
+        val readerSettings = novelReaderPreferences.resolveSettings(novel.source)
+        val translatedDownloadFormat = novelReaderPreferences.translatedDownloadFormat(novel.id)
+        val translatedQueueChapterIds = resolveTranslatedQueueChapterIds(
+            queueState = queueState,
+            novelId = novel.id,
+            format = translatedDownloadFormat,
+        )
+
+        val translationCacheRequirements = readerSettings.toTranslationCacheRequirements()
+        val translatedDownloadedIds = mutableSetOf<Long>()
+        val translatedNotDownloadedIds = mutableSetOf<Long>()
+        val translatingChapterId = translationQueueManager.activeTranslation.value?.chapterId
+
+        return copy(
+            geminiEnabled = readerSettings.geminiEnabled,
+            translatedDownloadFormat = translatedDownloadFormat,
+            chapterActionStates = buildNovelChapterActionUiStates(
+                geminiEnabled = readerSettings.geminiEnabled,
+                chapters = chapters,
+                translatedDownloadFormat = translatedDownloadFormat,
+                hasTranslationCache = { chapter ->
+                    NovelReaderTranslationCacheResolver.matches(
+                        NovelReaderTranslationDiskCacheStore.get(chapter.id),
+                        translationCacheRequirements,
+                    )
+                },
+                isTranslatedDownloaded = { chapter ->
+                    when {
+                        chapter.id in translatedDownloadedIds -> true
+                        chapter.id in translatedNotDownloadedIds -> false
+                        else -> {
+                            val downloaded = novelTranslatedDownloadManager.isTranslatedChapterDownloaded(
+                                novel = novel,
+                                chapter = chapter,
+                                format = translatedDownloadFormat,
+                            )
+                            if (downloaded) {
+                                translatedDownloadedIds.add(chapter.id)
+                            } else {
+                                translatedNotDownloadedIds.add(chapter.id)
+                            }
+                            downloaded
+                        }
+                    }
+                },
+                isTranslatedDownloading = { chapter ->
+                    chapter.id in translatedQueueChapterIds
+                },
+                isTranslating = { chapter ->
+                    chapter.id == translatingChapterId
+                },
+            ),
+        )
+    }
+
+    private fun resolveTranslatedQueueChapterIds(
+        queueState: NovelDownloadQueueState,
+        novelId: Long,
+        format: NovelTranslatedDownloadFormat,
+    ): Set<Long> {
+        val queueFormat = when (format) {
+            NovelTranslatedDownloadFormat.TXT -> eu.kanade.tachiyomi.data.download.novel.NovelQueuedDownloadFormat.TXT
+            NovelTranslatedDownloadFormat.DOCX -> eu.kanade.tachiyomi.data.download.novel.NovelQueuedDownloadFormat.DOCX
+        }
+        return queueState.tasks
+            .asSequence()
+            .filter { task ->
+                task.novel.id == novelId &&
+                    task.type == NovelQueuedDownloadType.TRANSLATED &&
+                    task.format == queueFormat &&
+                    (
+                        task.status == NovelQueuedDownloadStatus.QUEUED ||
+                            task.status == NovelQueuedDownloadStatus.DOWNLOADING
+                        )
+            }
+            .map { it.chapter.id }
+            .toSet()
+    }
+
     private fun updateNewChapterIds(
         addedIds: Iterable<Long> = emptyList(),
         clearedIds: Iterable<Long> = emptyList(),
@@ -610,6 +842,7 @@ class NovelScreenModel(
                     order = it.order,
                     flags = it.flags,
                     hidden = it.hidden,
+                    hiddenFromHomeHub = false,
                 )
             }
             .filterNot(Category::isSystemCategory)
@@ -794,6 +1027,10 @@ class NovelScreenModel(
             source = state.source,
             manualFetch = manualFetch,
         )
+        logcat(LogPriority.DEBUG) {
+            "Synced chapters for id=${state.novel.id} source=${state.source.name}, " +
+                "newCount=${newChapters.size}, manualFetch=$manualFetch"
+        }
         updateNewChapterIds(
             addedIds = newChapters.asSequence()
                 .filterNot { it.read }
@@ -1142,6 +1379,49 @@ class NovelScreenModel(
         }
     }
 
+    fun markPreviousChapterRead(pointer: NovelChapter) {
+        val state = successState ?: return
+        val novel = state.novel
+        val chapters = state.processedChapters
+        val prevChapters = if (novel.sortDescending()) chapters.asReversed() else chapters
+        val pointerPos = prevChapters.indexOf(pointer)
+        if (pointerPos == -1) return
+        val chaptersToMark = prevChapters.take(pointerPos)
+        if (chaptersToMark.isEmpty()) return
+        val chaptersToAchieve = chaptersToMark.filter { !it.read }
+        val updates = chaptersToMark
+            .asSequence()
+            .filter { it.read != true || it.lastPageRead > 0L }
+            .map {
+                NovelChapterUpdate(
+                    id = it.id,
+                    read = true,
+                    lastPageRead = 0L,
+                )
+            }
+            .toList()
+        screenModelScope.launchIO {
+            novelChapterRepository.updateAllChapters(updates)
+            updateNewChapterIds(clearedIds = chaptersToMark.map { it.id })
+            if (chaptersToAchieve.isNotEmpty()) {
+                chaptersToAchieve.forEach { chapter ->
+                    eventBus?.tryEmit(
+                        AchievementEvent.NovelChapterRead(
+                            novelId = chapter.novelId,
+                            chapterNumber = chapter.chapterNumber.toInt(),
+                        ),
+                    )
+                }
+                val markedIds = chaptersToAchieve.mapTo(hashSetOf()) { it.id }
+                val willComplete = state.chapters.all { it.read || it.id in markedIds }
+                if (willComplete) {
+                    eventBus?.tryEmit(AchievementEvent.NovelCompleted(chaptersToAchieve.first().novelId))
+                }
+            }
+            toggleAllSelection(false)
+        }
+    }
+
     fun toggleChapterDownload(chapterId: Long) {
         val state = successState ?: return
         val chapter = state.chapters.firstOrNull { it.id == chapterId } ?: return
@@ -1320,6 +1600,69 @@ class NovelScreenModel(
         )
         notifyQueueStarted(added)
         return added
+    }
+
+    fun setTranslatedDownloadFormat(format: NovelTranslatedDownloadFormat) {
+        val state = successState ?: return
+        val currentFormat = novelReaderPreferences.translatedDownloadFormat(state.novel.id)
+        if (currentFormat == format) return
+
+        novelReaderPreferences.setTranslatedDownloadFormat(state.novel.id, format)
+        refreshChapterActionStatesAsync(delayMs = 100L)
+    }
+
+    fun openTranslatedFolder(chapterId: Long) {
+        val state = successState ?: return
+        val chapter = state.chapters.find { it.id == chapterId } ?: return
+        val format = novelReaderPreferences.translatedDownloadFormat(state.novel.id)
+
+        val file = novelTranslatedDownloadManager.getTranslatedFile(state.novel, chapter, format)
+        if (file == null) {
+            screenModelScope.launchIO {
+                snackbarHostState.showSnackbar(message = "File not found")
+            }
+            return
+        }
+
+        // Get parent folder URI to open the folder containing the file
+        val parentFile = file.getParentFile()
+        if (parentFile == null) {
+            screenModelScope.launchIO {
+                snackbarHostState.showSnackbar(message = "Unable to find folder")
+            }
+            return
+        }
+
+        screenModelScope.launchIO {
+            openTranslatedFolderChannel.emit(parentFile.uri)
+        }
+    }
+
+    fun deleteTranslatedChapter(chapterId: Long) {
+        val state = successState ?: return
+        val chapter = state.chapters.find { it.id == chapterId } ?: return
+        val format = novelReaderPreferences.translatedDownloadFormat(state.novel.id)
+
+        novelTranslatedDownloadManager.deleteTranslatedChapter(state.novel, chapter, format)
+        screenModelScope.launchIO {
+            snackbarHostState.showSnackbar(message = "Downloaded translation deleted")
+        }
+        refreshChapterActionStatesAsync(delayMs = 100L)
+    }
+
+    fun addToTranslationQueue(chapterId: Long) {
+        val state = successState ?: return
+        screenModelScope.launchIO {
+            try {
+                translationQueueManager.addToQueue(listOf(chapterId), state.novel.id)
+                val appContext = Injekt.get<Application>()
+                TranslationJob.runImmediately(appContext)
+            } catch (e: Exception) {
+                snackbarHostState.showSnackbar(message = "Ошибка запуска: ${e.message}")
+                return@launchIO
+            }
+            snackbarHostState.showSnackbar(message = "Перевод добавлен в очередь")
+        }
     }
 
     fun deleteDownloadedSelectedChapters() {
@@ -1530,6 +1873,8 @@ class NovelScreenModel(
             val scanlatorChapterCounts: Map<String, Int>,
             val excludedScanlators: Set<String>,
             val downloadedOnly: Boolean = false,
+            val geminiEnabled: Boolean = false,
+            val translatedDownloadFormat: NovelTranslatedDownloadFormat = NovelTranslatedDownloadFormat.TXT,
             val newChapterIds: Set<Long> = emptySet(),
             val isRefreshingData: Boolean,
             val dialog: Dialog?,
@@ -1538,6 +1883,7 @@ class NovelScreenModel(
             val selectedChapterIds: Set<Long> = emptySet(),
             val downloadedChapterIds: Set<Long> = emptySet(),
             val downloadingChapterIds: Set<Long> = emptySet(),
+            val chapterActionStates: Map<Long, NovelChapterActionUiState> = emptyMap(),
             val chapterPageEnabled: Boolean = false,
             val chapterPageCurrent: Int = 1,
             val chapterPageTotal: Int = 1,
@@ -1545,6 +1891,7 @@ class NovelScreenModel(
             val chapterPageEstimatedTotal: Int = 0,
             val chapterPageNominalSize: Int = 0,
             val chapterPageVisibleUrls: Set<String> = emptySet(),
+            val hasCompletedChapterRefresh: Boolean = false,
             val scrollIndex: Int = 0,
             val scrollOffset: Int = 0,
         ) : State {

@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,6 +32,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -60,10 +62,16 @@ fun AchievementScreen(
     onCategoryChanged: (AchievementCategory) -> Unit = {},
     onAchievementClick: (achievement: Achievement) -> Unit = {},
     onDialogDismiss: () -> Unit = {},
+    onLocaleChanged: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
     val title = stringResource(AYMR.strings.label_achievements)
+    val localeTags = LocalConfiguration.current.locales.toLanguageTags()
+
+    LaunchedEffect(localeTags) {
+        onLocaleChanged()
+    }
 
     Scaffold(
         topBar = {
@@ -329,18 +337,5 @@ private fun AuroraStatCard(
                 )
             }
         }
-    }
-}
-
-/**
- * Format minutes to hours and minutes string
- */
-private fun formatTimeMinutes(minutes: Int): String {
-    val hours = minutes / 60
-    val mins = minutes % 60
-    return when {
-        hours > 0 && mins > 0 -> "${hours}ч ${mins}м"
-        hours > 0 -> "${hours}ч"
-        else -> "${mins}м"
     }
 }

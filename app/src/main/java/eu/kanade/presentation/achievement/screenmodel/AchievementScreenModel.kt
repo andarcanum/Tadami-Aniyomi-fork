@@ -70,6 +70,12 @@ class AchievementScreenModel(
         _categoryState.value = category
     }
 
+    fun refreshAchievements() {
+        screenModelScope.launch {
+            loader.loadAchievements()
+        }
+    }
+
     fun onAchievementClick(achievement: Achievement) {
         mutableState.update {
             when (it) {

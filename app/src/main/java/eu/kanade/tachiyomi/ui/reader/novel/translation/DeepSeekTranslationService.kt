@@ -21,7 +21,7 @@ import tachiyomi.core.common.util.lang.withIOContext
 class DeepSeekTranslationService(
     private val client: OkHttpClient,
     private val json: Json,
-    private val resolveSystemPrompt: (GeminiPromptMode) -> String,
+    private val resolveSystemPrompt: (GeminiPromptMode, NovelTranslationPromptFamily) -> String,
     private val retryDelay: suspend (Long) -> Unit = { delay(it) },
 ) {
 
@@ -40,14 +40,17 @@ class DeepSeekTranslationService(
         val taggedInput = segments.mapIndexed { index, text ->
             "<s i='$index'>$text</s>"
         }.joinToString("\n")
+        val promptFamily = resolveNovelTranslationPromptFamily(params.targetLang)
         val systemPrompt = buildSystemPrompt(
             mode = params.promptMode,
             modifiers = params.promptModifiers,
+            family = promptFamily,
         )
         val userPrompt = buildUserPrompt(
             sourceLang = params.sourceLang,
             targetLang = params.targetLang,
             taggedInput = taggedInput,
+            family = promptFamily,
         )
         val requestBody = buildJsonObject {
             put("model", params.model.trim())
@@ -156,8 +159,9 @@ class DeepSeekTranslationService(
     private fun buildSystemPrompt(
         mode: GeminiPromptMode,
         modifiers: String,
+        family: NovelTranslationPromptFamily,
     ): String {
-        val basePrompt = resolveSystemPrompt(mode)
+        val basePrompt = resolveSystemPrompt(mode, family)
         return if (modifiers.isBlank()) {
             basePrompt
         } else {
@@ -169,7 +173,14 @@ class DeepSeekTranslationService(
         sourceLang: String,
         targetLang: String,
         taggedInput: String,
+        family: NovelTranslationPromptFamily,
     ): String {
+        return buildNovelTranslationUserPrompt(
+            sourceLang = sourceLang,
+            targetLang = targetLang,
+            taggedInput = taggedInput,
+            family = family,
+        )
         return "TRANSLATE from $sourceLang to $targetLang.\n" +
             "Inject soul into the text. Make the reader believe this was written by a Russian author.\n\n" +
             "Use popular genre terminology (Magic -> Магия, etc.). Make it sound like high-quality fiction.\n\n" +

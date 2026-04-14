@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import eu.kanade.presentation.components.relativeDateTimeText
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.entries.anime.components.EpisodeDownloadAction
@@ -61,9 +62,6 @@ import tachiyomi.domain.entries.anime.model.asAnimeCover
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /**
  * Compact episode card with 40x40 thumbnail and minimal design.
@@ -185,24 +183,7 @@ fun AnimeEpisodeCardCompact(
                         )
 
                         // Format upload date
-                        val uploadDateText = remember(episode.dateUpload) {
-                            if (episode.dateUpload > 0) {
-                                val date = Date(episode.dateUpload)
-                                val now = System.currentTimeMillis()
-                                val diff = now - episode.dateUpload
-                                val days = diff / (1000 * 60 * 60 * 24)
-
-                                when {
-                                    days < 1 -> "Сегодня"
-                                    days < 2 -> "Вчера"
-                                    days < 7 -> "$days дней назад"
-                                    days < 30 -> "${days / 7} недель назад"
-                                    else -> SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(date)
-                                }
-                            } else {
-                                "Дата неизвестна"
-                            }
-                        }
+                        val uploadDateText = relativeDateTimeText(episode.dateUpload)
 
                         Text(
                             text = uploadDateText,

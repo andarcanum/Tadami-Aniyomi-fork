@@ -15,7 +15,10 @@ import eu.kanade.domain.items.novelchapter.interactor.GetNovelScanlatorChapterCo
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCacheEvent
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState
+import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadManager
 import eu.kanade.tachiyomi.data.track.TrackerManager
+import eu.kanade.tachiyomi.data.translation.TranslationQueueItem
+import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
@@ -27,11 +30,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import kotlinx.serialization.json.Json
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import tachiyomi.core.common.preference.Preference
@@ -55,6 +61,7 @@ import tachiyomi.domain.track.novel.model.NovelTrack
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.fullType
 import uy.kohesive.injekt.api.get
+import java.io.File
 
 class NovelScreenModelTest {
     private class TestApplication : Application()
@@ -64,10 +71,31 @@ class NovelScreenModelTest {
         @BeforeAll
         fun setupInjektBindings() {
             runCatching { Injekt.get<Application>() }
-                .getOrElse { Injekt.addSingleton(fullType<Application>(), TestApplication()) }
+                .getOrElse {
+                    val filesDir = File(System.getProperty("java.io.tmpdir"), "novel-screen-model-test-files")
+                        .apply { mkdirs() }
+                    val cacheDir = File(System.getProperty("java.io.tmpdir"), "novel-screen-model-test-cache")
+                        .apply { mkdirs() }
+                    val application = mockk<Application>(relaxed = true)
+                    every { application.filesDir } returns filesDir
+                    every { application.cacheDir } returns cacheDir
+                    Injekt.addSingleton(fullType<Application>(), application)
+                }
+            runCatching { Injekt.get<Json>() }
+                .getOrElse {
+                    Injekt.addSingleton(fullType<Json>(), Json { encodeDefaults = true })
+                }
             runCatching { Injekt.get<NovelRatingFetcher>() }
                 .getOrElse {
                     Injekt.addSingleton(fullType<NovelRatingFetcher>(), mockk<NovelRatingFetcher>(relaxed = true))
+                }
+            runCatching { Injekt.get<TranslationQueueManager>() }
+                .getOrElse {
+                    val translationQueueManager = mockk<TranslationQueueManager>(relaxed = true)
+                    every {
+                        translationQueueManager.activeTranslation
+                    } returns MutableStateFlow<TranslationQueueItem?>(null)
+                    Injekt.addSingleton(fullType<TranslationQueueManager>(), translationQueueManager)
                 }
         }
 
@@ -75,6 +103,12 @@ class NovelScreenModelTest {
         @BeforeAll
         fun setupMainDispatcher() {
             Dispatchers.setMain(Dispatchers.Unconfined)
+        }
+
+        @JvmStatic
+        @AfterAll
+        fun resetMainDispatcher() {
+            Dispatchers.resetMain()
         }
     }
 
@@ -367,6 +401,161 @@ class NovelScreenModelTest {
             try {
                 awaitResumeScreenModel(screenModel)
                 screenModel.getResumeOrNextChapter()?.id shouldBe chapter2.id
+            } finally {
+                screenModel.onDispose()
+            }
+        }
+    }
+
+    @Test
+    fun `chapter action states appear before translated download checks finish`() {
+        runBlocking {
+            val novel = novelForResumeTests(105L)
+            val chapters = listOf(
+                novelChapter(id = 1L, novelId = novel.id, chapterNumber = 1.0, read = false),
+            )
+            val blocker = CompletableDeferred<Unit>()
+            val translatedDownloadManager = mockk<NovelTranslatedDownloadManager>()
+            every {
+                translatedDownloadManager.isTranslatedChapterDownloaded(any(), any(), any())
+            } answers {
+                runBlocking { blocker.await() }
+                false
+            }
+
+            val screenModel = createResumeScreenModel(
+                novel = novel,
+                chapters = chapters,
+                novelTranslatedDownloadManager = translatedDownloadManager,
+                geminiEnabled = true,
+            )
+
+            try {
+                withTimeout(500) {
+                    while (screenModel.state.value is NovelScreenModel.State.Loading) {
+                        yield()
+                    }
+                }
+
+                val state = screenModel.state.value as NovelScreenModel.State.Success
+                state.chapterActionStates[1L]?.showGeminiRow shouldBe true
+                state.chapterActionStates[1L]?.translateState shouldBe NovelChapterActionIconState.Neutral
+                state.chapterActionStates[1L]?.downloadTranslatedState shouldBe NovelChapterActionIconState.Neutral
+            } finally {
+                blocker.complete(Unit)
+                screenModel.onDispose()
+            }
+        }
+    }
+
+    @Test
+    fun `chapter action states refresh when chapter ids change`() {
+        runBlocking {
+            val novel = novelForResumeTests(106L)
+            val initialChapters = listOf(
+                novelChapter(id = 1L, novelId = novel.id, chapterNumber = 1.0, read = false),
+            )
+            val updatedChapters = listOf(
+                novelChapter(id = 11L, novelId = novel.id, chapterNumber = 1.0, read = false),
+            )
+            val chapterRepository = FakeNovelChapterRepository(initialChapters)
+            val screenModel = createResumeScreenModel(
+                novel = novel,
+                chapters = initialChapters,
+                chapterRepository = chapterRepository,
+                geminiEnabled = true,
+            )
+
+            try {
+                awaitResumeScreenModel(screenModel)
+                chapterRepository.updateChapters(updatedChapters)
+
+                withTimeout(1_000) {
+                    while ((screenModel.state.value as? NovelScreenModel.State.Success)
+                            ?.chapterActionStates
+                            ?.get(updatedChapters.first().id)
+                            ?.showGeminiRow != true
+                    ) {
+                        yield()
+                    }
+                }
+
+                val state = screenModel.state.value as NovelScreenModel.State.Success
+                state.chapterActionStates[updatedChapters.first().id]?.showGeminiRow shouldBe true
+                state.chapterActionStates[updatedChapters.first().id]?.translateState shouldBe
+                    NovelChapterActionIconState.Neutral
+                state.chapterActionStates[updatedChapters.first().id]?.downloadTranslatedState shouldBe
+                    NovelChapterActionIconState.Neutral
+            } finally {
+                screenModel.onDispose()
+            }
+        }
+    }
+
+    @Test
+    fun `chapter action states refresh after scanlator selection changes chapters`() {
+        runBlocking {
+            val novel = novelForResumeTests(107L)
+            val initialChapters = listOf(
+                novelChapter(id = 1L, novelId = novel.id, chapterNumber = 1.0, read = false).copy(
+                    scanlator = "Alpha",
+                ),
+                novelChapter(id = 2L, novelId = novel.id, chapterNumber = 1.0, read = false).copy(
+                    scanlator = "Beta",
+                ),
+            )
+            val updatedChapters = listOf(
+                novelChapter(id = 11L, novelId = novel.id, chapterNumber = 1.0, read = false).copy(
+                    scanlator = "Alpha",
+                ),
+            )
+            val currentChapters = MutableStateFlow(initialChapters)
+            val getNovelWithChapters = mockk<GetNovelWithChapters>()
+            coEvery { getNovelWithChapters.awaitNovel(novel.id) } returns novel
+            coEvery { getNovelWithChapters.awaitChapters(novel.id, any()) } answers {
+                currentChapters.value
+            }
+            coEvery { getNovelWithChapters.subscribe(novel.id, any()) } returns
+                MutableStateFlow(novel to initialChapters)
+
+            val screenModel = createResumeScreenModel(
+                novel = novel,
+                chapters = initialChapters,
+                getNovelWithChaptersOverride = getNovelWithChapters,
+                geminiEnabled = true,
+                excludedScanlators = setOf("Beta"),
+            )
+
+            try {
+                awaitResumeScreenModel(screenModel)
+                withTimeout(1_000) {
+                    while ((screenModel.state.value as? NovelScreenModel.State.Success)
+                            ?.availableScanlators
+                            ?.containsAll(setOf("Alpha", "Beta")) != true
+                    ) {
+                        yield()
+                    }
+                }
+
+                currentChapters.value = updatedChapters
+                screenModel.selectScanlator("Beta")
+
+                withTimeout(1_000) {
+                    while ((screenModel.state.value as? NovelScreenModel.State.Success)
+                            ?.chapterActionStates
+                            ?.get(updatedChapters.first().id)
+                            ?.showGeminiRow != true
+                    ) {
+                        yield()
+                    }
+                }
+
+                val state = screenModel.state.value as NovelScreenModel.State.Success
+                state.chapterActionStates[updatedChapters.first().id]?.showGeminiRow shouldBe true
+                state.chapterActionStates[updatedChapters.first().id]?.translateState shouldBe
+                    NovelChapterActionIconState.Neutral
+                state.chapterActionStates[updatedChapters.first().id]?.downloadTranslatedState shouldBe
+                    NovelChapterActionIconState.Neutral
             } finally {
                 screenModel.onDispose()
             }
@@ -787,6 +976,10 @@ class NovelScreenModelTest {
         chapterRepository: FakeNovelChapterRepository = FakeNovelChapterRepository(chapters),
         downloadCacheChanges: Flow<NovelDownloadCacheEvent> = MutableSharedFlow(replay = 1, extraBufferCapacity = 1),
         downloadQueueState: Flow<NovelDownloadQueueState> = MutableStateFlow(NovelDownloadQueueState()),
+        getNovelWithChaptersOverride: GetNovelWithChapters? = null,
+        novelTranslatedDownloadManager: NovelTranslatedDownloadManager = NovelTranslatedDownloadManager(),
+        geminiEnabled: Boolean = false,
+        excludedScanlators: Set<String> = emptySet(),
         resolveDownloadedChapterIds: (Novel, List<NovelChapter>) -> Set<Long> = { _, _ -> emptySet() },
         enqueueOriginal: (Novel, List<NovelChapter>) -> Int = { novel, queuedChapters ->
             eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager.enqueueOriginal(novel, queuedChapters)
@@ -833,10 +1026,11 @@ class NovelScreenModelTest {
             override suspend fun setNovelCategories(novelId: Long, categoryIds: List<Long>) = Unit
         }
         val databaseHandler = mockk<NovelDatabaseHandler>().also { handler ->
-            coEvery { handler.awaitList<String>(any(), any()) } returns emptyList()
-            every { handler.subscribeToList<String>(any()) } returns MutableStateFlow(emptyList())
+            coEvery { handler.awaitList<String>(any(), any()) } returns excludedScanlators.toList()
+            every { handler.subscribeToList<String>(any()) } returns MutableStateFlow(excludedScanlators.toList())
         }
-        val getNovelWithChapters = GetNovelWithChapters(novelRepository, chapterRepository)
+        val getNovelWithChapters = getNovelWithChaptersOverride
+            ?: GetNovelWithChapters(novelRepository, chapterRepository)
         val updateNovel = UpdateNovel(novelRepository)
         val syncNovelChaptersWithSource = SyncNovelChaptersWithSource(
             novelChapterRepository = chapterRepository,
@@ -844,6 +1038,12 @@ class NovelScreenModelTest {
             updateNovel = updateNovel,
             libraryPreferences = libraryPreferences,
         )
+        val novelReaderPreferences = eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences(
+            preferenceStore = preferenceStore,
+            json = Json { encodeDefaults = true },
+        ).also { preferences ->
+            preferences.geminiEnabled().set(geminiEnabled)
+        }
 
         return NovelScreenModel(
             lifecycle = FakeLifecycleOwner().lifecycle,
@@ -876,10 +1076,8 @@ class NovelScreenModelTest {
             resolveDownloadedChapterIds = resolveDownloadedChapterIds,
             enqueueOriginal = enqueueOriginal,
             snackbarHostState = snackbarHostState,
-            novelReaderPreferences = eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences(
-                preferenceStore = preferenceStore,
-                json = Json { encodeDefaults = true },
-            ),
+            novelReaderPreferences = novelReaderPreferences,
+            novelTranslatedDownloadManager = novelTranslatedDownloadManager,
         )
     }
 
@@ -942,9 +1140,10 @@ class NovelScreenModelTest {
             novelId: Long,
             applyScanlatorFilter: Boolean,
         ): List<NovelChapter> = chapterFlow.value
-        override suspend fun getScanlatorsByNovelId(novelId: Long): List<String> = emptyList()
+        override suspend fun getScanlatorsByNovelId(novelId: Long): List<String> =
+            chapterFlow.value.mapNotNull { it.scanlator }.distinct()
         override fun getScanlatorsByNovelIdAsFlow(novelId: Long): Flow<List<String>> =
-            MutableStateFlow(emptyList())
+            chapterFlow.map { chapters -> chapters.mapNotNull { it.scanlator }.distinct() }
         override suspend fun getBookmarkedChaptersByNovelId(novelId: Long): List<NovelChapter> =
             chapterFlow.value.filter { it.bookmark }
         override suspend fun getChapterById(id: Long): NovelChapter? =

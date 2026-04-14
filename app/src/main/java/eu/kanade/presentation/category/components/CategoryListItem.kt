@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DragHandle
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.House
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Card
@@ -43,6 +44,7 @@ fun ReorderableCollectionItemScope.CategoryListItem(
     category: Category,
     onRename: () -> Unit,
     onHide: () -> Unit,
+    onToggleHomeHub: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -74,10 +76,10 @@ fun ReorderableCollectionItemScope.CategoryListItem(
         border = if (isAurora) {
             BorderStroke(
                 width = 1.dp,
-                color = if (category.hidden) {
-                    colors.warning.copy(alpha = 0.35f)
-                } else {
-                    colors.accent.copy(alpha = 0.2f)
+                color = when {
+                    category.hidden -> colors.warning.copy(alpha = 0.35f)
+                    category.hiddenFromHomeHub -> colors.textSecondary.copy(alpha = 0.3f)
+                    else -> colors.accent.copy(alpha = 0.2f)
                 },
             )
         } else {
@@ -127,15 +129,30 @@ fun ReorderableCollectionItemScope.CategoryListItem(
                 content = {
                     Icon(
                         imageVector = if (category.hidden) {
-                            Icons.Outlined.Visibility
-                        } else {
                             Icons.Outlined.VisibilityOff
+                        } else {
+                            Icons.Outlined.Visibility
                         },
                         contentDescription = stringResource(AYMR.strings.action_hide),
-                        tint = if (isAurora && category.hidden) {
-                            colors.warning
+                        tint = if (isAurora && !category.hidden) {
+                            colors.accent
                         } else {
                             Color.Unspecified
+                        },
+                    )
+                },
+            )
+            IconButton(
+                onClick = onToggleHomeHub,
+                colors = actionColors,
+                content = {
+                    Icon(
+                        imageVector = Icons.Outlined.House,
+                        contentDescription = stringResource(AYMR.strings.action_hide_from_home_hub),
+                        tint = if (isAurora && category.hiddenFromHomeHub) {
+                            colors.textSecondary.copy(alpha = 0.4f)
+                        } else {
+                            colors.accent
                         },
                     )
                 },

@@ -122,9 +122,10 @@ private fun StorageScreenContentPreview() {
             Category(
                 id = it.toLong(),
                 name = "Category $it",
-                0L,
-                0L,
-                false,
+                order = 0L,
+                flags = 0L,
+                hidden = false,
+                hiddenFromHomeHub = false,
             )
         }
     }
@@ -163,9 +164,10 @@ private fun StorageTabletUiScreenContentPreview() {
             Category(
                 id = it.toLong(),
                 name = "Category $it",
-                0L,
-                0L,
-                false,
+                order = 0L,
+                flags = 0L,
+                hidden = false,
+                hiddenFromHomeHub = false,
             )
         }
     }

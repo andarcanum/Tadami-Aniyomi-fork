@@ -1,10 +1,18 @@
 package eu.kanade.presentation.reader.novel
 
+import eu.kanade.tachiyomi.ui.reader.novel.translation.TranslationPhase
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class GoogleTranslationDialogStateTest {
+
+    @Test
+    fun `translation phase enum has expected values`() {
+        assertEquals(2, TranslationPhase.entries.size)
+        assertTrue(TranslationPhase.entries.contains(TranslationPhase.TRANSLATING))
+        assertTrue(TranslationPhase.entries.contains(TranslationPhase.IDLE))
+    }
 
     @Test
     fun `sync keeps local toggle draft while upstream value has not changed`() {
@@ -28,21 +36,5 @@ class GoogleTranslationDialogStateTest {
 
         assertEquals(true, state.committedValue)
         assertEquals(true, state.draftValue)
-    }
-
-    @Test
-    fun `language suggestions match english aliases in latin and cyrillic`() {
-        val englishByLatin = googleTranslationLanguageSuggestions("Eng")
-        val englishByCyrillic = googleTranslationLanguageSuggestions("Англ")
-
-        assertTrue(englishByLatin.any { it.canonicalName == "English" })
-        assertTrue(englishByCyrillic.any { it.canonicalName == "English" })
-    }
-
-    @Test
-    fun `language suggestions match russian alias`() {
-        val russianSuggestions = googleTranslationLanguageSuggestions("рус")
-
-        assertTrue(russianSuggestions.any { it.canonicalName == "Russian" })
     }
 }

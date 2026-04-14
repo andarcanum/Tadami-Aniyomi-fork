@@ -29,4 +29,27 @@ class GoogleTranslationSessionCacheTest {
         ) shouldBe mapOf(4 to "translation-4")
         cache.snapshotSize() shouldBe 4
     }
+
+    @Test
+    fun `same chapter and languages produce same cache entry`() {
+        val cache = GoogleTranslationSessionCache()
+        val chapterId = 1L
+        val sourceLang = "ja"
+        val targetLang = "en"
+
+        cache.put(
+            chapterId = chapterId,
+            sourceLang = sourceLang,
+            targetLang = targetLang,
+            translatedByIndex = mapOf(0 to "result"),
+        )
+
+        cache.get(
+            chapterId = chapterId,
+            sourceLang = sourceLang,
+            targetLang = targetLang,
+        ) shouldBe mapOf(0 to "result")
+
+        cache.buildKey(chapterId, sourceLang, targetLang) shouldBe "1|ja|en"
+    }
 }

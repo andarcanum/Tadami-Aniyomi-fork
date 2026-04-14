@@ -1,5 +1,7 @@
 package eu.kanade.tachiyomi.ui.download
 
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -21,6 +23,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Sort
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Pause
@@ -48,6 +51,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Velocity
@@ -83,6 +87,7 @@ import eu.kanade.tachiyomi.ui.download.novel.NovelDownloadQueueScreenModel
 import eu.kanade.tachiyomi.ui.download.novel.novelDownloadTab
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
+import tachiyomi.domain.storage.service.StorageManager
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.Pill
@@ -91,7 +96,49 @@ import tachiyomi.presentation.core.components.material.TabText
 import tachiyomi.presentation.core.i18n.stringResource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import tachiyomi.core.common.i18n.stringResource as stringResourceCtx
 import tachiyomi.presentation.core.util.collectAsState as preferenceCollectAsState
+
+private fun openDownloadFolder(context: android.content.Context, subdirectory: String? = null) {
+    val storageManager: StorageManager = Injekt.get()
+    val dir = if (subdirectory != null) {
+        storageManager.getDownloadsDirectory()?.createDirectory(subdirectory)
+    } else {
+        storageManager.getDownloadsDirectory()
+    }
+
+    if (dir == null) {
+        Toast.makeText(
+            context,
+            context.stringResourceCtx(AYMR.strings.download_folder_not_set),
+            Toast.LENGTH_SHORT,
+        ).show()
+        return
+    }
+
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(dir.uri, "resource/folder")
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+
+    try {
+        context.startActivity(intent)
+    } catch (_: Exception) {
+        val fallbackIntent = Intent(Intent.ACTION_VIEW).apply {
+            data = dir.uri
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try {
+            context.startActivity(fallbackIntent)
+        } catch (_: Exception) {
+            Toast.makeText(
+                context,
+                context.stringResourceCtx(AYMR.strings.no_file_manager_found),
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
+    }
+}
 
 data object DownloadsTab : Tab {
 
@@ -110,6 +157,7 @@ data object DownloadsTab : Tab {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val context = LocalContext.current
         val scope = rememberCoroutineScope()
         val uiPreferences = Injekt.get<UiPreferences>()
         val theme by uiPreferences.appTheme().preferenceCollectAsState()
@@ -205,11 +253,13 @@ data object DownloadsTab : Tab {
                                         animeScreenModel = animeScreenModel,
                                         animeDownloadList = animeDownloadList,
                                         isAurora = true,
+                                        onOpenFolder = { openDownloadFolder(context) },
                                     )
                                     DownloadQueueTab.MANGA -> MangaActions(
                                         mangaScreenModel = mangaScreenModel,
                                         mangaDownloadList = mangaDownloadList,
                                         isAurora = true,
+                                        onOpenFolder = { openDownloadFolder(context) },
                                     )
                                     DownloadQueueTab.NOVEL -> Unit
                                 }
@@ -244,11 +294,13 @@ data object DownloadsTab : Tab {
                                         animeScreenModel = animeScreenModel,
                                         animeDownloadList = animeDownloadList,
                                         isAurora = false,
+                                        onOpenFolder = { openDownloadFolder(context) },
                                     )
                                     DownloadQueueTab.MANGA -> MangaActions(
                                         mangaScreenModel = mangaScreenModel,
                                         mangaDownloadList = mangaDownloadList,
                                         isAurora = false,
+                                        onOpenFolder = { openDownloadFolder(context) },
                                     )
                                     DownloadQueueTab.NOVEL -> Unit
                                 }
@@ -461,6 +513,7 @@ data object DownloadsTab : Tab {
         animeScreenModel: AnimeDownloadQueueScreenModel,
         animeDownloadList: List<AnimeDownloadHeaderItem>,
         isAurora: Boolean,
+        onOpenFolder: () -> Unit,
     ) {
         if (animeDownloadList.isNotEmpty()) {
             var sortExpanded by remember { mutableStateOf(false) }
@@ -546,6 +599,14 @@ data object DownloadsTab : Tab {
                         onDismissRequest = { overflowExpanded = false },
                     ) {
                         DropdownMenuItem(
+                            text = { Text(stringResource(AYMR.strings.action_open_download_folder)) },
+                            leadingIcon = { Icon(Icons.Filled.FolderOpen, contentDescription = null) },
+                            onClick = {
+                                onOpenFolder()
+                                overflowExpanded = false
+                            },
+                        )
+                        DropdownMenuItem(
                             text = { Text(stringResource(MR.strings.action_cancel_all)) },
                             onClick = {
                                 animeScreenModel.clearQueue()
@@ -563,6 +624,10 @@ data object DownloadsTab : Tab {
                             onClick = { sortExpanded = true },
                         ),
                         AppBar.OverflowAction(
+                            title = stringResource(AYMR.strings.action_open_download_folder),
+                            onClick = onOpenFolder,
+                        ),
+                        AppBar.OverflowAction(
                             title = stringResource(MR.strings.action_cancel_all),
                             onClick = { animeScreenModel.clearQueue() },
                         ),
@@ -577,6 +642,7 @@ data object DownloadsTab : Tab {
         mangaScreenModel: MangaDownloadQueueScreenModel,
         mangaDownloadList: List<MangaDownloadHeaderItem>,
         isAurora: Boolean,
+        onOpenFolder: () -> Unit,
     ) {
         if (mangaDownloadList.isNotEmpty()) {
             var sortExpanded by remember { mutableStateOf(false) }
@@ -662,6 +728,14 @@ data object DownloadsTab : Tab {
                         onDismissRequest = { overflowExpanded = false },
                     ) {
                         DropdownMenuItem(
+                            text = { Text(stringResource(AYMR.strings.action_open_download_folder)) },
+                            leadingIcon = { Icon(Icons.Filled.FolderOpen, contentDescription = null) },
+                            onClick = {
+                                onOpenFolder()
+                                overflowExpanded = false
+                            },
+                        )
+                        DropdownMenuItem(
                             text = { Text(stringResource(MR.strings.action_cancel_all)) },
                             onClick = {
                                 mangaScreenModel.clearQueue()
@@ -677,6 +751,10 @@ data object DownloadsTab : Tab {
                             title = stringResource(MR.strings.action_sort),
                             icon = Icons.AutoMirrored.Outlined.Sort,
                             onClick = { sortExpanded = true },
+                        ),
+                        AppBar.OverflowAction(
+                            title = stringResource(AYMR.strings.action_open_download_folder),
+                            onClick = onOpenFolder,
                         ),
                         AppBar.OverflowAction(
                             title = stringResource(MR.strings.action_cancel_all),

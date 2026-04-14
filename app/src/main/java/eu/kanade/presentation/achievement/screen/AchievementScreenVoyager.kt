@@ -38,6 +38,9 @@ object AchievementScreenVoyager : Screen() {
             onDialogDismiss = {
                 screenModel.onDialogDismiss()
             },
+            onLocaleChanged = {
+                screenModel.refreshAchievements()
+            },
             modifier = Modifier,
         )
 

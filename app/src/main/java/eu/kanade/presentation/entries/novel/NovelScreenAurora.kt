@@ -133,6 +133,10 @@ fun NovelScreenAuroraImpl(
     onOpenTranslatedDownloadDialog: (() -> Unit)?,
     onOpenEpubExportDialog: (() -> Unit)?,
     onChapterClick: (Long) -> Unit,
+    onChapterTranslateClick: (Long) -> Unit,
+    onChapterTranslatedDownloadClick: (Long) -> Unit,
+    onChapterTranslatedDownloadLongClick: (Long) -> Unit,
+    onChapterTranslatedDownloadOpenFolder: (Long) -> Unit,
     onChapterLongClick: (Long) -> Unit,
     onChapterReadToggle: (Long) -> Unit,
     onChapterBookmarkToggle: (Long) -> Unit,
@@ -153,6 +157,7 @@ fun NovelScreenAuroraImpl(
     onInvertSelection: () -> Unit,
     onMultiBookmarkClicked: (Boolean) -> Unit,
     onMultiMarkAsReadClicked: (Boolean) -> Unit,
+    onMarkPreviousAsReadClicked: (NovelChapter) -> Unit,
     onMultiDownloadClicked: () -> Unit,
     onMultiDeleteClicked: () -> Unit,
     isAutoJumpToNextEnabled: Boolean,
@@ -523,10 +528,21 @@ fun NovelScreenAuroraImpl(
                                                     chapter = chapter,
                                                     displayNumber = row.displayNumber,
                                                     selected = chapter.id in selectedIds,
+                                                    chapterActionState = state.chapterActionStates[chapter.id],
                                                     isNew = chapter.id in state.newChapterIds,
                                                     selectionMode = isSelectionMode,
                                                     onClick = { onChapterClick(chapter.id) },
                                                     onLongClick = { onChapterLongClick(chapter.id) },
+                                                    onTranslateClick = { onChapterTranslateClick(chapter.id) },
+                                                    onTranslatedDownloadClick = {
+                                                        onChapterTranslatedDownloadClick(chapter.id)
+                                                    },
+                                                    onTranslatedDownloadLongClick = {
+                                                        onChapterTranslatedDownloadLongClick(chapter.id)
+                                                    },
+                                                    onTranslatedDownloadOpenFolder = {
+                                                        onChapterTranslatedDownloadOpenFolder(chapter.id)
+                                                    },
                                                     onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
                                                     onToggleRead = { onChapterReadToggle(chapter.id) },
                                                     onToggleDownload = { onChapterDownloadToggle(chapter.id) },
@@ -589,10 +605,21 @@ fun NovelScreenAuroraImpl(
                                                     displayNumber = row.displayNumber,
                                                     titleOverride = variantTitle,
                                                     selected = chapter.id in selectedIds,
+                                                    chapterActionState = state.chapterActionStates[chapter.id],
                                                     isNew = chapter.id in state.newChapterIds,
                                                     selectionMode = isSelectionMode,
                                                     onClick = { onChapterClick(chapter.id) },
                                                     onLongClick = { onChapterLongClick(chapter.id) },
+                                                    onTranslateClick = { onChapterTranslateClick(chapter.id) },
+                                                    onTranslatedDownloadClick = {
+                                                        onChapterTranslatedDownloadClick(chapter.id)
+                                                    },
+                                                    onTranslatedDownloadLongClick = {
+                                                        onChapterTranslatedDownloadLongClick(chapter.id)
+                                                    },
+                                                    onTranslatedDownloadOpenFolder = {
+                                                        onChapterTranslatedDownloadOpenFolder(chapter.id)
+                                                    },
                                                     onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
                                                     onToggleRead = { onChapterReadToggle(chapter.id) },
                                                     onToggleDownload = { onChapterDownloadToggle(chapter.id) },
@@ -775,6 +802,7 @@ fun NovelScreenAuroraImpl(
                     onCancel = { onToggleAllSelection(false) },
                     onMultiBookmarkClicked = onMultiBookmarkClicked,
                     onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
+                    onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
                     onMultiDownloadClicked = onMultiDownloadClicked,
                     onMultiDeleteClicked = onMultiDeleteClicked,
                     fillFraction = 0.5f,
@@ -986,10 +1014,21 @@ fun NovelScreenAuroraImpl(
                                         chapter = chapter,
                                         displayNumber = row.displayNumber,
                                         selected = chapter.id in selectedIds,
+                                        chapterActionState = state.chapterActionStates[chapter.id],
                                         isNew = chapter.id in state.newChapterIds,
                                         selectionMode = isSelectionMode,
                                         onClick = { onChapterClick(chapter.id) },
                                         onLongClick = { onChapterLongClick(chapter.id) },
+                                        onTranslateClick = { onChapterTranslateClick(chapter.id) },
+                                        onTranslatedDownloadClick = {
+                                            onChapterTranslatedDownloadClick(chapter.id)
+                                        },
+                                        onTranslatedDownloadLongClick = {
+                                            onChapterTranslatedDownloadLongClick(chapter.id)
+                                        },
+                                        onTranslatedDownloadOpenFolder = {
+                                            onChapterTranslatedDownloadOpenFolder(chapter.id)
+                                        },
                                         onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
                                         onToggleRead = { onChapterReadToggle(chapter.id) },
                                         onToggleDownload = { onChapterDownloadToggle(chapter.id) },
@@ -1054,10 +1093,21 @@ fun NovelScreenAuroraImpl(
                                         displayNumber = row.displayNumber,
                                         titleOverride = variantTitle,
                                         selected = chapter.id in selectedIds,
+                                        chapterActionState = state.chapterActionStates[chapter.id],
                                         isNew = chapter.id in state.newChapterIds,
                                         selectionMode = isSelectionMode,
                                         onClick = { onChapterClick(chapter.id) },
                                         onLongClick = { onChapterLongClick(chapter.id) },
+                                        onTranslateClick = { onChapterTranslateClick(chapter.id) },
+                                        onTranslatedDownloadClick = {
+                                            onChapterTranslatedDownloadClick(chapter.id)
+                                        },
+                                        onTranslatedDownloadLongClick = {
+                                            onChapterTranslatedDownloadLongClick(chapter.id)
+                                        },
+                                        onTranslatedDownloadOpenFolder = {
+                                            onChapterTranslatedDownloadOpenFolder(chapter.id)
+                                        },
                                         onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
                                         onToggleRead = { onChapterReadToggle(chapter.id) },
                                         onToggleDownload = { onChapterDownloadToggle(chapter.id) },
@@ -1290,6 +1340,7 @@ fun NovelScreenAuroraImpl(
                 onCancel = { onToggleAllSelection(false) },
                 onMultiBookmarkClicked = onMultiBookmarkClicked,
                 onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
+                onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
                 onMultiDownloadClicked = onMultiDownloadClicked,
                 onMultiDeleteClicked = onMultiDeleteClicked,
                 fillFraction = 1f,
@@ -1591,6 +1642,7 @@ private fun AuroraNovelSelectionBottomStack(
     onCancel: () -> Unit,
     onMultiBookmarkClicked: (Boolean) -> Unit,
     onMultiMarkAsReadClicked: (Boolean) -> Unit,
+    onMarkPreviousAsReadClicked: (NovelChapter) -> Unit,
     onMultiDownloadClicked: () -> Unit,
     onMultiDeleteClicked: () -> Unit,
     fillFraction: Float,
@@ -1656,6 +1708,9 @@ private fun AuroraNovelSelectionBottomStack(
             onMarkAsUnviewedClicked = {
                 onMultiMarkAsReadClicked(false)
             }.takeIf { selected.any { it.read || it.lastPageRead > 0L } },
+            onMarkPreviousAsViewedClicked = {
+                onMarkPreviousAsReadClicked(selected.first())
+            }.takeIf { selected.size == 1 },
             onDownloadClicked = onMultiDownloadClicked.takeIf {
                 selected.any { it.id !in downloadedChapterIds }
             },

@@ -1,11 +1,11 @@
 blank_issues_enabled: false
 contact_links:
-  - name: ❌ Help with Extensions
-    url: https://aniyomi.org/docs/faq/browse/extensions
+  - name: ❌ Help with anything
+    url: https://t.me/TadamiSupport
     about: For extension-related questions/issues
-  - name: 🧑‍💻 Aniyomi help discord
-    url: https://discord.gg/F32UjdJZrR
-    about: Common questions are answered here
-  - name: 🖥️ Aniyomi website
-    url: https://aniyomi.org/
-    about: Guides, troubleshooting, and answers to common questions
+  - name: 🧑‍💻 Tadami telegram group
+    url: https://t.me/TadamiSupport
+    about: Every questions could be answered here
+  - name: 🖥️ Tadami release
+    url: https://t.me/TadamiApp
+    about: Release, news

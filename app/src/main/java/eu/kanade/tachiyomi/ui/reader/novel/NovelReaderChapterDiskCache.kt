@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.reader.novel
 
 import android.app.Application
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
+import eu.kanade.tachiyomi.util.safeCacheDir
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import uy.kohesive.injekt.Injekt
@@ -201,8 +202,9 @@ internal object NovelReaderChapterDiskCacheStore {
 
     private val cache by lazy {
         val app = Injekt.get<Application>()
+        val cacheRoot = app.safeCacheDir()
         NovelReaderChapterDiskCache(
-            directory = File(app.cacheDir, "novel_reader_chapter_cache"),
+            directory = File(cacheRoot, "novel_reader_chapter_cache"),
             configProvider = { config() },
         )
     }

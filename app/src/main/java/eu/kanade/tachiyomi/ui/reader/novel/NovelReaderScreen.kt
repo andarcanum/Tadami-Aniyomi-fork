@@ -57,6 +57,7 @@ import java.io.File
 class NovelReaderScreen(
     private val chapterId: Long,
     private val sourceId: Long? = null,
+    private val autoStartGeminiTranslation: Boolean = false,
 ) : eu.kanade.presentation.util.Screen() {
     fun resolveInitialBackdropColor(): Color? {
         val initialReaderSettings = sourceId?.let { id ->
@@ -71,7 +72,12 @@ class NovelReaderScreen(
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val screenModel = rememberScreenModel { NovelReaderScreenModel(chapterId) }
+        val screenModel = rememberScreenModel {
+            NovelReaderScreenModel(
+                chapterId = chapterId,
+                autoStartGeminiTranslation = autoStartGeminiTranslation,
+            )
+        }
         val state by screenModel.state.collectAsStateWithLifecycle()
         val currentState = state
         val coroutineScope = rememberCoroutineScope()
@@ -223,6 +229,8 @@ class NovelReaderScreen(
                     onSetGeminiTopP = screenModel::setGeminiTopP,
                     onSetGeminiTopK = screenModel::setGeminiTopK,
                     onSetGeminiPromptMode = screenModel::setGeminiPromptMode,
+                    onSetGeminiSourceLang = screenModel::setGeminiSourceLang,
+                    onSetGeminiTargetLang = screenModel::setGeminiTargetLang,
                     onSetGeminiStylePreset = screenModel::setGeminiStylePreset,
                     onSetGeminiEnabledPromptModifiers = screenModel::setGeminiEnabledPromptModifiers,
                     onSetGeminiCustomPromptModifier = screenModel::setGeminiCustomPromptModifier,

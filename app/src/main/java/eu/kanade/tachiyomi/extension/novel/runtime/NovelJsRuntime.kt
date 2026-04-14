@@ -108,6 +108,16 @@ class NovelJsRuntime(
         fun storageRemove(key: String)
         fun storageClear()
         fun storageKeys(): String
+        fun localStorageGet(key: String): String?
+        fun localStorageSet(key: String, value: String)
+        fun localStorageRemove(key: String)
+        fun localStorageClear()
+        fun localStorageKeys(): String
+        fun sessionStorageGet(key: String): String?
+        fun sessionStorageSet(key: String, value: String)
+        fun sessionStorageRemove(key: String)
+        fun sessionStorageClear()
+        fun sessionStorageKeys(): String
         fun resolveUrl(url: String, base: String?): String
         fun getPathname(url: String): String
         fun select(html: String, selector: String): String
@@ -223,6 +233,98 @@ class NovelJsRuntime(
                 nativeApi.storageKeys()
             },
             "storageKeys",
+        )
+
+        nativeObject.registerJavaMethod(
+            JavaCallback { _, parameters ->
+                val key = parameters.stringArg(0)
+                compatibilityLogger.logOperation("localStorageGet", "storage", "key=$key")
+                nativeApi.localStorageGet(key)
+            },
+            "localStorageGet",
+        )
+
+        nativeObject.registerJavaMethod(
+            JavaCallback { _, parameters ->
+                val key = parameters.stringArg(0)
+                compatibilityLogger.logOperation("localStorageSet", "storage", "key=$key")
+                nativeApi.localStorageSet(key, parameters.stringArg(1))
+                null
+            },
+            "localStorageSet",
+        )
+
+        nativeObject.registerJavaMethod(
+            JavaCallback { _, parameters ->
+                val key = parameters.stringArg(0)
+                compatibilityLogger.logOperation("localStorageRemove", "storage", "key=$key")
+                nativeApi.localStorageRemove(key)
+                null
+            },
+            "localStorageRemove",
+        )
+
+        nativeObject.registerJavaMethod(
+            JavaCallback { _, _ ->
+                compatibilityLogger.logOperation("localStorageClear", "storage")
+                nativeApi.localStorageClear()
+                null
+            },
+            "localStorageClear",
+        )
+
+        nativeObject.registerJavaMethod(
+            JavaCallback { _, _ ->
+                compatibilityLogger.logOperation("localStorageKeys", "storage")
+                nativeApi.localStorageKeys()
+            },
+            "localStorageKeys",
+        )
+
+        nativeObject.registerJavaMethod(
+            JavaCallback { _, parameters ->
+                val key = parameters.stringArg(0)
+                compatibilityLogger.logOperation("sessionStorageGet", "storage", "key=$key")
+                nativeApi.sessionStorageGet(key)
+            },
+            "sessionStorageGet",
+        )
+
+        nativeObject.registerJavaMethod(
+            JavaCallback { _, parameters ->
+                val key = parameters.stringArg(0)
+                compatibilityLogger.logOperation("sessionStorageSet", "storage", "key=$key")
+                nativeApi.sessionStorageSet(key, parameters.stringArg(1))
+                null
+            },
+            "sessionStorageSet",
+        )
+
+        nativeObject.registerJavaMethod(
+            JavaCallback { _, parameters ->
+                val key = parameters.stringArg(0)
+                compatibilityLogger.logOperation("sessionStorageRemove", "storage", "key=$key")
+                nativeApi.sessionStorageRemove(key)
+                null
+            },
+            "sessionStorageRemove",
+        )
+
+        nativeObject.registerJavaMethod(
+            JavaCallback { _, _ ->
+                compatibilityLogger.logOperation("sessionStorageClear", "storage")
+                nativeApi.sessionStorageClear()
+                null
+            },
+            "sessionStorageClear",
+        )
+
+        nativeObject.registerJavaMethod(
+            JavaCallback { _, _ ->
+                compatibilityLogger.logOperation("sessionStorageKeys", "storage")
+                nativeApi.sessionStorageKeys()
+            },
+            "sessionStorageKeys",
         )
 
         nativeObject.registerJavaMethod(
@@ -922,7 +1024,57 @@ class NovelJsModuleRegistry(
             if (!raw) return undefined;
             try { return JSON.parse(raw); } catch (e) { return { value: raw }; }
           }
+          function parseStorageValue(raw) {
+            if (!raw) return undefined;
+            try { return JSON.parse(raw); } catch (e) { return raw; }
+          }
+          function stringifyValue(value) {
+            if (typeof value === "string") return value;
+            try { return JSON.stringify(value); } catch (e) { return String(value); }
+          }
           function now() { return Date.now(); }
+          function createStorage(getNative, setNative, removeNative, clearNative, keysNative) {
+            function readRaw(key) {
+              return getNative(String(key));
+            }
+            function readParsed(key) {
+              return parseStorageValue(readRaw(key));
+            }
+            function readAll() {
+              var result = {};
+              var keys = JSON.parse(keysNative());
+              for (var index = 0; index < keys.length; index++) {
+                var key = keys[index];
+                var value = readParsed(key);
+                if (value !== undefined) {
+                  result[key] = value;
+                }
+              }
+              return result;
+            }
+            function keyAt(index) {
+              var keys = JSON.parse(keysNative());
+              return typeof keys[index] === "undefined" ? null : keys[index];
+            }
+            return {
+              get: function(key, raw) {
+                if (typeof key === "undefined") return readAll();
+                return raw ? readRaw(key) : readParsed(key);
+              },
+              getItem: function(key) { return readParsed(key); },
+              set: function(key, value) { setNative(String(key), stringifyValue(value)); },
+              setItem: function(key, value) { setNative(String(key), stringifyValue(value)); },
+              delete: function(key) { removeNative(String(key)); },
+              remove: function(key) { removeNative(String(key)); },
+              removeItem: function(key) { removeNative(String(key)); },
+              clear: function() { clearNative(); },
+              clearAll: function() { clearNative(); },
+              getAllKeys: function() { return JSON.parse(keysNative()); },
+              keys: function() { return JSON.parse(keysNative()); },
+              key: function(index) { return keyAt(index); },
+              get length() { return JSON.parse(keysNative()).length; }
+            };
+          }
           var storage = {
             set: function(key, value, expires) {
               var expiry = null;
@@ -944,8 +1096,20 @@ class NovelJsModuleRegistry(
             delete: function(key) { __native.storageRemove(String(key)); },
             clearAll: function() { __native.storageClear(); }
           };
-          var localStorage = { get: function() { return {}; } };
-          var sessionStorage = { get: function() { return {}; } };
+          var localStorage = createStorage(
+            __native.localStorageGet,
+            __native.localStorageSet,
+            __native.localStorageRemove,
+            __native.localStorageClear,
+            __native.localStorageKeys
+          );
+          var sessionStorage = createStorage(
+            __native.sessionStorageGet,
+            __native.sessionStorageSet,
+            __native.sessionStorageRemove,
+            __native.sessionStorageClear,
+            __native.sessionStorageKeys
+          );
           module.exports = { storage: storage, localStorage: localStorage, sessionStorage: sessionStorage };
         });
     """.trimIndent()
@@ -1362,6 +1526,7 @@ class NovelJsModuleRegistry(
                 for (var i = 0; i < handles.length; i++) {
                   arr.push({
                     tagName: __native.domTagName(handles[i]),
+                    name: __native.domTagName(handles[i]),
                     attribs: JSON.parse(__native.domAttrs(handles[i]))
                   });
                 }
@@ -1373,6 +1538,7 @@ class NovelJsModuleRegistry(
                 if (!handles[index] && handles[index] !== 0) return undefined;
                 return {
                   tagName: __native.domTagName(handles[index]),
+                  name: __native.domTagName(handles[index]),
                   attribs: JSON.parse(__native.domAttrs(handles[index]))
                 };
               },

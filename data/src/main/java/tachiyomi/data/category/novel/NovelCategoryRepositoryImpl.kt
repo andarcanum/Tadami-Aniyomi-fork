@@ -65,6 +65,8 @@ class NovelCategoryRepositoryImpl(
                 name = category.name,
                 order = category.order,
                 flags = category.flags,
+                hidden = if (category.hidden) 1L else 0L,
+                hidden_from_home_hub = if (category.hiddenFromHomeHub) 1L else 0L,
             )
             db.novel_categoriesQueries.selectLastInsertedRowId()
         }
@@ -112,6 +114,7 @@ class NovelCategoryRepositoryImpl(
                     order = legacy.order,
                     flags = legacy.flags,
                     hidden = if (legacy.hidden) 1L else 0L,
+                    hidden_from_home_hub = if (legacy.hiddenFromHomeHub) 1L else 0L,
                 )
             }
         }
@@ -124,6 +127,7 @@ class NovelCategoryRepositoryImpl(
             order = update.order,
             flags = update.flags,
             hidden = update.hidden?.let { if (it) 1L else 0L },
+            hidden_from_home_hub = update.hiddenFromHomeHub?.let { if (it) 1L else 0L },
             categoryId = update.id,
         )
     }
@@ -134,11 +138,13 @@ class NovelCategoryRepositoryImpl(
         order: Long,
         flags: Long,
         hidden: Long,
+        hiddenFromHomeHub: Long,
     ): NovelCategory = NovelCategory(
         id = id,
         name = name,
         order = order,
         flags = flags,
         hidden = hidden == 1L,
+        hiddenFromHomeHub = hiddenFromHomeHub == 1L,
     )
 }
