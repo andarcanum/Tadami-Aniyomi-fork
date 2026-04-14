@@ -25,7 +25,6 @@ import eu.kanade.presentation.more.MoreScreenAurora
 import eu.kanade.presentation.more.settings.screen.SettingsNovelReaderScreen
 import eu.kanade.presentation.more.settings.screen.about.AboutScreen
 import eu.kanade.presentation.util.Tab
-import eu.kanade.tachiyomi.core.common.Constants
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
 import eu.kanade.tachiyomi.ui.category.CategoriesTab
@@ -101,7 +100,10 @@ data object MoreTab : Tab {
                 onDebugAppUpdatePreviewClick = { navigator.push(DebugAppUpdatePreviewScreen()) },
                 onStatsClick = { navigator.push(StatsTab) },
                 onAchievementsClick = { navigator.push(AchievementScreenVoyager) },
-                onHelpClick = { uriHandler.openUri(Constants.URL_HELP) },
+                onHelpClick = {
+                    android.util.Log.d("MoreTab", "Help button clicked - opening HelpScreen")
+                    navigator.push(eu.kanade.presentation.more.settings.screen.HelpScreen)
+                },
             )
         } else {
             MoreScreen(
@@ -122,6 +124,7 @@ data object MoreTab : Tab {
                 onClickSettings = { navigator.push(SettingsScreen()) },
                 onClickAbout = { navigator.push(AboutScreen) },
                 onClickDebugAppUpdatePreview = { navigator.push(DebugAppUpdatePreviewScreen()) },
+                onClickHelp = { navigator.push(eu.kanade.presentation.more.settings.screen.HelpScreen) },
             )
         }
     }

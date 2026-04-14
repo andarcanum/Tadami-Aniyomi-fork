@@ -24,7 +24,6 @@ import com.tadami.aurora.R
 import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.presentation.more.settings.widget.SwitchPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
-import eu.kanade.tachiyomi.core.common.Constants
 import eu.kanade.tachiyomi.ui.more.DownloadQueueState
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
@@ -52,6 +51,7 @@ fun MoreScreen(
     onClickSettings: () -> Unit,
     onClickAbout: () -> Unit,
     onClickDebugAppUpdatePreview: () -> Unit,
+    onClickHelp: () -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
 
@@ -192,7 +192,7 @@ fun MoreScreen(
                 TextPreferenceWidget(
                     title = stringResource(MR.strings.label_help),
                     icon = Icons.AutoMirrored.Outlined.HelpOutline,
-                    onPreferenceClick = { uriHandler.openUri(Constants.URL_HELP) },
+                    onPreferenceClick = onClickHelp,
                 )
             }
         }
