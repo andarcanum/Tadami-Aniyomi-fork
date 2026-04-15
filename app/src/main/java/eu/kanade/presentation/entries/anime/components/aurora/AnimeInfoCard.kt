@@ -26,12 +26,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.entries.manga.components.aurora.GlassmorphismCard
+import eu.kanade.presentation.entries.translation.AuroraEntryTranslationState
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 
-private fun filterDescription(description: String?): String? {
+internal fun filterAnimeDescription(description: String?): String? {
     if (description.isNullOrBlank()) return null
 
     val patternsToFilter = listOf(
@@ -57,6 +58,7 @@ private fun filterDescription(description: String?): String? {
 @Composable
 fun AnimeInfoCard(
     anime: Anime,
+    translation: AuroraEntryTranslationState? = null,
     onTagSearch: (String) -> Unit,
     descriptionExpanded: Boolean,
     genresExpanded: Boolean,
@@ -75,8 +77,8 @@ fun AnimeInfoCard(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            val filteredDescription = remember(anime.description) {
-                filterDescription(anime.description)
+            val filteredDescription = remember(anime.description, translation?.description) {
+                translation?.description ?: filterAnimeDescription(anime.description)
             }
 
             Text(

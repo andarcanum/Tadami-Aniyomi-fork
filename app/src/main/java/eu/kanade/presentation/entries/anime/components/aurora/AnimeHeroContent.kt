@@ -49,6 +49,7 @@ import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroPanelBo
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroPanelContainerColor
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroSecondaryButtonPalette
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroTitleColor
+import eu.kanade.presentation.entries.translation.AuroraEntryTranslationState
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
 import tachiyomi.domain.entries.anime.model.Anime
@@ -85,6 +86,7 @@ internal fun resolveAnimeHeroPrimaryActionLayoutSpec(): AnimeHeroPrimaryActionLa
 @Composable
 fun AnimeHeroContent(
     anime: Anime,
+    translation: AuroraEntryTranslationState? = null,
     hasWatchingProgress: Boolean,
     ratingText: String,
     episodesText: String,
@@ -133,9 +135,9 @@ fun AnimeHeroContent(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             val displayTitle = buildAnnotatedString {
-                append(anime.title)
+                append(translation?.title ?: anime.title)
 
-                if (showOriginalTitle && originalTitle != null) {
+                if (showOriginalTitle && translation?.titleTranslated != true && originalTitle != null) {
                     withStyle(
                         SpanStyle(
                             color = secondaryMetaColor,

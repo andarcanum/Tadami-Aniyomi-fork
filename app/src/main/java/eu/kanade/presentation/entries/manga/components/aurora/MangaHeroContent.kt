@@ -38,6 +38,7 @@ import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroOverlay
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroPanelBorderColor
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroPanelContainerColor
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroTitleColor
+import eu.kanade.presentation.entries.translation.AuroraEntryTranslationState
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
 import tachiyomi.domain.entries.manga.model.Manga
@@ -48,6 +49,7 @@ import tachiyomi.presentation.core.i18n.stringResource
 @Composable
 fun MangaHeroContent(
     manga: Manga,
+    translation: AuroraEntryTranslationState? = null,
     detailsSnapshot: MangaDetailsSnapshot,
     hasProgress: Boolean,
     onContinueReading: () -> Unit,
@@ -118,7 +120,7 @@ fun MangaHeroContent(
             }
 
             Text(
-                text = manga.title,
+                text = translation?.title ?: manga.title,
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Black,
                 color = titleColor,

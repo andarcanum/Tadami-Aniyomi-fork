@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.entries.translation.googleTranslationLanguageSuggestions
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.translation.TranslationPhase
 import tachiyomi.i18n.aniyomi.AYMR
@@ -362,58 +363,4 @@ fun syncGoogleTranslationToggleDraft(
         committedValue = committedValue,
         draftValue = draftValue,
     )
-}
-
-data class GoogleTranslationLanguageSuggestion(
-    val canonicalName: String,
-    val code: String,
-)
-
-private data class GoogleTranslationLanguageEntry(
-    val canonicalName: String,
-    val code: String,
-    val aliases: List<String>,
-)
-
-private val googleTranslationLanguageEntries = listOf(
-    GoogleTranslationLanguageEntry("Auto", "auto", listOf("auto", "авто", "automatic", "автоматически")),
-    GoogleTranslationLanguageEntry("English", "en", listOf("english", "eng", "англ", "английский", "en")),
-    GoogleTranslationLanguageEntry("Russian", "ru", listOf("russian", "рус", "русский", "ru")),
-    GoogleTranslationLanguageEntry("Japanese", "ja", listOf("japanese", "jpn", "япон", "японский", "ja")),
-    GoogleTranslationLanguageEntry("Chinese", "zh-CN", listOf("chinese", "china", "китай", "китайский", "zh")),
-    GoogleTranslationLanguageEntry("Korean", "ko", listOf("korean", "корей", "корейский", "ko")),
-    GoogleTranslationLanguageEntry("German", "de", listOf("german", "deutsch", "нем", "немецкий", "de")),
-    GoogleTranslationLanguageEntry("French", "fr", listOf("french", "франц", "французский", "fr")),
-    GoogleTranslationLanguageEntry("Spanish", "es", listOf("spanish", "espanol", "испан", "испанский", "es")),
-    GoogleTranslationLanguageEntry("Italian", "it", listOf("italian", "итал", "итальянский", "it")),
-    GoogleTranslationLanguageEntry("Portuguese", "pt", listOf("portuguese", "португ", "португальский", "pt")),
-    GoogleTranslationLanguageEntry("Ukrainian", "uk", listOf("ukrainian", "украин", "украинский", "uk")),
-    GoogleTranslationLanguageEntry("Polish", "pl", listOf("polish", "поль", "польский", "pl")),
-    GoogleTranslationLanguageEntry("Turkish", "tr", listOf("turkish", "турец", "турецкий", "tr")),
-    GoogleTranslationLanguageEntry("Arabic", "ar", listOf("arabic", "араб", "арабский", "ar")),
-    GoogleTranslationLanguageEntry("Hindi", "hi", listOf("hindi", "хинди", "hi")),
-    GoogleTranslationLanguageEntry("Thai", "th", listOf("thai", "тай", "тайский", "th")),
-    GoogleTranslationLanguageEntry("Vietnamese", "vi", listOf("vietnamese", "вьет", "вьетнамский", "vi")),
-    GoogleTranslationLanguageEntry("Indonesian", "id", listOf("indonesian", "индонез", "индонезийский", "id")),
-)
-
-fun googleTranslationLanguageSuggestions(input: String): List<GoogleTranslationLanguageSuggestion> {
-    val normalizedInput = input.trim().lowercase()
-    if (normalizedInput.isBlank()) return emptyList()
-
-    return googleTranslationLanguageEntries
-        .asSequence()
-        .filter { entry ->
-            entry.canonicalName.lowercase().contains(normalizedInput) ||
-                entry.code.lowercase().startsWith(normalizedInput) ||
-                entry.aliases.any { alias -> alias.lowercase().contains(normalizedInput) }
-        }
-        .map { entry ->
-            GoogleTranslationLanguageSuggestion(
-                canonicalName = entry.canonicalName,
-                code = entry.code,
-            )
-        }
-        .take(8)
-        .toList()
 }

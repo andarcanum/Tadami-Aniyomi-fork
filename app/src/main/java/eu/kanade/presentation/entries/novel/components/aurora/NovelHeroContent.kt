@@ -44,6 +44,7 @@ import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroPanelBo
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroPanelContainerColor
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroTitleColor
 import eu.kanade.presentation.entries.manga.components.aurora.MangaStatusFormatter
+import eu.kanade.presentation.entries.translation.AuroraEntryTranslationState
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
 import tachiyomi.domain.entries.novel.model.Novel
@@ -56,6 +57,7 @@ import java.util.Locale
 @Composable
 fun NovelHeroContent(
     novel: Novel,
+    translation: AuroraEntryTranslationState? = null,
     chapterCount: Int,
     rating: Float?,
     onContinueReading: (() -> Unit)?,
@@ -140,7 +142,7 @@ fun NovelHeroContent(
             }
 
             Text(
-                text = novel.title,
+                text = translation?.title ?: novel.title,
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Black,
                 color = titleColor,

@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.domain.entries.novel.model.normalizeNovelDescription
 import eu.kanade.presentation.entries.manga.components.aurora.GlassmorphismCard
+import eu.kanade.presentation.entries.translation.AuroraEntryTranslationState
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.i18n.aniyomi.AYMR
@@ -42,6 +43,7 @@ import tachiyomi.presentation.core.i18n.stringResource
 @Composable
 fun NovelInfoCard(
     novel: Novel,
+    translation: AuroraEntryTranslationState? = null,
     onTagSearch: (String) -> Unit,
     descriptionExpanded: Boolean,
     genresExpanded: Boolean,
@@ -50,8 +52,8 @@ fun NovelInfoCard(
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
-    val normalizedDescription = remember(novel.description) {
-        normalizeNovelDescription(novel.description)
+    val normalizedDescription = remember(novel.description, translation?.description) {
+        translation?.description ?: normalizeNovelDescription(novel.description)
     }
     var hasDescriptionOverflow by remember(normalizedDescription) { mutableStateOf(false) }
     val normalizedGenres = remember(novel.genre) {

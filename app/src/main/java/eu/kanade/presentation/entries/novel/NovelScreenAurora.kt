@@ -69,6 +69,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import eu.kanade.domain.entries.novel.model.normalizeNovelDescription
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.entries.TitleFastScrollOverlayAccumulator
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
@@ -89,6 +91,7 @@ import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
 import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollFloatingActionButton
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollOverlayChrome
+import eu.kanade.presentation.entries.translation.rememberAuroraEntryTranslation
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
@@ -110,6 +113,9 @@ import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.TwoPanelBox
 import tachiyomi.presentation.core.components.VerticalFastScroller
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.collectAsState
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.time.Instant
 
 @Composable
@@ -217,6 +223,20 @@ fun NovelScreenAuroraImpl(
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val contentMaxWidthDp = auroraAdaptiveSpec.entryMaxWidthDp
     val useTwoPaneLayout = shouldUseNovelAuroraTwoPane(auroraAdaptiveSpec.deviceClass)
+    val auroraTranslationPreferences = remember { Injekt.get<UiPreferences>() }
+    val auroraEntryTranslationEnabled by auroraTranslationPreferences
+        .auroraEntryTranslationEnabled()
+        .collectAsState()
+    val auroraEntryTranslationSourceLanguages by auroraTranslationPreferences
+        .auroraEntryTranslationSourceLanguages()
+        .collectAsState()
+    val auroraEntryTranslation = rememberAuroraEntryTranslation(
+        title = novel.title,
+        description = normalizeNovelDescription(novel.description),
+        sourceLanguage = state.source.lang,
+        enabled = auroraEntryTranslationEnabled,
+        allowedSourceFamilies = auroraEntryTranslationSourceLanguages,
+    )
 
     val lazyListState = rememberLazyListState()
     val scrollOffset by remember { derivedStateOf { lazyListState.firstVisibleItemScrollOffset } }
@@ -344,6 +364,7 @@ fun NovelScreenAuroraImpl(
                             ) {
                                 NovelHeroContent(
                                     novel = novel,
+                                    translation = auroraEntryTranslation,
                                     chapterCount = totalChapterCount,
                                     rating = state.rating,
                                     onContinueReading = onStartReading,
@@ -363,6 +384,7 @@ fun NovelScreenAuroraImpl(
                                 Spacer(modifier = Modifier.height(8.dp))
                                 NovelInfoCard(
                                     novel = novel,
+                                    translation = auroraEntryTranslation,
                                     onTagSearch = { tag -> onSearch(tag, true) },
                                     descriptionExpanded = descriptionExpanded,
                                     genresExpanded = genresExpanded,
@@ -912,6 +934,7 @@ fun NovelScreenAuroraImpl(
                             Spacer(modifier = Modifier.height(8.dp))
                             NovelInfoCard(
                                 novel = novel,
+                                translation = auroraEntryTranslation,
                                 onTagSearch = { tag -> onSearch(tag, true) },
                                 descriptionExpanded = descriptionExpanded,
                                 genresExpanded = genresExpanded,
@@ -1175,6 +1198,7 @@ fun NovelScreenAuroraImpl(
                 ) {
                     NovelHeroContent(
                         novel = novel,
+                        translation = auroraEntryTranslation,
                         chapterCount = totalChapterCount,
                         rating = state.rating,
                         onContinueReading = onStartReading,
