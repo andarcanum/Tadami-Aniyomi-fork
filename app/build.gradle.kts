@@ -321,6 +321,13 @@ dependencies {
     // Shizuku
     implementation(libs.bundles.shizuku)
 
+    // Google Drive API
+    implementation(libs.google.api.services.drive)
+    implementation(libs.google.api.client)
+    implementation(libs.google.http.client.android)
+    implementation(libs.google.oauth.client.java6)
+    implementation("com.google.http-client:google-http-client-jackson2:1.43.3")
+
     // Tests
     testImplementation(libs.bundles.test)
     testRuntimeOnly(libs.junitVintageEngine)

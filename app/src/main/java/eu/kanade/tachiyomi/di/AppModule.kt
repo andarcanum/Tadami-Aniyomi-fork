@@ -15,6 +15,7 @@ import dataanime.Animehistory
 import dataanime.Animes
 import datanovel.Novel_history
 import datanovel.Novels
+import eu.kanade.domain.sync.SyncPreferences
 import eu.kanade.domain.track.anime.store.DelayedAnimeTrackingStore
 import eu.kanade.domain.track.manga.store.DelayedMangaTrackingStore
 import eu.kanade.tachiyomi.data.cache.AnimeBackgroundCache
@@ -30,6 +31,7 @@ import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadProvider
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
 import eu.kanade.tachiyomi.data.saver.ImageSaver
+import eu.kanade.tachiyomi.data.sync.service.GoogleDriveService
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.data.translation.TranslationNotificationManager
 import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
@@ -518,6 +520,10 @@ class AppModule(val app: Application) : InjektModule {
                 app.getSharedPreferences("achievement_unlockables", Context.MODE_PRIVATE),
             )
         }
+
+        // Sync preferences and Google Drive service
+        addSingletonFactory { SyncPreferences(get()) }
+        addSingletonFactory { GoogleDriveService(app) }
 
         // Asynchronously init expensive components for a faster cold start
         java.util.concurrent.Executors.newSingleThreadExecutor().execute {

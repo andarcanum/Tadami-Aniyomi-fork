@@ -1062,6 +1062,32 @@
     <string name="episode_settings">Episode settings</string>
     <string name="season_settings">Season settings</string>
     <string name="pref_backup_flags">Backup options</string>
+    <!-- Cloud Sync / Google Drive -->
+    <string name="app_name_snake" translatable="false">tadami</string>
+    <string name="cloud_sync">Cloud Sync</string>
+    <string name="google_drive">Google Drive</string>
+    <string name="pref_google_drive_sign_in">Sign in</string>
+    <string name="pref_google_drive_sign_out">Sign out</string>
+    <string name="pref_google_drive_purge_sync_data">Delete sync data from Google Drive</string>
+    <string name="google_drive_sync_data_purged">Sync data deleted from Google Drive</string>
+    <string name="google_drive_sync_data_not_found">No sync data found in Google Drive</string>
+    <string name="google_drive_sync_data_purge_error">Error purging sync data from Google Drive, try signing in again</string>
+    <string name="google_drive_login_success">Signed in to Google Drive</string>
+    <string name="google_drive_login_failed">Failed to sign in to Google Drive: %s</string>
+    <string name="google_drive_not_signed_in">Not signed in to Google Drive</string>
+    <string name="error_uploading_sync_data">Error uploading sync data to Google Drive</string>
+    <string name="error_before_sync_gdrive">Error before sync: %s</string>
+    <string name="error_deleting_google_drive_lock_file">Error deleting Google Drive lock file</string>
+    <string name="pref_purge_confirmation_message">Deleting sync data will remove all your sync data from Google Drive. Are you sure you want to continue?</string>
+    <string name="pref_cloud_sync">Enable cloud sync</string>
+    <string name="pref_cloud_sync_summary">Sync your library across devices using Google Drive</string>
+    <string name="pref_sync_now">Sync now</string>
+    <string name="pref_last_sync">Last sync</string>
+    <string name="pref_sync_interval">Sync interval</string>
+    <string name="action_ok">OK</string>
+    <string name="cloud_sync_successful">Sync completed successfully</string>
+    <string name="cloud_sync_error">Sync error: %s</string>
+    <string name="never">Never</string>
     <string name="label_manga_extensions">Manga Extensions</string>
     <string name="label_anime_extensions">Anime Extensions</string>
     <string name="label_novel_extensions">Novel Extensions</string>

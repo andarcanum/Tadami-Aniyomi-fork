@@ -275,6 +275,21 @@
             </intent-filter>
         </activity>
 
+        <!-- Google Drive OAuth Activity -->
+        <activity
+            android:name="eu.kanade.tachiyomi.ui.setting.track.GoogleDriveLoginActivity"
+            android:exported="true"
+            android:label="@string/google_drive">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="com.googleusercontent.apps.YOUR_GOOGLE_CLIENT_ID"/>
+            </intent-filter>
+        </activity>
+
         <receiver
             android:name="eu.kanade.tachiyomi.data.notification.NotificationReceiver"
             android:exported="false" />

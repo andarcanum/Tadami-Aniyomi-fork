@@ -43,6 +43,7 @@ import androidx.core.net.toUri
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import com.hippo.unifile.UniFile
+import eu.kanade.domain.sync.SyncPreferences
 import eu.kanade.presentation.more.settings.AuroraTopBarIconButton
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.SettingsUiStyle
@@ -60,6 +61,9 @@ import eu.kanade.tachiyomi.data.export.ExportEntry
 import eu.kanade.tachiyomi.data.export.ExportEntry.Companion.toExportEntry
 import eu.kanade.tachiyomi.data.export.LibraryExporter
 import eu.kanade.tachiyomi.data.export.LibraryExporter.ExportOptions
+import eu.kanade.tachiyomi.data.sync.SyncManager
+import eu.kanade.tachiyomi.data.sync.service.GoogleDriveService
+import eu.kanade.tachiyomi.data.sync.service.GoogleDriveSyncService
 import eu.kanade.tachiyomi.ui.storage.StorageTab
 import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.tachiyomi.util.system.toast
@@ -152,7 +156,7 @@ object SettingsDataScreen : SearchableSettings {
                 try {
                     context.contentResolver.takePersistableUriPermission(uri, flags)
                 } catch (e: SecurityException) {
-                    logcat(LogPriority.ERROR, e)
+                    logcat(priority = LogPriority.ERROR, throwable = e)
                     context.toast(MR.strings.file_picker_uri_permission_unsupported)
                 }
 
@@ -341,7 +345,7 @@ object SettingsDataScreen : SearchableSettings {
                                     cacheReadableSizeSema++
                                 }
                             } catch (e: Throwable) {
-                                logcat(LogPriority.ERROR, e)
+                                this@SettingsDataScreen.logcat(LogPriority.ERROR, e)
                                 withUIContext { context.toast(MR.strings.cache_delete_error) }
                             }
                         }
@@ -350,6 +354,173 @@ object SettingsDataScreen : SearchableSettings {
                 Preference.PreferenceItem.SwitchPreference(
                     preference = libraryPreferences.autoClearItemCache(),
                     title = stringResource(AYMR.strings.pref_auto_clear_chapter_cache),
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getCloudSyncGroup(): Preference.PreferenceGroup {
+        val context = LocalContext.current
+        val scope = rememberCoroutineScope()
+        val syncPreferences = remember { Injekt.get<SyncPreferences>() }
+        val googleDriveService = remember { Injekt.get<GoogleDriveService>() }
+
+        val googleDriveAccessToken by syncPreferences.googleDriveAccessToken().collectAsState()
+        val googleDriveRefreshToken by syncPreferences.googleDriveRefreshToken().collectAsState()
+        val isSignedIn = googleDriveAccessToken.isNotBlank() && googleDriveRefreshToken.isNotBlank()
+        val cloudSyncEnabledPref = syncPreferences.cloudSyncEnabled()
+        val syncService by syncPreferences.syncService().collectAsState()
+        val lastSyncTimestamp by syncPreferences.lastSyncTimestamp().collectAsState()
+
+        var showPurgeDialog by remember { mutableStateOf(false) }
+
+        // Sign in launcher
+        val signInLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.StartActivityForResult(),
+        ) { }
+
+        if (showPurgeDialog) {
+            AlertDialog(
+                onDismissRequest = { showPurgeDialog = false },
+                title = { Text(stringResource(AYMR.strings.pref_google_drive_purge_sync_data)) },
+                text = { Text(stringResource(AYMR.strings.pref_purge_confirmation_message)) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showPurgeDialog = false
+                            scope.launchNonCancellable {
+                                try {
+                                    val status = GoogleDriveSyncService(context).deleteSyncDataFromGoogleDrive()
+                                    withUIContext {
+                                        when (status) {
+                                            GoogleDriveSyncService.DeleteSyncDataStatus.SUCCESS -> {
+                                                context.toast(AYMR.strings.google_drive_sync_data_purged)
+                                            }
+                                            GoogleDriveSyncService.DeleteSyncDataStatus.NO_FILES -> {
+                                                context.toast(AYMR.strings.google_drive_sync_data_not_found)
+                                            }
+                                            GoogleDriveSyncService.DeleteSyncDataStatus.NOT_INITIALIZED,
+                                            GoogleDriveSyncService.DeleteSyncDataStatus.ERROR,
+                                            -> {
+                                                context.toast(AYMR.strings.google_drive_sync_data_purge_error)
+                                            }
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    withUIContext {
+                                        context.toast(AYMR.strings.google_drive_sync_data_purge_error)
+                                    }
+                                }
+                            }
+                        },
+                    ) {
+                        Text(stringResource(MR.strings.action_ok))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showPurgeDialog = false }) {
+                        Text(stringResource(MR.strings.action_cancel))
+                    }
+                },
+            )
+        }
+
+        return Preference.PreferenceGroup(
+            title = stringResource(AYMR.strings.cloud_sync),
+            preferenceItems = persistentListOf(
+                // Google Drive sign in/out
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(AYMR.strings.google_drive),
+                    subtitle = if (isSignedIn) {
+                        stringResource(AYMR.strings.google_drive_login_success)
+                    } else {
+                        stringResource(AYMR.strings.google_drive_not_signed_in)
+                    },
+                    onClick = {
+                        if (isSignedIn) {
+                            // Sign out
+                            scope.launchNonCancellable {
+                                googleDriveService.signOut()
+                                syncPreferences.syncService().set(SyncPreferences.SYNC_SERVICE_NONE)
+                                cloudSyncEnabledPref.set(false)
+                                withUIContext {
+                                    context.toast(AYMR.strings.pref_google_drive_sign_out)
+                                }
+                            }
+                        } else {
+                            // Sign in
+                            try {
+                                val intent = googleDriveService.getSignInIntent()
+                                signInLauncher.launch(intent)
+                            } catch (e: Exception) {
+                                context.toast(
+                                    context.stringResource(
+                                        AYMR.strings.google_drive_login_failed,
+                                        e.message ?: "Google Drive OAuth credentials are not configured",
+                                    ),
+                                )
+                            }
+                        }
+                    },
+                ),
+
+                // Enable/disable sync toggle
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = cloudSyncEnabledPref,
+                    title = stringResource(AYMR.strings.pref_cloud_sync),
+                    subtitle = if (syncService == SyncPreferences.SYNC_SERVICE_GOOGLE_DRIVE) {
+                        stringResource(MR.strings.on)
+                    } else {
+                        stringResource(MR.strings.off)
+                    },
+                    enabled = isSignedIn,
+                    onValueChanged = { enabled ->
+                        if (enabled) {
+                            syncPreferences.syncService().set(SyncPreferences.SYNC_SERVICE_GOOGLE_DRIVE)
+                        } else {
+                            syncPreferences.syncService().set(SyncPreferences.SYNC_SERVICE_NONE)
+                        }
+                        true
+                    },
+                ),
+
+                // Sync now button
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(AYMR.strings.pref_sync_now),
+                    subtitle = if (lastSyncTimestamp > 0) {
+                        stringResource(AYMR.strings.pref_last_sync) + ": " + relativeTimeSpanString(lastSyncTimestamp)
+                    } else {
+                        stringResource(AYMR.strings.never)
+                    },
+                    enabled = isSignedIn && syncService == SyncPreferences.SYNC_SERVICE_GOOGLE_DRIVE,
+                    onClick = {
+                        scope.launchNonCancellable {
+                            try {
+                                val syncManager = SyncManager(context)
+                                syncManager.syncData()
+                            } catch (e: Exception) {
+                                logcat { "Sync error: ${e.message}" }
+                                withUIContext {
+                                    context.toast(
+                                        context.stringResource(
+                                            AYMR.strings.cloud_sync_error,
+                                            e.message ?: "Unknown error",
+                                        ),
+                                    )
+                                }
+                            }
+                        }
+                    },
+                ),
+
+                // Delete sync data
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(AYMR.strings.pref_google_drive_purge_sync_data),
+                    enabled = isSignedIn,
+                    onClick = {
+                        showPurgeDialog = true
+                    },
                 ),
             ),
         )

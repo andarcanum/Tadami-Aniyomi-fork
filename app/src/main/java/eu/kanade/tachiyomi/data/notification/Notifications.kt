@@ -70,6 +70,13 @@ object Notifications {
     const val ID_RESTORE_COMPLETE = -504
 
     /**
+     * Notification channel and ids used by the cloud sync system.
+     */
+    const val CHANNEL_SYNC_COMPLETE = "sync_complete_channel"
+    const val ID_SYNC_COMPLETE = -601
+    const val ID_SYNC_ERROR = -602
+
+    /**
      * Notification channel used for Incognito Mode
      */
     const val CHANNEL_INCOGNITO_MODE = "incognito_mode_channel"
@@ -177,6 +184,10 @@ object Notifications {
                 },
                 buildNotificationChannel(CHANNEL_INCOGNITO_MODE, IMPORTANCE_LOW) {
                     setName(context.stringResource(MR.strings.pref_incognito_mode))
+                },
+                buildNotificationChannel(CHANNEL_SYNC_COMPLETE, IMPORTANCE_HIGH) {
+                    setName("Cloud Sync")
+                    setShowBadge(false)
                 },
                 buildNotificationChannel(CHANNEL_TRANSLATION_PROGRESS, IMPORTANCE_LOW) {
                     setName("Translation Progress")
