@@ -1411,6 +1411,10 @@
     <!-- Original Title -->
     <string name="pref_show_original_title">Показывать оригинальное название</string>
     <string name="pref_show_original_title_summary">Отображать оригинальное название из описания в скобках</string>
+    <string name="pref_aurora_entry_translation">Переводить карточки Aurora</string>
+    <string name="pref_aurora_entry_translation_summary">Переводить название и описание на текущий язык приложения только для выбранных языков источника</string>
+    <string name="pref_aurora_entry_translation_source_languages">Языки источника</string>
+    <string name="pref_aurora_entry_translation_source_languages_summary">Переводить только если язык источника один из: %s</string>
     <string name="pref_show_achievement_notifications">Уведомления о достижениях</string>
     <string name="pref_show_achievement_notifications_summary">Показывать всплывающее окно при получении достижений</string>
     <string name="pref_animated_aurora_background">Анимированный фон Aurora</string>

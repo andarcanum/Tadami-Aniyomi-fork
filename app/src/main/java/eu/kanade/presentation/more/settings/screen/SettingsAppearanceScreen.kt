@@ -35,6 +35,7 @@ import eu.kanade.domain.ui.model.StartScreen
 import eu.kanade.domain.ui.model.TabletUiMode
 import eu.kanade.domain.ui.model.ThemeMode
 import eu.kanade.domain.ui.model.setAppCompatDelegateThemeMode
+import eu.kanade.presentation.entries.translation.googleTranslationSourceLanguageFamilyOptions
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.screen.appearance.AppLanguageScreen
 import eu.kanade.presentation.more.settings.settingsSubtitleColor
@@ -157,12 +158,15 @@ object SettingsAppearanceScreen : SearchableSettings {
         val showAnimeSectionPref = uiPreferences.showAnimeSection()
         val showMangaSectionPref = uiPreferences.showMangaSection()
         val showNovelSectionPref = uiPreferences.showNovelSection()
+        val auroraEntryTranslationPref = uiPreferences.auroraEntryTranslationEnabled()
+        val auroraEntryTranslationLanguagesPref = uiPreferences.auroraEntryTranslationSourceLanguages()
         val showMangaScanlatorBranchesPref = uiPreferences.showMangaScanlatorBranches()
         val appUiFontPref = uiPreferences.appUiFontId()
         val coverTitleFontPref = uiPreferences.coverTitleFontId()
         val showAnimeSection by showAnimeSectionPref.collectAsState()
         val showMangaSection by showMangaSectionPref.collectAsState()
         val showNovelSection by showNovelSectionPref.collectAsState()
+        val auroraEntryTranslationEnabled by auroraEntryTranslationPref.collectAsState()
         val appUiFontId by appUiFontPref.collectAsState()
         val coverTitleFontId by coverTitleFontPref.collectAsState()
         val canResetAppearanceFonts = shouldEnableAppearanceFontsReset(
@@ -403,6 +407,25 @@ object SettingsAppearanceScreen : SearchableSettings {
                         preference = uiPreferences.showOriginalTitle(),
                         title = stringResource(AYMR.strings.pref_show_original_title),
                         subtitle = stringResource(AYMR.strings.pref_show_original_title_summary),
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = auroraEntryTranslationPref,
+                        title = stringResource(AYMR.strings.pref_aurora_entry_translation),
+                        subtitle = stringResource(AYMR.strings.pref_aurora_entry_translation_summary),
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.MultiSelectListPreference(
+                        preference = auroraEntryTranslationLanguagesPref,
+                        entries = googleTranslationSourceLanguageFamilyOptions()
+                            .associate { it.code to it.label }
+                            .toImmutableMap(),
+                        title = stringResource(AYMR.strings.pref_aurora_entry_translation_source_languages),
+                        subtitle = stringResource(
+                            AYMR.strings.pref_aurora_entry_translation_source_languages_summary,
+                        ),
                     ),
                 )
                 add(

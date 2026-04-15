@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import eu.kanade.domain.metadata.model.MetadataLoadError
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.EntryDownloadDropdownMenu
 import eu.kanade.presentation.entries.DownloadAction
 import eu.kanade.presentation.entries.TitleFastScrollOverlayAccumulator
@@ -80,6 +81,7 @@ import eu.kanade.presentation.entries.anime.components.aurora.AnimeInfoCard
 import eu.kanade.presentation.entries.anime.components.aurora.AnimeStatsCard
 import eu.kanade.presentation.entries.anime.components.aurora.EpisodesHeader
 import eu.kanade.presentation.entries.anime.components.aurora.FullscreenPosterBackground
+import eu.kanade.presentation.entries.anime.components.aurora.filterAnimeDescription
 import eu.kanade.presentation.entries.anime.components.aurora.resolveAnimeDetailsSnapshot
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
@@ -94,6 +96,7 @@ import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
 import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollFloatingActionButton
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollOverlayChrome
+import eu.kanade.presentation.entries.translation.rememberAuroraEntryTranslation
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
@@ -113,6 +116,7 @@ import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.TwoPanelBox
 import tachiyomi.presentation.core.components.VerticalFastScroller
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.time.Instant
@@ -354,6 +358,20 @@ fun AnimeScreenAuroraImpl(
             episode.seen || episode.lastSecondSeen > 0L
         }
     }
+    val auroraTranslationPreferences = remember { Injekt.get<UiPreferences>() }
+    val auroraEntryTranslationEnabled by auroraTranslationPreferences
+        .auroraEntryTranslationEnabled()
+        .collectAsState()
+    val auroraEntryTranslationSourceLanguages by auroraTranslationPreferences
+        .auroraEntryTranslationSourceLanguages()
+        .collectAsState()
+    val auroraEntryTranslation = rememberAuroraEntryTranslation(
+        title = anime.title,
+        description = filterAnimeDescription(anime.description),
+        sourceLanguage = state.source.lang,
+        enabled = auroraEntryTranslationEnabled,
+        allowedSourceFamilies = auroraEntryTranslationSourceLanguages,
+    )
 
     AuroraEntryHoldToRefresh(
         refreshing = state.isRefreshingData,
@@ -417,6 +435,7 @@ fun AnimeScreenAuroraImpl(
                             ) {
                                 AnimeHeroContent(
                                     anime = anime,
+                                    translation = auroraEntryTranslation,
                                     hasWatchingProgress = hasWatchingProgress,
                                     ratingText = animeDetailsSnapshot.ratingText,
                                     episodesText = animeDetailsSnapshot.episodesText,
@@ -433,6 +452,7 @@ fun AnimeScreenAuroraImpl(
                                 Spacer(modifier = Modifier.height(8.dp))
                                 AnimeInfoCard(
                                     anime = anime,
+                                    translation = auroraEntryTranslation,
                                     onTagSearch = onTagSearch,
                                     descriptionExpanded = descriptionExpanded,
                                     genresExpanded = genresExpanded,
@@ -672,6 +692,7 @@ fun AnimeScreenAuroraImpl(
                                 Spacer(modifier = Modifier.height(8.dp))
                                 AnimeInfoCard(
                                     anime = anime,
+                                    translation = auroraEntryTranslation,
                                     onTagSearch = onTagSearch,
                                     descriptionExpanded = descriptionExpanded,
                                     genresExpanded = genresExpanded,
@@ -856,6 +877,7 @@ fun AnimeScreenAuroraImpl(
                     ) {
                         AnimeHeroContent(
                             anime = anime,
+                            translation = auroraEntryTranslation,
                             hasWatchingProgress = hasWatchingProgress,
                             ratingText = animeDetailsSnapshot.ratingText,
                             episodesText = animeDetailsSnapshot.episodesText,

@@ -81,6 +81,16 @@ class UiPreferences(
 
     fun showOriginalTitle() = preferenceStore.getBoolean("show_original_title", true)
 
+    fun auroraEntryTranslationEnabled() = preferenceStore.getBoolean(
+        "aurora_entry_translation_enabled",
+        false,
+    )
+
+    fun auroraEntryTranslationSourceLanguages() = preferenceStore.getStringSet(
+        "aurora_entry_translation_source_languages",
+        emptySet(),
+    )
+
     fun showAchievementNotifications() = preferenceStore.getBoolean("show_achievement_notifications", true)
 
     fun animatedAuroraBackground() = preferenceStore.getBoolean("animated_aurora_background", true)

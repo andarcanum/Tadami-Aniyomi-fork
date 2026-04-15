@@ -92,6 +92,7 @@ import eu.kanade.presentation.entries.resolveEntryAutoJumpTargetIndex
 import eu.kanade.presentation.entries.resolveTitleListFastScrollSpec
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollFloatingActionButton
 import eu.kanade.presentation.entries.shouldShowTitleFastScrollOverlayChrome
+import eu.kanade.presentation.entries.translation.rememberAuroraEntryTranslation
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
@@ -112,6 +113,7 @@ import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.TwoPanelBox
 import tachiyomi.presentation.core.components.VerticalFastScroller
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.time.Instant
@@ -221,6 +223,20 @@ fun MangaScreenAuroraImpl(
             metadataError = state.metadataError,
         )
     }
+    val auroraTranslationPreferences = remember { Injekt.get<UiPreferences>() }
+    val auroraEntryTranslationEnabled by auroraTranslationPreferences
+        .auroraEntryTranslationEnabled()
+        .collectAsState()
+    val auroraEntryTranslationSourceLanguages by auroraTranslationPreferences
+        .auroraEntryTranslationSourceLanguages()
+        .collectAsState()
+    val auroraEntryTranslation = rememberAuroraEntryTranslation(
+        title = manga.title,
+        description = manga.description,
+        sourceLanguage = state.source.lang,
+        enabled = auroraEntryTranslationEnabled,
+        allowedSourceFamilies = auroraEntryTranslationSourceLanguages,
+    )
 
     val lazyListState = rememberLazyListState()
     val scrollOffset by remember { derivedStateOf { lazyListState.firstVisibleItemScrollOffset } }
@@ -377,6 +393,7 @@ fun MangaScreenAuroraImpl(
                             ) {
                                 MangaHeroContent(
                                     manga = manga,
+                                    translation = auroraEntryTranslation,
                                     detailsSnapshot = detailsSnapshot,
                                     hasProgress = detailsSnapshot.progress?.hasProgress == true,
                                     onContinueReading = onContinueReading,
@@ -389,6 +406,7 @@ fun MangaScreenAuroraImpl(
                                 Spacer(modifier = Modifier.height(8.dp))
                                 MangaInfoCard(
                                     manga = manga,
+                                    translation = auroraEntryTranslation,
                                     onTagSearch = onTagSearch,
                                     descriptionExpanded = descriptionExpanded,
                                     genresExpanded = genresExpanded,
@@ -642,6 +660,7 @@ fun MangaScreenAuroraImpl(
                                 Spacer(modifier = Modifier.height(8.dp))
                                 MangaInfoCard(
                                     manga = manga,
+                                    translation = auroraEntryTranslation,
                                     onTagSearch = onTagSearch,
                                     descriptionExpanded = descriptionExpanded,
                                     genresExpanded = genresExpanded,
@@ -838,6 +857,7 @@ fun MangaScreenAuroraImpl(
                     ) {
                         MangaHeroContent(
                             manga = manga,
+                            translation = auroraEntryTranslation,
                             detailsSnapshot = detailsSnapshot,
                             hasProgress = detailsSnapshot.progress?.hasProgress == true,
                             onContinueReading = onContinueReading,

@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.presentation.entries.translation.AuroraEntryTranslationState
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.i18n.aniyomi.AYMR
@@ -37,6 +38,7 @@ import tachiyomi.presentation.core.i18n.stringResource
 @Composable
 fun MangaInfoCard(
     manga: Manga,
+    translation: AuroraEntryTranslationState? = null,
     onTagSearch: (String) -> Unit,
     descriptionExpanded: Boolean,
     genresExpanded: Boolean,
@@ -73,8 +75,9 @@ fun MangaInfoCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Top,
                 ) {
+                    val displayDescription = translation?.description ?: manga.description
                     Text(
-                        text = manga.description ?: stringResource(AYMR.strings.aurora_no_description),
+                        text = displayDescription ?: stringResource(AYMR.strings.aurora_no_description),
                         color = colors.textPrimary.copy(alpha = 0.9f),
                         fontSize = 14.sp,
                         lineHeight = 22.sp,
@@ -83,7 +86,7 @@ fun MangaInfoCard(
                         modifier = Modifier.weight(1f),
                     )
 
-                    if ((manga.description?.length ?: 0) > 200) {
+                    if ((displayDescription?.length ?: 0) > 200) {
                         Icon(
                             imageVector = if (descriptionExpanded) {
                                 Icons.Filled.KeyboardArrowUp
