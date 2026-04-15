@@ -1,19 +1,19 @@
-# Privacy Policy
+# Tadami Privacy Policy
 
 Last updated: 2026-04-15
 
-This application ("the App") is designed to help you manage and synchronize your library data. This Privacy Policy explains what information the App may process and how it is handled.
+Tadami is designed to help you manage and synchronize your anime, manga, and novel library data. This Privacy Policy explains what information Tadami may process and how it is handled.
 
-## Information the App Processes
+## Information Tadami Processes
 
-The App may process the following data locally on your device:
+Tadami may process the following data locally on your device:
 
 - Library metadata and reading data
-- Backup and restore data created by the App
-- App preferences and settings
+- Backup and restore data created by Tadami
+- Tadami preferences and settings
 - A locally generated device identifier used for sync conflict resolution
 
-If you enable Google Drive sync, the App also processes:
+If you enable Google Drive sync, Tadami also processes:
 
 - Google OAuth access and refresh tokens
 - Google Drive file metadata needed for synchronization
@@ -21,28 +21,28 @@ If you enable Google Drive sync, the App also processes:
 
 ## How the Data Is Used
 
-The App uses this data only to:
+Tadami uses this data only to:
 
-- Display and manage your library
+- Display and manage your anime, manga, and novel library
 - Create and restore local backups
 - Synchronize your data between devices when you enable Google Drive sync
 - Detect which device last performed a sync
 
 ## Storage
 
-- Most App data is stored locally on your device.
+- Most Tadami data is stored locally on your device.
 - If you enable Google Drive sync, synchronization data is stored in Google Drive app data storage.
-- OAuth tokens are stored locally on your device so the App can maintain your Google Drive session.
+- OAuth tokens are stored locally on your device so Tadami can maintain your Google Drive session.
 
 ## Sharing
 
-The App does not sell your personal data.
+Tadami does not sell your personal data.
 
-The App only sends data to Google when you explicitly use Google Drive sign-in or synchronization features. In that case, Google may process the data according to its own terms and privacy policy.
+Tadami only sends data to Google when you explicitly use Google Drive sign-in or synchronization features. In that case, Google may process the data according to its own terms and privacy policy.
 
 ## Permissions and Access
 
-When you sign in with Google Drive, you grant the App access only to the scopes required for synchronization:
+When you sign in with Google Drive, you grant Tadami access only to the scopes required for synchronization:
 
 - `drive.file`
 - `drive.appdata`
@@ -51,22 +51,22 @@ When you sign in with Google Drive, you grant the App access only to the scopes 
 
 You can:
 
-- Use the App without Google Drive sync
+- Use Tadami without Google Drive sync
 - Disable cloud sync at any time
 - Sign out from Google Drive
-- Remove synchronization data from Google Drive through the App, if available
+- Remove synchronization data from Google Drive through Tadami, if available
 
 ## Data Retention
 
-Local data remains on your device until you delete it or uninstall the App.
+Local data remains on your device until you delete it or uninstall Tadami.
 
-If Google Drive sync is enabled, synchronization data remains in your Google Drive until you delete it or remove the App's access.
+If Google Drive sync is enabled, synchronization data remains in your Google Drive until you delete it or remove Tadami's access.
 
-OAuth tokens are removed when you sign out or clear the App's data.
+OAuth tokens are removed when you sign out or clear Tadami's data.
 
 ## Children
 
-The App is not intended for use by children without appropriate supervision.
+Tadami is not intended for use by children without appropriate supervision.
 
 ## Changes to This Policy
 
