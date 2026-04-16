@@ -1,8 +1,10 @@
 package eu.kanade.presentation.components
 
+import android.content.Context
 import androidx.annotation.DrawableRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.painter.Painter
+import coil3.request.ImageRequest
 import com.tadami.aurora.R
 import eu.kanade.presentation.theme.LocalIsAuroraTheme
 import eu.kanade.presentation.util.rememberResourceBitmapPainter
@@ -40,6 +42,29 @@ fun rememberThemeAwareCoverErrorPainter(
             variant = variant,
         ),
     )
+}
+
+fun resolveAuroraCoverPlaceholderMemoryCacheKey(data: Any?): String? {
+    return when (val candidate = resolveAuroraCoverModelCandidate(data)) {
+        null -> null
+        is String -> candidate
+        is AnimeCover -> "anime;${candidate.url};${candidate.lastModified}"
+        is MangaCover -> "manga;${candidate.url};${candidate.lastModified}"
+        is NovelCover -> "novel;${candidate.url};${candidate.lastModified}"
+        else -> candidate.toString()
+    }
+}
+
+fun buildAuroraCoverImageRequest(
+    context: Context,
+    data: Any?,
+    configure: ImageRequest.Builder.() -> Unit = {},
+): ImageRequest {
+    return ImageRequest.Builder(context)
+        .data(resolveAuroraCoverModel(data))
+        .placeholderMemoryCacheKey(resolveAuroraCoverPlaceholderMemoryCacheKey(data))
+        .apply(configure)
+        .build()
 }
 
 @DrawableRes

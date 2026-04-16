@@ -19,6 +19,7 @@ import eu.kanade.presentation.library.components.CommonEntryItemDefaults
 import eu.kanade.presentation.library.components.EntryComfortableGridItem
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
+import eu.kanade.tachiyomi.source.novel.NovelPluginImageWarmupEffect
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.entries.novel.model.NovelCover
 import tachiyomi.domain.entries.novel.model.asNovelCover
@@ -68,6 +69,7 @@ private fun NovelItem(
     onLongClick: () -> Unit,
 ) {
     Box(modifier = Modifier.width(96.dp)) {
+        NovelPluginImageWarmupEffect(cover.url, cover.lastModified)
         EntryComfortableGridItem(
             title = title,
             titleMaxLines = 3,

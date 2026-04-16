@@ -26,6 +26,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +45,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.Hyphens
@@ -56,9 +58,9 @@ import androidx.compose.ui.unit.sp
 import androidx.core.graphics.PathParser
 import coil3.compose.AsyncImage
 import dev.icerock.moko.resources.StringResource
+import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.components.resolveAuroraCardOverlaySpec
-import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
@@ -630,6 +632,7 @@ private fun GlowContourLibraryCard(
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
+    val context = LocalContext.current
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
     val posterSurfaceSpec = resolveGlowContourPosterSurfaceSpec(colors.isDark)
     val footerContent = resolveGlowContourFooterContent(
@@ -680,9 +683,12 @@ private fun GlowContourLibraryCard(
             gridColumns = gridColumns,
             cardWidthDp = maxWidth.value,
         )
+        val coverRequest = remember(coverData) {
+            buildAuroraCoverImageRequest(context, coverData)
+        }
 
         AsyncImage(
-            model = resolveAuroraCoverModel(coverData),
+            model = coverRequest,
             contentDescription = null,
             contentScale = ContentScale.Crop,
             colorFilter = rememberAuroraPosterColorFilter(),

@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -12,8 +13,10 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import coil3.compose.AsyncImage
+import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import tachiyomi.domain.entries.anime.model.AnimeCover
@@ -51,10 +54,14 @@ enum class ItemCover(val ratio: Float) {
             )
 
         val resolvedErrorPainter = errorPainter ?: rememberThemeAwareCoverErrorPainter()
+        val context = LocalContext.current
 
         if (isLoadableCoverData(model)) {
+            val coverRequest = remember(model) {
+                buildAuroraCoverImageRequest(context, model)
+            }
             AsyncImage(
-                model = model,
+                model = coverRequest,
                 placeholder = ColorPainter(CoverPlaceholderColor),
                 error = resolvedErrorPainter,
                 fallback = resolvedErrorPainter,

@@ -41,11 +41,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
 import coil3.request.crossfade
+import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.relativeDateTimeText
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
-import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.entries.components.aurora.AURORA_DIMMED_ITEM_ALPHA
 import eu.kanade.presentation.entries.components.aurora.AURORA_NEW_ITEM_HIGHLIGHT_ALPHA
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadAction
@@ -132,15 +131,14 @@ fun MangaChapterCardCompact(
                         .clip(RoundedCornerShape(8.dp))
                         .background(Color.Black.copy(alpha = 0.3f)),
                 ) {
+                    val coverRequest = remember(manga.id, manga.thumbnailUrl, manga.coverLastModified) {
+                        buildAuroraCoverImageRequest(context, manga.asMangaCover()) {
+                            crossfade(true)
+                            size(40)
+                        }
+                    }
                     AsyncImage(
-                        model = remember(manga.id, manga.thumbnailUrl, manga.coverLastModified) {
-                            ImageRequest.Builder(context)
-                                .data(resolveAuroraCoverModel(manga.asMangaCover()))
-                                .placeholderMemoryCacheKey(manga.thumbnailUrl)
-                                .crossfade(true)
-                                .size(40)
-                                .build()
-                        },
+                        model = coverRequest,
                         error = placeholderPainter,
                         fallback = placeholderPainter,
                         contentDescription = null,
