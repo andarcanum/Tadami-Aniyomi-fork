@@ -7,6 +7,7 @@ import eu.kanade.domain.entries.novel.model.toSNovel
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.domain.items.novelchapter.model.toSNovelChapter
 import eu.kanade.presentation.reader.novel.NovelReaderTtsChapterHandoffPolicy
+import eu.kanade.presentation.reader.novel.SeriesInterstitialState
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.prefetch.AllowAllContentPrefetchEnvironment
 import eu.kanade.tachiyomi.data.prefetch.AndroidContentPrefetchEnvironment
@@ -28,6 +29,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationStylePreset
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
+import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationService
@@ -94,6 +96,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.isActive
@@ -127,6 +130,7 @@ import tachiyomi.domain.history.novel.repository.NovelHistoryRepository
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
+import tachiyomi.domain.series.novel.interactor.GetNovelSeriesWithEntries
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -137,10 +141,12 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 class NovelReaderScreenModel(
     private val chapterId: Long,
+    private val seriesId: Long? = null,
     private val autoStartGeminiTranslation: Boolean = false,
     private val novelChapterRepository: NovelChapterRepository = Injekt.get(),
     private val syncNovelChaptersWithSource: SyncNovelChaptersWithSource = Injekt.get(),
     private val getNovel: GetNovel = Injekt.get(),
+    private val getNovelSeriesWithEntries: GetNovelSeriesWithEntries = Injekt.get(),
     private val sourceManager: NovelSourceManager = Injekt.get(),
     private val novelDownloadManager: NovelDownloadManager = NovelDownloadManager(),
     private val pluginStorage: NovelPluginStorage = Injekt.get(),
@@ -335,6 +341,8 @@ class NovelReaderScreenModel(
     private var translationPhase: TranslationPhase = TranslationPhase.IDLE
     private val googleSessionCache = GoogleTranslationSessionCache()
     private var ttsUiState: NovelReaderTtsUiState = NovelReaderTtsUiState()
+    private var seriesInterstitialState: SeriesInterstitialState? = null
+    private var seriesInterstitialShownForChapterId: Long? = null
     private var initializedTtsEnginePackage: String? = null
     private var pendingTtsStartRequest: eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackStartRequest? = null
 
@@ -573,6 +581,57 @@ class NovelReaderScreenModel(
             .takeIf { it >= 0 }
             ?.let { chapterOrderList.getOrNull(it + 1) }
     }
+    private fun setSeriesInterstitialState(value: SeriesInterstitialState?) {
+        seriesInterstitialState = value
+        val currentState = mutableState.value
+        if (currentState is State.Success) {
+            mutableState.value = currentState.copy(seriesInterstitialState = value)
+        }
+    }
+    fun clearSeriesInterstitial() {
+        setSeriesInterstitialState(null)
+    }
+    private suspend fun resolveSeriesInterstitialState(): SeriesInterstitialState? {
+        val targetSeriesId = seriesId ?: return null
+        val novel = currentNovel ?: return null
+        val wrapper = getNovelSeriesWithEntries.subscribe(targetSeriesId).first() ?: return null
+        val seriesEntries = wrapper.series.entries
+        val currentIndex = seriesEntries.indexOfFirst { it.id == novel.id }
+        if (currentIndex < 0) return null
+        val nextNovel = seriesEntries.getOrNull(currentIndex + 1)?.novel
+        val nextChapter = nextNovel?.let { entryNovel ->
+            val chapters = withContext(Dispatchers.IO) {
+                novelChapterRepository.getChapterByNovelId(
+                    entryNovel.id,
+                    applyScanlatorFilter = true,
+                ).sortedWith(
+                    compareBy<NovelChapter> { it.sourceOrder }
+                        .thenBy { it.chapterNumber }
+                        .thenBy { it.id },
+                )
+            }
+            resolveNovelResumeChapter(chapters)
+        }
+        return SeriesInterstitialState(
+            seriesTitle = wrapper.series.title,
+            currentNovelTitle = novel.title,
+            nextNovel = nextNovel,
+            nextChapterId = nextChapter?.id,
+            nextChapterName = nextChapter?.name,
+        )
+    }
+    private fun maybeShowSeriesInterstitial(chapter: NovelChapter, becameRead: Boolean) {
+        if (!becameRead) return
+        if (seriesId == null) return
+        if (seriesInterstitialState != null) return
+        if (seriesInterstitialShownForChapterId == chapter.id) return
+        if (findNextChapter(chapter) != null) return
+        seriesInterstitialShownForChapterId = chapter.id
+        screenModelScope.launch {
+            val resolved = resolveSeriesInterstitialState() ?: return@launch
+            setSeriesInterstitialState(resolved)
+        }
+    }
     private suspend fun loadChapterOrderList(novelId: Long): List<NovelChapter> {
         return withContext(Dispatchers.IO) {
             val chapters = novelChapterRepository.getChapterByNovelId(novelId, applyScanlatorFilter = true)
@@ -762,6 +821,7 @@ class NovelReaderScreenModel(
             previousChapterName = chapterNavigation.previousChapterName,
             nextChapterId = chapterNavigation.nextChapterId,
             nextChapterName = chapterNavigation.nextChapterName,
+            seriesInterstitialState = seriesInterstitialState,
             chapterWebUrl = chapterWebUrl,
             selectedTextTranslationSelection = selectedTextTranslationSelection,
             selectedTextTranslationUiState = selectedTextTranslationUiState,
@@ -1198,6 +1258,10 @@ class NovelReaderScreenModel(
             chapter = chapter,
             read = shouldPersistRead,
             progress = newProgress,
+        )
+        maybeShowSeriesInterstitial(
+            chapter = chapter,
+            becameRead = becameRead,
         )
         val shouldEmitNovelCompleted = becameRead && chapterOrderList.all { it.read }
         enqueueProgressPersistence(
@@ -1749,6 +1813,8 @@ class NovelReaderScreenModel(
         ttsWordProgressJob?.cancel()
         ttsWordProgressJob = null
         pendingTtsStartRequest = null
+        seriesInterstitialState = null
+        seriesInterstitialShownForChapterId = null
         chapterReadStartTimeMs = System.currentTimeMillis()
     }
     fun addGeminiLog(message: String) {
@@ -3692,6 +3758,7 @@ class NovelReaderScreenModel(
             val previousChapterName: String? = null,
             val nextChapterId: Long?,
             val nextChapterName: String? = null,
+            val seriesInterstitialState: SeriesInterstitialState? = null,
             val chapterWebUrl: String?,
             val selectedTextTranslationSelection: NovelSelectedTextSelection? = null,
             val selectedTextTranslationUiState: NovelSelectedTextTranslationUiState =

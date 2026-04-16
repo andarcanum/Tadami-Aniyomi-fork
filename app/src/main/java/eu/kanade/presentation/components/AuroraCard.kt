@@ -57,6 +57,7 @@ fun AuroraCard(
     imagePadding: Dp = 0.dp,
     titleMaxLines: Int = 2,
     gridColumns: Int? = null,
+    customCover: @Composable (() -> Unit)? = null,
 ) {
     val colors = AuroraTheme.colors
     val context = LocalContext.current
@@ -102,26 +103,30 @@ fun AuroraCard(
                     cardWidthDp = maxWidth.value,
                 )
 
-                AsyncImage(
-                    model = coverRequest,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(
-                            if (imagePadding >
-                                0.dp
-                            ) {
-                                RoundedCornerShape(8.dp)
-                            } else if (showTextContent) {
-                                RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
-                            } else {
-                                RoundedCornerShape(12.dp)
-                            },
-                        ),
-                    error = placeholderPainter,
-                    fallback = placeholderPainter,
-                )
+                if (customCover != null) {
+                    customCover()
+                } else {
+                    AsyncImage(
+                        model = coverRequest,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(
+                                if (imagePadding >
+                                    0.dp
+                                ) {
+                                    RoundedCornerShape(8.dp)
+                                } else if (showTextContent) {
+                                    RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
+                                } else {
+                                    RoundedCornerShape(12.dp)
+                                },
+                            ),
+                        error = placeholderPainter,
+                        fallback = placeholderPainter,
+                    )
+                }
 
                 // Badge overlay (e.g. Unread count)
                 if (badge != null) {

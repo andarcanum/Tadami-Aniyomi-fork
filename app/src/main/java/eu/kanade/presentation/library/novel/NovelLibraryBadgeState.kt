@@ -1,6 +1,6 @@
 package eu.kanade.presentation.library.novel
 
-import tachiyomi.domain.library.novel.LibraryNovel
+
 
 internal data class NovelLibraryBadgeState(
     val showDownloaded: Boolean,
@@ -9,7 +9,7 @@ internal data class NovelLibraryBadgeState(
 )
 
 internal fun resolveNovelLibraryBadgeState(
-    item: LibraryNovel,
+    item: NovelLibraryItem,
     showDownloadBadge: Boolean,
     downloadedNovelIds: Set<Long>,
     showUnreadBadge: Boolean,
@@ -17,7 +17,7 @@ internal fun resolveNovelLibraryBadgeState(
     sourceLanguage: String,
 ): NovelLibraryBadgeState {
     return NovelLibraryBadgeState(
-        showDownloaded = showDownloadBadge && item.novel.id in downloadedNovelIds,
+        showDownloaded = showDownloadBadge && item.id in downloadedNovelIds,
         unreadCount = item.unreadCount.takeIf { showUnreadBadge && it > 0L },
         language = sourceLanguage.takeIf { showLanguageBadge && it.isNotBlank() },
     )

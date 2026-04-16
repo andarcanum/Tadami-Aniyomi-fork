@@ -139,6 +139,7 @@ import tachiyomi.data.track.novel.NovelTrackRepositoryImpl
 import tachiyomi.data.updates.anime.AnimeUpdatesRepositoryImpl
 import tachiyomi.data.updates.manga.MangaUpdatesRepositoryImpl
 import tachiyomi.data.updates.novel.NovelUpdatesRepositoryImpl
+import tachiyomi.data.series.novel.NovelSeriesRepositoryImpl
 import tachiyomi.domain.achievement.repository.AchievementRepository
 import tachiyomi.domain.achievement.repository.ActivityDataRepository
 import tachiyomi.domain.category.anime.interactor.CreateAnimeCategoryWithName
@@ -178,6 +179,16 @@ import tachiyomi.domain.category.novel.interactor.ResetNovelCategoryFlags
 import tachiyomi.domain.category.novel.interactor.SetNovelCategories
 import tachiyomi.domain.category.novel.interactor.UpdateNovelCategory
 import tachiyomi.domain.category.novel.repository.NovelCategoryRepository
+import tachiyomi.domain.series.novel.repository.NovelSeriesRepository
+import tachiyomi.domain.series.novel.interactor.UpdateNovelSeries
+import tachiyomi.domain.series.novel.interactor.AddNovelsToSeries
+import tachiyomi.domain.series.novel.interactor.CreateNovelSeries
+import tachiyomi.domain.series.novel.interactor.DeleteNovelSeries
+import tachiyomi.domain.series.novel.interactor.GetLibraryNovelSeries
+import tachiyomi.domain.series.novel.interactor.GetNovelIdsInAnySeries
+import tachiyomi.domain.series.novel.interactor.GetNovelSeriesWithEntries
+import tachiyomi.domain.series.novel.interactor.RemoveNovelFromSeries
+import tachiyomi.domain.series.novel.interactor.ReorderSeriesEntries
 import tachiyomi.domain.custombuttons.interactor.CreateCustomButton
 import tachiyomi.domain.custombuttons.interactor.DeleteCustomButton
 import tachiyomi.domain.custombuttons.interactor.GetCustomButtons
@@ -245,6 +256,7 @@ import tachiyomi.domain.items.episode.interactor.SetAnimeDefaultEpisodeFlags
 import tachiyomi.domain.items.episode.interactor.ShouldUpdateDbEpisode
 import tachiyomi.domain.items.episode.interactor.UpdateEpisode
 import tachiyomi.domain.items.episode.repository.EpisodeRepository
+import tachiyomi.domain.items.novelchapter.interactor.GetNovelChapters
 import tachiyomi.domain.items.novelchapter.interactor.SetNovelDefaultChapterFlags
 import tachiyomi.domain.items.novelchapter.interactor.ShouldUpdateDbNovelChapter
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
@@ -333,6 +345,17 @@ class DomainModule : InjektModule {
         addFactory { HideNovelCategory(get()) }
         addFactory { DeleteNovelCategory(get(), get(), get()) }
         addFactory { SetNovelCategories(get()) }
+        
+        addSingletonFactory<NovelSeriesRepository> { NovelSeriesRepositoryImpl(get(), get()) }
+        addFactory { CreateNovelSeries(get()) }
+        addFactory { DeleteNovelSeries(get()) }
+        addFactory { GetNovelSeriesWithEntries(get(), get()) }
+        addFactory { GetLibraryNovelSeries(get()) }
+        addFactory { AddNovelsToSeries(get()) }
+        addFactory { RemoveNovelFromSeries(get()) }
+        addFactory { ReorderSeriesEntries(get()) }
+        addFactory { UpdateNovelSeries(get()) }
+        addFactory { GetNovelIdsInAnySeries(get()) }
 
         addSingletonFactory<AnimeRepository> { AnimeRepositoryImpl(get(), get()) }
         addFactory { GetDuplicateLibraryAnime(get()) }
@@ -392,6 +415,7 @@ class DomainModule : InjektModule {
         addFactory { GetNovelFavorites(get()) }
         addFactory { GetLibraryNovel(get()) }
         addFactory { GetNovelWithChapters(get(), get()) }
+        addSingletonFactory { GetNovelChapters(get()) }
         addFactory { SetNovelChapterFlags(get()) }
         addFactory {
             SetNovelDefaultChapterFlags(

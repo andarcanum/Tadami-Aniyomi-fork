@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Input
 import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.automirrored.outlined.LabelOff
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.BookmarkRemove
@@ -303,6 +304,7 @@ fun LibraryBottomActionMenu(
     onOpenDownloadDialog: (() -> Unit)? = null,
     onTranslatedDownloadClicked: (() -> Unit)? = null,
     onMigrateClicked: (() -> Unit)? = null,
+    onSeriesClicked: (() -> Unit)? = null,
     onDeleteClicked: () -> Unit,
     isManga: Boolean,
     modifier: Modifier = Modifier,
@@ -322,7 +324,7 @@ fun LibraryBottomActionMenu(
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
             val haptic = LocalHapticFeedback.current
-            val confirm = remember { mutableStateListOf(false, false, false, false, false, false, false) }
+            val confirm = remember { mutableStateListOf(false, false, false, false, false, false, false, false) }
             var resetJob: Job? = remember { null }
             val onLongClickItem: (Int) -> Unit = { toConfirmIndex ->
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -399,6 +401,17 @@ fun LibraryBottomActionMenu(
                         onClick = onTranslatedDownloadClicked,
                     )
                 }
+
+                if (onSeriesClicked != null) {
+                    Button(
+                        title = stringResource(AYMR.strings.series_detail),
+                        icon = Icons.AutoMirrored.Outlined.MenuBook,
+                        toConfirm = confirm[7],
+                        onLongClick = { onLongClickItem(7) },
+                        onClick = onSeriesClicked,
+                    )
+                }
+
                 if (onDownloadClicked == null) {
                     if (onMigrateClicked != null) {
                         Button(

@@ -1,0 +1,40 @@
+CREATE TABLE novel_series (
+    _id INTEGER NOT NULL PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT,
+    category_id INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    date_added INTEGER NOT NULL DEFAULT 0,
+    cover_last_modified INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX novel_series_category_index ON novel_series(category_id);
+
+getAllSeries:
+SELECT * FROM novel_series;
+
+getSeriesById:
+SELECT * FROM novel_series WHERE _id = :id;
+
+getSeriesByCategory:
+SELECT * FROM novel_series WHERE category_id = :categoryId ORDER BY sort_order;
+
+insert:
+INSERT INTO novel_series(title, description, category_id, sort_order, date_added, cover_last_modified)
+VALUES (:title, :description, :categoryId, :sortOrder, :dateAdded, :coverLastModified);
+
+update:
+UPDATE novel_series
+SET title = coalesce(:title, title),
+    description = coalesce(:description, description),
+    category_id = coalesce(:categoryId, category_id),
+    sort_order = coalesce(:sortOrder, sort_order),
+    date_added = coalesce(:dateAdded, date_added),
+    cover_last_modified = coalesce(:coverLastModified, cover_last_modified)
+WHERE _id = :id;
+
+delete:
+DELETE FROM novel_series WHERE _id = :id;
+
+selectLastInsertedRowId:
+SELECT last_insert_rowid();

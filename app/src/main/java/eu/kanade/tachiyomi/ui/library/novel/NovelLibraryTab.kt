@@ -46,9 +46,12 @@ import cafe.adriel.voyager.navigator.tab.TabOptions
 import com.tadami.aurora.R
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.entries.components.ItemCover
+import eu.kanade.presentation.library.DeleteLibraryEntryDialog
 import eu.kanade.presentation.library.components.LibraryToolbar
 import eu.kanade.presentation.library.components.LibraryToolbarTitle
 import eu.kanade.presentation.library.novel.NovelLibrarySettingsDialog
+import eu.kanade.presentation.library.novel.components.AddToSeriesDialog
+import eu.kanade.presentation.library.novel.components.CreateSeriesDialog
 import eu.kanade.presentation.library.novel.resolveNovelLibraryBadgeState
 import eu.kanade.presentation.novel.sourceAwareNovelCoverModel
 import eu.kanade.presentation.util.Tab
@@ -56,6 +59,7 @@ import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
 import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
 import eu.kanade.tachiyomi.ui.category.CategoriesTab
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
+import eu.kanade.tachiyomi.ui.series.novel.NovelSeriesScreen
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -64,6 +68,7 @@ import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.library.novel.LibraryNovel
+import eu.kanade.presentation.library.novel.NovelLibraryItem
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.i18n.MR
@@ -136,16 +141,18 @@ data object NovelLibraryTab : Tab {
 
             state.items.asSequence()
                 .mapNotNull { item ->
-                    item.novel.id.takeIf { downloadCache.hasAnyDownloadedChapter(item.novel) }
+                    val novelItem = (item as? NovelLibraryItem.Single)?.libraryNovel?.novel ?: return@mapNotNull null
+                    item.id.takeIf { downloadCache.hasAnyDownloadedChapter(novelItem) }
                 }
                 .toSet()
         }
         val sourceLanguageByNovelId = remember(state.items, showLanguageBadge) {
             if (!showLanguageBadge) return@remember emptyMap()
 
-            state.items.associate { item ->
-                item.novel.id to sourceManager.getOrStub(item.novel.source).lang
-            }
+            state.items.mapNotNull { item ->
+                val source = (item as? NovelLibraryItem.Single)?.libraryNovel?.novel?.source ?: return@mapNotNull null
+                item.id to sourceManager.getOrStub(source).lang
+            }.toMap()
         }
         val snackbarHostState = remember { SnackbarHostState() }
 
@@ -197,7 +204,11 @@ data object NovelLibraryTab : Tab {
                         scope.launch {
                             val randomItem = state.items.randomOrNull()
                             if (randomItem != null) {
-                                navigator.push(NovelScreen(randomItem.novel.id))
+                                if (randomItem is NovelLibraryItem.Series) {
+                                    navigator.push(NovelSeriesScreen(randomItem.librarySeries.id))
+                                } else {
+                                    navigator.push(NovelScreen(randomItem.id))
+                                }
                             } else {
                                 snackbarHostState.showSnackbar(
                                     context.stringResource(MR.strings.information_no_entries_found),
@@ -240,9 +251,15 @@ data object NovelLibraryTab : Tab {
                                         downloadedNovelIds = downloadedNovelIds,
                                         showUnreadBadge = showUnreadBadge,
                                         showLanguageBadge = showLanguageBadge,
-                                        sourceLanguage = sourceLanguageByNovelId[item.novel.id].orEmpty(),
+                                        sourceLanguage = sourceLanguageByNovelId[item.id].orEmpty(),
                                     ),
-                                    onClick = { navigator.push(NovelScreen(item.novel.id)) },
+                                    onClick = {
+                                        if (item is NovelLibraryItem.Series) {
+                                            navigator.push(NovelSeriesScreen(item.librarySeries.id))
+                                        } else {
+                                            navigator.push(NovelScreen(item.id))
+                                        }
+                                    },
                                 )
                             }
                         }
@@ -272,10 +289,16 @@ data object NovelLibraryTab : Tab {
                                         downloadedNovelIds = downloadedNovelIds,
                                         showUnreadBadge = showUnreadBadge,
                                         showLanguageBadge = showLanguageBadge,
-                                        sourceLanguage = sourceLanguageByNovelId[item.novel.id].orEmpty(),
+                                        sourceLanguage = sourceLanguageByNovelId[item.id].orEmpty(),
                                     ),
                                     showMetadata = displayMode != LibraryDisplayMode.CoverOnlyGrid,
-                                    onClick = { navigator.push(NovelScreen(item.novel.id)) },
+                                    onClick = {
+                                        if (item is NovelLibraryItem.Series) {
+                                            navigator.push(NovelSeriesScreen(item.librarySeries.id))
+                                        } else {
+                                            navigator.push(NovelScreen(item.id))
+                                        }
+                                    },
                                 )
                             }
                         }
@@ -309,14 +332,28 @@ data object NovelLibraryTab : Tab {
                 )
             }
             is NovelLibraryScreenModel.Dialog.DeleteNovels -> {
-                eu.kanade.presentation.library.DeleteLibraryEntryDialog(
+                DeleteLibraryEntryDialog(
                     containsLocalEntry = false,
                     onDismissRequest = screenModel::closeDialog,
                     onConfirm = { deleteFromLibrary, deleteChapters ->
                         screenModel.removeNovels(dialog.novels, deleteFromLibrary, deleteChapters)
                         screenModel.clearSelection()
                     },
-                    isManga = true,
+                    isManga = false,
+                )
+            }
+            NovelLibraryScreenModel.Dialog.CreateSeries -> {
+                CreateSeriesDialog(
+                    onDismissRequest = screenModel::closeDialog,
+                    onCreate = screenModel::createSeries,
+                )
+            }
+            is NovelLibraryScreenModel.Dialog.AddToSeries -> {
+                AddToSeriesDialog(
+                    series = dialog.series,
+                    onDismissRequest = screenModel::closeDialog,
+                    onSelect = screenModel::addSelectionToSeries,
+                    onCreateSeries = screenModel::openCreateSeries,
                 )
             }
             null -> {}
@@ -329,7 +366,7 @@ data object NovelLibraryTab : Tab {
 
 @Composable
 private fun NovelLibraryGridItem(
-    item: LibraryNovel,
+    item: NovelLibraryItem,
     badgeState: eu.kanade.presentation.library.novel.NovelLibraryBadgeState,
     showMetadata: Boolean,
     onClick: () -> Unit,
@@ -355,7 +392,7 @@ private fun NovelLibraryGridItem(
                     .height(170.dp),
             ) {
                 ItemCover.Book(
-                    data = sourceAwareNovelCoverModel(item.novel),
+                    data = (item as? NovelLibraryItem.Single)?.libraryNovel?.novel?.let { sourceAwareNovelCoverModel(it) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(170.dp),
@@ -380,7 +417,7 @@ private fun NovelLibraryGridItem(
             }
             if (showMetadata) {
                 Text(
-                    text = item.novel.title,
+                    text = item.title,
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 2,
                 )
@@ -398,7 +435,7 @@ private fun NovelLibraryGridItem(
 
 @Composable
 private fun NovelLibraryListItem(
-    item: LibraryNovel,
+    item: NovelLibraryItem,
     badgeState: eu.kanade.presentation.library.novel.NovelLibraryBadgeState,
     onClick: () -> Unit,
 ) {
@@ -423,7 +460,7 @@ private fun NovelLibraryListItem(
                     .aspectRatio(0.68f),
             ) {
                 ItemCover.Book(
-                    data = sourceAwareNovelCoverModel(item.novel),
+                    data = (item as? NovelLibraryItem.Single)?.libraryNovel?.novel?.let { sourceAwareNovelCoverModel(it) },
                     modifier = Modifier
                         .height(112.dp)
                         .aspectRatio(0.68f),
@@ -451,7 +488,7 @@ private fun NovelLibraryListItem(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
-                    text = item.novel.title,
+                    text = item.title,
                     style = MaterialTheme.typography.bodyLarge,
                     maxLines = 2,
                 )

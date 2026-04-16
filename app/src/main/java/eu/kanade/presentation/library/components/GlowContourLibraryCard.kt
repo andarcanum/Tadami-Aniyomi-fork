@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -494,6 +495,7 @@ internal fun GlowContourLibraryGridItem(
     onClickContinueViewing: (() -> Unit)? = null,
     isSelected: Boolean = false,
     gridColumns: Int? = null,
+    customCover: @Composable (() -> Unit)? = null,
 ) {
     val colors = AuroraTheme.colors
     val blendSpec = resolveGlowContourUnifiedBlendSpec(colors.isDark)
@@ -519,6 +521,7 @@ internal fun GlowContourLibraryGridItem(
             cornerIndicatorState = cornerIndicatorState,
             onClickContinueViewing = onClickContinueViewing,
             gridColumns = gridColumns,
+            customCover = customCover,
         )
 
         if (textSpec.showTextBlock) {
@@ -630,6 +633,7 @@ private fun GlowContourLibraryCard(
     onClickContinueViewing: (() -> Unit)?,
     gridColumns: Int?,
     modifier: Modifier = Modifier,
+    customCover: @Composable (() -> Unit)? = null,
 ) {
     val colors = AuroraTheme.colors
     val context = LocalContext.current
@@ -683,15 +687,8 @@ private fun GlowContourLibraryCard(
             gridColumns = gridColumns,
             cardWidthDp = maxWidth.value,
         )
-        val coverRequest = remember(coverData) {
-            buildAuroraCoverImageRequest(context, coverData)
-        }
 
-        AsyncImage(
-            model = coverRequest,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            colorFilter = rememberAuroraPosterColorFilter(),
+        Box(
             modifier = Modifier
                 .matchParentSize()
                 .drawWithCache {
@@ -702,9 +699,25 @@ private fun GlowContourLibraryCard(
                         }
                     }
                 },
-            error = placeholderPainter,
-            fallback = placeholderPainter,
-        )
+        ) {
+            if (customCover != null) {
+                customCover()
+            } else {
+                val coverRequest = remember(coverData) {
+                    buildAuroraCoverImageRequest(context, coverData)
+                }
+
+                AsyncImage(
+                    model = coverRequest,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    colorFilter = rememberAuroraPosterColorFilter(),
+                    modifier = Modifier.fillMaxSize(),
+                    error = placeholderPainter,
+                    fallback = placeholderPainter,
+                )
+            }
+        }
 
         Box(
             modifier = Modifier

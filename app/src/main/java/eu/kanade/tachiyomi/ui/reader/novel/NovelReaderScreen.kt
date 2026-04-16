@@ -32,6 +32,7 @@ import eu.kanade.presentation.reader.novel.NovelReaderChapterHandoffPolicy
 import eu.kanade.presentation.reader.novel.NovelReaderPageReaderHandoffTarget
 import eu.kanade.presentation.reader.novel.NovelReaderScreen
 import eu.kanade.presentation.reader.novel.NovelReaderSystemUiSession
+import eu.kanade.presentation.reader.novel.SeriesInterstitialOverlay
 import eu.kanade.presentation.reader.novel.SystemUIController
 import eu.kanade.presentation.reader.novel.readNovelReaderCustomBackgroundItems
 import eu.kanade.presentation.reader.novel.resolveNovelReaderBackdropColor
@@ -57,6 +58,7 @@ import java.io.File
 class NovelReaderScreen(
     private val chapterId: Long,
     private val sourceId: Long? = null,
+    private val seriesId: Long? = null,
     private val autoStartGeminiTranslation: Boolean = false,
 ) : eu.kanade.presentation.util.Screen() {
     fun resolveInitialBackdropColor(): Color? {
@@ -75,6 +77,7 @@ class NovelReaderScreen(
         val screenModel = rememberScreenModel {
             NovelReaderScreenModel(
                 chapterId = chapterId,
+                seriesId = seriesId,
                 autoStartGeminiTranslation = autoStartGeminiTranslation,
             )
         }
@@ -285,7 +288,13 @@ class NovelReaderScreen(
                             NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
                                 NovelReaderPageReaderHandoffTarget.END,
                             )
-                            navigator.replace(NovelReaderScreen(previousChapterId, successState.novel.source))
+                            navigator.replace(
+                                NovelReaderScreen(
+                                    previousChapterId,
+                                    sourceId = successState.novel.source,
+                                    seriesId = seriesId,
+                                ),
+                            )
                         }
                     },
                     onOpenNextChapter = { nextChapterId ->
@@ -295,10 +304,52 @@ class NovelReaderScreen(
                             NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
                                 NovelReaderPageReaderHandoffTarget.START,
                             )
-                            navigator.replace(NovelReaderScreen(nextChapterId, successState.novel.source))
+                            navigator.replace(
+                                NovelReaderScreen(
+                                    nextChapterId,
+                                    sourceId = successState.novel.source,
+                                    seriesId = seriesId,
+                                ),
+                            )
                         }
                     },
                 )
+                successState.seriesInterstitialState?.let { seriesInterstitialState ->
+                    val continueAction: (() -> Unit)? = seriesInterstitialState.nextNovel?.let { nextNovel ->
+                        seriesInterstitialState.nextChapterId?.let { nextChapterId ->
+                            {
+                                coroutineScope.launch {
+                                    screenModel.awaitPendingProgressPersistence()
+                                    screenModel.clearSeriesInterstitial()
+                                    NovelReaderSystemUiSession.markInternalChapterReplace()
+                                    NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
+                                        NovelReaderPageReaderHandoffTarget.START,
+                                    )
+                                    navigator.replace(
+                                        NovelReaderScreen(
+                                            nextChapterId,
+                                            sourceId = nextNovel.source,
+                                            seriesId = seriesId,
+                                        ),
+                                    )
+                                }
+                                Unit
+                            }
+                        }
+                    }
+                    SeriesInterstitialOverlay(
+                        state = seriesInterstitialState,
+                        onBackToSeries = {
+                            coroutineScope.launch {
+                                screenModel.awaitPendingProgressPersistence()
+                                screenModel.clearSeriesInterstitial()
+                                navigator.pop()
+                            }
+                        },
+                        onContinue = continueAction,
+                        onDismissRequest = screenModel::clearSeriesInterstitial,
+                    )
+                }
             }
         }
     }
