@@ -1,42 +1,65 @@
 package eu.kanade.presentation.entries.components.aurora
 
+import android.content.Context
+import android.os.Build
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImagePainter
+import coil3.compose.rememberAsyncImagePainter
 import coil3.request.ImageRequest
-import coil3.size.Precision
-import eu.kanade.tachiyomi.data.coil.staticBlur
-import kotlin.math.max
-
-private const val AURORA_BACKGROUND_BLUR_DOWNSAMPLE_DIVISOR = 3
 
 internal data class AuroraPosterBackgroundSpec(
-    val sharpMemoryCacheKey: String,
-    val blurMemoryCacheKey: String,
-    val blurWidthPx: Int,
-    val blurHeightPx: Int,
+    val memoryCacheKey: String,
 )
 
 internal fun auroraPosterBackgroundSpec(
     baseCacheKey: String,
     containerWidthPx: Int,
     containerHeightPx: Int,
-    blurRadiusPx: Int,
 ): AuroraPosterBackgroundSpec {
-    val blurWidthPx = max(1, containerWidthPx / AURORA_BACKGROUND_BLUR_DOWNSAMPLE_DIVISOR)
-    val blurHeightPx = max(1, containerHeightPx / AURORA_BACKGROUND_BLUR_DOWNSAMPLE_DIVISOR)
-
     return AuroraPosterBackgroundSpec(
-        sharpMemoryCacheKey = "$baseCacheKey;sharp",
-        blurMemoryCacheKey = "$baseCacheKey;blur;${blurWidthPx}x$blurHeightPx;r$blurRadiusPx",
-        blurWidthPx = blurWidthPx,
-        blurHeightPx = blurHeightPx,
+        memoryCacheKey = "$baseCacheKey;${containerWidthPx}x$containerHeightPx",
     )
 }
 
-internal fun ImageRequest.Builder.applyAuroraBlurBackground(
+internal fun buildAuroraPosterBackgroundRequest(
+    context: Context,
+    data: Any?,
     spec: AuroraPosterBackgroundSpec,
-    blurRadiusPx: Int,
-): ImageRequest.Builder {
-    return memoryCacheKey(spec.blurMemoryCacheKey)
-        .size(spec.blurWidthPx, spec.blurHeightPx)
-        .precision(Precision.INEXACT)
-        .staticBlur(blurRadiusPx, intensityFactor = 0.6f)
+    containerWidthPx: Int,
+    containerHeightPx: Int,
+    configure: ImageRequest.Builder.() -> Unit = {},
+): ImageRequest {
+    return ImageRequest.Builder(context)
+        .data(data)
+        .memoryCacheKey(spec.memoryCacheKey)
+        .size(containerWidthPx, containerHeightPx)
+        .apply(configure)
+        .build()
+}
+
+@Composable
+internal fun rememberAuroraPosterBackgroundPainter(
+    request: ImageRequest,
+    placeholderPainter: Painter,
+): AsyncImagePainter {
+    return rememberAsyncImagePainter(
+        model = request,
+        error = placeholderPainter,
+        fallback = placeholderPainter,
+        contentScale = ContentScale.Crop,
+    )
+}
+
+internal fun Modifier.auroraPosterBlur(blurRadius: Dp): Modifier {
+    return if (blurRadius > 0.dp && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        blur(blurRadius)
+    } else {
+        this
+    }
 }
