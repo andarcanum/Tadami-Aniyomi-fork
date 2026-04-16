@@ -1777,7 +1777,6 @@ class AnimeScreenModel(
 
             updateSuccessState {
                 it.copy(
-                    animeMetadata = null,
                     isMetadataLoading = false,
                     metadataError = error,
                 )

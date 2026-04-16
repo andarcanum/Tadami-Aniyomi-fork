@@ -70,7 +70,7 @@ internal fun resolveExternalMetadataCover(
     metadataError: MetadataLoadError?,
     useMetadataCovers: Boolean,
 ): ResolvedCover {
-    if (!useMetadataCovers || isMetadataLoading || metadataError != null) {
+    if (!useMetadataCovers || isMetadataLoading) {
         return ResolvedCover(baseCoverUrl, null)
     }
 

@@ -414,7 +414,6 @@ class MangaScreenModel(
             }
             updateSuccessState {
                 it.copy(
-                    mangaMetadata = null,
                     isMetadataLoading = false,
                     metadataError = error,
                 )
