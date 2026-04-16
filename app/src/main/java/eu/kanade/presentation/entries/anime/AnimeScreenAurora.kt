@@ -1,5 +1,7 @@
 package eu.kanade.presentation.entries.anime
 
+import eu.kanade.tachiyomi.source.online.HttpSource
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
@@ -203,6 +205,9 @@ fun AnimeScreenAuroraImpl(
     ) {
         resolveCoverUrl(state, metadataSource != MetadataSource.NONE)
     }
+    val refererUrl = remember(state.source) {
+        (state.source as? HttpSource)?.baseUrl
+    }
 
     val lazyListState = rememberLazyListState()
     val scrollOffset by remember { derivedStateOf { lazyListState.firstVisibleItemScrollOffset } }
@@ -388,6 +393,7 @@ fun AnimeScreenAuroraImpl(
                 firstVisibleItemIndex = firstVisibleItemIndex,
                 resolvedCoverUrl = resolvedCover.coverUrl,
                 resolvedCoverUrlFallback = resolvedCover.coverUrlFallback,
+                refererUrl = refererUrl,
             )
 
             if (useTwoPaneLayout) {

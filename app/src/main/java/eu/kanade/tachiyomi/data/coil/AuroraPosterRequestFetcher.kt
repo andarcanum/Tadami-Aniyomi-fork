@@ -18,6 +18,7 @@ import java.io.IOException
 data class AuroraPosterRequest(
     val primaryUrl: String?,
     val fallbackUrl: String? = null,
+    val refererUrl: String? = null,
 )
 
 class AuroraPosterRequestKeyer : Keyer<AuroraPosterRequest> {
@@ -30,6 +31,7 @@ class AuroraPosterRequestKeyer : Keyer<AuroraPosterRequest> {
         }
     }
 }
+
 
 class AuroraPosterRequestFetcher(
     private val data: AuroraPosterRequest,
@@ -85,15 +87,18 @@ internal suspend fun loadAuroraPosterSource(
             continue
         }
 
+        val requestBuilder = CoverRequestPolicy.markCoverRequest(
+            Request.Builder().url(httpUrl),
+            fallbackUrl = request.fallbackUrl,
+            attempt = attemptIndex,
+        )
+
+        request.refererUrl?.trim()?.takeIf { it.isNotBlank() }?.let { referer ->
+            requestBuilder.addHeader("Referer", referer.trimEnd('/') + "/")
+        }
+
         val response = try {
-            callFactory.newCall(
-                CoverRequestPolicy.markCoverRequest(
-                    Request.Builder().url(httpUrl),
-                    fallbackUrl = request.fallbackUrl,
-                    attempt = attemptIndex,
-                )
-                    .build(),
-            ).execute()
+            callFactory.newCall(requestBuilder.build()).execute()
         } catch (e: IOException) {
             lastError = e
             continue

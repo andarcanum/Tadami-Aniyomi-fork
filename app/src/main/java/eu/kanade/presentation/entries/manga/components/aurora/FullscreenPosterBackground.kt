@@ -47,6 +47,7 @@ fun FullscreenPosterBackground(
     modifier: Modifier = Modifier,
     resolvedCoverUrl: String? = null,
     resolvedCoverUrlFallback: String? = null,
+    refererUrl: String? = null,
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
@@ -58,10 +59,11 @@ fun FullscreenPosterBackground(
             fallback = resolvedCoverUrlFallback,
         )
     }
-    val posterRequest = remember(posterModelPair) {
+    val posterRequest = remember(posterModelPair, refererUrl) {
         AuroraPosterRequest(
             primaryUrl = posterModelPair.primary as? String,
             fallbackUrl = posterModelPair.fallback as? String,
+            refererUrl = refererUrl,
         )
     }
     val posterModel = posterRequest.primaryUrl ?: posterRequest.fallbackUrl

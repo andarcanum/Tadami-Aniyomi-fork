@@ -120,6 +120,7 @@ fun AnimeInfoBox(
     doSearch: (query: String, global: Boolean) -> Unit,
     resolvedCoverUrl: String?,
     resolvedCoverUrlFallback: String? = null,
+    refererUrl: String? = null,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier) {
@@ -181,6 +182,7 @@ fun AnimeInfoBox(
                     isStubSource = isStubSource,
                     coverUrl = resolvedCoverUrl,
                     coverUrlFallback = resolvedCoverUrlFallback,
+                    refererUrl = refererUrl,
                     onCoverClick = onCoverClick,
                     doSearch = doSearch,
                 )
@@ -192,6 +194,7 @@ fun AnimeInfoBox(
                     isStubSource = isStubSource,
                     coverUrl = resolvedCoverUrl,
                     coverUrlFallback = resolvedCoverUrlFallback,
+                    refererUrl = refererUrl,
                     onCoverClick = onCoverClick,
                     doSearch = doSearch,
                 )
@@ -399,6 +402,7 @@ private fun AnimeAndSourceTitlesLarge(
     isStubSource: Boolean,
     coverUrl: String?,
     coverUrlFallback: String? = null,
+    refererUrl: String? = null,
     onCoverClick: () -> Unit,
     doSearch: (query: String, global: Boolean) -> Unit,
 ) {
@@ -412,7 +416,7 @@ private fun AnimeAndSourceTitlesLarge(
             ItemCover.Book(
                 modifier = Modifier.fillMaxWidth(0.65f),
                 data = ImageRequest.Builder(LocalContext.current)
-                    .data(AuroraPosterRequest(coverUrl, coverUrlFallback))
+                    .data(AuroraPosterRequest(coverUrl, coverUrlFallback, refererUrl))
                     .crossfade(true)
                     .build(),
                 contentDescription = stringResource(MR.strings.manga_cover),
@@ -446,6 +450,7 @@ private fun AnimeAndSourceTitlesSmall(
     isStubSource: Boolean,
     coverUrl: String?,
     coverUrlFallback: String? = null,
+    refererUrl: String? = null,
     onCoverClick: () -> Unit,
     doSearch: (query: String, global: Boolean) -> Unit,
 ) {
@@ -462,7 +467,7 @@ private fun AnimeAndSourceTitlesSmall(
                     .sizeIn(maxWidth = 100.dp)
                     .align(Alignment.Top),
                 data = ImageRequest.Builder(LocalContext.current)
-                    .data(AuroraPosterRequest(coverUrl, coverUrlFallback))
+                    .data(AuroraPosterRequest(coverUrl, coverUrlFallback, refererUrl))
                     .crossfade(true)
                     .build(),
                 contentDescription = stringResource(MR.strings.manga_cover),

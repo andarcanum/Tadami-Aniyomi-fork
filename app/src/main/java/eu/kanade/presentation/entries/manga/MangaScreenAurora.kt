@@ -1,5 +1,7 @@
 package eu.kanade.presentation.entries.manga
 
+import eu.kanade.tachiyomi.source.online.HttpSource
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
@@ -197,6 +199,9 @@ fun MangaScreenAuroraImpl(
             useMetadataCovers = metadataSource != MetadataSource.NONE,
         )
     }
+    val refererUrl = remember(state.source) {
+        (state.source as? HttpSource)?.baseUrl
+    }
     val chapterModels = remember(chapters) {
         chapters.mapNotNull { (it as? ChapterList.Item)?.chapter }
     }
@@ -345,6 +350,7 @@ fun MangaScreenAuroraImpl(
                 firstVisibleItemIndex = firstVisibleItemIndex,
                 resolvedCoverUrl = resolvedCover.coverUrl,
                 resolvedCoverUrlFallback = resolvedCover.coverUrlFallback,
+                refererUrl = refererUrl,
             )
 
             if (useTwoPaneLayout) {
