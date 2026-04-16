@@ -1,6 +1,5 @@
 package eu.kanade.presentation.library.novel
 
-import android.content.Context
 import android.content.res.Configuration
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -52,7 +51,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastAny
@@ -77,7 +75,6 @@ import eu.kanade.presentation.library.components.resolveGlowContourLibraryTextSp
 import eu.kanade.presentation.library.novel.components.SeriesStackedCoverCard
 import eu.kanade.presentation.library.novel.resolveNovelLibraryBadgeState
 import eu.kanade.presentation.library.resolveNovelLibraryCardProgressPercent
-import eu.kanade.presentation.novel.buildNovelCoverImageRequest
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
@@ -123,7 +120,6 @@ fun NovelLibraryAuroraContent(
     onContinueReadingClicked: ((NovelLibraryItem) -> Unit)? = null,
     showInlineHeader: Boolean = true,
 ) {
-    val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
     val sourceManager = remember { Injekt.get<NovelSourceManager>() }
@@ -247,7 +243,6 @@ fun NovelLibraryAuroraContent(
                     )
                     NovelLibraryAuroraCard(
                         item = item,
-                        context = context,
                         badgeState = badgeState,
                         showMetadata = true,
                         modifier = Modifier
@@ -317,7 +312,6 @@ fun NovelLibraryAuroraContent(
                     } else {
                         NovelLibraryAuroraCard(
                         item = item,
-                        context = context,
                         badgeState = badgeState,
                         showMetadata = displaySpec.showMetadata,
                         modifier = if (useGlowContourCards) {
@@ -402,7 +396,6 @@ internal fun resolveNovelLibraryCornerIndicatorIsFinished(status: Long): Boolean
 @Composable
 private fun NovelLibraryAuroraCard(
     item: NovelLibraryItem,
-    context: Context,
     badgeState: NovelLibraryBadgeState,
     showMetadata: Boolean,
     modifier: Modifier,
@@ -433,17 +426,20 @@ private fun NovelLibraryAuroraCard(
         remainingCount = item.unreadCount,
         isFinished = item.coverNovel?.let { resolveNovelLibraryCornerIndicatorIsFinished(it.status) } ?: false,
     )
-    val novel = item.coverNovel
-    val coverRequest = remember(novel?.id, novel?.thumbnailUrl, novel?.coverLastModified) {
-        novel?.let { buildNovelCoverImageRequest(context, it) }
-    }
+    val coverData = item.coverNovel?.asNovelCover() ?: NovelCover(
+        novelId = item.id,
+        sourceId = 0,
+        isNovelFavorite = true,
+        url = null,
+        lastModified = 0,
+    )
 
     if (useGlowContourCards) {
         GlowContourLibraryGridItem(
             modifier = modifier,
             title = item.title,
             subtitle = progressText,
-            coverData = coverRequest,
+            coverData = coverData,
             progressPercent = progressPercent,
             cardAspectRatio = 0.76f,
             cornerIndicatorState = cornerIndicatorState,
@@ -478,7 +474,7 @@ private fun NovelLibraryAuroraCard(
         AuroraCard(
             modifier = modifier,
             title = item.title,
-            coverData = coverRequest,
+            coverData = coverData,
             subtitle = progressText,
             coverHeightFraction = coverHeightFraction,
             badge = if (badgeState.hasBadge()) {
@@ -509,7 +505,7 @@ private fun NovelLibraryAuroraCard(
         )
     } else {
         NovelLibraryAuroraCoverOnlyCard(
-            coverData = coverRequest,
+            coverData = coverData,
             badgeState = badgeState,
             modifier = modifier,
             isSelected = isSelected,
