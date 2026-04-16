@@ -27,7 +27,7 @@ class NovelLibraryBadgeStateTest {
         )
 
         val state = resolveNovelLibraryBadgeState(
-            item = libraryNovel,
+            item = NovelLibraryItem.Single(libraryNovel),
             showDownloadBadge = true,
             downloadedNovelIds = setOf(7L),
             showUnreadBadge = true,
