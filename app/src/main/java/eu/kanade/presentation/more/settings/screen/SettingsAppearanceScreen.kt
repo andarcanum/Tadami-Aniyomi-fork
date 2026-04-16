@@ -614,7 +614,7 @@ object SettingsAppearanceScreen : SearchableSettings {
             title = stringResource(AYMR.strings.pref_category_metadata),
             preferenceItems = persistentListOf(
                 Preference.PreferenceItem.ListPreference(
-                    preference = uiPreferences.animeMetadataSource(),
+                    preference = uiPreferences.metadataSource(),
                     entries = AnimeMetadataSource.entries
                         .associateWith {
                             when (it) {

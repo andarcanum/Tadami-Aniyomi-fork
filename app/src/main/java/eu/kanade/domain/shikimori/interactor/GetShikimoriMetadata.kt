@@ -23,7 +23,7 @@ class GetShikimoriMetadata(
     private val preferences: UiPreferences,
 ) {
     suspend fun await(anime: Anime): ShikimoriMetadata? {
-        if (preferences.animeMetadataSource().get() != AnimeMetadataSource.SHIKIMORI) {
+        if (preferences.metadataSource().get() != AnimeMetadataSource.SHIKIMORI) {
             return null
         }
 

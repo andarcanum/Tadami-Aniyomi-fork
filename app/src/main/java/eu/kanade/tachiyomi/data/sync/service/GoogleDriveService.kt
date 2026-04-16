@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 package eu.kanade.tachiyomi.data.sync.service
 
 import android.app.Activity
@@ -8,9 +10,11 @@ import com.google.api.client.auth.oauth2.TokenResponseException
 import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow
 import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeTokenRequest
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
-import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
+import com.google.api.client.googleapis.auth.oauth2.GoogleRefreshTokenRequest
 import com.google.api.client.googleapis.auth.oauth2.GoogleTokenResponse
 import com.google.api.client.http.javanet.NetHttpTransport
+import com.google.api.client.http.HttpRequest
+import com.google.api.client.http.HttpRequestInitializer
 import com.google.api.client.json.JsonFactory
 import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.services.drive.Drive
@@ -59,7 +63,7 @@ class GoogleDriveService(private val context: Context) {
         }
 
         try {
-            setupGoogleDriveService(accessToken, refreshToken)
+            setupGoogleDriveService(accessToken)
         } catch (e: Exception) {
             driveService = null
             this.logcat(LogPriority.ERROR, e) {
@@ -115,27 +119,22 @@ class GoogleDriveService(private val context: Context) {
         val jsonFactory: JsonFactory = JacksonFactory.getDefaultInstance()
         val secrets = loadGoogleClientSecrets(jsonFactory)
 
-        val credential = GoogleCredential.Builder()
-            .setJsonFactory(jsonFactory)
-            .setTransport(NetHttpTransport())
-            .setClientSecrets(secrets)
-            .build()
-
-        credential.refreshToken = refreshToken
-
         try {
-            credential.refreshToken()
-            val newAccessToken = credential.accessToken
+            val tokenResponse = GoogleRefreshTokenRequest(
+                NetHttpTransport(),
+                jsonFactory,
+                refreshToken,
+                secrets.installed.clientId,
+                secrets.installed.clientSecret.orEmpty(),
+            ).execute()
 
-            // Save the new access token
+            val newAccessToken = tokenResponse.accessToken
+                ?: throw IllegalStateException("Google Drive refresh did not return an access token")
+            val newRefreshToken = tokenResponse.refreshToken ?: refreshToken
+
             syncPreferences.googleDriveAccessToken().set(newAccessToken)
-
-            // Update the refresh token if it changed
-            if (credential.refreshToken != null) {
-                syncPreferences.googleDriveRefreshToken().set(credential.refreshToken!!)
-            }
-
-            setupGoogleDriveService(newAccessToken, credential.refreshToken ?: refreshToken)
+            syncPreferences.googleDriveRefreshToken().set(newRefreshToken)
+            setupGoogleDriveService(newAccessToken)
 
             logcat { "Token refreshed successfully" }
         } catch (e: TokenResponseException) {
@@ -155,23 +154,18 @@ class GoogleDriveService(private val context: Context) {
     /**
      * Sets up the Google Drive service with the provided tokens.
      */
-    private fun setupGoogleDriveService(accessToken: String, refreshToken: String) {
+    private fun setupGoogleDriveService(accessToken: String) {
         val jsonFactory: JsonFactory = JacksonFactory.getDefaultInstance()
-        val secrets = loadGoogleClientSecrets(jsonFactory)
+        loadGoogleClientSecrets(jsonFactory)
 
-        val credential = GoogleCredential.Builder()
-            .setJsonFactory(jsonFactory)
-            .setTransport(NetHttpTransport())
-            .setClientSecrets(secrets)
-            .build()
-
-        credential.accessToken = accessToken
-        credential.refreshToken = refreshToken
+        val requestInitializer = HttpRequestInitializer { request: HttpRequest ->
+            request.headers.authorization = "Bearer $accessToken"
+        }
 
         driveService = Drive.Builder(
             NetHttpTransport(),
             jsonFactory,
-            credential,
+            requestInitializer,
         ).setApplicationName(context.packageName)
             .build()
 
@@ -208,8 +202,7 @@ class GoogleDriveService(private val context: Context) {
                 syncPreferences.googleDriveAccessToken().set(accessToken)
                 syncPreferences.googleDriveRefreshToken().set(newRefreshToken)
 
-                setupGoogleDriveService(accessToken, newRefreshToken)
-                initGoogleDriveService()
+                setupGoogleDriveService(accessToken)
 
                 logcat { "Authorization successful" }
 

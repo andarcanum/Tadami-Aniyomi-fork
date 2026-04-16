@@ -22,7 +22,7 @@ class GetAnilistMetadata(
     private val preferences: UiPreferences,
 ) {
     suspend fun await(anime: Anime): AnilistMetadata? {
-        if (preferences.animeMetadataSource().get() != AnimeMetadataSource.ANILIST) {
+        if (preferences.metadataSource().get() != AnimeMetadataSource.ANILIST) {
             return null
         }
 

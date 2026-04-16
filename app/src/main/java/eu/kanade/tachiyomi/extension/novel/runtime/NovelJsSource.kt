@@ -406,7 +406,22 @@ class NovelJsSource internal constructor(
                     "Novel chapterList fallback=html plugin=${plugin.id} url=${novel.url} " +
                         "count=${htmlFallbackChapters.size}"
                 }
-                return@runPluginSafe normalizeChapters(htmlFallbackChapters).mapNotNull { it.toSChapterOrNull() }
+                if (htmlFallbackChapters.isNotEmpty()) {
+                    return@runPluginSafe normalizeChapters(htmlFallbackChapters).mapNotNull { it.toSChapterOrNull() }
+                }
+
+                if (capabilities?.hasParsePage == true) {
+                    val parsePageChapters = collectChaptersFromParsePageFallback(runtime, novel.url)
+                    if (parsePageChapters.isNotEmpty()) {
+                        logcat(LogPriority.DEBUG) {
+                            "Novel chapterList fallback=parsePage plugin=${plugin.id} url=${novel.url} " +
+                                "count=${parsePageChapters.size}"
+                        }
+                        return@runPluginSafe normalizeChapters(parsePageChapters).mapNotNull { it.toSChapterOrNull() }
+                    }
+                }
+
+                return@runPluginSafe emptyList()
             }
 
             val directChapters = sourceNovel.chapters ?: emptyList()
@@ -443,6 +458,17 @@ class NovelJsSource internal constructor(
                         "count=${htmlFallbackChapters.size}"
                 }
                 return@runPluginSafe normalizeChapters(htmlFallbackChapters).mapNotNull { it.toSChapterOrNull() }
+            }
+
+            if (capabilities?.hasParsePage == true) {
+                val parsePageChapters = collectChaptersFromParsePageFallback(runtime, novel.url)
+                if (parsePageChapters.isNotEmpty()) {
+                    logcat(LogPriority.DEBUG) {
+                        "Novel chapterList fallback=parsePage plugin=${plugin.id} url=${novel.url} " +
+                            "count=${parsePageChapters.size}"
+                    }
+                    return@runPluginSafe normalizeChapters(parsePageChapters).mapNotNull { it.toSChapterOrNull() }
+                }
             }
 
             if (isJaomixPlugin()) {
@@ -482,7 +508,11 @@ class NovelJsSource internal constructor(
                     val payload = callPlugin(runtime, "parseNovel", toJsString(novel.url))
                     NovelJsPayloadParser.parseNovel(json, payload)
                 }
-            }.getOrNull() ?: return@runPluginSafe null
+            }.getOrNull()
+
+            if (sourceNovel == null) {
+                return@runPluginSafe buildChapterListPageFromParsePage(runtime, novel.url, page)
+            }
 
             val directChapters = sourceNovel.chapters ?: emptyList()
             var probePageResult: ParsedPluginPage? = null
@@ -1450,6 +1480,62 @@ class NovelJsSource internal constructor(
             collected.addAll(pageResult.chapters)
         }
         return collected
+    }
+
+    private suspend fun collectChaptersFromParsePageFallback(
+        runtime: NovelJsRuntime,
+        novelPath: String,
+    ): List<ParsedPluginChapter> {
+        val probePage = parseSinglePage(runtime, novelPath, 1) ?: return emptyList()
+        val totalPages = probePage.totalPages?.coerceAtLeast(1) ?: 1
+
+        return buildList {
+            addAll(probePage.chapters)
+            if (totalPages > 1) {
+                addAll(collectChaptersFromParsePage(runtime, novelPath, 2..totalPages))
+            }
+        }
+    }
+
+    private suspend fun buildChapterListPageFromParsePage(
+        runtime: NovelJsRuntime,
+        novelPath: String,
+        page: Int,
+    ): NovelPluginChapterListPage? {
+        val probePage = parseSinglePage(runtime, novelPath, 1) ?: return null
+        val totalPages = probePage.totalPages?.coerceAtLeast(1) ?: 1
+        if (probePage.totalPages == null && page > 1) return null
+
+        val targetPage = page.coerceIn(1, totalPages)
+        val sourcePage = if (isJaomixPlugin()) {
+            (totalPages - targetPage + 1).coerceIn(1, totalPages)
+        } else {
+            targetPage
+        }
+
+        val rawChapters = if (sourcePage == 1) {
+            probePage.chapters
+        } else {
+            parseSinglePage(runtime, novelPath, sourcePage)?.chapters.orEmpty()
+        }
+
+        return NovelPluginChapterListPage(
+            page = targetPage,
+            totalPages = totalPages,
+            chapters = normalizeChapters(rawChapters).mapNotNull { it.toSChapterOrNull() },
+        )
+    }
+
+    private suspend fun parseSinglePage(
+        runtime: NovelJsRuntime,
+        novelPath: String,
+        pageNumber: Int,
+    ): ParsedPluginPage? {
+        if (capabilities?.hasParsePage != true) return null
+        val payload = mutex.withLock {
+            callPlugin(runtime, "parsePage", toJsString(novelPath), toJsString(pageNumber.toString()))
+        }
+        return NovelJsPayloadParser.parsePage(json, payload)
     }
 
     private fun isNovelUpdatesPlugin(): Boolean {
