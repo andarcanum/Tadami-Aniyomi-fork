@@ -13,6 +13,7 @@
     <string name="manga">Manga</string>
     <string name="pref_library_summary">Categories, global update, chapter/episode swipe</string>
     <string name="series_detail">Series</string>
+    <string name="series_caption_label">Series</string>
     <string name="series_tab_titles">By Titles</string>
     <string name="series_tab_chapters">All Chapters</string>
     <string name="action_add_to_series">Add to Series</string>

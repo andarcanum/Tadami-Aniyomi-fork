@@ -5,6 +5,7 @@
     <string name="action_sort_airing_time">По времени выпуска</string>
     <string name="action_reorganize_by">Изменение порядка</string>
     <string name="relative_time_now">Сейчас</string>
+    <string name="series_caption_label">Сборник</string>
     <string name="pref_library_summary">Категории, глобальное обновление, смахивание глав/эпизодов</string>
     <string name="pref_library_update_show_tab_badge">Показывать количество непросмотренных/непрочитанных на значке обновлений</string>
     <string name="label_player_settings">Настройки проигрывателя</string>

@@ -416,6 +416,11 @@ private fun NovelLibraryAuroraCard(
     } else {
         null
     }
+    val seriesHeaderText = if (item is NovelLibraryItem.Series) {
+        stringResource(AYMR.strings.series_caption_label)
+    } else {
+        null
+    }
     val progressPercent = resolveNovelLibraryCardProgressPercent(
         readCount = item.readCount,
         totalCount = item.totalChapters,
@@ -463,6 +468,7 @@ private fun NovelLibraryAuroraCard(
             },
             isSelected = isSelected,
             gridColumns = gridColumns,
+            seriesHeaderText = seriesHeaderText,
             customCover = if (item is NovelLibraryItem.Series) {
                 { SeriesStackedCoverCard(covers = item.covers, isSelected = isSelected) }
             } else {
@@ -497,6 +503,7 @@ private fun NovelLibraryAuroraCard(
             isSelected = isSelected,
             titleMaxLines = if (showMetadata) 1 else 2,
             gridColumns = gridColumns,
+            seriesHeaderText = seriesHeaderText,
             customCover = if (item is NovelLibraryItem.Series) {
                 { SeriesStackedCoverCard(covers = item.covers, isSelected = isSelected) }
             } else {

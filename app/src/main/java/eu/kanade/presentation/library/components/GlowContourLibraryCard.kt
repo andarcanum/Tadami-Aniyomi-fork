@@ -489,6 +489,7 @@ internal fun GlowContourLibraryGridItem(
     cornerIndicatorState: GlowContourCornerIndicatorState,
     modifier: Modifier = Modifier,
     textSpec: GlowContourLibraryTextSpec,
+    seriesHeaderText: String? = null,
     badge: @Composable (() -> Unit)? = null,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
@@ -528,7 +529,12 @@ internal fun GlowContourLibraryGridItem(
             GlowContourLibraryTextBlock(
                 title = title,
                 subtitle = subtitle,
-                textSpec = textSpec,
+                seriesHeaderText = seriesHeaderText,
+                textSpec = if (seriesHeaderText.isNullOrBlank()) {
+                    textSpec
+                } else {
+                    textSpec.copy(titleMaxLines = 1)
+                },
                 blendSpec = blendSpec,
                 isUnifiedContainerMode = false,
             )
@@ -540,6 +546,7 @@ internal fun GlowContourLibraryGridItem(
 private fun GlowContourLibraryTextBlock(
     title: String,
     subtitle: String?,
+    seriesHeaderText: String?,
     textSpec: GlowContourLibraryTextSpec,
     blendSpec: GlowContourUnifiedBlendSpec,
     isUnifiedContainerMode: Boolean,
@@ -591,6 +598,17 @@ private fun GlowContourLibraryTextBlock(
         Column(
             verticalArrangement = Arrangement.spacedBy(renderSpec.titleSubtitleSpacing),
         ) {
+            if (!seriesHeaderText.isNullOrBlank()) {
+                Text(
+                    text = seriesHeaderText,
+                    color = colors.textSecondary.copy(alpha = 0.9f),
+                    fontSize = 11.sp,
+                    lineHeight = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Text(
                 text = title,
                 color = colors.textPrimary,

@@ -46,6 +46,7 @@ fun AuroraCard(
     title: String,
     coverData: Any?,
     modifier: Modifier = Modifier,
+    seriesHeaderText: String? = null,
     subtitle: String? = null,
     badge: @Composable (() -> Unit)? = null,
     onClick: () -> Unit,
@@ -167,6 +168,19 @@ fun AuroraCard(
                         .weight((1f - normalizedCoverHeightFraction).coerceAtLeast(0.01f))
                         .padding(horizontal = 8.dp, vertical = 8.dp),
                 ) {
+                    if (!seriesHeaderText.isNullOrBlank()) {
+                        Text(
+                            text = seriesHeaderText,
+                            color = colors.textSecondary.copy(alpha = 0.9f),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            lineHeight = 12.sp,
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                    }
+
                     Text(
                         text = title,
                         color = colors.textPrimary,
