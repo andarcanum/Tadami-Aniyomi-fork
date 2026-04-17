@@ -56,6 +56,7 @@ import eu.kanade.presentation.entries.novel.components.aurora.FullscreenPosterBa
 import eu.kanade.presentation.entries.novel.components.aurora.NovelChapterCardCompactUi
 import eu.kanade.presentation.series.novel.components.NovelSeriesEntryCard
 import eu.kanade.presentation.series.novel.components.NovelSeriesHeader
+import eu.kanade.presentation.series.novel.components.NovelSeriesReadingActionRow
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.ui.series.novel.NovelSeriesScreenModel
 import sh.calvin.reorderable.ReorderableItem
@@ -73,7 +74,7 @@ import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.plus
 import tachiyomi.i18n.aniyomi.AYMR
 
-private const val NOVEL_SERIES_TITLE_LIST_START_INDEX = 2
+private const val NOVEL_SERIES_TITLE_LIST_START_INDEX = 3
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -90,6 +91,12 @@ fun NovelSeriesAuroraContent(
     val series = state.series ?: return
     val colors = AuroraTheme.colors
     val heroNovel = series.activeNovel
+    val readingTarget = remember(series, state.chapters) {
+        resolveNovelSeriesReadingTarget(
+            series = series,
+            chapters = state.chapters,
+        )
+    }
 
     val lazyListState = rememberLazyListState()
 
@@ -211,6 +218,39 @@ fun NovelSeriesAuroraContent(
                         series = series,
                         modifier = Modifier.padding(bottom = 32.dp, top = 24.dp),
                     )
+                }
+
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                start = 12.dp,
+                                top = 8.dp,
+                                end = 12.dp,
+                                bottom = 20.dp,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        NovelSeriesReadingActionRow(
+                            label = stringResource(
+                                if (series.hasStarted) {
+                                    AYMR.strings.novel_series_cta_continue_reading
+                                } else {
+                                    AYMR.strings.novel_series_cta_start_reading
+                                },
+                            ),
+                            hint = readingTarget?.let {
+                                "${it.novel.novel.title} · ${it.chapter.name}"
+                            },
+                            enabled = readingTarget != null,
+                            onClick = {
+                                readingTarget?.let { target ->
+                                    onChapterClicked(target.novel, target.chapter)
+                                }
+                            },
+                        )
+                    }
                 }
 
                 stickyHeader {

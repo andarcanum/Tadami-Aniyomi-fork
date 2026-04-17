@@ -27,6 +27,8 @@
     <string name="series_interstitial_next_chapter">Next chapter: %1$s</string>
     <string name="series_interstitial_series_completed">Series completed!</string>
     <string name="series_interstitial_back_to_series">Back to Series</string>
+    <string name="novel_series_cta_start_reading">Start reading</string>
+    <string name="novel_series_cta_continue_reading">Continue reading</string>
 
     <string name="pref_behavior">Chapter behavior</string>
     <string name="action_add_repo_message">Add additional repos to %s. This should be a URL that ends with \"index.min.json\".</string>
