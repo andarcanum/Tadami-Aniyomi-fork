@@ -11,6 +11,7 @@ import eu.kanade.presentation.series.novel.NovelSeriesAuroraContent
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
 import eu.kanade.tachiyomi.ui.series.novel.NovelSeriesScreenModel
+import tachiyomi.presentation.core.screens.LoadingScreen
 
 data class NovelSeriesScreen(val seriesId: Long) : Screen {
 
@@ -19,6 +20,11 @@ data class NovelSeriesScreen(val seriesId: Long) : Screen {
         val navigator = LocalNavigator.currentOrThrow
         val screenModel = rememberScreenModel { NovelSeriesScreenModel(seriesId) }
         val state by screenModel.state.collectAsState()
+
+        if (state.isLoading || state.series == null) {
+            LoadingScreen()
+            return
+        }
 
         NovelSeriesAuroraContent(
             state = state,

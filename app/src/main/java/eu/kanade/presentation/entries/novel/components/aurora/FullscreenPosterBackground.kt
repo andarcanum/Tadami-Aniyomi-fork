@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -41,6 +42,8 @@ fun FullscreenPosterBackground(
     novel: Novel,
     scrollOffset: Int,
     firstVisibleItemIndex: Int,
+    minimumBlurOverlayAlpha: Float = 0f,
+    posterScrimAlpha: Float? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -61,7 +64,11 @@ fun FullscreenPosterBackground(
         label = "dimAlpha",
     )
     val blurOverlayAlpha by animateFloatAsState(
-        targetValue = if (hasScrolledAway) 1f else (scrollOffset / 100f).coerceIn(0f, 1f),
+        targetValue = if (hasScrolledAway) {
+            1f
+        } else {
+            (scrollOffset / 100f).coerceIn(minimumBlurOverlayAlpha, 1f)
+        },
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessLow,
@@ -85,6 +92,7 @@ fun FullscreenPosterBackground(
 
     Box(modifier = modifier.fillMaxSize()) {
         val colors = AuroraTheme.colors
+        val scrimColor = if (colors.isDark) Color.Black else colors.background
 
         if (posterModel != null) {
             val backgroundRequest = remember(
@@ -136,11 +144,28 @@ fun FullscreenPosterBackground(
             )
         }
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(resolveAuroraPosterScrimBrush(colors)),
-        )
+        if (posterScrimAlpha != null) {
+            val posterScrimBottomAlpha = (posterScrimAlpha + 0.15f).coerceAtMost(1f)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colorStops = arrayOf(
+                                0.0f to scrimColor.copy(alpha = posterScrimAlpha),
+                                0.6f to scrimColor.copy(alpha = posterScrimAlpha),
+                                1.0f to scrimColor.copy(alpha = posterScrimBottomAlpha),
+                            ),
+                        ),
+                    ),
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(resolveAuroraPosterScrimBrush(colors)),
+            )
+        }
 
         Box(
             modifier = Modifier

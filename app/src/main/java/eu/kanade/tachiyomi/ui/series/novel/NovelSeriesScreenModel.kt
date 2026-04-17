@@ -14,7 +14,6 @@ import tachiyomi.domain.series.novel.interactor.ReorderSeriesEntries
 import tachiyomi.domain.series.novel.interactor.UpdateNovelSeries
 import tachiyomi.domain.series.novel.model.LibraryNovelSeries
 import tachiyomi.domain.series.novel.model.LibraryNovelSeriesWithEntryIds
-import tachiyomi.domain.series.novel.model.NovelSeriesEntry
 import tachiyomi.domain.items.novelchapter.interactor.GetNovelChapters
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.library.novel.LibraryNovel
@@ -82,10 +81,7 @@ class NovelSeriesScreenModel(
     fun reorderEntries(novelIds: List<Long>) {
         val entryIds = state.value.entryIds
         screenModelScope.launch {
-            val entries = novelIds.mapIndexedNotNull { index, novelId ->
-                val entryId = entryIds[novelId] ?: return@mapIndexedNotNull null
-                NovelSeriesEntry(id = entryId, seriesId = seriesId, novelId = novelId, position = index)
-            }
+            val entries = buildNovelSeriesEntries(seriesId, novelIds, entryIds)
             reorderSeriesEntries.await(entries)
         }
     }

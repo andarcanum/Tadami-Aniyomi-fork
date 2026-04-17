@@ -29,6 +29,21 @@ data class LibraryNovelSeries(
     val hasStarted: Boolean
         get() = readCount > 0
 
+    val activeNovel: Novel?
+        get() {
+            if (entries.isEmpty()) return null
+
+            val lastProgressedIndex = entries.indexOfLast { it.hasStarted }
+            if (lastProgressedIndex == -1) return entries.first().novel
+
+            val activeEntry = entries[lastProgressedIndex]
+            if (activeEntry.readCount < activeEntry.totalChapters) {
+                return activeEntry.novel
+            }
+
+            return entries.getOrNull(lastProgressedIndex + 1)?.novel ?: activeEntry.novel
+        }
+
     val coverNovels: List<Novel>
         get() = entries.take(3).map { it.novel }
 }

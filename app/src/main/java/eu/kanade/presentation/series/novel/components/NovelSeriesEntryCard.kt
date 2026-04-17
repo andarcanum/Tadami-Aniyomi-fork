@@ -1,5 +1,6 @@
 package eu.kanade.presentation.series.novel.components
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,7 +10,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -19,10 +19,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,14 +38,24 @@ import tachiyomi.domain.library.novel.LibraryNovel
 @Composable
 fun NovelSeriesEntryCard(
     novel: LibraryNovel,
+    ordinalLabel: String?,
+    isDragging: Boolean = false,
+    dragHandleModifier: Modifier = Modifier,
     onRemove: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
+    val cardScale by animateFloatAsState(
+        targetValue = if (isDragging) 1.02f else 1f,
+        label = "series_entry_card_scale",
+    )
 
     GlassmorphismCard(
-        modifier = modifier,
+        modifier = modifier.graphicsLayer(
+            scaleX = cardScale,
+            scaleY = cardScale,
+        ),
         cornerRadius = 16.dp,
         verticalPadding = 4.dp,
         innerPadding = 0.dp,
@@ -58,9 +71,30 @@ fun NovelSeriesEntryCard(
             Icon(
                 imageVector = Icons.Default.DragHandle,
                 contentDescription = null,
-                tint = colors.textPrimary.copy(alpha = 0.4f),
-                modifier = Modifier.padding(horizontal = 8.dp),
+                tint = colors.textPrimary.copy(alpha = 0.85f),
+                modifier = Modifier
+                    .padding(horizontal = 8.dp)
+                    .then(dragHandleModifier),
             )
+
+            ordinalLabel?.let {
+                Box(
+                    modifier = Modifier
+                        .width(34.dp)
+                        .padding(start = 0.dp, end = 10.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Text(
+                        text = it,
+                        color = colors.textPrimary.copy(alpha = 0.85f),
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1,
+                        softWrap = false,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
 
             // Cover
             Box(
@@ -100,7 +134,7 @@ fun NovelSeriesEntryCard(
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = null,
-                    tint = colors.textPrimary.copy(alpha = 0.6f),
+                    tint = colors.textPrimary.copy(alpha = 0.85f),
                 )
             }
         }
