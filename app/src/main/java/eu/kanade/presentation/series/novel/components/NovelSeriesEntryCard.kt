@@ -32,8 +32,10 @@ import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.entries.components.ItemCover
 import eu.kanade.presentation.entries.manga.components.aurora.GlassmorphismCard
 import eu.kanade.presentation.theme.AuroraTheme
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.domain.entries.novel.model.asNovelCover
 import tachiyomi.domain.library.novel.LibraryNovel
+import tachiyomi.presentation.core.i18n.pluralStringResource
 
 @Composable
 fun NovelSeriesEntryCard(
@@ -122,7 +124,11 @@ fun NovelSeriesEntryCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "${novel.totalChapters} chapters",
+                    text = pluralStringResource(
+                        AYMR.plurals.series_num_chapters,
+                        count = novel.totalChapters.toInt(),
+                        novel.totalChapters.toInt(),
+                    ),
                     color = colors.textPrimary.copy(alpha = 0.6f),
                     fontSize = 12.sp,
                     maxLines = 1,

@@ -1,0 +1,14 @@
+<resources>
+    <plurals name="series_num_titles">
+        <item quantity="one">%d тайтл</item>
+        <item quantity="few">%d тайтла</item>
+        <item quantity="many">%d тайтлов</item>
+        <item quantity="other">%d тайтла</item>
+    </plurals>
+    <plurals name="series_num_chapters">
+        <item quantity="one">%d глава</item>
+        <item quantity="few">%d главы</item>
+        <item quantity="many">%d глав</item>
+        <item quantity="other">%d главы</item>
+    </plurals>
+</resources>

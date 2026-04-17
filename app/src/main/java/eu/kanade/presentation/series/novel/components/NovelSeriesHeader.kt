@@ -24,8 +24,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.library.novel.components.SeriesStackedCoverCard
 import eu.kanade.presentation.theme.AuroraTheme
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.domain.entries.novel.model.asNovelCover
 import tachiyomi.domain.series.novel.model.LibraryNovelSeries
+import tachiyomi.presentation.core.i18n.pluralStringResource
 import tachiyomi.presentation.core.util.plus
 
 @Composable
@@ -81,7 +83,11 @@ fun NovelSeriesHeader(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "${series.entries.size} titles",
+                    text = pluralStringResource(
+                        AYMR.plurals.series_num_titles,
+                        count = series.entries.size,
+                        series.entries.size,
+                    ),
                     color = colors.textPrimary.copy(alpha = 0.85f),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
@@ -96,7 +102,11 @@ fun NovelSeriesHeader(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "${series.totalChapters} chapters",
+                    text = pluralStringResource(
+                        AYMR.plurals.series_num_chapters,
+                        count = series.totalChapters.toInt(),
+                        series.totalChapters.toInt(),
+                    ),
                     color = colors.textPrimary.copy(alpha = 0.85f),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
