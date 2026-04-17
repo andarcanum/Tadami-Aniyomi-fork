@@ -416,38 +416,43 @@ internal fun HeroSection(
                     val actionIcon = when (actionSpec.icon) {
                         HomeHubHeroActionIcon.Play -> Icons.Filled.PlayArrow
                     }
-                    Box(
-                        modifier = Modifier.size(21.dp),
-                        contentAlignment = Alignment.Center,
+                    Row(
+                        modifier = Modifier.offset(x = (-2).dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (actionButtonIconShadowSpec.alpha > 0f) {
+                        Box(
+                            modifier = Modifier.size(21.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (actionButtonIconShadowSpec.alpha > 0f) {
+                                Icon(
+                                    imageVector = actionIcon,
+                                    contentDescription = null,
+                                    tint = Color.Black.copy(alpha = actionButtonIconShadowSpec.alpha),
+                                    modifier = Modifier
+                                        .size(21.dp)
+                                        .offset(
+                                            x = actionButtonIconShadowSpec.offsetXDp,
+                                            y = actionButtonIconShadowSpec.offsetYDp,
+                                        ),
+                                )
+                            }
                             Icon(
                                 imageVector = actionIcon,
                                 contentDescription = null,
-                                tint = Color.Black.copy(alpha = actionButtonIconShadowSpec.alpha),
-                                modifier = Modifier
-                                    .size(21.dp)
-                                    .offset(
-                                        x = actionButtonIconShadowSpec.offsetXDp,
-                                        y = actionButtonIconShadowSpec.offsetYDp,
-                                    ),
+                                tint = actionButtonContentColor,
+                                modifier = Modifier.size(21.dp),
                             )
                         }
-                        Icon(
-                            imageVector = actionIcon,
-                            contentDescription = null,
-                            tint = actionButtonContentColor,
-                            modifier = Modifier.size(21.dp),
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            stringResource(actionSpec.labelRes),
+                            color = actionButtonContentColor,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            style = TextStyle(shadow = actionButtonLabelShadow),
                         )
                     }
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        stringResource(actionSpec.labelRes),
-                        color = actionButtonContentColor,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
-                        style = TextStyle(shadow = actionButtonLabelShadow),
-                    )
                 }
             }
         }
