@@ -7,7 +7,6 @@ import androidx.compose.animation.graphics.vector.AnimatedImageVector
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.platform.LocalUriHandler
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
@@ -22,10 +21,10 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.achievement.screen.AchievementScreenVoyager
 import eu.kanade.presentation.more.MoreScreen
 import eu.kanade.presentation.more.MoreScreenAurora
+import eu.kanade.presentation.more.settings.screen.HelpScreen
 import eu.kanade.presentation.more.settings.screen.SettingsNovelReaderScreen
 import eu.kanade.presentation.more.settings.screen.about.AboutScreen
 import eu.kanade.presentation.util.Tab
-import eu.kanade.tachiyomi.core.common.Constants
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
 import eu.kanade.tachiyomi.ui.category.CategoriesTab
@@ -73,7 +72,6 @@ data object MoreTab : Tab {
         val navigator = LocalNavigator.currentOrThrow
         val screenModel = rememberScreenModel { MoreScreenModel() }
         val downloadQueueState by screenModel.downloadQueueState.collectAsState(DownloadQueueState.Stopped)
-        val uriHandler = LocalUriHandler.current
 
         val uiPreferences = Injekt.get<UiPreferences>()
         val theme by uiPreferences.appTheme().preferenceCollectAsState()
@@ -98,10 +96,10 @@ data object MoreTab : Tab {
                 onNovelReaderSettingsClick = { navigator.push(SettingsNovelReaderScreen) },
                 onSettingsClick = { navigator.push(SettingsScreen()) },
                 onAboutClick = { navigator.push(AboutScreen) },
+                onHelpClick = { navigator.push(HelpScreen) },
                 onDebugAppUpdatePreviewClick = { navigator.push(DebugAppUpdatePreviewScreen()) },
                 onStatsClick = { navigator.push(StatsTab) },
                 onAchievementsClick = { navigator.push(AchievementScreenVoyager) },
-                onHelpClick = { uriHandler.openUri(Constants.URL_HELP) },
             )
         } else {
             MoreScreen(
@@ -121,6 +119,7 @@ data object MoreTab : Tab {
                 onClickNovelReaderSettings = { navigator.push(SettingsNovelReaderScreen) },
                 onClickSettings = { navigator.push(SettingsScreen()) },
                 onClickAbout = { navigator.push(AboutScreen) },
+                onClickHelp = { navigator.push(HelpScreen) },
                 onClickDebugAppUpdatePreview = { navigator.push(DebugAppUpdatePreviewScreen()) },
             )
         }
