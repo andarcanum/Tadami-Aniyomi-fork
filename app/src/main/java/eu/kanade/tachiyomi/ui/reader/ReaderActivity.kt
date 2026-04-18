@@ -154,23 +154,34 @@ class ReaderActivity : BaseActivity() {
     var isScrollingThroughPages = false
         private set
 
+    private fun isEInkMode(): Boolean = uiPreferences.eInkMode().get()
+
     /**
      * Called when the activity is created. Initializes the presenter and configuration.
      */
     override fun onCreate(savedInstanceState: Bundle?) {
+        val reduceMotion = isEInkMode()
         registerSecureActivity(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             overrideActivityTransition(
                 Activity.OVERRIDE_TRANSITION_OPEN,
-                R.anim.shared_axis_x_push_enter,
-                R.anim.shared_axis_x_push_exit,
+                if (reduceMotion) 0 else R.anim.shared_axis_x_push_enter,
+                if (reduceMotion) 0 else R.anim.shared_axis_x_push_exit,
             )
         } else {
             @Suppress("DEPRECATION")
-            overridePendingTransition(R.anim.shared_axis_x_push_enter, R.anim.shared_axis_x_push_exit)
+            overridePendingTransition(
+                if (reduceMotion) 0 else R.anim.shared_axis_x_push_enter,
+                if (reduceMotion) 0 else R.anim.shared_axis_x_push_exit,
+            )
         }
 
         super.onCreate(savedInstanceState)
+
+        if (reduceMotion) {
+            window.sharedElementEnterTransition = null
+            window.sharedElementReturnTransition = null
+        }
 
         // Defer achievement notifications while in reader
         eu.kanade.presentation.achievement.components.AchievementBannerManager.setInReaderOrPlayer(true)
@@ -317,15 +328,19 @@ class ReaderActivity : BaseActivity() {
     override fun finish() {
         viewModel.onActivityFinish()
         super.finish()
+        val reduceMotion = isEInkMode()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             overrideActivityTransition(
                 Activity.OVERRIDE_TRANSITION_CLOSE,
-                R.anim.shared_axis_x_pop_enter,
-                R.anim.shared_axis_x_pop_exit,
+                if (reduceMotion) 0 else R.anim.shared_axis_x_pop_enter,
+                if (reduceMotion) 0 else R.anim.shared_axis_x_pop_exit,
             )
         } else {
             @Suppress("DEPRECATION")
-            overridePendingTransition(R.anim.shared_axis_x_pop_enter, R.anim.shared_axis_x_pop_exit)
+            overridePendingTransition(
+                if (reduceMotion) 0 else R.anim.shared_axis_x_pop_enter,
+                if (reduceMotion) 0 else R.anim.shared_axis_x_pop_exit,
+            )
         }
     }
 
@@ -640,13 +655,13 @@ class ReaderActivity : BaseActivity() {
         val prevViewer = viewModel.state.value.viewer
         val newViewer = ReadingMode.toViewer(viewModel.getMangaReadingMode(), this)
 
-        if (window.sharedElementEnterTransition is MaterialContainerTransform) {
+        if (isEInkMode() || window.sharedElementEnterTransition !is MaterialContainerTransform) {
+            setOrientation(viewModel.getMangaOrientation())
+        } else {
             // Wait until transition is complete to avoid crash on API 26
             window.sharedElementEnterTransition.doOnEnd {
                 setOrientation(viewModel.getMangaOrientation())
             }
-        } else {
-            setOrientation(viewModel.getMangaOrientation())
         }
 
         // Destroy previous viewer if there was one

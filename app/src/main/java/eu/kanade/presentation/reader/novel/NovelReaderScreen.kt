@@ -934,6 +934,7 @@ fun NovelReaderScreen(
         resolveActivePageTransitionStyle(
             requestedStyle = state.readerSettings.pageTransitionStyle,
             pageTurnRendererSupported = true,
+            isEInkMode = isEInkMode,
         )
     }
     val pageReaderRendererRoute = remember(usePageReader, activePageTransitionStyle) {

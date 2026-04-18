@@ -12,8 +12,9 @@ internal fun resolveNavigationTransitionMode(
     selectedMode: NavTransitionMode,
     animatorDurationScale: Float,
     isPowerSaveMode: Boolean,
+    isEInkMode: Boolean = false,
 ): ResolvedNavigationTransitionMode {
-    if (animatorDurationScale <= 0f) {
+    if (isEInkMode || animatorDurationScale <= 0f) {
         return ResolvedNavigationTransitionMode.NONE
     }
 

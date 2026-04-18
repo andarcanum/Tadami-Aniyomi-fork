@@ -16,6 +16,16 @@ class NavigationTransitionResolverTest {
     }
 
     @Test
+    fun `e ink mode always resolves to none`() {
+        resolveNavigationTransitionMode(
+            selectedMode = NavTransitionMode.MODERN,
+            animatorDurationScale = 1f,
+            isPowerSaveMode = false,
+            isEInkMode = true,
+        ) shouldBe ResolvedNavigationTransitionMode.NONE
+    }
+
+    @Test
     fun `auto mode resolves to modern when power save is off`() {
         resolveNavigationTransitionMode(
             selectedMode = NavTransitionMode.AUTO,

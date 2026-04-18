@@ -15,8 +15,8 @@ fun resolveAuroraSurfaceColor(
     if (colors.isEInk) {
         return when (level) {
             AuroraSurfaceLevel.Subtle -> Color(0xFFFFFFFF)
-            AuroraSurfaceLevel.Glass -> Color(0xFFF5F5F5)
-            AuroraSurfaceLevel.Strong -> Color(0xFFECECEC)
+            AuroraSurfaceLevel.Glass -> Color(0xFFF6F6F6)
+            AuroraSurfaceLevel.Strong -> Color(0xFFEDEDED)
         }
     }
     return if (colors.isDark) {
@@ -40,9 +40,9 @@ fun resolveAuroraBorderColor(
 ): Color {
     if (colors.isEInk) {
         return if (emphasized) {
-            Color(0xFF8F8F8F)
+            Color(0xFF8A8A8A)
         } else {
-            Color(0xFFCCCCCC)
+            Color(0xFFB5B5B5)
         }
     }
     return if (colors.isDark) {
@@ -62,7 +62,7 @@ fun resolveAuroraBorderColor(
 
 fun resolveAuroraSelectionContainerColor(colors: AuroraColors): Color {
     if (colors.isEInk) {
-        return Color(0xFFE5E5E5)
+        return Color(0xFFE3E3E3)
     }
     return if (colors.isDark) {
         colors.accent.copy(alpha = 0.18f)
@@ -84,7 +84,7 @@ fun resolveAuroraSelectionBorderColor(colors: AuroraColors): Color {
 
 fun resolveAuroraControlContainerColor(colors: AuroraColors): Color {
     if (colors.isEInk) {
-        return Color(0xFFF4F4F4)
+        return Color(0xFFF5F5F5)
     }
     return if (colors.isDark) {
         Color.White.copy(alpha = 0.05f)
@@ -121,7 +121,7 @@ fun resolveAuroraIconSurfaceColor(colors: AuroraColors): Color {
 
 fun resolveAuroraTopBarScrimColor(colors: AuroraColors): Color {
     if (colors.isEInk) {
-        return Color.Black.copy(alpha = 0.04f)
+        return Color.Black.copy(alpha = 0.03f)
     }
     return if (colors.isDark) {
         Color.Black.copy(alpha = 0.15f)
