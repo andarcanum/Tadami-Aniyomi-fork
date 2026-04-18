@@ -22,6 +22,7 @@ import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColo
 import tachiyomi.domain.entries.anime.model.AnimeCover
 import tachiyomi.domain.entries.manga.model.MangaCover
 import tachiyomi.domain.entries.novel.model.NovelCover
+import tachiyomi.presentation.core.util.LocalAppHaptics
 
 enum class ItemCover(val ratio: Float) {
     Square(1f / 1f),
@@ -39,6 +40,7 @@ enum class ItemCover(val ratio: Float) {
         errorPainter: Painter? = null,
     ) {
         val model = resolveCoverModel(data)
+        val appHaptics = LocalAppHaptics.current
         val imageModifier = modifier
             .aspectRatio(ratio)
             .clip(shape)
@@ -46,7 +48,10 @@ enum class ItemCover(val ratio: Float) {
                 if (onClick != null) {
                     Modifier.clickable(
                         role = Role.Button,
-                        onClick = onClick,
+                        onClick = {
+                            appHaptics.tap()
+                            onClick()
+                        },
                     )
                 } else {
                     Modifier

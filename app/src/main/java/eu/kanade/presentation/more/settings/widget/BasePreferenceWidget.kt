@@ -41,6 +41,7 @@ import eu.kanade.presentation.more.settings.settingsCardContainerColor
 import eu.kanade.presentation.more.settings.settingsTitleColor
 import eu.kanade.presentation.theme.LocalIsDefaultAppUiFont
 import kotlinx.coroutines.delay
+import tachiyomi.presentation.core.util.LocalAppHaptics
 import kotlin.time.Duration.Companion.seconds
 
 @Composable
@@ -57,6 +58,7 @@ internal fun BasePreferenceWidget(
     val minHeight = LocalPreferenceMinHeight.current
     val isAurora = LocalSettingsUiStyle.current == SettingsUiStyle.Aurora
     val useMediumWeight = LocalIsDefaultAppUiFont.current
+    val appHaptics = LocalAppHaptics.current
     val rowShape = if (isAurora) AURORA_SETTINGS_CARD_SHAPE else MaterialTheme.shapes.medium
     Row(
         modifier = modifier
@@ -74,7 +76,10 @@ internal fun BasePreferenceWidget(
             .sizeIn(minHeight = minHeight)
             .combinedClickable(
                 enabled = onClick != null || onLongClick != null,
-                onClick = { onClick?.invoke() },
+                onClick = {
+                    appHaptics.tap()
+                    onClick?.invoke()
+                },
                 onLongClick = onLongClick,
             )
             .fillMaxWidth(),

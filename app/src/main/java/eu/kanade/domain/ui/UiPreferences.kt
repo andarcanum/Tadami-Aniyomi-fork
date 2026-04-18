@@ -9,6 +9,7 @@ import eu.kanade.domain.ui.model.ThemeMode
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.preference.getEnum
 import tachiyomi.domain.metadata.model.MetadataSource
+import tachiyomi.presentation.core.util.HapticFeedbackMode
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
@@ -49,6 +50,11 @@ class UiPreferences(
     fun entryAutoJumpToNextNovel() = preferenceStore.getBoolean("entry_auto_jump_to_next_novel", false)
 
     fun navStyle() = preferenceStore.getEnum("bottom_rail_nav_style", NavStyle.MOVE_HISTORY_TO_MORE)
+
+    fun hapticFeedbackMode() = preferenceStore.getEnum(
+        "haptic_feedback_mode",
+        HapticFeedbackMode.PARTIAL,
+    )
 
     fun navigationTransitionMode() = preferenceStore.getEnum(
         "navigation_transition_mode",

@@ -56,6 +56,7 @@ import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 
 private val animationSpec = tween<IntOffset>(200)
 private val expandAnimationSpec = tween<IntSize>(200)
@@ -119,6 +120,7 @@ fun ReaderAppBars(
     onToggleExpand: () -> Unit = {},
 ) {
     val isRtl = viewer is R2LPagerViewer
+    val appHaptics = LocalAppHaptics.current
     val backgroundColor = MaterialTheme.colorScheme
         .surfaceColorAtElevation(3.dp)
         .copy(alpha = if (isSystemInDarkTheme()) 0.9f else 0.95f)
@@ -146,7 +148,10 @@ fun ReaderAppBars(
                         color = backgroundColor,
                         shape = RoundedCornerShape(bottomStart = 18.dp, bottomEnd = 18.dp),
                     )
-                    .clickable(onClick = onClickTopAppBar),
+                    .clickable(onClick = {
+                        appHaptics.tap()
+                        onClickTopAppBar()
+                    }),
             ) {
                 Column(
                     modifier = Modifier
@@ -237,7 +242,10 @@ fun ReaderAppBars(
                                 horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.medium),
                             ) {
                                 IconButton(
-                                    onClick = onToggleAutoScroll,
+                                    onClick = {
+                                        appHaptics.tap()
+                                        onToggleAutoScroll()
+                                    },
                                     modifier = Modifier.padding(top = 16.dp),
                                 ) {
                                     Icon(
@@ -286,7 +294,10 @@ fun ReaderAppBars(
                         contentAlignment = Alignment.Center,
                     ) {
                         IconButton(
-                            onClick = onToggleExpand,
+                            onClick = {
+                                appHaptics.tap()
+                                onToggleExpand()
+                            },
                         ) {
                             Icon(
                                 imageVector = if (isAutoScrollExpanded) {

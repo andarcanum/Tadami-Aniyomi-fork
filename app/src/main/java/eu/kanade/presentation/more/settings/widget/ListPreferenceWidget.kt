@@ -32,6 +32,7 @@ import eu.kanade.presentation.more.settings.settingsTitleColor
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.ScrollbarLazyColumn
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 
 @Composable
 fun <T> ListPreferenceWidget(
@@ -103,13 +104,18 @@ private fun DialogRow(
     textStyle: TextStyle?,
     onSelected: () -> Unit,
 ) {
+    val appHaptics = LocalAppHaptics.current
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .clip(MaterialTheme.shapes.small)
             .selectable(
                 selected = isSelected,
-                onClick = { if (!isSelected) onSelected() },
+                onClick = {
+                    appHaptics.tap()
+                    if (!isSelected) onSelected()
+                },
             )
             .fillMaxWidth()
             .minimumInteractiveComponentSize(),

@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.theme.AuroraTheme
+import tachiyomi.presentation.core.util.LocalAppHaptics
 
 @Composable
 fun AuroraEntryDropdownMenu(
@@ -51,6 +52,7 @@ fun AuroraEntryDropdownMenuItem(
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
     DropdownMenuItem(
         text = {
             Text(
@@ -69,7 +71,10 @@ fun AuroraEntryDropdownMenuItem(
                 )
             }
         },
-        onClick = onClick,
+        onClick = {
+            appHaptics.tap()
+            onClick()
+        },
         modifier = modifier,
         colors = MenuDefaults.itemColors(
             textColor = colors.textPrimary,

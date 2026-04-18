@@ -13,6 +13,7 @@ import androidx.compose.ui.zIndex
 import eu.kanade.presentation.category.visualName
 import tachiyomi.domain.category.model.Category
 import tachiyomi.presentation.core.components.material.TabText
+import tachiyomi.presentation.core.util.LocalAppHaptics
 
 @Composable
 internal fun LibraryTabs(
@@ -22,6 +23,7 @@ internal fun LibraryTabs(
     onTabItemClick: (Int) -> Unit,
 ) {
     val currentPageIndex = pagerState.currentPage.coerceAtMost(categories.lastIndex)
+    val appHaptics = LocalAppHaptics.current
     Column(
         modifier = Modifier.zIndex(1f),
     ) {
@@ -35,7 +37,10 @@ internal fun LibraryTabs(
             categories.forEachIndexed { index, category ->
                 Tab(
                     selected = currentPageIndex == index,
-                    onClick = { onTabItemClick(index) },
+                    onClick = {
+                        appHaptics.tap()
+                        onTabItemClick(index)
+                    },
                     text = {
                         TabText(
                             text = category.visualName,

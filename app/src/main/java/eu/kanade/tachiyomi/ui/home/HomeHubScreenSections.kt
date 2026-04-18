@@ -70,6 +70,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
 import kotlinx.coroutines.launch
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 import tachiyomi.presentation.core.util.collectAsState
 
 @Composable
@@ -374,6 +375,7 @@ private fun HomeHubScreen(
 @Composable
 private fun WelcomeSection(onBrowseClick: () -> Unit, onExtensionClick: () -> Unit) {
     val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val contentMaxWidthDp = auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp
 
@@ -407,7 +409,10 @@ private fun WelcomeSection(onBrowseClick: () -> Unit, onExtensionClick: () -> Un
             Spacer(Modifier.height(32.dp))
 
             Button(
-                onClick = onBrowseClick,
+                onClick = {
+                    appHaptics.tap()
+                    onBrowseClick()
+                },
                 colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth().height(52.dp),
@@ -425,7 +430,10 @@ private fun WelcomeSection(onBrowseClick: () -> Unit, onExtensionClick: () -> Un
             Spacer(Modifier.height(12.dp))
 
             Button(
-                onClick = onExtensionClick,
+                onClick = {
+                    appHaptics.tap()
+                    onExtensionClick()
+                },
                 colors = ButtonDefaults.buttonColors(
                     containerColor = resolveAuroraSurfaceColor(colors, AuroraSurfaceLevel.Glass),
                 ),

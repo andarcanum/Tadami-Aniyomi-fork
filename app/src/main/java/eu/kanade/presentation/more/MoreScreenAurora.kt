@@ -51,6 +51,7 @@ import eu.kanade.presentation.theme.LocalIsDefaultAppUiFont
 import eu.kanade.tachiyomi.ui.more.DownloadQueueState
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 
 @Composable
 fun MoreScreenAurora(
@@ -220,6 +221,7 @@ fun AuroraSettingItem(
 ) {
     val colors = AuroraTheme.colors
     val useMediumWeight = LocalIsDefaultAppUiFont.current
+    val appHaptics = LocalAppHaptics.current
 
     Row(
         modifier = Modifier
@@ -227,7 +229,10 @@ fun AuroraSettingItem(
             .padding(vertical = AURORA_MORE_CARD_VERTICAL_INSET)
             .clip(RoundedCornerShape(16.dp))
             .background(resolveAuroraMoreCardContainerColor(colors))
-            .clickable(onClick = onClick)
+            .clickable {
+                appHaptics.tap()
+                onClick()
+            }
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -267,6 +272,7 @@ fun AuroraToggleItem(
 ) {
     val colors = AuroraTheme.colors
     val useMediumWeight = LocalIsDefaultAppUiFont.current
+    val appHaptics = LocalAppHaptics.current
 
     Row(
         modifier = Modifier
@@ -274,7 +280,10 @@ fun AuroraToggleItem(
             .padding(vertical = AURORA_MORE_CARD_VERTICAL_INSET)
             .clip(RoundedCornerShape(16.dp))
             .background(resolveAuroraMoreCardContainerColor(colors))
-            .clickable { onCheckedChange(!checked) }
+            .clickable {
+                appHaptics.tap()
+                onCheckedChange(!checked)
+            }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -300,7 +309,7 @@ fun AuroraToggleItem(
         CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
             androidx.compose.material3.Switch(
                 checked = checked,
-                onCheckedChange = onCheckedChange,
+                onCheckedChange = null,
                 colors = androidx.compose.material3.SwitchDefaults.colors(
                     checkedThumbColor = colors.accent,
                     checkedTrackColor = resolveAuroraMoreCheckedTrackColor(colors),

@@ -152,6 +152,7 @@ import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
 import tachiyomi.presentation.core.screens.EmptyScreenAction
 import tachiyomi.presentation.core.screens.LoadingScreen
+import tachiyomi.presentation.core.util.LocalAppHaptics
 import tachiyomi.presentation.core.util.collectAsState
 import tachiyomi.source.local.entries.anime.isLocal
 import tachiyomi.source.local.entries.manga.isLocal
@@ -1403,6 +1404,7 @@ private fun AuroraLibraryPinnedHeader(
     getCountForCategory: (Category) -> Int?,
 ) {
     val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
     var isSearchExpanded by remember(selectedSectionIndex) { mutableStateOf(searchQuery != null) }
     var previousSearchQuery by remember(selectedSectionIndex) { mutableStateOf(searchQuery) }
     val isSearchActive = shouldShowAuroraSearchField(
@@ -1450,6 +1452,7 @@ private fun AuroraLibraryPinnedHeader(
                     trailingIcon = {
                         IconButton(
                             onClick = {
+                                appHaptics.tap()
                                 isSearchExpanded = false
                                 onSearchQueryChange(null)
                             },
@@ -1487,7 +1490,10 @@ private fun AuroraLibraryPinnedHeader(
                         Color.Black.copy(alpha = 0.03f)
                     }
                     IconButton(
-                        onClick = { isSearchExpanded = true },
+                        onClick = {
+                            appHaptics.tap()
+                            isSearchExpanded = true
+                        },
                         modifier = Modifier
                             .background(tabContainerColor, CircleShape)
                             .size(44.dp),
@@ -1500,7 +1506,10 @@ private fun AuroraLibraryPinnedHeader(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     IconButton(
-                        onClick = onFilterClick,
+                        onClick = {
+                            appHaptics.tap()
+                            onFilterClick()
+                        },
                         modifier = Modifier
                             .background(tabContainerColor, CircleShape)
                             .size(44.dp),
@@ -1514,7 +1523,10 @@ private fun AuroraLibraryPinnedHeader(
                     Spacer(modifier = Modifier.width(8.dp))
                     androidx.compose.foundation.layout.Box {
                         IconButton(
-                            onClick = { showMenu = true },
+                            onClick = {
+                                appHaptics.tap()
+                                showMenu = true
+                            },
                             modifier = Modifier
                                 .background(tabContainerColor, CircleShape)
                                 .size(44.dp),
@@ -1617,6 +1629,7 @@ private fun AuroraLibraryCategoryTabs(
     getCountForCategory: (Category) -> Int?,
 ) {
     val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
     val coercedSelected = coerceAuroraLibraryCategoryIndex(selectedIndex, categories.size)
 
     Box(
@@ -1649,7 +1662,10 @@ private fun AuroraLibraryCategoryTabs(
                                 Color.Transparent
                             },
                         )
-                        .clickable { onCategorySelected(index) }
+                        .clickable {
+                            appHaptics.tap()
+                            onCategorySelected(index)
+                        }
                         .padding(horizontal = 14.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),

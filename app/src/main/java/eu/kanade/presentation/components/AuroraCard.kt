@@ -40,6 +40,7 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.resolveAuroraBorderColor
 import eu.kanade.presentation.theme.resolveAuroraSelectionBorderColor
 import eu.kanade.presentation.theme.resolveAuroraSurfaceColor
+import tachiyomi.presentation.core.util.LocalAppHaptics
 
 @Composable
 fun AuroraCard(
@@ -62,6 +63,7 @@ fun AuroraCard(
 ) {
     val colors = AuroraTheme.colors
     val context = LocalContext.current
+    val appHaptics = LocalAppHaptics.current
     val normalizedCoverHeightFraction = coverHeightFraction.coerceIn(0.01f, 1f)
     val showTextContent = normalizedCoverHeightFraction < 1f
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
@@ -72,7 +74,10 @@ fun AuroraCard(
     Card(
         modifier = modifier
             .combinedClickable(
-                onClick = onClick,
+                onClick = {
+                    appHaptics.tap()
+                    onClick()
+                },
                 onLongClick = onLongClick,
             ),
         shape = RoundedCornerShape(12.dp),
@@ -142,7 +147,10 @@ fun AuroraCard(
 
                 if (onClickContinueViewing != null) {
                     FilledIconButton(
-                        onClick = onClickContinueViewing,
+                        onClick = {
+                            appHaptics.tap()
+                            onClickContinueViewing()
+                        },
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(6.dp)

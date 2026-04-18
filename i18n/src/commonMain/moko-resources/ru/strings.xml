@@ -1017,4 +1017,8 @@
     <string name="ai_translator_log_empty">Логи пока пусты</string>
     <string name="ai_translator_custom_prompt_title">Свой модификатор промпта</string>
     <string name="ai_translator_custom_prompt_hint">Свои инструкции</string>
+    <string name="pref_haptic_feedback">Тактильный отклик</string>
+    <string name="pref_haptic_feedback_summary">Частичный режим сохраняет текущие выборочные отклики. Полный добавляет вибрацию на обычные нажатия и кнопки.</string>
+    <string name="pref_haptic_feedback_partial">Частичный</string>
+    <string name="pref_haptic_feedback_full">Полный</string>
 </resources>

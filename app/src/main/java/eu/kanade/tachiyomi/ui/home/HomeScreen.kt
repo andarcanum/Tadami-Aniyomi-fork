@@ -83,6 +83,7 @@ import tachiyomi.presentation.core.components.material.NavigationBar
 import tachiyomi.presentation.core.components.material.NavigationRail
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.pluralStringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -334,6 +335,7 @@ object HomeScreen : Screen() {
         val navigator = LocalNavigator.currentOrThrow
         val scope = rememberCoroutineScope()
         val selected = tabNavigator.current::class == tab::class
+        val appHaptics = LocalAppHaptics.current
 
         val colors = if (isAurora) {
             val auroraColors = AuroraTheme.colors
@@ -351,6 +353,7 @@ object HomeScreen : Screen() {
         NavigationBarItem(
             selected = selected,
             onClick = {
+                appHaptics.tap()
                 if (!selected) {
                     tabNavigator.current = tab
                 } else {
@@ -378,6 +381,7 @@ object HomeScreen : Screen() {
         val navigator = LocalNavigator.currentOrThrow
         val scope = rememberCoroutineScope()
         val selected = tabNavigator.current::class == tab::class
+        val appHaptics = LocalAppHaptics.current
         val theme by uiPreferences.appTheme().collectAsState()
         val isAurora = theme.isAuroraStyle
 
@@ -397,6 +401,7 @@ object HomeScreen : Screen() {
         NavigationRailItem(
             selected = selected,
             onClick = {
+                appHaptics.tap()
                 if (!selected) {
                     tabNavigator.current = tab
                 } else {

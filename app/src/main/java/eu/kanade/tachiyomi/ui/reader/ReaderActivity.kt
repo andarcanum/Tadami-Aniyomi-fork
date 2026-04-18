@@ -46,6 +46,7 @@ import com.tadami.aurora.databinding.ReaderActivityBinding
 import dev.chrisbanes.insetter.applyInsetter
 import eu.kanade.core.util.ifMangaSourcesLoaded
 import eu.kanade.domain.base.BasePreferences
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.reader.DisplayRefreshHost
 import eu.kanade.presentation.reader.OrientationSelectDialog
 import eu.kanade.presentation.reader.PageIndicatorText
@@ -98,6 +99,7 @@ import tachiyomi.core.common.util.lang.launchNonCancellable
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.util.AppHapticsProvider
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -126,6 +128,7 @@ class ReaderActivity : BaseActivity() {
 
     private val readerPreferences = Injekt.get<ReaderPreferences>()
     private val preferences = Injekt.get<BasePreferences>()
+    private val uiPreferences = Injekt.get<UiPreferences>()
 
     lateinit var binding: ReaderActivityBinding
 
@@ -359,242 +362,250 @@ class ReaderActivity : BaseActivity() {
      */
     private fun initializeMenu() {
         binding.pageNumber.setComposeContent {
-            val state by viewModel.state.collectAsState()
-            val showPageNumber by viewModel.readerPreferences.showPageNumber().collectAsState()
+            val hapticFeedbackMode by uiPreferences.hapticFeedbackMode().collectAsState()
 
-            if (!state.menuVisible && showPageNumber) {
-                PageIndicatorText(
-                    currentPage = state.currentPage,
-                    totalPages = state.totalPages,
-                )
+            AppHapticsProvider(hapticFeedbackMode = hapticFeedbackMode) {
+                val state by viewModel.state.collectAsState()
+                val showPageNumber by viewModel.readerPreferences.showPageNumber().collectAsState()
+
+                if (!state.menuVisible && showPageNumber) {
+                    PageIndicatorText(
+                        currentPage = state.currentPage,
+                        totalPages = state.totalPages,
+                    )
+                }
             }
         }
 
         binding.dialogRoot.setComposeContent {
-            val state by viewModel.state.collectAsState()
-            val settingsScreenModel = remember {
-                ReaderSettingsScreenModel(
-                    readerState = viewModel.state,
-                    hasDisplayCutout = hasCutout,
-                    onChangeReadingMode = viewModel::setMangaReadingMode,
-                    onChangeOrientation = viewModel::setMangaOrientationType,
-                )
-            }
+            val hapticFeedbackMode by uiPreferences.hapticFeedbackMode().collectAsState()
 
-            if (!ifMangaSourcesLoaded()) {
-                return@setComposeContent
-            }
-
-            val isHttpSource = viewModel.getSource() is HttpSource
-            val isFullscreen by readerPreferences.fullscreen().collectAsState()
-            val flashOnPageChange by readerPreferences.flashOnPageChange().collectAsState()
-
-            val colorOverlayEnabled by readerPreferences.colorFilter().collectAsState()
-            val colorOverlay by readerPreferences.colorFilterValue().collectAsState()
-            val colorOverlayMode by readerPreferences.colorFilterMode().collectAsState()
-            val colorOverlayBlendMode = remember(colorOverlayMode) {
-                ReaderPreferences.ColorFilterMode.getOrNull(colorOverlayMode)?.second
-            }
-
-            val cropBorderPaged by readerPreferences.cropBorders().collectAsState()
-            val cropBorderWebtoon by readerPreferences.cropBordersWebtoon().collectAsState()
-            val isPagerType = ReadingMode.isPagerType(viewModel.getMangaReadingMode())
-            val cropEnabled = if (isPagerType) cropBorderPaged else cropBorderWebtoon
-
-            // Navigator customization preferences
-            val showNavigator by readerPreferences.showNavigator().collectAsState()
-            val navigatorShowPageNumbers by readerPreferences.navigatorShowPageNumbers().collectAsState()
-            val navigatorShowChapterButtons by readerPreferences.navigatorShowChapterButtons().collectAsState()
-            val navigatorSliderColor by readerPreferences.navigatorSliderColor().collectAsState()
-            val navigatorBackgroundAlpha by readerPreferences.navigatorBackgroundAlpha().collectAsState()
-            val navigatorHeight by readerPreferences.navigatorHeight().collectAsState()
-            val navigatorCornerRadius by readerPreferences.navigatorCornerRadius().collectAsState()
-            val navigatorShowTickMarks by readerPreferences.navigatorShowTickMarks().collectAsState()
-            val pageActionButtonColorPref = remember { readerPreferences.pageActionButtonColor() }
-            val pageActionButtonColor by pageActionButtonColorPref.collectAsState()
-            val pageActionLabelColorPref = remember { readerPreferences.pageActionLabelColor() }
-            val pageActionLabelColor by pageActionLabelColorPref.collectAsState()
-
-            // Auto-scroll effect - start/stop based on state
-            LaunchedEffect(state.autoScrollEnabled, state.autoScrollSpeed, state.viewer) {
-                val viewer = state.viewer
-                if (viewer != null && state.autoScrollEnabled) {
-                    // Hide menu when auto-scroll starts
-                    setMenuVisibility(false)
-                    when (viewer) {
-                        is PagerViewer -> viewer.startAutoScroll(state.autoScrollSpeed)
-                        is WebtoonViewer -> viewer.startAutoScroll(state.autoScrollSpeed)
-                    }
-                } else if (viewer != null) {
-                    when (viewer) {
-                        is PagerViewer -> viewer.stopAutoScroll()
-                        is WebtoonViewer -> viewer.stopAutoScroll()
-                    }
-                }
-            }
-
-            ReaderContentOverlay(
-                brightness = state.brightnessOverlayValue,
-                color = colorOverlay.takeIf { colorOverlayEnabled },
-                colorBlendMode = colorOverlayBlendMode,
-            )
-
-            ReaderAppBars(
-                visible = state.menuVisible,
-                fullscreen = isFullscreen,
-
-                mangaTitle = state.manga?.title,
-                chapterTitle = state.currentChapter?.chapter?.name,
-                navigateUp = onBackPressedDispatcher::onBackPressed,
-                onClickTopAppBar = ::openMangaScreen,
-                bookmarked = state.bookmarked,
-                onToggleBookmarked = viewModel::toggleChapterBookmark,
-                onOpenInWebView = ::openChapterInWebView.takeIf { isHttpSource },
-                onOpenInBrowser = ::openChapterInBrowser.takeIf { isHttpSource },
-                onShare = ::shareChapter.takeIf { isHttpSource },
-
-                viewer = state.viewer,
-
-                onNextChapter = ::loadNextChapter,
-                enabledNext = state.viewerChapters?.nextChapter != null,
-                onPreviousChapter = ::loadPreviousChapter,
-                enabledPrevious = state.viewerChapters?.prevChapter != null,
-                currentPage = state.currentPage,
-                totalPages = state.totalPages,
-                onPageIndexChange = {
-                    isScrollingThroughPages = true
-                    moveToPageIndex(it)
-                },
-
-                readingMode = ReadingMode.fromPreference(
-                    viewModel.getMangaReadingMode(resolveDefault = false),
-                ),
-                onClickReadingMode = viewModel::openReadingModeSelectDialog,
-                orientation = ReaderOrientation.fromPreference(
-                    viewModel.getMangaOrientation(resolveDefault = false),
-                ),
-                onClickOrientation = viewModel::openOrientationModeSelectDialog,
-                cropEnabled = cropEnabled,
-                onClickCropBorder = {
-                    val enabled = viewModel.toggleCropBorders()
-                    menuToggleToast?.cancel()
-                    menuToggleToast = toast(if (enabled) MR.strings.on else MR.strings.off)
-                },
-                onClickSettings = viewModel::openSettingsDialog,
-
-                // Auto-scroll options
-                autoScrollEnabled = state.autoScrollEnabled,
-                autoScrollSpeed = state.autoScrollSpeed,
-                onToggleAutoScroll = viewModel::toggleAutoScroll,
-                onSpeedChange = viewModel::setAutoScrollSpeed,
-                isAutoScrollExpanded = state.isAutoScrollExpanded,
-                onToggleExpand = viewModel::toggleAutoScrollExpand,
-
-                // Navigator customization options
-                showNavigator = showNavigator,
-                navigatorShowPageNumbers = navigatorShowPageNumbers,
-                navigatorShowChapterButtons = navigatorShowChapterButtons,
-                navigatorSliderColor = navigatorSliderColor,
-                navigatorBackgroundAlpha = navigatorBackgroundAlpha,
-                navigatorHeight = navigatorHeight,
-                navigatorCornerRadius = navigatorCornerRadius,
-                navigatorShowTickMarks = navigatorShowTickMarks,
-            )
-
-            if (flashOnPageChange) {
-                DisplayRefreshHost(
-                    hostState = displayRefreshHost,
-                )
-            }
-
-            val onDismissRequest = viewModel::closeDialog
-            when (state.dialog) {
-                is ReaderViewModel.Dialog.Loading -> {
-                    AlertDialog(
-                        onDismissRequest = {},
-                        confirmButton = {},
-                        text = {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                CircularProgressIndicator()
-                                Text(stringResource(MR.strings.loading))
-                            }
-                        },
+            AppHapticsProvider(hapticFeedbackMode = hapticFeedbackMode) {
+                val state by viewModel.state.collectAsState()
+                val settingsScreenModel = remember {
+                    ReaderSettingsScreenModel(
+                        readerState = viewModel.state,
+                        hasDisplayCutout = hasCutout,
+                        onChangeReadingMode = viewModel::setMangaReadingMode,
+                        onChangeOrientation = viewModel::setMangaOrientationType,
                     )
                 }
-                is ReaderViewModel.Dialog.Settings -> {
-                    ReaderSettingsDialog(
-                        onDismissRequest = onDismissRequest,
-                        onShowMenus = { setMenuVisibility(true) },
-                        onHideMenus = { setMenuVisibility(false) },
-                        screenModel = settingsScreenModel,
-                    )
-                }
-                is ReaderViewModel.Dialog.ReadingModeSelect -> {
-                    ReadingModeSelectDialog(
-                        onDismissRequest = onDismissRequest,
-                        screenModel = settingsScreenModel,
-                        onChange = { stringRes ->
-                            menuToggleToast?.cancel()
-                            if (!readerPreferences.showReadingMode().get()) {
-                                menuToggleToast = toast(stringRes)
-                            }
-                        },
-                    )
-                }
-                is ReaderViewModel.Dialog.OrientationModeSelect -> {
-                    OrientationSelectDialog(
-                        onDismissRequest = onDismissRequest,
-                        screenModel = settingsScreenModel,
-                        onChange = { stringRes ->
-                            menuToggleToast?.cancel()
-                            menuToggleToast = toast(stringRes)
-                        },
-                    )
-                }
-                is ReaderViewModel.Dialog.PageActions -> {
-                    ReaderPageActionsDialog(
-                        onDismissRequest = onDismissRequest,
-                        onSetAsCover = viewModel::setAsCover,
-                        onShare = viewModel::shareImage,
-                        onSave = viewModel::saveImage,
-                        buttonColorValue = pageActionButtonColor,
-                        labelColorValue = pageActionLabelColor,
-                        onButtonColorChange = pageActionButtonColorPref::set,
-                        onLabelColorChange = pageActionLabelColorPref::set,
-                    )
-                }
-                null -> {}
-            }
 
-            state.seriesInterstitialState?.let { seriesState ->
-                val onContinue = seriesState.nextManga?.manga?.id?.let { nextMangaId ->
-                    seriesState.nextChapterId?.let { nextChapterId ->
-                        {
-                            viewModel.clearSeriesInterstitial()
-                            startActivity(
-                                ReaderActivity.newIntent(
-                                    this@ReaderActivity,
-                                    nextMangaId,
-                                    nextChapterId,
-                                    seriesId,
-                                ),
-                            )
-                            finish()
+                if (!ifMangaSourcesLoaded()) {
+                    return@AppHapticsProvider
+                }
+
+                val isHttpSource = viewModel.getSource() is HttpSource
+                val isFullscreen by readerPreferences.fullscreen().collectAsState()
+                val flashOnPageChange by readerPreferences.flashOnPageChange().collectAsState()
+
+                val colorOverlayEnabled by readerPreferences.colorFilter().collectAsState()
+                val colorOverlay by readerPreferences.colorFilterValue().collectAsState()
+                val colorOverlayMode by readerPreferences.colorFilterMode().collectAsState()
+                val colorOverlayBlendMode = remember(colorOverlayMode) {
+                    ReaderPreferences.ColorFilterMode.getOrNull(colorOverlayMode)?.second
+                }
+
+                val cropBorderPaged by readerPreferences.cropBorders().collectAsState()
+                val cropBorderWebtoon by readerPreferences.cropBordersWebtoon().collectAsState()
+                val isPagerType = ReadingMode.isPagerType(viewModel.getMangaReadingMode())
+                val cropEnabled = if (isPagerType) cropBorderPaged else cropBorderWebtoon
+
+                // Navigator customization preferences
+                val showNavigator by readerPreferences.showNavigator().collectAsState()
+                val navigatorShowPageNumbers by readerPreferences.navigatorShowPageNumbers().collectAsState()
+                val navigatorShowChapterButtons by readerPreferences.navigatorShowChapterButtons().collectAsState()
+                val navigatorSliderColor by readerPreferences.navigatorSliderColor().collectAsState()
+                val navigatorBackgroundAlpha by readerPreferences.navigatorBackgroundAlpha().collectAsState()
+                val navigatorHeight by readerPreferences.navigatorHeight().collectAsState()
+                val navigatorCornerRadius by readerPreferences.navigatorCornerRadius().collectAsState()
+                val navigatorShowTickMarks by readerPreferences.navigatorShowTickMarks().collectAsState()
+                val pageActionButtonColorPref = remember { readerPreferences.pageActionButtonColor() }
+                val pageActionButtonColor by pageActionButtonColorPref.collectAsState()
+                val pageActionLabelColorPref = remember { readerPreferences.pageActionLabelColor() }
+                val pageActionLabelColor by pageActionLabelColorPref.collectAsState()
+
+                // Auto-scroll effect - start/stop based on state
+                LaunchedEffect(state.autoScrollEnabled, state.autoScrollSpeed, state.viewer) {
+                    val viewer = state.viewer
+                    if (viewer != null && state.autoScrollEnabled) {
+                        // Hide menu when auto-scroll starts
+                        setMenuVisibility(false)
+                        when (viewer) {
+                            is PagerViewer -> viewer.startAutoScroll(state.autoScrollSpeed)
+                            is WebtoonViewer -> viewer.startAutoScroll(state.autoScrollSpeed)
+                        }
+                    } else if (viewer != null) {
+                        when (viewer) {
+                            is PagerViewer -> viewer.stopAutoScroll()
+                            is WebtoonViewer -> viewer.stopAutoScroll()
                         }
                     }
                 }
 
-                MangaSeriesInterstitialOverlay(
-                    state = seriesState,
-                    onBackToSeries = {
-                        viewModel.clearSeriesInterstitial()
-                        finish()
-                    },
-                    onContinue = onContinue,
+                ReaderContentOverlay(
+                    brightness = state.brightnessOverlayValue,
+                    color = colorOverlay.takeIf { colorOverlayEnabled },
+                    colorBlendMode = colorOverlayBlendMode,
                 )
+
+                ReaderAppBars(
+                    visible = state.menuVisible,
+                    fullscreen = isFullscreen,
+
+                    mangaTitle = state.manga?.title,
+                    chapterTitle = state.currentChapter?.chapter?.name,
+                    navigateUp = onBackPressedDispatcher::onBackPressed,
+                    onClickTopAppBar = ::openMangaScreen,
+                    bookmarked = state.bookmarked,
+                    onToggleBookmarked = viewModel::toggleChapterBookmark,
+                    onOpenInWebView = ::openChapterInWebView.takeIf { isHttpSource },
+                    onOpenInBrowser = ::openChapterInBrowser.takeIf { isHttpSource },
+                    onShare = ::shareChapter.takeIf { isHttpSource },
+
+                    viewer = state.viewer,
+
+                    onNextChapter = ::loadNextChapter,
+                    enabledNext = state.viewerChapters?.nextChapter != null,
+                    onPreviousChapter = ::loadPreviousChapter,
+                    enabledPrevious = state.viewerChapters?.prevChapter != null,
+                    currentPage = state.currentPage,
+                    totalPages = state.totalPages,
+                    onPageIndexChange = {
+                        isScrollingThroughPages = true
+                        moveToPageIndex(it)
+                    },
+
+                    readingMode = ReadingMode.fromPreference(
+                        viewModel.getMangaReadingMode(resolveDefault = false),
+                    ),
+                    onClickReadingMode = viewModel::openReadingModeSelectDialog,
+                    orientation = ReaderOrientation.fromPreference(
+                        viewModel.getMangaOrientation(resolveDefault = false),
+                    ),
+                    onClickOrientation = viewModel::openOrientationModeSelectDialog,
+                    cropEnabled = cropEnabled,
+                    onClickCropBorder = {
+                        val enabled = viewModel.toggleCropBorders()
+                        menuToggleToast?.cancel()
+                        menuToggleToast = toast(if (enabled) MR.strings.on else MR.strings.off)
+                    },
+                    onClickSettings = viewModel::openSettingsDialog,
+
+                    // Auto-scroll options
+                    autoScrollEnabled = state.autoScrollEnabled,
+                    autoScrollSpeed = state.autoScrollSpeed,
+                    onToggleAutoScroll = viewModel::toggleAutoScroll,
+                    onSpeedChange = viewModel::setAutoScrollSpeed,
+                    isAutoScrollExpanded = state.isAutoScrollExpanded,
+                    onToggleExpand = viewModel::toggleAutoScrollExpand,
+
+                    // Navigator customization options
+                    showNavigator = showNavigator,
+                    navigatorShowPageNumbers = navigatorShowPageNumbers,
+                    navigatorShowChapterButtons = navigatorShowChapterButtons,
+                    navigatorSliderColor = navigatorSliderColor,
+                    navigatorBackgroundAlpha = navigatorBackgroundAlpha,
+                    navigatorHeight = navigatorHeight,
+                    navigatorCornerRadius = navigatorCornerRadius,
+                    navigatorShowTickMarks = navigatorShowTickMarks,
+                )
+
+                if (flashOnPageChange) {
+                    DisplayRefreshHost(
+                        hostState = displayRefreshHost,
+                    )
+                }
+
+                val onDismissRequest = viewModel::closeDialog
+                when (state.dialog) {
+                    is ReaderViewModel.Dialog.Loading -> {
+                        AlertDialog(
+                            onDismissRequest = {},
+                            confirmButton = {},
+                            text = {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    CircularProgressIndicator()
+                                    Text(stringResource(MR.strings.loading))
+                                }
+                            },
+                        )
+                    }
+                    is ReaderViewModel.Dialog.Settings -> {
+                        ReaderSettingsDialog(
+                            onDismissRequest = onDismissRequest,
+                            onShowMenus = { setMenuVisibility(true) },
+                            onHideMenus = { setMenuVisibility(false) },
+                            screenModel = settingsScreenModel,
+                        )
+                    }
+                    is ReaderViewModel.Dialog.ReadingModeSelect -> {
+                        ReadingModeSelectDialog(
+                            onDismissRequest = onDismissRequest,
+                            screenModel = settingsScreenModel,
+                            onChange = { stringRes ->
+                                menuToggleToast?.cancel()
+                                if (!readerPreferences.showReadingMode().get()) {
+                                    menuToggleToast = toast(stringRes)
+                                }
+                            },
+                        )
+                    }
+                    is ReaderViewModel.Dialog.OrientationModeSelect -> {
+                        OrientationSelectDialog(
+                            onDismissRequest = onDismissRequest,
+                            screenModel = settingsScreenModel,
+                            onChange = { stringRes ->
+                                menuToggleToast?.cancel()
+                                menuToggleToast = toast(stringRes)
+                            },
+                        )
+                    }
+                    is ReaderViewModel.Dialog.PageActions -> {
+                        ReaderPageActionsDialog(
+                            onDismissRequest = onDismissRequest,
+                            onSetAsCover = viewModel::setAsCover,
+                            onShare = viewModel::shareImage,
+                            onSave = viewModel::saveImage,
+                            buttonColorValue = pageActionButtonColor,
+                            labelColorValue = pageActionLabelColor,
+                            onButtonColorChange = pageActionButtonColorPref::set,
+                            onLabelColorChange = pageActionLabelColorPref::set,
+                        )
+                    }
+                    null -> {}
+                }
+
+                state.seriesInterstitialState?.let { seriesState ->
+                    val onContinue = seriesState.nextManga?.manga?.id?.let { nextMangaId ->
+                        seriesState.nextChapterId?.let { nextChapterId ->
+                            {
+                                viewModel.clearSeriesInterstitial()
+                                startActivity(
+                                    ReaderActivity.newIntent(
+                                        this@ReaderActivity,
+                                        nextMangaId,
+                                        nextChapterId,
+                                        seriesId,
+                                    ),
+                                )
+                                finish()
+                            }
+                        }
+                    }
+
+                    MangaSeriesInterstitialOverlay(
+                        state = seriesState,
+                        onBackToSeries = {
+                            viewModel.clearSeriesInterstitial()
+                            finish()
+                        },
+                        onContinue = onContinue,
+                    )
+                }
             }
         }
 

@@ -4,6 +4,7 @@ import android.content.Context
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
+import eu.kanade.presentation.library.novel.NovelLibraryItem
 import eu.kanade.tachiyomi.source.model.SManga
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
@@ -43,7 +44,6 @@ import tachiyomi.domain.series.novel.interactor.CreateNovelSeries
 import tachiyomi.domain.series.novel.interactor.DeleteNovelSeries
 import tachiyomi.domain.series.novel.interactor.GetLibraryNovelSeries
 import tachiyomi.domain.series.novel.interactor.GetNovelIdsInAnySeries
-import eu.kanade.presentation.library.novel.NovelLibraryItem
 
 class NovelLibraryScreenModelTest {
 

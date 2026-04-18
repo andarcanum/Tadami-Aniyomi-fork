@@ -59,6 +59,7 @@ import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.HapticFeedbackMode
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -377,6 +378,16 @@ object SettingsAppearanceScreen : SearchableSettings {
                             .toImmutableMap(),
                         title = stringResource(AYMR.strings.pref_bottom_nav_style),
                         onValueChanged = { true },
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.ListPreference(
+                        preference = uiPreferences.hapticFeedbackMode(),
+                        entries = HapticFeedbackMode.entries
+                            .associateWith { stringResource(it.titleRes) }
+                            .toImmutableMap(),
+                        title = stringResource(MR.strings.pref_haptic_feedback),
+                        subtitle = stringResource(MR.strings.pref_haptic_feedback_summary),
                     ),
                 )
                 add(

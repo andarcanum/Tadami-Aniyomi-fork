@@ -53,6 +53,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -72,6 +73,7 @@ fun WebViewScreenContent(
     val navigator = rememberWebViewNavigator()
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
+    val appHaptics = LocalAppHaptics.current
     val scope = rememberCoroutineScope()
     val novelSourceManager = remember { Injekt.get<tachiyomi.domain.source.novel.service.NovelSourceManager>() }
     val pluginAssetBindings = remember { Injekt.get<NovelPluginAssetBindings>() }
@@ -209,6 +211,7 @@ fun WebViewScreenContent(
                                 modifier = Modifier
                                     .clip(MaterialTheme.shapes.small)
                                     .clickable {
+                                        appHaptics.tap()
                                         uriHandler.openUri(
                                             "https://aniyomi.org/docs/guides/troubleshooting/#cloudflare",
                                         )

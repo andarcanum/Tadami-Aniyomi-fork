@@ -70,6 +70,7 @@ import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import kotlin.time.Duration.Companion.seconds
@@ -261,6 +262,7 @@ private fun RowScope.Button(
         targetValue = if (toConfirm) 2f else 1f,
         label = "weight",
     )
+    val appHaptics = LocalAppHaptics.current
     Column(
         modifier = Modifier
             .size(48.dp)
@@ -269,7 +271,10 @@ private fun RowScope.Button(
                 interactionSource = null,
                 indication = ripple(bounded = false),
                 onLongClick = onLongClick,
-                onClick = onClick,
+                onClick = {
+                    appHaptics.tap()
+                    onClick()
+                },
             ),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -315,6 +320,7 @@ fun LibraryBottomActionMenu(
         exit = shrinkVertically(animationSpec = tween()),
     ) {
         val scope = rememberCoroutineScope()
+        val appHaptics = LocalAppHaptics.current
         Surface(
             modifier = modifier,
             shape = MaterialTheme.shapes.large.copy(
@@ -445,12 +451,18 @@ fun LibraryBottomActionMenu(
                             if (onMigrateClicked != null) {
                                 DropdownMenuItem(
                                     text = { Text(stringResource(MR.strings.action_migrate)) },
-                                    onClick = onMigrateClicked,
+                                    onClick = {
+                                        appHaptics.tap()
+                                        onMigrateClicked()
+                                    },
                                 )
                             }
                             DropdownMenuItem(
                                 text = { Text(stringResource(MR.strings.action_delete)) },
-                                onClick = onDeleteClicked,
+                                onClick = {
+                                    appHaptics.tap()
+                                    onDeleteClicked()
+                                },
                             )
                         }
                     }

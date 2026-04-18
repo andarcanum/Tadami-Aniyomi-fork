@@ -73,6 +73,7 @@ import eu.kanade.presentation.theme.resolveAuroraBorderColor
 import eu.kanade.presentation.theme.resolveAuroraSurfaceColor
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 
 @Composable
 internal fun HeroSection(
@@ -83,6 +84,7 @@ internal fun HeroSection(
     onEntryClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
     val isEInkMode = colors.isEInk
     val actionSpec = remember(section, hero.progressNumber, ctaMode) {
         resolveHomeHubHeroActionSpec(
@@ -309,7 +311,10 @@ internal fun HeroSection(
         ).padding(16.dp)
             .clip(heroCardShape)
             .border(width = 1.dp, brush = rimLightBrush, shape = heroCardShape)
-            .clickable(onClick = onEntryClick),
+            .clickable {
+                appHaptics.tap()
+                onEntryClick()
+            },
     ) {
         val fallbackPainter = rememberThemeAwareCoverErrorPainter(variant = AuroraCoverPlaceholderVariant.Wide)
         AsyncImage(
@@ -406,7 +411,10 @@ internal fun HeroSection(
                 contentAlignment = Alignment.Center,
             ) {
                 Button(
-                    onClick = onPlayClick,
+                    onClick = {
+                        appHaptics.tap()
+                        onPlayClick()
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
                     elevation = actionButtonElevation,
                     shape = actionButtonShape,
@@ -525,6 +533,7 @@ private fun OutlinedHeroText(
 @Composable
 internal fun QuickSourceButton(sourceName: String?, onClick: () -> Unit) {
     val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val contentMaxWidthDp = auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp
     val sourceButtonShape = RoundedCornerShape(16.dp)
@@ -559,7 +568,10 @@ internal fun QuickSourceButton(sourceName: String?, onClick: () -> Unit) {
             .padding(horizontal = 24.dp, vertical = 16.dp),
     ) {
         Button(
-            onClick = onClick,
+            onClick = {
+                appHaptics.tap()
+                onClick()
+            },
             colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
             shape = sourceButtonShape,
             modifier = Modifier
@@ -633,6 +645,7 @@ internal fun HomeHubRecentPosterCard(
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
     val posterSpec = remember(deviceClass) {
         resolveHomeHubRecentPosterCardSpec(deviceClass)
     }
@@ -658,7 +671,10 @@ internal fun HomeHubRecentPosterCard(
     Column(
         modifier = modifier
             .clip(cardShape)
-            .clickable(onClick = onClick)
+            .clickable {
+                appHaptics.tap()
+                onClick()
+            }
             .background(outerSurface)
             .padding(6.dp),
     ) {

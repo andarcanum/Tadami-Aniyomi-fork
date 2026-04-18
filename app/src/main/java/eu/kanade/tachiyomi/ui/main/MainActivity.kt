@@ -141,6 +141,7 @@ import tachiyomi.domain.release.interactor.GetApplicationRelease
 import tachiyomi.domain.release.service.AppUpdatePreferences
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
+import tachiyomi.presentation.core.util.AppHapticsProvider
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -212,172 +213,175 @@ class MainActivity : BaseActivity() {
             // Get current theme for Aurora detection
             val uiPreferences = remember { Injekt.get<UiPreferences>() }
             val theme by uiPreferences.appTheme().collectAsState()
+            val hapticFeedbackMode by uiPreferences.hapticFeedbackMode().collectAsState()
             val isAurora = theme.isAuroraStyle
 
-            Navigator(
-                screen = HomeScreen,
-                disposeBehavior = NavigatorDisposeBehavior(
-                    disposeNestedNavigators = false,
-                    disposeSteps = true,
-                ),
-            ) { navigator ->
-                LaunchedEffect(isSystemInDarkTheme, statusBarBackgroundColor, navigator.lastItem, isAurora) {
-                    if (!shouldMainActivityApplyEdgeToEdge(navigator.lastItem)) return@LaunchedEffect
-                    // Draw edge-to-edge and set system bars color to transparent
-                    val lightStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.BLACK)
-                    val transparentLightStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
-                    val darkStyle = SystemBarStyle.dark(Color.TRANSPARENT)
-                    val isHomeScreen = navigator.lastItem == HomeScreen
-                    val isLightStatusBar = statusBarBackgroundColor.luminance() > 0.5
-                    val statusBarStyleMode = resolveMainStatusBarStyleMode(
-                        isHomeScreen = isHomeScreen,
-                        isAurora = isAurora,
-                        isLightStatusBarBackground = isLightStatusBar,
-                    )
-                    enableEdgeToEdge(
-                        statusBarStyle = when (statusBarStyleMode) {
-                            MainStatusBarStyleMode.LIGHT -> lightStyle
-                            MainStatusBarStyleMode.TRANSPARENT_LIGHT -> transparentLightStyle
-                            MainStatusBarStyleMode.DARK -> darkStyle
-                        },
-                        navigationBarStyle = if (isSystemInDarkTheme) darkStyle else lightStyle,
-                    )
-                }
-
-                LaunchedEffect(navigator) {
-                    this@MainActivity.navigator = navigator
-
-                    if (isLaunch) {
-                        // Set start screen
-                        handleIntentAction(intent, navigator)
-
-                        // Reset Incognito Mode on relaunch
-                        preferences.incognitoMode().set(false)
-                    }
-                }
-                LaunchedEffect(navigator.lastItem) {
-                    (navigator.lastItem as? BrowseMangaSourceScreen)?.sourceId
-                        .let(getMangaIncognitoState::subscribe)
-                        .collectLatest { incognito = it }
-                }
-
-                LaunchedEffect(navigator.lastItem) {
-                    (navigator.lastItem as? BrowseAnimeSourceScreen)?.sourceId
-                        .let(getAnimeIncognitoState::subscribe)
-                        .collectLatest { incognitoAnime = it }
-                }
-
-                val readerBackdropColor = when (val currentScreen = navigator.lastItem) {
-                    is NovelReaderScreen -> {
-                        currentScreen.resolveInitialBackdropColor() ?: NovelReaderBackdropSession.backgroundColor
-                    }
-                    else -> null
-                }
-                val themeBackgroundArgb = MaterialTheme.colorScheme.background.toArgb()
-                SideEffect {
-                    updateMainActivityWindowBackground(
-                        readerBackdropColor = readerBackdropColor,
-                        fallbackColorArgb = themeBackgroundArgb,
-                    )
-                    if (navigator.lastItem !is NovelReaderScreen) {
-                        NovelReaderBackdropSession.update(null)
-                    }
-                }
-                val scaffoldInsets = WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal)
-                Scaffold(
-                    containerColor = readerBackdropColor ?: MaterialTheme.colorScheme.background,
-                    topBar = {
-                        AppStateBanners(
-                            downloadedOnlyMode = downloadOnly,
-                            incognitoMode = incognito || incognitoAnime,
-                            indexing = indexing || indexingAnime,
-                            modifier = Modifier.windowInsetsPadding(scaffoldInsets),
+            AppHapticsProvider(hapticFeedbackMode = hapticFeedbackMode) {
+                Navigator(
+                    screen = HomeScreen,
+                    disposeBehavior = NavigatorDisposeBehavior(
+                        disposeNestedNavigators = false,
+                        disposeSteps = true,
+                    ),
+                ) { navigator ->
+                    LaunchedEffect(isSystemInDarkTheme, statusBarBackgroundColor, navigator.lastItem, isAurora) {
+                        if (!shouldMainActivityApplyEdgeToEdge(navigator.lastItem)) return@LaunchedEffect
+                        // Draw edge-to-edge and set system bars color to transparent
+                        val lightStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.BLACK)
+                        val transparentLightStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+                        val darkStyle = SystemBarStyle.dark(Color.TRANSPARENT)
+                        val isHomeScreen = navigator.lastItem == HomeScreen
+                        val isLightStatusBar = statusBarBackgroundColor.luminance() > 0.5
+                        val statusBarStyleMode = resolveMainStatusBarStyleMode(
+                            isHomeScreen = isHomeScreen,
+                            isAurora = isAurora,
+                            isLightStatusBarBackground = isLightStatusBar,
                         )
-                    },
-                    contentWindowInsets = scaffoldInsets,
-                ) { contentPadding ->
-                    // Consume insets already used by app state banners
-                    Box {
-                        // Shows current screen
-                        DefaultNavigatorScreenTransition(
-                            navigator = navigator,
-                            modifier = Modifier
-                                .padding(contentPadding)
-                                .consumeWindowInsets(contentPadding),
-                        )
-                        // Achievement unlock banner overlay
-                        AchievementUnlockBanner(
-                            modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .windowInsetsPadding(WindowInsets.statusBars)
-                                .padding(top = AchievementPopupSizeTokens.overlayTopPadding),
-                        )
-                        // Achievement group notification (for multiple achievements after reader/player)
-                        var showAchievementsList by remember { mutableStateOf(false) }
-                        var pendingAchievements by remember { mutableStateOf<List<Achievement>>(emptyList()) }
-
-                        AchievementGroupNotification(
-                            modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .windowInsetsPadding(WindowInsets.statusBars)
-                                .padding(top = AchievementPopupSizeTokens.overlayTopPadding),
-                            onViewAll = { achievements ->
-                                // Get achievements directly from notification
-                                pendingAchievements = achievements
-                                showAchievementsList = true
+                        enableEdgeToEdge(
+                            statusBarStyle = when (statusBarStyleMode) {
+                                MainStatusBarStyleMode.LIGHT -> lightStyle
+                                MainStatusBarStyleMode.TRANSPARENT_LIGHT -> transparentLightStyle
+                                MainStatusBarStyleMode.DARK -> darkStyle
                             },
+                            navigationBarStyle = if (isSystemInDarkTheme) darkStyle else lightStyle,
                         )
+                    }
 
-                        // Achievement list dialog
-                        if (showAchievementsList && pendingAchievements.isNotEmpty()) {
-                            AchievementListDialog(
-                                achievements = pendingAchievements,
-                                onDismiss = {
-                                    showAchievementsList = false
-                                    pendingAchievements = emptyList()
+                    LaunchedEffect(navigator) {
+                        this@MainActivity.navigator = navigator
+
+                        if (isLaunch) {
+                            // Set start screen
+                            handleIntentAction(intent, navigator)
+
+                            // Reset Incognito Mode on relaunch
+                            preferences.incognitoMode().set(false)
+                        }
+                    }
+                    LaunchedEffect(navigator.lastItem) {
+                        (navigator.lastItem as? BrowseMangaSourceScreen)?.sourceId
+                            .let(getMangaIncognitoState::subscribe)
+                            .collectLatest { incognito = it }
+                    }
+
+                    LaunchedEffect(navigator.lastItem) {
+                        (navigator.lastItem as? BrowseAnimeSourceScreen)?.sourceId
+                            .let(getAnimeIncognitoState::subscribe)
+                            .collectLatest { incognitoAnime = it }
+                    }
+
+                    val readerBackdropColor = when (val currentScreen = navigator.lastItem) {
+                        is NovelReaderScreen -> {
+                            currentScreen.resolveInitialBackdropColor() ?: NovelReaderBackdropSession.backgroundColor
+                        }
+                        else -> null
+                    }
+                    val themeBackgroundArgb = MaterialTheme.colorScheme.background.toArgb()
+                    SideEffect {
+                        updateMainActivityWindowBackground(
+                            readerBackdropColor = readerBackdropColor,
+                            fallbackColorArgb = themeBackgroundArgb,
+                        )
+                        if (navigator.lastItem !is NovelReaderScreen) {
+                            NovelReaderBackdropSession.update(null)
+                        }
+                    }
+                    val scaffoldInsets = WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal)
+                    Scaffold(
+                        containerColor = readerBackdropColor ?: MaterialTheme.colorScheme.background,
+                        topBar = {
+                            AppStateBanners(
+                                downloadedOnlyMode = downloadOnly,
+                                incognitoMode = incognito || incognitoAnime,
+                                indexing = indexing || indexingAnime,
+                                modifier = Modifier.windowInsetsPadding(scaffoldInsets),
+                            )
+                        },
+                        contentWindowInsets = scaffoldInsets,
+                    ) { contentPadding ->
+                        // Consume insets already used by app state banners
+                        Box {
+                            // Shows current screen
+                            DefaultNavigatorScreenTransition(
+                                navigator = navigator,
+                                modifier = Modifier
+                                    .padding(contentPadding)
+                                    .consumeWindowInsets(contentPadding),
+                            )
+                            // Achievement unlock banner overlay
+                            AchievementUnlockBanner(
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .windowInsetsPadding(WindowInsets.statusBars)
+                                    .padding(top = AchievementPopupSizeTokens.overlayTopPadding),
+                            )
+                            // Achievement group notification (for multiple achievements after reader/player)
+                            var showAchievementsList by remember { mutableStateOf(false) }
+                            var pendingAchievements by remember { mutableStateOf<List<Achievement>>(emptyList()) }
+
+                            AchievementGroupNotification(
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .windowInsetsPadding(WindowInsets.statusBars)
+                                    .padding(top = AchievementPopupSizeTokens.overlayTopPadding),
+                                onViewAll = { achievements ->
+                                    // Get achievements directly from notification
+                                    pendingAchievements = achievements
+                                    showAchievementsList = true
                                 },
                             )
-                        }
-                        // Draw navigation bar scrim when needed
-                        if (remember { isNavigationBarNeedsScrim() }) {
-                            Spacer(
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .fillMaxWidth()
-                                    .windowInsetsBottomHeight(WindowInsets.navigationBars)
-                                    .alpha(0.8f)
-                                    .background(MaterialTheme.colorScheme.surfaceContainer),
-                            )
-                        }
-                    }
-                }
 
-                // Pop source-related screens when incognito mode is turned off
-                LaunchedEffect(Unit) {
-                    preferences.incognitoMode().changes()
-                        .drop(1)
-                        .filter { !it }
-                        .onEach {
-                            val currentScreen = navigator.lastItem
-                            if ((
-                                    currentScreen is BrowseMangaSourceScreen ||
-                                        (currentScreen is MangaScreen && currentScreen.fromSource)
-                                    ) ||
-                                (
-                                    currentScreen is BrowseAnimeSourceScreen ||
-                                        (currentScreen is AnimeScreen && currentScreen.fromSource)
-                                    )
-                            ) {
-                                navigator.popUntilRoot()
+                            // Achievement list dialog
+                            if (showAchievementsList && pendingAchievements.isNotEmpty()) {
+                                AchievementListDialog(
+                                    achievements = pendingAchievements,
+                                    onDismiss = {
+                                        showAchievementsList = false
+                                        pendingAchievements = emptyList()
+                                    },
+                                )
+                            }
+                            // Draw navigation bar scrim when needed
+                            if (remember { isNavigationBarNeedsScrim() }) {
+                                Spacer(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .fillMaxWidth()
+                                        .windowInsetsBottomHeight(WindowInsets.navigationBars)
+                                        .alpha(0.8f)
+                                        .background(MaterialTheme.colorScheme.surfaceContainer),
+                                )
                             }
                         }
-                        .launchIn(this)
+                    }
+
+                    // Pop source-related screens when incognito mode is turned off
+                    LaunchedEffect(Unit) {
+                        preferences.incognitoMode().changes()
+                            .drop(1)
+                            .filter { !it }
+                            .onEach {
+                                val currentScreen = navigator.lastItem
+                                if ((
+                                        currentScreen is BrowseMangaSourceScreen ||
+                                            (currentScreen is MangaScreen && currentScreen.fromSource)
+                                        ) ||
+                                    (
+                                        currentScreen is BrowseAnimeSourceScreen ||
+                                            (currentScreen is AnimeScreen && currentScreen.fromSource)
+                                        )
+                                ) {
+                                    navigator.popUntilRoot()
+                                }
+                            }
+                            .launchIn(this)
+                    }
+
+                    HandleOnNewIntent(context = context, navigator = navigator)
+
+                    CheckForUpdates()
+                    ShowOnboarding()
                 }
-
-                HandleOnNewIntent(context = context, navigator = navigator)
-
-                CheckForUpdates()
-                ShowOnboarding()
             }
 
             var showChangelog by remember { mutableStateOf(didMigration && !BuildConfig.DEBUG) }
