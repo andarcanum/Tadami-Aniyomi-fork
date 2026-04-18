@@ -164,14 +164,21 @@ private class AndroidNovelTtsPlatformEngine(
     }
 
     override fun stop() {
-        tts?.stop()
+        runCatching {
+            tts?.stop()
+        }
     }
 
     override fun shutdown() {
-        tts?.stop()
-        tts?.shutdown()
-        tts = null
-        initializedEnginePackage = null
+        runCatching {
+            tts?.stop()
+        }
+        runCatching {
+            tts?.shutdown()
+        }.also {
+            tts = null
+            initializedEnginePackage = null
+        }
     }
 
     private companion object {

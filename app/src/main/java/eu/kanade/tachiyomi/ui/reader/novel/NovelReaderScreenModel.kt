@@ -93,6 +93,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
@@ -105,6 +106,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
@@ -1742,7 +1744,7 @@ class NovelReaderScreenModel(
         val chapterId = currentChapter?.id
         if (chapterId != null) {
             val finalReadDurationMs = (System.currentTimeMillis() - chapterReadStartTimeMs).coerceAtLeast(0L)
-            screenModelScope.launch(NonCancellable) {
+            runBlocking(NonCancellable) {
                 awaitPendingProgressPersistence()
                 flushPendingHistorySnapshot(
                     chapterId = chapterId,
@@ -1751,8 +1753,18 @@ class NovelReaderScreenModel(
             }
         }
         clearChapterTransientState()
-        settingsJob?.cancel()
-        ttsWordProgressJob?.cancel()
+        runBlocking(NonCancellable) {
+            settingsJob?.cancelAndJoin()
+            nextChapterPrefetchJob?.cancelAndJoin()
+            nextChapterGeminiPrefetchJob?.cancelAndJoin()
+            adjacentJaomixPageJob?.cancelAndJoin()
+            geminiTranslationJob?.cancelAndJoin()
+            queueProgressJob?.cancelAndJoin()
+            googleTranslationJob?.cancelAndJoin()
+            selectedTextTranslationJob?.cancelAndJoin()
+            progressPersistenceJob?.cancelAndJoin()
+            ttsWordProgressJob?.cancelAndJoin()
+        }
         ttsAudioFocusManager.abandonPlaybackFocus()
         ttsEngine.shutdown()
         super.onDispose()

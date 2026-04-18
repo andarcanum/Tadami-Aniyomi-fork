@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.annotation.DelicateCoilApi
+import coil3.decode.BitmapFactoryDecoder
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.ErrorResult
 import coil3.request.ImageRequest
@@ -68,6 +69,7 @@ class SingletonImageLoaderNetworkTest {
         SingletonImageLoader.setUnsafe {
             ImageLoader.Builder(context)
                 .components {
+                    add(BitmapFactoryDecoder.Factory())
                     add(OkHttpNetworkFetcherFactory(callFactory = { OkHttpClient() }))
                 }
                 .build()

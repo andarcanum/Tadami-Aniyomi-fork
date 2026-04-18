@@ -38,6 +38,12 @@ import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.library.novel.model.NovelLibrarySort
 import tachiyomi.domain.library.service.LibraryPreferences
+import tachiyomi.domain.series.novel.interactor.AddNovelsToSeries
+import tachiyomi.domain.series.novel.interactor.CreateNovelSeries
+import tachiyomi.domain.series.novel.interactor.DeleteNovelSeries
+import tachiyomi.domain.series.novel.interactor.GetLibraryNovelSeries
+import tachiyomi.domain.series.novel.interactor.GetNovelIdsInAnySeries
+import eu.kanade.presentation.library.novel.NovelLibraryItem
 
 class NovelLibraryScreenModelTest {
 
@@ -51,6 +57,11 @@ class NovelLibraryScreenModelTest {
     private lateinit var getNovelCategories: GetNovelCategories
     private lateinit var setNovelCategories: SetNovelCategories
     private lateinit var updateNovel: UpdateNovel
+    private lateinit var createNovelSeries: CreateNovelSeries
+    private lateinit var addNovelsToSeries: AddNovelsToSeries
+    private lateinit var deleteNovelSeries: DeleteNovelSeries
+    private lateinit var getLibraryNovelSeries: GetLibraryNovelSeries
+    private lateinit var getNovelIdsInAnySeries: GetNovelIdsInAnySeries
 
     @BeforeEach
     fun setup() {
@@ -64,11 +75,18 @@ class NovelLibraryScreenModelTest {
         getNovelCategories = mockk()
         setNovelCategories = mockk()
         updateNovel = mockk()
+        createNovelSeries = mockk()
+        addNovelsToSeries = mockk()
+        deleteNovelSeries = mockk()
+        getLibraryNovelSeries = mockk()
+        getNovelIdsInAnySeries = mockk()
         coEvery { getNovelCategories.await(any<Long>()) } returns emptyList()
         coEvery { getNovelCategories.await() } returns emptyList<NovelCategory>()
         coJustRun { setNovelCategories.await(any(), any()) }
         coEvery { updateNovel.await(any()) } returns true
         coEvery { updateNovel.awaitAll(any()) } returns true
+        every { getLibraryNovelSeries.subscribe() } returns MutableStateFlow(emptyList())
+        every { getNovelIdsInAnySeries.subscribe() } returns MutableStateFlow(emptySet())
         val preferenceStore = FakePreferenceStore()
         basePreferences = BasePreferences(
             context = mockk<Context>(relaxed = true),
@@ -104,7 +122,7 @@ class NovelLibraryScreenModelTest {
         screenModel.search("Second")
         testDispatcher.scheduler.advanceUntilIdle()
 
-        screenModel.state.value.items.shouldContainExactly(second)
+        screenModel.state.value.items.shouldContainExactly(libraryNovelItem(id = 2L, title = "Second Story"))
     }
 
     @Test
@@ -129,12 +147,15 @@ class NovelLibraryScreenModelTest {
         screenModel.search("Second")
         advanceTimeBy(SEARCH_DEBOUNCE_MILLIS - 1)
 
-        screenModel.state.value.items.shouldContainExactly(first, second)
+        screenModel.state.value.items.shouldContainExactly(
+            libraryNovelItem(id = 1L, title = "First Novel"),
+            libraryNovelItem(id = 2L, title = "Second Story"),
+        )
 
         advanceTimeBy(1)
         testDispatcher.scheduler.advanceUntilIdle()
 
-        screenModel.state.value.items.shouldContainExactly(second)
+        screenModel.state.value.items.shouldContainExactly(libraryNovelItem(id = 2L, title = "Second Story"))
     }
 
     @Test
@@ -156,7 +177,7 @@ class NovelLibraryScreenModelTest {
         screenModel.toggleUnreadFilter()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        screenModel.state.value.items.shouldContainExactly(unread)
+        screenModel.state.value.items.shouldContainExactly(libraryNovelItem(id = 1L, title = "Unread"))
         screenModel.state.value.hasActiveFilters shouldBe true
     }
 
@@ -179,7 +200,7 @@ class NovelLibraryScreenModelTest {
         screenModel.toggleCompletedFilter()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        screenModel.state.value.items.shouldContainExactly(completed)
+        screenModel.state.value.items.shouldContainExactly(NovelLibraryItem.Single(completed))
     }
 
     @Test
@@ -201,7 +222,7 @@ class NovelLibraryScreenModelTest {
         screenModel.toggleDownloadedFilter()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        screenModel.state.value.items.shouldContainExactly(downloaded)
+        screenModel.state.value.items.shouldContainExactly(libraryNovelItem(id = 1L, title = "Downloaded"))
         screenModel.state.value.hasActiveFilters shouldBe true
     }
 
@@ -233,7 +254,7 @@ class NovelLibraryScreenModelTest {
         downloadCacheChanges.emit(Unit)
         testDispatcher.scheduler.advanceUntilIdle()
 
-        screenModel.state.value.items.shouldContainExactly(downloaded)
+        screenModel.state.value.items.shouldContainExactly(libraryNovelItem(id = 1L, title = "Downloaded"))
     }
 
     @Test
@@ -258,7 +279,10 @@ class NovelLibraryScreenModelTest {
         )
         testDispatcher.scheduler.advanceUntilIdle()
 
-        screenModel.state.value.items.shouldContainExactly(newer, older)
+        screenModel.state.value.items.shouldContainExactly(
+            NovelLibraryItem.Single(newer),
+            NovelLibraryItem.Single(older),
+        )
     }
 
     @Test
@@ -281,7 +305,10 @@ class NovelLibraryScreenModelTest {
 
         testDispatcher.scheduler.advanceUntilIdle()
 
-        screenModel.state.value.items.shouldContainExactly(first, second)
+        screenModel.state.value.items.shouldContainExactly(
+            libraryNovelItem(id = 1L, title = "First Novel"),
+            libraryNovelItem(id = 2L, title = "Second Story"),
+        )
     }
 
     @Test
@@ -303,7 +330,7 @@ class NovelLibraryScreenModelTest {
         screenModel.toggleIntervalCustomFilter()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        screenModel.state.value.items.shouldContainExactly(custom)
+        screenModel.state.value.items.shouldContainExactly(NovelLibraryItem.Single(custom))
         screenModel.state.value.hasActiveFilters shouldBe true
     }
 
@@ -457,9 +484,14 @@ class NovelLibraryScreenModelTest {
     ): NovelLibraryScreenModel {
         return NovelLibraryScreenModel(
             getLibraryNovel = getLibraryNovel,
+            getLibraryNovelSeries = getLibraryNovelSeries,
+            getNovelIdsInAnySeries = getNovelIdsInAnySeries,
             getNovelCategories = getNovelCategories,
             setNovelCategories = setNovelCategories,
             updateNovel = updateNovel,
+            createNovelSeries = createNovelSeries,
+            addNovelsToSeries = addNovelsToSeries,
+            deleteNovelSeries = deleteNovelSeries,
             chapterRepository = chapterRepository,
             basePreferences = basePreferences,
             libraryPreferences = libraryPreferences,
@@ -496,6 +528,28 @@ class NovelLibraryScreenModelTest {
             latestUpload = 0L,
             chapterFetchedAt = 0L,
             lastRead = lastRead,
+        )
+    }
+
+    private fun libraryNovelItem(
+        id: Long,
+        title: String,
+        total: Long = 10L,
+        read: Long = 1L,
+        status: Long = 0L,
+        lastRead: Long = 0L,
+        fetchInterval: Int = 0,
+    ): NovelLibraryItem.Single {
+        return NovelLibraryItem.Single(
+            libraryNovel(
+                id = id,
+                title = title,
+                total = total,
+                read = read,
+                status = status,
+                lastRead = lastRead,
+                fetchInterval = fetchInterval,
+            ),
         )
     }
 

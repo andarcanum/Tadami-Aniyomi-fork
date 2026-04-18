@@ -76,6 +76,7 @@ import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.library.novel.LibraryNovel
+import tachiyomi.domain.series.novel.interactor.GetNovelSeriesWithEntries
 import tachiyomi.domain.source.novel.model.StubNovelSource
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import uy.kohesive.injekt.Injekt
@@ -94,6 +95,7 @@ class NovelReaderScreenModelTest {
     private val openRouterModelsService = mockk<OpenRouterModelsService>(relaxed = true)
     private val deepSeekTranslationService = mockk<DeepSeekTranslationService>(relaxed = true)
     private val deepSeekModelsService = mockk<DeepSeekModelsService>(relaxed = true)
+    private val getNovelSeriesWithEntries = mockk<GetNovelSeriesWithEntries>(relaxed = true)
     private val googleTranslationService = mockk<GoogleTranslationService>(relaxed = true)
     private val translationQueueUpdates = MutableSharedFlow<TranslationProgressUpdate>(extraBufferCapacity = 16)
     private val translationQueueActiveTranslation = MutableStateFlow<TranslationQueueItem?>(null)
@@ -109,23 +111,19 @@ class NovelReaderScreenModelTest {
     fun tearDown() {
         activeScreenModels.forEach { it.onDispose() }
         activeScreenModels.clear()
+        runBlocking {
+            yield()
+        }
         NovelReaderChapterPrefetchCache.clear()
         NovelReaderTranslationDiskCacheStore.clear()
         io.mockk.unmockkAll()
+        Dispatchers.resetMain()
     }
 
     @BeforeEach
     fun setupPerTestEnvironment() {
         Dispatchers.setMain(Dispatchers.Unconfined)
         ensureReaderScreenModelDependencies()
-    }
-
-    companion object {
-        @JvmStatic
-        @AfterAll
-        fun resetMainDispatcher() {
-            Dispatchers.resetMain()
-        }
     }
 
     @Test
@@ -2551,6 +2549,9 @@ class NovelReaderScreenModelTest {
             testTranslationQueueManager.activeTranslation
         } returns MutableStateFlow<TranslationQueueItem?>(null)
         Injekt.addSingleton(fullType<TranslationQueueManager>(), testTranslationQueueManager)
+
+        every { getNovelSeriesWithEntries.subscribe(any()) } returns MutableStateFlow(null)
+        Injekt.addSingleton(fullType<GetNovelSeriesWithEntries>(), getNovelSeriesWithEntries)
     }
 
     private class ReactivePreferenceStore : PreferenceStore {
