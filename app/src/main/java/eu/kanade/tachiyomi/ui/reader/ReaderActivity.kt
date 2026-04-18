@@ -53,6 +53,7 @@ import eu.kanade.presentation.reader.ReaderContentOverlay
 import eu.kanade.presentation.reader.ReaderPageActionsDialog
 import eu.kanade.presentation.reader.ReadingModeSelectDialog
 import eu.kanade.presentation.reader.appbars.ReaderAppBars
+import eu.kanade.presentation.reader.manga.MangaSeriesInterstitialOverlay
 import eu.kanade.presentation.reader.settings.ReaderSettingsDialog
 import eu.kanade.tachiyomi.core.common.Constants
 import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
@@ -106,10 +107,18 @@ import java.io.ByteArrayOutputStream
 class ReaderActivity : BaseActivity() {
 
     companion object {
-        fun newIntent(context: Context, mangaId: Long?, chapterId: Long?): Intent {
+        fun newIntent(
+            context: Context,
+            mangaId: Long?,
+            chapterId: Long?,
+            seriesId: Long? = null,
+        ): Intent {
             return Intent(context, ReaderActivity::class.java).apply {
                 putExtra("manga", mangaId)
                 putExtra("chapter", chapterId)
+                if (seriesId != null) {
+                    putExtra(Constants.SERIES_EXTRA, seriesId)
+                }
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }
         }
@@ -122,6 +131,7 @@ class ReaderActivity : BaseActivity() {
 
     val viewModel by viewModels<ReaderViewModel>()
     private var assistUrl: String? = null
+    private var seriesId: Long? = null
 
     private val hasCutout by lazy { hasDisplayCutout() }
 
@@ -165,6 +175,7 @@ class ReaderActivity : BaseActivity() {
         binding = ReaderActivityBinding.inflate(layoutInflater)
         setContentView(binding.root)
         applyReaderSystemBarIconStyle(viewModel.state.value.menuVisible)
+        seriesId = intent.extras?.getLong(Constants.SERIES_EXTRA, -1)?.takeIf { it > 0 }
 
         if (viewModel.needsInit()) {
             val manga = intent.extras?.getLong("manga", -1) ?: -1L
@@ -180,7 +191,7 @@ class ReaderActivity : BaseActivity() {
             )
 
             lifecycleScope.launchNonCancellable {
-                val initResult = viewModel.init(manga, chapter)
+                val initResult = viewModel.init(manga, chapter, seriesId)
                 if (!initResult.getOrDefault(false)) {
                     val exception = initResult.exceptionOrNull() ?: IllegalStateException(
                         "Unknown err",
@@ -556,6 +567,34 @@ class ReaderActivity : BaseActivity() {
                     )
                 }
                 null -> {}
+            }
+
+            state.seriesInterstitialState?.let { seriesState ->
+                val onContinue = seriesState.nextManga?.manga?.id?.let { nextMangaId ->
+                    seriesState.nextChapterId?.let { nextChapterId ->
+                        {
+                            viewModel.clearSeriesInterstitial()
+                            startActivity(
+                                ReaderActivity.newIntent(
+                                    this@ReaderActivity,
+                                    nextMangaId,
+                                    nextChapterId,
+                                    seriesId,
+                                ),
+                            )
+                            finish()
+                        }
+                    }
+                }
+
+                MangaSeriesInterstitialOverlay(
+                    state = seriesState,
+                    onBackToSeries = {
+                        viewModel.clearSeriesInterstitial()
+                        finish()
+                    },
+                    onContinue = onContinue,
+                )
             }
         }
 

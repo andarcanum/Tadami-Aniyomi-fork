@@ -22,7 +22,7 @@ class GetNovelSeriesWithEntries(
             val seriesLibraryNovels = entries
                 .sortedBy { it.position }
                 .mapNotNull { novelsById[it.novelId] }
-            
+
             val entryIds = entries.associate { it.novelId to it.id }
             LibraryNovelSeriesWithEntryIds(
                 series = LibraryNovelSeries(series, seriesLibraryNovels),

@@ -31,7 +31,7 @@ import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColo
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.entries.manga.model.asMangaCover
 import tachiyomi.domain.library.manga.LibraryManga
-import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
@@ -121,7 +121,11 @@ fun AniviewMangaCard(
         // Chapter count (metadata)
         val readCount = item.totalChapters - item.unreadCount
         Text(
-            text = "$readCount/${item.totalChapters} ${stringResource(MR.strings.chapters)}",
+            text = stringResource(
+                AYMR.strings.manga_series_chapters_progress,
+                readCount,
+                item.totalChapters,
+            ),
             color = colors.textSecondary,
             fontSize = 12.sp,
             modifier = Modifier.padding(top = 2.dp),

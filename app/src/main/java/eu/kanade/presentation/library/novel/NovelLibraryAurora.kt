@@ -84,7 +84,6 @@ import tachiyomi.domain.entries.novel.model.NovelCover
 import tachiyomi.domain.entries.novel.model.asNovelCover
 import tachiyomi.domain.library.model.AuroraLibraryCardStyle
 import tachiyomi.domain.library.model.LibraryDisplayMode
-import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.i18n.MR
@@ -311,23 +310,23 @@ fun NovelLibraryAuroraContent(
                         )
                     } else {
                         NovelLibraryAuroraCard(
-                        item = item,
-                        badgeState = badgeState,
-                        showMetadata = displaySpec.showMetadata,
-                        modifier = if (useGlowContourCards) {
-                            Modifier
-                        } else {
-                            Modifier.aspectRatio(displaySpec.gridCardAspectRatio)
-                        },
-                        coverHeightFraction = displaySpec.gridCoverHeightFraction,
-                        onNovelClicked = { onClickNovelItem(item) },
-                        onLongClick = onLongClickNovelItem?.let { { it(item) } },
-                        onClickContinueReading = onContinueReadingClicked?.let { { it(item) } },
-                        isSelected = selection.fastAny { it.id == item.id },
-                        cardStyle = auroraCardStyle,
-                        glowDisplayMode = displayMode,
-                        gridColumns = columns.coerceAtLeast(0),
-                    )
+                            item = item,
+                            badgeState = badgeState,
+                            showMetadata = displaySpec.showMetadata,
+                            modifier = if (useGlowContourCards) {
+                                Modifier
+                            } else {
+                                Modifier.aspectRatio(displaySpec.gridCardAspectRatio)
+                            },
+                            coverHeightFraction = displaySpec.gridCoverHeightFraction,
+                            onNovelClicked = { onClickNovelItem(item) },
+                            onLongClick = onLongClickNovelItem?.let { { it(item) } },
+                            onClickContinueReading = onContinueReadingClicked?.let { { it(item) } },
+                            isSelected = selection.fastAny { it.id == item.id },
+                            cardStyle = auroraCardStyle,
+                            glowDisplayMode = displayMode,
+                            gridColumns = columns.coerceAtLeast(0),
+                        )
                     }
                 }
             }

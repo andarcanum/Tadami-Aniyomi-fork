@@ -115,15 +115,17 @@ import eu.kanade.tachiyomi.ui.entries.novel.NovelDownloadChapterPickerDialog
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
 import eu.kanade.tachiyomi.ui.entries.novel.NovelTranslatedDownloadDialog
 import eu.kanade.tachiyomi.ui.home.HomeScreen
+import eu.kanade.tachiyomi.ui.library.manga.MangaLibraryItem
 import eu.kanade.tachiyomi.ui.library.manga.MangaLibraryScreenModel
 import eu.kanade.tachiyomi.ui.library.manga.MangaLibrarySettingsScreenModel
 import eu.kanade.tachiyomi.ui.library.novel.NovelLibraryScreenModel
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences
-import eu.kanade.tachiyomi.ui.series.novel.NovelSeriesScreen
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
+import eu.kanade.tachiyomi.ui.series.manga.MangaSeriesScreen
+import eu.kanade.tachiyomi.ui.series.novel.NovelSeriesScreen
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
@@ -143,7 +145,6 @@ import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
 import tachiyomi.domain.items.episode.model.Episode
 import tachiyomi.domain.library.anime.LibraryAnime
 import tachiyomi.domain.library.manga.LibraryManga
-import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.Scaffold
@@ -157,6 +158,7 @@ import tachiyomi.source.local.entries.manga.isLocal
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
+import eu.kanade.presentation.library.manga.components.AddToSeriesDialog as MangaAddToSeriesDialog
 import tachiyomi.domain.items.novelchapter.model.NovelChapter as DomainNovelChapter
 
 data object AnimeLibraryTab : Tab {
@@ -447,6 +449,7 @@ data object AnimeLibraryTab : Tab {
                     displayMode = mangaDisplayMode,
                     columns = mangaColumns,
                     onMangaClicked = { navigator.push(MangaScreen(it)) },
+                    onSeriesClicked = { navigator.push(MangaSeriesScreen(it)) },
                     onToggleSelection = mangaScreenModel::toggleSelection,
                     onToggleRangeSelection = {
                         mangaScreenModel.toggleRangeSelection(it)
@@ -741,7 +744,11 @@ data object AnimeLibraryTab : Tab {
                     scope.launch {
                         val randomItem = mangaScreenModel.getRandomLibraryItemForCurrentCategory()
                         if (randomItem != null) {
-                            navigator.push(MangaScreen(randomItem.libraryManga.manga.id))
+                            if (randomItem is MangaLibraryItem.Series) {
+                                navigator.push(MangaSeriesScreen(randomItem.librarySeries.id))
+                            } else {
+                                navigator.push(MangaScreen(randomItem.libraryManga.manga.id))
+                            }
                         } else {
                             snackbarHostState.showSnackbar(
                                 context.stringResource(MR.strings.information_no_entries_found),
@@ -843,6 +850,7 @@ data object AnimeLibraryTab : Tab {
                                     navigator.push(MigrationConfigScreen(selectionIds))
                                 }
                             },
+                            onSeriesClicked = { mangaScreenModel.openAddToSeries() },
                             onDeleteClicked = mangaScreenModel::openDeleteMangaDialog,
                             isManga = true,
                         )
@@ -1067,6 +1075,20 @@ data object AnimeLibraryTab : Tab {
                         mangaScreenModel.clearSelection()
                     },
                     isManga = true,
+                )
+            }
+            MangaLibraryScreenModel.Dialog.CreateSeries -> {
+                CreateSeriesDialog(
+                    onDismissRequest = onDismissMangaRequest,
+                    onCreate = mangaScreenModel::createSeries,
+                )
+            }
+            is MangaLibraryScreenModel.Dialog.AddToSeries -> {
+                MangaAddToSeriesDialog(
+                    onDismissRequest = onDismissMangaRequest,
+                    series = dialog.series,
+                    onSelect = mangaScreenModel::addSelectionToSeries,
+                    onCreateSeries = mangaScreenModel::openCreateSeries,
                 )
             }
             null -> {}

@@ -6,6 +6,9 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import tachiyomi.domain.items.novelchapter.interactor.GetNovelChapters
+import tachiyomi.domain.items.novelchapter.model.NovelChapter
+import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.series.novel.interactor.AddNovelsToSeries
 import tachiyomi.domain.series.novel.interactor.DeleteNovelSeries
 import tachiyomi.domain.series.novel.interactor.GetNovelSeriesWithEntries
@@ -13,10 +16,6 @@ import tachiyomi.domain.series.novel.interactor.RemoveNovelFromSeries
 import tachiyomi.domain.series.novel.interactor.ReorderSeriesEntries
 import tachiyomi.domain.series.novel.interactor.UpdateNovelSeries
 import tachiyomi.domain.series.novel.model.LibraryNovelSeries
-import tachiyomi.domain.series.novel.model.LibraryNovelSeriesWithEntryIds
-import tachiyomi.domain.items.novelchapter.interactor.GetNovelChapters
-import tachiyomi.domain.items.novelchapter.model.NovelChapter
-import tachiyomi.domain.library.novel.LibraryNovel
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 

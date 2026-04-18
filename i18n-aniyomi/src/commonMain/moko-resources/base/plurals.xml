@@ -44,6 +44,14 @@
         <item quantity="one">%d chapter</item>
         <item quantity="other">%d chapters</item>
     </plurals>
+    <plurals name="manga_series_num_titles">
+        <item quantity="one">%d title</item>
+        <item quantity="other">%d titles</item>
+    </plurals>
+    <plurals name="manga_series_num_chapters">
+        <item quantity="one">%d chapter</item>
+        <item quantity="other">%d chapters</item>
+    </plurals>
     <plurals name="download_amount_anime">
         <item quantity="one">Next episode</item>
         <item quantity="other">Next %d episodes</item>

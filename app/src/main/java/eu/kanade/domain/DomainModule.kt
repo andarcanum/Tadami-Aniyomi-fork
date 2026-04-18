@@ -127,6 +127,8 @@ import tachiyomi.data.items.chapter.ChapterRepositoryImpl
 import tachiyomi.data.items.episode.EpisodeRepositoryImpl
 import tachiyomi.data.items.novelchapter.NovelChapterRepositoryImpl
 import tachiyomi.data.release.ReleaseServiceImpl
+import tachiyomi.data.series.manga.MangaSeriesRepositoryImpl
+import tachiyomi.data.series.novel.NovelSeriesRepositoryImpl
 import tachiyomi.data.source.anime.AnimeSourceRepositoryImpl
 import tachiyomi.data.source.anime.AnimeStubSourceRepositoryImpl
 import tachiyomi.data.source.manga.MangaSourceRepositoryImpl
@@ -139,7 +141,6 @@ import tachiyomi.data.track.novel.NovelTrackRepositoryImpl
 import tachiyomi.data.updates.anime.AnimeUpdatesRepositoryImpl
 import tachiyomi.data.updates.manga.MangaUpdatesRepositoryImpl
 import tachiyomi.data.updates.novel.NovelUpdatesRepositoryImpl
-import tachiyomi.data.series.novel.NovelSeriesRepositoryImpl
 import tachiyomi.domain.achievement.repository.AchievementRepository
 import tachiyomi.domain.achievement.repository.ActivityDataRepository
 import tachiyomi.domain.category.anime.interactor.CreateAnimeCategoryWithName
@@ -179,16 +180,6 @@ import tachiyomi.domain.category.novel.interactor.ResetNovelCategoryFlags
 import tachiyomi.domain.category.novel.interactor.SetNovelCategories
 import tachiyomi.domain.category.novel.interactor.UpdateNovelCategory
 import tachiyomi.domain.category.novel.repository.NovelCategoryRepository
-import tachiyomi.domain.series.novel.repository.NovelSeriesRepository
-import tachiyomi.domain.series.novel.interactor.UpdateNovelSeries
-import tachiyomi.domain.series.novel.interactor.AddNovelsToSeries
-import tachiyomi.domain.series.novel.interactor.CreateNovelSeries
-import tachiyomi.domain.series.novel.interactor.DeleteNovelSeries
-import tachiyomi.domain.series.novel.interactor.GetLibraryNovelSeries
-import tachiyomi.domain.series.novel.interactor.GetNovelIdsInAnySeries
-import tachiyomi.domain.series.novel.interactor.GetNovelSeriesWithEntries
-import tachiyomi.domain.series.novel.interactor.RemoveNovelFromSeries
-import tachiyomi.domain.series.novel.interactor.ReorderSeriesEntries
 import tachiyomi.domain.custombuttons.interactor.CreateCustomButton
 import tachiyomi.domain.custombuttons.interactor.DeleteCustomButton
 import tachiyomi.domain.custombuttons.interactor.GetCustomButtons
@@ -266,6 +257,25 @@ import tachiyomi.domain.items.season.interactor.ShouldUpdateDbSeason
 import tachiyomi.domain.release.interactor.GetApplicationRelease
 import tachiyomi.domain.release.service.AppUpdatePreferences
 import tachiyomi.domain.release.service.ReleaseService
+import tachiyomi.domain.series.manga.interactor.AddMangasToSeries
+import tachiyomi.domain.series.manga.interactor.CreateMangaSeries
+import tachiyomi.domain.series.manga.interactor.DeleteMangaSeries
+import tachiyomi.domain.series.manga.interactor.GetLibraryMangaSeries
+import tachiyomi.domain.series.manga.interactor.GetMangaIdsInAnySeries
+import tachiyomi.domain.series.manga.interactor.GetMangaSeriesWithEntries
+import tachiyomi.domain.series.manga.interactor.RemoveMangaFromSeries
+import tachiyomi.domain.series.manga.interactor.UpdateMangaSeries
+import tachiyomi.domain.series.manga.repository.MangaSeriesRepository
+import tachiyomi.domain.series.novel.interactor.AddNovelsToSeries
+import tachiyomi.domain.series.novel.interactor.CreateNovelSeries
+import tachiyomi.domain.series.novel.interactor.DeleteNovelSeries
+import tachiyomi.domain.series.novel.interactor.GetLibraryNovelSeries
+import tachiyomi.domain.series.novel.interactor.GetNovelIdsInAnySeries
+import tachiyomi.domain.series.novel.interactor.GetNovelSeriesWithEntries
+import tachiyomi.domain.series.novel.interactor.RemoveNovelFromSeries
+import tachiyomi.domain.series.novel.interactor.ReorderSeriesEntries
+import tachiyomi.domain.series.novel.interactor.UpdateNovelSeries
+import tachiyomi.domain.series.novel.repository.NovelSeriesRepository
 import tachiyomi.domain.source.anime.interactor.GetAnimeSourcesWithNonLibraryAnime
 import tachiyomi.domain.source.anime.interactor.GetRemoteAnime
 import tachiyomi.domain.source.anime.repository.AnimeSourceRepository
@@ -304,6 +314,7 @@ import uy.kohesive.injekt.api.InjektRegistrar
 import uy.kohesive.injekt.api.addFactory
 import uy.kohesive.injekt.api.addSingletonFactory
 import uy.kohesive.injekt.api.get
+import tachiyomi.domain.series.manga.interactor.ReorderSeriesEntries as ReorderMangaSeriesEntries
 
 class DomainModule : InjektModule {
 
@@ -345,7 +356,18 @@ class DomainModule : InjektModule {
         addFactory { HideNovelCategory(get()) }
         addFactory { DeleteNovelCategory(get(), get(), get()) }
         addFactory { SetNovelCategories(get()) }
-        
+
+        addSingletonFactory<MangaSeriesRepository> { MangaSeriesRepositoryImpl(get(), get()) }
+        addFactory { CreateMangaSeries(get()) }
+        addFactory { DeleteMangaSeries(get()) }
+        addFactory { GetMangaSeriesWithEntries(get(), get()) }
+        addFactory { GetLibraryMangaSeries(get()) }
+        addFactory { AddMangasToSeries(get()) }
+        addFactory { RemoveMangaFromSeries(get()) }
+        addFactory { ReorderMangaSeriesEntries(get()) }
+        addFactory { UpdateMangaSeries(get()) }
+        addFactory { GetMangaIdsInAnySeries(get()) }
+
         addSingletonFactory<NovelSeriesRepository> { NovelSeriesRepositoryImpl(get(), get()) }
         addFactory { CreateNovelSeries(get()) }
         addFactory { DeleteNovelSeries(get()) }

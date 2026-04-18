@@ -24,7 +24,6 @@ import androidx.compose.ui.window.Dialog
 import eu.kanade.presentation.entries.components.ItemCover
 import eu.kanade.presentation.novel.sourceAwareNovelCoverModel
 import tachiyomi.domain.entries.novel.model.Novel
-import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 

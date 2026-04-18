@@ -5,6 +5,7 @@ object Constants {
     const val URL_HELP_UPCOMING = "https://aniyomi.org/docs/faq/updates/upcoming"
 
     const val MANGA_EXTRA = "manga"
+    const val SERIES_EXTRA = "series_id"
 
     const val ANIME_EXTRA = "anime"
 

@@ -1,0 +1,38 @@
+CREATE TABLE manga_series_entries (
+    _id INTEGER NOT NULL PRIMARY KEY,
+    series_id INTEGER NOT NULL,
+    manga_id INTEGER NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY(series_id) REFERENCES manga_series(_id) ON DELETE CASCADE,
+    FOREIGN KEY(manga_id) REFERENCES mangas(_id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX manga_series_entries_manga_id ON manga_series_entries(manga_id);
+CREATE INDEX manga_series_entries_series_id ON manga_series_entries(series_id);
+
+getEntriesBySeriesId:
+SELECT * FROM manga_series_entries WHERE series_id = :seriesId ORDER BY position;
+
+getEntryByMangaId:
+SELECT * FROM manga_series_entries WHERE manga_id = :mangaId;
+
+getAllMangaIdsInAnySeries:
+SELECT manga_id FROM manga_series_entries;
+
+insert:
+INSERT INTO manga_series_entries(series_id, manga_id, position)
+VALUES (:seriesId, :mangaId, :position);
+
+deleteByMangaId:
+DELETE FROM manga_series_entries WHERE manga_id = :mangaId;
+
+deleteBySeriesId:
+DELETE FROM manga_series_entries WHERE series_id = :seriesId;
+
+getAllEntries:
+SELECT * FROM manga_series_entries ORDER BY position;
+
+updatePosition:
+UPDATE manga_series_entries
+SET position = :position
+WHERE _id = :id;

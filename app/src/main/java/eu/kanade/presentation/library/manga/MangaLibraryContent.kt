@@ -37,6 +37,7 @@ fun MangaLibraryContent(
     showPageTabs: Boolean,
     onChangeCurrentPage: (Int) -> Unit,
     onMangaClicked: (Long) -> Unit,
+    onSeriesClicked: (Long) -> Unit,
     onContinueReadingClicked: ((LibraryManga) -> Unit)?,
     onToggleSelection: (LibraryManga) -> Unit,
     onToggleRangeSelection: (LibraryManga) -> Unit,
@@ -107,6 +108,7 @@ fun MangaLibraryContent(
                 getColumnsForOrientation = getColumnsForOrientation,
                 getLibraryForPage = getLibraryForPage,
                 onClickManga = onClickManga,
+                onClickSeries = onSeriesClicked,
                 onLongClickManga = onToggleRangeSelection,
                 onClickContinueReading = onContinueReadingClicked,
             )

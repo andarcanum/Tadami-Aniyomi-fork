@@ -10,15 +10,15 @@ class AddNovelsToSeries(
     suspend fun await(seriesId: Long, novelIds: List<Long>) {
         val currentEntries = repository.getEntriesForSeries(seriesId).first()
         val nextPosition = (currentEntries.maxOfOrNull { it.position } ?: -1) + 1
-        
+
         novelIds.forEachIndexed { index, novelId ->
             repository.insertEntry(
                 NovelSeriesEntry(
                     id = 0,
                     seriesId = seriesId,
                     novelId = novelId,
-                    position = nextPosition + index
-                )
+                    position = nextPosition + index,
+                ),
             )
         }
     }

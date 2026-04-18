@@ -1,8 +1,8 @@
 package eu.kanade.presentation.library.novel
 
+import tachiyomi.domain.entries.novel.model.asNovelCover
 import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.series.novel.model.LibraryNovelSeries
-import tachiyomi.domain.entries.novel.model.asNovelCover
 
 sealed interface NovelLibraryItem {
     val id: Long

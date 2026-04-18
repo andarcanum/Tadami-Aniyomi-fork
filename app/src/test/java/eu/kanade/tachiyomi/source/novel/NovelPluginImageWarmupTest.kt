@@ -15,7 +15,9 @@ class NovelPluginImageWarmupTest {
                 add("novelimg://plugin-$index?ref=cover-$index")
             }
             add("novelimg://plugin-3?ref=cover-3")
-            add("heximg://hexnovels?ref=%7B%22imageUrl%22%3A%22https%3A%2F%2Fcdn.example%2Fcover.png%22%2C%22secretKey%22%3A%22abc%22%7D")
+            add(
+                "heximg://hexnovels?ref=%7B%22imageUrl%22%3A%22https%3A%2F%2Fcdn.example%2Fcover.png%22%2C%22secretKey%22%3A%22abc%22%7D",
+            )
             add("https://example.com/cover-1.png")
         }
 

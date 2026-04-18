@@ -49,6 +49,7 @@ import eu.kanade.presentation.entries.components.ItemCover
 import eu.kanade.presentation.library.DeleteLibraryEntryDialog
 import eu.kanade.presentation.library.components.LibraryToolbar
 import eu.kanade.presentation.library.components.LibraryToolbarTitle
+import eu.kanade.presentation.library.novel.NovelLibraryItem
 import eu.kanade.presentation.library.novel.NovelLibrarySettingsDialog
 import eu.kanade.presentation.library.novel.components.AddToSeriesDialog
 import eu.kanade.presentation.library.novel.components.CreateSeriesDialog
@@ -67,8 +68,6 @@ import kotlinx.coroutines.launch
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.library.model.LibraryDisplayMode
-import tachiyomi.domain.library.novel.LibraryNovel
-import eu.kanade.presentation.library.novel.NovelLibraryItem
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.i18n.MR
@@ -392,7 +391,9 @@ private fun NovelLibraryGridItem(
                     .height(170.dp),
             ) {
                 ItemCover.Book(
-                    data = (item as? NovelLibraryItem.Single)?.libraryNovel?.novel?.let { sourceAwareNovelCoverModel(it) },
+                    data = (item as? NovelLibraryItem.Single)?.libraryNovel?.novel?.let {
+                        sourceAwareNovelCoverModel(it)
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(170.dp),
@@ -460,7 +461,9 @@ private fun NovelLibraryListItem(
                     .aspectRatio(0.68f),
             ) {
                 ItemCover.Book(
-                    data = (item as? NovelLibraryItem.Single)?.libraryNovel?.novel?.let { sourceAwareNovelCoverModel(it) },
+                    data = (item as? NovelLibraryItem.Single)?.libraryNovel?.novel?.let {
+                        sourceAwareNovelCoverModel(it)
+                    },
                     modifier = Modifier
                         .height(112.dp)
                         .aspectRatio(0.68f),

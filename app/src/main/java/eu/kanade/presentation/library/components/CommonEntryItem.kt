@@ -83,6 +83,7 @@ fun EntryCompactGridItem(
     onClickContinueViewing: (() -> Unit)? = null,
     coverAlpha: Float = 1f,
     errorPainter: Painter? = null,
+    customCover: (@Composable BoxScope.() -> Unit)? = null,
     coverBadgeStart: @Composable (RowScope.() -> Unit)? = null,
     coverBadgeEnd: @Composable (RowScope.() -> Unit)? = null,
 ) {
@@ -93,13 +94,17 @@ fun EntryCompactGridItem(
     ) {
         EntryGridCover(
             cover = {
-                ItemCover.Book(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .alpha(if (isSelected) GRID_SELECTED_COVER_ALPHA else coverAlpha),
-                    data = coverData,
-                    errorPainter = errorPainter,
-                )
+                if (customCover != null) {
+                    customCover()
+                } else {
+                    ItemCover.Book(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .alpha(if (isSelected) GRID_SELECTED_COVER_ALPHA else coverAlpha),
+                        data = coverData,
+                        errorPainter = errorPainter,
+                    )
+                }
             },
             badgesStart = coverBadgeStart,
             badgesEnd = coverBadgeEnd,
@@ -190,6 +195,7 @@ fun EntryComfortableGridItem(
     coverData: EntryCoverModel,
     coverAlpha: Float = 1f,
     errorPainter: Painter? = null,
+    customCover: (@Composable BoxScope.() -> Unit)? = null,
     coverBadgeStart: (@Composable RowScope.() -> Unit)? = null,
     coverBadgeEnd: (@Composable RowScope.() -> Unit)? = null,
     onClickContinueViewing: (() -> Unit)? = null,
@@ -202,13 +208,17 @@ fun EntryComfortableGridItem(
         Column {
             EntryGridCover(
                 cover = {
-                    ItemCover.Book(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .alpha(if (isSelected) GRID_SELECTED_COVER_ALPHA else coverAlpha),
-                        data = coverData,
-                        errorPainter = errorPainter,
-                    )
+                    if (customCover != null) {
+                        customCover()
+                    } else {
+                        ItemCover.Book(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .alpha(if (isSelected) GRID_SELECTED_COVER_ALPHA else coverAlpha),
+                            data = coverData,
+                            errorPainter = errorPainter,
+                        )
+                    }
                 },
                 badgesStart = coverBadgeStart,
                 badgesEnd = coverBadgeEnd,
@@ -349,6 +359,7 @@ fun EntryListItem(
     coverData: EntryCoverModel,
     coverAlpha: Float = 1f,
     errorPainter: Painter? = null,
+    customCover: (@Composable BoxScope.() -> Unit)? = null,
     onLongClick: () -> Unit,
     onClick: () -> Unit,
     badge: @Composable (RowScope.() -> Unit),
@@ -376,13 +387,23 @@ fun EntryListItem(
             .padding(horizontal = 16.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ItemCover.Book(
+        Box(
             modifier = Modifier
                 .fillMaxHeight()
-                .alpha(coverAlpha),
-            data = coverData,
-            errorPainter = errorPainter,
-        )
+                .aspectRatio(ItemCover.Book.ratio),
+        ) {
+            if (customCover != null) {
+                customCover()
+            } else {
+                ItemCover.Book(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .alpha(coverAlpha),
+                    data = coverData,
+                    errorPainter = errorPainter,
+                )
+            }
+        }
         Text(
             text = title,
             modifier = Modifier

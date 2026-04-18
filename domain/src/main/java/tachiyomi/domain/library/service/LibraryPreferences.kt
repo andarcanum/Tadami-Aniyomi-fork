@@ -315,7 +315,7 @@ class LibraryPreferences(
 
     fun sortChapterByAscendingOrDescending() = preferenceStore.getLong(
         "default_chapter_sort_by_ascending_or_descending",
-        Manga.CHAPTER_SORT_DESC,
+        Manga.CHAPTER_SORT_ASC,
     )
 
     fun showEpisodeThumbnailPreviews() = preferenceStore.getLong(

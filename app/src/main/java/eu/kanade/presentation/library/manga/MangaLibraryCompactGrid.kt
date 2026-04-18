@@ -13,6 +13,7 @@ import eu.kanade.presentation.library.components.LazyLibraryGrid
 import eu.kanade.presentation.library.components.UnviewedBadge
 import eu.kanade.presentation.library.components.globalSearchItem
 import eu.kanade.presentation.library.components.shouldShowContinueViewingAction
+import eu.kanade.presentation.library.manga.components.SeriesStackedCoverCard
 import eu.kanade.tachiyomi.ui.library.manga.MangaLibraryItem
 import tachiyomi.domain.entries.manga.model.MangaCover
 import tachiyomi.domain.library.manga.LibraryManga
@@ -25,6 +26,7 @@ internal fun MangaLibraryCompactGrid(
     contentPadding: PaddingValues,
     selection: List<LibraryManga>,
     onClick: (LibraryManga) -> Unit,
+    onSeriesClicked: (Long) -> Unit,
     onLongClick: (LibraryManga) -> Unit,
     onClickContinueReading: ((LibraryManga) -> Unit)?,
     searchQuery: String?,
@@ -41,10 +43,21 @@ internal fun MangaLibraryCompactGrid(
             items = items,
             contentType = { "manga_library_compact_grid_item" },
         ) { libraryItem ->
-            val manga = libraryItem.libraryManga.manga
+            val manga = libraryItem.coverManga ?: libraryItem.libraryManga.manga
+            val isSeries = libraryItem is MangaLibraryItem.Series
+            val notSelectionMode = selection.isEmpty()
+            val title = if (isSeries) libraryItem.title else manga.title
+            val selectionManga = libraryItem.libraryManga.takeUnless { isSeries }
+            val targetManga = if (isSeries) {
+                libraryItem.librarySeries.entries.firstOrNull {
+                    it.manga.id == libraryItem.librarySeries.activeManga?.id
+                } ?: libraryItem.libraryManga
+            } else {
+                libraryItem.libraryManga
+            }
             EntryCompactGridItem(
-                isSelected = selection.fastAny { it.id == libraryItem.libraryManga.id },
-                title = manga.title.takeIf { showTitle },
+                isSelected = selectionManga != null && selection.fastAny { it.id == selectionManga.id },
+                title = title.takeIf { showTitle },
                 coverData = MangaCover(
                     mangaId = manga.id,
                     sourceId = manga.source,
@@ -52,6 +65,16 @@ internal fun MangaLibraryCompactGrid(
                     url = manga.thumbnailUrl,
                     lastModified = manga.coverLastModified,
                 ),
+                customCover = if (isSeries) {
+                    {
+                        SeriesStackedCoverCard(
+                            covers = libraryItem.covers,
+                            isSelected = false,
+                        )
+                    }
+                } else {
+                    null
+                },
                 coverBadgeStart = {
                     DownloadsBadge(count = libraryItem.downloadCount)
                     UnviewedBadge(count = libraryItem.unreadCount)
@@ -62,15 +85,27 @@ internal fun MangaLibraryCompactGrid(
                         sourceLanguage = libraryItem.sourceLanguage,
                     )
                 },
-                onLongClick = { onLongClick(libraryItem.libraryManga) },
-                onClick = { onClick(libraryItem.libraryManga) },
+                onLongClick = if (selectionManga != null) {
+                    { onLongClick(selectionManga) }
+                } else {
+                    {}
+                },
+                onClick = {
+                    if (isSeries) {
+                        if (notSelectionMode) {
+                            onSeriesClicked(libraryItem.librarySeries.id)
+                        }
+                    } else {
+                        onClick(libraryItem.libraryManga)
+                    }
+                },
                 onClickContinueViewing = if (
                     shouldShowContinueViewingAction(
                         hasContinueAction = onClickContinueReading != null,
-                        remainingCount = libraryItem.libraryManga.unreadCount,
+                        remainingCount = libraryItem.unreadCount,
                     )
                 ) {
-                    { onClickContinueReading?.invoke(libraryItem.libraryManga) }
+                    { onClickContinueReading?.invoke(targetManga) }
                 } else {
                     null
                 },

@@ -24,23 +24,31 @@ class NovelSeriesRepositoryImpl(
     }
 
     override fun getSeriesByCategory(categoryId: Long): Flow<List<NovelSeries>> {
-        return handler.subscribeToList { db -> db.novel_seriesQueries.getSeriesByCategory(categoryId, novelSeriesMapper) }
+        return handler.subscribeToList { db ->
+            db.novel_seriesQueries.getSeriesByCategory(categoryId, novelSeriesMapper)
+        }
     }
 
     override suspend fun getSeriesForNovel(novelId: Long): NovelSeries? {
-        val entry = handler.awaitOneOrNull { db -> db.novel_series_entriesQueries.getEntryByNovelId(novelId, novelSeriesEntryMapper) } ?: return null
+        val entry =
+            handler.awaitOneOrNull { db ->
+                db.novel_series_entriesQueries.getEntryByNovelId(novelId, novelSeriesEntryMapper)
+            }
+                ?: return null
         return handler.awaitOneOrNull { db -> db.novel_seriesQueries.getSeriesById(entry.seriesId, novelSeriesMapper) }
     }
 
     override fun getEntriesForSeries(seriesId: Long): Flow<List<NovelSeriesEntry>> {
-        return handler.subscribeToList { db -> db.novel_series_entriesQueries.getEntriesBySeriesId(seriesId, novelSeriesEntryMapper) }
+        return handler.subscribeToList { db ->
+            db.novel_series_entriesQueries.getEntriesBySeriesId(seriesId, novelSeriesEntryMapper)
+        }
     }
 
     override fun getLibrarySeriesWithEntries(): Flow<List<LibraryNovelSeries>> {
         return combine(
             getAllSeries(),
             handler.subscribeToList { db -> db.novel_series_entriesQueries.getAllEntries(novelSeriesEntryMapper) },
-            novelRepository.getLibraryNovelAsFlow()
+            novelRepository.getLibraryNovelAsFlow(),
         ) { seriesList, allEntries, allLibraryNovels ->
             val libraryNovelsById = allLibraryNovels.associateBy { it.novel.id }
             val entriesBySeriesId = allEntries.groupBy { it.seriesId }
@@ -66,7 +74,7 @@ class NovelSeriesRepositoryImpl(
                 categoryId = series.categoryId,
                 sortOrder = series.sortOrder,
                 dateAdded = series.dateAdded,
-                coverLastModified = series.coverLastModified
+                coverLastModified = series.coverLastModified,
             )
             db.novel_seriesQueries.selectLastInsertedRowId()
         }
@@ -81,7 +89,7 @@ class NovelSeriesRepositoryImpl(
                 categoryId = series.categoryId,
                 sortOrder = series.sortOrder,
                 dateAdded = series.dateAdded,
-                coverLastModified = series.coverLastModified
+                coverLastModified = series.coverLastModified,
             )
         }
     }
@@ -97,7 +105,7 @@ class NovelSeriesRepositoryImpl(
             db.novel_series_entriesQueries.insert(
                 seriesId = entry.seriesId,
                 novelId = entry.novelId,
-                position = entry.position.toLong()
+                position = entry.position.toLong(),
             )
         }
     }
@@ -113,7 +121,7 @@ class NovelSeriesRepositoryImpl(
             entries.forEach { entry ->
                 db.novel_series_entriesQueries.updatePosition(
                     position = entry.position.toLong(),
-                    id = entry.id
+                    id = entry.id,
                 )
             }
         }

@@ -17,8 +17,8 @@ class CreateNovelSeries(
                 categoryId = categoryId,
                 sortOrder = 0,
                 dateAdded = Date().time,
-                coverLastModified = 0
-            )
+                coverLastModified = 0,
+            ),
         )
 
         novelIds.forEachIndexed { index, novelId ->
@@ -27,8 +27,8 @@ class CreateNovelSeries(
                     id = 0,
                     seriesId = seriesId,
                     novelId = novelId,
-                    position = index
-                )
+                    position = index,
+                ),
             )
         }
     }

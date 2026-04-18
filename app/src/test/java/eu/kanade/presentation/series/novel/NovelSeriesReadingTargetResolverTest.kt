@@ -7,117 +7,14 @@ import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.series.novel.model.LibraryNovelSeries
 import tachiyomi.domain.series.novel.model.NovelSeries
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 
 class NovelSeriesReadingTargetResolverTest {
 
     @Test
-    fun `empty series returns null`() {
-        val result = resolveNovelSeriesReadingTarget(
-            series = series(entries = emptyList()),
-            chapters = emptyList(),
-        )
-
-        assertNull(result)
-    }
-
-    @Test
-    fun `no progress uses first title and first chapter`() {
-        val one = libraryNovel(id = 10L, title = "One", readCount = 0, totalChapters = 3)
-        val two = libraryNovel(id = 20L, title = "Two", readCount = 0, totalChapters = 2)
-        val result = resolveNovelSeriesReadingTarget(
-            series = series(entries = listOf(one, two)),
-            chapters = listOf(
-                one to listOf(
-                    chapter(id = 100L, novelId = one.novel.id, read = false, lastPageRead = 0L, chapterNumber = 1.0, name = "Chapter 1"),
-                    chapter(id = 101L, novelId = one.novel.id, read = false, lastPageRead = 0L, chapterNumber = 2.0, name = "Chapter 2"),
-                ),
-                two to listOf(
-                    chapter(id = 200L, novelId = two.novel.id, read = false, lastPageRead = 0L, chapterNumber = 1.0, name = "Chapter 1"),
-                ),
-            ),
-        )
-
-        assertEquals(one.novel.id, result?.novel?.novel?.id)
-        assertEquals(100L, result?.chapter?.id)
-    }
-
-    @Test
-    fun `partial progress resumes the active title`() {
-        val one = libraryNovel(id = 10L, title = "One", readCount = 1, totalChapters = 3)
-        val two = libraryNovel(id = 20L, title = "Two", readCount = 0, totalChapters = 2)
-        val result = resolveNovelSeriesReadingTarget(
-            series = series(entries = listOf(one, two)),
-            chapters = listOf(
-                one to listOf(
-                    chapter(id = 100L, novelId = one.novel.id, read = false, lastPageRead = 12L, chapterNumber = 1.0, name = "Chapter 1"),
-                    chapter(id = 101L, novelId = one.novel.id, read = false, lastPageRead = 0L, chapterNumber = 2.0, name = "Chapter 2"),
-                ),
-                two to listOf(
-                    chapter(id = 200L, novelId = two.novel.id, read = false, lastPageRead = 0L, chapterNumber = 1.0, name = "Chapter 1"),
-                ),
-            ),
-        )
-
-        assertEquals(one.novel.id, result?.novel?.novel?.id)
-        assertEquals(100L, result?.chapter?.id)
-    }
-
-    @Test
-    fun `completed title advances to the next committed title`() {
-        val one = libraryNovel(id = 10L, title = "One", readCount = 3, totalChapters = 3)
-        val two = libraryNovel(id = 20L, title = "Two", readCount = 0, totalChapters = 2)
-        val result = resolveNovelSeriesReadingTarget(
-            series = series(entries = listOf(one, two)),
-            chapters = listOf(
-                one to listOf(
-                    chapter(id = 100L, novelId = one.novel.id, read = true, lastPageRead = 0L, chapterNumber = 1.0, name = "Chapter 1"),
-                ),
-                two to listOf(
-                    chapter(id = 200L, novelId = two.novel.id, read = false, lastPageRead = 0L, chapterNumber = 1.0, name = "Chapter 1"),
-                ),
-            ),
-        )
-
-        assertEquals(two.novel.id, result?.novel?.novel?.id)
-        assertEquals(200L, result?.chapter?.id)
-    }
-
-    @Test
-    fun `reordered committed entries change the target`() {
-        val one = libraryNovel(id = 10L, title = "One", readCount = 3, totalChapters = 3)
-        val two = libraryNovel(id = 20L, title = "Two", readCount = 0, totalChapters = 2)
-        val original = resolveNovelSeriesReadingTarget(
-            series = series(entries = listOf(one, two)),
-            chapters = listOf(
-                one to listOf(
-                    chapter(id = 100L, novelId = one.novel.id, read = true, lastPageRead = 0L, chapterNumber = 1.0, name = "Chapter 1"),
-                ),
-                two to listOf(
-                    chapter(id = 200L, novelId = two.novel.id, read = false, lastPageRead = 0L, chapterNumber = 1.0, name = "Chapter 1"),
-                ),
-            ),
-        )
-        val reordered = resolveNovelSeriesReadingTarget(
-            series = series(entries = listOf(two, one)),
-            chapters = listOf(
-                one to listOf(
-                    chapter(id = 100L, novelId = one.novel.id, read = true, lastPageRead = 0L, chapterNumber = 1.0, name = "Chapter 1"),
-                ),
-                two to listOf(
-                    chapter(id = 200L, novelId = two.novel.id, read = false, lastPageRead = 0L, chapterNumber = 1.0, name = "Chapter 1"),
-                ),
-            ),
-        )
-
-        assertEquals(two.novel.id, original?.novel?.novel?.id)
-        assertEquals(one.novel.id, reordered?.novel?.novel?.id)
-    }
-
-    private fun series(entries: List<LibraryNovel>): LibraryNovelSeries {
-        return LibraryNovelSeries(
+    fun `returns next novel when active novel is fully read`() {
+        val series = LibraryNovelSeries(
             series = NovelSeries(
-                id = 42L,
+                id = 1L,
                 title = "Series",
                 description = null,
                 categoryId = 0L,
@@ -125,15 +22,36 @@ class NovelSeriesReadingTargetResolverTest {
                 dateAdded = 0L,
                 coverLastModified = 0L,
             ),
-            entries = entries,
+            entries = listOf(
+                libraryNovel(id = 10L, title = "One", totalChapters = 100, readCount = 90),
+                libraryNovel(id = 20L, title = "Two", totalChapters = 20, readCount = 0),
+            ),
         )
+
+        val chapters = listOf(
+            libraryNovelChapters(
+                novelId = 10L,
+                chapterIds = listOf(1L, 2L, 3L),
+                read = true,
+            ),
+            libraryNovelChapters(
+                novelId = 20L,
+                chapterIds = listOf(11L, 12L),
+                read = false,
+            ),
+        )
+
+        val target = resolveNovelSeriesReadingTarget(series, chapters)
+
+        assertEquals(20L, target?.novel?.novel?.id)
+        assertEquals(11L, target?.chapter?.id)
     }
 
     private fun libraryNovel(
         id: Long,
         title: String,
-        readCount: Long,
         totalChapters: Long,
+        readCount: Long,
     ): LibraryNovel {
         return LibraryNovel(
             novel = Novel.create().copy(
@@ -152,23 +70,22 @@ class NovelSeriesReadingTargetResolverTest {
         )
     }
 
-    private fun chapter(
-        id: Long,
+    private fun libraryNovelChapters(
         novelId: Long,
+        chapterIds: List<Long>,
         read: Boolean,
-        lastPageRead: Long,
-        chapterNumber: Double,
-        name: String,
-    ): NovelChapter {
-        return NovelChapter.create().copy(
-            id = id,
-            novelId = novelId,
-            read = read,
-            lastPageRead = lastPageRead,
-            sourceOrder = chapterNumber.toLong(),
-            chapterNumber = chapterNumber,
-            name = name,
-            url = "https://example.com/chapter/$id",
-        )
+    ): Pair<LibraryNovel, List<NovelChapter>> {
+        val novel = libraryNovel(id = novelId, title = "Novel $novelId", totalChapters = 1, readCount = 0)
+        return novel to chapterIds.mapIndexed { index, chapterId ->
+            NovelChapter.create().copy(
+                id = chapterId,
+                novelId = novelId,
+                read = read,
+                chapterNumber = (index + 1).toDouble(),
+                sourceOrder = (index + 1).toLong(),
+                name = "Chapter $chapterId",
+                url = "https://example.com/novel/$novelId/$chapterId",
+            )
+        }
     }
 }

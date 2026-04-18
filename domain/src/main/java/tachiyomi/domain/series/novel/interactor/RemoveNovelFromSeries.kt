@@ -9,7 +9,7 @@ class RemoveNovelFromSeries(
     suspend fun await(novelId: Long) {
         val series = repository.getSeriesForNovel(novelId) ?: return
         repository.deleteEntry(novelId)
-        
+
         // Re-index remaining entries
         val remaining = repository.getEntriesForSeries(series.id).first().sortedBy { it.position }
         val updated = remaining.mapIndexed { index, entry ->

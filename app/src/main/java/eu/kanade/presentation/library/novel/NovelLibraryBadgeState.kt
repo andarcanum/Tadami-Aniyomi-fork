@@ -1,7 +1,5 @@
 package eu.kanade.presentation.library.novel
 
-
-
 internal data class NovelLibraryBadgeState(
     val showDownloaded: Boolean,
     val unreadCount: Long?,

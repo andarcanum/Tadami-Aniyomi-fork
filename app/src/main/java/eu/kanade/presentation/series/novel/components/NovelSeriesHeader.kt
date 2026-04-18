@@ -24,9 +24,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.library.novel.components.SeriesStackedCoverCard
 import eu.kanade.presentation.theme.AuroraTheme
-import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.domain.entries.novel.model.asNovelCover
 import tachiyomi.domain.series.novel.model.LibraryNovelSeries
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.pluralStringResource
 import tachiyomi.presentation.core.util.plus
 
@@ -36,7 +36,7 @@ fun NovelSeriesHeader(
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
-    
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -55,9 +55,9 @@ fun NovelSeriesHeader(
                 isSelected = false,
             )
         }
-        
+
         Spacer(modifier = Modifier.height(24.dp))
-        
+
         // Title
         Text(
             text = series.title,
@@ -67,9 +67,9 @@ fun NovelSeriesHeader(
             textAlign = TextAlign.Center,
             lineHeight = 34.sp,
         )
-        
+
         Spacer(modifier = Modifier.height(8.dp))
-        
+
         // Stats
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),

@@ -31,8 +31,8 @@ import eu.kanade.presentation.library.components.EntryListItem
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.presentation.util.formattedMessage
-import eu.kanade.tachiyomi.source.novel.NovelPluginImageWarmupEffect
 import eu.kanade.tachiyomi.novelsource.NovelSource
+import eu.kanade.tachiyomi.source.novel.NovelPluginImageWarmupEffect
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.StateFlow
 import tachiyomi.core.common.i18n.stringResource

@@ -32,7 +32,6 @@ class AuroraPosterRequestKeyer : Keyer<AuroraPosterRequest> {
     }
 }
 
-
 class AuroraPosterRequestFetcher(
     private val data: AuroraPosterRequest,
     private val options: Options,
