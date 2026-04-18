@@ -533,6 +533,7 @@
     <string name="enhanced_services">Расширенные сервисы отслеживания</string>
     <string name="theme_monet">Динамическая</string>
     <string name="label_background_activity">Фоновая активность</string>
+    <string name="label_haptic_feedback">Тактильный отклик</string>
     <string name="pref_lowest">Самая низкая</string>
     <string name="pref_low">Низкая</string>
     <string name="pref_high">Высокая</string>

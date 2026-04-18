@@ -31,6 +31,7 @@ import eu.kanade.domain.ui.model.AuroraTitleHeroCtaMode
 import eu.kanade.domain.ui.model.HomeHeroCtaMode
 import eu.kanade.domain.ui.model.HomeHubRecentCardMode
 import eu.kanade.domain.ui.model.NavStyle
+import eu.kanade.domain.ui.model.NavTransitionMode
 import eu.kanade.domain.ui.model.StartScreen
 import eu.kanade.domain.ui.model.TabletUiMode
 import eu.kanade.domain.ui.model.ThemeMode
@@ -59,7 +60,6 @@ import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
-import tachiyomi.presentation.core.util.HapticFeedbackMode
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -382,12 +382,14 @@ object SettingsAppearanceScreen : SearchableSettings {
                 )
                 add(
                     Preference.PreferenceItem.ListPreference(
-                        preference = uiPreferences.hapticFeedbackMode(),
-                        entries = HapticFeedbackMode.entries
-                            .associateWith { stringResource(it.titleRes) }
-                            .toImmutableMap(),
-                        title = stringResource(MR.strings.pref_haptic_feedback),
-                        subtitle = stringResource(MR.strings.pref_haptic_feedback_summary),
+                        preference = uiPreferences.navigationTransitionMode(),
+                        entries = mapOf(
+                            NavTransitionMode.AUTO to stringResource(AYMR.strings.pref_navigation_transition_mode_auto),
+                            NavTransitionMode.MODERN to stringResource(AYMR.strings.pref_navigation_transition_mode_modern),
+                            NavTransitionMode.LEGACY to stringResource(AYMR.strings.pref_navigation_transition_mode_legacy),
+                        ).toImmutableMap(),
+                        title = stringResource(AYMR.strings.pref_navigation_transition_mode),
+                        subtitle = stringResource(AYMR.strings.pref_navigation_transition_mode_summary),
                     ),
                 )
                 add(
