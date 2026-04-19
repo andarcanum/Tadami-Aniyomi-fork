@@ -43,6 +43,11 @@ class UiPreferences(
 
     fun showMangaScanlatorBranches() = preferenceStore.getBoolean("show_manga_scanlator_branches", true)
 
+    fun auroraLibraryImmersiveMode() = preferenceStore.getBoolean(
+        "aurora_library_immersive_mode",
+        false,
+    )
+
     fun libraryUpdatePacingTimeoutSeconds() = preferenceStore.getInt(
         "library_update_pacing_timeout_seconds",
         0,

@@ -5,10 +5,15 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.graphics.ExperimentalAnimationGraphicsApi
 import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -47,6 +52,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -57,11 +63,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
@@ -98,6 +109,7 @@ import eu.kanade.presentation.library.novel.components.AddToSeriesDialog
 import eu.kanade.presentation.library.novel.components.CreateSeriesDialog
 import eu.kanade.presentation.more.onboarding.GETTING_STARTED_URL
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.util.LocalBottomNavVisibilityController
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateJob
@@ -115,10 +127,12 @@ import eu.kanade.tachiyomi.ui.entries.novel.NovelDownloadChapterPickerDialog
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
 import eu.kanade.tachiyomi.ui.entries.novel.NovelTranslatedDownloadDialog
 import eu.kanade.tachiyomi.ui.home.HomeScreen
+import eu.kanade.tachiyomi.ui.library.LibraryImmersiveChromeState
 import eu.kanade.tachiyomi.ui.library.manga.MangaLibraryItem
 import eu.kanade.tachiyomi.ui.library.manga.MangaLibraryScreenModel
 import eu.kanade.tachiyomi.ui.library.manga.MangaLibrarySettingsScreenModel
 import eu.kanade.tachiyomi.ui.library.novel.NovelLibraryScreenModel
+import eu.kanade.tachiyomi.ui.library.resolveLibraryImmersiveChromeState
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
@@ -214,6 +228,8 @@ data object AnimeLibraryTab : Tab {
         val showAnimeSection by uiPreferences.showAnimeSection().collectAsState()
         val showMangaSection by uiPreferences.showMangaSection().collectAsState()
         val showNovelSection by uiPreferences.showNovelSection().collectAsState()
+        val immersiveModeEnabled by uiPreferences.auroraLibraryImmersiveMode().collectAsState()
+        val bottomNavVisibilityController = LocalBottomNavVisibilityController.current
         val useSeparateDisplayModePerMedia by settingsScreenModel
             .libraryPreferences
             .separateDisplayModePerMedia()
@@ -320,6 +336,54 @@ data object AnimeLibraryTab : Tab {
         val updatingMangaMessage = context.stringResource(AYMR.strings.aurora_updating_manga)
         val updatingNovelMessage = context.stringResource(MR.strings.updating_library)
         val updateAlreadyRunningMessage = context.stringResource(MR.strings.update_already_running)
+        val hideThresholdPx = with(LocalDensity.current) { 56.dp.toPx() }
+        var immersiveChromeState by remember { mutableStateOf(LibraryImmersiveChromeState()) }
+        val forceChromeVisible = state.searchQuery != null ||
+            mangaState.searchQuery != null ||
+            novelState.searchQuery != null ||
+            state.selectionMode ||
+            mangaState.selectionMode ||
+            novelState.selectionMode ||
+            showNovelBatchDownloadDialog ||
+            showNovelBatchChapterPickerDialog ||
+            showNovelTranslatedDownloadDialog ||
+            showNovelTranslatedChapterPickerDialog
+
+        val immersiveScrollConnection = remember(immersiveModeEnabled, forceChromeVisible, hideThresholdPx) {
+            object : NestedScrollConnection {
+                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                    if (!immersiveModeEnabled || source != NestedScrollSource.Drag) return Offset.Zero
+
+                    val nextState = resolveLibraryImmersiveChromeState(
+                        currentState = immersiveChromeState,
+                        scrollDeltaPx = -available.y,
+                        enabled = immersiveModeEnabled,
+                        forceVisible = forceChromeVisible,
+                        hideThresholdPx = hideThresholdPx,
+                    )
+                    if (nextState != immersiveChromeState) {
+                        immersiveChromeState = nextState
+                    }
+
+                    return Offset.Zero
+                }
+            }
+        }
+
+        LaunchedEffect(immersiveModeEnabled, forceChromeVisible, immersiveChromeState.isVisible) {
+            if (!immersiveModeEnabled || forceChromeVisible) {
+                immersiveChromeState = LibraryImmersiveChromeState()
+                bottomNavVisibilityController.updateVisible(true)
+            } else {
+                bottomNavVisibilityController.updateVisible(immersiveChromeState.isVisible)
+            }
+        }
+
+        DisposableEffect(Unit) {
+            onDispose {
+                bottomNavVisibilityController.updateVisible(true)
+            }
+        }
 
         fun showLibraryUpdateFeedback(started: Boolean, startedMessage: String) {
             if (isAurora) {
@@ -919,6 +983,11 @@ data object AnimeLibraryTab : Tab {
                 else -> {
                     if (isAurora) {
                         TabbedScreenAurora(
+                            modifier = if (immersiveModeEnabled) {
+                                Modifier.nestedScroll(immersiveScrollConnection)
+                            } else {
+                                Modifier
+                            },
                             titleRes = null,
                             tabs = auroraTabs,
                             state = auroraPagerState,
@@ -942,6 +1011,7 @@ data object AnimeLibraryTab : Tab {
                                     searchQuery = auroraSearchQuery,
                                     onSearchQueryChange = onAuroraSearchQueryChange,
                                     onFilterClick = onAuroraFilterClick,
+                                    topChromeVisible = immersiveChromeState.isVisible,
                                     onRefreshCurrent = onAuroraRefreshCurrent,
                                     onRefreshGlobal = onAuroraRefreshGlobal,
                                     onOpenRandomEntry = onAuroraOpenRandom,
@@ -1411,6 +1481,7 @@ private fun AuroraLibraryPinnedHeader(
     searchQuery: String?,
     onSearchQueryChange: (String?) -> Unit,
     onFilterClick: () -> Unit,
+    topChromeVisible: Boolean,
     onRefreshCurrent: () -> Unit,
     onRefreshGlobal: () -> Unit,
     onOpenRandomEntry: () -> Unit,
@@ -1444,167 +1515,187 @@ private fun AuroraLibraryPinnedHeader(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+        AnimatedVisibility(
+            visible = topChromeVisible,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
         ) {
-            if (isSearchActive) {
-                TextField(
-                    value = searchQuery.orEmpty(),
-                    onValueChange = { onSearchQueryChange(it.ifBlank { null }) },
-                    placeholder = {
-                        Text(
-                            text = stringResource(MR.strings.action_search),
-                            color = colors.textSecondary,
-                        )
-                    },
-                    singleLine = true,
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Filled.Search,
-                            contentDescription = null,
-                            tint = colors.textSecondary,
-                        )
-                    },
-                    trailingIcon = {
-                        IconButton(
-                            onClick = {
-                                appHaptics.tap()
-                                isSearchExpanded = false
-                                onSearchQueryChange(null)
-                            },
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Close,
-                                contentDescription = null,
-                                tint = colors.textSecondary,
-                            )
-                        }
-                    },
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = colors.cardBackground,
-                        unfocusedContainerColor = colors.cardBackground,
-                        focusedTextColor = colors.textPrimary,
-                        unfocusedTextColor = colors.textPrimary,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                    ),
-                    shape = RoundedCornerShape(22.dp),
+            Column {
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                )
-            } else {
-                Text(
-                    text = title,
-                    color = colors.textPrimary,
-                    fontSize = 22.sp,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                )
-
-                Row {
-                    val tabContainerColor = if (colors.background.luminance() < 0.5f) {
-                        Color.White.copy(alpha = 0.05f)
-                    } else {
-                        Color.Black.copy(alpha = 0.03f)
-                    }
-                    IconButton(
-                        onClick = {
-                            appHaptics.tap()
-                            isSearchExpanded = true
-                        },
-                        modifier = Modifier
-                            .background(tabContainerColor, CircleShape)
-                            .size(44.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Search,
-                            contentDescription = stringResource(MR.strings.action_search),
-                            tint = colors.textPrimary,
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    IconButton(
-                        onClick = {
-                            appHaptics.tap()
-                            onFilterClick()
-                        },
-                        modifier = Modifier
-                            .background(tabContainerColor, CircleShape)
-                            .size(44.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.FilterList,
-                            contentDescription = null,
-                            tint = colors.textPrimary,
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    androidx.compose.foundation.layout.Box {
-                        IconButton(
-                            onClick = {
-                                appHaptics.tap()
-                                showMenu = true
-                            },
-                            modifier = Modifier
-                                .background(tabContainerColor, CircleShape)
-                                .size(44.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.MoreVert,
-                                contentDescription = null,
-                                tint = colors.textPrimary,
-                            )
-                        }
-                        AuroraEntryDropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false },
-                        ) {
-                            auroraLibraryPinnedHeaderMenuItems(
-                                includeImportEpub = onImportEpub != null,
-                            ).forEach { item ->
-                                AuroraEntryDropdownMenuItem(
-                                    text = when (item) {
-                                        AuroraLibraryPinnedHeaderMenuItem.RefreshCurrent ->
-                                            stringResource(MR.strings.action_update_library)
-                                        AuroraLibraryPinnedHeaderMenuItem.RefreshGlobal ->
-                                            stringResource(MR.strings.pref_category_library_update)
-                                        AuroraLibraryPinnedHeaderMenuItem.OpenRandomEntry ->
-                                            stringResource(MR.strings.action_open_random_manga)
-                                        AuroraLibraryPinnedHeaderMenuItem.ImportEpub ->
-                                            stringResource(AYMR.strings.novel_library_import_epub)
-                                    },
-                                    leadingIcon = when (item) {
-                                        AuroraLibraryPinnedHeaderMenuItem.RefreshCurrent,
-                                        AuroraLibraryPinnedHeaderMenuItem.RefreshGlobal,
-                                        -> Icons.Filled.Refresh
-                                        AuroraLibraryPinnedHeaderMenuItem.OpenRandomEntry -> Icons.Filled.Shuffle
-                                        AuroraLibraryPinnedHeaderMenuItem.ImportEpub -> Icons.Filled.Add
-                                    },
-                                    onClick = {
-                                        when (item) {
-                                            AuroraLibraryPinnedHeaderMenuItem.RefreshCurrent -> onRefreshCurrent()
-                                            AuroraLibraryPinnedHeaderMenuItem.RefreshGlobal -> onRefreshGlobal()
-                                            AuroraLibraryPinnedHeaderMenuItem.OpenRandomEntry -> onOpenRandomEntry()
-                                            AuroraLibraryPinnedHeaderMenuItem.ImportEpub -> onImportEpub?.invoke()
-                                        }
-                                        showMenu = false
-                                    },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (isSearchActive) {
+                        TextField(
+                            value = searchQuery.orEmpty(),
+                            onValueChange = { onSearchQueryChange(it.ifBlank { null }) },
+                            placeholder = {
+                                Text(
+                                    text = stringResource(MR.strings.action_search),
+                                    color = colors.textSecondary,
                                 )
+                            },
+                            singleLine = true,
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.Search,
+                                    contentDescription = null,
+                                    tint = colors.textSecondary,
+                                )
+                            },
+                            trailingIcon = {
+                                IconButton(
+                                    onClick = {
+                                        appHaptics.tap()
+                                        isSearchExpanded = false
+                                        onSearchQueryChange(null)
+                                    },
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Close,
+                                        contentDescription = null,
+                                        tint = colors.textSecondary,
+                                    )
+                                }
+                            },
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = colors.cardBackground,
+                                unfocusedContainerColor = colors.cardBackground,
+                                focusedTextColor = colors.textPrimary,
+                                unfocusedTextColor = colors.textPrimary,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                            ),
+                            shape = RoundedCornerShape(22.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    } else {
+                        Text(
+                            text = title,
+                            color = colors.textPrimary,
+                            fontSize = 22.sp,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                        )
+
+                        Row {
+                            val tabContainerColor = if (colors.background.luminance() < 0.5f) {
+                                Color.White.copy(alpha = 0.05f)
+                            } else {
+                                Color.Black.copy(alpha = 0.03f)
+                            }
+                            IconButton(
+                                onClick = {
+                                    appHaptics.tap()
+                                    isSearchExpanded = true
+                                },
+                                modifier = Modifier
+                                    .background(tabContainerColor, CircleShape)
+                                    .size(44.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Search,
+                                    contentDescription = stringResource(MR.strings.action_search),
+                                    tint = colors.textPrimary,
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            IconButton(
+                                onClick = {
+                                    appHaptics.tap()
+                                    onFilterClick()
+                                },
+                                modifier = Modifier
+                                    .background(tabContainerColor, CircleShape)
+                                    .size(44.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.FilterList,
+                                    contentDescription = null,
+                                    tint = colors.textPrimary,
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            androidx.compose.foundation.layout.Box {
+                                IconButton(
+                                    onClick = {
+                                        appHaptics.tap()
+                                        showMenu = true
+                                    },
+                                    modifier = Modifier
+                                        .background(tabContainerColor, CircleShape)
+                                        .size(44.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.MoreVert,
+                                        contentDescription = null,
+                                        tint = colors.textPrimary,
+                                    )
+                                }
+                                AuroraEntryDropdownMenu(
+                                    expanded = showMenu,
+                                    onDismissRequest = { showMenu = false },
+                                ) {
+                                    auroraLibraryPinnedHeaderMenuItems(
+                                        includeImportEpub = onImportEpub != null,
+                                    ).forEach { item ->
+                                        AuroraEntryDropdownMenuItem(
+                                            text = when (item) {
+                                                AuroraLibraryPinnedHeaderMenuItem.RefreshCurrent ->
+                                                    stringResource(MR.strings.action_update_library)
+                                                AuroraLibraryPinnedHeaderMenuItem.RefreshGlobal ->
+                                                    stringResource(MR.strings.pref_category_library_update)
+                                                AuroraLibraryPinnedHeaderMenuItem.OpenRandomEntry ->
+                                                    stringResource(MR.strings.action_open_random_manga)
+                                                AuroraLibraryPinnedHeaderMenuItem.ImportEpub ->
+                                                    stringResource(AYMR.strings.novel_library_import_epub)
+                                            },
+                                            leadingIcon = when (item) {
+                                                AuroraLibraryPinnedHeaderMenuItem.RefreshCurrent,
+                                                AuroraLibraryPinnedHeaderMenuItem.RefreshGlobal,
+                                                -> Icons.Filled.Refresh
+                                                AuroraLibraryPinnedHeaderMenuItem.OpenRandomEntry -> {
+                                                    Icons.Filled.Shuffle
+                                                }
+                                                AuroraLibraryPinnedHeaderMenuItem.ImportEpub -> {
+                                                    Icons.Filled.Add
+                                                }
+                                            },
+                                            onClick = {
+                                                when (item) {
+                                                    AuroraLibraryPinnedHeaderMenuItem.RefreshCurrent -> {
+                                                        onRefreshCurrent()
+                                                    }
+                                                    AuroraLibraryPinnedHeaderMenuItem.RefreshGlobal -> {
+                                                        onRefreshGlobal()
+                                                    }
+                                                    AuroraLibraryPinnedHeaderMenuItem.OpenRandomEntry -> {
+                                                        onOpenRandomEntry()
+                                                    }
+                                                    AuroraLibraryPinnedHeaderMenuItem.ImportEpub -> {
+                                                        onImportEpub?.invoke()
+                                                    }
+                                                }
+                                                showMenu = false
+                                            },
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
                 }
-            }
-        }
 
-        if (tabs.size > 1) {
-            Spacer(modifier = Modifier.height(12.dp))
-            AuroraTabRow(
-                tabs = tabs.toImmutableList(),
-                selectedIndex = selectedSectionIndex,
-                onTabSelected = onSectionSelected,
-                scrollable = false,
-            )
+                if (tabs.size > 1) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    AuroraTabRow(
+                        tabs = tabs.toImmutableList(),
+                        selectedIndex = selectedSectionIndex,
+                        onTabSelected = onSectionSelected,
+                        scrollable = false,
+                    )
+                }
+            }
         }
 
         if (showCategories && categories.isNotEmpty()) {

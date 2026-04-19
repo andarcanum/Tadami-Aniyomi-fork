@@ -35,6 +35,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -56,6 +57,8 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.StartScreen
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalIsEInkMode
+import eu.kanade.presentation.util.BottomNavVisibilityController
+import eu.kanade.presentation.util.LocalBottomNavVisibilityController
 import eu.kanade.presentation.util.ResolvedNavigationTransitionMode
 import eu.kanade.presentation.util.Screen
 import eu.kanade.presentation.util.isTabletUi
@@ -122,12 +125,16 @@ object HomeScreen : Screen() {
         val isAurora = theme.isAuroraStyle
         val useNavigationRail = isTabletUi() && !isAurora
         val navigator = LocalNavigator.currentOrThrow
+        val bottomNavVisibilityController = remember { BottomNavVisibilityController() }
         TabNavigator(
             tab = defaultTab,
             key = TAB_NAVIGATOR_KEY,
         ) { tabNavigator ->
             // Provide usable navigator to content screen
-            CompositionLocalProvider(LocalNavigator provides navigator) {
+            CompositionLocalProvider(
+                LocalNavigator provides navigator,
+                LocalBottomNavVisibilityController provides bottomNavVisibilityController,
+            ) {
                 Scaffold(
                     startBar = {
                         if (useNavigationRail) {
@@ -143,7 +150,9 @@ object HomeScreen : Screen() {
                             val bottomNavVisible by produceState(initialValue = true) {
                                 showBottomNavEvent.receiveAsFlow().collectLatest { value = it }
                             }
-                            val showBottomNav = bottomNavVisible && tabNavigator.current != currentMoreTab
+                            val showBottomNav = bottomNavVisible &&
+                                bottomNavVisibilityController.isVisible &&
+                                tabNavigator.current != currentMoreTab
                             if (isEInkMode) {
                                 if (showBottomNav) {
                                     val auroraColors = if (isAurora) AuroraTheme.colors else null
