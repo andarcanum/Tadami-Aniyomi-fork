@@ -73,7 +73,7 @@ class NovelLibraryUpdateJob(
     private val updateNovel: UpdateNovel = Injekt.get()
     private val syncNovelChaptersWithSource: SyncNovelChaptersWithSource = Injekt.get()
     private val novelDownloadManager: NovelDownloadManager = NovelDownloadManager()
-    private val pacingPolicy: LibraryUpdatePacingPolicy = Injekt.get()
+    private val pacingPolicy = LibraryUpdatePacingPolicy(Injekt.get())
 
     private val notifier = NovelLibraryUpdateNotifier(context)
 
@@ -349,7 +349,7 @@ class NovelLibraryUpdateJob(
     private fun writeErrorFile(errors: List<LibraryUpdateFailure>): File {
         try {
             if (errors.isNotEmpty()) {
-                val file = context.createFileInCacheDir("aniyomi_update_errors.txt")
+                val file = context.createFileInCacheDir("tadami_update_errors.txt")
                 file.bufferedWriter().use { out ->
                     out.write(
                         context.stringResource(MR.strings.library_errors_help, ERROR_LOG_HELP_URL) + "\n\n",
@@ -414,7 +414,7 @@ class NovelLibraryUpdateJob(
         private const val WORK_NAME_MANUAL = "NovelLibraryUpdate-manual"
         private const val KEY_CATEGORY = "category"
         private const val GRACE_PERIOD_DAYS = 1L
-        private const val ERROR_LOG_HELP_URL = "https://aniyomi.org/help/guides/troubleshooting"
+        private const val ERROR_LOG_HELP_URL = "https://t.me/TadamiSupport"
 
         fun cancelAllWorks(context: Context) {
             context.workManager.cancelAllWorkByTag(TAG)

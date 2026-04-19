@@ -87,7 +87,7 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
     private val animeFetchInterval: AnimeFetchInterval = Injekt.get()
     private val filterEpisodesForDownload: FilterEpisodesForDownload = Injekt.get()
     private val getAnimeSeasonsByParentId: GetAnimeSeasonsByParentId = Injekt.get()
-    private val pacingPolicy: LibraryUpdatePacingPolicy = Injekt.get()
+    private val pacingPolicy = LibraryUpdatePacingPolicy(Injekt.get())
 
     private val notifier = AnimeLibraryUpdateNotifier(context)
 
@@ -425,7 +425,7 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
     private fun writeErrorFile(errors: List<LibraryUpdateFailure>): File {
         try {
             if (errors.isNotEmpty()) {
-                val file = context.createFileInCacheDir("aniyomi_update_errors.txt")
+                val file = context.createFileInCacheDir("tadami_update_errors.txt")
                 file.bufferedWriter().use { out ->
                     out.write(
                         context.stringResource(MR.strings.library_errors_help, ERROR_LOG_HELP_URL) + "\n\n",
@@ -459,7 +459,7 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
         private const val WORK_NAME_AUTO = "AnimeLibraryUpdate-auto"
         private const val WORK_NAME_MANUAL = "AnimeLibraryUpdate-manual"
 
-        private const val ERROR_LOG_HELP_URL = "https://aniyomi.org/docs/guides/troubleshooting/"
+        private const val ERROR_LOG_HELP_URL = "https://t.me/TadamiSupport"
 
         private const val ANIME_PER_SOURCE_QUEUE_WARNING_THRESHOLD = 60
 
