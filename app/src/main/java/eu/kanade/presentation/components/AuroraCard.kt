@@ -2,9 +2,11 @@ package eu.kanade.presentation.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -22,7 +25,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.components.buildAuroraCoverImageRequest
+import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.theme.AuroraSurfaceLevel
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.resolveAuroraBorderColor
@@ -50,6 +57,8 @@ fun AuroraCard(
     seriesHeaderText: String? = null,
     subtitle: String? = null,
     badge: @Composable (() -> Unit)? = null,
+    topEndBadge: @Composable (() -> Unit)? = null,
+    menuContent: (@Composable ColumnScope.(closeMenu: () -> Unit) -> Unit)? = null,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     onClickContinueViewing: (() -> Unit)? = null,
@@ -64,6 +73,7 @@ fun AuroraCard(
     val colors = AuroraTheme.colors
     val context = LocalContext.current
     val appHaptics = LocalAppHaptics.current
+    var showMenu by remember { mutableStateOf(false) }
     val normalizedCoverHeightFraction = coverHeightFraction.coerceIn(0.01f, 1f)
     val showTextContent = normalizedCoverHeightFraction < 1f
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
@@ -142,6 +152,47 @@ fun AuroraCard(
                             .padding(6.dp),
                     ) {
                         badge()
+                    }
+                }
+
+                if (topEndBadge != null || menuContent != null) {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(6.dp),
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        topEndBadge?.invoke()
+
+                        if (menuContent != null) {
+                            Box {
+                                FilledIconButton(
+                                    onClick = {
+                                        appHaptics.tap()
+                                        showMenu = true
+                                    },
+                                    modifier = Modifier.size(28.dp),
+                                    colors = IconButtonDefaults.filledIconButtonColors(
+                                        containerColor = colors.surface.copy(alpha = 0.9f),
+                                        contentColor = colors.textPrimary,
+                                    ),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.MoreVert,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
+
+                                AuroraEntryDropdownMenu(
+                                    expanded = showMenu,
+                                    onDismissRequest = { showMenu = false },
+                                ) {
+                                    menuContent { showMenu = false }
+                                }
+                            }
+                        }
                     }
                 }
 

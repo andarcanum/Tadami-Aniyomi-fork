@@ -73,6 +73,7 @@ class MangaSeriesRepositoryImpl(
                 sortOrder = series.sortOrder,
                 dateAdded = series.dateAdded,
                 coverLastModified = series.coverLastModified,
+                pinned = series.pinned,
             )
             db.manga_seriesQueries.selectLastInsertedRowId()
         }
@@ -88,6 +89,7 @@ class MangaSeriesRepositoryImpl(
                 sortOrder = series.sortOrder,
                 dateAdded = series.dateAdded,
                 coverLastModified = series.coverLastModified,
+                pinned = series.pinned,
             )
         }
     }
@@ -126,8 +128,8 @@ class MangaSeriesRepositoryImpl(
     }
 }
 
-private val mangaSeriesMapper: (Long, String, String?, Long, Long, Long, Long) -> MangaSeries =
-    { id, title, description, categoryId, sortOrder, dateAdded, coverLastModified ->
+private val mangaSeriesMapper: (Long, String, String?, Long, Long, Long, Long, Boolean) -> MangaSeries =
+    { id, title, description, categoryId, sortOrder, dateAdded, coverLastModified, pinned ->
         MangaSeries(
             id = id,
             title = title,
@@ -136,6 +138,7 @@ private val mangaSeriesMapper: (Long, String, String?, Long, Long, Long, Long) -
             sortOrder = sortOrder,
             dateAdded = dateAdded,
             coverLastModified = coverLastModified,
+            pinned = pinned,
         )
     }
 

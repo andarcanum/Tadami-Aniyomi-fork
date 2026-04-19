@@ -32,10 +32,12 @@ object MangaMapper {
         @Suppress("UNUSED_PARAMETER")
         isSyncing: Long,
         rating: Double,
+        pinned: Boolean,
     ): Manga = Manga(
         id = id,
         source = source,
         favorite = favorite,
+        pinned = pinned,
         lastUpdate = lastUpdate ?: 0,
         nextUpdate = nextUpdate ?: 0,
         fetchInterval = calculateInterval.toInt(),
@@ -85,6 +87,7 @@ object MangaMapper {
         version: Long,
         isSyncing: Long,
         rating: Double,
+        pinned: Boolean,
         totalCount: Long,
         readCount: Double,
         latestUpload: Long,
@@ -119,6 +122,7 @@ object MangaMapper {
             version,
             isSyncing,
             rating,
+            pinned,
         ),
         category = category,
         totalChapters = totalCount,

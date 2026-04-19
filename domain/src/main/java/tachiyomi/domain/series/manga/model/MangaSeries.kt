@@ -10,4 +10,5 @@ data class MangaSeries(
     val sortOrder: Long,
     val dateAdded: Long,
     val coverLastModified: Long,
+    val pinned: Boolean = false,
 ) : Serializable

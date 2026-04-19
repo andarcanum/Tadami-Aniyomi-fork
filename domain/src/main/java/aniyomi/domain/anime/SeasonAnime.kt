@@ -14,6 +14,7 @@ data class SeasonAnime(
     val lastSeen: Long,
 ) {
     val id: Long = anime.id
+    val pinned: Boolean = anime.pinned
 
     val seen
         get() = totalCount == seenCount

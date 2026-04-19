@@ -14,6 +14,7 @@ data class LibraryAnime(
     val lastSeen: Long,
 ) {
     val id: Long = anime.id
+    val pinned: Boolean = anime.pinned
 
     val unseenCount
         get() = totalCount - seenCount

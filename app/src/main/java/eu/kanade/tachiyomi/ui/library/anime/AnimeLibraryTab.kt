@@ -423,6 +423,7 @@ data object AnimeLibraryTab : Tab {
                         screenModel.toggleRangeSelection(it)
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     },
+                    onTogglePinned = { screenModel.togglePinned(it.libraryAnime) },
                     onContinueWatchingClicked = { item: LibraryAnime ->
                         scope.launchIO {
                             val episode = screenModel.getNextUnseenEpisode(item.anime)
@@ -456,6 +457,7 @@ data object AnimeLibraryTab : Tab {
                         mangaScreenModel.toggleRangeSelection(it)
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     },
+                    onTogglePinned = mangaScreenModel::togglePinned,
                     onContinueReadingClicked = { item: LibraryManga ->
                         scope.launchIO {
                             val chapter = mangaScreenModel.getNextUnreadChapter(item.manga)
@@ -524,6 +526,7 @@ data object AnimeLibraryTab : Tab {
                         activeNovelScreenModel.toggleRangeSelection(novelItem)
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     },
+                    onTogglePinned = activeNovelScreenModel::togglePinned,
                     contentPadding = contentPadding,
                     hasActiveFilters = novelState.hasActiveFilters,
                     onFilterClicked = activeNovelScreenModel::showSettingsDialog,
@@ -828,6 +831,10 @@ data object AnimeLibraryTab : Tab {
                         LibraryBottomActionMenu(
                             visible = state.selectionMode,
                             onChangeCategoryClicked = screenModel::openChangeCategoryDialog,
+                            onTogglePinnedClicked = { pinned ->
+                                state.selection.forEach { screenModel.setPinned(it, pinned) }
+                            },
+                            isPinned = state.selection.fastAll { it.pinned },
                             onMarkAsViewedClicked = { screenModel.markSeenSelection(true) },
                             onMarkAsUnviewedClicked = { screenModel.markSeenSelection(false) },
                             onDownloadClicked = screenModel::runDownloadActionSelection
@@ -840,6 +847,10 @@ data object AnimeLibraryTab : Tab {
                         LibraryBottomActionMenu(
                             visible = mangaState.selectionMode,
                             onChangeCategoryClicked = mangaScreenModel::openChangeCategoryDialog,
+                            onTogglePinnedClicked = { pinned ->
+                                mangaState.selection.forEach { mangaScreenModel.setPinned(it, pinned) }
+                            },
+                            isPinned = mangaState.selection.fastAll { it.pinned },
                             onMarkAsViewedClicked = { mangaScreenModel.markReadSelection(true) },
                             onMarkAsUnviewedClicked = { mangaScreenModel.markReadSelection(false) },
                             onDownloadClicked = mangaScreenModel::runDownloadActionSelection
@@ -860,6 +871,12 @@ data object AnimeLibraryTab : Tab {
                         LibraryBottomActionMenu(
                             visible = novelState.selectionMode,
                             onChangeCategoryClicked = { novelScreenModel?.openChangeCategoryDialog() },
+                            onTogglePinnedClicked = { pinned ->
+                                novelScreenModel?.let { screenModel ->
+                                    novelState.selection.forEach { screenModel.setPinned(it, pinned) }
+                                }
+                            },
+                            isPinned = novelState.selection.fastAll { it.pinned },
                             onMarkAsViewedClicked = { novelScreenModel?.markReadSelection(true) },
                             onMarkAsUnviewedClicked = { novelScreenModel?.markReadSelection(false) },
                             onDownloadClicked = null,
@@ -975,6 +992,7 @@ data object AnimeLibraryTab : Tab {
                                 screenModel.toggleRangeSelection(it)
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             },
+                            onTogglePinned = { screenModel.togglePinned(it.libraryAnime) },
                             onRefresh = onClickRefresh,
                             onGlobalSearchClicked = {
                                 navigator.push(

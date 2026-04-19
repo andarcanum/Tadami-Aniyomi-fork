@@ -148,6 +148,25 @@ class LibraryMangaSeriesTest {
         ).activeManga shouldBe null
     }
 
+    @Test
+    fun `series exposes pinned state`() {
+        val series = LibraryMangaSeries(
+            series = MangaSeries(
+                id = 1L,
+                title = "Series",
+                description = null,
+                categoryId = 0L,
+                sortOrder = 0L,
+                dateAdded = 0L,
+                coverLastModified = 0L,
+                pinned = true,
+            ),
+            entries = emptyList(),
+        )
+
+        series.pinned shouldBe true
+    }
+
     private fun libraryManga(
         id: Long,
         title: String,

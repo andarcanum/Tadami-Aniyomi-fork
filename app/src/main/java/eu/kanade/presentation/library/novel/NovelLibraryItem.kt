@@ -7,6 +7,7 @@ import tachiyomi.domain.series.novel.model.LibraryNovelSeries
 sealed interface NovelLibraryItem {
     val id: Long
     val category: Long
+    val pinned: Boolean
     val unreadCount: Long
     val readCount: Long
     val lastRead: Long
@@ -22,6 +23,7 @@ sealed interface NovelLibraryItem {
     data class Single(val libraryNovel: LibraryNovel) : NovelLibraryItem {
         override val id = libraryNovel.id
         override val category = libraryNovel.category
+        override val pinned = libraryNovel.pinned
         override val unreadCount = libraryNovel.unreadCount
         override val readCount = libraryNovel.readCount
         override val lastRead = libraryNovel.lastRead
@@ -36,6 +38,7 @@ sealed interface NovelLibraryItem {
     data class Series(val librarySeries: LibraryNovelSeries) : NovelLibraryItem {
         override val id = -librarySeries.id // Negative to prevent collisions with single novels in compose keys
         override val category = librarySeries.categoryId
+        override val pinned = librarySeries.pinned
         override val unreadCount = librarySeries.unreadCount
         override val readCount = librarySeries.readCount
         override val lastRead = librarySeries.lastRead

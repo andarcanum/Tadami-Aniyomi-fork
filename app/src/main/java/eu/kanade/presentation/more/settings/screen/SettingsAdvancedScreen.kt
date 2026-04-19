@@ -201,9 +201,9 @@ object SettingsAdvancedScreen : SearchableSettings {
                     subtitle = stringResource(MR.strings.about_dont_kill_my_app),
                     onClick = { uriHandler.openUri("https://dontkillmyapp.com/") },
                 ),
-        ),
-    )
-}
+            ),
+        )
+    }
 
     @Composable
     private fun getDataGroup(): Preference.PreferenceGroup {

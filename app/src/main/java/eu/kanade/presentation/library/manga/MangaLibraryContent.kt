@@ -41,6 +41,7 @@ fun MangaLibraryContent(
     onContinueReadingClicked: ((LibraryManga) -> Unit)?,
     onToggleSelection: (LibraryManga) -> Unit,
     onToggleRangeSelection: (LibraryManga) -> Unit,
+    onTogglePinned: (MangaLibraryItem) -> Unit,
     onRefresh: (Category?) -> Boolean,
     onGlobalSearchClicked: () -> Unit,
     getNumberOfMangaForCategory: (Category) -> Int?,
@@ -110,6 +111,7 @@ fun MangaLibraryContent(
                 onClickManga = onClickManga,
                 onClickSeries = onSeriesClicked,
                 onLongClickManga = onToggleRangeSelection,
+                onTogglePinned = onTogglePinned,
                 onClickContinueReading = onContinueReadingClicked,
             )
         }

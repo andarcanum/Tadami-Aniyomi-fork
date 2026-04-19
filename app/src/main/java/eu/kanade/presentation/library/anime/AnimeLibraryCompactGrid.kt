@@ -10,6 +10,7 @@ import eu.kanade.presentation.library.components.DownloadsBadge
 import eu.kanade.presentation.library.components.EntryCompactGridItem
 import eu.kanade.presentation.library.components.LanguageBadge
 import eu.kanade.presentation.library.components.LazyLibraryGrid
+import eu.kanade.presentation.library.components.PinnedBadge
 import eu.kanade.presentation.library.components.UnviewedBadge
 import eu.kanade.presentation.library.components.globalSearchItem
 import eu.kanade.presentation.library.components.shouldShowContinueViewingAction
@@ -27,6 +28,7 @@ fun AnimeLibraryCompactGrid(
     onClick: (LibraryAnime) -> Unit,
     onLongClick: (LibraryAnime) -> Unit,
     onClickContinueWatching: ((LibraryAnime) -> Unit)?,
+    onTogglePinned: (AnimeLibraryItem) -> Unit,
     searchQuery: String?,
     onGlobalSearchClicked: () -> Unit,
 ) {
@@ -62,6 +64,12 @@ fun AnimeLibraryCompactGrid(
                         sourceLanguage = libraryItem.sourceLanguage,
                     )
                 },
+                topEndBadge = if (libraryItem.pinned) {
+                    { PinnedBadge() }
+                } else {
+                    null
+                },
+                menuContent = null,
                 onLongClick = { onLongClick(libraryItem.libraryAnime) },
                 onClick = { onClick(libraryItem.libraryAnime) },
                 onClickContinueViewing = if (

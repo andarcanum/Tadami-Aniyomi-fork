@@ -12,6 +12,7 @@ import uy.kohesive.injekt.api.get
 sealed interface MangaLibraryItem {
     val id: Long
     val category: Long
+    val pinned: Boolean
     val downloadCount: Long
     val isLocal: Boolean
     val sourceLanguage: String
@@ -41,6 +42,7 @@ sealed interface MangaLibraryItem {
     ) : MangaLibraryItem {
         override val id = libraryMangaValue.id
         override val category = libraryMangaValue.category
+        override val pinned = libraryMangaValue.pinned
         override val downloadCount = downloadCountValue
         override val isLocal = isLocalValue
         override val sourceLanguage = sourceLanguageValue
@@ -83,6 +85,7 @@ sealed interface MangaLibraryItem {
     ) : MangaLibraryItem {
         override val id = -librarySeries.id
         override val category = librarySeries.categoryId
+        override val pinned = librarySeries.pinned
         override val downloadCount = downloadCountValue
         override val isLocal = isLocalValue
         override val sourceLanguage = sourceLanguageValue

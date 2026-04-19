@@ -148,6 +148,25 @@ class LibraryNovelSeriesTest {
         ).activeNovel shouldBe null
     }
 
+    @Test
+    fun `series exposes pinned state`() {
+        val series = LibraryNovelSeries(
+            series = NovelSeries(
+                id = 1L,
+                title = "Series",
+                description = null,
+                categoryId = 0L,
+                sortOrder = 0L,
+                dateAdded = 0L,
+                coverLastModified = 0L,
+                pinned = true,
+            ),
+            entries = emptyList(),
+        )
+
+        series.pinned shouldBe true
+    }
+
     private fun libraryNovel(
         id: Long,
         title: String,

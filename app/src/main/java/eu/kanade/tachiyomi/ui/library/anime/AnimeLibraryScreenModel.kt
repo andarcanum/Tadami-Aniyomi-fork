@@ -27,6 +27,7 @@ import eu.kanade.tachiyomi.data.cache.AnimeCoverCache
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadCache
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.track.TrackerManager
+import eu.kanade.tachiyomi.ui.library.sortPinnedFirst
 import eu.kanade.tachiyomi.util.episode.getNextUnseen
 import eu.kanade.tachiyomi.util.removeBackgrounds
 import eu.kanade.tachiyomi.util.removeCovers
@@ -259,6 +260,7 @@ class AnimeLibraryScreenModel(
         val sortAlphabetically: (AnimeLibraryItem, AnimeLibraryItem) -> Int = { i1, i2 ->
             i1.libraryAnime.anime.title.lowercase().compareToWithCollator(i2.libraryAnime.anime.title.lowercase())
         }
+        val isPinned: (AnimeLibraryItem) -> Boolean = { it.libraryAnime.pinned }
 
         val defaultTrackerScoreSortValue = -1.0
         val trackerScores by lazy {
@@ -327,14 +329,21 @@ class AnimeLibraryScreenModel(
 
         return mapValues { (key, value) ->
             if (key.sort.type == AnimeLibrarySort.Type.Random) {
-                return@mapValues value.shuffled(Random(libraryPreferences.randomAnimeSortSeed().get()))
+                return@mapValues value.sortPinnedFirst(
+                    isPinned = isPinned,
+                    comparator = sortAlphabetically,
+                    randomSeed = libraryPreferences.randomAnimeSortSeed().get(),
+                )
             }
 
             val comparator = key.sort.comparator()
                 .let { if (key.sort.isAscending) it else it.reversed() }
                 .thenComparator(sortAlphabetically)
 
-            value.sortedWith(comparator)
+            value.sortPinnedFirst(
+                isPinned = isPinned,
+                comparator = comparator,
+            )
         }
     }
 
@@ -552,6 +561,21 @@ class AnimeLibraryScreenModel(
                     }
                 }
             }
+        }
+    }
+
+    fun togglePinned(anime: LibraryAnime) {
+        setPinned(anime, !anime.pinned)
+    }
+
+    fun setPinned(anime: LibraryAnime, pinned: Boolean) {
+        screenModelScope.launchIO {
+            updateAnime.await(
+                AnimeUpdate(
+                    id = anime.id,
+                    pinned = pinned,
+                ),
+            )
         }
     }
 

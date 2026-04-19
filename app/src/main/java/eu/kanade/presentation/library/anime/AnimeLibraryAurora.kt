@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -21,6 +22,8 @@ import eu.kanade.presentation.components.AuroraCard
 import eu.kanade.presentation.library.components.GlobalSearchItem
 import eu.kanade.presentation.library.components.GlowContourLibraryGridItem
 import eu.kanade.presentation.library.components.LazyLibraryGrid
+import eu.kanade.presentation.library.components.PinnedBadge
+import eu.kanade.presentation.library.components.PinnedSectionHeader
 import eu.kanade.presentation.library.components.globalSearchItem
 import eu.kanade.presentation.library.components.resolveGlowContourCornerIndicatorState
 import eu.kanade.presentation.library.components.resolveGlowContourLibraryTextSpec
@@ -61,6 +64,7 @@ fun AnimeLibraryAuroraContent(
     onAnimeClicked: (Long) -> Unit,
     onToggleSelection: (LibraryAnime) -> Unit,
     onToggleRangeSelection: (LibraryAnime) -> Unit,
+    onTogglePinned: (AnimeLibraryItem) -> Unit,
     onContinueWatchingClicked: ((LibraryAnime) -> Unit)?,
     onGlobalSearchClicked: () -> Unit,
     contentPadding: PaddingValues,
@@ -100,6 +104,7 @@ fun AnimeLibraryAuroraContent(
                 onGlobalSearchClicked = onGlobalSearchClicked,
                 onClick = onClickAnime,
                 onLongClick = onToggleRangeSelection,
+                onTogglePinned = onTogglePinned,
                 onClickContinueWatching = onContinueWatchingClicked,
                 listMaxWidthDp = auroraAdaptiveSpec.listMaxWidthDp,
                 horizontalPaddingDp = auroraAdaptiveSpec.contentHorizontalPaddingDp,
@@ -119,6 +124,7 @@ fun AnimeLibraryAuroraContent(
                     showMetadata = true,
                     onClick = onClickAnime,
                     onLongClick = onToggleRangeSelection,
+                    onTogglePinned = onTogglePinned,
                     onClickContinueWatching = onContinueWatchingClicked,
                     listMaxWidthDp = auroraAdaptiveSpec.listMaxWidthDp,
                     adaptiveMinCellDp = auroraAdaptiveSpec.compactGridAdaptiveMinCellDp,
@@ -134,6 +140,7 @@ fun AnimeLibraryAuroraContent(
                     selection = selection,
                     onClick = onClickAnime,
                     onLongClick = onToggleRangeSelection,
+                    onTogglePinned = onTogglePinned,
                     onClickContinueWatching = onContinueWatchingClicked,
                     searchQuery = searchQuery,
                     onGlobalSearchClicked = onGlobalSearchClicked,
@@ -152,6 +159,7 @@ fun AnimeLibraryAuroraContent(
                 showMetadata = false,
                 onClick = onClickAnime,
                 onLongClick = onToggleRangeSelection,
+                onTogglePinned = onTogglePinned,
                 onClickContinueWatching = onContinueWatchingClicked,
                 listMaxWidthDp = auroraAdaptiveSpec.listMaxWidthDp,
                 adaptiveMinCellDp = auroraAdaptiveSpec.coverOnlyGridAdaptiveMinCellDp,
@@ -171,6 +179,7 @@ fun AnimeLibraryAuroraContent(
                 showMetadata = true,
                 onClick = onClickAnime,
                 onLongClick = onToggleRangeSelection,
+                onTogglePinned = onTogglePinned,
                 onClickContinueWatching = onContinueWatchingClicked,
                 listMaxWidthDp = auroraAdaptiveSpec.listMaxWidthDp,
                 adaptiveMinCellDp = auroraAdaptiveSpec.comfortableGridAdaptiveMinCellDp,
@@ -190,11 +199,13 @@ private fun AnimeLibraryAuroraList(
     onGlobalSearchClicked: () -> Unit,
     onClick: (LibraryAnime) -> Unit,
     onLongClick: (LibraryAnime) -> Unit,
+    onTogglePinned: (AnimeLibraryItem) -> Unit,
     onClickContinueWatching: ((LibraryAnime) -> Unit)?,
     listMaxWidthDp: Int?,
     horizontalPaddingDp: Int,
 ) {
     val colors = AuroraTheme.colors
+    val showPinnedSection = items.count { it.pinned } > 1
 
     FastScrollLazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -209,6 +220,16 @@ private fun AnimeLibraryAuroraList(
                         .auroraCenteredMaxWidth(listMaxWidthDp),
                     searchQuery = searchQuery,
                     onClick = onGlobalSearchClicked,
+                )
+            }
+        }
+
+        if (showPinnedSection) {
+            item {
+                PinnedSectionHeader(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .auroraCenteredMaxWidth(listMaxWidthDp),
                 )
             }
         }
@@ -282,6 +303,12 @@ private fun AnimeLibraryAuroraList(
                 } else {
                     null
                 },
+                topEndBadge = if (libraryItem.pinned) {
+                    { PinnedBadge() }
+                } else {
+                    null
+                },
+                menuContent = null,
                 onClick = { onClick(libraryAnime) },
                 onLongClick = { onLongClick(libraryAnime) },
                 onClickContinueViewing = if (
@@ -313,6 +340,7 @@ private fun AnimeLibraryAuroraCardGrid(
     showMetadata: Boolean,
     onClick: (LibraryAnime) -> Unit,
     onLongClick: (LibraryAnime) -> Unit,
+    onTogglePinned: (AnimeLibraryItem) -> Unit,
     onClickContinueWatching: ((LibraryAnime) -> Unit)?,
     listMaxWidthDp: Int?,
     adaptiveMinCellDp: Int,
@@ -320,6 +348,7 @@ private fun AnimeLibraryAuroraCardGrid(
     glowDisplayMode: LibraryDisplayMode,
 ) {
     val useGlowContourCards = cardStyle == AuroraLibraryCardStyle.GlowContour
+    val showPinnedSection = items.count { it.pinned } > 1
 
     LazyLibraryGrid(
         modifier = Modifier
@@ -330,6 +359,16 @@ private fun AnimeLibraryAuroraCardGrid(
         contentPadding = contentPadding,
     ) {
         globalSearchItem(searchQuery, onGlobalSearchClicked)
+
+        if (showPinnedSection) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                PinnedSectionHeader(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .auroraCenteredMaxWidth(listMaxWidthDp),
+                )
+            }
+        }
 
         gridItems(
             items = items,
@@ -391,6 +430,12 @@ private fun AnimeLibraryAuroraCardGrid(
                     } else {
                         null
                     },
+                    topEndBadge = if (libraryItem.pinned) {
+                        { PinnedBadge() }
+                    } else {
+                        null
+                    },
+                    menuContent = null,
                     onClick = { onClick(libraryAnime) },
                     onLongClick = { onLongClick(libraryAnime) },
                     onClickContinueViewing = if (
@@ -444,6 +489,12 @@ private fun AnimeLibraryAuroraCardGrid(
                     coverHeightFraction = if (showMetadata) 0.68f else 1f,
                     titleMaxLines = if (showMetadata) 1 else 2,
                     gridColumns = columns,
+                    topEndBadge = if (libraryItem.pinned) {
+                        { PinnedBadge() }
+                    } else {
+                        null
+                    },
+                    menuContent = null,
                 )
             }
         }

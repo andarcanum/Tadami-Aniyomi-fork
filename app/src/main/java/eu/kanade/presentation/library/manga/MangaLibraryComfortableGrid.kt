@@ -10,6 +10,7 @@ import eu.kanade.presentation.library.components.DownloadsBadge
 import eu.kanade.presentation.library.components.EntryComfortableGridItem
 import eu.kanade.presentation.library.components.LanguageBadge
 import eu.kanade.presentation.library.components.LazyLibraryGrid
+import eu.kanade.presentation.library.components.PinnedBadge
 import eu.kanade.presentation.library.components.UnviewedBadge
 import eu.kanade.presentation.library.components.globalSearchItem
 import eu.kanade.presentation.library.components.shouldShowContinueViewingAction
@@ -27,6 +28,7 @@ internal fun MangaLibraryComfortableGrid(
     onClick: (LibraryManga) -> Unit,
     onSeriesClicked: (Long) -> Unit,
     onLongClick: (LibraryManga) -> Unit,
+    onTogglePinned: (MangaLibraryItem) -> Unit,
     onClickContinueReading: ((LibraryManga) -> Unit)?,
     searchQuery: String?,
     onGlobalSearchClicked: () -> Unit,
@@ -46,7 +48,8 @@ internal fun MangaLibraryComfortableGrid(
             val isSeries = libraryItem is MangaLibraryItem.Series
             val notSelectionMode = selection.isEmpty()
             val title = if (isSeries) libraryItem.title else manga.title
-            val selectionManga = libraryItem.libraryManga.takeUnless { isSeries }
+            val selectionManga = libraryItem.libraryManga
+            val isSelected = selection.fastAny { it.id == selectionManga.id }
             val targetManga = if (isSeries) {
                 libraryItem.librarySeries.entries.firstOrNull {
                     it.manga.id == libraryItem.librarySeries.activeManga?.id
@@ -55,7 +58,7 @@ internal fun MangaLibraryComfortableGrid(
                 libraryItem.libraryManga
             }
             EntryComfortableGridItem(
-                isSelected = selectionManga != null && selection.fastAny { it.id == selectionManga.id },
+                isSelected = isSelected,
                 title = title,
                 coverData = MangaCover(
                     mangaId = manga.id,
@@ -68,7 +71,7 @@ internal fun MangaLibraryComfortableGrid(
                     {
                         SeriesStackedCoverCard(
                             covers = libraryItem.covers,
-                            isSelected = false,
+                            isSelected = isSelected,
                         )
                     }
                 } else {
@@ -84,11 +87,13 @@ internal fun MangaLibraryComfortableGrid(
                         sourceLanguage = libraryItem.sourceLanguage,
                     )
                 },
-                onLongClick = if (selectionManga != null) {
-                    { onLongClick(selectionManga) }
+                topEndBadge = if (libraryItem.pinned) {
+                    { PinnedBadge() }
                 } else {
-                    {}
+                    null
                 },
+                menuContent = null,
+                onLongClick = { onLongClick(selectionManga) },
                 onClick = {
                     if (isSeries) {
                         if (notSelectionMode) {

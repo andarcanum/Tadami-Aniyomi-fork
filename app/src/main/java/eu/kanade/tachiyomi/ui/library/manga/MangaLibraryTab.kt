@@ -188,6 +188,10 @@ data object MangaLibraryTab : Tab {
                 LibraryBottomActionMenu(
                     visible = state.selectionMode,
                     onChangeCategoryClicked = screenModel::openChangeCategoryDialog,
+                    onTogglePinnedClicked = { pinned ->
+                        state.selection.forEach { screenModel.setPinned(it, pinned) }
+                    },
+                    isPinned = state.selection.fastAll { it.pinned },
                     onMarkAsViewedClicked = { screenModel.markReadSelection(true) },
                     onMarkAsUnviewedClicked = { screenModel.markReadSelection(false) },
                     onDownloadClicked = screenModel::runDownloadActionSelection
@@ -261,6 +265,7 @@ data object MangaLibraryTab : Tab {
                             screenModel.toggleRangeSelection(it)
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         },
+                        onTogglePinned = screenModel::togglePinned,
                         onRefresh = onClickRefresh,
                         onGlobalSearchClicked = {
                             navigator.push(

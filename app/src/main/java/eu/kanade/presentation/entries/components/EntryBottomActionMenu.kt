@@ -27,6 +27,7 @@ import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.automirrored.outlined.LabelOff
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.BookmarkRemove
 import androidx.compose.material.icons.outlined.Delete
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.NewLabel
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.RemoveDone
 import androidx.compose.material.icons.outlined.SwapCalls
 import androidx.compose.material.icons.outlined.Translate
@@ -303,6 +305,8 @@ private fun RowScope.Button(
 fun LibraryBottomActionMenu(
     visible: Boolean,
     onChangeCategoryClicked: () -> Unit,
+    onTogglePinnedClicked: ((Boolean) -> Unit)? = null,
+    isPinned: Boolean = false,
     onMarkAsViewedClicked: () -> Unit,
     onMarkAsUnviewedClicked: () -> Unit,
     onDownloadClicked: ((DownloadAction) -> Unit)?,
@@ -321,6 +325,7 @@ fun LibraryBottomActionMenu(
     ) {
         val scope = rememberCoroutineScope()
         val appHaptics = LocalAppHaptics.current
+        var pinned by remember(isPinned) { mutableStateOf(isPinned) }
         Surface(
             modifier = modifier,
             shape = MaterialTheme.shapes.large.copy(
@@ -356,6 +361,21 @@ fun LibraryBottomActionMenu(
                     onLongClick = { onLongClickItem(0) },
                     onClick = onChangeCategoryClicked,
                 )
+                if (onTogglePinnedClicked != null) {
+                    Button(
+                        title = stringResource(
+                            if (pinned) MR.strings.action_unpin else MR.strings.action_pin,
+                        ),
+                        icon = if (pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                        toConfirm = false,
+                        onLongClick = {},
+                        onClick = {
+                            val desiredPinned = !pinned
+                            pinned = desiredPinned
+                            onTogglePinnedClicked(desiredPinned)
+                        },
+                    )
+                }
                 val viewed = if (isManga) MR.strings.action_mark_as_read else AYMR.strings.action_mark_as_seen
                 Button(
                     title = stringResource(viewed),

@@ -3,8 +3,8 @@ package tachiyomi.data.series.novel
 import tachiyomi.domain.series.novel.model.NovelSeries
 import tachiyomi.domain.series.novel.model.NovelSeriesEntry
 
-val novelSeriesMapper: (Long, String, String?, Long, Long, Long, Long) -> NovelSeries =
-    { id, title, description, categoryId, sortOrder, dateAdded, coverLastModified ->
+val novelSeriesMapper: (Long, String, String?, Long, Long, Long, Long, Boolean) -> NovelSeries =
+    { id, title, description, categoryId, sortOrder, dateAdded, coverLastModified, pinned ->
         NovelSeries(
             id = id,
             title = title,
@@ -13,6 +13,7 @@ val novelSeriesMapper: (Long, String, String?, Long, Long, Long, Long) -> NovelS
             sortOrder = sortOrder,
             dateAdded = dateAdded,
             coverLastModified = coverLastModified,
+            pinned = pinned,
         )
     }
 

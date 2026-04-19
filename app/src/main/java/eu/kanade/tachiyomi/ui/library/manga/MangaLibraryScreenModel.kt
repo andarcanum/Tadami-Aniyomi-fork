@@ -26,6 +26,7 @@ import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.HttpSource
+import eu.kanade.tachiyomi.ui.library.sortPinnedFirst
 import eu.kanade.tachiyomi.util.chapter.getNextUnread
 import eu.kanade.tachiyomi.util.removeCovers
 import kotlinx.collections.immutable.ImmutableList
@@ -71,6 +72,7 @@ import tachiyomi.domain.series.manga.interactor.AddMangasToSeries
 import tachiyomi.domain.series.manga.interactor.CreateMangaSeries
 import tachiyomi.domain.series.manga.interactor.GetLibraryMangaSeries
 import tachiyomi.domain.series.manga.interactor.GetMangaIdsInAnySeries
+import tachiyomi.domain.series.manga.interactor.UpdateMangaSeries
 import tachiyomi.domain.series.manga.model.MangaSeries
 import tachiyomi.domain.source.manga.service.MangaSourceManager
 import tachiyomi.domain.track.manga.interactor.GetTracksPerManga
@@ -98,6 +100,7 @@ class MangaLibraryScreenModel(
     private val setMangaCategories: SetMangaCategories = Injekt.get(),
     private val createMangaSeries: CreateMangaSeries = Injekt.get(),
     private val addMangasToSeries: AddMangasToSeries = Injekt.get(),
+    private val updateMangaSeries: UpdateMangaSeries = Injekt.get(),
     private val preferences: BasePreferences = Injekt.get(),
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
     private val coverCache: MangaCoverCache = Injekt.get(),
@@ -305,6 +308,12 @@ class MangaLibraryScreenModel(
         val sortAlphabetically: (MangaLibraryItem, MangaLibraryItem) -> Int = { i1, i2 ->
             i1.title.lowercase().compareToWithCollator(i2.title.lowercase())
         }
+        val isPinned: (MangaLibraryItem) -> Boolean = {
+            when (it) {
+                is MangaLibraryItem.Single -> it.libraryManga.pinned
+                is MangaLibraryItem.Series -> it.librarySeries.pinned
+            }
+        }
 
         val defaultTrackerScoreSortValue = -1.0
         val trackerMap = if (loggedInTrackerIds.isEmpty()) {
@@ -387,14 +396,21 @@ class MangaLibraryScreenModel(
 
         return mapValues { (key, value) ->
             if (key.sort.type == MangaLibrarySort.Type.Random) {
-                return@mapValues value.shuffled(Random(libraryPreferences.randomMangaSortSeed().get()))
+                return@mapValues value.sortPinnedFirst(
+                    isPinned = isPinned,
+                    comparator = sortAlphabetically,
+                    randomSeed = libraryPreferences.randomMangaSortSeed().get(),
+                )
             }
 
             val comparator = key.sort.comparator()
                 .let { if (key.sort.isAscending) it else it.reversed() }
                 .thenComparator(sortAlphabetically)
 
-            value.sortedWith(comparator)
+            value.sortPinnedFirst(
+                isPinned = isPinned,
+                comparator = comparator,
+            )
         }
     }
 
@@ -860,6 +876,50 @@ class MangaLibraryScreenModel(
                 addMangasToSeries.await(series.id, mangaIds)
             }
             clearSelection()
+        }
+    }
+
+    fun togglePinned(item: MangaLibraryItem) {
+        setPinned(item, !item.pinned)
+    }
+
+    fun setPinned(item: MangaLibraryItem, pinned: Boolean) {
+        screenModelScope.launchIO {
+            setPinnedInternal(item, pinned)
+        }
+    }
+
+    fun togglePinned(manga: LibraryManga) {
+        setPinned(manga, !manga.pinned)
+    }
+
+    fun setPinned(manga: LibraryManga, pinned: Boolean) {
+        screenModelScope.launchIO {
+            val item = state.value.library.values
+                .flatten()
+                .firstOrNull { libraryItem ->
+                    when (libraryItem) {
+                        is MangaLibraryItem.Single -> libraryItem.libraryManga.id == manga.id
+                        is MangaLibraryItem.Series -> libraryItem.librarySeries.entries.any { it.id == manga.id }
+                    }
+                } ?: return@launchIO
+            setPinnedInternal(item, pinned)
+        }
+    }
+
+    private suspend fun setPinnedInternal(item: MangaLibraryItem, pinned: Boolean) {
+        when (item) {
+            is MangaLibraryItem.Single -> updateManga.await(
+                MangaUpdate(
+                    id = item.libraryManga.id,
+                    pinned = pinned,
+                ),
+            )
+            is MangaLibraryItem.Series -> updateMangaSeries.await(
+                item.librarySeries.series.copy(
+                    pinned = pinned,
+                ),
+            )
         }
     }
 

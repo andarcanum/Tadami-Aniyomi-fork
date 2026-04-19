@@ -42,6 +42,7 @@ fun MangaLibraryPager(
     onClickManga: (LibraryManga) -> Unit,
     onClickSeries: (Long) -> Unit,
     onLongClickManga: (LibraryManga) -> Unit,
+    onTogglePinned: (MangaLibraryItem) -> Unit,
     onClickContinueReading: ((LibraryManga) -> Unit)?,
 ) {
     BoxWithConstraints {
@@ -101,6 +102,7 @@ fun MangaLibraryPager(
                         onClick = onClickManga,
                         onSeriesClicked = onClickSeries,
                         onLongClick = onLongClickManga,
+                        onTogglePinned = onTogglePinned,
                         onClickContinueReading = onClickContinueReading,
                         searchQuery = searchQuery,
                         onGlobalSearchClicked = onGlobalSearchClicked,
@@ -116,6 +118,7 @@ fun MangaLibraryPager(
                         onClick = onClickManga,
                         onSeriesClicked = onClickSeries,
                         onLongClick = onLongClickManga,
+                        onTogglePinned = onTogglePinned,
                         onClickContinueReading = onClickContinueReading,
                         searchQuery = searchQuery,
                         onGlobalSearchClicked = onGlobalSearchClicked,

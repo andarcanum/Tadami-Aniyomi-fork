@@ -17,6 +17,7 @@ class NovelTest {
         novel.url shouldBe ""
         novel.title shouldBe ""
         novel.favorite shouldBe false
+        novel.pinned shouldBe false
         novel.initialized shouldBe false
     }
 }

@@ -75,6 +75,7 @@ class NovelSeriesRepositoryImpl(
                 sortOrder = series.sortOrder,
                 dateAdded = series.dateAdded,
                 coverLastModified = series.coverLastModified,
+                pinned = series.pinned,
             )
             db.novel_seriesQueries.selectLastInsertedRowId()
         }
@@ -90,6 +91,7 @@ class NovelSeriesRepositoryImpl(
                 sortOrder = series.sortOrder,
                 dateAdded = series.dateAdded,
                 coverLastModified = series.coverLastModified,
+                pinned = series.pinned,
             )
         }
     }

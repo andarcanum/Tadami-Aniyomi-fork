@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -69,6 +70,8 @@ import eu.kanade.presentation.library.components.EntryCompactGridItem
 import eu.kanade.presentation.library.components.GlowContourLibraryGridItem
 import eu.kanade.presentation.library.components.LanguageBadge
 import eu.kanade.presentation.library.components.LazyLibraryGrid
+import eu.kanade.presentation.library.components.PinnedBadge
+import eu.kanade.presentation.library.components.PinnedSectionHeader
 import eu.kanade.presentation.library.components.UnviewedBadge
 import eu.kanade.presentation.library.components.resolveGlowContourCornerIndicatorState
 import eu.kanade.presentation.library.components.resolveGlowContourLibraryTextSpec
@@ -92,6 +95,7 @@ import tachiyomi.presentation.core.components.Badge
 import tachiyomi.presentation.core.components.BadgeGroup
 import tachiyomi.presentation.core.components.FastScrollLazyColumn
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 import tachiyomi.presentation.core.util.collectAsState
 import tachiyomi.presentation.core.util.plus
 import uy.kohesive.injekt.Injekt
@@ -108,6 +112,7 @@ fun NovelLibraryAuroraContent(
     onNovelClicked: (Long) -> Unit,
     onToggleSelection: ((NovelLibraryItem) -> Unit)? = null,
     onToggleRangeSelection: ((NovelLibraryItem) -> Unit)? = null,
+    onTogglePinned: ((NovelLibraryItem) -> Unit)? = null,
     contentPadding: PaddingValues,
     hasActiveFilters: Boolean,
     onFilterClicked: () -> Unit,
@@ -182,6 +187,7 @@ fun NovelLibraryAuroraContent(
     } else {
         items.filter { it.title.contains(query, ignoreCase = true) }
     }
+    val showPinnedSection = filteredItems.count { it.pinned } > 1
     val isSelectionMode = selection.isNotEmpty() && onToggleSelection != null
     val onClickNovelItem: (NovelLibraryItem) -> Unit = { libraryItem ->
         if (isSelectionMode) {
@@ -231,6 +237,16 @@ fun NovelLibraryAuroraContent(
                     }
                 }
 
+                if (showPinnedSection) {
+                    item {
+                        PinnedSectionHeader(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),
+                        )
+                    }
+                }
+
                 listItems(filteredItems, key = { it.id }) { item ->
                     val badgeState = resolveNovelLibraryBadgeState(
                         item = item,
@@ -256,6 +272,7 @@ fun NovelLibraryAuroraContent(
                         cardStyle = AuroraLibraryCardStyle.Standard,
                         glowDisplayMode = LibraryDisplayMode.List,
                         gridColumns = null,
+                        onTogglePinned = onTogglePinned,
                     )
                 }
             }
@@ -290,6 +307,16 @@ fun NovelLibraryAuroraContent(
                     }
                 }
 
+                if (showPinnedSection) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        PinnedSectionHeader(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),
+                        )
+                    }
+                }
+
                 gridItems(filteredItems, key = { it.id }) { item ->
                     val badgeState = resolveNovelLibraryBadgeState(
                         item = item,
@@ -307,6 +334,7 @@ fun NovelLibraryAuroraContent(
                             onNovelClicked = onClickNovelItem,
                             onLongClickNovel = onLongClickNovelItem,
                             onClickContinueReading = onContinueReadingClicked,
+                            onTogglePinned = onTogglePinned,
                         )
                     } else {
                         NovelLibraryAuroraCard(
@@ -326,6 +354,7 @@ fun NovelLibraryAuroraContent(
                             cardStyle = auroraCardStyle,
                             glowDisplayMode = displayMode,
                             gridColumns = columns.coerceAtLeast(0),
+                            onTogglePinned = onTogglePinned,
                         )
                     }
                 }
@@ -342,6 +371,7 @@ private fun NovelLibraryCompactGridItem(
     onNovelClicked: (NovelLibraryItem) -> Unit,
     onLongClickNovel: ((NovelLibraryItem) -> Unit)?,
     onClickContinueReading: ((NovelLibraryItem) -> Unit)?,
+    onTogglePinned: ((NovelLibraryItem) -> Unit)?,
 ) {
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
 
@@ -383,6 +413,12 @@ private fun NovelLibraryCompactGridItem(
                 )
             }
         },
+        topEndBadge = if (item.pinned) {
+            { PinnedBadge() }
+        } else {
+            null
+        },
+        menuContent = null,
     )
 }
 
@@ -406,6 +442,7 @@ private fun NovelLibraryAuroraCard(
     cardStyle: AuroraLibraryCardStyle,
     glowDisplayMode: LibraryDisplayMode,
     gridColumns: Int?,
+    onTogglePinned: ((NovelLibraryItem) -> Unit)? = null,
 ) {
     val useGlowContourCards = cardStyle == AuroraLibraryCardStyle.GlowContour
     val progressText = if (showMetadata && item.totalChapters > 0) {
@@ -437,6 +474,11 @@ private fun NovelLibraryAuroraCard(
         url = null,
         lastModified = 0,
     )
+    val topEndBadge: @Composable (() -> Unit)? = if (item.pinned) {
+        { PinnedBadge() }
+    } else {
+        null
+    }
 
     if (useGlowContourCards) {
         GlowContourLibraryGridItem(
@@ -473,6 +515,8 @@ private fun NovelLibraryAuroraCard(
             } else {
                 null
             },
+            topEndBadge = topEndBadge,
+            menuContent = null,
         )
     } else if (showMetadata) {
         val colors = AuroraTheme.colors
@@ -508,6 +552,8 @@ private fun NovelLibraryAuroraCard(
             } else {
                 null
             },
+            topEndBadge = topEndBadge,
+            menuContent = null,
         )
     } else {
         NovelLibraryAuroraCoverOnlyCard(
@@ -528,6 +574,8 @@ private fun NovelLibraryAuroraCard(
             } else {
                 null
             },
+            topEndBadge = topEndBadge,
+            menuContent = null,
         )
     }
 }
@@ -588,8 +636,12 @@ private fun NovelLibraryAuroraCoverOnlyCard(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)?,
     customCover: @Composable (() -> Unit)? = null,
+    topEndBadge: @Composable (() -> Unit)? = null,
+    menuContent: (@Composable ColumnScope.(closeMenu: () -> Unit) -> Unit)? = null,
 ) {
     val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
+    var showMenu by remember { mutableStateOf(false) }
     val tabContainerColor = if (colors.background.luminance() < 0.5f) {
         Color.White.copy(alpha = 0.05f)
     } else {
@@ -670,6 +722,47 @@ private fun NovelLibraryAuroraCoverOnlyCard(
                             textColor = colors.textOnAccent,
                             shape = RoundedCornerShape(4.dp),
                         )
+                    }
+                }
+            }
+
+            if (topEndBadge != null || menuContent != null) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp),
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    topEndBadge?.invoke()
+
+                    if (menuContent != null) {
+                        Box {
+                            FilledIconButton(
+                                onClick = {
+                                    appHaptics.tap()
+                                    showMenu = true
+                                },
+                                modifier = Modifier.size(28.dp),
+                                colors = IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = colors.surface.copy(alpha = 0.9f),
+                                    contentColor = colors.textPrimary,
+                                ),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.MoreVert,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+
+                            AuroraEntryDropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false },
+                            ) {
+                                menuContent { showMenu = false }
+                            }
+                        }
                     }
                 }
             }

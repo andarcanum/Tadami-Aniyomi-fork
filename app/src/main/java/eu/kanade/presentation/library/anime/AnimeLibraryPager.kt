@@ -41,6 +41,7 @@ fun AnimeLibraryPager(
     getLibraryForPage: (Int) -> List<AnimeLibraryItem>,
     onClickAnime: (LibraryAnime) -> Unit,
     onLongClickAnime: (LibraryAnime) -> Unit,
+    onTogglePinned: (AnimeLibraryItem) -> Unit,
     onClickContinueWatching: ((LibraryAnime) -> Unit)?,
 ) {
     BoxWithConstraints {
@@ -99,6 +100,7 @@ fun AnimeLibraryPager(
                         onClick = onClickAnime,
                         onClickContinueWatching = onClickContinueWatching,
                         onLongClick = onLongClickAnime,
+                        onTogglePinned = onTogglePinned,
                         searchQuery = searchQuery,
                         onGlobalSearchClicked = onGlobalSearchClicked,
                     )
@@ -112,6 +114,7 @@ fun AnimeLibraryPager(
                         selection = selectedAnime,
                         onClick = onClickAnime,
                         onLongClick = onLongClickAnime,
+                        onTogglePinned = onTogglePinned,
                         onClickContinueWatching = onClickContinueWatching,
                         searchQuery = searchQuery,
                         onGlobalSearchClicked = onGlobalSearchClicked,

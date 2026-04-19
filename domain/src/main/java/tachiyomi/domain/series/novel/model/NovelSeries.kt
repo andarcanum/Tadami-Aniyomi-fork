@@ -10,4 +10,5 @@ data class NovelSeries(
     val sortOrder: Long,
     val dateAdded: Long,
     val coverLastModified: Long,
+    val pinned: Boolean = false,
 ) : Serializable

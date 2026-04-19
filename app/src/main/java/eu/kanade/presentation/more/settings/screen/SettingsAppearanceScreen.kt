@@ -385,8 +385,10 @@ object SettingsAppearanceScreen : SearchableSettings {
                         preference = uiPreferences.navigationTransitionMode(),
                         entries = mapOf(
                             NavTransitionMode.AUTO to stringResource(AYMR.strings.pref_navigation_transition_mode_auto),
-                            NavTransitionMode.MODERN to stringResource(AYMR.strings.pref_navigation_transition_mode_modern),
-                            NavTransitionMode.LEGACY to stringResource(AYMR.strings.pref_navigation_transition_mode_legacy),
+                            NavTransitionMode.MODERN to
+                                stringResource(AYMR.strings.pref_navigation_transition_mode_modern),
+                            NavTransitionMode.LEGACY to
+                                stringResource(AYMR.strings.pref_navigation_transition_mode_legacy),
                         ).toImmutableMap(),
                         title = stringResource(AYMR.strings.pref_navigation_transition_mode),
                         subtitle = stringResource(AYMR.strings.pref_navigation_transition_mode_summary),

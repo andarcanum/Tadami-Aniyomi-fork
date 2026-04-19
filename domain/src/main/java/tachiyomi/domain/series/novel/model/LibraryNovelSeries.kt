@@ -10,6 +10,7 @@ data class LibraryNovelSeries(
     val id: Long = series.id
     val title: String = series.title
     val categoryId: Long = series.categoryId
+    val pinned: Boolean = series.pinned
 
     val totalChapters: Long
         get() = entries.sumOf { it.totalChapters }

@@ -13,6 +13,7 @@ data class LibraryManga(
     val lastRead: Long,
 ) {
     val id: Long = manga.id
+    val pinned: Boolean = manga.pinned
 
     val unreadCount
         get() = totalChapters - readCount

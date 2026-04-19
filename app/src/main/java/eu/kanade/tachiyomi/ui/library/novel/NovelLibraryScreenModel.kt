@@ -25,6 +25,7 @@ import eu.kanade.tachiyomi.source.novel.importer.ImportedEpubParser
 import eu.kanade.tachiyomi.source.novel.importer.ImportedEpubStorage
 import eu.kanade.tachiyomi.ui.entries.novel.NovelDownloadAction
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
+import eu.kanade.tachiyomi.ui.library.sortPinnedFirst
 import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.PersistentList
@@ -64,6 +65,7 @@ import tachiyomi.domain.series.novel.interactor.CreateNovelSeries
 import tachiyomi.domain.series.novel.interactor.DeleteNovelSeries
 import tachiyomi.domain.series.novel.interactor.GetLibraryNovelSeries
 import tachiyomi.domain.series.novel.interactor.GetNovelIdsInAnySeries
+import tachiyomi.domain.series.novel.interactor.UpdateNovelSeries
 import tachiyomi.domain.series.novel.model.NovelSeries
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -77,6 +79,7 @@ class NovelLibraryScreenModel(
     private val deleteNovelSeries: DeleteNovelSeries = Injekt.get(),
     private val createNovelSeries: CreateNovelSeries = Injekt.get(),
     private val addNovelsToSeries: AddNovelsToSeries = Injekt.get(),
+    private val updateNovelSeries: UpdateNovelSeries = Injekt.get(),
     private val getNovelCategories: GetNovelCategories = Injekt.get(),
     private val setNovelCategories: SetNovelCategories = Injekt.get(),
     private val updateNovel: UpdateNovel = Injekt.get(),
@@ -753,55 +756,60 @@ class NovelLibraryScreenModel(
         randomSortSeed: Int,
     ): List<NovelLibraryItem> {
         if (items.isEmpty()) return items
-        if (sort.type == NovelLibrarySort.Type.Random) {
-            return items.shuffled(Random(randomSortSeed))
+        val isPinned: (NovelLibraryItem) -> Boolean = {
+            when (it) {
+                is NovelLibraryItem.Single -> it.libraryNovel.pinned
+                is NovelLibraryItem.Series -> it.librarySeries.pinned
+            }
         }
 
-        val sorted = items.sortedWith(
-            Comparator<NovelLibraryItem> { left, right ->
-                when (sort.type) {
-                    NovelLibrarySort.Type.Alphabetical -> {
-                        left.title.lowercase().compareToWithCollator(right.title.lowercase())
-                    }
-                    NovelLibrarySort.Type.LastRead -> left.lastRead.compareTo(right.lastRead)
-                    NovelLibrarySort.Type.LastUpdate -> {
-                        val leftLastUpdate = (left as? NovelLibraryItem.Single)?.libraryNovel?.novel?.lastUpdate ?: 0L
-                        val rightLastUpdate = (right as? NovelLibraryItem.Single)?.libraryNovel?.novel?.lastUpdate ?: 0L
-                        leftLastUpdate.compareTo(rightLastUpdate)
-                    }
-                    NovelLibrarySort.Type.UnreadCount -> {
-                        when {
-                            left.unreadCount == right.unreadCount -> 0
-                            left.unreadCount == 0L -> if (sort.isAscending) 1 else -1
-                            right.unreadCount == 0L -> if (sort.isAscending) -1 else 1
-                            else -> left.unreadCount.compareTo(right.unreadCount)
-                        }
-                    }
-                    NovelLibrarySort.Type.TotalChapters -> left.totalChapters.compareTo(right.totalChapters)
-                    NovelLibrarySort.Type.LatestChapter -> {
-                        val leftLatestUpload = (left as? NovelLibraryItem.Single)?.libraryNovel?.latestUpload ?: 0L
-                        val rightLatestUpload = (right as? NovelLibraryItem.Single)?.libraryNovel?.latestUpload ?: 0L
-                        leftLatestUpload.compareTo(rightLatestUpload)
-                    }
-                    NovelLibrarySort.Type.ChapterFetchDate -> {
-                        val leftChapterFetchedAt =
-                            (left as? NovelLibraryItem.Single)?.libraryNovel?.chapterFetchedAt ?: 0L
-                        val rightChapterFetchedAt =
-                            (right as? NovelLibraryItem.Single)?.libraryNovel?.chapterFetchedAt ?: 0L
-                        leftChapterFetchedAt.compareTo(rightChapterFetchedAt)
-                    }
-                    NovelLibrarySort.Type.DateAdded -> left.dateAdded.compareTo(right.dateAdded)
-                    NovelLibrarySort.Type.TrackerMean -> 0
-                    NovelLibrarySort.Type.Random -> 0
-                }
-            }
-                .let { if (sort.isAscending) it else it.reversed() }
-                .thenComparator { left, right ->
+        val comparator = Comparator<NovelLibraryItem> { left, right ->
+            when (sort.type) {
+                NovelLibrarySort.Type.Alphabetical -> {
                     left.title.lowercase().compareToWithCollator(right.title.lowercase())
-                },
-        )
+                }
+                NovelLibrarySort.Type.LastRead -> left.lastRead.compareTo(right.lastRead)
+                NovelLibrarySort.Type.LastUpdate -> {
+                    val leftLastUpdate = (left as? NovelLibraryItem.Single)?.libraryNovel?.novel?.lastUpdate ?: 0L
+                    val rightLastUpdate = (right as? NovelLibraryItem.Single)?.libraryNovel?.novel?.lastUpdate ?: 0L
+                    leftLastUpdate.compareTo(rightLastUpdate)
+                }
+                NovelLibrarySort.Type.UnreadCount -> {
+                    when {
+                        left.unreadCount == right.unreadCount -> 0
+                        left.unreadCount == 0L -> if (sort.isAscending) 1 else -1
+                        right.unreadCount == 0L -> if (sort.isAscending) -1 else 1
+                        else -> left.unreadCount.compareTo(right.unreadCount)
+                    }
+                }
+                NovelLibrarySort.Type.TotalChapters -> left.totalChapters.compareTo(right.totalChapters)
+                NovelLibrarySort.Type.LatestChapter -> {
+                    val leftLatestUpload = (left as? NovelLibraryItem.Single)?.libraryNovel?.latestUpload ?: 0L
+                    val rightLatestUpload = (right as? NovelLibraryItem.Single)?.libraryNovel?.latestUpload ?: 0L
+                    leftLatestUpload.compareTo(rightLatestUpload)
+                }
+                NovelLibrarySort.Type.ChapterFetchDate -> {
+                    val leftChapterFetchedAt =
+                        (left as? NovelLibraryItem.Single)?.libraryNovel?.chapterFetchedAt ?: 0L
+                    val rightChapterFetchedAt =
+                        (right as? NovelLibraryItem.Single)?.libraryNovel?.chapterFetchedAt ?: 0L
+                    leftChapterFetchedAt.compareTo(rightChapterFetchedAt)
+                }
+                NovelLibrarySort.Type.DateAdded -> left.dateAdded.compareTo(right.dateAdded)
+                NovelLibrarySort.Type.TrackerMean -> 0
+                NovelLibrarySort.Type.Random -> 0
+            }
+        }
+            .let { if (sort.isAscending) it else it.reversed() }
+            .thenComparator { left, right ->
+                left.title.lowercase().compareToWithCollator(right.title.lowercase())
+            }
 
-        return sorted
+        return items.sortPinnedFirst(
+            isPinned = isPinned,
+            comparator = comparator,
+            randomSeed = if (sort.type == NovelLibrarySort.Type.Random) randomSortSeed else null,
+        )
     }
 
     private suspend fun getCategories(): List<Category> {
@@ -966,6 +974,28 @@ class NovelLibraryScreenModel(
                 addNovelsToSeries.await(series.id, novelIds)
             }
             clearSelection()
+        }
+    }
+
+    fun togglePinned(item: NovelLibraryItem) {
+        setPinned(item, !item.pinned)
+    }
+
+    fun setPinned(item: NovelLibraryItem, pinned: Boolean) {
+        screenModelScope.launchIO {
+            when (item) {
+                is NovelLibraryItem.Single -> updateNovel.await(
+                    NovelUpdate(
+                        id = item.libraryNovel.id,
+                        pinned = pinned,
+                    ),
+                )
+                is NovelLibraryItem.Series -> updateNovelSeries.await(
+                    item.librarySeries.series.copy(
+                        pinned = pinned,
+                    ),
+                )
+            }
         }
     }
 

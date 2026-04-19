@@ -2,9 +2,11 @@ package eu.kanade.presentation.library.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.aspectRatio
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -25,6 +28,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -42,11 +49,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.ItemCover
 import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.BadgeGroup
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 import tachiyomi.presentation.core.util.selectedBackground
 import tachiyomi.domain.entries.EntryCover as EntryCoverModel
 
@@ -86,6 +95,8 @@ fun EntryCompactGridItem(
     customCover: (@Composable BoxScope.() -> Unit)? = null,
     coverBadgeStart: @Composable (RowScope.() -> Unit)? = null,
     coverBadgeEnd: @Composable (RowScope.() -> Unit)? = null,
+    topEndBadge: @Composable (BoxScope.() -> Unit)? = null,
+    menuContent: (@Composable ColumnScope.(closeMenu: () -> Unit) -> Unit)? = null,
 ) {
     GridItemSelectable(
         isSelected = isSelected,
@@ -108,6 +119,8 @@ fun EntryCompactGridItem(
             },
             badgesStart = coverBadgeStart,
             badgesEnd = coverBadgeEnd,
+            topEndBadge = topEndBadge,
+            menuContent = menuContent,
             content = {
                 if (title != null) {
                     CoverTextOverlay(
@@ -198,6 +211,8 @@ fun EntryComfortableGridItem(
     customCover: (@Composable BoxScope.() -> Unit)? = null,
     coverBadgeStart: (@Composable RowScope.() -> Unit)? = null,
     coverBadgeEnd: (@Composable RowScope.() -> Unit)? = null,
+    topEndBadge: (@Composable BoxScope.() -> Unit)? = null,
+    menuContent: (@Composable ColumnScope.(closeMenu: () -> Unit) -> Unit)? = null,
     onClickContinueViewing: (() -> Unit)? = null,
 ) {
     GridItemSelectable(
@@ -222,6 +237,8 @@ fun EntryComfortableGridItem(
                 },
                 badgesStart = coverBadgeStart,
                 badgesEnd = coverBadgeEnd,
+                topEndBadge = topEndBadge,
+                menuContent = menuContent,
                 content = {
                     if (onClickContinueViewing != null) {
                         ContinueViewingButton(
@@ -255,8 +272,13 @@ private fun EntryGridCover(
     cover: @Composable BoxScope.() -> Unit = {},
     badgesStart: (@Composable RowScope.() -> Unit)? = null,
     badgesEnd: (@Composable RowScope.() -> Unit)? = null,
+    topEndBadge: (@Composable BoxScope.() -> Unit)? = null,
+    menuContent: (@Composable ColumnScope.(closeMenu: () -> Unit) -> Unit)? = null,
     content: @Composable (BoxScope.() -> Unit)? = null,
 ) {
+    val appHaptics = LocalAppHaptics.current
+    var showMenu by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -280,6 +302,47 @@ private fun EntryGridCover(
                     .align(Alignment.TopEnd),
                 content = badgesEnd,
             )
+        }
+
+        if (topEndBadge != null || menuContent != null) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                topEndBadge?.invoke(this@Box)
+
+                if (menuContent != null) {
+                    Box {
+                        FilledIconButton(
+                            onClick = {
+                                appHaptics.tap()
+                                showMenu = true
+                            },
+                            modifier = Modifier.size(28.dp),
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                            ),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.MoreVert,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+
+                        AuroraEntryDropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false },
+                        ) {
+                            menuContent { showMenu = false }
+                        }
+                    }
+                }
+            }
         }
     }
 }

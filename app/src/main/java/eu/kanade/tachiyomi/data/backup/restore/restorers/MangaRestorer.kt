@@ -94,6 +94,7 @@ class MangaRestorer(
         val rating = if (newer.rating >= 0f) newer.rating else rating
         return this.copy(
             favorite = this.favorite || newer.favorite,
+            pinned = this.pinned || newer.pinned,
             author = newer.author,
             artist = newer.artist,
             description = newer.description,
@@ -120,6 +121,7 @@ class MangaRestorer(
                 rating = manga.rating.toDouble(),
                 thumbnailUrl = manga.thumbnailUrl,
                 favorite = manga.favorite,
+                pinned = manga.pinned,
                 lastUpdate = manga.lastUpdate,
                 nextUpdate = null,
                 calculateInterval = null,
@@ -255,6 +257,7 @@ class MangaRestorer(
                 rating = manga.rating.toDouble(),
                 thumbnailUrl = manga.thumbnailUrl,
                 favorite = manga.favorite,
+                pinned = manga.pinned,
                 lastUpdate = manga.lastUpdate,
                 nextUpdate = 0L,
                 calculateInterval = 0L,

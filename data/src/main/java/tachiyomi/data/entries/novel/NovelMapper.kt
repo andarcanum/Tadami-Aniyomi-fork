@@ -30,10 +30,12 @@ object NovelMapper {
         version: Long,
         @Suppress("UNUSED_PARAMETER")
         isSyncing: Long,
+        pinned: Boolean,
     ): Novel = Novel(
         id = id,
         source = source,
         favorite = favorite,
+        pinned = pinned,
         lastUpdate = lastUpdate ?: 0,
         nextUpdate = nextUpdate ?: 0,
         fetchInterval = calculateInterval.toInt(),
@@ -79,6 +81,7 @@ object NovelMapper {
         favoriteModifiedAt: Long?,
         version: Long,
         isSyncing: Long,
+        pinned: Boolean,
         totalCount: Long,
         readCount: Double,
         latestUpload: Long,
@@ -111,6 +114,7 @@ object NovelMapper {
             favoriteModifiedAt,
             version,
             isSyncing,
+            pinned,
         ),
         category = category,
         totalChapters = totalCount,

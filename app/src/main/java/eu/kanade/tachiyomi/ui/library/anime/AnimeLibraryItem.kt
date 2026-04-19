@@ -14,6 +14,9 @@ data class AnimeLibraryItem(
     var sourceLanguage: String = "",
     private val sourceManager: AnimeSourceManager = Injekt.get(),
 ) {
+    val pinned: Boolean
+        get() = libraryAnime.pinned
+
     /**
      * Checks if a query matches the anime
      *
