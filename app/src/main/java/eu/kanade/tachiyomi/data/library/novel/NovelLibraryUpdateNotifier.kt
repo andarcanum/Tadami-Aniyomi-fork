@@ -1,8 +1,11 @@
 package eu.kanade.tachiyomi.data.library.novel
 
 import android.content.Context
+import android.net.Uri
 import androidx.core.app.NotificationCompat
 import com.tadami.aurora.R
+import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
+import eu.kanade.tachiyomi.data.library.LibraryUpdateFailureNotificationFormatter
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.util.lang.chop
@@ -116,17 +119,26 @@ class NovelLibraryUpdateNotifier(
         }
     }
 
-    fun showUpdateErrorNotification(failed: Int) {
-        if (failed == 0) return
+    fun showUpdateErrorNotification(errors: List<LibraryUpdateFailure>, uri: Uri) {
+        if (errors.isEmpty()) return
+
+        val notificationText = LibraryUpdateFailureNotificationFormatter.build(
+            context = context,
+            failures = errors,
+            hideContent = false,
+        )
 
         context.notify(
             Notifications.ID_NOVEL_LIBRARY_ERROR,
             Notifications.CHANNEL_LIBRARY_ERROR,
         ) {
-            setContentTitle(context.stringResource(MR.strings.notification_update_error, failed))
-            setContentText(context.stringResource(MR.strings.action_show_errors))
+            setContentTitle(context.stringResource(MR.strings.notification_update_error, errors.size))
+            setContentText(notificationText.contentText)
+            notificationText.bigText?.let {
+                setStyle(NotificationCompat.BigTextStyle().bigText(it))
+            }
             setSmallIcon(R.drawable.ic_ani)
-            setAutoCancel(true)
+            setContentIntent(NotificationReceiver.openErrorLogPendingActivity(context, uri))
         }
     }
 

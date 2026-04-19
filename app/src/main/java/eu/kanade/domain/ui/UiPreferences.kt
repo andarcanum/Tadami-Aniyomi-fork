@@ -43,6 +43,16 @@ class UiPreferences(
 
     fun showMangaScanlatorBranches() = preferenceStore.getBoolean("show_manga_scanlator_branches", true)
 
+    fun libraryUpdatePacingTimeoutSeconds() = preferenceStore.getInt(
+        "library_update_pacing_timeout_seconds",
+        0,
+    )
+
+    fun libraryUpdatePacingSourceKeys() = preferenceStore.getStringSet(
+        "library_update_pacing_source_keys",
+        emptySet(),
+    )
+
     fun entryAutoJumpToNextAnime() = preferenceStore.getBoolean("entry_auto_jump_to_next_anime", false)
 
     fun entryAutoJumpToNextManga() = preferenceStore.getBoolean("entry_auto_jump_to_next_manga", false)

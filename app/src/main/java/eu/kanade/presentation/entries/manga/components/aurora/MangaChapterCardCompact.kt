@@ -43,9 +43,9 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import coil3.request.crossfade
 import eu.kanade.presentation.components.buildAuroraCoverImageRequest
-import eu.kanade.presentation.entries.components.DotSeparatorText
 import eu.kanade.presentation.components.relativeDateTimeText
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
+import eu.kanade.presentation.entries.components.DotSeparatorText
 import eu.kanade.presentation.entries.components.aurora.AURORA_DIMMED_ITEM_ALPHA
 import eu.kanade.presentation.entries.components.aurora.AURORA_NEW_ITEM_HIGHLIGHT_ALPHA
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadAction

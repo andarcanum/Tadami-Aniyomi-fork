@@ -16,9 +16,13 @@ import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.entries.novel.model.toSNovel
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
+import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
+import eu.kanade.tachiyomi.data.library.LibraryUpdatePacingPolicy
 import eu.kanade.tachiyomi.data.library.shouldRetryLegacyAutoUpdateRun
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.source.model.SManga
+import eu.kanade.tachiyomi.util.storage.getUriCompat
+import eu.kanade.tachiyomi.util.system.createFileInCacheDir
 import eu.kanade.tachiyomi.util.system.isCharging
 import eu.kanade.tachiyomi.util.system.isConnectedToWifi
 import eu.kanade.tachiyomi.util.system.isRunning
@@ -51,6 +55,7 @@ import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.io.File
 import java.time.ZonedDateTime
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
@@ -68,6 +73,7 @@ class NovelLibraryUpdateJob(
     private val updateNovel: UpdateNovel = Injekt.get()
     private val syncNovelChaptersWithSource: SyncNovelChaptersWithSource = Injekt.get()
     private val novelDownloadManager: NovelDownloadManager = NovelDownloadManager()
+    private val pacingPolicy: LibraryUpdatePacingPolicy = Injekt.get()
 
     private val notifier = NovelLibraryUpdateNotifier(context)
 
@@ -214,18 +220,18 @@ class NovelLibraryUpdateJob(
         val failedCount = AtomicInteger(0)
         val currentlyUpdating = CopyOnWriteArrayList<Novel>()
         val newUpdates = CopyOnWriteArrayList<Pair<Novel, Int>>()
-        val failedUpdates = CopyOnWriteArrayList<Pair<Novel, String?>>()
+        val failedUpdates = CopyOnWriteArrayList<LibraryUpdateFailure>()
         coroutineScope {
             novelToUpdate.groupBy { it.novel.source }.values
                 .map { novelsInSource ->
                     async {
                         semaphore.withPermit {
-                            novelsInSource.forEach { libraryNovel ->
+                            novelsInSource.forEachIndexed { index, libraryNovel ->
                                 val novel = libraryNovel.novel
                                 ensureActive()
 
                                 if (getNovel.await(novel.id)?.favorite != true) {
-                                    return@forEach
+                                    return@forEachIndexed
                                 }
 
                                 withUpdateNotification(
@@ -259,10 +265,22 @@ class NovelLibraryUpdateJob(
                                                 context.stringResource(MR.strings.loader_not_implemented_error)
                                             else -> e.message
                                         }
-                                        failedUpdates.add(novel to errorMessage)
+                                        failedUpdates.add(
+                                            LibraryUpdateFailure(
+                                                title = novel.title,
+                                                sourceName = sourceManager.getOrStub(novel.source).toString(),
+                                                reason = errorMessage,
+                                            ),
+                                        )
                                         failedCount.incrementAndGet()
                                     }
                                 }
+
+                                pacingPolicy.delayAfterUpdate(
+                                    mediaTag = LibraryUpdatePacingPolicy.MEDIA_NOVEL,
+                                    sourceId = novel.source,
+                                    shouldDelay = index != novelsInSource.lastIndex,
+                                )
                             }
                         }
                     }
@@ -276,7 +294,8 @@ class NovelLibraryUpdateJob(
             notifier.showUpdateSummaryNotification(newUpdates)
         }
         if (failedUpdates.isNotEmpty()) {
-            notifier.showUpdateErrorNotification(failedUpdates.size)
+            val errorFile = writeErrorFile(failedUpdates)
+            notifier.showUpdateErrorNotification(failedUpdates, errorFile.getUriCompat(context))
         }
         if (isManualRun && newUpdates.isEmpty() && failedUpdates.isEmpty()) {
             notifier.showNoUpdatesNotification(checked = novelToUpdate.size)
@@ -327,6 +346,34 @@ class NovelLibraryUpdateJob(
             .toList()
     }
 
+    private fun writeErrorFile(errors: List<LibraryUpdateFailure>): File {
+        try {
+            if (errors.isNotEmpty()) {
+                val file = context.createFileInCacheDir("aniyomi_update_errors.txt")
+                file.bufferedWriter().use { out ->
+                    out.write(
+                        context.stringResource(MR.strings.library_errors_help, ERROR_LOG_HELP_URL) + "\n\n",
+                    )
+                    errors.groupBy { it.reason }.forEach { (error, failures) ->
+                        out.write(
+                            "\n! ${error.orEmpty().ifBlank {
+                                context.stringResource(MR.strings.unknown_error)
+                            }}\n",
+                        )
+                        failures.groupBy { it.sourceName }.forEach { (sourceName, failuresForSource) ->
+                            out.write("  # $sourceName\n")
+                            failuresForSource.forEach {
+                                out.write("    - ${it.title}\n")
+                            }
+                        }
+                    }
+                }
+                return file
+            }
+        } catch (_: Exception) {}
+        return File("")
+    }
+
     private suspend fun withUpdateNotification(
         updatingNovel: CopyOnWriteArrayList<Novel>,
         completed: AtomicInteger,
@@ -367,6 +414,7 @@ class NovelLibraryUpdateJob(
         private const val WORK_NAME_MANUAL = "NovelLibraryUpdate-manual"
         private const val KEY_CATEGORY = "category"
         private const val GRACE_PERIOD_DAYS = 1L
+        private const val ERROR_LOG_HELP_URL = "https://aniyomi.org/help/guides/troubleshooting"
 
         fun cancelAllWorks(context: Context) {
             context.workManager.cancelAllWorkByTag(TAG)

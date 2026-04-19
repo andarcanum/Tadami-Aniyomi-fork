@@ -120,6 +120,7 @@ class NovelSourceRepositoryImplTest {
             dateAdded = 0,
             updateStrategy = eu.kanade.tachiyomi.source.model.UpdateStrategy.ALWAYS_UPDATE,
             calculateInterval = 0,
+            pinned = false,
             version = 0,
         )
 

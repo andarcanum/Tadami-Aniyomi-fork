@@ -19,6 +19,8 @@ import eu.kanade.presentation.util.formatChapterNumber
 import eu.kanade.tachiyomi.core.common.Constants
 import eu.kanade.tachiyomi.core.security.SecurityPreferences
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloader
+import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
+import eu.kanade.tachiyomi.data.library.LibraryUpdateFailureNotificationFormatter
 import eu.kanade.tachiyomi.data.notification.NotificationHandler
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
@@ -162,17 +164,26 @@ class MangaLibraryUpdateNotifier(
      * @param failed Number of entries that failed to update.
      * @param uri Uri for error log file containing all titles that failed.
      */
-    fun showUpdateErrorNotification(failed: Int, uri: Uri) {
-        if (failed == 0) {
+    fun showUpdateErrorNotification(errors: List<LibraryUpdateFailure>, uri: Uri) {
+        if (errors.isEmpty()) {
             return
         }
+
+        val notificationText = LibraryUpdateFailureNotificationFormatter.build(
+            context = context,
+            failures = errors,
+            hideContent = securityPreferences.hideNotificationContent().get(),
+        )
 
         context.notify(
             Notifications.ID_LIBRARY_ERROR,
             Notifications.CHANNEL_LIBRARY_ERROR,
         ) {
-            setContentTitle(context.stringResource(MR.strings.notification_update_error, failed))
-            setContentText(context.stringResource(MR.strings.action_show_errors))
+            setContentTitle(context.stringResource(MR.strings.notification_update_error, errors.size))
+            setContentText(notificationText.contentText)
+            notificationText.bigText?.let {
+                setStyle(NotificationCompat.BigTextStyle().bigText(it))
+            }
             setSmallIcon(R.drawable.ic_ani)
 
             setContentIntent(NotificationReceiver.openErrorLogPendingActivity(context, uri))

@@ -89,4 +89,5 @@ private fun testAnime(thumbnailUrl: String?) = Anime(
     seasonFlags = 0L,
     seasonNumber = -1.0,
     seasonSourceOrder = 0L,
+    pinned = false,
 )
