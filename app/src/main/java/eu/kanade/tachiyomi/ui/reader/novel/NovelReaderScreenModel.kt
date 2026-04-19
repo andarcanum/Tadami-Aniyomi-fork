@@ -634,6 +634,19 @@ class NovelReaderScreenModel(
             setSeriesInterstitialState(resolved)
         }
     }
+
+    fun getChapterOrderList(): List<NovelChapter> {
+        return chapterOrderList
+    }
+
+    suspend fun downloadChapter(chapterId: Long) {
+        val novel = currentNovel ?: return
+        val chapter = chapterOrderList.firstOrNull { it.id == chapterId } ?: return
+        withContext(Dispatchers.IO) {
+            novelDownloadManager.downloadChapter(novel, chapter)
+        }
+    }
+
     private suspend fun loadChapterOrderList(novelId: Long): List<NovelChapter> {
         return withContext(Dispatchers.IO) {
             val chapters = novelChapterRepository.getChapterByNovelId(novelId, applyScanlatorFilter = true)
@@ -815,6 +828,7 @@ class NovelReaderScreenModel(
             contentBlocks = displayContentBlocks,
             richContentBlocks = displayRichBlocks,
             richContentUnsupportedFeaturesDetected = richContentResult.unsupportedFeaturesDetected,
+            chapterOrderList = chapterOrderList,
             lastSavedIndex = lastSavedIndex,
             lastSavedScrollOffsetPx = lastSavedScrollOffsetPx,
             lastSavedWebProgressPercent = lastSavedWebProgressPercent,
@@ -3762,6 +3776,7 @@ class NovelReaderScreenModel(
             val contentBlocks: List<ContentBlock>,
             val richContentBlocks: List<NovelRichContentBlock>,
             val richContentUnsupportedFeaturesDetected: Boolean,
+            val chapterOrderList: List<NovelChapter> = emptyList(),
             val lastSavedIndex: Int,
             val lastSavedScrollOffsetPx: Int,
             val lastSavedWebProgressPercent: Int,

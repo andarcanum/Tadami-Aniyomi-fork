@@ -434,6 +434,7 @@ class ReaderViewModel @JvmOverloads constructor(
                 chapterToDownload = cancelQueuedDownloads(newChapters.currChapter)
                 it.copy(
                     viewerChapters = newChapters,
+                    chapterList = chapterList,
                     bookmarked = newChapters.currChapter.chapter.bookmark,
                 )
             }
@@ -801,6 +802,30 @@ class ReaderViewModel @JvmOverloads constructor(
     }
 
     /**
+     * Called from the chapter list sheet to load and set the selected chapter as active.
+     */
+    suspend fun jumpToChapter(chapterId: Long) {
+        val targetChapter = chapterList.firstOrNull { it.chapter.id == chapterId } ?: return
+        if (targetChapter == getCurrentChapter()) return
+        loadAdjacent(targetChapter)
+    }
+
+    /**
+     * Downloads the selected chapter from the chapter list sheet.
+     */
+    suspend fun downloadChapter(chapterId: Long) {
+        val manga = manga ?: return
+        val chapter = chapterList.firstOrNull { it.chapter.id == chapterId } ?: return
+
+        withIOContext {
+            downloadManager.downloadChapters(
+                manga,
+                listOf(chapter.chapter.toDomainChapter()!!),
+            )
+        }
+    }
+
+    /**
      * Returns the currently active chapter.
      */
     private fun getCurrentChapter(): ReaderChapter? {
@@ -968,6 +993,10 @@ class ReaderViewModel @JvmOverloads constructor(
 
     fun openSettingsDialog() {
         mutableState.update { it.copy(dialog = Dialog.Settings) }
+    }
+
+    fun openChapterListDialog() {
+        mutableState.update { it.copy(dialog = Dialog.ChapterList) }
     }
 
     fun closeDialog() {
@@ -1230,6 +1259,7 @@ class ReaderViewModel @JvmOverloads constructor(
     data class State(
         val manga: Manga? = null,
         val viewerChapters: ViewerChapters? = null,
+        val chapterList: List<ReaderChapter> = emptyList(),
         val bookmarked: Boolean = false,
         val isLoadingAdjacentChapter: Boolean = false,
         val currentPage: Int = -1,
@@ -1258,6 +1288,7 @@ class ReaderViewModel @JvmOverloads constructor(
     sealed interface Dialog {
         data object Loading : Dialog
         data object Settings : Dialog
+        data object ChapterList : Dialog
         data object ReadingModeSelect : Dialog
         data object OrientationModeSelect : Dialog
         data class PageActions(val page: ReaderPage) : Dialog

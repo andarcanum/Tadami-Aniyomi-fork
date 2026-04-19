@@ -47,9 +47,12 @@ import dev.chrisbanes.insetter.applyInsetter
 import eu.kanade.core.util.ifMangaSourcesLoaded
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.presentation.components.relativeDateTimeText
 import eu.kanade.presentation.reader.DisplayRefreshHost
 import eu.kanade.presentation.reader.OrientationSelectDialog
 import eu.kanade.presentation.reader.PageIndicatorText
+import eu.kanade.presentation.reader.ReaderChapterListItem
+import eu.kanade.presentation.reader.ReaderChapterListSheet
 import eu.kanade.presentation.reader.ReaderContentOverlay
 import eu.kanade.presentation.reader.ReaderPageActionsDialog
 import eu.kanade.presentation.reader.ReadingModeSelectDialog
@@ -505,6 +508,7 @@ class ReaderActivity : BaseActivity() {
                         menuToggleToast?.cancel()
                         menuToggleToast = toast(if (enabled) MR.strings.on else MR.strings.off)
                     },
+                    onClickChapterList = viewModel::openChapterListDialog,
                     onClickSettings = viewModel::openSettingsDialog,
 
                     // Auto-scroll options
@@ -589,6 +593,35 @@ class ReaderActivity : BaseActivity() {
                             labelColorValue = pageActionLabelColor,
                             onButtonColorChange = pageActionButtonColorPref::set,
                             onLabelColorChange = pageActionLabelColorPref::set,
+                        )
+                    }
+                    is ReaderViewModel.Dialog.ChapterList -> {
+                        val currentChapterId = state.currentChapter?.chapter?.id
+                        val chapterListItems = state.chapterList.map { chapter ->
+                            ReaderChapterListItem(
+                                id = chapter.chapter.id!!,
+                                title = chapter.chapter.name,
+                                dateText = chapter.chapter.date_upload.takeIf { it > 0 }?.let {
+                                    relativeDateTimeText(it)
+                                },
+                                scanlator = chapter.chapter.scanlator?.takeIf { it.isNotBlank() },
+                                isCurrent = chapter.chapter.id == currentChapterId,
+                            )
+                        }
+                        ReaderChapterListSheet(
+                            items = chapterListItems,
+                            onDismissRequest = onDismissRequest,
+                            onChapterClick = { chapterId ->
+                                onDismissRequest()
+                                lifecycleScope.launch {
+                                    viewModel.jumpToChapter(chapterId)
+                                }
+                            },
+                            onDownloadClick = { chapterId ->
+                                lifecycleScope.launch {
+                                    viewModel.downloadChapter(chapterId)
+                                }
+                            },
                         )
                     }
                     null -> {}

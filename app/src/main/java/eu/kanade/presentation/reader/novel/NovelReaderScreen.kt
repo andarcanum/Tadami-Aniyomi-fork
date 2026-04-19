@@ -65,6 +65,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ChevronLeft
@@ -147,6 +148,9 @@ import coil3.compose.AsyncImage
 import com.tadami.aurora.R
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.TabbedDialog
+import eu.kanade.presentation.components.relativeDateTimeText
+import eu.kanade.presentation.reader.ReaderChapterListItem
+import eu.kanade.presentation.reader.ReaderChapterListSheet
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelPluginImageResolver
@@ -192,6 +196,7 @@ import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.ByteArrayInputStream
@@ -324,6 +329,8 @@ fun NovelReaderScreen(
     onDisableTts: () -> Unit = {},
     onOpenPreviousChapter: ((Long) -> Unit)? = null,
     onOpenNextChapter: ((Long) -> Unit)? = null,
+    onOpenChapter: ((Long) -> Unit)? = null,
+    onDownloadChapter: ((Long) -> Unit)? = null,
     showReaderUi: Boolean,
     onSetShowReaderUi: (Boolean) -> Unit,
     onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit = {},
@@ -332,10 +339,12 @@ fun NovelReaderScreen(
     onDismissSelectedTextTranslation: () -> Unit = {},
 ) {
     var showSettings by remember { mutableStateOf(false) }
+    var showChapterList by remember { mutableStateOf(false) }
     var showTtsBehaviorSettings by remember { mutableStateOf(false) }
     var selectedTextSelectionSessionId by remember(state.chapter.id) {
         mutableIntStateOf(0)
     }
+    val appHaptics = LocalAppHaptics.current
     val ttsPlacement = remember(state.readerSettings.ttsEnabled) {
         resolveNovelReaderTtsSettingsPlacementSnapshot(state.readerSettings.ttsEnabled)
     }
@@ -3371,6 +3380,17 @@ fun NovelReaderScreen(
                     }
                     IconButton(
                         onClick = {
+                            appHaptics.tap()
+                            showChapterList = true
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.ViewList,
+                            contentDescription = stringResource(MR.strings.chapters),
+                        )
+                    }
+                    IconButton(
+                        onClick = {
                             val chapterUrl =
                                 state.chapterWebUrl
                                     ?: state.chapter.url.takeIf { it.startsWith("http", ignoreCase = true) }
@@ -3471,6 +3491,35 @@ fun NovelReaderScreen(
                 currentWebViewActive = showWebView,
                 currentPageReaderActive = usePageReader,
                 onDismissRequest = { showSettings = false },
+            )
+        }
+        if (showChapterList) {
+            val currentChapterId = state.chapter.id
+            val chapterListItems = state.chapterOrderList.map { chapter ->
+                ReaderChapterListItem(
+                    id = chapter.id,
+                    title = chapter.name,
+                    dateText = chapter.dateUpload.takeIf { it > 0 }?.let {
+                        relativeDateTimeText(it)
+                    },
+                    scanlator = chapter.scanlator?.takeIf { it.isNotBlank() },
+                    isCurrent = chapter.id == currentChapterId,
+                )
+            }
+            ReaderChapterListSheet(
+                items = chapterListItems,
+                onDismissRequest = { showChapterList = false },
+                onChapterClick = { chapterId ->
+                    if (chapterId == state.chapter.id) {
+                        showChapterList = false
+                    } else {
+                        showChapterList = false
+                        onOpenChapter?.invoke(chapterId)
+                    }
+                },
+                onDownloadClick = { chapterId ->
+                    onDownloadChapter?.invoke(chapterId)
+                },
             )
         }
         if (showTtsBehaviorSettings && ttsPlacement.showFooterEntry) {

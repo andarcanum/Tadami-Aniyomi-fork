@@ -99,6 +99,7 @@ fun ReaderAppBars(
     onClickOrientation: () -> Unit,
     cropEnabled: Boolean,
     onClickCropBorder: () -> Unit,
+    onClickChapterList: () -> Unit,
     onClickSettings: () -> Unit,
 
     // Navigator customization options
@@ -362,6 +363,7 @@ fun ReaderAppBars(
                     onClickOrientation = onClickOrientation,
                     cropEnabled = cropEnabled,
                     onClickCropBorder = onClickCropBorder,
+                    onClickChapterList = onClickChapterList,
                     onClickSettings = onClickSettings,
                 )
             }

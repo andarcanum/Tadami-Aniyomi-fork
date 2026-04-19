@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,6 +33,7 @@ fun BottomReaderBar(
     onClickOrientation: () -> Unit,
     cropEnabled: Boolean,
     onClickCropBorder: () -> Unit,
+    onClickChapterList: () -> Unit,
     onClickSettings: () -> Unit,
 ) {
     val appHaptics = LocalAppHaptics.current
@@ -74,6 +76,16 @@ fun BottomReaderBar(
             Icon(
                 painter = painterResource(if (cropEnabled) R.drawable.ic_crop_24dp else R.drawable.ic_crop_off_24dp),
                 contentDescription = stringResource(MR.strings.pref_crop_borders),
+            )
+        }
+
+        IconButton(onClick = {
+            appHaptics.tap()
+            onClickChapterList()
+        }) {
+            Icon(
+                imageVector = Icons.Filled.ViewList,
+                contentDescription = stringResource(MR.strings.chapters),
             )
         }
 

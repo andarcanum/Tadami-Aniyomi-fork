@@ -313,6 +313,27 @@ class NovelReaderScreen(
                             )
                         }
                     },
+                    onOpenChapter = { chapterId ->
+                        coroutineScope.launch {
+                            screenModel.awaitPendingProgressPersistence()
+                            NovelReaderSystemUiSession.markInternalChapterReplace()
+                            NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
+                                NovelReaderPageReaderHandoffTarget.START,
+                            )
+                            navigator.replace(
+                                NovelReaderScreen(
+                                    chapterId,
+                                    sourceId = successState.novel.source,
+                                    seriesId = seriesId,
+                                ),
+                            )
+                        }
+                    },
+                    onDownloadChapter = { chapterId ->
+                        coroutineScope.launch {
+                            screenModel.downloadChapter(chapterId)
+                        }
+                    },
                 )
                 successState.seriesInterstitialState?.let { seriesInterstitialState ->
                     val continueAction: (() -> Unit)? = seriesInterstitialState.nextNovel?.let { nextNovel ->
