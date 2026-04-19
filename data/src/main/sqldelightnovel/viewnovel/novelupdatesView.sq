@@ -23,13 +23,13 @@ ORDER BY date_fetch DESC;
 getRecentUpdates:
 SELECT *
 FROM novelupdatesView
-WHERE dateUpload > :after
+WHERE datefetch > :after
 LIMIT :limit;
 
 getUpdatesByReadStatus:
 SELECT *
 FROM novelupdatesView
 WHERE read = :read
-AND dateUpload > :after
+AND datefetch > :after
 
 LIMIT :limit;
