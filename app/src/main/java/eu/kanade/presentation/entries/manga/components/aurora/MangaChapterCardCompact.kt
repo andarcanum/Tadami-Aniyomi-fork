@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import coil3.request.crossfade
 import eu.kanade.presentation.components.buildAuroraCoverImageRequest
+import eu.kanade.presentation.entries.components.DotSeparatorText
 import eu.kanade.presentation.components.relativeDateTimeText
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.entries.components.aurora.AURORA_DIMMED_ITEM_ALPHA
@@ -86,6 +87,7 @@ fun MangaChapterCardCompact(
     } else {
         null
     }
+    val scanlator = chapter.scanlator?.trim()?.takeIf(String::isNotEmpty)
     val startSwipeAction = auroraMangaSwipeAction(
         action = chapterSwipeStartAction,
         read = chapter.read,
@@ -182,6 +184,17 @@ fun MangaChapterCardCompact(
                             fontSize = 12.sp,
                             color = colors.textSecondary,
                         )
+
+                        if (scanlator != null) {
+                            DotSeparatorText()
+                            Text(
+                                text = scanlator,
+                                fontSize = 12.sp,
+                                color = colors.textSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
 
                     if (chapter.bookmark) {
