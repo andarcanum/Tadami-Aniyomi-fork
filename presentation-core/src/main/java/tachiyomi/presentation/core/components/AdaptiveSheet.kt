@@ -161,6 +161,8 @@ private fun PhoneAdaptiveSheet(
     var scrimTargetAlpha by remember { mutableFloatStateOf(0f) }
     var sheetShown by remember { mutableStateOf(false) }
     var dismissRequested by remember { mutableStateOf(false) }
+    var dismissRequestedByDrag by remember { mutableStateOf(false) }
+    var isDragging by remember { mutableStateOf(false) }
     val scrimAlpha by animateFloatAsState(
         targetValue = scrimTargetAlpha,
         animationSpec = SHEET_ANIMATION_SPEC,
@@ -177,6 +179,7 @@ private fun PhoneAdaptiveSheet(
     val internalOnDismissRequest: () -> Unit = {
         if (!dismissRequested) {
             dismissRequested = true
+            dismissRequestedByDrag = false
         }
     }
 
@@ -228,7 +231,11 @@ private fun PhoneAdaptiveSheet(
                         sheetModifier
                             .nestedScroll(
                                 remember(anchoredDraggableState, flingBehavior) {
-                                    anchoredDraggableState.preUpPostDownNestedScrollConnection(flingBehavior)
+                                    anchoredDraggableState.preUpPostDownNestedScrollConnection(
+                                        flingBehavior = flingBehavior,
+                                        onDragStart = { isDragging = true },
+                                        onDragEnd = { isDragging = false },
+                                    )
                                 },
                             )
                             .anchoredDraggable(
@@ -256,7 +263,14 @@ private fun PhoneAdaptiveSheet(
         LaunchedEffect(dismissRequested) {
             if (dismissRequested) {
                 scrimTargetAlpha = 0f
-                anchoredDraggableState.animateTo(1)
+                if (!dismissRequestedByDrag) {
+                    anchoredDraggableState.animateTo(1)
+                } else {
+                    val remainingOffset = anchoredDraggableState.anchors.maxPosition() - anchoredDraggableState.offset
+                    if (remainingOffset != 0f) {
+                        anchoredDraggableState.dispatchRawDelta(remainingOffset)
+                    }
+                }
                 onDismissRequest()
             } else {
                 scrimTargetAlpha = PHONE_SCRIM_ALPHA
@@ -265,8 +279,14 @@ private fun PhoneAdaptiveSheet(
             }
         }
 
-        LaunchedEffect(sheetShown, dismissRequested, anchoredDraggableState.currentValue) {
-            if (sheetShown && !dismissRequested && anchoredDraggableState.currentValue == 1) {
+        LaunchedEffect(sheetShown, dismissRequested, isDragging, anchoredDraggableState.offset) {
+            if (
+                sheetShown &&
+                !dismissRequested &&
+                !isDragging &&
+                anchoredDraggableState.offset >= anchoredDraggableState.anchors.maxPosition()
+            ) {
+                dismissRequestedByDrag = true
                 dismissRequested = true
             }
         }
@@ -275,6 +295,8 @@ private fun PhoneAdaptiveSheet(
 
 private fun AnchoredDraggableState<Int>.preUpPostDownNestedScrollConnection(
     flingBehavior: TargetedFlingBehavior,
+    onDragStart: () -> Unit,
+    onDragEnd: () -> Unit,
 ) =
     object : NestedScrollConnection {
         private val scrollScope = object : ScrollScope {
@@ -284,6 +306,7 @@ private fun AnchoredDraggableState<Int>.preUpPostDownNestedScrollConnection(
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
             val delta = available.toFloat()
             return if (delta < 0 && source == NestedScrollSource.UserInput) {
+                onDragStart()
                 dispatchRawDelta(delta).toOffset()
             } else {
                 Offset.Zero
@@ -296,6 +319,7 @@ private fun AnchoredDraggableState<Int>.preUpPostDownNestedScrollConnection(
             source: NestedScrollSource,
         ): Offset {
             return if (source == NestedScrollSource.UserInput) {
+                onDragStart()
                 dispatchRawDelta(available.toFloat()).toOffset()
             } else {
                 Offset.Zero
@@ -305,6 +329,7 @@ private fun AnchoredDraggableState<Int>.preUpPostDownNestedScrollConnection(
         override suspend fun onPreFling(available: Velocity): Velocity {
             val toFling = available.toFloat()
             return if (toFling < 0 && offset > anchors.minPosition()) {
+                onDragStart()
                 with(flingBehavior) {
                     scrollScope.performFling(toFling)
                 }
@@ -317,11 +342,14 @@ private fun AnchoredDraggableState<Int>.preUpPostDownNestedScrollConnection(
         override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
             val toFling = available.toFloat()
             return if (toFling > 0) {
+                onDragStart()
                 with(flingBehavior) {
                     scrollScope.performFling(toFling)
                 }
+                onDragEnd()
                 available
             } else {
+                onDragEnd()
                 Velocity.Zero
             }
         }
