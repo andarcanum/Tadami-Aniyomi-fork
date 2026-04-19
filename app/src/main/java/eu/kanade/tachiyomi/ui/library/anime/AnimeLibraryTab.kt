@@ -1669,17 +1669,17 @@ private fun AuroraLibraryCategoryTabs(
             ) { index, category ->
                 val isSelected = index == coercedSelected
                 val badgeCount = getCountForCategory(category)
+                val tabBackground = when {
+                    isSelected && colors.isDark -> Color.White.copy(alpha = 0.16f)
+                    isSelected -> colors.accentVariant
+                    colors.isDark -> Color.Transparent
+                    else -> colors.cardBackground
+                }
 
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(18.dp))
-                        .background(
-                            if (isSelected) {
-                                Color.White.copy(alpha = 0.16f)
-                            } else {
-                                Color.Transparent
-                            },
-                        )
+                        .background(tabBackground)
                         .clickable {
                             appHaptics.tap()
                             onCategorySelected(index)
