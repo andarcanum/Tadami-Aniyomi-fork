@@ -60,6 +60,36 @@ class AdaptiveSheetTest {
     }
 
     @Test
+    fun swipe_enabled_sheet_dismisses_on_drag_down() {
+        val dismissCount = AtomicInteger(0)
+        composeTestRule.mainClock.autoAdvance = false
+
+        composeTestRule.setContent {
+            AdaptiveSheet(
+                onDismissRequest = { dismissCount.incrementAndGet() },
+                enableSwipeDismiss = true,
+            ) {
+                Text("Swipe enabled content", Modifier.testTag("swipe_enabled_content"))
+            }
+        }
+
+        composeTestRule.mainClock.advanceTimeBy(500)
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(ADAPTIVE_SHEET_SURFACE_TEST_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Swipe enabled content").assertIsDisplayed()
+
+        composeTestRule.onNodeWithTag(ADAPTIVE_SHEET_SURFACE_TEST_TAG).performTouchInput {
+            swipeDown()
+        }
+
+        composeTestRule.mainClock.advanceTimeBy(500)
+        composeTestRule.waitForIdle()
+
+        assertEquals(1, dismissCount.get())
+    }
+
+    @Test
     fun swipe_disabled_sheet_does_not_drag_dismiss() {
         val dismissCount = AtomicInteger(0)
         composeTestRule.mainClock.autoAdvance = false

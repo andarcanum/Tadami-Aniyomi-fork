@@ -159,6 +159,7 @@ private fun PhoneAdaptiveSheet(
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
     val maxHeight = screenHeight * 0.95f
     var scrimTargetAlpha by remember { mutableFloatStateOf(0f) }
+    var sheetShown by remember { mutableStateOf(false) }
     var dismissRequested by remember { mutableStateOf(false) }
     val scrimAlpha by animateFloatAsState(
         targetValue = scrimTargetAlpha,
@@ -260,6 +261,13 @@ private fun PhoneAdaptiveSheet(
             } else {
                 scrimTargetAlpha = PHONE_SCRIM_ALPHA
                 anchoredDraggableState.animateTo(0)
+                sheetShown = true
+            }
+        }
+
+        LaunchedEffect(sheetShown, dismissRequested, anchoredDraggableState.currentValue) {
+            if (sheetShown && !dismissRequested && anchoredDraggableState.currentValue == 1) {
+                dismissRequested = true
             }
         }
     }
