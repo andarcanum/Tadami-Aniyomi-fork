@@ -41,7 +41,7 @@ class UiPreferences(
 
     fun showNovelSection() = preferenceStore.getBoolean("aurora_show_novel_section", true)
 
-    fun showMangaScanlatorBranches() = preferenceStore.getBoolean("show_manga_scanlator_branches", false)
+    fun showMangaScanlatorBranches() = preferenceStore.getBoolean("show_manga_scanlator_branches", true)
 
     fun entryAutoJumpToNextAnime() = preferenceStore.getBoolean("entry_auto_jump_to_next_anime", false)
 
