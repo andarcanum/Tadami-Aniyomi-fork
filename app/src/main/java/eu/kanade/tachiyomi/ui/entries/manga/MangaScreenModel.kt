@@ -50,6 +50,7 @@ import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.ui.entries.mergeNewItemIds
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.chapter.getNextUnread
+import eu.kanade.tachiyomi.util.chapter.removeDuplicateChapters
 import eu.kanade.tachiyomi.util.removeCovers
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.ImmutableList
@@ -275,6 +276,7 @@ class MangaScreenModel(
                     source = Injekt.get<MangaSourceManager>().getOrStub(manga.source),
                     isFromSource = isFromSource,
                     chapters = chapters,
+                    useAuroraChapterDedupe = uiPreferences.appTheme().get().isAuroraStyle,
                     availableScanlators = availableScanlators,
                     scanlatorChapterCounts = scanlatorChapterCounts,
                     excludedScanlators = initialExcludedScanlators,
@@ -1389,9 +1391,15 @@ class MangaScreenModel(
             val metadataError: MetadataLoadError? = null,
             val scrollIndex: Int = 0,
             val scrollOffset: Int = 0,
+            val useAuroraChapterDedupe: Boolean = false,
         ) : State {
             val processedChapters by lazy {
-                chapters.applyFilters(manga).toList()
+                val filtered = chapters.applyFilters(manga).toList()
+                if (useAuroraChapterDedupe) {
+                    filtered.removeDuplicateChapters { it.chapter }
+                } else {
+                    filtered
+                }
             }
 
             val targetChapterIndex by lazy {

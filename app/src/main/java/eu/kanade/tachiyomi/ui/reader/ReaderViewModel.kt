@@ -15,6 +15,7 @@ import eu.kanade.domain.items.chapter.model.toDbChapter
 import eu.kanade.domain.source.manga.interactor.GetMangaIncognitoState
 import eu.kanade.domain.track.manga.interactor.TrackChapter
 import eu.kanade.domain.track.service.TrackPreferences
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.reader.manga.MangaSeriesInterstitialState
 import eu.kanade.presentation.reader.manga.resolveMangaSeriesInterstitialState
 import eu.kanade.tachiyomi.data.database.models.manga.isRecognizedNumber
@@ -100,6 +101,7 @@ class ReaderViewModel @JvmOverloads constructor(
     private val downloadProvider: MangaDownloadProvider = Injekt.get(),
     private val imageSaver: ImageSaver = Injekt.get(),
     val readerPreferences: ReaderPreferences = Injekt.get(),
+    private val uiPreferences: UiPreferences = Injekt.get(),
     private val basePreferences: BasePreferences = Injekt.get(),
     private val downloadPreferences: DownloadPreferences = Injekt.get(),
     private val trackPreferences: TrackPreferences = Injekt.get(),
@@ -161,6 +163,7 @@ class ReaderViewModel @JvmOverloads constructor(
     private var seriesInterstitialShownForChapterId: Long? = null
 
     private var chapterToDownload: MangaDownload? = null
+    private val isAuroraTheme by lazy { uiPreferences.appTheme().get().isAuroraStyle }
 
     /**
      * Chapter list for the active manga. It's retrieved lazily and should be accessed for the first
@@ -220,15 +223,15 @@ class ReaderViewModel @JvmOverloads constructor(
         chaptersForReader
             .sortedWith(getChapterSort(manga, sortDescending = false))
             .run {
-                if (readerPreferences.skipDupe().get()) {
-                    removeDuplicates(selectedChapter)
+                if (basePreferences.downloadedOnly().get()) {
+                    filterDownloadedChapters(manga)
                 } else {
                     this
                 }
             }
             .run {
-                if (basePreferences.downloadedOnly().get()) {
-                    filterDownloadedChapters(manga)
+                if (readerPreferences.skipDupe().get() || isAuroraTheme) {
+                    removeDuplicates(selectedChapter)
                 } else {
                     this
                 }
@@ -586,13 +589,15 @@ class ReaderViewModel @JvmOverloads constructor(
             )
             if (!isNextChapterDownloaded) return@launchIO
 
-            val chaptersToDownload = getNextChapters.await(manga.id, nextChapter.id!!).run {
-                if (readerPreferences.skipDupe().get()) {
-                    removeDuplicates(nextChapter.toDomainChapter()!!)
-                } else {
-                    this
+            val chaptersToDownload = getNextChapters.await(manga.id, nextChapter.id!!)
+                .run {
+                    if (readerPreferences.skipDupe().get() || isAuroraTheme) {
+                        removeDuplicates(nextChapter.toDomainChapter()!!)
+                    } else {
+                        this
+                    }
                 }
-            }.take(downloadAheadAmount)
+                .take(downloadAheadAmount)
             downloadManager.downloadChapters(
                 manga,
                 chaptersToDownload,
