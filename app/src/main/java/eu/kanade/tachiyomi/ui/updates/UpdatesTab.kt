@@ -87,6 +87,7 @@ import kotlinx.coroutines.launch
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
@@ -124,6 +125,11 @@ data object UpdatesTab : Tab {
         val showMangaSection by uiPreferences.showMangaSection().collectAsState()
         val showNovelSection by uiPreferences.showNovelSection().collectAsState()
         val fromMore = currentNavigationStyle() == NavStyle.MOVE_UPDATES_TO_MORE
+        val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
+
+        LaunchedEffect(Unit) {
+            clearUpdatesBadgeCounts(libraryPreferences)
+        }
 
         if (theme.isAuroraStyle) {
             val navigator = LocalNavigator.currentOrThrow
@@ -379,6 +385,12 @@ private const val TAB_MANGA = 1
 private const val TAB_NOVEL = 2
 
 internal fun shouldShowAuroraUpdatesSubtitle(tabId: Int): Boolean = false
+
+internal fun clearUpdatesBadgeCounts(libraryPreferences: LibraryPreferences) {
+    libraryPreferences.newAnimeUpdatesCount().set(0)
+    libraryPreferences.newMangaUpdatesCount().set(0)
+    libraryPreferences.newNovelUpdatesCount().set(0)
+}
 
 internal fun currentTabUpdatingMessage(
     tabId: Int,

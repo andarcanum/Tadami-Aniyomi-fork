@@ -494,7 +494,10 @@ object HomeScreen : Screen() {
                             combine(
                                 pref.newAnimeUpdatesCount().changes(),
                                 pref.newMangaUpdatesCount().changes(),
-                            ) { countAnime, countManga -> countAnime + countManga }
+                                pref.newNovelUpdatesCount().changes(),
+                            ) { countAnime, countManga, countNovel ->
+                                countAnime + countManga + countNovel
+                            }
                                 .collectLatest { value = if (pref.newShowUpdatesCount().get()) it else 0 }
                         }
                         if (count > 0) {

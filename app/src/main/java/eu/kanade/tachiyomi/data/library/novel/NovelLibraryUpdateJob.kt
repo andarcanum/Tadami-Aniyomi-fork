@@ -36,6 +36,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
+import tachiyomi.core.common.preference.getAndSet
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.download.service.DownloadPreferences
@@ -252,6 +253,8 @@ class NovelLibraryUpdateJob(
                                             if (chaptersToDownload.isNotEmpty()) {
                                                 novelDownloadManager.downloadChapters(novel, chaptersToDownload)
                                             }
+                                            libraryPreferences.newNovelUpdatesCount()
+                                                .getAndSet { it + newChapters.size }
                                             newUpdates.add(novel to newChapters.size)
                                             updatedCount.incrementAndGet()
                                         }
