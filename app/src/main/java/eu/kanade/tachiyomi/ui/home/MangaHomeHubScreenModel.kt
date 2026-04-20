@@ -6,6 +6,7 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UserProfilePreferences
+import eu.kanade.presentation.series.manga.resolveMangaResumeChapter
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -13,9 +14,9 @@ import kotlinx.coroutines.flow.update
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.category.manga.interactor.GetMangaCategories
 import tachiyomi.domain.entries.manga.interactor.GetLibraryManga
+import tachiyomi.domain.entries.manga.interactor.GetMangaWithChapters
 import tachiyomi.domain.entries.manga.model.MangaCover
 import tachiyomi.domain.history.manga.interactor.GetMangaHistory
-import tachiyomi.domain.history.manga.interactor.GetNextChapters
 import tachiyomi.domain.history.manga.model.MangaHistoryWithRelations
 import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.library.manga.LibraryManga
@@ -27,7 +28,7 @@ import java.io.File
 
 class MangaHomeHubScreenModel(
     private val getMangaHistory: GetMangaHistory = Injekt.get(),
-    private val getNextChapters: GetNextChapters = Injekt.get(),
+    private val getMangaWithChapters: GetMangaWithChapters = Injekt.get(),
     private val getLibraryManga: GetLibraryManga = Injekt.get(),
     private val getMangaCategories: GetMangaCategories = Injekt.get(),
     private val userProfilePreferences: UserProfilePreferences = Injekt.get(),
@@ -157,7 +158,7 @@ class MangaHomeHubScreenModel(
                     fastCache.markInitialized()
                 }
 
-                val previousHeroId = mutableState.value.hero?.mangaId
+                val previousHero = mutableState.value.hero
 
                 val mangaRecommendations = filteredManga.take(10)
 
@@ -173,7 +174,15 @@ class MangaHomeHubScreenModel(
                     )
                 }
 
-                if (hero != null && hero.mangaId != previousHeroId) {
+                if (
+                    hero != null &&
+                    shouldReloadMangaHomeHeroChapter(
+                        previousHeroMangaId = previousHero?.mangaId,
+                        previousHeroChapterId = previousHero?.chapterId,
+                        currentHeroMangaId = hero.mangaId,
+                        currentHeroChapterId = hero.chapterId,
+                    )
+                ) {
                     loadHeroChapter(hero.mangaId, hero.chapterId)
                 }
 
@@ -183,9 +192,8 @@ class MangaHomeHubScreenModel(
     }
 
     private suspend fun loadHeroChapter(mangaId: Long, chapterId: Long) {
-        val nextChapters = getNextChapters.await(mangaId, chapterId, onlyUnread = true)
-        val heroChapter = nextChapters.firstOrNull()
-            ?: getNextChapters.await(mangaId, chapterId, onlyUnread = false).firstOrNull()
+        val chapters = getMangaWithChapters.awaitChapters(mangaId, applyScanlatorFilter = true)
+        val heroChapter = resolveMangaResumeChapter(chapters, chapterId)
         mutableState.update { it.copy(heroChapter = heroChapter) }
     }
 
@@ -337,4 +345,14 @@ class MangaHomeHubScreenModel(
             instance = model
         }
     }
+}
+
+internal fun shouldReloadMangaHomeHeroChapter(
+    previousHeroMangaId: Long?,
+    previousHeroChapterId: Long?,
+    currentHeroMangaId: Long,
+    currentHeroChapterId: Long,
+): Boolean {
+    return previousHeroMangaId != currentHeroMangaId ||
+        previousHeroChapterId != currentHeroChapterId
 }

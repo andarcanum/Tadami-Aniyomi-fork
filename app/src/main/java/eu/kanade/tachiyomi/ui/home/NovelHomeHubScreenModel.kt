@@ -5,32 +5,29 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UserProfilePreferences
+import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.category.novel.interactor.GetNovelCategories
 import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
-import tachiyomi.domain.entries.novel.interactor.GetNovel
+import tachiyomi.domain.entries.novel.interactor.GetNovelWithChapters
 import tachiyomi.domain.entries.novel.model.NovelCover
 import tachiyomi.domain.history.novel.model.NovelHistoryWithRelations
 import tachiyomi.domain.history.novel.repository.NovelHistoryRepository
-import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
-import tachiyomi.domain.items.novelchapter.service.getNovelChapterSort
 import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.i18n.aniyomi.AYMR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
-import kotlin.math.max
 
 class NovelHomeHubScreenModel(
     private val historyRepository: NovelHistoryRepository = Injekt.get(),
     private val getLibraryNovel: GetLibraryNovel = Injekt.get(),
-    private val getNovel: GetNovel = Injekt.get(),
+    private val getNovelWithChapters: GetNovelWithChapters = Injekt.get(),
     private val getNovelCategories: GetNovelCategories = Injekt.get(),
-    private val chapterRepository: NovelChapterRepository = Injekt.get(),
     private val userProfilePreferences: UserProfilePreferences = Injekt.get(),
     private val sourcePreferences: SourcePreferences = Injekt.get(),
     private val sourceManager: NovelSourceManager = Injekt.get(),
@@ -200,9 +197,7 @@ class NovelHomeHubScreenModel(
     }
 
     private suspend fun loadHeroChapterId(novelId: Long, fromChapterId: Long) {
-        val novel = getNovel.await(novelId) ?: return
-        val chapters = chapterRepository.getChapterByNovelId(novelId, applyScanlatorFilter = true)
-            .sortedWith(getNovelChapterSort(novel, sortDescending = false))
+        val chapters = getNovelWithChapters.awaitChapters(novelId, applyScanlatorFilter = true)
         mutableState.update {
             it.copy(heroChapterId = resolveNovelHomeHeroChapterId(chapters, fromChapterId))
         }
@@ -365,22 +360,7 @@ internal fun resolveNovelHomeHeroChapterId(
     chapters: List<tachiyomi.domain.items.novelchapter.model.NovelChapter>,
     fromChapterId: Long,
 ): Long? {
-    if (chapters.isEmpty()) return null
-
-    val currentIndex = chapters.indexOfFirst { it.id == fromChapterId }
-    val candidates = chapters.subList(max(0, currentIndex), chapters.size)
-    candidates.firstOrNull { !it.read }?.let { return it.id }
-
-    if (currentIndex >= 0) {
-        return chapters[currentIndex].id
-    }
-
-    val lastReadIndex = chapters.indexOfLast { it.read || it.lastPageRead > 0L }
-    if (lastReadIndex >= 0) {
-        return chapters[lastReadIndex].id
-    }
-
-    return chapters.firstOrNull { !it.read }?.id ?: chapters.first().id
+    return resolveNovelResumeChapter(chapters, fromChapterId)?.id
 }
 
 internal fun shouldReloadNovelHomeHeroChapterId(
