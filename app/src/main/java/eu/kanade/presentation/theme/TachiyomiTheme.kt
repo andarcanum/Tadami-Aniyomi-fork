@@ -15,6 +15,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.AppTheme
+import eu.kanade.domain.ui.model.EInkProfile
+import eu.kanade.domain.ui.model.EInkThemeMode
 import eu.kanade.presentation.theme.colorscheme.AuroraColorScheme
 import eu.kanade.presentation.theme.colorscheme.BaseColorScheme
 import eu.kanade.presentation.theme.colorscheme.CloudflareColorScheme
@@ -49,11 +51,18 @@ fun TachiyomiTheme(
     val uiPreferences = Injekt.get<UiPreferences>()
     val appUiFontId = uiPreferences.appUiFontId().get()
     val coverTitleFontId = uiPreferences.coverTitleFontId().get()
-    val isEInkMode = uiPreferences.eInkMode().collectAsState().value
+    val eInkProfile = uiPreferences.eInkProfile().collectAsState().value
+    val eInkThemeMode = uiPreferences.eInkThemeMode().collectAsState().value
+    val isDark = resolveEInkThemeIsDark(
+        eInkProfile = eInkProfile,
+        eInkThemeMode = eInkThemeMode,
+        isSystemDarkTheme = isSystemInDarkTheme(),
+    )
     BaseTachiyomiTheme(
         appTheme = appTheme ?: uiPreferences.appTheme().get(),
         isAmoled = amoled ?: uiPreferences.themeDarkAmoled().get(),
-        isEInkMode = isEInkMode,
+        eInkProfile = eInkProfile,
+        isDark = isDark,
         appUiFontId = appUiFontId,
         coverTitleFontId = coverTitleFontId,
         content = content,
@@ -68,7 +77,8 @@ fun TachiyomiPreviewTheme(
 ) = BaseTachiyomiTheme(
     appTheme = appTheme,
     isAmoled = isAmoled,
-    isEInkMode = false,
+    eInkProfile = EInkProfile.OFF,
+    isDark = isSystemInDarkTheme(),
     appUiFontId = UiPreferences.DEFAULT_APP_UI_FONT_ID,
     coverTitleFontId = UiPreferences.DEFAULT_COVER_TITLE_FONT_ID,
     content = content,
@@ -78,16 +88,18 @@ fun TachiyomiPreviewTheme(
 private fun BaseTachiyomiTheme(
     appTheme: AppTheme,
     isAmoled: Boolean,
-    isEInkMode: Boolean,
+    eInkProfile: EInkProfile,
+    isDark: Boolean,
     appUiFontId: String,
     coverTitleFontId: String,
     content: @Composable () -> Unit,
 ) {
-    val isDark = if (isEInkMode) false else isSystemInDarkTheme()
+    val isEInkMode = eInkProfile.isEnabled
     val colorScheme = getThemeColorScheme(
         appTheme = appTheme,
         isAmoled = isAmoled,
-        isEInkMode = isEInkMode,
+        eInkProfile = eInkProfile,
+        isDark = isDark,
     )
     val appFontFamily = rememberAppFontFamily(appUiFontId)
     val coverTitleFontFamily = rememberAppFontFamily(coverTitleFontId)
@@ -99,7 +111,7 @@ private fun BaseTachiyomiTheme(
         colorScheme = colorScheme,
         isDark = isDark,
         isAmoled = isAmoled,
-        isEInk = isEInkMode,
+        eInkProfile = eInkProfile,
     )
 
     CompositionLocalProvider(
@@ -122,11 +134,12 @@ private fun BaseTachiyomiTheme(
 private fun getThemeColorScheme(
     appTheme: AppTheme,
     isAmoled: Boolean,
-    isEInkMode: Boolean,
+    eInkProfile: EInkProfile,
+    isDark: Boolean,
 ): ColorScheme {
-    if (isEInkMode) {
+    if (eInkProfile == EInkProfile.MONOCHROME) {
         return MonochromeColorScheme.getColorScheme(
-            isDark = false,
+            isDark = isDark,
             isAmoled = false,
         )
     }
@@ -136,9 +149,22 @@ private fun getThemeColorScheme(
         colorSchemes.getOrDefault(appTheme, TachiyomiColorScheme)
     }
     return colorScheme.getColorScheme(
-        isSystemInDarkTheme(),
+        isDark,
         isAmoled,
     )
+}
+
+internal fun resolveEInkThemeIsDark(
+    eInkProfile: EInkProfile,
+    eInkThemeMode: EInkThemeMode,
+    isSystemDarkTheme: Boolean,
+): Boolean {
+    return when {
+        !eInkProfile.isEnabled -> isSystemDarkTheme
+        eInkThemeMode == EInkThemeMode.LIGHT -> false
+        eInkThemeMode == EInkThemeMode.DARK -> true
+        else -> isSystemDarkTheme
+    }
 }
 
 private const val RIPPLE_DRAGGED_ALPHA = .1f

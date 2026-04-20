@@ -1,7 +1,9 @@
 package eu.kanade.presentation.more.settings
 
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import eu.kanade.domain.ui.model.EInkProfile
 import eu.kanade.presentation.theme.AuroraColors
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
@@ -37,6 +39,23 @@ class SettingsUiStyleTokensTest {
     @Test
     fun `aurora card border stays monochrome in e ink mode`() {
         resolveAuroraCardBorderColor(AuroraColors.EInk) shouldBe Color(0xFFBDBDBD)
+    }
+
+    @Test
+    fun `aurora card border stays visible in dark e ink mode`() {
+        resolveAuroraCardBorderColor(AuroraColors.EInkDark) shouldBe Color(0xFF404040)
+    }
+
+    @Test
+    fun `aurora card border follows the active color e ink divider`() {
+        val colorScheme = lightColorScheme()
+        val colors = AuroraColors.fromColorScheme(
+            colorScheme = colorScheme,
+            isDark = false,
+            eInkProfile = EInkProfile.COLOR,
+        )
+
+        resolveAuroraCardBorderColor(colors) shouldBe colorScheme.outlineVariant
     }
 
     @Test

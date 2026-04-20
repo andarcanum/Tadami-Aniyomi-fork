@@ -107,6 +107,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPrivateBridge
@@ -173,8 +174,10 @@ object SettingsNovelReaderScreen : SearchableSettings {
     @Composable
     override fun getPreferences(): List<Preference> {
         val prefs = remember { Injekt.get<NovelReaderPreferences>() }
+        val eInkPrefs = remember { Injekt.get<ReaderPreferences>() }
         return listOf(
             getDisplayGroup(prefs),
+            getEInkRefreshGroup(eInkPrefs),
             getThemeGroup(prefs),
             getNavigationGroup(prefs),
             getAccessibilityGroup(prefs),

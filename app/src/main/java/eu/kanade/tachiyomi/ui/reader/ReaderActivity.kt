@@ -157,7 +157,7 @@ class ReaderActivity : BaseActivity() {
     var isScrollingThroughPages = false
         private set
 
-    private fun isEInkMode(): Boolean = uiPreferences.eInkMode().get()
+    private fun isEInkMode(): Boolean = uiPreferences.eInkProfile().get().isEnabled
 
     /**
      * Called when the activity is created. Initializes the presenter and configuration.
@@ -256,7 +256,9 @@ class ReaderActivity : BaseActivity() {
                         viewModel.state.value.viewerChapters?.let(::setChapters)
                     }
                     ReaderViewModel.Event.PageChanged -> {
-                        displayRefreshHost.flash()
+                        if (readerPreferences.flashOnPageChange().get() && isEInkMode()) {
+                            displayRefreshHost.flash()
+                        }
                     }
                     is ReaderViewModel.Event.SetOrientation -> {
                         setOrientation(event.orientation)
@@ -381,8 +383,12 @@ class ReaderActivity : BaseActivity() {
     private fun initializeMenu() {
         binding.pageNumber.setComposeContent {
             val hapticFeedbackMode by uiPreferences.hapticFeedbackMode().collectAsState()
+            val eInkProfile by uiPreferences.eInkProfile().collectAsState()
 
-            AppHapticsProvider(hapticFeedbackMode = hapticFeedbackMode) {
+            AppHapticsProvider(
+                hapticFeedbackMode = hapticFeedbackMode,
+                isEInkMode = eInkProfile.isEnabled,
+            ) {
                 val state by viewModel.state.collectAsState()
                 val showPageNumber by viewModel.readerPreferences.showPageNumber().collectAsState()
 
@@ -397,8 +403,12 @@ class ReaderActivity : BaseActivity() {
 
         binding.dialogRoot.setComposeContent {
             val hapticFeedbackMode by uiPreferences.hapticFeedbackMode().collectAsState()
+            val eInkProfile by uiPreferences.eInkProfile().collectAsState()
 
-            AppHapticsProvider(hapticFeedbackMode = hapticFeedbackMode) {
+            AppHapticsProvider(
+                hapticFeedbackMode = hapticFeedbackMode,
+                isEInkMode = eInkProfile.isEnabled,
+            ) {
                 val state by viewModel.state.collectAsState()
                 val settingsScreenModel = remember {
                     ReaderSettingsScreenModel(
@@ -530,7 +540,7 @@ class ReaderActivity : BaseActivity() {
                     navigatorShowTickMarks = navigatorShowTickMarks,
                 )
 
-                if (flashOnPageChange) {
+                if (flashOnPageChange && eInkProfile.isEnabled) {
                     DisplayRefreshHost(
                         hostState = displayRefreshHost,
                     )
@@ -1008,6 +1018,15 @@ class ReaderActivity : BaseActivity() {
                 .onEach { setDisplayProfile(it) }
                 .launchIn(lifecycleScope)
 
+            uiPreferences.eInkProfile().changes()
+                .onEach {
+                    setLayerPaint(
+                        readerPreferences.grayscale().get() && it.isEnabled,
+                        readerPreferences.invertedColors().get() && it.isEnabled,
+                    )
+                }
+                .launchIn(lifecycleScope)
+
             readerPreferences.cutoutShort().changes()
                 .onEach(::setCutoutShort)
                 .launchIn(lifecycleScope)
@@ -1021,7 +1040,12 @@ class ReaderActivity : BaseActivity() {
                 .launchIn(lifecycleScope)
 
             merge(readerPreferences.grayscale().changes(), readerPreferences.invertedColors().changes())
-                .onEach { setLayerPaint(readerPreferences.grayscale().get(), readerPreferences.invertedColors().get()) }
+                .onEach {
+                    setLayerPaint(
+                        readerPreferences.grayscale().get() && isEInkMode(),
+                        readerPreferences.invertedColors().get() && isEInkMode(),
+                    )
+                }
                 .launchIn(lifecycleScope)
 
             readerPreferences.fullscreen().changes()

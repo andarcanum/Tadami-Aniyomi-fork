@@ -32,6 +32,19 @@ class AppHapticsTest {
         recordingHaptics.calls shouldBe emptyList()
     }
 
+    @Test
+    fun `tap is a no-op in e ink mode`() {
+        val recordingHaptics = RecordingHapticFeedback()
+
+        createAppHaptics(
+            hapticFeedback = recordingHaptics,
+            hapticFeedbackMode = HapticFeedbackMode.FULL,
+            isEInkMode = true,
+        ).tap()
+
+        recordingHaptics.calls shouldBe emptyList()
+    }
+
     private class RecordingHapticFeedback : HapticFeedback {
         val calls = mutableListOf<HapticFeedbackType>()
 

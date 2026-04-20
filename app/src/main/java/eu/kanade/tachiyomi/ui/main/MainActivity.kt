@@ -214,9 +214,13 @@ class MainActivity : BaseActivity() {
             val uiPreferences = remember { Injekt.get<UiPreferences>() }
             val theme by uiPreferences.appTheme().collectAsState()
             val hapticFeedbackMode by uiPreferences.hapticFeedbackMode().collectAsState()
+            val eInkProfile by uiPreferences.eInkProfile().collectAsState()
             val isAurora = theme.isAuroraStyle
 
-            AppHapticsProvider(hapticFeedbackMode = hapticFeedbackMode) {
+            AppHapticsProvider(
+                hapticFeedbackMode = hapticFeedbackMode,
+                isEInkMode = eInkProfile.isEnabled,
+            ) {
                 Navigator(
                     screen = HomeScreen,
                     disposeBehavior = NavigatorDisposeBehavior(

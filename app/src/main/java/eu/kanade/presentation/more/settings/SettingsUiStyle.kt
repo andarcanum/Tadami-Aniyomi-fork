@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.model.EInkProfile
 import eu.kanade.presentation.more.resolveAuroraMoreCardContainerColor
 import eu.kanade.presentation.theme.AuroraColors
 import eu.kanade.presentation.theme.AuroraTheme
@@ -69,12 +70,18 @@ internal fun resolveAuroraSelectionBorderColor(accent: Color): Color {
 internal fun resolveAuroraCardBorderColor(
     colors: AuroraColors,
 ): Color {
-    return if (colors.isEInk) {
-        Color(0xFFBDBDBD)
-    } else if (colors.isDark) {
-        Color.Transparent
-    } else {
-        Color(0xFFD7E3F1)
+    return when (colors.eInkProfile) {
+        EInkProfile.MONOCHROME -> if (colors.isDark) {
+            Color(0xFF404040)
+        } else {
+            Color(0xFFBDBDBD)
+        }
+        EInkProfile.COLOR -> colors.divider
+        EInkProfile.OFF -> if (colors.isDark) {
+            Color.Transparent
+        } else {
+            Color(0xFFD7E3F1)
+        }
     }
 }
 

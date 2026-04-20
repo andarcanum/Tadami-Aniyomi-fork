@@ -28,9 +28,10 @@ private object NoOpAppHaptics : AppHaptics {
 private class AppHapticsImpl(
     private val hapticFeedback: HapticFeedback,
     private val hapticFeedbackMode: HapticFeedbackMode,
+    private val isEInkMode: Boolean,
 ) : AppHaptics {
     override fun tap() {
-        if (hapticFeedbackMode == HapticFeedbackMode.FULL) {
+        if (!isEInkMode && hapticFeedbackMode == HapticFeedbackMode.FULL) {
             hapticFeedback.performHapticFeedback(HapticFeedbackType.VirtualKey)
         }
     }
@@ -41,13 +42,15 @@ val LocalAppHaptics = staticCompositionLocalOf<AppHaptics> { NoOpAppHaptics }
 @Composable
 fun AppHapticsProvider(
     hapticFeedbackMode: HapticFeedbackMode,
+    isEInkMode: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val hapticFeedback = LocalHapticFeedback.current
-    val appHaptics = remember(hapticFeedback, hapticFeedbackMode) {
+    val appHaptics = remember(hapticFeedback, hapticFeedbackMode, isEInkMode) {
         createAppHaptics(
             hapticFeedback = hapticFeedback,
             hapticFeedbackMode = hapticFeedbackMode,
+            isEInkMode = isEInkMode,
         )
     }
 
@@ -59,7 +62,9 @@ fun AppHapticsProvider(
 fun createAppHaptics(
     hapticFeedback: HapticFeedback,
     hapticFeedbackMode: HapticFeedbackMode,
+    isEInkMode: Boolean = false,
 ): AppHaptics = AppHapticsImpl(
     hapticFeedback = hapticFeedback,
     hapticFeedbackMode = hapticFeedbackMode,
+    isEInkMode = isEInkMode,
 )

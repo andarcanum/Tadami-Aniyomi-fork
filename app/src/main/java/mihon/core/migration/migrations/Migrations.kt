@@ -54,4 +54,5 @@ val migrations: List<Migration>
         NavigationTransitionModeMigration(),
         DefaultChapterEpisodeSortNumberMigration(),
         DefaultChapterSortAscendingMigration(),
+        EInkProfileMigration(),
     )

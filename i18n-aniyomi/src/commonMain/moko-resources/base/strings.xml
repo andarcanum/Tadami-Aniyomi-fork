@@ -1626,8 +1626,14 @@
     <string name="pref_show_achievement_notifications_summary">Show popup when unlocking achievements</string>
     <string name="pref_animated_aurora_background">Animated Aurora background</string>
     <string name="pref_animated_aurora_background_summary">Show soft animated color glows on Aurora screens</string>
-    <string name="pref_e_ink_mode">E-ink mode</string>
-    <string name="pref_e_ink_mode_summary">Use a high-contrast monochrome profile for e-ink displays</string>
+    <string name="pref_e_ink_profile">E-ink profile</string>
+    <string name="pref_e_ink_profile_monochrome">Monochrome</string>
+    <string name="pref_e_ink_profile_color">Color</string>
+    <string name="pref_e_ink_theme_mode">E-ink theme mode</string>
+    <string name="pref_e_ink_auto_optimization">Auto-optimize reader settings</string>
+    <string name="pref_e_ink_auto_optimization_summary">Applies recommended low-motion reader settings once when enabled</string>
+    <string name="pref_e_ink_auto_optimization_applied">Applied recommended reader settings</string>
+    <string name="pref_e_ink_refresh">E-ink refresh</string>
     <string name="pref_aurora_customization">Aurora customization</string>
     <string name="pref_home_recent_card_mode">Recent blocks on Home</string>
     <string name="pref_home_recent_card_mode_summary">Style for the recent cards on the Home screen: %s</string>

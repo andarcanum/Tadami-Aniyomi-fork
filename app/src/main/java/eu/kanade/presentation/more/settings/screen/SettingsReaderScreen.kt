@@ -122,59 +122,7 @@ object SettingsReaderScreen : SearchableSettings {
 
     @Composable
     private fun getEInkGroup(readerPreferences: ReaderPreferences): Preference.PreferenceGroup {
-        val flashPageState by readerPreferences.flashOnPageChange().collectAsState()
-
-        val flashMillisPref = readerPreferences.flashDurationMillis()
-        val flashMillis by flashMillisPref.collectAsState()
-
-        val flashIntervalPref = readerPreferences.flashPageInterval()
-        val flashInterval by flashIntervalPref.collectAsState()
-
-        val flashColorPref = readerPreferences.flashColor()
-
-        return Preference.PreferenceGroup(
-            title = "E-Ink",
-            preferenceItems = persistentListOf(
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = readerPreferences.flashOnPageChange(),
-                    title = stringResource(MR.strings.pref_flash_page),
-                    subtitle = stringResource(MR.strings.pref_flash_page_summ),
-                ),
-                Preference.PreferenceItem.SliderPreference(
-                    value = flashMillis / ReaderPreferences.MILLI_CONVERSION,
-                    valueRange = 1..15,
-                    title = stringResource(MR.strings.pref_flash_duration),
-                    subtitle = stringResource(MR.strings.pref_flash_duration_summary, flashMillis),
-                    enabled = flashPageState,
-                    onValueChanged = {
-                        flashMillisPref.set(it * ReaderPreferences.MILLI_CONVERSION)
-                        true
-                    },
-                ),
-                Preference.PreferenceItem.SliderPreference(
-                    value = flashInterval,
-                    valueRange = 1..10,
-                    title = stringResource(MR.strings.pref_flash_page_interval),
-                    subtitle = pluralStringResource(MR.plurals.pref_pages, flashInterval, flashInterval),
-                    enabled = flashPageState,
-                    onValueChanged = {
-                        flashIntervalPref.set(it)
-                        true
-                    },
-                ),
-                Preference.PreferenceItem.ListPreference(
-                    preference = flashColorPref,
-                    entries = persistentMapOf(
-                        ReaderPreferences.FlashColor.BLACK to stringResource(MR.strings.pref_flash_style_black),
-                        ReaderPreferences.FlashColor.WHITE to stringResource(MR.strings.pref_flash_style_white),
-                        ReaderPreferences.FlashColor.WHITE_BLACK
-                            to stringResource(MR.strings.pref_flash_style_white_black),
-                    ),
-                    title = stringResource(MR.strings.pref_flash_with),
-                    enabled = flashPageState,
-                ),
-            ),
-        )
+        return getEInkRefreshGroup(readerPreferences)
     }
 
     @Composable
@@ -443,4 +391,61 @@ object SettingsReaderScreen : SearchableSettings {
             ),
         )
     }
+}
+
+@Composable
+internal fun getEInkRefreshGroup(readerPreferences: ReaderPreferences): Preference.PreferenceGroup {
+    val flashPageState by readerPreferences.flashOnPageChange().collectAsState()
+
+    val flashMillisPref = readerPreferences.flashDurationMillis()
+    val flashMillis by flashMillisPref.collectAsState()
+
+    val flashIntervalPref = readerPreferences.flashPageInterval()
+    val flashInterval by flashIntervalPref.collectAsState()
+
+    val flashColorPref = readerPreferences.flashColor()
+
+    return Preference.PreferenceGroup(
+        title = stringResource(AYMR.strings.pref_e_ink_refresh),
+        preferenceItems = persistentListOf(
+            Preference.PreferenceItem.SwitchPreference(
+                preference = readerPreferences.flashOnPageChange(),
+                title = stringResource(MR.strings.pref_flash_page),
+                subtitle = stringResource(MR.strings.pref_flash_page_summ),
+            ),
+            Preference.PreferenceItem.SliderPreference(
+                value = flashMillis / ReaderPreferences.MILLI_CONVERSION,
+                valueRange = 1..15,
+                title = stringResource(MR.strings.pref_flash_duration),
+                subtitle = stringResource(MR.strings.pref_flash_duration_summary, flashMillis),
+                enabled = flashPageState,
+                onValueChanged = {
+                    flashMillisPref.set(it * ReaderPreferences.MILLI_CONVERSION)
+                    true
+                },
+            ),
+            Preference.PreferenceItem.SliderPreference(
+                value = flashInterval,
+                valueRange = 1..10,
+                title = stringResource(MR.strings.pref_flash_page_interval),
+                subtitle = pluralStringResource(MR.plurals.pref_pages, flashInterval, flashInterval),
+                enabled = flashPageState,
+                onValueChanged = {
+                    flashIntervalPref.set(it)
+                    true
+                },
+            ),
+            Preference.PreferenceItem.ListPreference(
+                preference = flashColorPref,
+                entries = persistentMapOf(
+                    ReaderPreferences.FlashColor.BLACK to stringResource(MR.strings.pref_flash_style_black),
+                    ReaderPreferences.FlashColor.WHITE to stringResource(MR.strings.pref_flash_style_white),
+                    ReaderPreferences.FlashColor.WHITE_BLACK
+                        to stringResource(MR.strings.pref_flash_style_white_black),
+                ),
+                title = stringResource(MR.strings.pref_flash_with),
+                enabled = flashPageState,
+            ),
+        ),
+    )
 }

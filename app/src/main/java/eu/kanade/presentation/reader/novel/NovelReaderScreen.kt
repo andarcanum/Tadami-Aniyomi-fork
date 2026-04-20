@@ -149,9 +149,11 @@ import com.tadami.aurora.R
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.TabbedDialog
 import eu.kanade.presentation.components.relativeDateTimeText
+import eu.kanade.presentation.reader.DisplayRefreshHost
 import eu.kanade.presentation.reader.ReaderChapterListItem
 import eu.kanade.presentation.reader.ReaderChapterListSheet
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelPluginImageResolver
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreenModel
@@ -172,6 +174,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationStylePreset
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPrivateBridge
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptModifiers
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePresets
@@ -197,6 +200,7 @@ import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.LocalAppHaptics
+import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.ByteArrayInputStream
@@ -392,6 +396,11 @@ fun NovelReaderScreen(
         )
     }
     val readerPreferences = remember { Injekt.get<NovelReaderPreferences>() }
+    val displayRefreshPreferences = remember { Injekt.get<ReaderPreferences>() }
+    val uiPreferences = remember { Injekt.get<UiPreferences>() }
+    val flashOnPageChange by displayRefreshPreferences.flashOnPageChange().collectAsState()
+    val eInkProfile by uiPreferences.eInkProfile().collectAsState()
+    val displayRefreshHost = remember { DisplayRefreshHost() }
     val sourceId = state.novel.source
     val hasSourceOverride = remember(sourceId) { readerPreferences.getSourceOverride(sourceId) != null }
     var pageViewportSize by remember(state.chapter.id) { mutableStateOf(IntSize.Zero) }
@@ -417,6 +426,9 @@ fun NovelReaderScreen(
     }
     var shouldRestoreWebScroll by remember(state.chapter.id) { mutableStateOf(true) }
     var appliedWebCssFingerprint by remember(state.chapter.id) { mutableStateOf<String?>(null) }
+    var hasReportedReadingProgress by remember(state.chapter.id, showWebView, state.readerSettings.pageReader) {
+        mutableStateOf(false)
+    }
     fun persistAutoScrollEnabledPreference(
         enabled: Boolean,
     ) {
@@ -442,6 +454,18 @@ fun NovelReaderScreen(
         } else {
             readerPreferences.autoScrollInterval().set(interval)
         }
+    }
+    fun reportReadingProgress(
+        currentIndex: Int,
+        totalItems: Int,
+        persistedProgress: Long?,
+        flashDisplay: Boolean = false,
+    ) {
+        if (flashDisplay && flashOnPageChange && eInkProfile.isEnabled && hasReportedReadingProgress) {
+            displayRefreshHost.flash()
+        }
+        hasReportedReadingProgress = true
+        onReadingProgress(currentIndex, totalItems, persistedProgress)
     }
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
@@ -597,7 +621,7 @@ fun NovelReaderScreen(
         state.readerSettings.oledEdgeGradient
     }
     val isDarkTheme = when {
-        isEInkMode -> false
+        isEInkMode -> AuroraTheme.colors.isDark
         else -> when (state.readerSettings.theme) {
             NovelReaderTheme.SYSTEM -> MaterialTheme.colorScheme.background.luminance() < 0.5f
             NovelReaderTheme.DARK -> true
@@ -605,14 +629,14 @@ fun NovelReaderScreen(
         }
     }
     val fallbackTextColor = if (isEInkMode) {
-        Color(0xFF000000)
+        AuroraTheme.colors.textPrimary
     } else if (isDarkTheme) {
         androidx.compose.ui.graphics.Color(0xFFEDEDED)
     } else {
         androidx.compose.ui.graphics.Color(0xFF1A1A1A)
     }
     val fallbackBackground = if (isEInkMode) {
-        Color.White
+        AuroraTheme.colors.background
     } else if (isDarkTheme) {
         androidx.compose.ui.graphics.Color(0xFF121212)
     } else {
@@ -625,13 +649,13 @@ fun NovelReaderScreen(
         .takeIf { state.readerSettings.backgroundColor?.isNotBlank() == true }
         ?: fallbackBackground
     val textColor = when {
-        isEInkMode -> Color(0xFF000000)
+        isEInkMode -> AuroraTheme.colors.textPrimary
         isBackgroundMode -> backgroundModeTextColor
         else -> themeModeTextColor
     }
     val chapterTitleTextColor = textColor
     val textBackground = when {
-        isEInkMode -> Color.White
+        isEInkMode -> AuroraTheme.colors.background
         isBackgroundMode -> backgroundModeBaseColor
         else -> themeModeBackground
     }
@@ -1721,19 +1745,20 @@ fun NovelReaderScreen(
             if (!showWebView && scrollContentBlocks.isNotEmpty()) {
                 // РћС‚СЃР»РµР¶РёРІР°РЅРёРµ РїСЂРѕРіСЂРµСЃСЃР° РІ Р·Р°РІРёСЃРёРјРѕСЃС‚Рё РѕС‚ СЂРµР¶РёРјР°
                 if (usePageReader) {
-                    LaunchedEffect(pageReaderProgressPageIndex, pageReaderItemsCount) {
-                        onReadingProgress(
-                            pageReaderProgressPageIndex,
-                            pageReaderItemsCount,
-                            encodePageReaderProgress(
-                                index = pageReaderProgressPageIndex,
-                                totalItems = pageReaderItemsCount,
-                            ),
-                        )
-                    }
+                        LaunchedEffect(pageReaderProgressPageIndex, pageReaderItemsCount) {
+                            reportReadingProgress(
+                                pageReaderProgressPageIndex,
+                                pageReaderItemsCount,
+                                encodePageReaderProgress(
+                                    index = pageReaderProgressPageIndex,
+                                    totalItems = pageReaderItemsCount,
+                                ),
+                                flashDisplay = true,
+                            )
+                        }
                     DisposableEffect(pagerState, pageReaderItemsCount) {
                         onDispose {
-                            onReadingProgress(
+                            reportReadingProgress(
                                 pageReaderProgressPageIndex,
                                 pageReaderItemsCount,
                                 encodePageReaderProgress(
@@ -1744,17 +1769,17 @@ fun NovelReaderScreen(
                         }
                     }
                 } else {
-                    LaunchedEffect(
-                        textListState.firstVisibleItemIndex,
-                        textListState.canScrollForward,
-                        nativeScrollItemsCount,
+                        LaunchedEffect(
+                            textListState.firstVisibleItemIndex,
+                            textListState.canScrollForward,
+                            nativeScrollItemsCount,
                     ) {
                         val (progressIndex, progressTotal) = resolveNativeScrollProgressForTracking(
                             firstVisibleItemIndex = textListState.firstVisibleItemIndex,
                             textBlocksCount = nativeScrollItemsCount,
                             canScrollForward = textListState.canScrollForward,
                         )
-                        onReadingProgress(
+                        reportReadingProgress(
                             progressIndex,
                             progressTotal,
                             encodeNativeScrollProgress(
@@ -1770,13 +1795,14 @@ fun NovelReaderScreen(
                                 textBlocksCount = nativeScrollItemsCount,
                                 canScrollForward = textListState.canScrollForward,
                             )
-                            onReadingProgress(
+                            reportReadingProgress(
                                 progressIndex,
                                 progressTotal,
                                 encodeNativeScrollProgress(
                                     index = textListState.firstVisibleItemIndex,
                                     offsetPx = textListState.firstVisibleItemScrollOffset,
                                 ),
+                                flashDisplay = true,
                             )
                         }
                     }
@@ -2203,7 +2229,7 @@ fun NovelReaderScreen(
                             resolvedPercent = resolvedProgress,
                             cachedPercent = webProgressPercent,
                         )
-                        onReadingProgress(
+                        reportReadingProgress(
                             finalProgress,
                             100,
                             encodeWebScrollProgressPercent(finalProgress),
@@ -2399,7 +2425,7 @@ fun NovelReaderScreen(
                                                 )
                                             ) {
                                                 webProgressPercent = settledProgress
-                                                onReadingProgress(
+                                                reportReadingProgress(
                                                     settledProgress,
                                                     100,
                                                     encodeWebScrollProgressPercent(settledProgress),
@@ -2413,7 +2439,7 @@ fun NovelReaderScreen(
                                         ?: webProgressPercent
                                     if (shouldDispatchWebProgressUpdate(false, settledProgress, webProgressPercent)) {
                                         webProgressPercent = settledProgress
-                                        onReadingProgress(
+                                        reportReadingProgress(
                                             settledProgress,
                                             100,
                                             encodeWebScrollProgressPercent(settledProgress),
@@ -2450,7 +2476,7 @@ fun NovelReaderScreen(
                                     )
                                 ) {
                                     webProgressPercent = newPercent
-                                    onReadingProgress(newPercent, 100, encodeWebScrollProgressPercent(newPercent))
+                                    reportReadingProgress(newPercent, 100, encodeWebScrollProgressPercent(newPercent))
                                 }
                             }
                             loadDataWithBaseURL(baseUrl, initialFactoryWebViewHtml, "text/html", "utf-8", null)
@@ -2731,7 +2757,7 @@ fun NovelReaderScreen(
                                                 )
                                             ) {
                                                 webProgressPercent = settledProgress
-                                                onReadingProgress(
+                                                reportReadingProgress(
                                                     settledProgress,
                                                     100,
                                                     encodeWebScrollProgressPercent(settledProgress),
@@ -2745,7 +2771,7 @@ fun NovelReaderScreen(
                                         ?: webProgressPercent
                                     if (shouldDispatchWebProgressUpdate(false, settledProgress, webProgressPercent)) {
                                         webProgressPercent = settledProgress
-                                        onReadingProgress(
+                                        reportReadingProgress(
                                             settledProgress,
                                             100,
                                             encodeWebScrollProgressPercent(settledProgress),
@@ -3141,7 +3167,7 @@ fun NovelReaderScreen(
                                     webView.scrollTo(0, 0)
                                 }
                             }
-                            onReadingProgress(targetPercent, 100, encodeWebScrollProgressPercent(targetPercent))
+                            reportReadingProgress(targetPercent, 100, encodeWebScrollProgressPercent(targetPercent))
                         } else {
                             val maxIndex = (seekbarItemsCount - 1).coerceAtLeast(0)
                             val target = (value * maxIndex.toFloat())
@@ -3483,6 +3509,12 @@ fun NovelReaderScreen(
             onDismiss = onDismissSelectedTextTranslation,
             modifier = Modifier.align(Alignment.BottomEnd),
         )
+
+        if (flashOnPageChange && eInkProfile.isEnabled) {
+            DisplayRefreshHost(
+                hostState = displayRefreshHost,
+            )
+        }
 
         // Settings dialog
         if (showSettings) {

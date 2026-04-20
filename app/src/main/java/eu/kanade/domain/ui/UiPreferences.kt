@@ -1,6 +1,8 @@
 package eu.kanade.domain.ui
 
 import eu.kanade.domain.ui.model.AppTheme
+import eu.kanade.domain.ui.model.EInkProfile
+import eu.kanade.domain.ui.model.EInkThemeMode
 import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.domain.ui.model.NavTransitionMode
 import eu.kanade.domain.ui.model.StartScreen
@@ -116,7 +118,11 @@ class UiPreferences(
 
     fun animatedAuroraBackground() = preferenceStore.getBoolean("animated_aurora_background", true)
 
-    fun eInkMode() = preferenceStore.getBoolean("e_ink_mode", false)
+    fun eInkProfile() = preferenceStore.getEnum("e_ink_profile", EInkProfile.OFF)
+
+    fun eInkThemeMode() = preferenceStore.getEnum("e_ink_theme_mode", EInkThemeMode.SYSTEM)
+
+    fun eInkAutoOptimization() = preferenceStore.getBoolean("e_ink_auto_optimization", false)
 
     fun appUiFontId() = preferenceStore.getString("app_ui_font_id", DEFAULT_APP_UI_FONT_ID)
 

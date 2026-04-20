@@ -273,8 +273,12 @@ class PlayerActivity : BaseActivity() {
 
         binding.controls.setContent {
             val hapticFeedbackMode by uiPreferences.hapticFeedbackMode().collectAsState()
+            val eInkProfile by uiPreferences.eInkProfile().collectAsState()
 
-            AppHapticsProvider(hapticFeedbackMode = hapticFeedbackMode) {
+            AppHapticsProvider(
+                hapticFeedbackMode = hapticFeedbackMode,
+                isEInkMode = eInkProfile.isEnabled,
+            ) {
                 TachiyomiTheme {
                     PlayerControls(
                         viewModel = viewModel,

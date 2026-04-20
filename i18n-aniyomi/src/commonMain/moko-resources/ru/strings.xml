@@ -1451,8 +1451,14 @@
     <string name="pref_show_achievement_notifications_summary">Показывать всплывающее окно при получении достижений</string>
     <string name="pref_animated_aurora_background">Анимированный фон Aurora</string>
     <string name="pref_animated_aurora_background_summary">Показывать мягкие анимированные цветовые переливы на экранах Aurora</string>
-    <string name="pref_e_ink_mode">Режим E-ink</string>
-    <string name="pref_e_ink_mode_summary">Использовать монохромный профиль с высоким контрастом для экранов e-ink</string>
+    <string name="pref_e_ink_profile">Профиль E-ink</string>
+    <string name="pref_e_ink_profile_monochrome">Монохром</string>
+    <string name="pref_e_ink_profile_color">Цвет</string>
+    <string name="pref_e_ink_theme_mode">Режим темы E-ink</string>
+    <string name="pref_e_ink_auto_optimization">Автооптимизация настроек чтения</string>
+    <string name="pref_e_ink_auto_optimization_summary">Один раз применяет рекомендуемые низкомоторные настройки чтения при включении</string>
+    <string name="pref_e_ink_auto_optimization_applied">Рекомендуемые настройки чтения применены</string>
+    <string name="pref_e_ink_refresh">Обновление E-ink</string>
     <string name="pref_aurora_customization">Аврора кастомизация</string>
     <string name="pref_home_recent_card_mode">Блоки недавние на главной</string>
     <string name="pref_home_recent_card_mode_summary">Стиль карточек в недавних блоках на главной: %s</string>
