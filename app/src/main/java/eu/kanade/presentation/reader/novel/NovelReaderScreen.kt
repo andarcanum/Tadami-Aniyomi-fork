@@ -146,6 +146,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import coil3.compose.AsyncImage
 import com.tadami.aurora.R
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.TabbedDialog
 import eu.kanade.presentation.components.relativeDateTimeText
@@ -153,7 +154,6 @@ import eu.kanade.presentation.reader.DisplayRefreshHost
 import eu.kanade.presentation.reader.ReaderChapterListItem
 import eu.kanade.presentation.reader.ReaderChapterListSheet
 import eu.kanade.presentation.theme.AuroraTheme
-import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelPluginImageResolver
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreenModel
@@ -174,7 +174,6 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationStylePreset
-import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPrivateBridge
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptModifiers
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePresets
@@ -189,6 +188,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.tts.PageReaderTtsNavigator
 import eu.kanade.tachiyomi.ui.reader.novel.tts.WebViewTtsNavigationAdapter
 import eu.kanade.tachiyomi.ui.reader.novel.tts.WebViewTtsNavigator
 import eu.kanade.tachiyomi.ui.reader.novel.tts.resolvePlainPageReaderTtsAnchors
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
@@ -1745,17 +1745,17 @@ fun NovelReaderScreen(
             if (!showWebView && scrollContentBlocks.isNotEmpty()) {
                 // РћС‚СЃР»РµР¶РёРІР°РЅРёРµ РїСЂРѕРіСЂРµСЃСЃР° РІ Р·Р°РІРёСЃРёРјРѕСЃС‚Рё РѕС‚ СЂРµР¶РёРјР°
                 if (usePageReader) {
-                        LaunchedEffect(pageReaderProgressPageIndex, pageReaderItemsCount) {
-                            reportReadingProgress(
-                                pageReaderProgressPageIndex,
-                                pageReaderItemsCount,
-                                encodePageReaderProgress(
-                                    index = pageReaderProgressPageIndex,
-                                    totalItems = pageReaderItemsCount,
-                                ),
-                                flashDisplay = true,
-                            )
-                        }
+                    LaunchedEffect(pageReaderProgressPageIndex, pageReaderItemsCount) {
+                        reportReadingProgress(
+                            pageReaderProgressPageIndex,
+                            pageReaderItemsCount,
+                            encodePageReaderProgress(
+                                index = pageReaderProgressPageIndex,
+                                totalItems = pageReaderItemsCount,
+                            ),
+                            flashDisplay = true,
+                        )
+                    }
                     DisposableEffect(pagerState, pageReaderItemsCount) {
                         onDispose {
                             reportReadingProgress(
@@ -1769,10 +1769,10 @@ fun NovelReaderScreen(
                         }
                     }
                 } else {
-                        LaunchedEffect(
-                            textListState.firstVisibleItemIndex,
-                            textListState.canScrollForward,
-                            nativeScrollItemsCount,
+                    LaunchedEffect(
+                        textListState.firstVisibleItemIndex,
+                        textListState.canScrollForward,
+                        nativeScrollItemsCount,
                     ) {
                         val (progressIndex, progressTotal) = resolveNativeScrollProgressForTracking(
                             firstVisibleItemIndex = textListState.firstVisibleItemIndex,

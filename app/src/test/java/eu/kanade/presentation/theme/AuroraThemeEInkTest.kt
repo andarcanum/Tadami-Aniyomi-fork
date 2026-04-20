@@ -1,7 +1,7 @@
 package eu.kanade.presentation.theme
 
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import eu.kanade.domain.ui.model.EInkProfile
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe

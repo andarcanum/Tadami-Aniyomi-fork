@@ -7,7 +7,8 @@ import tachiyomi.i18n.aniyomi.AYMR
 enum class EInkProfile(val titleRes: StringResource) {
     OFF(MR.strings.off),
     MONOCHROME(AYMR.strings.pref_e_ink_profile_monochrome),
-    COLOR(AYMR.strings.pref_e_ink_profile_color);
+    COLOR(AYMR.strings.pref_e_ink_profile_color),
+    ;
 
     val isEnabled: Boolean
         get() = this != OFF

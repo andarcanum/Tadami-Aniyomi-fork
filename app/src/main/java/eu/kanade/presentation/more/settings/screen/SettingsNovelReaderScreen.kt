@@ -107,10 +107,10 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
-import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPrivateBridge
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList

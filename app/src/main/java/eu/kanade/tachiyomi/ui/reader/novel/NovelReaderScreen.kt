@@ -113,7 +113,8 @@ class NovelReaderScreen(
             activeValue = activeReaderSettings?.keepScreenOn,
             loadingValue = loadingReaderSettings?.keepScreenOn,
             initialValue = initialReaderSettings?.keepScreenOn,
-        ) && eInkProfile.isEnabled
+        ) &&
+            eInkProfile.isEnabled
 
         SystemUIController(
             fullScreenMode = fullScreenMode,
