@@ -38,13 +38,23 @@ fun resolveMangaSeriesReadingTarget(
     return fallbackTarget
 }
 
-internal fun resolveMangaResumeChapter(chapters: List<Chapter>): Chapter? {
+internal fun resolveMangaResumeChapter(
+    chapters: List<Chapter>,
+    fromChapterId: Long? = null,
+): Chapter? {
     val sortedChapters = chapters.sortedWith(
         compareBy<Chapter> { it.chapterNumber }
             .thenBy { it.sourceOrder }
             .thenBy { it.id },
     )
     if (sortedChapters.isEmpty()) return null
+
+    if (fromChapterId != null) {
+        val currentIndex = sortedChapters.indexOfFirst { it.id == fromChapterId }
+        if (currentIndex >= 0) {
+            return sortedChapters[currentIndex]
+        }
+    }
 
     sortedChapters.firstOrNull { it.lastPageRead > 0L && !it.read }?.let { return it }
 

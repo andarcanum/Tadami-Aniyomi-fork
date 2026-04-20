@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -216,6 +217,8 @@ internal fun AuroraTitleHeroActionButton(
                 fontSize = textSize,
                 fontWeight = textWeight,
                 style = TextStyle(shadow = labelShadow),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }

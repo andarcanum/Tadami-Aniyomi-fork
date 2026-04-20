@@ -36,6 +36,7 @@ import eu.kanade.domain.track.model.AutoTrackState
 import eu.kanade.domain.track.service.TrackPreferences
 import eu.kanade.presentation.entries.DownloadAction
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadAction
+import eu.kanade.presentation.series.manga.resolveMangaResumeChapter
 import eu.kanade.presentation.util.TargetChapterCalculator
 import eu.kanade.presentation.util.formattedMessage
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadCache
@@ -85,6 +86,7 @@ import tachiyomi.domain.entries.manga.interactor.GetMangaWithChapters
 import tachiyomi.domain.entries.manga.interactor.SetMangaChapterFlags
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.entries.manga.repository.MangaRepository
+import tachiyomi.domain.history.manga.repository.MangaHistoryRepository
 import tachiyomi.domain.items.chapter.interactor.SetMangaDefaultChapterFlags
 import tachiyomi.domain.items.chapter.interactor.UpdateChapter
 import tachiyomi.domain.items.chapter.model.Chapter
@@ -135,6 +137,7 @@ class MangaScreenModel(
     private val addTracks: AddMangaTracks = Injekt.get(),
     private val setMangaCategories: SetMangaCategories = Injekt.get(),
     private val mangaRepository: MangaRepository = Injekt.get(),
+    private val mangaHistoryRepository: MangaHistoryRepository = Injekt.get(),
     private val filterChaptersForDownload: FilterChaptersForDownload = Injekt.get(),
     private val getMangaMetadata: GetMangaMetadata = Injekt.get(),
     private val sourceMangaRatingFetcher: SourceMangaRatingFetcher = Injekt.get(),
@@ -848,6 +851,14 @@ class MangaScreenModel(
             manga = successState.manga,
             downloadedOnly = successState.downloadedOnly,
         )
+    }
+
+    suspend fun getContinueChapter(): Chapter? = withIOContext {
+        val successState = successState ?: return@withIOContext null
+        val historyChapterId = mangaHistoryRepository.getHistoryByMangaId(mangaId)
+            .maxByOrNull { it.readAt?.time ?: Long.MIN_VALUE }
+            ?.chapterId
+        resolveMangaResumeChapter(successState.chapters.map { it.chapter }, historyChapterId)
     }
 
     fun saveScrollPosition(index: Int, offset: Int) {

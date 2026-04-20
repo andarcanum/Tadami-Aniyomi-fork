@@ -50,6 +50,10 @@ import tachiyomi.domain.entries.novel.interactor.GetNovelWithChapters
 import tachiyomi.domain.entries.novel.interactor.SetNovelChapterFlags
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.entries.novel.model.NovelUpdate
+import tachiyomi.domain.history.novel.model.NovelHistory
+import tachiyomi.domain.history.novel.model.NovelHistoryUpdate
+import tachiyomi.domain.history.novel.model.NovelHistoryWithRelations
+import tachiyomi.domain.history.novel.repository.NovelHistoryRepository
 import tachiyomi.domain.items.novelchapter.interactor.SetNovelDefaultChapterFlags
 import tachiyomi.domain.items.novelchapter.interactor.ShouldUpdateDbNovelChapter
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
@@ -62,6 +66,7 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.fullType
 import uy.kohesive.injekt.api.get
 import java.io.File
+import java.util.Date
 
 class NovelScreenModelTest {
     private class TestApplication : Application()
@@ -295,6 +300,7 @@ class NovelScreenModelTest {
                 updateNovel = updateNovel,
                 syncNovelChaptersWithSource = sync,
                 novelChapterRepository = chapterRepository,
+                novelHistoryRepository = FakeNovelHistoryRepository(),
                 setNovelChapterFlags = SetNovelChapterFlags(novelRepository),
                 setNovelDefaultChapterFlags = SetNovelDefaultChapterFlags(
                     libraryPreferences = libraryPreferences,
@@ -365,7 +371,7 @@ class NovelScreenModelTest {
 
             try {
                 awaitResumeScreenModel(screenModel)
-                screenModel.getResumeOrNextChapter()?.id shouldBe chapter2.id
+                screenModel.getContinueChapter()?.id shouldBe chapter2.id
             } finally {
                 screenModel.onDispose()
             }
@@ -401,6 +407,39 @@ class NovelScreenModelTest {
             try {
                 awaitResumeScreenModel(screenModel)
                 screenModel.getResumeOrNextChapter()?.id shouldBe chapter2.id
+            } finally {
+                screenModel.onDispose()
+            }
+        }
+    }
+
+    @Test
+    fun `history chapter id wins even when later unread chapters exist`() {
+        runBlocking {
+            val novel = novelForResumeTests(108L)
+            val chapter1 = novelChapter(id = 1L, novelId = novel.id, chapterNumber = 1.0, read = false)
+            val chapter2 = novelChapter(id = 2L, novelId = novel.id, chapterNumber = 2.0, read = true)
+            val chapter3 = novelChapter(id = 3L, novelId = novel.id, chapterNumber = 3.0, read = false)
+            val historyRepository = FakeNovelHistoryRepository(
+                mapOf(
+                    novel.id to listOf(
+                        NovelHistory.create().copy(
+                            chapterId = chapter2.id,
+                            readAt = Date(2_000L),
+                            readDuration = 0L,
+                        ),
+                    ),
+                ),
+            )
+            val screenModel = createResumeScreenModel(
+                novel = novel,
+                chapters = listOf(chapter1, chapter2, chapter3),
+                novelHistoryRepository = historyRepository,
+            )
+
+            try {
+                awaitResumeScreenModel(screenModel)
+                screenModel.getContinueChapter()?.id shouldBe chapter2.id
             } finally {
                 screenModel.onDispose()
             }
@@ -974,6 +1013,7 @@ class NovelScreenModelTest {
         novel: Novel,
         chapters: List<NovelChapter>,
         chapterRepository: FakeNovelChapterRepository = FakeNovelChapterRepository(chapters),
+        novelHistoryRepository: NovelHistoryRepository = FakeNovelHistoryRepository(),
         downloadCacheChanges: Flow<NovelDownloadCacheEvent> = MutableSharedFlow(replay = 1, extraBufferCapacity = 1),
         downloadQueueState: Flow<NovelDownloadQueueState> = MutableStateFlow(NovelDownloadQueueState()),
         getNovelWithChaptersOverride: GetNovelWithChapters? = null,
@@ -1054,6 +1094,7 @@ class NovelScreenModelTest {
             updateNovel = updateNovel,
             syncNovelChaptersWithSource = syncNovelChaptersWithSource,
             novelChapterRepository = chapterRepository,
+            novelHistoryRepository = novelHistoryRepository,
             setNovelChapterFlags = SetNovelChapterFlags(novelRepository),
             setNovelDefaultChapterFlags = SetNovelDefaultChapterFlags(
                 libraryPreferences = libraryPreferences,
@@ -1220,6 +1261,50 @@ class NovelScreenModelTest {
         }
         override suspend fun updateAllNovel(novelUpdates: List<NovelUpdate>): Boolean = true
         override suspend fun resetNovelViewerFlags(): Boolean = true
+    }
+
+    private class FakeNovelHistoryRepository(
+        private val historyByNovelId: Map<Long, List<NovelHistory>> = emptyMap(),
+    ) : NovelHistoryRepository {
+        override fun getNovelHistory(query: String): Flow<List<NovelHistoryWithRelations>> =
+            MutableStateFlow(emptyList())
+
+        override suspend fun getLastNovelHistory(): NovelHistoryWithRelations? =
+            historyByNovelId.values
+                .flatten()
+                .maxByOrNull { it.readAt?.time ?: Long.MIN_VALUE }
+                ?.let { history ->
+                    NovelHistoryWithRelations(
+                        id = history.id,
+                        chapterId = history.chapterId,
+                        novelId = -1L,
+                        title = "",
+                        chapterNumber = 0.0,
+                        readAt = history.readAt,
+                        readDuration = history.readDuration,
+                        coverData = tachiyomi.domain.entries.novel.model.NovelCover(
+                            novelId = -1L,
+                            sourceId = -1L,
+                            isNovelFavorite = false,
+                            url = "",
+                            lastModified = 0L,
+                        ),
+                    )
+                }
+
+        override suspend fun getTotalReadDuration(): Long =
+            historyByNovelId.values.flatten().sumOf { it.readDuration }
+
+        override suspend fun getHistoryByNovelId(novelId: Long): List<NovelHistory> =
+            historyByNovelId[novelId].orEmpty()
+
+        override suspend fun resetNovelHistory(historyId: Long) = Unit
+
+        override suspend fun resetHistoryByNovelId(novelId: Long) = Unit
+
+        override suspend fun deleteAllNovelHistory(): Boolean = true
+
+        override suspend fun upsertNovelHistory(historyUpdate: NovelHistoryUpdate) = Unit
     }
 
     private class FakeNovelSourceManager : NovelSourceManager {

@@ -79,6 +79,44 @@ class MangaSeriesReadingTargetResolverTest {
         assertEquals(11L, target?.chapter?.id)
     }
 
+    @Test
+    fun `history chapter id keeps the exact chapter even when later unread exists`() {
+        val chapter1 = Chapter.create().copy(
+            id = 1L,
+            mangaId = 10L,
+            read = false,
+            chapterNumber = 1.0,
+            sourceOrder = 0L,
+            name = "Chapter 1",
+            url = "https://example.com/manga/10/1",
+        )
+        val chapter2 = Chapter.create().copy(
+            id = 2L,
+            mangaId = 10L,
+            read = true,
+            chapterNumber = 2.0,
+            sourceOrder = 1L,
+            name = "Chapter 2",
+            url = "https://example.com/manga/10/2",
+        )
+        val chapter3 = Chapter.create().copy(
+            id = 3L,
+            mangaId = 10L,
+            read = false,
+            chapterNumber = 3.0,
+            sourceOrder = 2L,
+            name = "Chapter 3",
+            url = "https://example.com/manga/10/3",
+        )
+
+        val target = resolveMangaResumeChapter(
+            listOf(chapter1, chapter2, chapter3),
+            fromChapterId = chapter2.id,
+        )
+
+        assertEquals(chapter2.id, target?.id)
+    }
+
     private fun libraryManga(
         id: Long,
         title: String,

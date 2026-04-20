@@ -39,6 +39,18 @@ class NovelChapterResumeResolverTest {
         resolveNovelResumeChapter(listOf(chapter1, chapter2, chapter3))?.id shouldBe chapter1.id
     }
 
+    @Test
+    fun `history chapter id keeps the exact chapter even when later unread exists`() {
+        val chapter1 = novelChapter(id = 1L, sourceOrder = 0L, chapterNumber = 1.0, read = false)
+        val chapter2 = novelChapter(id = 2L, sourceOrder = 1L, chapterNumber = 2.0, read = true)
+        val chapter3 = novelChapter(id = 3L, sourceOrder = 2L, chapterNumber = 3.0, read = false)
+
+        resolveNovelResumeChapter(
+            listOf(chapter1, chapter2, chapter3),
+            fromChapterId = chapter2.id,
+        )?.id shouldBe chapter2.id
+    }
+
     private fun novelChapter(
         id: Long,
         sourceOrder: Long,
