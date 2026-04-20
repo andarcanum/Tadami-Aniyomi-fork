@@ -37,10 +37,10 @@ class AuroraLightSurfaceTokensTest {
 
     @Test
     fun `e ink aurora theme uses paper like neutral surfaces`() {
-        resolveAuroraSurfaceColor(AuroraColors.EInk, AuroraSurfaceLevel.Glass) shouldBe Color(0xFFF5F5F5)
-        resolveAuroraSurfaceColor(AuroraColors.EInk, AuroraSurfaceLevel.Strong) shouldBe Color(0xFFECECEC)
-        resolveAuroraBorderColor(AuroraColors.EInk, emphasized = true) shouldBe Color(0xFF8F8F8F)
-        resolveAuroraSelectionContainerColor(AuroraColors.EInk) shouldBe Color(0xFFE5E5E5)
+        resolveAuroraSurfaceColor(AuroraColors.EInk, AuroraSurfaceLevel.Glass) shouldBe Color(0xFFF6F6F6)
+        resolveAuroraSurfaceColor(AuroraColors.EInk, AuroraSurfaceLevel.Strong) shouldBe Color(0xFFEDEDED)
+        resolveAuroraBorderColor(AuroraColors.EInk, emphasized = true) shouldBe Color(0xFF8A8A8A)
+        resolveAuroraSelectionContainerColor(AuroraColors.EInk) shouldBe Color(0xFFE3E3E3)
         resolveAuroraSelectionBorderColor(AuroraColors.EInk) shouldBe Color(0xFF8A8A8A)
         resolveAuroraControlSelectedContentColor(AuroraColors.EInk) shouldBe Color.Black
         resolveAuroraIconSurfaceColor(AuroraColors.EInk) shouldBe Color(0xFFEDEDED)

@@ -44,6 +44,7 @@ import tachiyomi.domain.series.novel.interactor.CreateNovelSeries
 import tachiyomi.domain.series.novel.interactor.DeleteNovelSeries
 import tachiyomi.domain.series.novel.interactor.GetLibraryNovelSeries
 import tachiyomi.domain.series.novel.interactor.GetNovelIdsInAnySeries
+import tachiyomi.domain.series.novel.interactor.UpdateNovelSeries
 
 class NovelLibraryScreenModelTest {
 
@@ -60,6 +61,7 @@ class NovelLibraryScreenModelTest {
     private lateinit var createNovelSeries: CreateNovelSeries
     private lateinit var addNovelsToSeries: AddNovelsToSeries
     private lateinit var deleteNovelSeries: DeleteNovelSeries
+    private lateinit var updateNovelSeries: UpdateNovelSeries
     private lateinit var getLibraryNovelSeries: GetLibraryNovelSeries
     private lateinit var getNovelIdsInAnySeries: GetNovelIdsInAnySeries
 
@@ -78,6 +80,7 @@ class NovelLibraryScreenModelTest {
         createNovelSeries = mockk()
         addNovelsToSeries = mockk()
         deleteNovelSeries = mockk()
+        updateNovelSeries = mockk(relaxed = true)
         getLibraryNovelSeries = mockk()
         getNovelIdsInAnySeries = mockk()
         coEvery { getNovelCategories.await(any<Long>()) } returns emptyList()
@@ -492,6 +495,7 @@ class NovelLibraryScreenModelTest {
             createNovelSeries = createNovelSeries,
             addNovelsToSeries = addNovelsToSeries,
             deleteNovelSeries = deleteNovelSeries,
+            updateNovelSeries = updateNovelSeries,
             chapterRepository = chapterRepository,
             basePreferences = basePreferences,
             libraryPreferences = libraryPreferences,

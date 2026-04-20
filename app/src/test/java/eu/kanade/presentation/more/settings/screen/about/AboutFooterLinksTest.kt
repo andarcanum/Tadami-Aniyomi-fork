@@ -41,6 +41,16 @@ class AboutFooterLinksTest {
                         icon = AboutFooterLinkIcon.Github,
                         url = "https://github.com/andarcanum/Tadami-Aniyomi-fork",
                     ),
+                    AboutFooterLink(
+                        label = AboutFooterLinkLabel.TelegramChannel,
+                        icon = AboutFooterLinkIcon.TelegramChannel,
+                        url = "https://t.me/TadamiApp",
+                    ),
+                    AboutFooterLink(
+                        label = AboutFooterLinkLabel.TelegramGroup,
+                        icon = AboutFooterLinkIcon.TelegramGroup,
+                        url = "https://t.me/TadamiSupport",
+                    ),
                 ),
             )
     }

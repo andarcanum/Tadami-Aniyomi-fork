@@ -37,6 +37,7 @@ import tachiyomi.domain.series.manga.interactor.AddMangasToSeries
 import tachiyomi.domain.series.manga.interactor.CreateMangaSeries
 import tachiyomi.domain.series.manga.interactor.GetLibraryMangaSeries
 import tachiyomi.domain.series.manga.interactor.GetMangaIdsInAnySeries
+import tachiyomi.domain.series.manga.interactor.UpdateMangaSeries
 import tachiyomi.domain.series.manga.model.LibraryMangaSeries
 import tachiyomi.domain.series.manga.model.MangaSeries
 import tachiyomi.domain.source.manga.service.MangaSourceManager
@@ -57,6 +58,7 @@ class MangaLibraryScreenModelSeriesTest {
     private lateinit var trackerManager: TrackerManager
     private lateinit var createMangaSeries: CreateMangaSeries
     private lateinit var addMangasToSeries: AddMangasToSeries
+    private lateinit var updateMangaSeries: UpdateMangaSeries
     private lateinit var mangaFlow: MutableStateFlow<List<LibraryManga>>
     private lateinit var seriesFlow: MutableStateFlow<List<LibraryMangaSeries>>
     private lateinit var seriesIdsFlow: MutableStateFlow<Set<Long>>
@@ -87,6 +89,7 @@ class MangaLibraryScreenModelSeriesTest {
         trackerManager = mockk()
         createMangaSeries = mockk(relaxed = true)
         addMangasToSeries = mockk(relaxed = true)
+        updateMangaSeries = mockk(relaxed = true)
         categoriesFlow = MutableStateFlow(listOf(category()))
         tracksFlow = MutableStateFlow(emptyMap())
         downloadCacheChanges = MutableSharedFlow<Unit>(replay = 1).also { it.tryEmit(Unit) }
@@ -139,6 +142,7 @@ class MangaLibraryScreenModelSeriesTest {
             setMangaCategories = mockk(relaxed = true),
             createMangaSeries = createMangaSeries,
             addMangasToSeries = addMangasToSeries,
+            updateMangaSeries = updateMangaSeries,
             preferences = basePreferences,
             libraryPreferences = libraryPreferences,
             coverCache = mockk(relaxed = true),
@@ -186,6 +190,7 @@ class MangaLibraryScreenModelSeriesTest {
             setMangaCategories = mockk(relaxed = true),
             createMangaSeries = createMangaSeries,
             addMangasToSeries = addMangasToSeries,
+            updateMangaSeries = updateMangaSeries,
             preferences = basePreferences,
             libraryPreferences = libraryPreferences,
             coverCache = mockk(relaxed = true),
@@ -232,6 +237,7 @@ class MangaLibraryScreenModelSeriesTest {
             setMangaCategories = mockk(relaxed = true),
             createMangaSeries = createMangaSeries,
             addMangasToSeries = addMangasToSeries,
+            updateMangaSeries = updateMangaSeries,
             preferences = basePreferences,
             libraryPreferences = libraryPreferences,
             coverCache = mockk(relaxed = true),
@@ -275,6 +281,7 @@ class MangaLibraryScreenModelSeriesTest {
             setMangaCategories = mockk(relaxed = true),
             createMangaSeries = createMangaSeries,
             addMangasToSeries = addMangasToSeries,
+            updateMangaSeries = updateMangaSeries,
             preferences = basePreferences,
             libraryPreferences = libraryPreferences,
             coverCache = mockk(relaxed = true),
@@ -321,6 +328,7 @@ class MangaLibraryScreenModelSeriesTest {
             setMangaCategories = mockk(relaxed = true),
             createMangaSeries = createMangaSeries,
             addMangasToSeries = addMangasToSeries,
+            updateMangaSeries = updateMangaSeries,
             preferences = basePreferences,
             libraryPreferences = libraryPreferences,
             coverCache = mockk(relaxed = true),

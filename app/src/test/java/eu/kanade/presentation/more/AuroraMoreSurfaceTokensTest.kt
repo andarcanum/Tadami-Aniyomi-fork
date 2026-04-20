@@ -32,8 +32,8 @@ class AuroraMoreSurfaceTokensTest {
 
     @Test
     fun `e ink aurora more cards and switches stay monochrome`() {
-        resolveAuroraMoreCardContainerColor(AuroraColors.EInk) shouldBe Color(0xFFECECEC)
-        resolveAuroraMoreCardBorderColor(AuroraColors.EInk) shouldBe Color(0xFF8F8F8F)
+        resolveAuroraMoreCardContainerColor(AuroraColors.EInk) shouldBe Color(0xFFEDEDED)
+        resolveAuroraMoreCardBorderColor(AuroraColors.EInk) shouldBe Color(0xFF8A8A8A)
         resolveAuroraMoreCheckedTrackColor(AuroraColors.EInk) shouldBe Color(0xFFCFCFCF)
     }
 
