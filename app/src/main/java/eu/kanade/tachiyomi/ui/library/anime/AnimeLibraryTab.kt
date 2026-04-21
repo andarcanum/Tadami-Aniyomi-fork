@@ -352,7 +352,7 @@ data object AnimeLibraryTab : Tab {
         val immersiveScrollConnection = remember(immersiveModeEnabled, forceChromeVisible, hideThresholdPx) {
             object : NestedScrollConnection {
                 override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                    if (!immersiveModeEnabled || source != NestedScrollSource.Drag) return Offset.Zero
+                    if (!immersiveModeEnabled || source != NestedScrollSource.UserInput) return Offset.Zero
 
                     val nextState = resolveLibraryImmersiveChromeState(
                         currentState = immersiveChromeState,

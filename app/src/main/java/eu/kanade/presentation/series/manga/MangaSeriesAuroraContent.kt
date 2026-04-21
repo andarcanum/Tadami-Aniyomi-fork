@@ -28,10 +28,9 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.TabRowDefaults.SecondaryIndicator
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -253,13 +252,13 @@ fun MangaSeriesAuroraContent(
                 }
 
                 stickyHeader {
-                    TabRow(
+                    SecondaryTabRow(
                         selectedTabIndex = selectedTab,
                         containerColor = Color.Transparent,
                         divider = {},
-                        indicator = { tabPositions ->
+                        indicator = {
                             SecondaryIndicator(
-                                modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                                modifier = Modifier.tabIndicatorOffset(selectedTab),
                                 color = colors.textPrimary,
                             )
                         },

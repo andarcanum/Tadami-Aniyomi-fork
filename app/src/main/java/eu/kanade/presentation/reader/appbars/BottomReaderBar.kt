@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ViewList
+import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -84,7 +84,7 @@ fun BottomReaderBar(
             onClickChapterList()
         }) {
             Icon(
-                imageVector = Icons.Filled.ViewList,
+                imageVector = Icons.AutoMirrored.Filled.ViewList,
                 contentDescription = stringResource(MR.strings.chapters),
             )
         }

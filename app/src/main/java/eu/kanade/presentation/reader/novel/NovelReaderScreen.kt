@@ -65,7 +65,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.ViewList
+import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ChevronLeft
@@ -3411,7 +3411,7 @@ fun NovelReaderScreen(
                         },
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ViewList,
+                            imageVector = Icons.AutoMirrored.Filled.ViewList,
                             contentDescription = stringResource(MR.strings.chapters),
                         )
                     }
