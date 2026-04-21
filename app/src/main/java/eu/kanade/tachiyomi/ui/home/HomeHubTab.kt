@@ -81,6 +81,7 @@ import tachiyomi.domain.achievement.model.DayActivity
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.injectLazy
 import java.time.LocalDate
@@ -955,6 +956,7 @@ object HomeHubTab : Tab {
                 scope.launch { pagerState.animateScrollToPage(index) }
             }
         }
+        val appHaptics = LocalAppHaptics.current
 
         TabbedScreenAurora(
             titleRes = null,
@@ -1003,10 +1005,22 @@ object HomeHubTab : Tab {
                     tabs = tabs,
                     selectedIndex = pagerState.currentPage.coerceIn(0, (tabs.size - 1).coerceAtLeast(0)),
                     onTabSelected = onSectionSelected,
-                    onAvatarClick = { photoPickerLauncher.launch("image/*") },
-                    onNameClick = { showNameDialog = true },
-                    onGreetingClick = { showGreetingDialog = true },
-                    onStreakClick = { showStreakStyleDialog = true },
+                    onAvatarClick = {
+                        appHaptics.tap()
+                        photoPickerLauncher.launch("image/*")
+                    },
+                    onNameClick = {
+                        appHaptics.tap()
+                        showNameDialog = true
+                    },
+                    onGreetingClick = {
+                        appHaptics.tap()
+                        showGreetingDialog = true
+                    },
+                    onStreakClick = {
+                        appHaptics.tap()
+                        showStreakStyleDialog = true
+                    },
                 )
             },
         )
@@ -1320,6 +1334,7 @@ internal fun NameStyleChip(
     onClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
@@ -1332,7 +1347,10 @@ internal fun NameStyleChip(
                 color = if (selected) colors.accent.copy(alpha = 0.5f) else colors.divider,
                 shape = RoundedCornerShape(999.dp),
             )
-            .clickable(onClick = onClick)
+            .clickable {
+                appHaptics.tap()
+                onClick()
+            }
             .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {
         Text(
@@ -1361,6 +1379,7 @@ private fun NameDialog(
     var glowEnabled by remember(currentStyle) { mutableStateOf(currentStyle.glow) }
     var selectedEffect by remember(currentStyle) { mutableStateOf(currentStyle.effect) }
     var isEffectDropdownOpen by remember { mutableStateOf(false) }
+    val appHaptics = LocalAppHaptics.current
 
     val previewStyle = NicknameStyle(
         font = selectedFont,
@@ -1489,7 +1508,13 @@ private fun NameDialog(
                         stringResource(AYMR.strings.aurora_nickname_outline),
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    Switch(checked = outlineEnabled, onCheckedChange = { outlineEnabled = it })
+                    Switch(
+                        checked = outlineEnabled,
+                        onCheckedChange = {
+                            appHaptics.tap()
+                            outlineEnabled = it
+                        },
+                    )
                 }
 
                 if (outlineEnabled) {
@@ -1515,7 +1540,13 @@ private fun NameDialog(
                         stringResource(AYMR.strings.aurora_nickname_glow),
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    Switch(checked = glowEnabled, onCheckedChange = { glowEnabled = it })
+                    Switch(
+                        checked = glowEnabled,
+                        onCheckedChange = {
+                            appHaptics.tap()
+                            glowEnabled = it
+                        },
+                    )
                 }
 
                 Spacer(Modifier.height(8.dp))
@@ -1531,7 +1562,10 @@ private fun NameDialog(
                             .clip(RoundedCornerShape(12.dp))
                             .background(AuroraTheme.colors.glass)
                             .border(1.dp, AuroraTheme.colors.divider, RoundedCornerShape(12.dp))
-                            .clickable { isEffectDropdownOpen = true }
+                            .clickable {
+                                appHaptics.tap()
+                                isEffectDropdownOpen = true
+                            }
                             .padding(horizontal = 12.dp, vertical = 12.dp),
                     ) {
                         Text(
@@ -1548,6 +1582,7 @@ private fun NameDialog(
                             DropdownMenuItem(
                                 text = { Text(preset.label()) },
                                 onClick = {
+                                    appHaptics.tap()
                                     selectedEffect = preset
                                     isEffectDropdownOpen = false
                                 },
@@ -1560,6 +1595,7 @@ private fun NameDialog(
         confirmButton = {
             TextButton(
                 onClick = {
+                    appHaptics.tap()
                     val normalizedCustomColor = customColorHex.trim().let { raw ->
                         if (raw.startsWith("#")) raw else "#$raw"
                     }.uppercase()
@@ -1576,7 +1612,10 @@ private fun NameDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = {
+                appHaptics.tap()
+                onDismiss()
+            }) {
                 Text(stringResource(AYMR.strings.aurora_nickname_cancel))
             }
         },
@@ -1597,6 +1636,7 @@ private fun GreetingStyleDialog(
     var italicEnabled by remember(currentStyle) { mutableStateOf(currentStyle.italic) }
     var fontSize by remember(currentStyle) { mutableIntStateOf(currentStyle.fontSize.coerceIn(10, 26)) }
     var alpha by remember(currentStyle) { mutableIntStateOf(currentStyle.alpha.coerceIn(10, 100)) }
+    val appHaptics = LocalAppHaptics.current
 
     val previewStyle = GreetingStyle(
         font = selectedFont,
@@ -1755,13 +1795,20 @@ private fun GreetingStyleDialog(
                         stringResource(AYMR.strings.aurora_greeting_italic),
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    Switch(checked = italicEnabled, onCheckedChange = { italicEnabled = it })
+                    Switch(
+                        checked = italicEnabled,
+                        onCheckedChange = {
+                            appHaptics.tap()
+                            italicEnabled = it
+                        },
+                    )
                 }
             }
         },
         confirmButton = {
             TextButton(
                 onClick = {
+                    appHaptics.tap()
                     val normalizedCustomColor = customColorHex.trim().let { raw ->
                         if (raw.startsWith("#")) raw else "#$raw"
                     }.uppercase()
@@ -1780,7 +1827,10 @@ private fun GreetingStyleDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = {
+                appHaptics.tap()
+                onDismiss()
+            }) {
                 Text(stringResource(AYMR.strings.aurora_nickname_cancel))
             }
         },

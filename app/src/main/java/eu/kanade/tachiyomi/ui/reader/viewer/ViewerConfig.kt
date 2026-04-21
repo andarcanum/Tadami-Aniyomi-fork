@@ -1,16 +1,23 @@
 package eu.kanade.tachiyomi.ui.reader.viewer
 
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import tachiyomi.core.common.preference.Preference
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 /**
  * Common configuration for all viewers.
  */
-abstract class ViewerConfig(readerPreferences: ReaderPreferences, private val scope: CoroutineScope) {
+abstract class ViewerConfig(
+    readerPreferences: ReaderPreferences,
+    private val scope: CoroutineScope,
+    uiPreferences: UiPreferences = Injekt.get(),
+) {
 
     var imagePropertyChangedListener: (() -> Unit)? = null
 
@@ -42,15 +49,25 @@ abstract class ViewerConfig(readerPreferences: ReaderPreferences, private val sc
     var dualPageRotateToFitInvert = false
         protected set
 
+    private var isEInkMode = uiPreferences.eInkProfile().get().isEnabled
+
     abstract var navigator: ViewerNavigation
         protected set
 
     init {
+        uiPreferences.eInkProfile()
+            .changes()
+            .onEach {
+                isEInkMode = it.isEnabled
+                usePageTransitions = readerPreferences.pageTransitions().get() || !isEInkMode
+            }
+            .launchIn(scope)
+
         readerPreferences.readWithLongTap()
             .register({ longTapEnabled = it })
 
         readerPreferences.pageTransitions()
-            .register({ usePageTransitions = it })
+            .register({ usePageTransitions = it || !isEInkMode })
 
         readerPreferences.doubleTapAnimSpeed()
             .register({ doubleTapAnimDuration = it })

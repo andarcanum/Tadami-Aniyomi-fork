@@ -19,8 +19,8 @@ android {
     defaultConfig {
         applicationId = "com.tadami.aurora"
 
-        versionCode = 154
-        versionName = "0.37"
+        versionCode = 155
+        versionName = "0.38"
 
         buildConfigField("String", "COMMIT_COUNT", "\"${getCommitCount()}\"")
         buildConfigField("String", "COMMIT_SHA", "\"${getGitSha()}\"")
@@ -320,6 +320,13 @@ dependencies {
 
     // Shizuku
     implementation(libs.bundles.shizuku)
+
+    // Google Drive API
+    implementation(libs.google.api.services.drive)
+    implementation(libs.google.api.client)
+    implementation(libs.google.http.client.android)
+    implementation(libs.google.oauth.client.java6)
+    implementation("com.google.http-client:google-http-client-jackson2:1.43.3")
 
     // Tests
     testImplementation(libs.bundles.test)

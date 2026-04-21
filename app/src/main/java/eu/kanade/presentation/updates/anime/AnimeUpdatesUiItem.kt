@@ -49,6 +49,7 @@ import tachiyomi.presentation.core.components.ListGroupHeader
 import tachiyomi.presentation.core.components.material.DISABLED_ALPHA
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 import tachiyomi.presentation.core.util.selectedBackground
 import java.util.concurrent.TimeUnit
 
@@ -158,13 +159,17 @@ private fun AnimeUpdatesUiItem(
     modifier: Modifier = Modifier,
 ) {
     val haptic = LocalHapticFeedback.current
+    val appHaptics = LocalAppHaptics.current
     val textAlpha = if (update.seen) DISABLED_ALPHA else 1f
 
     Row(
         modifier = modifier
             .selectedBackground(selected)
             .combinedClickable(
-                onClick = onClick,
+                onClick = {
+                    appHaptics.tap()
+                    onClick()
+                },
                 onLongClick = {
                     onLongClick()
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -257,7 +262,10 @@ private fun AnimeUpdatesUiItem(
             modifier = Modifier.padding(start = 4.dp),
             downloadStateProvider = downloadStateProvider,
             downloadProgressProvider = downloadProgressProvider,
-            onClick = { onDownloadEpisode?.invoke(it) },
+            onClick = { action ->
+                appHaptics.tap()
+                onDownloadEpisode?.invoke(action)
+            },
         )
     }
 }

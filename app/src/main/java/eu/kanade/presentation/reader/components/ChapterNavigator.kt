@@ -46,6 +46,7 @@ import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Slider
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 
 @Composable
 fun ChapterNavigator(
@@ -70,6 +71,7 @@ fun ChapterNavigator(
     val horizontalPadding = if (isTabletUi) 24.dp else 8.dp
     val layoutDirection = if (isRtl) LayoutDirection.Rtl else LayoutDirection.Ltr
     val haptic = LocalHapticFeedback.current
+    val appHaptics = LocalAppHaptics.current
 
     // Calculate background alpha based on preference
     val calculatedAlpha = backgroundAlpha / 100f
@@ -116,7 +118,14 @@ fun ChapterNavigator(
             if (showChapterButtons) {
                 FilledIconButton(
                     enabled = if (isRtl) enabledNext else enabledPrevious,
-                    onClick = if (isRtl) onNextChapter else onPreviousChapter,
+                    onClick = {
+                        appHaptics.tap()
+                        if (isRtl) {
+                            onNextChapter()
+                        } else {
+                            onPreviousChapter()
+                        }
+                    },
                     colors = buttonColor,
                 ) {
                     Icon(
@@ -181,7 +190,14 @@ fun ChapterNavigator(
             if (showChapterButtons) {
                 FilledIconButton(
                     enabled = if (isRtl) enabledPrevious else enabledNext,
-                    onClick = if (isRtl) onPreviousChapter else onNextChapter,
+                    onClick = {
+                        appHaptics.tap()
+                        if (isRtl) {
+                            onPreviousChapter()
+                        } else {
+                            onNextChapter()
+                        }
+                    },
                     colors = buttonColor,
                 ) {
                     Icon(

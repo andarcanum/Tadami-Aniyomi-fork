@@ -2,6 +2,7 @@ package eu.kanade.presentation.more
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import eu.kanade.domain.ui.model.EInkProfile
 import eu.kanade.presentation.theme.AuroraColors
 import eu.kanade.presentation.theme.AuroraSurfaceLevel
 import eu.kanade.presentation.theme.resolveAuroraBorderColor
@@ -26,7 +27,8 @@ internal fun resolveAuroraMoreCardBorderColor(colors: AuroraColors): Color {
 
 internal fun resolveAuroraMoreCheckedTrackColor(colors: AuroraColors): Color {
     return when {
-        colors.isEInk -> Color(0xFFCFCFCF)
+        colors.eInkProfile == EInkProfile.MONOCHROME -> Color(0xFFCFCFCF)
+        colors.eInkProfile == EInkProfile.COLOR -> colors.accent.copy(alpha = AURORA_MORE_DARK_SWITCH_TRACK_ALPHA)
         colors.isDark -> colors.accent.copy(alpha = AURORA_MORE_DARK_SWITCH_TRACK_ALPHA)
         else -> colors.accent.copy(alpha = AURORA_MORE_LIGHT_SWITCH_TRACK_ALPHA)
     }

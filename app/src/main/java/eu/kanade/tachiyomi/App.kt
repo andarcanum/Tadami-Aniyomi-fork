@@ -19,6 +19,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
+import coil3.annotation.DelicateCoilApi
 import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.allowRgb565
@@ -41,6 +42,7 @@ import eu.kanade.tachiyomi.data.coil.AnimeKeyer
 import eu.kanade.tachiyomi.data.coil.AuroraPosterRequestFetcher
 import eu.kanade.tachiyomi.data.coil.AuroraPosterRequestKeyer
 import eu.kanade.tachiyomi.data.coil.BufferedSourceFetcher
+import eu.kanade.tachiyomi.data.coil.FallbackUriFetcher
 import eu.kanade.tachiyomi.data.coil.MangaCoverFetcher
 import eu.kanade.tachiyomi.data.coil.MangaCoverKeyer
 import eu.kanade.tachiyomi.data.coil.MangaKeyer
@@ -48,6 +50,7 @@ import eu.kanade.tachiyomi.data.coil.NovelCoverFetcher
 import eu.kanade.tachiyomi.data.coil.NovelCoverKeyer
 import eu.kanade.tachiyomi.data.coil.NovelPluginImageFetcher
 import eu.kanade.tachiyomi.data.coil.NovelPluginImageKeyer
+import eu.kanade.tachiyomi.data.coil.StringCoverUriMapper
 import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.data.updater.AppUpdateFileManager
@@ -101,6 +104,7 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
     private val achievementScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     @SuppressLint("LaunchActivityFromNotification")
+    @OptIn(DelicateCoilApi::class)
     override fun onCreate() {
         LogcatLogger.install(AndroidLogcatLogger(LogPriority.VERBOSE))
         super<Application>.onCreate()
@@ -129,6 +133,7 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         // SY -->
         Injekt.importModule(SYDomainModule())
         // SY <--
+        SingletonImageLoader.setUnsafe { context -> newImageLoader(context) }
 
         appUpdateFileManager.cleanupIfInstalledVersionReached(
             isPreview = isPreviewBuildType,
@@ -282,8 +287,11 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         return ImageLoader.Builder(this).apply {
             val callFactoryLazy = lazy { Injekt.get<NetworkHelper>().client }
             components {
+                // Mapper
+                add(StringCoverUriMapper())
                 // NetworkFetcher.Factory
-                add(OkHttpNetworkFetcherFactory(callFactoryLazy::value))
+                add(OkHttpNetworkFetcherFactory(callFactory = { callFactoryLazy.value }))
+                add(FallbackUriFetcher.Factory(callFactoryLazy))
                 // Decoder.Factory
                 add(TachiyomiImageDecoder.Factory())
                 // Fetcher.Factory

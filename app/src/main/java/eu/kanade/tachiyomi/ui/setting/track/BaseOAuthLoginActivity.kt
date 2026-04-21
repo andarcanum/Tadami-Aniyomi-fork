@@ -10,11 +10,18 @@ import eu.kanade.tachiyomi.util.view.setComposeContent
 import tachiyomi.presentation.core.screens.LoadingScreen
 import uy.kohesive.injekt.injectLazy
 
+/**
+ * Abstract base activity for OAuth-based login flows.
+ * Handles the common OAuth callback processing.
+ */
 abstract class BaseOAuthLoginActivity : BaseActivity() {
 
     internal val trackerManager: TrackerManager by injectLazy()
 
-    abstract fun handleResult(data: Uri?)
+    /**
+     * Handle the result from the OAuth callback.
+     */
+    abstract fun handleResult(uri: Uri?)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -23,9 +30,17 @@ abstract class BaseOAuthLoginActivity : BaseActivity() {
             LoadingScreen()
         }
 
-        handleResult(intent.data)
+        val data = intent.data
+        if (data == null) {
+            returnToSettings()
+        } else {
+            handleResult(data)
+        }
     }
 
+    /**
+     * Returns to the main activity and finishes this one.
+     */
     internal fun returnToSettings() {
         finish()
 

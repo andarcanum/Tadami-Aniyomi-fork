@@ -102,6 +102,7 @@ import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.resolveAuroraAdaptiveSpec
 import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
+import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreenModel
 import eu.kanade.tachiyomi.ui.entries.anime.EpisodeList
 import kotlinx.coroutines.flow.conflate
@@ -202,6 +203,9 @@ fun AnimeScreenAuroraImpl(
         metadataSource,
     ) {
         resolveCoverUrl(state, metadataSource != MetadataSource.NONE)
+    }
+    val refererUrl = remember(state.source) {
+        (state.source as? HttpSource)?.baseUrl
     }
 
     val lazyListState = rememberLazyListState()
@@ -388,6 +392,7 @@ fun AnimeScreenAuroraImpl(
                 firstVisibleItemIndex = firstVisibleItemIndex,
                 resolvedCoverUrl = resolvedCover.coverUrl,
                 resolvedCoverUrlFallback = resolvedCover.coverUrlFallback,
+                refererUrl = refererUrl,
             )
 
             if (useTwoPaneLayout) {

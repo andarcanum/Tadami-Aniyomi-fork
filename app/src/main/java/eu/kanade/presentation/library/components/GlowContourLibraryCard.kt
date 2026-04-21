@@ -7,25 +7,34 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +53,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.Hyphens
@@ -56,15 +66,17 @@ import androidx.compose.ui.unit.sp
 import androidx.core.graphics.PathParser
 import coil3.compose.AsyncImage
 import dev.icerock.moko.resources.StringResource
+import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.components.resolveAuroraCardOverlaySpec
-import eu.kanade.presentation.components.resolveAuroraCoverModel
+import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 import android.graphics.Matrix as AndroidMatrix
 
 private const val GLOW_CONTOUR_SVG_WIDTH = 256f
@@ -486,12 +498,16 @@ internal fun GlowContourLibraryGridItem(
     cornerIndicatorState: GlowContourCornerIndicatorState,
     modifier: Modifier = Modifier,
     textSpec: GlowContourLibraryTextSpec,
+    seriesHeaderText: String? = null,
     badge: @Composable (() -> Unit)? = null,
+    topEndBadge: @Composable (() -> Unit)? = null,
+    menuContent: (@Composable ColumnScope.(closeMenu: () -> Unit) -> Unit)? = null,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     onClickContinueViewing: (() -> Unit)? = null,
     isSelected: Boolean = false,
     gridColumns: Int? = null,
+    customCover: @Composable (() -> Unit)? = null,
 ) {
     val colors = AuroraTheme.colors
     val blendSpec = resolveGlowContourUnifiedBlendSpec(colors.isDark)
@@ -511,19 +527,27 @@ internal fun GlowContourLibraryGridItem(
             coverData = coverData,
             progressPercent = progressPercent,
             badge = badge,
+            topEndBadge = topEndBadge,
+            menuContent = menuContent,
             isSelected = isSelected,
             isUnifiedContainerMode = false,
             blendSpec = blendSpec,
             cornerIndicatorState = cornerIndicatorState,
             onClickContinueViewing = onClickContinueViewing,
             gridColumns = gridColumns,
+            customCover = customCover,
         )
 
         if (textSpec.showTextBlock) {
             GlowContourLibraryTextBlock(
                 title = title,
                 subtitle = subtitle,
-                textSpec = textSpec,
+                seriesHeaderText = seriesHeaderText,
+                textSpec = if (seriesHeaderText.isNullOrBlank()) {
+                    textSpec
+                } else {
+                    textSpec.copy(titleMaxLines = 1)
+                },
                 blendSpec = blendSpec,
                 isUnifiedContainerMode = false,
             )
@@ -535,6 +559,7 @@ internal fun GlowContourLibraryGridItem(
 private fun GlowContourLibraryTextBlock(
     title: String,
     subtitle: String?,
+    seriesHeaderText: String?,
     textSpec: GlowContourLibraryTextSpec,
     blendSpec: GlowContourUnifiedBlendSpec,
     isUnifiedContainerMode: Boolean,
@@ -586,6 +611,17 @@ private fun GlowContourLibraryTextBlock(
         Column(
             verticalArrangement = Arrangement.spacedBy(renderSpec.titleSubtitleSpacing),
         ) {
+            if (!seriesHeaderText.isNullOrBlank()) {
+                Text(
+                    text = seriesHeaderText,
+                    color = colors.textSecondary.copy(alpha = 0.9f),
+                    fontSize = 11.sp,
+                    lineHeight = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Text(
                 text = title,
                 color = colors.textPrimary,
@@ -622,14 +658,20 @@ private fun GlowContourLibraryCard(
     progressPercent: Int?,
     cornerIndicatorState: GlowContourCornerIndicatorState,
     badge: @Composable (() -> Unit)?,
+    topEndBadge: @Composable (() -> Unit)? = null,
+    menuContent: (@Composable ColumnScope.(closeMenu: () -> Unit) -> Unit)? = null,
     isSelected: Boolean,
     isUnifiedContainerMode: Boolean,
     blendSpec: GlowContourUnifiedBlendSpec,
     onClickContinueViewing: (() -> Unit)?,
     gridColumns: Int?,
     modifier: Modifier = Modifier,
+    customCover: @Composable (() -> Unit)? = null,
 ) {
     val colors = AuroraTheme.colors
+    val context = LocalContext.current
+    val appHaptics = LocalAppHaptics.current
+    var showMenu by remember { mutableStateOf(false) }
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
     val posterSurfaceSpec = resolveGlowContourPosterSurfaceSpec(colors.isDark)
     val footerContent = resolveGlowContourFooterContent(
@@ -681,11 +723,7 @@ private fun GlowContourLibraryCard(
             cardWidthDp = maxWidth.value,
         )
 
-        AsyncImage(
-            model = resolveAuroraCoverModel(coverData),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            colorFilter = rememberAuroraPosterColorFilter(),
+        Box(
             modifier = Modifier
                 .matchParentSize()
                 .drawWithCache {
@@ -696,9 +734,25 @@ private fun GlowContourLibraryCard(
                         }
                     }
                 },
-            error = placeholderPainter,
-            fallback = placeholderPainter,
-        )
+        ) {
+            if (customCover != null) {
+                customCover()
+            } else {
+                val coverRequest = remember(coverData) {
+                    buildAuroraCoverImageRequest(context, coverData)
+                }
+
+                AsyncImage(
+                    model = coverRequest,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    colorFilter = rememberAuroraPosterColorFilter(),
+                    modifier = Modifier.fillMaxSize(),
+                    error = placeholderPainter,
+                    fallback = placeholderPainter,
+                )
+            }
+        }
 
         Box(
             modifier = Modifier
@@ -963,6 +1017,47 @@ private fun GlowContourLibraryCard(
                     .padding(6.dp),
             ) {
                 badge()
+            }
+        }
+
+        if (topEndBadge != null || menuContent != null) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                topEndBadge?.invoke()
+
+                if (menuContent != null) {
+                    Box {
+                        FilledIconButton(
+                            onClick = {
+                                appHaptics.tap()
+                                showMenu = true
+                            },
+                            modifier = Modifier.size(28.dp),
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = colors.surface.copy(alpha = 0.9f),
+                                contentColor = colors.textPrimary,
+                            ),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.MoreVert,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+
+                        AuroraEntryDropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false },
+                        ) {
+                            menuContent { showMenu = false }
+                        }
+                    }
+                }
             }
         }
     }

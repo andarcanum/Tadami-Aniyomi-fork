@@ -30,7 +30,6 @@ import eu.kanade.domain.extension.manga.interactor.TrustMangaExtension
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.source.service.SourcePreferences.DataSaver
 import eu.kanade.domain.ui.UiPreferences
-import eu.kanade.domain.ui.model.NavTransitionMode
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.screen.advanced.ClearAnimeDatabaseScreen
 import eu.kanade.presentation.more.settings.screen.advanced.ClearDatabaseScreen
@@ -84,6 +83,7 @@ import tachiyomi.domain.entries.manga.interactor.ResetMangaViewerFlags
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.HapticFeedbackMode
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -142,7 +142,19 @@ object SettingsAdvancedScreen : SearchableSettings {
                 },
             ),
             getBackgroundActivityGroup(),
-            getMotionGroup(uiPreferences = uiPreferences),
+            Preference.PreferenceGroup(
+                title = stringResource(MR.strings.label_haptic_feedback),
+                preferenceItems = persistentListOf(
+                    Preference.PreferenceItem.ListPreference(
+                        preference = uiPreferences.hapticFeedbackMode(),
+                        entries = HapticFeedbackMode.entries
+                            .associateWith { stringResource(it.titleRes) }
+                            .toImmutableMap(),
+                        title = stringResource(MR.strings.pref_haptic_feedback),
+                        subtitle = stringResource(MR.strings.pref_haptic_feedback_summary),
+                    ),
+                ),
+            ),
             getDataGroup(),
             getNetworkGroup(networkPreferences = networkPreferences),
             getLibraryGroup(),
@@ -188,27 +200,6 @@ object SettingsAdvancedScreen : SearchableSettings {
                     title = "Don't kill my app!",
                     subtitle = stringResource(MR.strings.about_dont_kill_my_app),
                     onClick = { uriHandler.openUri("https://dontkillmyapp.com/") },
-                ),
-            ),
-        )
-    }
-
-    @Composable
-    private fun getMotionGroup(
-        uiPreferences: UiPreferences,
-    ): Preference.PreferenceGroup {
-        return Preference.PreferenceGroup(
-            title = stringResource(AYMR.strings.pref_category_motion),
-            preferenceItems = persistentListOf(
-                Preference.PreferenceItem.ListPreference(
-                    preference = uiPreferences.navigationTransitionMode(),
-                    entries = mapOf(
-                        NavTransitionMode.AUTO to stringResource(AYMR.strings.pref_navigation_transition_mode_auto),
-                        NavTransitionMode.MODERN to stringResource(AYMR.strings.pref_navigation_transition_mode_modern),
-                        NavTransitionMode.LEGACY to stringResource(AYMR.strings.pref_navigation_transition_mode_legacy),
-                    ).toImmutableMap(),
-                    title = stringResource(AYMR.strings.pref_navigation_transition_mode),
-                    subtitle = stringResource(AYMR.strings.pref_navigation_transition_mode_summary),
                 ),
             ),
         )

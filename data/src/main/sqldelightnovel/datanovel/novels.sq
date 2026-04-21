@@ -26,7 +26,8 @@ CREATE TABLE novels(
     last_modified_at INTEGER NOT NULL DEFAULT 0,
     favorite_modified_at INTEGER,
     version INTEGER NOT NULL DEFAULT 0,
-    is_syncing INTEGER NOT NULL DEFAULT 0
+    is_syncing INTEGER NOT NULL DEFAULT 0,
+    pinned INTEGER AS Boolean NOT NULL DEFAULT 0
 );
 
 CREATE INDEX library_favorite_index_novels ON novels(favorite) WHERE favorite = 1;
@@ -149,8 +150,8 @@ WHERE favorite = 0
 AND source IN :sourceIds;
 
 insert:
-INSERT INTO novels(source, url, author, description, genre, title, status, thumbnail_url, favorite, last_update, next_update, initialized, viewer, chapter_flags, cover_last_modified, date_added, update_strategy, calculate_interval, last_modified_at, version)
-VALUES (:source, :url, :author, :description, :genre, :title, :status, :thumbnailUrl, :favorite, :lastUpdate, :nextUpdate, :initialized, :viewerFlags, :chapterFlags, :coverLastModified, :dateAdded, :updateStrategy, :calculateInterval, 0, :version);
+INSERT INTO novels(source, url, author, description, genre, title, status, thumbnail_url, favorite, pinned, last_update, next_update, initialized, viewer, chapter_flags, cover_last_modified, date_added, update_strategy, calculate_interval, last_modified_at, version, is_syncing)
+VALUES (:source, :url, :author, :description, :genre, :title, :status, :thumbnailUrl, :favorite, :pinned, :lastUpdate, :nextUpdate, :initialized, :viewerFlags, :chapterFlags, :coverLastModified, :dateAdded, :updateStrategy, :calculateInterval, 0, :version, 0);
 
 update:
 UPDATE novels SET
@@ -163,6 +164,7 @@ UPDATE novels SET
     status = coalesce(:status, status),
     thumbnail_url = coalesce(:thumbnailUrl, thumbnail_url),
     favorite = coalesce(:favorite, favorite),
+    pinned = coalesce(:pinned, pinned),
     last_update = coalesce(:lastUpdate, last_update),
     next_update = coalesce(:nextUpdate, next_update),
     initialized = coalesce(:initialized, initialized),

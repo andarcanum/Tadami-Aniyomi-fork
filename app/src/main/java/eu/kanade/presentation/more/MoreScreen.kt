@@ -17,7 +17,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.vectorResource
 import com.tadami.aurora.BuildConfig
 import com.tadami.aurora.R
@@ -50,11 +49,9 @@ fun MoreScreen(
     onClickNovelReaderSettings: () -> Unit,
     onClickSettings: () -> Unit,
     onClickAbout: () -> Unit,
-    onClickDebugAppUpdatePreview: () -> Unit,
     onClickHelp: () -> Unit,
+    onClickDebugAppUpdatePreview: () -> Unit,
 ) {
-    val uriHandler = LocalUriHandler.current
-
     Scaffold { contentPadding ->
         ScrollbarLazyColumn(
             modifier = Modifier.padding(contentPadding),

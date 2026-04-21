@@ -25,6 +25,7 @@ import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -35,6 +36,7 @@ internal fun HistoryRow(
     onViewAllClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val contentMaxWidthDp = auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp
     val sectionHorizontalPadding = when (auroraAdaptiveSpec.deviceClass) {
@@ -77,7 +79,10 @@ internal fun HistoryRow(
                 color = colors.accent,
                 fontSize = 12.sp,
                 fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                modifier = Modifier.clickable(onClick = onViewAllClick),
+                modifier = Modifier.clickable {
+                    appHaptics.tap()
+                    onViewAllClick()
+                },
             )
         }
         Spacer(Modifier.height(16.dp))
@@ -141,6 +146,7 @@ internal fun RecommendationsGrid(
     onMoreClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val contentMaxWidthDp = auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp
     val sectionHorizontalPadding = when (auroraAdaptiveSpec.deviceClass) {
@@ -183,7 +189,10 @@ internal fun RecommendationsGrid(
                 color = colors.accent,
                 fontSize = 12.sp,
                 fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                modifier = Modifier.clickable(onClick = onMoreClick),
+                modifier = Modifier.clickable {
+                    appHaptics.tap()
+                    onMoreClick()
+                },
             )
         }
         Spacer(Modifier.height(16.dp))

@@ -70,6 +70,7 @@ import tachiyomi.presentation.core.components.material.Slider
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.theme.header
+import tachiyomi.presentation.core.util.LocalAppHaptics
 import tachiyomi.presentation.core.util.collectAsState
 
 object SettingsItemsPaddings {
@@ -358,11 +359,14 @@ fun TriStateItem(
     enabled: Boolean = true,
     onClick: ((TriState) -> Unit)?,
 ) {
+    val appHaptics = LocalAppHaptics.current
+
     Row(
         modifier = Modifier
             .clickable(
                 enabled = enabled && onClick != null,
                 onClick = {
+                    appHaptics.tap()
                     when (state) {
                         TriState.DISABLED -> onClick?.invoke(TriState.ENABLED_IS)
                         TriState.ENABLED_IS -> onClick?.invoke(TriState.ENABLED_NOT)
@@ -413,6 +417,8 @@ fun <T> SelectItem(
     onSelect: (Int) -> Unit,
     toString: (T) -> String = { it.toString() },
 ) {
+    val appHaptics = LocalAppHaptics.current
+
     var expanded by remember { mutableStateOf(false) }
 
     ExposedDropdownMenuBox(
@@ -450,6 +456,7 @@ fun <T> SelectItem(
                 DropdownMenuItem(
                     text = { Text(toString(option)) },
                     onClick = {
+                        appHaptics.tap()
                         onSelect(index)
                         expanded = false
                     },
@@ -613,9 +620,14 @@ private fun BaseSettingsItem(
     widget: @Composable RowScope.() -> Unit,
     onClick: () -> Unit,
 ) {
+    val appHaptics = LocalAppHaptics.current
+
     Row(
         modifier = Modifier
-            .clickable(onClick = onClick)
+            .clickable(onClick = {
+                appHaptics.tap()
+                onClick()
+            })
             .fillMaxWidth()
             .padding(
                 horizontal = SettingsItemsPaddings.Horizontal,

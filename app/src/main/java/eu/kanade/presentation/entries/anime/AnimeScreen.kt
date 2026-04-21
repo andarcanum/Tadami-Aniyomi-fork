@@ -85,6 +85,7 @@ import eu.kanade.tachiyomi.animesource.model.FetchType
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
 import eu.kanade.tachiyomi.source.anime.getNameForAnimeInfo
+import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.browse.anime.extension.details.AnimeSourcePreferencesScreen
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreenModel
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeSeasonItem
@@ -462,6 +463,9 @@ private fun AnimeScreenSmallImpl(
     ) {
         resolveCoverUrl(state, metadataSource)
     }
+    val refererUrl = remember(state.source) {
+        (state.source as? HttpSource)?.baseUrl
+    }
 
     val density = LocalDensity.current
     val offsetGridPaddingPx = with(density) { GRID_PADDING.roundToPx() }
@@ -671,6 +675,7 @@ private fun AnimeScreenSmallImpl(
                             modifier = Modifier.ignorePadding(offsetGridPaddingPx),
                             resolvedCoverUrl = resolvedCoverUrl,
                             resolvedCoverUrlFallback = state.animeMetadata?.coverUrlFallback,
+                            refererUrl = refererUrl,
                         )
                     }
 
@@ -897,6 +902,9 @@ fun AnimeScreenLargeImpl(
     ) {
         resolveCoverUrl(state, metadataSource)
     }
+    val refererUrl = remember(state.source) {
+        (state.source as? HttpSource)?.baseUrl
+    }
 
     val layoutDirection = LocalLayoutDirection.current
     val density = LocalDensity.current
@@ -1062,6 +1070,7 @@ fun AnimeScreenLargeImpl(
                                 doSearch = onSearch,
                                 resolvedCoverUrl = resolvedCoverUrl,
                                 resolvedCoverUrlFallback = state.animeMetadata?.coverUrlFallback,
+                                refererUrl = refererUrl,
                             )
                             AnimeActionRow(
                                 favorite = state.anime.favorite,

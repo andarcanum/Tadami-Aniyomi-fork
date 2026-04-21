@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -21,10 +22,13 @@ import eu.kanade.presentation.components.AuroraCard
 import eu.kanade.presentation.library.components.GlobalSearchItem
 import eu.kanade.presentation.library.components.GlowContourLibraryGridItem
 import eu.kanade.presentation.library.components.LazyLibraryGrid
+import eu.kanade.presentation.library.components.PinnedBadge
+import eu.kanade.presentation.library.components.PinnedSectionHeader
 import eu.kanade.presentation.library.components.globalSearchItem
 import eu.kanade.presentation.library.components.resolveGlowContourCornerIndicatorState
 import eu.kanade.presentation.library.components.resolveGlowContourLibraryTextSpec
 import eu.kanade.presentation.library.components.shouldShowContinueViewingAction
+import eu.kanade.presentation.library.manga.components.SeriesStackedCoverCard
 import eu.kanade.presentation.library.resolveMangaLibraryCardProgressPercent
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
@@ -59,8 +63,10 @@ fun MangaLibraryAuroraContent(
     displayMode: LibraryDisplayMode,
     columns: Int,
     onMangaClicked: (Long) -> Unit,
+    onSeriesClicked: (Long) -> Unit,
     onToggleSelection: (LibraryManga) -> Unit,
     onToggleRangeSelection: (LibraryManga) -> Unit,
+    onTogglePinned: (MangaLibraryItem) -> Unit,
     onContinueReadingClicked: ((LibraryManga) -> Unit)?,
     onGlobalSearchClicked: () -> Unit,
     contentPadding: PaddingValues,
@@ -99,7 +105,9 @@ fun MangaLibraryAuroraContent(
                 searchQuery = searchQuery,
                 onGlobalSearchClicked = onGlobalSearchClicked,
                 onClick = onClickManga,
+                onSeriesClicked = onSeriesClicked,
                 onLongClick = onToggleRangeSelection,
+                onTogglePinned = onTogglePinned,
                 onClickContinueReading = onContinueReadingClicked,
                 listMaxWidthDp = auroraAdaptiveSpec.listMaxWidthDp,
                 horizontalPaddingDp = auroraAdaptiveSpec.contentHorizontalPaddingDp,
@@ -118,7 +126,9 @@ fun MangaLibraryAuroraContent(
                     onGlobalSearchClicked = onGlobalSearchClicked,
                     showMetadata = true,
                     onClick = onClickManga,
+                    onSeriesClicked = onSeriesClicked,
                     onLongClick = onToggleRangeSelection,
+                    onTogglePinned = onTogglePinned,
                     onClickContinueReading = onContinueReadingClicked,
                     listMaxWidthDp = auroraAdaptiveSpec.listMaxWidthDp,
                     adaptiveMinCellDp = auroraAdaptiveSpec.compactGridAdaptiveMinCellDp,
@@ -133,7 +143,9 @@ fun MangaLibraryAuroraContent(
                     contentPadding = contentPadding,
                     selection = selection,
                     onClick = onClickManga,
+                    onSeriesClicked = onSeriesClicked,
                     onLongClick = onToggleRangeSelection,
+                    onTogglePinned = onTogglePinned,
                     onClickContinueReading = onContinueReadingClicked,
                     searchQuery = searchQuery,
                     onGlobalSearchClicked = onGlobalSearchClicked,
@@ -151,7 +163,9 @@ fun MangaLibraryAuroraContent(
                 onGlobalSearchClicked = onGlobalSearchClicked,
                 showMetadata = false,
                 onClick = onClickManga,
+                onSeriesClicked = onSeriesClicked,
                 onLongClick = onToggleRangeSelection,
+                onTogglePinned = onTogglePinned,
                 onClickContinueReading = onContinueReadingClicked,
                 listMaxWidthDp = auroraAdaptiveSpec.listMaxWidthDp,
                 adaptiveMinCellDp = auroraAdaptiveSpec.coverOnlyGridAdaptiveMinCellDp,
@@ -170,7 +184,9 @@ fun MangaLibraryAuroraContent(
                 onGlobalSearchClicked = onGlobalSearchClicked,
                 showMetadata = true,
                 onClick = onClickManga,
+                onSeriesClicked = onSeriesClicked,
                 onLongClick = onToggleRangeSelection,
+                onTogglePinned = onTogglePinned,
                 onClickContinueReading = onContinueReadingClicked,
                 listMaxWidthDp = auroraAdaptiveSpec.listMaxWidthDp,
                 adaptiveMinCellDp = auroraAdaptiveSpec.comfortableGridAdaptiveMinCellDp,
@@ -189,12 +205,15 @@ private fun MangaLibraryAuroraList(
     searchQuery: String?,
     onGlobalSearchClicked: () -> Unit,
     onClick: (LibraryManga) -> Unit,
+    onSeriesClicked: (Long) -> Unit,
     onLongClick: (LibraryManga) -> Unit,
+    onTogglePinned: (MangaLibraryItem) -> Unit,
     onClickContinueReading: ((LibraryManga) -> Unit)?,
     listMaxWidthDp: Int?,
     horizontalPaddingDp: Int,
 ) {
     val colors = AuroraTheme.colors
+    val showPinnedSection = items.count { it.pinned } > 1
 
     FastScrollLazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -213,14 +232,31 @@ private fun MangaLibraryAuroraList(
             }
         }
 
+        if (showPinnedSection) {
+            item {
+                PinnedSectionHeader(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .auroraCenteredMaxWidth(listMaxWidthDp),
+                )
+            }
+        }
+
         listItems(
             items = items,
             contentType = { "manga_library_aurora_list_item" },
         ) { libraryItem ->
+            val isSeries = libraryItem is MangaLibraryItem.Series
             val libraryManga = libraryItem.libraryManga
-            val manga = libraryManga.manga
-            val subtitle = if (libraryManga.totalChapters > 0) {
-                "${libraryManga.readCount}/${libraryManga.totalChapters} ${stringResource(MR.strings.chapters)}"
+            val manga = libraryItem.coverManga ?: libraryManga.manga
+            val title = if (isSeries) libraryItem.title else manga.title
+            val selectionManga = libraryManga
+            val subtitle = if (libraryItem.totalChapters > 0) {
+                stringResource(
+                    AYMR.strings.manga_series_chapters_progress,
+                    libraryItem.readCount,
+                    libraryItem.totalChapters,
+                )
             } else {
                 null
             }
@@ -228,13 +264,25 @@ private fun MangaLibraryAuroraList(
                 libraryItem.unreadCount > 0 ||
                 libraryItem.isLocal ||
                 libraryItem.sourceLanguage.isNotBlank()
+            val targetManga = if (isSeries) {
+                libraryItem.librarySeries.entries.firstOrNull {
+                    it.manga.id == libraryItem.librarySeries.activeManga?.id
+                } ?: libraryManga
+            } else {
+                libraryManga
+            }
+            val seriesHeaderText = if (isSeries) {
+                stringResource(AYMR.strings.manga_series_caption_label)
+            } else {
+                null
+            }
 
             AuroraCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .auroraCenteredMaxWidth(listMaxWidthDp)
                     .aspectRatio(2.2f),
-                title = manga.title,
+                title = title,
                 coverData = MangaCover(
                     mangaId = manga.id,
                     sourceId = manga.source,
@@ -243,6 +291,17 @@ private fun MangaLibraryAuroraList(
                     lastModified = manga.coverLastModified,
                 ),
                 subtitle = subtitle,
+                seriesHeaderText = seriesHeaderText,
+                customCover = if (isSeries) {
+                    {
+                        SeriesStackedCoverCard(
+                            covers = libraryItem.covers,
+                            isSelected = selection.fastAny { it.id == selectionManga.id },
+                        )
+                    }
+                } else {
+                    null
+                },
                 badge = if (hasBadge) {
                     {
                         BadgeGroup {
@@ -282,19 +341,33 @@ private fun MangaLibraryAuroraList(
                 } else {
                     null
                 },
-                onClick = { onClick(libraryManga) },
-                onLongClick = { onLongClick(libraryManga) },
-                onClickContinueViewing = if (
-                    shouldShowContinueViewingAction(
-                        hasContinueAction = onClickContinueReading != null,
-                        remainingCount = libraryItem.libraryManga.unreadCount,
-                    )
-                ) {
-                    { onClickContinueReading?.invoke(libraryManga) }
+                topEndBadge = if (libraryItem.pinned) {
+                    { PinnedBadge() }
                 } else {
                     null
                 },
-                isSelected = selection.fastAny { it.id == libraryManga.id },
+                menuContent = null,
+                onClick = {
+                    if (isSeries) {
+                        if (selection.isEmpty()) {
+                            onSeriesClicked(libraryItem.librarySeries.id)
+                        }
+                    } else {
+                        onClick(libraryManga)
+                    }
+                },
+                onLongClick = { onLongClick(selectionManga) },
+                onClickContinueViewing = if (
+                    shouldShowContinueViewingAction(
+                        hasContinueAction = onClickContinueReading != null,
+                        remainingCount = libraryItem.unreadCount,
+                    )
+                ) {
+                    { onClickContinueReading?.invoke(targetManga) }
+                } else {
+                    null
+                },
+                isSelected = selection.fastAny { it.id == selectionManga.id },
                 coverHeightFraction = 0.62f,
                 titleMaxLines = 1,
             )
@@ -312,7 +385,9 @@ private fun MangaLibraryAuroraCardGrid(
     onGlobalSearchClicked: () -> Unit,
     showMetadata: Boolean,
     onClick: (LibraryManga) -> Unit,
+    onSeriesClicked: (Long) -> Unit,
     onLongClick: (LibraryManga) -> Unit,
+    onTogglePinned: (MangaLibraryItem) -> Unit,
     onClickContinueReading: ((LibraryManga) -> Unit)?,
     listMaxWidthDp: Int?,
     adaptiveMinCellDp: Int,
@@ -320,6 +395,7 @@ private fun MangaLibraryAuroraCardGrid(
     glowDisplayMode: LibraryDisplayMode,
 ) {
     val useGlowContourCards = cardStyle == AuroraLibraryCardStyle.GlowContour
+    val showPinnedSection = items.count { it.pinned } > 1
 
     LazyLibraryGrid(
         modifier = Modifier
@@ -331,6 +407,16 @@ private fun MangaLibraryAuroraCardGrid(
     ) {
         globalSearchItem(searchQuery, onGlobalSearchClicked)
 
+        if (showPinnedSection) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                PinnedSectionHeader(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .auroraCenteredMaxWidth(listMaxWidthDp),
+                )
+            }
+        }
+
         gridItems(
             items = items,
             contentType = {
@@ -341,10 +427,29 @@ private fun MangaLibraryAuroraCardGrid(
                 }
             },
         ) { libraryItem ->
+            val isSeries = libraryItem is MangaLibraryItem.Series
             val libraryManga = libraryItem.libraryManga
-            val manga = libraryManga.manga
-            val subtitle = if (showMetadata && libraryManga.totalChapters > 0) {
-                "${libraryManga.readCount}/${libraryManga.totalChapters} ${stringResource(MR.strings.chapters)}"
+            val manga = libraryItem.coverManga ?: libraryManga.manga
+            val title = if (isSeries) libraryItem.title else manga.title
+            val selectionManga = libraryManga
+            val subtitle = if (showMetadata && libraryItem.totalChapters > 0) {
+                stringResource(
+                    AYMR.strings.manga_series_chapters_progress,
+                    libraryItem.readCount,
+                    libraryItem.totalChapters,
+                )
+            } else {
+                null
+            }
+            val targetManga = if (isSeries) {
+                libraryItem.librarySeries.entries.firstOrNull {
+                    it.manga.id == libraryItem.librarySeries.activeManga?.id
+                } ?: libraryManga
+            } else {
+                libraryManga
+            }
+            val seriesHeaderText = if (isSeries) {
+                stringResource(AYMR.strings.manga_series_caption_label)
             } else {
                 null
             }
@@ -353,13 +458,13 @@ private fun MangaLibraryAuroraCardGrid(
                 libraryItem.isLocal ||
                 libraryItem.sourceLanguage.isNotBlank()
             val progressPercent = resolveMangaLibraryCardProgressPercent(
-                readCount = libraryManga.readCount,
-                totalCount = libraryManga.totalChapters,
+                readCount = libraryItem.readCount,
+                totalCount = libraryItem.totalChapters,
             )
             val textSpec = resolveGlowContourLibraryTextSpec(glowDisplayMode)
             val cornerIndicatorState = resolveGlowContourCornerIndicatorState(
                 hasContinueAction = onClickContinueReading != null,
-                remainingCount = libraryItem.libraryManga.unreadCount,
+                remainingCount = libraryItem.unreadCount,
                 isFinished = manga.status == SManga.COMPLETED.toLong() ||
                     manga.status == SManga.PUBLISHING_FINISHED.toLong() ||
                     manga.status == SManga.CANCELLED.toLong(),
@@ -368,7 +473,7 @@ private fun MangaLibraryAuroraCardGrid(
             if (useGlowContourCards) {
                 GlowContourLibraryGridItem(
                     modifier = Modifier,
-                    title = manga.title,
+                    title = title,
                     subtitle = subtitle,
                     coverData = MangaCover(
                         mangaId = manga.id,
@@ -380,6 +485,17 @@ private fun MangaLibraryAuroraCardGrid(
                     progressPercent = progressPercent,
                     cardAspectRatio = 0.76f,
                     cornerIndicatorState = cornerIndicatorState,
+                    seriesHeaderText = seriesHeaderText,
+                    customCover = if (isSeries) {
+                        {
+                            SeriesStackedCoverCard(
+                                covers = libraryItem.covers,
+                                isSelected = selection.fastAny { it.id == selectionManga.id },
+                            )
+                        }
+                    } else {
+                        null
+                    },
                     textSpec = textSpec,
                     badge = if (hasBadge) {
                         {
@@ -391,25 +507,39 @@ private fun MangaLibraryAuroraCardGrid(
                     } else {
                         null
                     },
-                    onClick = { onClick(libraryManga) },
-                    onLongClick = { onLongClick(libraryManga) },
-                    onClickContinueViewing = if (
-                        shouldShowContinueViewingAction(
-                            hasContinueAction = onClickContinueReading != null,
-                            remainingCount = libraryItem.libraryManga.unreadCount,
-                        )
-                    ) {
-                        { onClickContinueReading?.invoke(libraryManga) }
+                    topEndBadge = if (libraryItem.pinned) {
+                        { PinnedBadge() }
                     } else {
                         null
                     },
-                    isSelected = selection.fastAny { it.id == libraryManga.id },
+                    menuContent = null,
+                    onClick = {
+                        if (isSeries) {
+                            if (selection.isEmpty()) {
+                                onSeriesClicked(libraryItem.librarySeries.id)
+                            }
+                        } else {
+                            onClick(libraryManga)
+                        }
+                    },
+                    onLongClick = { onLongClick(selectionManga) },
+                    onClickContinueViewing = if (
+                        shouldShowContinueViewingAction(
+                            hasContinueAction = onClickContinueReading != null,
+                            remainingCount = libraryItem.unreadCount,
+                        )
+                    ) {
+                        { onClickContinueReading?.invoke(targetManga) }
+                    } else {
+                        null
+                    },
+                    isSelected = selection.fastAny { it.id == selectionManga.id },
                     gridColumns = columns,
                 )
             } else {
                 AuroraCard(
                     modifier = Modifier.aspectRatio(if (showMetadata) 0.66f else 0.6f),
-                    title = manga.title,
+                    title = title,
                     coverData = MangaCover(
                         mangaId = manga.id,
                         sourceId = manga.source,
@@ -418,6 +548,17 @@ private fun MangaLibraryAuroraCardGrid(
                         lastModified = manga.coverLastModified,
                     ),
                     subtitle = subtitle,
+                    seriesHeaderText = seriesHeaderText,
+                    customCover = if (isSeries) {
+                        {
+                            SeriesStackedCoverCard(
+                                covers = libraryItem.covers,
+                                isSelected = selection.fastAny { it.id == selectionManga.id },
+                            )
+                        }
+                    } else {
+                        null
+                    },
                     badge = if (hasBadge) {
                         {
                             MangaAuroraBadgeGroup(
@@ -428,19 +569,33 @@ private fun MangaLibraryAuroraCardGrid(
                     } else {
                         null
                     },
-                    onClick = { onClick(libraryManga) },
-                    onLongClick = { onLongClick(libraryManga) },
-                    onClickContinueViewing = if (
-                        shouldShowContinueViewingAction(
-                            hasContinueAction = onClickContinueReading != null,
-                            remainingCount = libraryItem.libraryManga.unreadCount,
-                        )
-                    ) {
-                        { onClickContinueReading?.invoke(libraryManga) }
+                    topEndBadge = if (libraryItem.pinned) {
+                        { PinnedBadge() }
                     } else {
                         null
                     },
-                    isSelected = selection.fastAny { it.id == libraryManga.id },
+                    menuContent = null,
+                    onClick = {
+                        if (isSeries) {
+                            if (selection.isEmpty()) {
+                                onSeriesClicked(libraryItem.librarySeries.id)
+                            }
+                        } else {
+                            onClick(libraryManga)
+                        }
+                    },
+                    onLongClick = { onLongClick(selectionManga) },
+                    onClickContinueViewing = if (
+                        shouldShowContinueViewingAction(
+                            hasContinueAction = onClickContinueReading != null,
+                            remainingCount = libraryItem.unreadCount,
+                        )
+                    ) {
+                        { onClickContinueReading?.invoke(targetManga) }
+                    } else {
+                        null
+                    },
+                    isSelected = selection.fastAny { it.id == selectionManga.id },
                     coverHeightFraction = if (showMetadata) 0.68f else 1f,
                     titleMaxLines = if (showMetadata) 1 else 2,
                     gridColumns = columns,

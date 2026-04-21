@@ -235,6 +235,7 @@ class LibraryPreferences(
 
     fun newMangaUpdatesCount() = preferenceStore.getInt("library_unread_updates_count", 0)
     fun newAnimeUpdatesCount() = preferenceStore.getInt("library_unseen_updates_count", 0)
+    fun newNovelUpdatesCount() = preferenceStore.getInt("library_unread_novel_updates_count", 0)
 
     // Mixture Category
 
@@ -315,7 +316,7 @@ class LibraryPreferences(
 
     fun sortChapterByAscendingOrDescending() = preferenceStore.getLong(
         "default_chapter_sort_by_ascending_or_descending",
-        Manga.CHAPTER_SORT_DESC,
+        Manga.CHAPTER_SORT_ASC,
     )
 
     fun showEpisodeThumbnailPreviews() = preferenceStore.getLong(

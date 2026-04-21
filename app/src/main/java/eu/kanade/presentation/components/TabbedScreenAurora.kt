@@ -82,6 +82,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 import kotlin.math.roundToInt
 
 data class TabState(
@@ -369,6 +370,7 @@ private fun AuroraTabHeader(
     extraActionGapAfterTitle: String?,
 ) {
     val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
     val currentTab = tabs.getOrNull(currentPage)
     val actions = currentTab?.actions.orEmpty()
     val iconActions = actions.filterIsInstance<AppBar.Action>()
@@ -422,7 +424,12 @@ private fun AuroraTabHeader(
                     )
                 },
                 trailingIcon = {
-                    IconButton(onClick = onSearchClose) {
+                    IconButton(
+                        onClick = {
+                            appHaptics.tap()
+                            onSearchClose()
+                        },
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.Close,
                             contentDescription = null,
@@ -490,6 +497,7 @@ private fun AuroraTabHeader(
                                 DropdownMenuItem(
                                     text = { Text(action.title, fontWeight = FontWeight.Normal) },
                                     onClick = {
+                                        appHaptics.tap()
                                         action.onClick()
                                         showOverflowMenu = false
                                     },
@@ -559,6 +567,7 @@ internal fun AuroraTab(
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
     val tabShape = RoundedCornerShape(20.dp)
     val selectedTabBrush = remember(colors.accent) {
         Brush.linearGradient(
@@ -598,7 +607,10 @@ internal fun AuroraTab(
                     Modifier
                 },
             )
-            .clickable(onClick = onClick)
+            .clickable {
+                appHaptics.tap()
+                onClick()
+            }
             .padding(horizontal = 16.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {

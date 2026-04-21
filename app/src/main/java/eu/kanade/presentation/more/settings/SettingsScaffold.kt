@@ -43,6 +43,7 @@ import eu.kanade.presentation.theme.resolveAuroraTopBarScrimColor
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 
 private val AuroraSettingsBottomContentInset = 16.dp
 
@@ -244,8 +245,12 @@ internal fun AuroraTopBarIconButton(
     tint: Color = AuroraTheme.colors.textPrimary,
 ) {
     val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
     IconButton(
-        onClick = onClick,
+        onClick = {
+            appHaptics.tap()
+            onClick()
+        },
         modifier = modifier
             .size(40.dp)
             .background(resolveAuroraControlContainerColor(colors), CircleShape),

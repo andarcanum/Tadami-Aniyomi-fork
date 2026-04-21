@@ -11,20 +11,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
-import eu.kanade.presentation.entries.components.aurora.applyAuroraBlurBackground
 import eu.kanade.presentation.entries.components.aurora.auroraPosterBackgroundSpec
+import eu.kanade.presentation.entries.components.aurora.auroraPosterBlur
+import eu.kanade.presentation.entries.components.aurora.buildAuroraPosterBackgroundRequest
+import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterBackgroundPainter
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraPosterScrimBrush
-import eu.kanade.presentation.novel.buildNovelCoverImageRequest
 import eu.kanade.presentation.novel.sourceAwareNovelCoverModel
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.entries.novel.model.Novel
@@ -41,6 +42,8 @@ fun FullscreenPosterBackground(
     novel: Novel,
     scrollOffset: Int,
     firstVisibleItemIndex: Int,
+    minimumBlurOverlayAlpha: Float = 0f,
+    posterScrimAlpha: Float? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -48,6 +51,7 @@ fun FullscreenPosterBackground(
     val density = LocalDensity.current
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter(AuroraCoverPlaceholderVariant.Wide)
     val posterModel = sourceAwareNovelCoverModel(novel).takeIf { !it.url.isNullOrBlank() }
+    val posterColorFilter = rememberAuroraPosterColorFilter()
 
     val hasScrolledAway = firstVisibleItemIndex > 0 || scrollOffset > 100
 
@@ -60,14 +64,17 @@ fun FullscreenPosterBackground(
         label = "dimAlpha",
     )
     val blurOverlayAlpha by animateFloatAsState(
-        targetValue = if (hasScrolledAway) 1f else (scrollOffset / 100f).coerceIn(0f, 1f),
+        targetValue = if (hasScrolledAway) {
+            1f
+        } else {
+            (scrollOffset / 100f).coerceIn(minimumBlurOverlayAlpha, 1f)
+        },
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessLow,
         ),
         label = "blurOverlayAlpha",
     )
-    val blurRadiusPx = with(density) { 20.dp.roundToPx() }
     val containerWidthPx = with(density) { configuration.screenWidthDp.dp.roundToPx() }
     val containerHeightPx = with(density) { configuration.screenHeightDp.dp.roundToPx() }
     val backgroundSpec = remember(
@@ -75,50 +82,58 @@ fun FullscreenPosterBackground(
         novel.coverLastModified,
         containerWidthPx,
         containerHeightPx,
-        blurRadiusPx,
     ) {
         auroraPosterBackgroundSpec(
             baseCacheKey = "novel-bg;${novel.id};${novel.coverLastModified}",
             containerWidthPx = containerWidthPx,
             containerHeightPx = containerHeightPx,
-            blurRadiusPx = blurRadiusPx,
         )
     }
 
     Box(modifier = modifier.fillMaxSize()) {
         val colors = AuroraTheme.colors
+        val scrimColor = if (colors.isDark) Color.Black else colors.background
 
         if (posterModel != null) {
-            AsyncImage(
-                model = remember(posterModel, backgroundSpec.sharpMemoryCacheKey) {
-                    buildNovelCoverImageRequest(context, novel) {
-                        memoryCacheKey(backgroundSpec.sharpMemoryCacheKey)
-                    }
-                },
-                error = placeholderPainter,
-                fallback = placeholderPainter,
+            val backgroundRequest = remember(
+                novel.id,
+                novel.coverLastModified,
+                backgroundSpec.memoryCacheKey,
+                containerWidthPx,
+                containerHeightPx,
+            ) {
+                buildAuroraPosterBackgroundRequest(
+                    context = context,
+                    data = sourceAwareNovelCoverModel(novel),
+                    spec = backgroundSpec,
+                    containerWidthPx = containerWidthPx,
+                    containerHeightPx = containerHeightPx,
+                ) {
+                    placeholderMemoryCacheKey(novel.thumbnailUrl)
+                }
+            }
+            val backgroundPainter = rememberAuroraPosterBackgroundPainter(
+                request = backgroundRequest,
+                placeholderPainter = placeholderPainter,
+            )
+
+            Image(
+                painter = backgroundPainter,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                colorFilter = rememberAuroraPosterColorFilter(),
+                colorFilter = posterColorFilter,
                 modifier = Modifier.fillMaxSize(),
             )
 
-            AsyncImage(
-                model = remember(posterModel, backgroundSpec, blurRadiusPx) {
-                    buildNovelCoverImageRequest(context, novel) {
-                        applyAuroraBlurBackground(
-                            spec = backgroundSpec,
-                            blurRadiusPx = blurRadiusPx,
-                        )
-                    }
-                },
-                error = placeholderPainter,
-                fallback = placeholderPainter,
+            Image(
+                painter = backgroundPainter,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                colorFilter = rememberAuroraPosterColorFilter(),
+                colorFilter = posterColorFilter,
                 alpha = blurOverlayAlpha,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .auroraPosterBlur(20.dp),
             )
         } else {
             Image(
@@ -129,11 +144,28 @@ fun FullscreenPosterBackground(
             )
         }
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(resolveAuroraPosterScrimBrush(colors)),
-        )
+        if (posterScrimAlpha != null) {
+            val posterScrimBottomAlpha = (posterScrimAlpha + 0.15f).coerceAtMost(1f)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colorStops = arrayOf(
+                                0.0f to scrimColor.copy(alpha = posterScrimAlpha),
+                                0.6f to scrimColor.copy(alpha = posterScrimAlpha),
+                                1.0f to scrimColor.copy(alpha = posterScrimBottomAlpha),
+                            ),
+                        ),
+                    ),
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(resolveAuroraPosterScrimBrush(colors)),
+            )
+        }
 
         Box(
             modifier = Modifier

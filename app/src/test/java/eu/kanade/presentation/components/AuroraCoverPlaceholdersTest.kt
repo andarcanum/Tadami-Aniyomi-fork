@@ -1,103 +1,42 @@
 package eu.kanade.presentation.components
 
-import com.tadami.aurora.R
+import android.content.Context
 import io.kotest.matchers.shouldBe
+import io.mockk.mockk
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.entries.anime.model.AnimeCover
 import tachiyomi.domain.entries.manga.model.MangaCover
-import tachiyomi.domain.entries.novel.model.NovelCover
 
 class AuroraCoverPlaceholdersTest {
 
     @Test
-    fun `aurora cover model resolves blank values to null`() {
-        resolveAuroraCoverModel(null) shouldBe null
-        resolveAuroraCoverModel("   ") shouldBe null
-        resolveAuroraCoverModel(
+    fun `resolveAuroraCoverPlaceholderMemoryCacheKey includes last modified for cover models`() {
+        val key = resolveAuroraCoverPlaceholderMemoryCacheKey(
             AnimeCover(
-                animeId = 3L,
-                sourceId = 4L,
-                isAnimeFavorite = false,
-                url = "",
-                lastModified = 0L,
-            ),
-        ) shouldBe null
-        resolveAuroraCoverModel(
-            MangaCover(
-                mangaId = 5L,
-                sourceId = 6L,
-                isMangaFavorite = false,
-                url = " ",
-                lastModified = 0L,
-            ),
-        ) shouldBe null
-        resolveAuroraCoverModel(
-            NovelCover(
-                novelId = 1L,
+                animeId = 1L,
                 sourceId = 2L,
-                isNovelFavorite = false,
-                url = " ",
-                lastModified = 0L,
+                isAnimeFavorite = true,
+                url = "https://example.org/anime.jpg",
+                lastModified = 1234L,
             ),
-        ) shouldBe null
-    }
-
-    @Test
-    fun `aurora cover model keeps loadable data`() {
-        val animeCover = AnimeCover(
-            animeId = 3L,
-            sourceId = 4L,
-            isAnimeFavorite = false,
-            url = "https://example.org/anime.jpg",
-            lastModified = 0L,
-        )
-        val mangaCover = MangaCover(
-            mangaId = 5L,
-            sourceId = 6L,
-            isMangaFavorite = false,
-            url = "https://example.org/manga.jpg",
-            lastModified = 0L,
-        )
-        val cover = NovelCover(
-            novelId = 1L,
-            sourceId = 2L,
-            isNovelFavorite = false,
-            url = "https://example.org/cover.jpg",
-            lastModified = 0L,
         )
 
-        resolveAuroraCoverModel("https://example.org/image.jpg") shouldBe "https://example.org/image.jpg"
-        resolveAuroraCoverModel(animeCover) shouldBe animeCover
-        resolveAuroraCoverModel(mangaCover) shouldBe mangaCover
-        resolveAuroraCoverModel(cover) shouldBe cover
+        key shouldBe "anime;https://example.org/anime.jpg;1234"
     }
 
     @Test
-    fun `aurora placeholder variant maps to expected resource`() {
-        auroraCoverPlaceholderResId(AuroraCoverPlaceholderVariant.Portrait) shouldBe
-            R.drawable.aurora_cover_placeholder_portrait
-        auroraCoverPlaceholderResId(AuroraCoverPlaceholderVariant.Wide) shouldBe
-            R.drawable.aurora_cover_placeholder_wide
-    }
+    fun `buildAuroraCoverImageRequest applies placeholder memory cache key`() {
+        val request = buildAuroraCoverImageRequest(
+            context = mockk<Context>(relaxed = true),
+            data = MangaCover(
+                mangaId = 3L,
+                sourceId = 4L,
+                isMangaFavorite = false,
+                url = "https://example.org/manga.jpg",
+                lastModified = 5678L,
+            ),
+        )
 
-    @Test
-    fun `theme aware fallback uses cover empty when aurora is disabled`() {
-        themeAwareCoverFallbackResId(
-            isAuroraTheme = false,
-            variant = AuroraCoverPlaceholderVariant.Portrait,
-        ) shouldBe R.drawable.cover_empty
-    }
-
-    @Test
-    fun `theme aware fallback uses aurora placeholders when aurora is enabled`() {
-        themeAwareCoverFallbackResId(
-            isAuroraTheme = true,
-            variant = AuroraCoverPlaceholderVariant.Portrait,
-        ) shouldBe R.drawable.aurora_cover_placeholder_portrait
-
-        themeAwareCoverFallbackResId(
-            isAuroraTheme = true,
-            variant = AuroraCoverPlaceholderVariant.Wide,
-        ) shouldBe R.drawable.aurora_cover_placeholder_wide
+        request.placeholderMemoryCacheKey?.key shouldBe "manga;https://example.org/manga.jpg;5678"
     }
 }

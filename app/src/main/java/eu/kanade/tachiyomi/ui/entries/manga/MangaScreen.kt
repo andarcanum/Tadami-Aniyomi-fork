@@ -170,7 +170,13 @@ class MangaScreen(
             selectedScanlator = successState.selectedScanlator,
             onScanlatorSelected = screenModel::selectScanlator,
             onRefresh = screenModel::fetchAllFromSource,
-            onContinueReading = { continueReading(context, screenModel.getNextUnreadChapter()) },
+            onContinueReading = {
+                scope.launch {
+                    screenModel.getContinueChapter()?.let { chapter ->
+                        continueReading(context, chapter)
+                    }
+                }
+            },
             onSearch = { query, global -> scope.launch { performSearch(navigator, query, global) } },
             onCoverClicked = screenModel::showCoverDialog,
             onShareClicked = { shareManga(context, screenModel.manga, screenModel.source) }.takeIf { isHttpSource },

@@ -2,13 +2,23 @@ package eu.kanade.tachiyomi.ui.novel
 
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 
-internal fun resolveNovelResumeChapter(chapters: List<NovelChapter>): NovelChapter? {
+internal fun resolveNovelResumeChapter(
+    chapters: List<NovelChapter>,
+    fromChapterId: Long? = null,
+): NovelChapter? {
     val sortedChapters = chapters.sortedWith(
         compareBy<NovelChapter> { it.sourceOrder }
             .thenBy { it.chapterNumber }
             .thenBy { it.id },
     )
     if (sortedChapters.isEmpty()) return null
+
+    if (fromChapterId != null) {
+        val currentIndex = sortedChapters.indexOfFirst { it.id == fromChapterId }
+        if (currentIndex >= 0) {
+            return sortedChapters[currentIndex]
+        }
+    }
 
     sortedChapters.firstOrNull { it.lastPageRead > 0L && !it.read }?.let { return it }
 

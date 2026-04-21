@@ -526,7 +526,11 @@ internal fun resolveComposePagerSettledBoundaryChapterTarget(
 internal fun resolveActivePageTransitionStyle(
     requestedStyle: NovelPageTransitionStyle,
     pageTurnRendererSupported: Boolean,
+    isEInkMode: Boolean = false,
 ): NovelPageTransitionStyle {
+    if (isEInkMode) {
+        return NovelPageTransitionStyle.INSTANT
+    }
     val requestedEngine = resolvePageTransitionEngine(requestedStyle)
     if (requestedEngine == NovelPageTransitionEngine.PAGE_TURN_RENDERER && !pageTurnRendererSupported) {
         return NovelPageTransitionStyle.SLIDE

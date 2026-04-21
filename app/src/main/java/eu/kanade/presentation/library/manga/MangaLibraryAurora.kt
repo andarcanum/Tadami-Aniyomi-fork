@@ -25,14 +25,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
+import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
-import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.entries.manga.model.asMangaCover
 import tachiyomi.domain.library.manga.LibraryManga
-import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
@@ -63,13 +62,11 @@ fun AniviewMangaCard(
                 .clip(RoundedCornerShape(12.dp))
                 .background(colors.cardBackground),
         ) {
+            val coverRequest = remember(item.manga.id, item.manga.thumbnailUrl, item.manga.coverLastModified) {
+                buildAuroraCoverImageRequest(context, item.manga.asMangaCover())
+            }
             AsyncImage(
-                model = remember(item.manga.id, item.manga.thumbnailUrl, item.manga.coverLastModified) {
-                    ImageRequest.Builder(context)
-                        .data(resolveAuroraCoverModel(item.manga.asMangaCover()))
-                        .placeholderMemoryCacheKey(item.manga.thumbnailUrl)
-                        .build()
-                },
+                model = coverRequest,
                 error = placeholderPainter,
                 fallback = placeholderPainter,
                 contentDescription = null,
@@ -124,7 +121,11 @@ fun AniviewMangaCard(
         // Chapter count (metadata)
         val readCount = item.totalChapters - item.unreadCount
         Text(
-            text = "$readCount/${item.totalChapters} ${stringResource(MR.strings.chapters)}",
+            text = stringResource(
+                AYMR.strings.manga_series_chapters_progress,
+                readCount,
+                item.totalChapters,
+            ),
             color = colors.textSecondary,
             fontSize = 12.sp,
             modifier = Modifier.padding(top = 2.dp),

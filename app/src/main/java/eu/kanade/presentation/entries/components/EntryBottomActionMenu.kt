@@ -25,7 +25,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Input
 import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.automirrored.outlined.LabelOff
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.BookmarkRemove
 import androidx.compose.material.icons.outlined.Delete
@@ -33,6 +35,7 @@ import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.NewLabel
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.RemoveDone
 import androidx.compose.material.icons.outlined.SwapCalls
 import androidx.compose.material.icons.outlined.Translate
@@ -69,6 +72,7 @@ import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import kotlin.time.Duration.Companion.seconds
@@ -260,6 +264,7 @@ private fun RowScope.Button(
         targetValue = if (toConfirm) 2f else 1f,
         label = "weight",
     )
+    val appHaptics = LocalAppHaptics.current
     Column(
         modifier = Modifier
             .size(48.dp)
@@ -268,7 +273,10 @@ private fun RowScope.Button(
                 interactionSource = null,
                 indication = ripple(bounded = false),
                 onLongClick = onLongClick,
-                onClick = onClick,
+                onClick = {
+                    appHaptics.tap()
+                    onClick()
+                },
             ),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -297,12 +305,15 @@ private fun RowScope.Button(
 fun LibraryBottomActionMenu(
     visible: Boolean,
     onChangeCategoryClicked: () -> Unit,
+    onTogglePinnedClicked: ((Boolean) -> Unit)? = null,
+    isPinned: Boolean = false,
     onMarkAsViewedClicked: () -> Unit,
     onMarkAsUnviewedClicked: () -> Unit,
     onDownloadClicked: ((DownloadAction) -> Unit)?,
     onOpenDownloadDialog: (() -> Unit)? = null,
     onTranslatedDownloadClicked: (() -> Unit)? = null,
     onMigrateClicked: (() -> Unit)? = null,
+    onSeriesClicked: (() -> Unit)? = null,
     onDeleteClicked: () -> Unit,
     isManga: Boolean,
     modifier: Modifier = Modifier,
@@ -313,6 +324,8 @@ fun LibraryBottomActionMenu(
         exit = shrinkVertically(animationSpec = tween()),
     ) {
         val scope = rememberCoroutineScope()
+        val appHaptics = LocalAppHaptics.current
+        var pinned by remember(isPinned) { mutableStateOf(isPinned) }
         Surface(
             modifier = modifier,
             shape = MaterialTheme.shapes.large.copy(
@@ -322,7 +335,7 @@ fun LibraryBottomActionMenu(
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
             val haptic = LocalHapticFeedback.current
-            val confirm = remember { mutableStateListOf(false, false, false, false, false, false, false) }
+            val confirm = remember { mutableStateListOf(false, false, false, false, false, false, false, false) }
             var resetJob: Job? = remember { null }
             val onLongClickItem: (Int) -> Unit = { toConfirmIndex ->
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -348,6 +361,21 @@ fun LibraryBottomActionMenu(
                     onLongClick = { onLongClickItem(0) },
                     onClick = onChangeCategoryClicked,
                 )
+                if (onTogglePinnedClicked != null) {
+                    Button(
+                        title = stringResource(
+                            if (pinned) MR.strings.action_unpin else MR.strings.action_pin,
+                        ),
+                        icon = if (pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                        toConfirm = false,
+                        onLongClick = {},
+                        onClick = {
+                            val desiredPinned = !pinned
+                            pinned = desiredPinned
+                            onTogglePinnedClicked(desiredPinned)
+                        },
+                    )
+                }
                 val viewed = if (isManga) MR.strings.action_mark_as_read else AYMR.strings.action_mark_as_seen
                 Button(
                     title = stringResource(viewed),
@@ -399,6 +427,17 @@ fun LibraryBottomActionMenu(
                         onClick = onTranslatedDownloadClicked,
                     )
                 }
+
+                if (onSeriesClicked != null) {
+                    Button(
+                        title = stringResource(AYMR.strings.series_detail),
+                        icon = Icons.AutoMirrored.Outlined.MenuBook,
+                        toConfirm = confirm[7],
+                        onLongClick = { onLongClickItem(7) },
+                        onClick = onSeriesClicked,
+                    )
+                }
+
                 if (onDownloadClicked == null) {
                     if (onMigrateClicked != null) {
                         Button(
@@ -432,12 +471,18 @@ fun LibraryBottomActionMenu(
                             if (onMigrateClicked != null) {
                                 DropdownMenuItem(
                                     text = { Text(stringResource(MR.strings.action_migrate)) },
-                                    onClick = onMigrateClicked,
+                                    onClick = {
+                                        appHaptics.tap()
+                                        onMigrateClicked()
+                                    },
                                 )
                             }
                             DropdownMenuItem(
                                 text = { Text(stringResource(MR.strings.action_delete)) },
-                                onClick = onDeleteClicked,
+                                onClick = {
+                                    appHaptics.tap()
+                                    onDeleteClicked()
+                                },
                             )
                         }
                     }

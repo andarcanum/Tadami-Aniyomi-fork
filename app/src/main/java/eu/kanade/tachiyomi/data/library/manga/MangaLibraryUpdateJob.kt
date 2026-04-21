@@ -17,6 +17,8 @@ import eu.kanade.domain.entries.manga.model.toSManga
 import eu.kanade.domain.items.chapter.interactor.SyncChaptersWithSource
 import eu.kanade.tachiyomi.data.cache.MangaCoverCache
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
+import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
+import eu.kanade.tachiyomi.data.library.LibraryUpdatePacingPolicy
 import eu.kanade.tachiyomi.data.library.shouldRetryLegacyAutoUpdateRun
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.source.model.SManga
@@ -78,6 +80,7 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
     private val syncChaptersWithSource: SyncChaptersWithSource = Injekt.get()
     private val mangaFetchInterval: MangaFetchInterval = Injekt.get()
     private val filterChaptersForDownload: FilterChaptersForDownload = Injekt.get()
+    private val pacingPolicy = LibraryUpdatePacingPolicy(Injekt.get())
 
     private val notifier = MangaLibraryUpdateNotifier(context)
 
@@ -246,7 +249,7 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
         val progressCount = AtomicInteger(0)
         val currentlyUpdatingManga = CopyOnWriteArrayList<Manga>()
         val newUpdates = CopyOnWriteArrayList<Pair<Manga, Array<Chapter>>>()
-        val failedUpdates = CopyOnWriteArrayList<Pair<Manga, String?>>()
+        val failedUpdates = CopyOnWriteArrayList<LibraryUpdateFailure>()
         val hasDownloads = AtomicBoolean(false)
         val fetchWindow = mangaFetchInterval.getWindow(ZonedDateTime.now())
 
@@ -255,13 +258,13 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                 .map { mangaInSource ->
                     async {
                         semaphore.withPermit {
-                            mangaInSource.forEach { libraryManga ->
+                            mangaInSource.forEachIndexed { index, libraryManga ->
                                 val manga = libraryManga.manga
                                 ensureActive()
 
                                 // Don't continue to update if manga is not in library
                                 if (getManga.await(manga.id)?.favorite != true) {
-                                    return@forEach
+                                    return@forEachIndexed
                                 }
 
                                 withUpdateNotification(
@@ -297,9 +300,21 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                                             )
                                             else -> e.message
                                         }
-                                        failedUpdates.add(manga to errorMessage)
+                                        failedUpdates.add(
+                                            LibraryUpdateFailure(
+                                                title = manga.title,
+                                                sourceName = sourceManager.getOrStub(manga.source).toString(),
+                                                reason = errorMessage,
+                                            ),
+                                        )
                                     }
                                 }
+
+                                pacingPolicy.delayAfterUpdate(
+                                    mediaTag = LibraryUpdatePacingPolicy.MEDIA_MANGA,
+                                    sourceId = manga.source,
+                                    shouldDelay = index != mangaInSource.lastIndex,
+                                )
                             }
                         }
                     }
@@ -318,10 +333,7 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
 
         if (failedUpdates.isNotEmpty()) {
             val errorFile = writeErrorFile(failedUpdates)
-            notifier.showUpdateErrorNotification(
-                failedUpdates.size,
-                errorFile.getUriCompat(context),
-            )
+            notifier.showUpdateErrorNotification(failedUpdates, errorFile.getUriCompat(context))
         }
         if (isManualRun && newUpdates.isEmpty() && failedUpdates.isEmpty()) {
             notifier.showNoUpdatesNotification(checked = mangaToUpdate.size)
@@ -389,10 +401,10 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
     /**
      * Writes basic file of update errors to cache dir.
      */
-    private fun writeErrorFile(errors: List<Pair<Manga, String?>>): File {
+    private fun writeErrorFile(errors: List<LibraryUpdateFailure>): File {
         try {
             if (errors.isNotEmpty()) {
-                val file = context.createFileInCacheDir("aniyomi_update_errors.txt")
+                val file = context.createFileInCacheDir("tadami_update_errors.txt")
                 file.bufferedWriter().use { out ->
                     out.write(
                         context.stringResource(MR.strings.library_errors_help, ERROR_LOG_HELP_URL) + "\n\n",
@@ -401,12 +413,15 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                     // ! Error
                     //   # Source
                     //     - Manga
-                    errors.groupBy({ it.second }, { it.first }).forEach { (error, mangas) ->
-                        out.write("\n! ${error}\n")
-                        mangas.groupBy { it.source }.forEach { (srcId, mangas) ->
-                            val source = sourceManager.getOrStub(srcId)
-                            out.write("  # $source\n")
-                            mangas.forEach {
+                    errors.groupBy { it.reason }.forEach { (error, failures) ->
+                        out.write(
+                            "\n! ${error.orEmpty().ifBlank {
+                                context.stringResource(MR.strings.unknown_error)
+                            }}\n",
+                        )
+                        failures.groupBy { it.sourceName }.forEach { (sourceName, failuresForSource) ->
+                            out.write("  # $sourceName\n")
+                            failuresForSource.forEach {
                                 out.write("    - ${it.title}\n")
                             }
                         }
@@ -423,7 +438,7 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
         private const val WORK_NAME_AUTO = "LibraryUpdate-auto"
         private const val WORK_NAME_MANUAL = "LibraryUpdate-manual"
 
-        private const val ERROR_LOG_HELP_URL = "https://aniyomi.org/help/guides/troubleshooting"
+        private const val ERROR_LOG_HELP_URL = "https://t.me/TadamiSupport"
         private const val MANGA_PER_SOURCE_QUEUE_WARNING_THRESHOLD = 60
 
         /**

@@ -58,6 +58,7 @@ import kotlinx.collections.immutable.ImmutableList
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.Pill
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 import tachiyomi.presentation.core.util.clearFocusOnSoftKeyboardHide
 import tachiyomi.presentation.core.util.runOnEnterKeyPressed
 import tachiyomi.presentation.core.util.secondaryItemAlpha
@@ -132,13 +133,18 @@ fun AppBar(
 
     scrollBehavior: TopAppBarScrollBehavior? = null,
 ) {
+    val appHaptics = LocalAppHaptics.current
+
     Column(
         modifier = modifier,
     ) {
         TopAppBar(
             navigationIcon = {
                 if (isActionMode) {
-                    IconButton(onClick = onCancelActionMode) {
+                    IconButton(onClick = {
+                        appHaptics.tap()
+                        onCancelActionMode()
+                    }) {
                         Icon(
                             imageVector = Icons.Outlined.Close,
                             contentDescription = stringResource(MR.strings.action_cancel),
@@ -146,7 +152,10 @@ fun AppBar(
                     }
                 } else {
                     navigateUp?.let {
-                        IconButton(onClick = it) {
+                        IconButton(onClick = {
+                            appHaptics.tap()
+                            it()
+                        }) {
                             UpIcon(navigationIcon = navigationIcon)
                         }
                     }
@@ -215,6 +224,7 @@ fun AppBarTitle(
 fun AppBarActions(
     actions: ImmutableList<AppBar.AppBarAction>,
 ) {
+    val appHaptics = LocalAppHaptics.current
     var showMenu by remember { mutableStateOf(false) }
 
     actions.filterIsInstance<AppBar.Action>().map {
@@ -228,7 +238,10 @@ fun AppBarActions(
             state = rememberTooltipState(),
         ) {
             IconButton(
-                onClick = it.onClick,
+                onClick = {
+                    appHaptics.tap()
+                    it.onClick()
+                },
                 enabled = it.enabled,
             ) {
                 Icon(
@@ -252,7 +265,10 @@ fun AppBarActions(
             state = rememberTooltipState(),
         ) {
             IconButton(
-                onClick = { showMenu = !showMenu },
+                onClick = {
+                    appHaptics.tap()
+                    showMenu = !showMenu
+                },
             ) {
                 Icon(
                     Icons.Outlined.MoreVert,
@@ -270,6 +286,7 @@ fun AppBarActions(
             overflowActions.map {
                 DropdownMenuItem(
                     onClick = {
+                        appHaptics.tap()
                         it.onClick()
                         showMenu = false
                     },
@@ -302,6 +319,7 @@ fun SearchToolbar(
     visualTransformation: VisualTransformation = VisualTransformation.None,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
 ) {
+    val appHaptics = LocalAppHaptics.current
     val focusRequester = remember { FocusRequester() }
 
     AppBar(
@@ -377,7 +395,9 @@ fun SearchToolbar(
                     // Don't show search action
                 } else if (searchQuery == null) {
                     TooltipBox(
-                        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+                        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(
+                            TooltipAnchorPosition.Above,
+                        ),
                         tooltip = {
                             PlainTooltip {
                                 Text(stringResource(MR.strings.action_search))
@@ -386,7 +406,10 @@ fun SearchToolbar(
                         state = rememberTooltipState(),
                     ) {
                         IconButton(
-                            onClick = onClick,
+                            onClick = {
+                                appHaptics.tap()
+                                onClick()
+                            },
                         ) {
                             Icon(
                                 Icons.Outlined.Search,
@@ -407,6 +430,7 @@ fun SearchToolbar(
                     ) {
                         IconButton(
                             onClick = {
+                                appHaptics.tap()
                                 onClick()
                                 focusRequester.requestFocus()
                             },

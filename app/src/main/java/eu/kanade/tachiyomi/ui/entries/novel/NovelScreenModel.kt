@@ -68,6 +68,7 @@ import logcat.LogPriority
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
+import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.handler.AchievementEventBus
 import tachiyomi.data.achievement.model.AchievementEvent
@@ -79,6 +80,7 @@ import tachiyomi.domain.entries.novel.interactor.GetNovelWithChapters
 import tachiyomi.domain.entries.novel.interactor.SetNovelChapterFlags
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.entries.novel.model.NovelUpdate
+import tachiyomi.domain.history.novel.repository.NovelHistoryRepository
 import tachiyomi.domain.items.novelchapter.interactor.SetNovelDefaultChapterFlags
 import tachiyomi.domain.items.novelchapter.model.NoChaptersException
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
@@ -142,6 +144,7 @@ class NovelScreenModel(
     private val updateNovel: UpdateNovel = Injekt.get(),
     private val syncNovelChaptersWithSource: SyncNovelChaptersWithSource = Injekt.get(),
     private val novelChapterRepository: NovelChapterRepository = Injekt.get(),
+    private val novelHistoryRepository: NovelHistoryRepository = Injekt.get(),
     private val setNovelChapterFlags: SetNovelChapterFlags = Injekt.get(),
     private val setNovelDefaultChapterFlags: SetNovelDefaultChapterFlags = Injekt.get(),
     private val getAvailableNovelScanlators: GetAvailableNovelScanlators = Injekt.get(),
@@ -222,7 +225,15 @@ class NovelScreenModel(
 
     fun getResumeOrNextChapter(): NovelChapter? {
         val state = successState ?: return null
-        return resolveNovelResumeChapter(state.chapters)
+        return resolveNovelResumeChapter(state.chapters, state.resumeChapterId)
+    }
+
+    suspend fun getContinueChapter(): NovelChapter? = withIOContext {
+        val state = successState ?: return@withIOContext null
+        val historyChapterId = novelHistoryRepository.getHistoryByNovelId(novelId)
+            .maxByOrNull { it.readAt?.time ?: Long.MIN_VALUE }
+            ?.chapterId
+        resolveNovelResumeChapter(state.chapters, historyChapterId)
     }
 
     fun getNextUnreadChapter(): NovelChapter? {
@@ -370,6 +381,9 @@ class NovelScreenModel(
                 availableScanlators = availableScanlators,
                 excludedScanlators = storedExcludedScanlators,
             ) ?: storedExcludedScanlators
+            val resumeChapterId = novelHistoryRepository.getHistoryByNovelId(novelId)
+                .maxByOrNull { it.readAt?.time ?: Long.MIN_VALUE }
+                ?.chapterId
 
             if (initialExcludedScanlators != storedExcludedScanlators) {
                 setNovelExcludedScanlators.await(novelId, initialExcludedScanlators)
@@ -423,6 +437,7 @@ class NovelScreenModel(
                 } else {
                     emptySet()
                 },
+                resumeChapterId = resumeChapterId,
                 hasCompletedChapterRefresh = chapters.isNotEmpty(),
             )
             mutableState.update {
@@ -1891,6 +1906,7 @@ class NovelScreenModel(
             val chapterPageEstimatedTotal: Int = 0,
             val chapterPageNominalSize: Int = 0,
             val chapterPageVisibleUrls: Set<String> = emptySet(),
+            val resumeChapterId: Long? = null,
             val hasCompletedChapterRefresh: Boolean = false,
             val scrollIndex: Int = 0,
             val scrollOffset: Int = 0,

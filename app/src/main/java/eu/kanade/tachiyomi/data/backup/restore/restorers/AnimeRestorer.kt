@@ -106,6 +106,7 @@ class AnimeRestorer(
     private fun Anime.copyFrom(newer: Anime): Anime {
         return this.copy(
             favorite = this.favorite || newer.favorite,
+            pinned = this.pinned || newer.pinned,
             author = newer.author,
             artist = newer.artist,
             description = newer.description,
@@ -132,6 +133,7 @@ class AnimeRestorer(
                 status = anime.status,
                 thumbnailUrl = anime.thumbnailUrl,
                 favorite = anime.favorite,
+                pinned = anime.pinned,
                 lastUpdate = anime.lastUpdate,
                 nextUpdate = null,
                 calculateInterval = null,
@@ -282,6 +284,7 @@ class AnimeRestorer(
                 status = anime.status,
                 thumbnailUrl = anime.thumbnailUrl,
                 favorite = anime.favorite,
+                pinned = anime.pinned,
                 lastUpdate = anime.lastUpdate,
                 nextUpdate = 0L,
                 calculateInterval = 0L,

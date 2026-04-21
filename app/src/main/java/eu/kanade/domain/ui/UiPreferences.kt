@@ -1,6 +1,8 @@
 package eu.kanade.domain.ui
 
 import eu.kanade.domain.ui.model.AppTheme
+import eu.kanade.domain.ui.model.EInkProfile
+import eu.kanade.domain.ui.model.EInkThemeMode
 import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.domain.ui.model.NavTransitionMode
 import eu.kanade.domain.ui.model.StartScreen
@@ -9,6 +11,7 @@ import eu.kanade.domain.ui.model.ThemeMode
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.preference.getEnum
 import tachiyomi.domain.metadata.model.MetadataSource
+import tachiyomi.presentation.core.util.HapticFeedbackMode
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
@@ -40,7 +43,22 @@ class UiPreferences(
 
     fun showNovelSection() = preferenceStore.getBoolean("aurora_show_novel_section", true)
 
-    fun showMangaScanlatorBranches() = preferenceStore.getBoolean("show_manga_scanlator_branches", false)
+    fun showMangaScanlatorBranches() = preferenceStore.getBoolean("show_manga_scanlator_branches", true)
+
+    fun auroraLibraryImmersiveMode() = preferenceStore.getBoolean(
+        "aurora_library_immersive_mode",
+        false,
+    )
+
+    fun libraryUpdatePacingTimeoutSeconds() = preferenceStore.getInt(
+        "library_update_pacing_timeout_seconds",
+        0,
+    )
+
+    fun libraryUpdatePacingSourceKeys() = preferenceStore.getStringSet(
+        "library_update_pacing_source_keys",
+        emptySet(),
+    )
 
     fun entryAutoJumpToNextAnime() = preferenceStore.getBoolean("entry_auto_jump_to_next_anime", false)
 
@@ -49,6 +67,11 @@ class UiPreferences(
     fun entryAutoJumpToNextNovel() = preferenceStore.getBoolean("entry_auto_jump_to_next_novel", false)
 
     fun navStyle() = preferenceStore.getEnum("bottom_rail_nav_style", NavStyle.MOVE_HISTORY_TO_MORE)
+
+    fun hapticFeedbackMode() = preferenceStore.getEnum(
+        "haptic_feedback_mode",
+        HapticFeedbackMode.PARTIAL,
+    )
 
     fun navigationTransitionMode() = preferenceStore.getEnum(
         "navigation_transition_mode",
@@ -95,7 +118,11 @@ class UiPreferences(
 
     fun animatedAuroraBackground() = preferenceStore.getBoolean("animated_aurora_background", true)
 
-    fun eInkMode() = preferenceStore.getBoolean("e_ink_mode", false)
+    fun eInkProfile() = preferenceStore.getEnum("e_ink_profile", EInkProfile.OFF)
+
+    fun eInkThemeMode() = preferenceStore.getEnum("e_ink_theme_mode", EInkThemeMode.SYSTEM)
+
+    fun eInkAutoOptimization() = preferenceStore.getBoolean("e_ink_auto_optimization", false)
 
     fun appUiFontId() = preferenceStore.getString("app_ui_font_id", DEFAULT_APP_UI_FONT_ID)
 

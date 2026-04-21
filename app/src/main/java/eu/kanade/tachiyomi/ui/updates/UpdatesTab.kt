@@ -6,6 +6,7 @@ import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -18,8 +19,10 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -29,6 +32,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -54,6 +58,9 @@ import eu.kanade.presentation.components.AuroraTabRow
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.components.TabbedScreen
 import eu.kanade.presentation.components.TabbedScreenAurora
+import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
+import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
+import eu.kanade.presentation.more.settings.screen.LibraryUpdatePacingScreen
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.updates.anime.AnimeUpdatesAuroraContent
 import eu.kanade.presentation.updates.manga.MangaUpdatesAuroraContent
@@ -78,6 +85,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.launch
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -117,6 +125,11 @@ data object UpdatesTab : Tab {
         val showMangaSection by uiPreferences.showMangaSection().collectAsState()
         val showNovelSection by uiPreferences.showNovelSection().collectAsState()
         val fromMore = currentNavigationStyle() == NavStyle.MOVE_UPDATES_TO_MORE
+        val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
+
+        LaunchedEffect(Unit) {
+            clearUpdatesBadgeCounts(libraryPreferences)
+        }
 
         if (theme.isAuroraStyle) {
             val navigator = LocalNavigator.currentOrThrow
@@ -344,6 +357,9 @@ data object UpdatesTab : Tab {
                         },
                         onRefreshCurrent = ::refreshCurrentTab,
                         onRefreshAll = ::refreshAllTabs,
+                        onOpenPacingSettings = {
+                            navigator.push(LibraryUpdatePacingScreen)
+                        },
                     )
                 },
             )
@@ -369,6 +385,12 @@ private const val TAB_MANGA = 1
 private const val TAB_NOVEL = 2
 
 internal fun shouldShowAuroraUpdatesSubtitle(tabId: Int): Boolean = false
+
+internal fun clearUpdatesBadgeCounts(libraryPreferences: LibraryPreferences) {
+    libraryPreferences.newAnimeUpdatesCount().set(0)
+    libraryPreferences.newMangaUpdatesCount().set(0)
+    libraryPreferences.newNovelUpdatesCount().set(0)
+}
 
 internal fun currentTabUpdatingMessage(
     tabId: Int,
@@ -403,9 +425,11 @@ private fun AuroraUpdatesPinnedHeader(
     onTabSelected: (Int) -> Unit,
     onRefreshCurrent: () -> Unit,
     onRefreshAll: () -> Unit,
+    onOpenPacingSettings: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
     val selected = selectedIndex.coerceIn(0, (tabs.size - 1).coerceAtLeast(0))
+    var pacingMenuExpanded by rememberSaveable { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -465,6 +489,36 @@ private fun AuroraUpdatesPinnedHeader(
                         contentDescription = stringResource(AYMR.strings.aurora_refresh_all_tabs),
                         tint = colors.textOnAccent,
                     )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Box {
+                    IconButton(
+                        onClick = {
+                            pacingMenuExpanded = true
+                        },
+                        modifier = Modifier
+                            .background(tabContainerColor, CircleShape)
+                            .size(44.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.MoreVert,
+                            contentDescription = stringResource(MR.strings.action_menu_overflow_description),
+                            tint = colors.textPrimary,
+                        )
+                    }
+                    AuroraEntryDropdownMenu(
+                        expanded = pacingMenuExpanded,
+                        onDismissRequest = { pacingMenuExpanded = false },
+                    ) {
+                        AuroraEntryDropdownMenuItem(
+                            text = stringResource(MR.strings.action_timeout_settings),
+                            leadingIcon = Icons.Filled.Tune,
+                            onClick = {
+                                pacingMenuExpanded = false
+                                onOpenPacingSettings()
+                            },
+                        )
+                    }
                 }
             }
         }

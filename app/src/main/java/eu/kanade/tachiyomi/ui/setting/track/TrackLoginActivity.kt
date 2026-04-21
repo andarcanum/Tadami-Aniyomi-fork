@@ -6,13 +6,13 @@ import tachiyomi.core.common.util.lang.launchIO
 
 class TrackLoginActivity : BaseOAuthLoginActivity() {
 
-    override fun handleResult(data: Uri?) {
-        when (data?.host) {
-            "anilist-auth" -> handleAnilist(data)
-            "bangumi-auth" -> handleBangumi(data)
-            "myanimelist-auth" -> handleMyAnimeList(data)
-            "shikimori-auth" -> handleShikimori(data)
-            "simkl-auth" -> handleSimkl(data)
+    override fun handleResult(uri: Uri?) {
+        when (uri?.host) {
+            "anilist-auth" -> handleAnilist(uri)
+            "bangumi-auth" -> handleBangumi(uri)
+            "myanimelist-auth" -> handleMyAnimeList(uri)
+            "shikimori-auth" -> handleShikimori(uri)
+            "simkl-auth" -> handleSimkl(uri)
         }
     }
 

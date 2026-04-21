@@ -22,6 +22,8 @@ import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.data.cache.AnimeBackgroundCache
 import eu.kanade.tachiyomi.data.cache.AnimeCoverCache
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
+import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
+import eu.kanade.tachiyomi.data.library.LibraryUpdatePacingPolicy
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.util.storage.getUriCompat
 import eu.kanade.tachiyomi.util.system.createFileInCacheDir
@@ -85,6 +87,7 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
     private val animeFetchInterval: AnimeFetchInterval = Injekt.get()
     private val filterEpisodesForDownload: FilterEpisodesForDownload = Injekt.get()
     private val getAnimeSeasonsByParentId: GetAnimeSeasonsByParentId = Injekt.get()
+    private val pacingPolicy = LibraryUpdatePacingPolicy(Injekt.get())
 
     private val notifier = AnimeLibraryUpdateNotifier(context)
 
@@ -262,7 +265,7 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
         val progressCount = AtomicInteger(0)
         val currentlyUpdatingAnime = CopyOnWriteArrayList<Anime>()
         val newUpdates = CopyOnWriteArrayList<Pair<Anime, Array<Episode>>>()
-        val failedUpdates = CopyOnWriteArrayList<Pair<Anime, String?>>()
+        val failedUpdates = CopyOnWriteArrayList<LibraryUpdateFailure>()
         val hasDownloads = AtomicBoolean(false)
         val fetchWindow = animeFetchInterval.getWindow(ZonedDateTime.now())
 
@@ -271,13 +274,13 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                 .map { animeInSource ->
                     async {
                         semaphore.withPermit {
-                            animeInSource.forEach { libraryAnime ->
+                            animeInSource.forEachIndexed { index, libraryAnime ->
                                 val anime = libraryAnime.anime
                                 ensureActive()
 
                                 // Don't continue to update if anime is not in library
                                 if (anime.parentId == null && getAnime.await(anime.id)?.favorite != true) {
-                                    return@forEach
+                                    return@forEachIndexed
                                 }
 
                                 withUpdateNotification(
@@ -314,9 +317,21 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                                             )
                                             else -> e.message
                                         }
-                                        failedUpdates.add(anime to errorMessage)
+                                        failedUpdates.add(
+                                            LibraryUpdateFailure(
+                                                title = anime.title,
+                                                sourceName = sourceManager.getOrStub(anime.source).toString(),
+                                                reason = errorMessage,
+                                            ),
+                                        )
                                     }
                                 }
+
+                                pacingPolicy.delayAfterUpdate(
+                                    mediaTag = LibraryUpdatePacingPolicy.MEDIA_ANIME,
+                                    sourceId = anime.source,
+                                    shouldDelay = index != animeInSource.lastIndex,
+                                )
                             }
                         }
                     }
@@ -336,7 +351,7 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
         if (failedUpdates.isNotEmpty()) {
             val errorFile = writeErrorFile(failedUpdates)
             notifier.showUpdateErrorNotification(
-                failedUpdates.size,
+                failedUpdates,
                 errorFile.getUriCompat(context),
             )
         }
@@ -407,10 +422,10 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
     /**
      * Writes basic file of update errors to cache dir.
      */
-    private fun writeErrorFile(errors: List<Pair<Anime, String?>>): File {
+    private fun writeErrorFile(errors: List<LibraryUpdateFailure>): File {
         try {
             if (errors.isNotEmpty()) {
-                val file = context.createFileInCacheDir("aniyomi_update_errors.txt")
+                val file = context.createFileInCacheDir("tadami_update_errors.txt")
                 file.bufferedWriter().use { out ->
                     out.write(
                         context.stringResource(MR.strings.library_errors_help, ERROR_LOG_HELP_URL) + "\n\n",
@@ -419,12 +434,15 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                     // ! Error
                     //   # Source
                     //     - Anime
-                    errors.groupBy({ it.second }, { it.first }).forEach { (error, animes) ->
-                        out.write("\n! ${error}\n")
-                        animes.groupBy { it.source }.forEach { (srcId, animes) ->
-                            val source = sourceManager.getOrStub(srcId)
-                            out.write("  # $source\n")
-                            animes.forEach {
+                    errors.groupBy { it.reason }.forEach { (error, failures) ->
+                        out.write(
+                            "\n! ${error.orEmpty().ifBlank {
+                                context.stringResource(MR.strings.unknown_error)
+                            }}\n",
+                        )
+                        failures.groupBy { it.sourceName }.forEach { (sourceName, failuresForSource) ->
+                            out.write("  # $sourceName\n")
+                            failuresForSource.forEach {
                                 out.write("    - ${it.title}\n")
                             }
                         }
@@ -441,7 +459,7 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
         private const val WORK_NAME_AUTO = "AnimeLibraryUpdate-auto"
         private const val WORK_NAME_MANUAL = "AnimeLibraryUpdate-manual"
 
-        private const val ERROR_LOG_HELP_URL = "https://aniyomi.org/docs/guides/troubleshooting/"
+        private const val ERROR_LOG_HELP_URL = "https://t.me/TadamiSupport"
 
         private const val ANIME_PER_SOURCE_QUEUE_WARNING_THRESHOLD = 60
 

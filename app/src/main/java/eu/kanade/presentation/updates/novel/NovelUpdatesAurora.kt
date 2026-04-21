@@ -42,15 +42,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.relativeDateText
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
-import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
@@ -76,6 +77,7 @@ fun NovelUpdatesAuroraContent(
     contentPadding: PaddingValues,
 ) {
     val colors = AuroraTheme.colors
+    val context = LocalContext.current
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val scope = rememberCoroutineScope()
     var isRefreshing by remember { mutableStateOf(false) }
@@ -302,6 +304,10 @@ private fun NovelUpdateCard(
     val colors = AuroraTheme.colors
     val update = item.update
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
+    val context = LocalContext.current
+    val coverRequest = remember(update.coverData) {
+        buildAuroraCoverImageRequest(context, update.coverData)
+    }
 
     Row(
         modifier = modifier
@@ -320,7 +326,7 @@ private fun NovelUpdateCard(
                 .clickable { onNovelClick(update.novelId) },
         ) {
             AsyncImage(
-                model = resolveAuroraCoverModel(update.coverData),
+                model = coverRequest,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 colorFilter = rememberAuroraPosterColorFilter(),

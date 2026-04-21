@@ -7,10 +7,10 @@ import tachiyomi.core.common.preference.InMemoryPreferenceStore
 class UiPreferencesTest {
 
     @Test
-    fun `manga scanlator branches are disabled by default`() {
+    fun `manga scanlator branches are enabled by default`() {
         val prefs = UiPreferences(InMemoryPreferenceStore())
 
-        prefs.showMangaScanlatorBranches().get() shouldBe false
+        prefs.showMangaScanlatorBranches().get() shouldBe true
     }
 
     @Test

@@ -26,7 +26,7 @@ class CoverRecoveryInterceptor : Interceptor {
             }
             response
         } catch (e: IOException) {
-            CoverRequestPolicy.recordFailure(host)
+            // Keep transient network failures from poisoning the host blacklist.
             throw e
         }
     }

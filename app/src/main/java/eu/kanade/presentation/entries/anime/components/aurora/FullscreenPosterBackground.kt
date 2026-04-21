@@ -17,13 +17,13 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.components.resolveAuroraPosterModelPair
-import eu.kanade.presentation.entries.components.aurora.applyAuroraBlurBackground
 import eu.kanade.presentation.entries.components.aurora.auroraPosterBackgroundSpec
+import eu.kanade.presentation.entries.components.aurora.auroraPosterBlur
+import eu.kanade.presentation.entries.components.aurora.buildAuroraPosterBackgroundRequest
+import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterBackgroundPainter
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraPosterScrimBrush
 import eu.kanade.presentation.theme.AuroraTheme
@@ -46,6 +46,7 @@ fun FullscreenPosterBackground(
     modifier: Modifier = Modifier,
     resolvedCoverUrl: String?,
     resolvedCoverUrlFallback: String? = null,
+    refererUrl: String? = null,
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
@@ -54,13 +55,15 @@ fun FullscreenPosterBackground(
     val posterModelPair = remember(resolvedCoverUrl, resolvedCoverUrlFallback) {
         resolveAuroraPosterModelPair(resolvedCoverUrl, resolvedCoverUrlFallback)
     }
-    val posterRequest = remember(posterModelPair) {
+    val posterRequest = remember(posterModelPair, refererUrl) {
         AuroraPosterRequest(
             primaryUrl = posterModelPair.primary as? String,
             fallbackUrl = posterModelPair.fallback as? String,
+            refererUrl = refererUrl,
         )
     }
     val posterModel = posterRequest.primaryUrl ?: posterRequest.fallbackUrl
+    val posterColorFilter = rememberAuroraPosterColorFilter()
 
     val hasScrolledAway = firstVisibleItemIndex > 0 || scrollOffset > 100
 
@@ -80,7 +83,6 @@ fun FullscreenPosterBackground(
         ),
         label = "blurOverlayAlpha",
     )
-    val blurRadiusPx = with(density) { 20.dp.roundToPx() }
     val containerWidthPx = with(density) { configuration.screenWidthDp.dp.roundToPx() }
     val containerHeightPx = with(density) { configuration.screenHeightDp.dp.roundToPx() }
 
@@ -94,47 +96,49 @@ fun FullscreenPosterBackground(
                 posterRequest.hashCode(),
                 containerWidthPx,
                 containerHeightPx,
-                blurRadiusPx,
             ) {
                 auroraPosterBackgroundSpec(
                     baseCacheKey = "anime-bg;${anime.id};${anime.coverLastModified};${posterRequest.hashCode()}",
                     containerWidthPx = containerWidthPx,
                     containerHeightPx = containerHeightPx,
-                    blurRadiusPx = blurRadiusPx,
                 )
             }
-            AsyncImage(
-                model = remember(posterRequest, backgroundSpec.sharpMemoryCacheKey) {
-                    ImageRequest.Builder(context)
-                        .data(posterRequest)
-                        .memoryCacheKey(backgroundSpec.sharpMemoryCacheKey)
-                        .build()
-                },
-                error = placeholderPainter,
-                fallback = placeholderPainter,
+            val backgroundRequest = remember(
+                posterRequest,
+                backgroundSpec.memoryCacheKey,
+                containerWidthPx,
+                containerHeightPx,
+            ) {
+                buildAuroraPosterBackgroundRequest(
+                    context = context,
+                    data = posterRequest,
+                    spec = backgroundSpec,
+                    containerWidthPx = containerWidthPx,
+                    containerHeightPx = containerHeightPx,
+                )
+            }
+            val backgroundPainter = rememberAuroraPosterBackgroundPainter(
+                request = backgroundRequest,
+                placeholderPainter = placeholderPainter,
+            )
+
+            Image(
+                painter = backgroundPainter,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                colorFilter = rememberAuroraPosterColorFilter(),
+                colorFilter = posterColorFilter,
                 modifier = Modifier.fillMaxSize(),
             )
 
-            AsyncImage(
-                model = remember(posterRequest, backgroundSpec, blurRadiusPx) {
-                    ImageRequest.Builder(context)
-                        .data(posterRequest)
-                        .applyAuroraBlurBackground(
-                            spec = backgroundSpec,
-                            blurRadiusPx = blurRadiusPx,
-                        )
-                        .build()
-                },
-                error = placeholderPainter,
-                fallback = placeholderPainter,
+            Image(
+                painter = backgroundPainter,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                colorFilter = rememberAuroraPosterColorFilter(),
+                colorFilter = posterColorFilter,
                 alpha = blurOverlayAlpha,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .auroraPosterBlur(20.dp),
             )
         } else {
             Image(

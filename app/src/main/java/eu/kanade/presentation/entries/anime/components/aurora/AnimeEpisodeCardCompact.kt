@@ -43,11 +43,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
 import coil3.request.crossfade
+import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.relativeDateTimeText
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
-import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.entries.anime.components.EpisodeDownloadAction
 import eu.kanade.presentation.entries.anime.components.EpisodeDownloadIndicator
 import eu.kanade.presentation.entries.components.aurora.AURORA_DIMMED_ITEM_ALPHA
@@ -138,15 +137,14 @@ fun AnimeEpisodeCardCompact(
                         .clip(RoundedCornerShape(8.dp))
                         .background(Color.Black.copy(alpha = 0.3f)),
                 ) {
+                    val coverRequest = remember(anime.id, anime.thumbnailUrl, anime.coverLastModified) {
+                        buildAuroraCoverImageRequest(context, anime.asAnimeCover()) {
+                            crossfade(true)
+                            size(40)
+                        }
+                    }
                     AsyncImage(
-                        model = remember(anime.id, anime.thumbnailUrl, anime.coverLastModified) {
-                            ImageRequest.Builder(context)
-                                .data(resolveAuroraCoverModel(anime.asAnimeCover()))
-                                .placeholderMemoryCacheKey(anime.thumbnailUrl)
-                                .crossfade(true)
-                                .size(40)
-                                .build()
-                        },
+                        model = coverRequest,
                         error = placeholderPainter,
                         fallback = placeholderPainter,
                         contentDescription = null,

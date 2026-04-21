@@ -11,6 +11,7 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
+import eu.kanade.presentation.library.novel.NovelLibraryItem
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCacheEvent
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
@@ -24,6 +25,7 @@ import eu.kanade.tachiyomi.source.novel.importer.ImportedEpubParser
 import eu.kanade.tachiyomi.source.novel.importer.ImportedEpubStorage
 import eu.kanade.tachiyomi.ui.entries.novel.NovelDownloadAction
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
+import eu.kanade.tachiyomi.ui.library.sortPinnedFirst
 import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.PersistentList
@@ -36,6 +38,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
@@ -55,9 +58,15 @@ import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.items.novelchapter.service.getNovelChapterSort
-import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.library.novel.model.NovelLibrarySort
 import tachiyomi.domain.library.service.LibraryPreferences
+import tachiyomi.domain.series.novel.interactor.AddNovelsToSeries
+import tachiyomi.domain.series.novel.interactor.CreateNovelSeries
+import tachiyomi.domain.series.novel.interactor.DeleteNovelSeries
+import tachiyomi.domain.series.novel.interactor.GetLibraryNovelSeries
+import tachiyomi.domain.series.novel.interactor.GetNovelIdsInAnySeries
+import tachiyomi.domain.series.novel.interactor.UpdateNovelSeries
+import tachiyomi.domain.series.novel.model.NovelSeries
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
@@ -65,6 +74,12 @@ import kotlin.random.Random
 
 class NovelLibraryScreenModel(
     private val getLibraryNovel: GetLibraryNovel = Injekt.get(),
+    private val getLibraryNovelSeries: GetLibraryNovelSeries = Injekt.get(),
+    private val getNovelIdsInAnySeries: GetNovelIdsInAnySeries = Injekt.get(),
+    private val deleteNovelSeries: DeleteNovelSeries = Injekt.get(),
+    private val createNovelSeries: CreateNovelSeries = Injekt.get(),
+    private val addNovelsToSeries: AddNovelsToSeries = Injekt.get(),
+    private val updateNovelSeries: UpdateNovelSeries = Injekt.get(),
     private val getNovelCategories: GetNovelCategories = Injekt.get(),
     private val setNovelCategories: SetNovelCategories = Injekt.get(),
     private val updateNovel: UpdateNovel = Injekt.get(),
@@ -115,13 +130,23 @@ class NovelLibraryScreenModel(
                         if (query.isNullOrBlank()) 0L else searchDebounceMillis
                     }
                     .distinctUntilChanged(),
-                flow2 = getLibraryNovel.subscribe(),
+                flow2 = combine(
+                    getLibraryNovel.subscribe(),
+                    getLibraryNovelSeries.subscribe(),
+                    getNovelIdsInAnySeries.subscribe(),
+                ) { novels, series, idsInSeries ->
+                    val singleItems = novels.filterNot {
+                        it.novel.id in idsInSeries
+                    }.map { NovelLibraryItem.Single(it) }
+                    val seriesItems = series.map { NovelLibraryItem.Series(it) }
+                    singleItems + seriesItems
+                },
                 flow3 = getFilterPreferencesFlow(),
                 flow4 = getSortPreferencesFlow(),
                 flow5 = downloadCacheChanges.onStart { emit(Unit) },
                 transform = {
                         query: String?,
-                        novels: List<LibraryNovel>,
+                        novels: List<NovelLibraryItem>,
                         filterPrefs: FilterPreferences,
                         sortPrefs: SortPreferences,
                         _: Unit,
@@ -200,7 +225,7 @@ class NovelLibraryScreenModel(
         mutableState.update { it.copy(selection = persistentListOf()) }
     }
 
-    fun toggleSelection(novel: LibraryNovel) {
+    fun toggleSelection(novel: NovelLibraryItem) {
         mutableState.update { current ->
             val mutable = current.selection.toMutableList()
             val existingIndex = mutable.indexOfFirst { it.id == novel.id }
@@ -209,11 +234,11 @@ class NovelLibraryScreenModel(
             } else {
                 mutable.add(novel)
             }
-            current.copy(selection = persistentListOf<LibraryNovel>().addAll(mutable))
+            current.copy(selection = persistentListOf<NovelLibraryItem>().addAll(mutable))
         }
     }
 
-    fun toggleRangeSelection(novel: LibraryNovel) {
+    fun toggleRangeSelection(novel: NovelLibraryItem) {
         mutableState.update { current ->
             val mutable = current.selection.toMutableList()
             val lastSelected = mutable.lastOrNull()
@@ -224,7 +249,7 @@ class NovelLibraryScreenModel(
                 } else {
                     mutable.add(novel)
                 }
-                return@update current.copy(selection = persistentListOf<LibraryNovel>().addAll(mutable))
+                return@update current.copy(selection = persistentListOf<NovelLibraryItem>().addAll(mutable))
             }
 
             val items = current.items.filter { it.category == novel.category }
@@ -241,7 +266,7 @@ class NovelLibraryScreenModel(
                 .subList(start, end + 1)
                 .filterNot { it.id in selectedIds }
             mutable.addAll(toAdd)
-            current.copy(selection = persistentListOf<LibraryNovel>().addAll(mutable))
+            current.copy(selection = persistentListOf<NovelLibraryItem>().addAll(mutable))
         }
     }
 
@@ -256,7 +281,7 @@ class NovelLibraryScreenModel(
             val selectedIds = current.selection.map { it.id }.toSet()
             val mutable = current.selection.toMutableList()
             mutable.addAll(scopeItems.filterNot { it.id in selectedIds })
-            current.copy(selection = persistentListOf<LibraryNovel>().addAll(mutable))
+            current.copy(selection = persistentListOf<NovelLibraryItem>().addAll(mutable))
         }
     }
 
@@ -272,15 +297,24 @@ class NovelLibraryScreenModel(
             val toRemoveIds = scopeItems.filter { it.id in selectedIds }.map { it.id }.toSet()
             val mutable = current.selection.filterNot { it.id in toRemoveIds }.toMutableList()
             mutable.addAll(scopeItems.filterNot { it.id in selectedIds })
-            current.copy(selection = persistentListOf<LibraryNovel>().addAll(mutable))
+            current.copy(selection = persistentListOf<NovelLibraryItem>().addAll(mutable))
         }
     }
 
     fun openChangeCategoryDialog() {
-        val novels = state.value.selection.map { it.novel }.distinctBy { it.id }
+        val novels = state.value.selection.mapNotNull {
+            (it as? NovelLibraryItem.Single)?.libraryNovel?.novel
+        }.distinctBy { it.id }
         openChangeCategoryDialog(novels)
     }
-
+    fun openDeleteNovelsDialog() {
+        val novels = state.value.selection.mapNotNull {
+            (it as? NovelLibraryItem.Single)?.libraryNovel?.novel
+        }.distinctBy { it.id }
+        if (novels.isNotEmpty()) {
+            mutableState.update { it.copy(dialog = Dialog.DeleteNovels(novels)) }
+        }
+    }
     fun openChangeCategoryDialog(novel: Novel) {
         openChangeCategoryDialog(listOf(novel))
     }
@@ -308,7 +342,9 @@ class NovelLibraryScreenModel(
     }
 
     fun openDeleteNovelDialog() {
-        val novels = state.value.selection.map { it.novel }.distinctBy { it.id }
+        val novels = state.value.selection.mapNotNull {
+            (it as? NovelLibraryItem.Single)?.libraryNovel?.novel
+        }.distinctBy { it.id }
         if (novels.isEmpty()) return
         mutableState.update { it.copy(dialog = Dialog.DeleteNovels(novels)) }
     }
@@ -332,7 +368,9 @@ class NovelLibraryScreenModel(
     }
 
     fun markReadSelection(read: Boolean) {
-        val selected = state.value.selection.map { it.novel }.distinctBy { it.id }
+        val selected = state.value.selection.mapNotNull {
+            (it as? NovelLibraryItem.Single)?.libraryNovel?.novel
+        }.distinctBy { it.id }
         if (selected.isEmpty()) return
         screenModelScope.launchIO {
             selected.forEach { novel ->
@@ -384,7 +422,9 @@ class NovelLibraryScreenModel(
         action: NovelDownloadAction,
         amount: Int = 0,
     ): Int {
-        val selected = state.value.selection.map { it.novel }.distinctBy { it.id }
+        val selected = state.value.selection.mapNotNull {
+            (it as? NovelLibraryItem.Single)?.libraryNovel?.novel
+        }.distinctBy { it.id }
         if (selected.isEmpty()) return 0
         var totalAdded = 0
         selected.forEach { novel ->
@@ -413,7 +453,9 @@ class NovelLibraryScreenModel(
         amount: Int = 0,
         format: NovelTranslatedDownloadFormat,
     ): Int {
-        val selected = state.value.selection.map { it.novel }.distinctBy { it.id }
+        val selected = state.value.selection.mapNotNull {
+            (it as? NovelLibraryItem.Single)?.libraryNovel?.novel
+        }.distinctBy { it.id }
         if (selected.isEmpty()) return 0
         var totalAdded = 0
         selected.forEach { novel ->
@@ -447,7 +489,9 @@ class NovelLibraryScreenModel(
     }
 
     suspend fun getSingleSelectionDownloadCandidates(onlyNotDownloaded: Boolean): List<NovelChapter> {
-        val novel = state.value.selection.singleOrNull()?.novel ?: return emptyList()
+        val novel =
+            (state.value.selection.singleOrNull() as? NovelLibraryItem.Single)?.libraryNovel?.novel
+                ?: return emptyList()
         val chapters = getSortedNovelChapters(novel)
         if (!onlyNotDownloaded) return chapters
         return chapters.filterNot { chapter ->
@@ -457,7 +501,7 @@ class NovelLibraryScreenModel(
 
     suspend fun runDownloadForSingleSelectionChapterIds(chapterIds: Set<Long>): Int {
         if (chapterIds.isEmpty()) return 0
-        val novel = state.value.selection.singleOrNull()?.novel ?: return 0
+        val novel = (state.value.selection.singleOrNull() as? NovelLibraryItem.Single)?.libraryNovel?.novel ?: return 0
         val chaptersById = getSortedNovelChapters(novel).associateBy { it.id }
         val chapters = chapterIds.mapNotNull { chaptersById[it] }
         if (chapters.isEmpty()) return 0
@@ -470,7 +514,9 @@ class NovelLibraryScreenModel(
         format: NovelTranslatedDownloadFormat,
         onlyNotDownloaded: Boolean,
     ): List<NovelChapter> {
-        val novel = state.value.selection.singleOrNull()?.novel ?: return emptyList()
+        val novel =
+            (state.value.selection.singleOrNull() as? NovelLibraryItem.Single)?.libraryNovel?.novel
+                ?: return emptyList()
         val chaptersWithCache = getSortedNovelChapters(novel)
             .filter { chapter -> novelTranslatedDownloadManager.hasTranslationCache(chapter.id) }
         if (!onlyNotDownloaded) return chaptersWithCache
@@ -488,7 +534,7 @@ class NovelLibraryScreenModel(
         format: NovelTranslatedDownloadFormat,
     ): Int {
         if (chapterIds.isEmpty()) return 0
-        val novel = state.value.selection.singleOrNull()?.novel ?: return 0
+        val novel = (state.value.selection.singleOrNull() as? NovelLibraryItem.Single)?.libraryNovel?.novel ?: return 0
         val chaptersById = getSortedNovelChapters(novel).associateBy { it.id }
         val chapters = chapterIds.mapNotNull { chaptersById[it] }
             .filter { chapter -> novelTranslatedDownloadManager.hasTranslationCache(chapter.id) }
@@ -571,6 +617,19 @@ class NovelLibraryScreenModel(
         return resolveNovelResumeChapter(chapters)
     }
 
+    suspend fun getNextUnreadChapter(item: NovelLibraryItem): NovelChapter? {
+        return when (item) {
+            is NovelLibraryItem.Single -> getNextUnreadChapter(item.libraryNovel.novel)
+            is NovelLibraryItem.Series -> {
+                for (novel in item.librarySeries.entries) {
+                    val chapter = getNextUnreadChapter(novel.novel)
+                    if (chapter != null) return chapter
+                }
+                null
+            }
+        }
+    }
+
     private suspend fun getSortedNovelChapters(novel: Novel): List<NovelChapter> {
         return chapterRepository.getChapterByNovelId(
             novelId = novel.id,
@@ -618,7 +677,7 @@ class NovelLibraryScreenModel(
     }
 
     private fun filterItems(
-        novels: List<LibraryNovel>,
+        novels: List<NovelLibraryItem>,
         query: String?,
         downloadedFilter: TriState,
         downloadedNovelIds: Set<Long>,
@@ -629,28 +688,40 @@ class NovelLibraryScreenModel(
         filterIntervalCustom: TriState,
         sort: NovelLibrarySort,
         randomSortSeed: Int,
-    ): List<LibraryNovel> {
+    ): List<NovelLibraryItem> {
         var filtered = novels
         if (!query.isNullOrBlank()) {
-            filtered = filtered.filter { it.novel.title.contains(query, ignoreCase = true) }
+            filtered = filtered.filter { it.title.contains(query, ignoreCase = true) }
         }
-        filtered = applyFilter(filtered, downloadedFilter) { it.novel.id in downloadedNovelIds }
+        filtered =
+            applyFilter(filtered, downloadedFilter) {
+                (it as? NovelLibraryItem.Single)?.libraryNovel?.novel?.id in
+                    downloadedNovelIds
+            }
         filtered = applyFilter(filtered, unreadFilter) { it.unreadCount > 0 }
         filtered = applyFilter(filtered, startedFilter) { it.hasStarted }
-        filtered = applyFilter(filtered, bookmarkedFilter) { it.hasBookmarks }
+        filtered =
+            applyFilter(filtered, bookmarkedFilter) {
+                (it as? NovelLibraryItem.Single)?.libraryNovel?.hasBookmarks ==
+                    true
+            }
         filtered = applyFilter(filtered, completedFilter) {
-            it.novel.status.toInt() == SManga.COMPLETED
+            (it as? NovelLibraryItem.Single)?.libraryNovel?.novel?.status?.toInt() == SManga.COMPLETED
         }
-        filtered = applyFilter(filtered, filterIntervalCustom) { it.novel.fetchInterval < 0 }
+        filtered =
+            applyFilter(filtered, filterIntervalCustom) {
+                (it as? NovelLibraryItem.Single)?.libraryNovel?.novel?.fetchInterval?.compareTo(0) ==
+                    -1
+            }
 
         return sortItems(filtered, sort, randomSortSeed)
     }
 
     private fun applyFilter(
-        items: List<LibraryNovel>,
+        items: List<NovelLibraryItem>,
         filter: TriState,
-        predicate: (LibraryNovel) -> Boolean,
-    ): List<LibraryNovel> {
+        predicate: (NovelLibraryItem) -> Boolean,
+    ): List<NovelLibraryItem> {
         return when (filter) {
             TriState.DISABLED -> items
             TriState.ENABLED_IS -> items.filter(predicate)
@@ -658,16 +729,19 @@ class NovelLibraryScreenModel(
         }
     }
 
-    private fun resolveDownloadedNovelIds(novels: List<LibraryNovel>): Set<Long> {
+    private fun resolveDownloadedNovelIds(novels: List<NovelLibraryItem>): Set<Long> {
         return novels.asSequence()
-            .mapNotNull { libraryNovel ->
-                libraryNovel.novel.id.takeIf { hasDownloadedChapters(libraryNovel.novel) }
+            .mapNotNull { item ->
+                when (item) {
+                    is NovelLibraryItem.Single -> item.libraryNovel.novel.takeIf { hasDownloadedChapters(it) }?.id
+                    is NovelLibraryItem.Series -> null // To be supported later
+                }
             }
             .toSet()
     }
 
     private suspend fun resolveDownloadedNovelIdsForFilter(
-        novels: List<LibraryNovel>,
+        novels: List<NovelLibraryItem>,
         shouldResolve: Boolean,
     ): Set<Long> {
         if (!shouldResolve || novels.isEmpty()) return emptySet()
@@ -677,46 +751,65 @@ class NovelLibraryScreenModel(
     }
 
     private fun sortItems(
-        items: List<LibraryNovel>,
+        items: List<NovelLibraryItem>,
         sort: NovelLibrarySort,
         randomSortSeed: Int,
-    ): List<LibraryNovel> {
+    ): List<NovelLibraryItem> {
         if (items.isEmpty()) return items
-        if (sort.type == NovelLibrarySort.Type.Random) {
-            return items.shuffled(Random(randomSortSeed))
+        val isPinned: (NovelLibraryItem) -> Boolean = {
+            when (it) {
+                is NovelLibraryItem.Single -> it.libraryNovel.pinned
+                is NovelLibraryItem.Series -> it.librarySeries.pinned
+            }
         }
 
-        val sorted = items.sortedWith(
-            Comparator<LibraryNovel> { left, right ->
-                when (sort.type) {
-                    NovelLibrarySort.Type.Alphabetical -> {
-                        left.novel.title.lowercase().compareToWithCollator(right.novel.title.lowercase())
-                    }
-                    NovelLibrarySort.Type.LastRead -> left.lastRead.compareTo(right.lastRead)
-                    NovelLibrarySort.Type.LastUpdate -> left.novel.lastUpdate.compareTo(right.novel.lastUpdate)
-                    NovelLibrarySort.Type.UnreadCount -> {
-                        when {
-                            left.unreadCount == right.unreadCount -> 0
-                            left.unreadCount == 0L -> if (sort.isAscending) 1 else -1
-                            right.unreadCount == 0L -> if (sort.isAscending) -1 else 1
-                            else -> left.unreadCount.compareTo(right.unreadCount)
-                        }
-                    }
-                    NovelLibrarySort.Type.TotalChapters -> left.totalChapters.compareTo(right.totalChapters)
-                    NovelLibrarySort.Type.LatestChapter -> left.latestUpload.compareTo(right.latestUpload)
-                    NovelLibrarySort.Type.ChapterFetchDate -> left.chapterFetchedAt.compareTo(right.chapterFetchedAt)
-                    NovelLibrarySort.Type.DateAdded -> left.novel.dateAdded.compareTo(right.novel.dateAdded)
-                    NovelLibrarySort.Type.TrackerMean -> 0
-                    NovelLibrarySort.Type.Random -> 0
+        val comparator = Comparator<NovelLibraryItem> { left, right ->
+            when (sort.type) {
+                NovelLibrarySort.Type.Alphabetical -> {
+                    left.title.lowercase().compareToWithCollator(right.title.lowercase())
                 }
+                NovelLibrarySort.Type.LastRead -> left.lastRead.compareTo(right.lastRead)
+                NovelLibrarySort.Type.LastUpdate -> {
+                    val leftLastUpdate = (left as? NovelLibraryItem.Single)?.libraryNovel?.novel?.lastUpdate ?: 0L
+                    val rightLastUpdate = (right as? NovelLibraryItem.Single)?.libraryNovel?.novel?.lastUpdate ?: 0L
+                    leftLastUpdate.compareTo(rightLastUpdate)
+                }
+                NovelLibrarySort.Type.UnreadCount -> {
+                    when {
+                        left.unreadCount == right.unreadCount -> 0
+                        left.unreadCount == 0L -> if (sort.isAscending) 1 else -1
+                        right.unreadCount == 0L -> if (sort.isAscending) -1 else 1
+                        else -> left.unreadCount.compareTo(right.unreadCount)
+                    }
+                }
+                NovelLibrarySort.Type.TotalChapters -> left.totalChapters.compareTo(right.totalChapters)
+                NovelLibrarySort.Type.LatestChapter -> {
+                    val leftLatestUpload = (left as? NovelLibraryItem.Single)?.libraryNovel?.latestUpload ?: 0L
+                    val rightLatestUpload = (right as? NovelLibraryItem.Single)?.libraryNovel?.latestUpload ?: 0L
+                    leftLatestUpload.compareTo(rightLatestUpload)
+                }
+                NovelLibrarySort.Type.ChapterFetchDate -> {
+                    val leftChapterFetchedAt =
+                        (left as? NovelLibraryItem.Single)?.libraryNovel?.chapterFetchedAt ?: 0L
+                    val rightChapterFetchedAt =
+                        (right as? NovelLibraryItem.Single)?.libraryNovel?.chapterFetchedAt ?: 0L
+                    leftChapterFetchedAt.compareTo(rightChapterFetchedAt)
+                }
+                NovelLibrarySort.Type.DateAdded -> left.dateAdded.compareTo(right.dateAdded)
+                NovelLibrarySort.Type.TrackerMean -> 0
+                NovelLibrarySort.Type.Random -> 0
             }
-                .let { if (sort.isAscending) it else it.reversed() }
-                .thenComparator { left, right ->
-                    left.novel.title.lowercase().compareToWithCollator(right.novel.title.lowercase())
-                },
-        )
+        }
+            .let { if (sort.isAscending) it else it.reversed() }
+            .thenComparator { left, right ->
+                left.title.lowercase().compareToWithCollator(right.title.lowercase())
+            }
 
-        return sorted
+        return items.sortPinnedFirst(
+            isPinned = isPinned,
+            comparator = comparator,
+            randomSeed = if (sort.type == NovelLibrarySort.Type.Random) randomSortSeed else null,
+        )
     }
 
     private suspend fun getCategories(): List<Category> {
@@ -737,9 +830,9 @@ class NovelLibraryScreenModel(
     @Immutable
     data class State(
         val isLoading: Boolean = true,
-        val rawItems: List<LibraryNovel> = emptyList(),
-        val items: List<LibraryNovel> = emptyList(),
-        val selection: PersistentList<LibraryNovel> = persistentListOf(),
+        val rawItems: List<NovelLibraryItem> = emptyList(),
+        val items: List<NovelLibraryItem> = emptyList(),
+        val selection: PersistentList<NovelLibraryItem> = persistentListOf(),
         val searchQuery: String? = null,
         val downloadedOnly: Boolean = false,
         val downloadedFilter: TriState = TriState.DISABLED,
@@ -792,13 +885,13 @@ class NovelLibraryScreenModel(
 
     private data class RecomputeInput(
         val query: String?,
-        val novels: List<LibraryNovel>,
+        val novels: List<NovelLibraryItem>,
         val filterPreferences: FilterPreferences,
         val sortPreferences: SortPreferences,
     )
 
     private data class RecomputedState(
-        val items: List<LibraryNovel>,
+        val items: List<NovelLibraryItem>,
         val downloadedNovelIds: Set<Long>,
     )
 
@@ -846,6 +939,65 @@ class NovelLibraryScreenModel(
             importedEpubImporter.import(uri)
         }
     }
+    fun openCreateSeries() {
+        mutableState.update { it.copy(dialog = Dialog.CreateSeries) }
+    }
+
+    fun openAddToSeries() {
+        screenModelScope.launchIO {
+            val allSeries = getLibraryNovelSeries.subscribe().first()
+            val series = allSeries.map { it.series }
+            mutableState.update { it.copy(dialog = Dialog.AddToSeries(series)) }
+        }
+    }
+
+    fun createSeries(name: String) {
+        val selection = state.value.selection
+        if (selection.isEmpty()) return
+
+        screenModelScope.launchIO {
+            val novelIds = selection.filterIsInstance<NovelLibraryItem.Single>().map { it.libraryNovel.novel.id }
+            if (novelIds.isNotEmpty()) {
+                createNovelSeries.await(name, 0L, novelIds)
+            }
+            clearSelection()
+        }
+    }
+
+    fun addSelectionToSeries(series: NovelSeries) {
+        val selection = state.value.selection
+        if (selection.isEmpty()) return
+
+        screenModelScope.launchIO {
+            val novelIds = selection.filterIsInstance<NovelLibraryItem.Single>().map { it.libraryNovel.novel.id }
+            if (novelIds.isNotEmpty()) {
+                addNovelsToSeries.await(series.id, novelIds)
+            }
+            clearSelection()
+        }
+    }
+
+    fun togglePinned(item: NovelLibraryItem) {
+        setPinned(item, !item.pinned)
+    }
+
+    fun setPinned(item: NovelLibraryItem, pinned: Boolean) {
+        screenModelScope.launchIO {
+            when (item) {
+                is NovelLibraryItem.Single -> updateNovel.await(
+                    NovelUpdate(
+                        id = item.libraryNovel.id,
+                        pinned = pinned,
+                    ),
+                )
+                is NovelLibraryItem.Series -> updateNovelSeries.await(
+                    item.librarySeries.series.copy(
+                        pinned = pinned,
+                    ),
+                )
+            }
+        }
+    }
 
     sealed interface Dialog {
         data object Settings : Dialog
@@ -854,5 +1006,7 @@ class NovelLibraryScreenModel(
             val initialSelection: ImmutableList<CheckboxState<Category>>,
         ) : Dialog
         data class DeleteNovels(val novels: List<Novel>) : Dialog
+        data object CreateSeries : Dialog
+        data class AddToSeries(val series: List<NovelSeries>) : Dialog
     }
 }

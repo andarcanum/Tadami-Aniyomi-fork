@@ -1,50 +1,49 @@
 package eu.kanade.presentation.entries.components.aurora
 
+import android.content.Context
+import coil3.size.Size
 import eu.kanade.presentation.components.resolveAuroraPosterModelPair
 import eu.kanade.presentation.components.shouldApplyAuroraPosterTrim
 import io.kotest.matchers.shouldBe
+import io.mockk.mockk
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.entries.manga.model.MangaCover
 
 class AuroraPosterBackgroundRequestTest {
 
     @Test
-    fun `aurora poster background uses distinct sharp and blur cache keys`() {
+    fun `aurora poster background spec keys by cache and size only`() {
         val spec = auroraPosterBackgroundSpec(
-            baseCacheKey = "novel-bg;42;1234",
+            baseCacheKey = "anime-bg;42;1234;request",
             containerWidthPx = 1080,
-            containerHeightPx = 2400,
-            blurRadiusPx = 60,
+            containerHeightPx = 1920,
         )
 
-        spec.sharpMemoryCacheKey shouldBe "novel-bg;42;1234;sharp"
-        spec.blurMemoryCacheKey shouldBe "novel-bg;42;1234;blur;360x800;r60"
+        spec.memoryCacheKey shouldBe "anime-bg;42;1234;request;1080x1920"
     }
 
     @Test
-    fun `aurora poster background downsamples blur layer conservatively`() {
+    fun `buildAuroraPosterBackgroundRequest keeps configure block and requested size`() = runTest {
         val spec = auroraPosterBackgroundSpec(
-            baseCacheKey = "manga-bg;7;999",
-            containerWidthPx = 1440,
-            containerHeightPx = 3120,
-            blurRadiusPx = 48,
+            baseCacheKey = "anime-bg;42;1234;request",
+            containerWidthPx = 1080,
+            containerHeightPx = 1920,
         )
 
-        spec.blurWidthPx shouldBe 480
-        spec.blurHeightPx shouldBe 1040
-    }
+        val request = buildAuroraPosterBackgroundRequest(
+            context = mockk<Context>(relaxed = true),
+            data = "https://example.org/cover.jpg",
+            spec = spec,
+            containerWidthPx = 1080,
+            containerHeightPx = 1920,
+        ) {
+            placeholderMemoryCacheKey("https://example.org/placeholder.jpg")
+        }
 
-    @Test
-    fun `aurora poster background clamps tiny blur targets to one pixel`() {
-        val spec = auroraPosterBackgroundSpec(
-            baseCacheKey = "anime-bg;1;2",
-            containerWidthPx = 2,
-            containerHeightPx = 1,
-            blurRadiusPx = 12,
-        )
-
-        spec.blurWidthPx shouldBe 1
-        spec.blurHeightPx shouldBe 1
+        request.memoryCacheKey shouldBe spec.memoryCacheKey
+        request.placeholderMemoryCacheKey?.key shouldBe "https://example.org/placeholder.jpg"
+        request.sizeResolver.size() shouldBe Size(1080, 1920)
     }
 
     @Test

@@ -30,6 +30,7 @@ import cafe.adriel.voyager.transitions.ScreenTransitionContent
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.presentation.reader.novel.NovelReaderSystemUiSession
+import eu.kanade.presentation.theme.LocalIsEInkMode
 import eu.kanade.tachiyomi.util.system.animatorDurationScale
 import eu.kanade.tachiyomi.util.system.powerManager
 import kotlinx.coroutines.CoroutineName
@@ -94,10 +95,12 @@ fun DefaultNavigatorScreenTransition(
     val density = LocalDensity.current
     val modernSlideDistance = with(density) { MODERN_SLIDE_DISTANCE.roundToPx() }
     val selectedMode = uiPreferences.navigationTransitionMode().collectAsState().value
+    val isEInkMode = LocalIsEInkMode.current
     val resolvedMode = resolveNavigationTransitionMode(
         selectedMode = selectedMode,
         animatorDurationScale = context.animatorDurationScale,
         isPowerSaveMode = context.powerManager.isPowerSaveMode,
+        isEInkMode = isEInkMode,
     )
     ScreenTransition(
         navigator = navigator,

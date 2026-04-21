@@ -45,6 +45,7 @@ import android.view.View
 import android.view.WindowManager
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -59,6 +60,7 @@ import androidx.media.AudioFocusRequestCompat
 import androidx.media.AudioManagerCompat
 import com.hippo.unifile.UniFile
 import com.tadami.aurora.databinding.PlayerLayoutBinding
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.theme.TachiyomiTheme
 import eu.kanade.tachiyomi.animesource.model.ChapterType
 import eu.kanade.tachiyomi.animesource.model.Hoster
@@ -96,6 +98,8 @@ import tachiyomi.domain.custombuttons.model.CustomButton
 import tachiyomi.domain.storage.service.StorageManager
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.presentation.core.util.AppHapticsProvider
+import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.IOException
@@ -130,6 +134,7 @@ class PlayerActivity : BaseActivity() {
     private val advancedPlayerPreferences: AdvancedPlayerPreferences = Injekt.get()
     private val networkPreferences: NetworkPreferences = Injekt.get()
     private val storageManager: StorageManager = Injekt.get()
+    private val uiPreferences: UiPreferences = Injekt.get()
 
     private var audioFocusRequest: AudioFocusRequestCompat? = null
     private var restoreAudioFocus: () -> Unit = {}
@@ -267,28 +272,39 @@ class PlayerActivity : BaseActivity() {
             .launchIn(lifecycleScope)
 
         binding.controls.setContent {
-            TachiyomiTheme {
-                PlayerControls(
-                    viewModel = viewModel,
-                    onBackPress = {
-                        if (isPipSupportedAndEnabled && player.paused == false && playerPreferences.pipOnExit().get()) {
-                            enterPictureInPictureMode(createPipParams())
-                        } else {
-                            finish()
-                        }
-                    },
-                    modifier = Modifier.onGloballyPositioned {
-                        pipRect = run {
-                            val boundsInWindow = it.boundsInWindow()
-                            Rect(
-                                boundsInWindow.left.toInt(),
-                                boundsInWindow.top.toInt(),
-                                boundsInWindow.right.toInt(),
-                                boundsInWindow.bottom.toInt(),
-                            )
-                        }
-                    },
-                )
+            val hapticFeedbackMode by uiPreferences.hapticFeedbackMode().collectAsState()
+            val eInkProfile by uiPreferences.eInkProfile().collectAsState()
+
+            AppHapticsProvider(
+                hapticFeedbackMode = hapticFeedbackMode,
+                isEInkMode = eInkProfile.isEnabled,
+            ) {
+                TachiyomiTheme {
+                    PlayerControls(
+                        viewModel = viewModel,
+                        onBackPress = {
+                            if (isPipSupportedAndEnabled &&
+                                player.paused == false &&
+                                playerPreferences.pipOnExit().get()
+                            ) {
+                                enterPictureInPictureMode(createPipParams())
+                            } else {
+                                finish()
+                            }
+                        },
+                        modifier = Modifier.onGloballyPositioned {
+                            pipRect = run {
+                                val boundsInWindow = it.boundsInWindow()
+                                Rect(
+                                    boundsInWindow.left.toInt(),
+                                    boundsInWindow.top.toInt(),
+                                    boundsInWindow.right.toInt(),
+                                    boundsInWindow.bottom.toInt(),
+                                )
+                            }
+                        },
+                    )
+                }
             }
         }
 

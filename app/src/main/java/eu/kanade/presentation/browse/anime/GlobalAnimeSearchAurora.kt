@@ -19,17 +19,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.components.AuroraBackground
+import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
-import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.i18n.aniyomi.AYMR
@@ -42,6 +44,7 @@ fun GlobalAnimeSearchAuroraContent(
     contentPadding: PaddingValues,
 ) {
     val colors = AuroraTheme.colors
+    val context = LocalContext.current
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
 
     AuroraBackground {
@@ -68,6 +71,9 @@ fun GlobalAnimeSearchAuroraContent(
             val allAnime = items.flatten()
 
             items(allAnime) { anime ->
+                val coverRequest = remember(anime.thumbnailUrl, anime.coverLastModified) {
+                    buildAuroraCoverImageRequest(context, anime.thumbnailUrl)
+                }
                 androidx.compose.foundation.layout.Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -81,7 +87,7 @@ fun GlobalAnimeSearchAuroraContent(
                             .background(colors.cardBackground),
                     ) {
                         AsyncImage(
-                            model = resolveAuroraCoverModel(anime.thumbnailUrl),
+                            model = coverRequest,
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize(),

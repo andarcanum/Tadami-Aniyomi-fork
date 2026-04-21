@@ -32,6 +32,7 @@ import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.presentation.util.formattedMessage
 import eu.kanade.tachiyomi.novelsource.NovelSource
+import eu.kanade.tachiyomi.source.novel.NovelPluginImageWarmupEffect
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.StateFlow
 import tachiyomi.core.common.i18n.stringResource
@@ -168,9 +169,11 @@ private fun NovelListContent(
             key = { index -> novelBrowseItemKey(novels[index]?.value?.url, index) },
         ) { index ->
             val novel by novels[index]?.collectAsState() ?: return@items
+            val cover = novel.asBrowseNovelCover()
+            NovelPluginImageWarmupEffect(cover.url, cover.lastModified)
             EntryListItem(
                 title = novel.title,
-                coverData = novel.asBrowseNovelCover(),
+                coverData = cover,
                 coverAlpha = if (novel.favorite) CommonEntryItemDefaults.BrowseFavoriteCoverAlpha else 1f,
                 badge = { InLibraryBadge(enabled = novel.favorite) },
                 onLongClick = onNovelLongClick?.let { callback -> { callback(novel) } } ?: {},
@@ -209,9 +212,11 @@ private fun NovelComfortableGridContent(
             key = { index -> novelBrowseItemKey(novels[index]?.value?.url, index) },
         ) { index ->
             val novel by novels[index]?.collectAsState() ?: return@items
+            val cover = novel.asBrowseNovelCover()
+            NovelPluginImageWarmupEffect(cover.url, cover.lastModified)
             EntryComfortableGridItem(
                 title = novel.title,
-                coverData = novel.asBrowseNovelCover(),
+                coverData = cover,
                 coverAlpha = if (novel.favorite) CommonEntryItemDefaults.BrowseFavoriteCoverAlpha else 1f,
                 coverBadgeStart = { InLibraryBadge(enabled = novel.favorite) },
                 onLongClick = onNovelLongClick?.let { callback -> { callback(novel) } } ?: {},
@@ -257,9 +262,11 @@ private fun NovelCompactGridContent(
             key = { index -> novelBrowseItemKey(novels[index]?.value?.url, index) },
         ) { index ->
             val novel by novels[index]?.collectAsState() ?: return@items
+            val cover = novel.asBrowseNovelCover()
+            NovelPluginImageWarmupEffect(cover.url, cover.lastModified)
             EntryCompactGridItem(
                 title = novel.title.takeIf { showTitle },
-                coverData = novel.asBrowseNovelCover(),
+                coverData = cover,
                 coverAlpha = if (novel.favorite) CommonEntryItemDefaults.BrowseFavoriteCoverAlpha else 1f,
                 coverBadgeStart = { InLibraryBadge(enabled = novel.favorite) },
                 onLongClick = onNovelLongClick?.let { callback -> { callback(novel) } } ?: {},

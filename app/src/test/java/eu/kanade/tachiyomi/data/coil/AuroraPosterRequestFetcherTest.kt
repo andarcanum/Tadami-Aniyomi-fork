@@ -7,9 +7,11 @@ import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.SocketPolicy
 import okio.FileSystem
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -117,6 +119,61 @@ class AuroraPosterRequestFetcherTest {
 
         assertTrue(result is SourceFetchResult)
         assertEquals(0, primaryServer.requestCount)
+        assertEquals(1, fallbackServer.requestCount)
+    }
+
+    @Test
+    fun `loadAuroraPosterSource does not blacklist primary host after transient disconnect`() = runTest {
+        primaryServer.enqueue(
+            MockResponse()
+                .setSocketPolicy(SocketPolicy.DISCONNECT_AT_START),
+        )
+        primaryServer.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "image/png")
+                .setBody("primary-recovered"),
+        )
+        fallbackServer.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "image/png")
+                .setBody("fallback-first"),
+        )
+        fallbackServer.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "image/png")
+                .setBody("fallback-second"),
+        )
+
+        val client = OkHttpClient.Builder()
+            .addInterceptor(CoverRecoveryInterceptor())
+            .build()
+
+        val firstResult = loadAuroraPosterSource(
+            callFactory = client,
+            fileSystem = FileSystem.SYSTEM,
+            request = AuroraPosterRequest(
+                primaryUrl = primaryServer.url("/primary.png").toString(),
+                fallbackUrl = fallbackServer.url("/fallback.png").toString(),
+            ),
+        )
+
+        assertTrue(firstResult is SourceFetchResult)
+        assertFalse(CoverRequestPolicy.isBlacklisted(primaryServer.hostName))
+
+        val secondResult = loadAuroraPosterSource(
+            callFactory = client,
+            fileSystem = FileSystem.SYSTEM,
+            request = AuroraPosterRequest(
+                primaryUrl = primaryServer.url("/primary.png").toString(),
+                fallbackUrl = fallbackServer.url("/fallback.png").toString(),
+            ),
+        )
+
+        assertTrue(secondResult is SourceFetchResult)
+        assertEquals(2, primaryServer.requestCount)
         assertEquals(1, fallbackServer.requestCount)
     }
 }

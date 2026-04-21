@@ -43,6 +43,7 @@ import eu.kanade.tachiyomi.ui.player.controls.LocalPlayerButtonsClickEvent
 import tachiyomi.presentation.core.components.material.Button
 import tachiyomi.presentation.core.components.material.DISABLED_ALPHA
 import tachiyomi.presentation.core.components.material.padding
+import tachiyomi.presentation.core.util.LocalAppHaptics
 
 @Composable
 fun ControlsButton(
@@ -58,6 +59,7 @@ fun ControlsButton(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val clickEvent = LocalPlayerButtonsClickEvent.current
+    val appHaptics = LocalAppHaptics.current
     val iconColor = if (enabled) color else color.copy(alpha = DISABLED_ALPHA)
 
     Box(
@@ -65,6 +67,7 @@ fun ControlsButton(
             .combinedClickable(
                 enabled = enabled,
                 onClick = {
+                    appHaptics.tap()
                     clickEvent()
                     onClick()
                 },
@@ -102,10 +105,12 @@ fun ControlsButton(
     val interactionSource = remember { MutableInteractionSource() }
 
     val clickEvent = LocalPlayerButtonsClickEvent.current
+    val appHaptics = LocalAppHaptics.current
     Box(
         modifier = modifier
             .combinedClickable(
                 onClick = {
+                    appHaptics.tap()
                     clickEvent()
                     onClick()
                 },
@@ -138,6 +143,7 @@ fun FilledControlsButton(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val clickEvent = LocalPlayerButtonsClickEvent.current
+    val appHaptics = LocalAppHaptics.current
 
     Box(
         modifier = modifier.padding(end = MaterialTheme.padding.small),
@@ -150,6 +156,7 @@ fun FilledControlsButton(
                 .matchParentSize()
                 .combinedClickable(
                     onClick = {
+                        appHaptics.tap()
                         clickEvent()
                         onClick()
                     },

@@ -15,6 +15,7 @@ import androidx.core.content.ContextCompat
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.category.visualName
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.PreferenceItem
@@ -68,6 +69,7 @@ object SettingsLibraryScreen : SearchableSettings {
         val getNovelCategories = remember { Injekt.get<GetNovelCategories>() }
         val allNovelCategories by getNovelCategories.subscribe().collectAsState(initial = emptyList())
         val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
+        val uiPreferences = remember { Injekt.get<UiPreferences>() }
 
         return listOf(
             getCategoriesGroup(
@@ -86,6 +88,7 @@ object SettingsLibraryScreen : SearchableSettings {
             getSeasonBehaviorGroup(libraryPreferences),
             getAnimeBehaviorGroup(libraryPreferences),
             getBehaviorGroup(libraryPreferences),
+            getAuroraGroup(uiPreferences),
         )
     }
 
@@ -487,6 +490,22 @@ object SettingsLibraryScreen : SearchableSettings {
                             stringResource(MR.strings.pref_mark_duplicate_read_chapter_read_new),
                     ),
                     title = stringResource(MR.strings.pref_mark_duplicate_read_chapter_read),
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getAuroraGroup(
+        uiPreferences: UiPreferences,
+    ): Preference.PreferenceGroup {
+        return Preference.PreferenceGroup(
+            title = stringResource(AYMR.strings.theme_aurora),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = uiPreferences.auroraLibraryImmersiveMode(),
+                    title = stringResource(AYMR.strings.pref_aurora_library_immersive_mode),
+                    subtitle = stringResource(AYMR.strings.pref_aurora_library_immersive_mode_summary),
                 ),
             ),
         )

@@ -53,4 +53,6 @@ val migrations: List<Migration>
         CoalesceLibraryUpdateWorkersMigration(),
         NavigationTransitionModeMigration(),
         DefaultChapterEpisodeSortNumberMigration(),
+        DefaultChapterSortAscendingMigration(),
+        EInkProfileMigration(),
     )

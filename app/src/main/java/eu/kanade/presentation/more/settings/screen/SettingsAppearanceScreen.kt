@@ -28,9 +28,11 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.domain.ui.model.AnimeMetadataSource
 import eu.kanade.domain.ui.model.AuroraTitleHeroCtaMode
+import eu.kanade.domain.ui.model.EInkProfile
 import eu.kanade.domain.ui.model.HomeHeroCtaMode
 import eu.kanade.domain.ui.model.HomeHubRecentCardMode
 import eu.kanade.domain.ui.model.NavStyle
+import eu.kanade.domain.ui.model.NavTransitionMode
 import eu.kanade.domain.ui.model.StartScreen
 import eu.kanade.domain.ui.model.TabletUiMode
 import eu.kanade.domain.ui.model.ThemeMode
@@ -49,6 +51,8 @@ import eu.kanade.presentation.reader.novel.importNovelReaderCustomFont
 import eu.kanade.presentation.reader.novel.removeNovelReaderCustomFont
 import eu.kanade.presentation.theme.rememberAppFontFamily
 import eu.kanade.tachiyomi.ui.home.HomeHeaderLayoutEditorScreen
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableMap
@@ -163,12 +167,14 @@ object SettingsAppearanceScreen : SearchableSettings {
         val showMangaScanlatorBranchesPref = uiPreferences.showMangaScanlatorBranches()
         val appUiFontPref = uiPreferences.appUiFontId()
         val coverTitleFontPref = uiPreferences.coverTitleFontId()
+        val eInkProfilePref = uiPreferences.eInkProfile()
         val showAnimeSection by showAnimeSectionPref.collectAsState()
         val showMangaSection by showMangaSectionPref.collectAsState()
         val showNovelSection by showNovelSectionPref.collectAsState()
         val auroraEntryTranslationEnabled by auroraEntryTranslationPref.collectAsState()
         val appUiFontId by appUiFontPref.collectAsState()
         val coverTitleFontId by coverTitleFontPref.collectAsState()
+        val eInkProfile by eInkProfilePref.collectAsState()
         val canResetAppearanceFonts = shouldEnableAppearanceFontsReset(
             appUiFontId = appUiFontId,
             coverTitleFontId = coverTitleFontId,
@@ -381,6 +387,20 @@ object SettingsAppearanceScreen : SearchableSettings {
                 )
                 add(
                     Preference.PreferenceItem.ListPreference(
+                        preference = uiPreferences.navigationTransitionMode(),
+                        entries = mapOf(
+                            NavTransitionMode.AUTO to stringResource(AYMR.strings.pref_navigation_transition_mode_auto),
+                            NavTransitionMode.MODERN to
+                                stringResource(AYMR.strings.pref_navigation_transition_mode_modern),
+                            NavTransitionMode.LEGACY to
+                                stringResource(AYMR.strings.pref_navigation_transition_mode_legacy),
+                        ).toImmutableMap(),
+                        title = stringResource(AYMR.strings.pref_navigation_transition_mode),
+                        subtitle = stringResource(AYMR.strings.pref_navigation_transition_mode_summary),
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.ListPreference(
                         preference = uiPreferences.dateFormat(),
                         entries = DateFormats
                             .associateWith {
@@ -436,19 +456,21 @@ object SettingsAppearanceScreen : SearchableSettings {
                     ),
                 )
                 add(
-                    Preference.PreferenceItem.SwitchPreference(
-                        preference = uiPreferences.animatedAuroraBackground(),
-                        title = stringResource(AYMR.strings.pref_animated_aurora_background),
-                        subtitle = stringResource(AYMR.strings.pref_animated_aurora_background_summary),
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(AYMR.strings.pref_e_ink_profile),
+                        subtitle = stringResource(eInkProfile.titleRes),
+                        onClick = { navigator.push(SettingsEInkScreen) },
                     ),
                 )
-                add(
-                    Preference.PreferenceItem.SwitchPreference(
-                        preference = uiPreferences.eInkMode(),
-                        title = stringResource(AYMR.strings.pref_e_ink_mode),
-                        subtitle = stringResource(AYMR.strings.pref_e_ink_mode_summary),
-                    ),
-                )
+                if (!eInkProfile.isEnabled) {
+                    add(
+                        Preference.PreferenceItem.SwitchPreference(
+                            preference = uiPreferences.animatedAuroraBackground(),
+                            title = stringResource(AYMR.strings.pref_animated_aurora_background),
+                            subtitle = stringResource(AYMR.strings.pref_animated_aurora_background_summary),
+                        ),
+                    )
+                }
                 add(
                     Preference.PreferenceItem.TextPreference(
                         title = stringResource(AYMR.strings.pref_customize_home_header_layout),
@@ -614,7 +636,7 @@ object SettingsAppearanceScreen : SearchableSettings {
             title = stringResource(AYMR.strings.pref_category_metadata),
             preferenceItems = persistentListOf(
                 Preference.PreferenceItem.ListPreference(
-                    preference = uiPreferences.animeMetadataSource(),
+                    preference = uiPreferences.metadataSource(),
                     entries = AnimeMetadataSource.entries
                         .associateWith {
                             when (it) {
@@ -717,6 +739,21 @@ internal fun shouldEnableAppearanceFontsReset(
 ): Boolean {
     return appUiFontId != UiPreferences.DEFAULT_APP_UI_FONT_ID ||
         coverTitleFontId != UiPreferences.DEFAULT_COVER_TITLE_FONT_ID
+}
+
+internal fun seedEInkAutoOptimizationDefaults(
+    eInkProfile: EInkProfile,
+    readerPreferences: ReaderPreferences,
+    novelReaderPreferences: NovelReaderPreferences,
+) {
+    readerPreferences.pageTransitions().set(false)
+    readerPreferences.flashOnPageChange().set(true)
+    readerPreferences.grayscale().set(eInkProfile == EInkProfile.MONOCHROME)
+    readerPreferences.invertedColors().set(false)
+    readerPreferences.keepScreenOn().set(true)
+
+    novelReaderPreferences.fullScreenMode().set(true)
+    novelReaderPreferences.keepScreenOn().set(true)
 }
 
 private val DateFormats = listOf(

@@ -152,7 +152,6 @@ class NovelScreen(
 
         val rawNovelUrl = successState.novel.url
         val canOpenNovelWebView = rawNovelUrl.isNotBlank()
-        val startChapter = screenModel.getResumeOrNextChapter()
         val isReading = screenModel.isReadingStarted()
         val isSourceConfigurable = successState.source.hasVisiblePluginSettings()
         val actionAvailability = resolveNovelEntryActionAvailability(
@@ -335,8 +334,16 @@ class NovelScreen(
             isFromSource = fromSource,
             snackbarHostState = screenModel.snackbarHostState,
             onBack = navigator::pop,
-            onStartReading = startChapter?.let { chapter ->
-                { navigator.push(NovelReaderScreen(chapter.id, successState.source.id)) }
+            onStartReading = if (successState.chapters.isEmpty()) {
+                null
+            } else {
+                {
+                    coroutineScope.launch {
+                        screenModel.getContinueChapter()?.let { chapter ->
+                            navigator.push(NovelReaderScreen(chapter.id, successState.source.id))
+                        }
+                    }
+                }
             },
             isReading = isReading,
             onToggleFavorite = screenModel::toggleFavorite,

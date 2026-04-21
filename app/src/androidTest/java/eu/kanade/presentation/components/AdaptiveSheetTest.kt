@@ -6,9 +6,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -52,6 +54,79 @@ class AdaptiveSheetTest {
 
         composeTestRule.onNodeWithTag(ADAPTIVE_SHEET_SCRIM_TEST_TAG).performClick()
         composeTestRule.onNodeWithTag(ADAPTIVE_SHEET_SCRIM_TEST_TAG).performClick()
+
+        composeTestRule.mainClock.advanceTimeBy(500)
+        composeTestRule.waitForIdle()
+
+        assertEquals(1, dismissCount.get())
+        composeTestRule.onAllNodes(hasTestTag(ADAPTIVE_SHEET_SURFACE_TEST_TAG)).assertCountEquals(0)
+        composeTestRule.onAllNodes(hasTestTag(ADAPTIVE_SHEET_SCRIM_TEST_TAG)).assertCountEquals(0)
+    }
+
+    @Test
+    fun swipe_enabled_sheet_dismisses_on_drag_down() {
+        val dismissCount = AtomicInteger(0)
+        composeTestRule.mainClock.autoAdvance = false
+
+        composeTestRule.setContent {
+            AdaptiveSheet(
+                onDismissRequest = { dismissCount.incrementAndGet() },
+                enableSwipeDismiss = true,
+            ) {
+                Text("Swipe enabled content", Modifier.testTag("swipe_enabled_content"))
+            }
+        }
+
+        composeTestRule.mainClock.advanceTimeBy(500)
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(ADAPTIVE_SHEET_SURFACE_TEST_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Swipe enabled content").assertIsDisplayed()
+
+        composeTestRule.onNodeWithTag(ADAPTIVE_SHEET_SURFACE_TEST_TAG).performTouchInput {
+            swipeDown()
+        }
+
+        composeTestRule.mainClock.advanceTimeBy(500)
+        composeTestRule.waitForIdle()
+
+        assertEquals(1, dismissCount.get())
+        composeTestRule.onAllNodes(hasTestTag(ADAPTIVE_SHEET_SURFACE_TEST_TAG)).assertCountEquals(0)
+        composeTestRule.onAllNodes(hasTestTag(ADAPTIVE_SHEET_SCRIM_TEST_TAG)).assertCountEquals(0)
+    }
+
+    @Test
+    fun swipe_enabled_sheet_waits_for_drag_release_before_dismissing() {
+        val dismissCount = AtomicInteger(0)
+        composeTestRule.mainClock.autoAdvance = false
+
+        composeTestRule.setContent {
+            AdaptiveSheet(
+                onDismissRequest = { dismissCount.incrementAndGet() },
+                enableSwipeDismiss = true,
+            ) {
+                Text("Release gated content", Modifier.testTag("release_gated_content"))
+            }
+        }
+
+        composeTestRule.mainClock.advanceTimeBy(500)
+        composeTestRule.waitForIdle()
+
+        val surface = composeTestRule.onNodeWithTag(ADAPTIVE_SHEET_SURFACE_TEST_TAG)
+        surface.assertIsDisplayed()
+        composeTestRule.onNodeWithText("Release gated content").assertIsDisplayed()
+
+        surface.performTouchInput {
+            down(center)
+            moveBy(Offset(0f, 1200f))
+        }
+
+        composeTestRule.waitForIdle()
+        assertEquals(0, dismissCount.get())
+
+        surface.performTouchInput {
+            up()
+        }
 
         composeTestRule.mainClock.advanceTimeBy(500)
         composeTestRule.waitForIdle()

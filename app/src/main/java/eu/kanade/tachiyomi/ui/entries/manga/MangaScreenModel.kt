@@ -36,6 +36,7 @@ import eu.kanade.domain.track.model.AutoTrackState
 import eu.kanade.domain.track.service.TrackPreferences
 import eu.kanade.presentation.entries.DownloadAction
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadAction
+import eu.kanade.presentation.series.manga.resolveMangaResumeChapter
 import eu.kanade.presentation.util.TargetChapterCalculator
 import eu.kanade.presentation.util.formattedMessage
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadCache
@@ -50,6 +51,7 @@ import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.ui.entries.mergeNewItemIds
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.chapter.getNextUnread
+import eu.kanade.tachiyomi.util.chapter.removeDuplicateChapters
 import eu.kanade.tachiyomi.util.removeCovers
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.ImmutableList
@@ -84,6 +86,7 @@ import tachiyomi.domain.entries.manga.interactor.GetMangaWithChapters
 import tachiyomi.domain.entries.manga.interactor.SetMangaChapterFlags
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.entries.manga.repository.MangaRepository
+import tachiyomi.domain.history.manga.repository.MangaHistoryRepository
 import tachiyomi.domain.items.chapter.interactor.SetMangaDefaultChapterFlags
 import tachiyomi.domain.items.chapter.interactor.UpdateChapter
 import tachiyomi.domain.items.chapter.model.Chapter
@@ -134,6 +137,7 @@ class MangaScreenModel(
     private val addTracks: AddMangaTracks = Injekt.get(),
     private val setMangaCategories: SetMangaCategories = Injekt.get(),
     private val mangaRepository: MangaRepository = Injekt.get(),
+    private val mangaHistoryRepository: MangaHistoryRepository = Injekt.get(),
     private val filterChaptersForDownload: FilterChaptersForDownload = Injekt.get(),
     private val getMangaMetadata: GetMangaMetadata = Injekt.get(),
     private val sourceMangaRatingFetcher: SourceMangaRatingFetcher = Injekt.get(),
@@ -275,6 +279,7 @@ class MangaScreenModel(
                     source = Injekt.get<MangaSourceManager>().getOrStub(manga.source),
                     isFromSource = isFromSource,
                     chapters = chapters,
+                    useAuroraChapterDedupe = uiPreferences.appTheme().get().isAuroraStyle,
                     availableScanlators = availableScanlators,
                     scanlatorChapterCounts = scanlatorChapterCounts,
                     excludedScanlators = initialExcludedScanlators,
@@ -414,7 +419,6 @@ class MangaScreenModel(
             }
             updateSuccessState {
                 it.copy(
-                    mangaMetadata = null,
                     isMetadataLoading = false,
                     metadataError = error,
                 )
@@ -847,6 +851,14 @@ class MangaScreenModel(
             manga = successState.manga,
             downloadedOnly = successState.downloadedOnly,
         )
+    }
+
+    suspend fun getContinueChapter(): Chapter? = withIOContext {
+        val successState = successState ?: return@withIOContext null
+        val historyChapterId = mangaHistoryRepository.getHistoryByMangaId(mangaId)
+            .maxByOrNull { it.readAt?.time ?: Long.MIN_VALUE }
+            ?.chapterId
+        resolveMangaResumeChapter(successState.chapters.map { it.chapter }, historyChapterId)
     }
 
     fun saveScrollPosition(index: Int, offset: Int) {
@@ -1390,9 +1402,15 @@ class MangaScreenModel(
             val metadataError: MetadataLoadError? = null,
             val scrollIndex: Int = 0,
             val scrollOffset: Int = 0,
+            val useAuroraChapterDedupe: Boolean = false,
         ) : State {
             val processedChapters by lazy {
-                chapters.applyFilters(manga).toList()
+                val filtered = chapters.applyFilters(manga).toList()
+                if (useAuroraChapterDedupe) {
+                    filtered.removeDuplicateChapters { it.chapter }
+                } else {
+                    filtered
+                }
             }
 
             val targetChapterIndex by lazy {

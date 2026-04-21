@@ -21,16 +21,19 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -50,14 +53,18 @@ fun AniviewContentCard(
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
+    val context = LocalContext.current
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
+    val contentCardRequest = remember(imageUrl) {
+        buildAuroraCoverImageRequest(context, imageUrl)
+    }
 
     Column(
         modifier = modifier.clickable { onClick() },
     ) {
         Box {
             AsyncImage(
-                model = resolveAuroraCoverModel(imageUrl),
+                model = contentCardRequest,
                 contentDescription = null,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -137,7 +144,11 @@ fun AniviewHeroCard(
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
+    val context = LocalContext.current
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter(AuroraCoverPlaceholderVariant.Wide)
+    val heroCardRequest = remember(imageUrl) {
+        buildAuroraCoverImageRequest(context, imageUrl)
+    }
 
     Box(
         modifier = modifier
@@ -154,7 +165,7 @@ fun AniviewHeroCard(
     ) {
         // Background image
         AsyncImage(
-            model = resolveAuroraCoverModel(imageUrl),
+            model = heroCardRequest,
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,

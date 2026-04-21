@@ -533,6 +533,7 @@
     <string name="enhanced_services">Расширенные сервисы отслеживания</string>
     <string name="theme_monet">Динамическая</string>
     <string name="label_background_activity">Фоновая активность</string>
+    <string name="label_haptic_feedback">Тактильный отклик</string>
     <string name="pref_lowest">Самая низкая</string>
     <string name="pref_low">Низкая</string>
     <string name="pref_high">Высокая</string>
@@ -587,6 +588,7 @@
     <string name="skipped_reason_not_caught_up">Пропущено, т.к есть непрочитанные главы</string>
     <string name="skipped_reason_not_started">Пропущено, т.к серия не начата</string>
     <string name="learn_more">Нажать для подробностей</string>
+    <string name="notification_update_error_more">+%1$d еще</string>
     <string name="notification_update_error">%1$d обновление(ий) не удалось</string>
     <string name="rotation_reverse_portrait">Портретная наоборот</string>
     <string name="action_move_to_top_all_for_series">Переместить серию в начало</string>
@@ -1017,4 +1019,16 @@
     <string name="ai_translator_log_empty">Логи пока пусты</string>
     <string name="ai_translator_custom_prompt_title">Свой модификатор промпта</string>
     <string name="ai_translator_custom_prompt_hint">Свои инструкции</string>
+    <string name="pref_haptic_feedback">Тактильный отклик</string>
+    <string name="pref_haptic_feedback_summary">Частичный режим сохраняет текущие выборочные отклики. Полный добавляет вибрацию на обычные нажатия и кнопки.</string>
+    <string name="pref_haptic_feedback_partial">Частичный</string>
+    <string name="pref_haptic_feedback_full">Полный</string>
+    <string name="label_library_update_pacing">Пауза обновления библиотеки</string>
+    <string name="label_library_update_pacing_description">Пауза между обновлениями тайтлов для выбранных источников.</string>
+    <string name="label_library_update_pacing_timeout">Таймаут (секунд)</string>
+    <string name="label_library_update_pacing_search">Поиск источников</string>
+    <string name="label_library_update_pacing_selected">Выбрано %1$d из %2$d</string>
+    <string name="label_library_update_pacing_empty">Источники не найдены</string>
+    <string name="label_library_update_pacing_empty_search">По вашему запросу ничего не найдено</string>
+    <string name="action_timeout_settings">Настройка таймаута</string>
 </resources>

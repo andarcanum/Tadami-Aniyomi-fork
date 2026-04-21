@@ -73,6 +73,7 @@ import eu.kanade.presentation.theme.resolveAuroraBorderColor
 import eu.kanade.presentation.theme.resolveAuroraSurfaceColor
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 
 @Composable
 internal fun HeroSection(
@@ -83,6 +84,7 @@ internal fun HeroSection(
     onEntryClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
     val isEInkMode = colors.isEInk
     val actionSpec = remember(section, hero.progressNumber, ctaMode) {
         resolveHomeHubHeroActionSpec(
@@ -309,7 +311,10 @@ internal fun HeroSection(
         ).padding(16.dp)
             .clip(heroCardShape)
             .border(width = 1.dp, brush = rimLightBrush, shape = heroCardShape)
-            .clickable(onClick = onEntryClick),
+            .clickable {
+                appHaptics.tap()
+                onEntryClick()
+            },
     ) {
         val fallbackPainter = rememberThemeAwareCoverErrorPainter(variant = AuroraCoverPlaceholderVariant.Wide)
         AsyncImage(
@@ -406,7 +411,10 @@ internal fun HeroSection(
                 contentAlignment = Alignment.Center,
             ) {
                 Button(
-                    onClick = onPlayClick,
+                    onClick = {
+                        appHaptics.tap()
+                        onPlayClick()
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
                     elevation = actionButtonElevation,
                     shape = actionButtonShape,
@@ -416,38 +424,43 @@ internal fun HeroSection(
                     val actionIcon = when (actionSpec.icon) {
                         HomeHubHeroActionIcon.Play -> Icons.Filled.PlayArrow
                     }
-                    Box(
-                        modifier = Modifier.size(21.dp),
-                        contentAlignment = Alignment.Center,
+                    Row(
+                        modifier = Modifier.offset(x = (-2).dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (actionButtonIconShadowSpec.alpha > 0f) {
+                        Box(
+                            modifier = Modifier.size(21.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (actionButtonIconShadowSpec.alpha > 0f) {
+                                Icon(
+                                    imageVector = actionIcon,
+                                    contentDescription = null,
+                                    tint = Color.Black.copy(alpha = actionButtonIconShadowSpec.alpha),
+                                    modifier = Modifier
+                                        .size(21.dp)
+                                        .offset(
+                                            x = actionButtonIconShadowSpec.offsetXDp,
+                                            y = actionButtonIconShadowSpec.offsetYDp,
+                                        ),
+                                )
+                            }
                             Icon(
                                 imageVector = actionIcon,
                                 contentDescription = null,
-                                tint = Color.Black.copy(alpha = actionButtonIconShadowSpec.alpha),
-                                modifier = Modifier
-                                    .size(21.dp)
-                                    .offset(
-                                        x = actionButtonIconShadowSpec.offsetXDp,
-                                        y = actionButtonIconShadowSpec.offsetYDp,
-                                    ),
+                                tint = actionButtonContentColor,
+                                modifier = Modifier.size(21.dp),
                             )
                         }
-                        Icon(
-                            imageVector = actionIcon,
-                            contentDescription = null,
-                            tint = actionButtonContentColor,
-                            modifier = Modifier.size(21.dp),
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            stringResource(actionSpec.labelRes),
+                            color = actionButtonContentColor,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            style = TextStyle(shadow = actionButtonLabelShadow),
                         )
                     }
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        stringResource(actionSpec.labelRes),
-                        color = actionButtonContentColor,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
-                        style = TextStyle(shadow = actionButtonLabelShadow),
-                    )
                 }
             }
         }
@@ -520,6 +533,7 @@ private fun OutlinedHeroText(
 @Composable
 internal fun QuickSourceButton(sourceName: String?, onClick: () -> Unit) {
     val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val contentMaxWidthDp = auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp
     val sourceButtonShape = RoundedCornerShape(16.dp)
@@ -554,7 +568,10 @@ internal fun QuickSourceButton(sourceName: String?, onClick: () -> Unit) {
             .padding(horizontal = 24.dp, vertical = 16.dp),
     ) {
         Button(
-            onClick = onClick,
+            onClick = {
+                appHaptics.tap()
+                onClick()
+            },
             colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
             shape = sourceButtonShape,
             modifier = Modifier
@@ -628,6 +645,7 @@ internal fun HomeHubRecentPosterCard(
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
     val posterSpec = remember(deviceClass) {
         resolveHomeHubRecentPosterCardSpec(deviceClass)
     }
@@ -653,7 +671,10 @@ internal fun HomeHubRecentPosterCard(
     Column(
         modifier = modifier
             .clip(cardShape)
-            .clickable(onClick = onClick)
+            .clickable {
+                appHaptics.tap()
+                onClick()
+            }
             .background(outerSurface)
             .padding(6.dp),
     ) {

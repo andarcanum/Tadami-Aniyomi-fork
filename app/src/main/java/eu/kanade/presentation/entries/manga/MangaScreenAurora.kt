@@ -99,6 +99,7 @@ import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.resolveAuroraAdaptiveSpec
 import eu.kanade.tachiyomi.data.download.manga.model.MangaDownload
 import eu.kanade.tachiyomi.source.manga.getNameForMangaInfo
+import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.entries.manga.ChapterList
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreenModel
 import kotlinx.coroutines.flow.conflate
@@ -196,6 +197,9 @@ fun MangaScreenAuroraImpl(
             metadataError = state.metadataError,
             useMetadataCovers = metadataSource != MetadataSource.NONE,
         )
+    }
+    val refererUrl = remember(state.source) {
+        (state.source as? HttpSource)?.baseUrl
     }
     val chapterModels = remember(chapters) {
         chapters.mapNotNull { (it as? ChapterList.Item)?.chapter }
@@ -345,6 +349,7 @@ fun MangaScreenAuroraImpl(
                 firstVisibleItemIndex = firstVisibleItemIndex,
                 resolvedCoverUrl = resolvedCover.coverUrl,
                 resolvedCoverUrlFallback = resolvedCover.coverUrlFallback,
+                refererUrl = refererUrl,
             )
 
             if (useTwoPaneLayout) {

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Generic strings -->
     <string name="confirm_exit">Enable Horizontal Seek</string>
@@ -12,6 +12,39 @@
     <!-- Changed from mihon -->
     <string name="manga">Manga</string>
     <string name="pref_library_summary">Categories, global update, chapter/episode swipe</string>
+    <string name="series_detail">Series</string>
+    <string name="series_caption_label">Series</string>
+    <string name="series_tab_titles">By Titles</string>
+    <string name="series_tab_chapters">All Chapters</string>
+    <string name="action_add_to_series">Add to Series</string>
+    <string name="action_create_series">Create Series</string>
+    <string name="action_rename_series">Rename Series</string>
+    <string name="action_delete_series">Delete Series</string>
+    <string name="confirm_delete_series">Are you sure you want to delete this series? The novels within will NOT be deleted from your library.</string>
+    <string name="manga_series_caption_label">Series</string>
+    <string name="manga_series_tab_titles">By Titles</string>
+    <string name="manga_series_tab_chapters">All Chapters</string>
+    <string name="manga_series_action_rename_series">Rename Series</string>
+    <string name="manga_series_action_delete_series">Delete Series</string>
+    <string name="manga_series_confirm_delete_series">Are you sure you want to delete this series? The manga within will NOT be deleted from your library.</string>
+    <string name="manga_series_chapters_progress">%1$d/%2$d Chapters</string>
+    <string name="novel_series_chapters_progress">%1$d/%2$d Chapters</string>
+    <string name="manga_series_cta_start_reading">Start reading</string>
+    <string name="manga_series_cta_continue_reading">Continue reading</string>
+    <string name="manga_series_interstitial_completed">Completed: %1$s</string>
+    <string name="manga_series_interstitial_next_manga">Next: %1$s</string>
+    <string name="manga_series_interstitial_next_chapter">Next chapter: %1$s</string>
+    <string name="manga_series_interstitial_series_completed">Series completed!</string>
+    <string name="manga_series_interstitial_back_to_series">Back to Series</string>
+    <string name="series_no_chapters_error">No chapters available for this series.</string>
+    <string name="series_interstitial_completed">Completed: %1$s</string>
+    <string name="series_interstitial_next_novel">Next: %1$s</string>
+    <string name="series_interstitial_next_chapter">Next chapter: %1$s</string>
+    <string name="series_interstitial_series_completed">Series completed!</string>
+    <string name="series_interstitial_back_to_series">Back to Series</string>
+    <string name="novel_series_cta_start_reading">Start reading</string>
+    <string name="novel_series_cta_continue_reading">Continue reading</string>
+
     <string name="pref_behavior">Chapter behavior</string>
     <string name="action_add_repo_message">Add additional repos to %s. This should be a URL that ends with \"index.min.json\".</string>
     <string name="download_ahead_info">Only works if the current chapter/episode + the next one are already downloaded.</string>
@@ -21,6 +54,8 @@
     <string name="action_display_show_continue_reading_button">Continue watching/reading button</string>
     <string name="pref_update_only_completely_read">Skip entries with unseen episode(s)/unread chapter(s)</string>
     <string name="pref_library_update_show_tab_badge">Show unseen/unread count on Updates icon</string>
+    <string name="pref_aurora_library_immersive_mode">Immersive mode</string>
+    <string name="pref_aurora_library_immersive_mode_summary">Hide the top chrome and bottom navigation while scrolling, but keep categories visible.</string>
     <string name="pref_category_delete_chapters">Delete chapters/episodes</string>
     <string name="pref_remove_after_marked_as_read">After manually marked as read/watched</string>
     <string name="pref_remove_after_read">After reading/watching automatically delete</string>
@@ -1062,6 +1097,32 @@
     <string name="episode_settings">Episode settings</string>
     <string name="season_settings">Season settings</string>
     <string name="pref_backup_flags">Backup options</string>
+    <!-- Cloud Sync / Google Drive -->
+    <string name="app_name_snake" translatable="false">tadami</string>
+    <string name="cloud_sync">Cloud Sync</string>
+    <string name="google_drive">Google Drive</string>
+    <string name="pref_google_drive_sign_in">Sign in</string>
+    <string name="pref_google_drive_sign_out">Sign out</string>
+    <string name="pref_google_drive_purge_sync_data">Delete sync data from Google Drive</string>
+    <string name="google_drive_sync_data_purged">Sync data deleted from Google Drive</string>
+    <string name="google_drive_sync_data_not_found">No sync data found in Google Drive</string>
+    <string name="google_drive_sync_data_purge_error">Error purging sync data from Google Drive, try signing in again</string>
+    <string name="google_drive_login_success">Signed in to Google Drive</string>
+    <string name="google_drive_login_failed">Failed to sign in to Google Drive: %s</string>
+    <string name="google_drive_not_signed_in">Not signed in to Google Drive</string>
+    <string name="error_uploading_sync_data">Error uploading sync data to Google Drive</string>
+    <string name="error_before_sync_gdrive">Error before sync: %s</string>
+    <string name="error_deleting_google_drive_lock_file">Error deleting Google Drive lock file</string>
+    <string name="pref_purge_confirmation_message">Deleting sync data will remove all your sync data from Google Drive. Are you sure you want to continue?</string>
+    <string name="pref_cloud_sync">Enable cloud sync</string>
+    <string name="pref_cloud_sync_summary">Sync your library across devices using Google Drive</string>
+    <string name="pref_sync_now">Sync now</string>
+    <string name="pref_last_sync">Last sync</string>
+    <string name="pref_sync_interval">Sync interval</string>
+    <string name="action_ok">OK</string>
+    <string name="cloud_sync_successful">Sync completed successfully</string>
+    <string name="cloud_sync_error">Sync error: %s</string>
+    <string name="never">Never</string>
     <string name="label_manga_extensions">Manga Extensions</string>
     <string name="label_anime_extensions">Anime Extensions</string>
     <string name="label_novel_extensions">Novel Extensions</string>
@@ -1565,8 +1626,14 @@
     <string name="pref_show_achievement_notifications_summary">Show popup when unlocking achievements</string>
     <string name="pref_animated_aurora_background">Animated Aurora background</string>
     <string name="pref_animated_aurora_background_summary">Show soft animated color glows on Aurora screens</string>
-    <string name="pref_e_ink_mode">E-ink mode</string>
-    <string name="pref_e_ink_mode_summary">Use a high-contrast monochrome profile for e-ink displays</string>
+    <string name="pref_e_ink_profile">E-ink profile</string>
+    <string name="pref_e_ink_profile_monochrome">Monochrome</string>
+    <string name="pref_e_ink_profile_color">Color</string>
+    <string name="pref_e_ink_theme_mode">E-ink theme mode</string>
+    <string name="pref_e_ink_auto_optimization">Auto-optimize reader settings</string>
+    <string name="pref_e_ink_auto_optimization_summary">Applies recommended low-motion reader settings once when enabled</string>
+    <string name="pref_e_ink_auto_optimization_applied">Applied recommended reader settings</string>
+    <string name="pref_e_ink_refresh">E-ink refresh</string>
     <string name="pref_aurora_customization">Aurora customization</string>
     <string name="pref_home_recent_card_mode">Recent blocks on Home</string>
     <string name="pref_home_recent_card_mode_summary">Style for the recent cards on the Home screen: %s</string>

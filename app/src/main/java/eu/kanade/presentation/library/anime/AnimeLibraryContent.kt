@@ -40,6 +40,7 @@ fun AnimeLibraryContent(
     onContinueWatchingClicked: ((LibraryAnime) -> Unit)?,
     onToggleSelection: (LibraryAnime) -> Unit,
     onToggleRangeSelection: (LibraryAnime) -> Unit,
+    onTogglePinned: (AnimeLibraryItem) -> Unit,
     onRefresh: (Category?) -> Boolean,
     onGlobalSearchClicked: () -> Unit,
     getNumberOfAnimeForCategory: (Category) -> Int?,
@@ -108,6 +109,7 @@ fun AnimeLibraryContent(
                 getLibraryForPage = getAnimeLibraryForPage,
                 onClickAnime = onClickAnime,
                 onLongClickAnime = onToggleRangeSelection,
+                onTogglePinned = onTogglePinned,
                 onClickContinueWatching = onContinueWatchingClicked,
             )
         }

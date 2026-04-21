@@ -73,6 +73,7 @@ class NovelRestorer(
     private fun Novel.copyFrom(newer: Novel): Novel {
         return this.copy(
             favorite = this.favorite || newer.favorite,
+            pinned = this.pinned || newer.pinned,
             author = newer.author,
             description = newer.description,
             genre = newer.genre,
@@ -95,6 +96,7 @@ class NovelRestorer(
                 status = novel.status,
                 thumbnailUrl = novel.thumbnailUrl,
                 favorite = novel.favorite,
+                pinned = novel.pinned,
                 lastUpdate = novel.lastUpdate,
                 nextUpdate = null,
                 calculateInterval = null,
@@ -231,6 +233,7 @@ class NovelRestorer(
                 status = novel.status,
                 thumbnailUrl = novel.thumbnailUrl,
                 favorite = novel.favorite,
+                pinned = novel.pinned,
                 lastUpdate = novel.lastUpdate,
                 nextUpdate = 0L,
                 calculateInterval = 0L,

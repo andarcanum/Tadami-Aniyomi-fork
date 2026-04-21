@@ -37,6 +37,8 @@ import eu.kanade.presentation.library.DeleteLibraryEntryDialog
 import eu.kanade.presentation.library.components.LibraryToolbar
 import eu.kanade.presentation.library.manga.MangaLibraryContent
 import eu.kanade.presentation.library.manga.MangaLibrarySettingsDialog
+import eu.kanade.presentation.library.manga.components.AddToSeriesDialog
+import eu.kanade.presentation.library.novel.components.CreateSeriesDialog
 import eu.kanade.presentation.more.onboarding.GETTING_STARTED_URL
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.data.library.manga.MangaLibraryUpdateJob
@@ -45,8 +47,10 @@ import eu.kanade.tachiyomi.ui.browse.manga.source.globalsearch.GlobalMangaSearch
 import eu.kanade.tachiyomi.ui.category.CategoriesTab
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreen
 import eu.kanade.tachiyomi.ui.home.HomeScreen
+import eu.kanade.tachiyomi.ui.library.manga.MangaLibraryItem
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
+import eu.kanade.tachiyomi.ui.series.manga.MangaSeriesScreen
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collectLatest
@@ -162,7 +166,11 @@ data object MangaLibraryTab : Tab {
                         scope.launch {
                             val randomItem = screenModel.getRandomLibraryItemForCurrentCategory()
                             if (randomItem != null) {
-                                navigator.push(MangaScreen(randomItem.libraryManga.manga.id))
+                                if (randomItem is MangaLibraryItem.Series) {
+                                    navigator.push(MangaSeriesScreen(randomItem.librarySeries.id))
+                                } else {
+                                    navigator.push(MangaScreen(randomItem.libraryManga.manga.id))
+                                }
                             } else {
                                 snackbarHostState.showSnackbar(
                                     context.stringResource(MR.strings.information_no_entries_found),
@@ -180,6 +188,10 @@ data object MangaLibraryTab : Tab {
                 LibraryBottomActionMenu(
                     visible = state.selectionMode,
                     onChangeCategoryClicked = screenModel::openChangeCategoryDialog,
+                    onTogglePinnedClicked = { pinned ->
+                        state.selection.forEach { screenModel.setPinned(it, pinned) }
+                    },
+                    isPinned = state.selection.fastAll { it.pinned },
                     onMarkAsViewedClicked = { screenModel.markReadSelection(true) },
                     onMarkAsUnviewedClicked = { screenModel.markReadSelection(false) },
                     onDownloadClicked = screenModel::runDownloadActionSelection
@@ -194,6 +206,7 @@ data object MangaLibraryTab : Tab {
                             MangaLibraryMigrationRoute.None -> Unit
                         }
                     },
+                    onSeriesClicked = { screenModel.openAddToSeries() },
                     onDeleteClicked = screenModel::openDeleteMangaDialog,
                     isManga = true,
                 )
@@ -227,6 +240,7 @@ data object MangaLibraryTab : Tab {
                         showPageTabs = state.showCategoryTabs || !state.searchQuery.isNullOrEmpty(),
                         onChangeCurrentPage = { screenModel.activeCategoryIndex = it },
                         onMangaClicked = { navigator.push(MangaScreen(it)) },
+                        onSeriesClicked = { navigator.push(MangaSeriesScreen(it)) },
                         onContinueReadingClicked = { it: LibraryManga ->
                             scope.launchIO {
                                 val chapter = screenModel.getNextUnreadChapter(it.manga)
@@ -251,6 +265,7 @@ data object MangaLibraryTab : Tab {
                             screenModel.toggleRangeSelection(it)
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         },
+                        onTogglePinned = screenModel::togglePinned,
                         onRefresh = onClickRefresh,
                         onGlobalSearchClicked = {
                             navigator.push(
@@ -309,6 +324,20 @@ data object MangaLibraryTab : Tab {
                         screenModel.clearSelection()
                     },
                     isManga = true,
+                )
+            }
+            MangaLibraryScreenModel.Dialog.CreateSeries -> {
+                CreateSeriesDialog(
+                    onDismissRequest = onDismissRequest,
+                    onCreate = screenModel::createSeries,
+                )
+            }
+            is MangaLibraryScreenModel.Dialog.AddToSeries -> {
+                AddToSeriesDialog(
+                    onDismissRequest = onDismissRequest,
+                    series = dialog.series,
+                    onSelect = screenModel::addSelectionToSeries,
+                    onCreateSeries = screenModel::openCreateSeries,
                 )
             }
             null -> {}

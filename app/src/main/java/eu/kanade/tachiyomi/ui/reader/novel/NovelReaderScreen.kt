@@ -26,12 +26,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.reader.novel.NovelAtmosphereBackground
 import eu.kanade.presentation.reader.novel.NovelReaderBackdropSession
 import eu.kanade.presentation.reader.novel.NovelReaderChapterHandoffPolicy
 import eu.kanade.presentation.reader.novel.NovelReaderPageReaderHandoffTarget
 import eu.kanade.presentation.reader.novel.NovelReaderScreen
 import eu.kanade.presentation.reader.novel.NovelReaderSystemUiSession
+import eu.kanade.presentation.reader.novel.SeriesInterstitialOverlay
 import eu.kanade.presentation.reader.novel.SystemUIController
 import eu.kanade.presentation.reader.novel.readNovelReaderCustomBackgroundItems
 import eu.kanade.presentation.reader.novel.resolveNovelReaderBackdropColor
@@ -50,6 +52,7 @@ import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
 import tachiyomi.presentation.core.screens.LoadingScreen
+import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
@@ -57,6 +60,7 @@ import java.io.File
 class NovelReaderScreen(
     private val chapterId: Long,
     private val sourceId: Long? = null,
+    private val seriesId: Long? = null,
     private val autoStartGeminiTranslation: Boolean = false,
 ) : eu.kanade.presentation.util.Screen() {
     fun resolveInitialBackdropColor(): Color? {
@@ -75,6 +79,7 @@ class NovelReaderScreen(
         val screenModel = rememberScreenModel {
             NovelReaderScreenModel(
                 chapterId = chapterId,
+                seriesId = seriesId,
                 autoStartGeminiTranslation = autoStartGeminiTranslation,
             )
         }
@@ -92,6 +97,8 @@ class NovelReaderScreen(
         val initialBackdropColor = remember(initialReaderSettings) {
             resolveInitialBackdropColor()
         }
+        val uiPreferences = remember { Injekt.get<UiPreferences>() }
+        val eInkProfile by uiPreferences.eInkProfile().collectAsState()
 
         val activeReaderSettings = (currentState as? NovelReaderScreenModel.State.Success)?.readerSettings
         val loadingReaderSettings = (currentState as? NovelReaderScreenModel.State.Loading)
@@ -106,7 +113,8 @@ class NovelReaderScreen(
             activeValue = activeReaderSettings?.keepScreenOn,
             loadingValue = loadingReaderSettings?.keepScreenOn,
             initialValue = initialReaderSettings?.keepScreenOn,
-        )
+        ) &&
+            eInkProfile.isEnabled
 
         SystemUIController(
             fullScreenMode = fullScreenMode,
@@ -285,7 +293,13 @@ class NovelReaderScreen(
                             NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
                                 NovelReaderPageReaderHandoffTarget.END,
                             )
-                            navigator.replace(NovelReaderScreen(previousChapterId, successState.novel.source))
+                            navigator.replace(
+                                NovelReaderScreen(
+                                    previousChapterId,
+                                    sourceId = successState.novel.source,
+                                    seriesId = seriesId,
+                                ),
+                            )
                         }
                     },
                     onOpenNextChapter = { nextChapterId ->
@@ -295,10 +309,73 @@ class NovelReaderScreen(
                             NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
                                 NovelReaderPageReaderHandoffTarget.START,
                             )
-                            navigator.replace(NovelReaderScreen(nextChapterId, successState.novel.source))
+                            navigator.replace(
+                                NovelReaderScreen(
+                                    nextChapterId,
+                                    sourceId = successState.novel.source,
+                                    seriesId = seriesId,
+                                ),
+                            )
+                        }
+                    },
+                    onOpenChapter = { chapterId ->
+                        coroutineScope.launch {
+                            screenModel.awaitPendingProgressPersistence()
+                            NovelReaderSystemUiSession.markInternalChapterReplace()
+                            NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
+                                NovelReaderPageReaderHandoffTarget.START,
+                            )
+                            navigator.replace(
+                                NovelReaderScreen(
+                                    chapterId,
+                                    sourceId = successState.novel.source,
+                                    seriesId = seriesId,
+                                ),
+                            )
+                        }
+                    },
+                    onDownloadChapter = { chapterId ->
+                        coroutineScope.launch {
+                            screenModel.downloadChapter(chapterId)
                         }
                     },
                 )
+                successState.seriesInterstitialState?.let { seriesInterstitialState ->
+                    val continueAction: (() -> Unit)? = seriesInterstitialState.nextNovel?.let { nextNovel ->
+                        seriesInterstitialState.nextChapterId?.let { nextChapterId ->
+                            {
+                                coroutineScope.launch {
+                                    screenModel.awaitPendingProgressPersistence()
+                                    screenModel.clearSeriesInterstitial()
+                                    NovelReaderSystemUiSession.markInternalChapterReplace()
+                                    NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
+                                        NovelReaderPageReaderHandoffTarget.START,
+                                    )
+                                    navigator.replace(
+                                        NovelReaderScreen(
+                                            nextChapterId,
+                                            sourceId = nextNovel.source,
+                                            seriesId = seriesId,
+                                        ),
+                                    )
+                                }
+                                Unit
+                            }
+                        }
+                    }
+                    SeriesInterstitialOverlay(
+                        state = seriesInterstitialState,
+                        onBackToSeries = {
+                            coroutineScope.launch {
+                                screenModel.awaitPendingProgressPersistence()
+                                screenModel.clearSeriesInterstitial()
+                                navigator.pop()
+                            }
+                        },
+                        onContinue = continueAction,
+                        onDismissRequest = screenModel::clearSeriesInterstitial,
+                    )
+                }
             }
         }
     }
