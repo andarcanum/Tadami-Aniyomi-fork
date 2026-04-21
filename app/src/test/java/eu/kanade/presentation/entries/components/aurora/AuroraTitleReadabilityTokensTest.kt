@@ -76,4 +76,18 @@ class AuroraTitleReadabilityTokensTest {
             Color(0xFFC9C9C9),
         )
     }
+
+    @Test
+    fun `dark e ink hero palette switches to readable dark mode contrast`() {
+        resolveAuroraHeroOverlayAlphaStops(AuroraColors.EInkDark) shouldBe listOf(
+            0.00f to 0.00f,
+            0.38f to 0.06f,
+            0.62f to 0.26f,
+            0.82f to 0.56f,
+            1.00f to 0.82f,
+        )
+        resolveAuroraHeroTitleColor(AuroraColors.EInkDark) shouldBe AuroraColors.EInkDark.textPrimary
+        resolveAuroraHeroPrimaryMetaColor(AuroraColors.EInkDark) shouldBe AuroraColors.EInkDark.textPrimary.copy(alpha = 0.85f)
+        resolveAuroraHeroSecondaryMetaColor(AuroraColors.EInkDark) shouldBe AuroraColors.EInkDark.textSecondary.copy(alpha = 0.68f)
+    }
 }
