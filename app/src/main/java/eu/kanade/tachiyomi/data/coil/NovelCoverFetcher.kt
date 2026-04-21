@@ -12,6 +12,8 @@ import coil3.request.Options
 import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.data.cache.NovelCoverCache
 import eu.kanade.tachiyomi.network.await
+import eu.kanade.tachiyomi.source.novel.NovelPluginImage
+import eu.kanade.tachiyomi.source.novel.NovelPluginImageResolver
 import eu.kanade.tachiyomi.source.novel.NovelImageRequestSource
 import eu.kanade.tachiyomi.source.novel.NovelSiteSource
 import logcat.LogPriority
@@ -23,6 +25,7 @@ import okio.FileSystem
 import okio.Path.Companion.toOkioPath
 import okio.Source
 import okio.buffer
+import okio.Buffer
 import okio.sink
 import okio.source
 import tachiyomi.core.common.util.system.logcat
@@ -41,6 +44,8 @@ class NovelCoverFetcher(
     private val pluginHeadersProvider: suspend () -> Map<String, String>,
     private val callFactoryLazy: Lazy<Call.Factory>,
     private val imageLoader: ImageLoader,
+    private val pluginImageResolver: suspend (String) -> eu.kanade.tachiyomi.source.novel.NovelPluginImagePayload? =
+        NovelPluginImageResolver::resolve,
 ) : Fetcher {
 
     private val diskCacheKey: String
@@ -50,6 +55,7 @@ class NovelCoverFetcher(
         val rawUrl = data.url ?: error("No cover specified")
         return when (getResourceType(rawUrl)) {
             Type.URL -> httpLoader(rawUrl)
+            Type.PLUGIN_IMAGE -> pluginImageLoader(rawUrl)
             Type.RELATIVE -> {
                 val siteUrl = sourceSiteUrlLazy.value?.trimEnd('/')
                 if (siteUrl != null) {
@@ -72,6 +78,19 @@ class NovelCoverFetcher(
             source = ImageSource(source = tempFile, fileSystem = FileSystem.SYSTEM),
             mimeType = "image/*",
             dataSource = DataSource.DISK,
+        )
+    }
+
+    private suspend fun pluginImageLoader(url: String): FetchResult {
+        val resolved = pluginImageResolver(url)
+            ?: throw IOException("Failed to resolve plugin image: $url")
+        return SourceFetchResult(
+            source = ImageSource(
+                source = Buffer().write(resolved.bytes),
+                fileSystem = options.fileSystem,
+            ),
+            mimeType = resolved.mimeType,
+            dataSource = DataSource.NETWORK,
         )
     }
 
@@ -245,6 +264,7 @@ class NovelCoverFetcher(
     private fun getResourceType(cover: String?): Type? {
         return when {
             cover.isNullOrEmpty() -> null
+            NovelPluginImage.isSupported(cover) -> Type.PLUGIN_IMAGE
             cover.startsWith("http", true) || cover.startsWith("Custom-", true) -> Type.URL
             cover.startsWith("file://") -> Type.File
             cover.startsWith("/") -> Type.RELATIVE
@@ -257,6 +277,7 @@ class NovelCoverFetcher(
         File,
         URL,
         URI,
+        PLUGIN_IMAGE,
 
         /** A path starting with '/' that should be resolved against the source's site URL. */
         RELATIVE,

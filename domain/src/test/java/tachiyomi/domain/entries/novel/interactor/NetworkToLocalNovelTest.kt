@@ -102,6 +102,34 @@ class NetworkToLocalNovelTest {
         }
     }
 
+    @Test
+    fun `fills missing thumbnail for non-favorite local from remote novel`() {
+        runBlocking {
+            val repository = FakeNovelRepository(
+                existing = Novel.create().copy(
+                    id = 10L,
+                    url = "/novel/1",
+                    title = "Local",
+                    source = 1L,
+                    favorite = false,
+                    thumbnailUrl = null,
+                ),
+            )
+            val interactor = NetworkToLocalNovel(repository)
+
+            val novel = Novel.create().copy(
+                url = "/novel/1",
+                title = "Remote",
+                source = 1L,
+                thumbnailUrl = "https://cdn.example/cover.jpg",
+            )
+            val result = interactor.await(novel)
+
+            result.thumbnailUrl shouldBe "https://cdn.example/cover.jpg"
+            result.favorite shouldBe false
+        }
+    }
+
     private class FakeNovelRepository(
         private val existing: Novel? = null,
         lookupResults: List<Novel?> = emptyList(),

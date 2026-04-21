@@ -589,6 +589,15 @@ class BrowseNovelSourceScreenModelTest {
         override fun getLatestNovels(sourceId: Long, filterList: NovelFilterList) = TODO()
     }
 
+    private fun invokeMaybeFetchMissingNovelDetails(
+        screenModel: BrowseNovelSourceScreenModel,
+        novel: Novel,
+    ) {
+        val method = screenModel.javaClass.getDeclaredMethod("maybeFetchMissingNovelDetails", Novel::class.java)
+        method.isAccessible = true
+        method.invoke(screenModel, novel)
+    }
+
     @Test
     fun `novelSourcePreferencesScreenOrNull returns null for source without settings`() {
         val source = FakeNovelCatalogueSource(id = 1L, name = "Novel", lang = "en")
@@ -601,6 +610,60 @@ class BrowseNovelSourceScreenModelTest {
         val source = FakeConfigurableNovelCatalogueSource(id = 1L, name = "Novel", lang = "en")
         val result = novelSourcePreferencesScreenOrNull(sourceId = 1L, source = source)
         result shouldNotBe null
+    }
+
+    @Test
+    fun `missing thumbnail triggers details fetch and update once`() {
+        runBlocking {
+            val detailsCalls = java.util.concurrent.atomic.AtomicInteger(0)
+            val source = FakeNovelCatalogueSourceWithDetails(
+                id = 1L,
+                name = "Novel",
+                lang = "en",
+                detailsDelayMillis = 100L,
+            ) { incoming ->
+                detailsCalls.incrementAndGet()
+                incoming.apply {
+                    thumbnail_url = "https://cdn.example/novel-cover.jpg"
+                    initialized = true
+                }
+            }
+            val sourceManager = FakeNovelSourceManager(source)
+            val prefs = SourcePreferences(FakePreferenceStore())
+            val novelRepository = FakeNovelRepository(insertId = 1L)
+            val getRemoteNovel = GetRemoteNovel(repository = FakeNovelSourceRepository())
+
+            val screenModel = track(
+                BrowseNovelSourceScreenModel(
+                    sourceId = 1L,
+                    listingQuery = null,
+                    sourceManager = sourceManager,
+                    getRemoteNovel = getRemoteNovel,
+                    sourcePreferences = prefs,
+                    getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(novelRepository),
+                    networkToLocalNovel = NetworkToLocalNovel(novelRepository),
+                    updateNovel = UpdateNovel(novelRepository),
+                ),
+            )
+
+            val novel = Novel.create().copy(
+                id = 101L,
+                source = 1L,
+                url = "/novel/101",
+                title = "Novel 101",
+                thumbnailUrl = null,
+                initialized = false,
+            )
+            invokeMaybeFetchMissingNovelDetails(screenModel, novel)
+            invokeMaybeFetchMissingNovelDetails(screenModel, novel)
+
+            delay(250)
+
+            detailsCalls.get() shouldBe 1
+            novelRepository.lastNovelUpdate?.id shouldBe 101L
+            novelRepository.lastNovelUpdate?.thumbnailUrl shouldBe "https://cdn.example/novel-cover.jpg"
+            novelRepository.lastNovelUpdate?.initialized shouldBe true
+        }
     }
 
     @Suppress("OVERRIDE_DEPRECATION")
@@ -628,5 +691,36 @@ class BrowseNovelSourceScreenModelTest {
         override fun setupPreferenceScreen(screen: androidx.preference.PreferenceScreen) {
             // No-op for test
         }
+    }
+
+    @Suppress("OVERRIDE_DEPRECATION")
+    private class FakeNovelCatalogueSourceWithDetails(
+        override val id: Long,
+        override val name: String,
+        override val lang: String,
+        private val detailsDelayMillis: Long = 0L,
+        private val detailsProvider: (SNovel) -> SNovel,
+    ) : NovelHttpSource {
+        override val supportsLatest: Boolean = true
+        override fun fetchPopularNovels(page: Int): Observable<NovelsPage> =
+            Observable.just(NovelsPage(emptyList(), false))
+        override fun fetchSearchNovels(
+            page: Int,
+            query: String,
+            filters: NovelFilterList,
+        ): Observable<NovelsPage> =
+            Observable.just(NovelsPage(emptyList(), false))
+        override fun fetchLatestUpdates(page: Int): Observable<NovelsPage> =
+            Observable.just(NovelsPage(emptyList(), false))
+        override fun getFilterList(): NovelFilterList = NovelFilterList()
+        override fun fetchNovelDetails(novel: SNovel): Observable<SNovel> {
+            if (detailsDelayMillis > 0L) {
+                Thread.sleep(detailsDelayMillis)
+            }
+            return Observable.just(detailsProvider(novel))
+        }
+        override fun fetchChapterList(novel: SNovel): Observable<List<SNovelChapter>> =
+            Observable.just(emptyList())
+        override fun fetchChapterText(chapter: SNovelChapter): Observable<String> = Observable.just("")
     }
 }

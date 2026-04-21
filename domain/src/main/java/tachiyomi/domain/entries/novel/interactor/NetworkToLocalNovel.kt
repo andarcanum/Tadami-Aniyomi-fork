@@ -24,7 +24,14 @@ class NetworkToLocalNovel(
             !localNovel.favorite -> {
                 // if the novel isn't a favorite, set its display title from source
                 // if it later becomes a favorite, updated title will go to db
-                localNovel.copy(title = novel.title)
+                localNovel.copy(
+                    title = novel.title,
+                    thumbnailUrl = if (localNovel.thumbnailUrl.isNullOrBlank()) {
+                        novel.thumbnailUrl
+                    } else {
+                        localNovel.thumbnailUrl
+                    },
+                )
             }
             else -> {
                 localNovel
