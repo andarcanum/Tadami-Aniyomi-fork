@@ -3,17 +3,28 @@ package eu.kanade.presentation.entries.components.aurora
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -35,10 +46,10 @@ private fun rememberAuroraPosterActionMode(): AuroraTitleHeroCtaMode {
 
 @Composable
 internal fun AuroraPosterActionPanel(
+    onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable RowScope.(contentColor: Color) -> Unit,
 ) {
-    val shape = RoundedCornerShape(999.dp)
     val colors = AuroraTheme.colors
     val titleHeroMode = rememberAuroraPosterActionMode()
     val visualMode = remember(titleHeroMode) {
@@ -54,55 +65,82 @@ internal fun AuroraPosterActionPanel(
         AuroraTitleHeroCtaVisualMode.AuroraGlass -> Color.White
         AuroraTitleHeroCtaVisualMode.ClassicSolid -> colors.textOnAccent
     }
-    val auroraInnerGlowBrush = remember(colors.accent, surfaceSpec) {
+
+    // Эффект "фаски" на стекле - светится сверху, затухает снизу
+    val borderBrush = remember(colors.accent, surfaceSpec.borderAlpha) {
         Brush.verticalGradient(
-            colorStops = arrayOf(
-                0.00f to Color.Transparent,
-                0.46f to colors.accent.copy(alpha = surfaceSpec.innerGlowAlpha * 0.18f),
-                0.78f to colors.accent.copy(alpha = surfaceSpec.innerGlowAlpha * 0.58f),
-                1.00f to colors.accent.copy(alpha = surfaceSpec.innerGlowAlpha),
+            colors = listOf(
+                Color.White.copy(alpha = surfaceSpec.borderAlpha * 1.8f),
+                Color.White.copy(alpha = surfaceSpec.borderAlpha * 0.2f),
             ),
         )
     }
-    val auroraHighlightBrush = remember(surfaceSpec) {
-        Brush.verticalGradient(
-            colorStops = arrayOf(
-                0.00f to Color.White.copy(alpha = surfaceSpec.highlightAlpha),
-                0.34f to Color.White.copy(alpha = surfaceSpec.highlightAlpha * 0.48f),
-                0.68f to Color.Transparent,
-                1.00f to Color.Transparent,
+
+    // Внутреннее мягкое свечение снизу
+    val innerGlowBrush = remember(colors.accent, surfaceSpec.innerGlowAlpha) {
+        Brush.radialGradient(
+            colors = listOf(
+                colors.accent.copy(alpha = surfaceSpec.innerGlowAlpha * 0.4f),
+                Color.Transparent,
             ),
+            center = Offset(0.5f, 1.2f),
         )
     }
+
+    val islandShape = RoundedCornerShape(28.dp)
 
     Row(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .clip(shape)
-            .background(colors.accent.copy(alpha = surfaceSpec.containerAlpha))
-            .background(
-                brush = auroraInnerGlowBrush,
-                alpha = if (visualMode == AuroraTitleHeroCtaVisualMode.AuroraGlass) 1f else 0f,
-            )
-            .background(
-                brush = auroraHighlightBrush,
-                alpha = if (visualMode == AuroraTitleHeroCtaVisualMode.AuroraGlass) 1f else 0f,
-            )
-            .let { base ->
-                if (surfaceSpec.borderAlpha > 0f) {
-                    base.border(
-                        BorderStroke(
-                            width = 1.dp,
-                            color = Color.White.copy(alpha = surfaceSpec.borderAlpha),
-                        ),
-                        shape,
-                    )
-                } else {
-                    base
+            .padding(horizontal = 20.dp, vertical = 24.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Основной остров действий
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .height(64.dp)
+                .clip(islandShape)
+                .background(colors.accent.copy(alpha = surfaceSpec.containerAlpha))
+                .background(innerGlowBrush)
+                .let { base ->
+                    if (surfaceSpec.borderAlpha > 0f) {
+                        base.border(BorderStroke(1.dp, borderBrush), islandShape)
+                    } else {
+                        base
+                    }
                 }
-            }
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        content = { content(contentColor) },
-    )
+                .padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            content(contentColor)
+        }
+
+        // Отдельный круглый остров для закрытия (Асимметрия)
+        Box(
+            modifier = Modifier
+                .size(64.dp)
+                .clip(CircleShape)
+                .background(colors.accent.copy(alpha = surfaceSpec.containerAlpha * 0.9f))
+                .let { base ->
+                    if (surfaceSpec.borderAlpha > 0f) {
+                        base.border(BorderStroke(1.dp, borderBrush), CircleShape)
+                    } else {
+                        base
+                    }
+                }
+                .clickable(onClick = onDismissRequest),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Close,
+                tint = contentColor,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+            )
+        }
+    }
 }
