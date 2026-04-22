@@ -58,74 +58,62 @@ fun MangaCoverDialog(
         snackbarHostState = snackbarHostState,
         onDismissRequest = onDismissRequest,
         bottomBar = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-            ) {
-                AuroraPosterActionPanel { contentColor ->
-                    IconButton(onClick = onSaveClick) {
-                        Icon(
-                            imageVector = Icons.Outlined.Download,
-                            tint = contentColor,
-                            contentDescription = stringResource(MR.strings.action_download),
-                        )
-                    }
-                    if (onEditClick != null) {
-                        Box {
-                            var expanded by remember { mutableStateOf(false) }
-                            IconButton(
+            AuroraPosterActionPanel(
+                onDismissRequest = onDismissRequest,
+            ) { contentColor ->
+                IconButton(onClick = onSaveClick) {
+                    Icon(
+                        imageVector = Icons.Outlined.Download,
+                        tint = contentColor,
+                        contentDescription = stringResource(MR.strings.action_download),
+                    )
+                }
+                if (onEditClick != null) {
+                    Box {
+                        var expanded by remember { mutableStateOf(false) }
+                        IconButton(
+                            onClick = {
+                                if (isCustomCover) {
+                                    expanded = true
+                                } else {
+                                    onEditClick(EditCoverAction.EDIT)
+                                }
+                            },
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Edit,
+                                tint = contentColor,
+                                contentDescription = stringResource(MR.strings.action_edit_cover),
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false },
+                            offset = DpOffset(8.dp, 0.dp),
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(text = stringResource(MR.strings.action_edit)) },
                                 onClick = {
-                                    if (isCustomCover) {
-                                        expanded = true
-                                    } else {
-                                        onEditClick(EditCoverAction.EDIT)
-                                    }
+                                    onEditClick(EditCoverAction.EDIT)
+                                    expanded = false
                                 },
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Edit,
-                                    tint = contentColor,
-                                    contentDescription = stringResource(MR.strings.action_edit_cover),
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false },
-                                offset = DpOffset(8.dp, 0.dp),
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text(text = stringResource(MR.strings.action_edit)) },
-                                    onClick = {
-                                        onEditClick(EditCoverAction.EDIT)
-                                        expanded = false
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(text = stringResource(MR.strings.action_delete)) },
-                                    onClick = {
-                                        onEditClick(EditCoverAction.DELETE)
-                                        expanded = false
-                                    },
-                                )
-                            }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(text = stringResource(MR.strings.action_delete)) },
+                                onClick = {
+                                    onEditClick(EditCoverAction.DELETE)
+                                    expanded = false
+                                },
+                            )
                         }
                     }
-                    IconButton(onClick = onShareClick) {
-                        Icon(
-                            imageVector = Icons.Outlined.Share,
-                            tint = contentColor,
-                            contentDescription = stringResource(MR.strings.action_share),
-                        )
-                    }
-                    Spacer(modifier = Modifier.weight(1f))
-                    IconButton(onClick = onDismissRequest) {
-                        Icon(
-                            imageVector = Icons.Outlined.Close,
-                            tint = contentColor,
-                            contentDescription = stringResource(MR.strings.action_close),
-                        )
-                    }
+                }
+                IconButton(onClick = onShareClick) {
+                    Icon(
+                        imageVector = Icons.Outlined.Share,
+                        tint = contentColor,
+                        contentDescription = stringResource(MR.strings.action_share),
+                    )
                 }
             }
         },
