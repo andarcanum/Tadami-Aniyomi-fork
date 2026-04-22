@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.series.manga
 
+import eu.kanade.tachiyomi.data.cache.SeriesCoverCache
 import io.mockk.coEvery
 import io.mockk.coJustRun
 import io.mockk.coVerify
@@ -14,7 +15,6 @@ import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import eu.kanade.tachiyomi.data.cache.SeriesCoverCache
 import tachiyomi.domain.category.manga.interactor.GetVisibleMangaCategories
 import tachiyomi.domain.category.manga.interactor.SetMangaCategories
 import tachiyomi.domain.entries.manga.model.Manga

@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.series.novel
 
+import eu.kanade.tachiyomi.data.cache.SeriesCoverCache
 import io.mockk.coEvery
 import io.mockk.coJustRun
 import io.mockk.coVerify
@@ -14,7 +15,6 @@ import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import eu.kanade.tachiyomi.data.cache.SeriesCoverCache
 import tachiyomi.domain.category.novel.interactor.GetNovelCategories
 import tachiyomi.domain.category.novel.interactor.SetNovelCategories
 import tachiyomi.domain.entries.novel.model.Novel
