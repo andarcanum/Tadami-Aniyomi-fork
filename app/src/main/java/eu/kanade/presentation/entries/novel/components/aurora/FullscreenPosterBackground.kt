@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -14,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -46,6 +48,7 @@ fun FullscreenPosterBackground(
     posterScrimAlpha: Float? = null,
     modifier: Modifier = Modifier,
     resolvedCoverUrl: String? = null,
+    onPosterLongPress: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
@@ -97,7 +100,21 @@ fun FullscreenPosterBackground(
         )
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .then(
+                if (onPosterLongPress != null) {
+                    Modifier.pointerInput(onPosterLongPress) {
+                        detectTapGestures(
+                            onLongPress = { onPosterLongPress() },
+                        )
+                    }
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
         val colors = AuroraTheme.colors
         val scrimColor = if (colors.isDark) Color.Black else colors.background
 

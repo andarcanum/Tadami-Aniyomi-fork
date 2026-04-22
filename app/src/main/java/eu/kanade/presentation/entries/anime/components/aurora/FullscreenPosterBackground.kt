@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -13,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -27,7 +29,7 @@ import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterBack
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraPosterScrimBrush
 import eu.kanade.presentation.theme.AuroraTheme
-import eu.kanade.tachiyomi.data.coil.AuroraPosterRequest
+import tachiyomi.domain.entries.anime.model.asAnimeCover
 import tachiyomi.domain.entries.anime.model.Anime
 
 /**
@@ -47,22 +49,28 @@ fun FullscreenPosterBackground(
     resolvedCoverUrl: String?,
     resolvedCoverUrlFallback: String? = null,
     refererUrl: String? = null,
+    onPosterLongPress: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter(AuroraCoverPlaceholderVariant.Wide)
-    val posterModelPair = remember(resolvedCoverUrl, resolvedCoverUrlFallback) {
-        resolveAuroraPosterModelPair(resolvedCoverUrl, resolvedCoverUrlFallback)
-    }
-    val posterRequest = remember(posterModelPair, refererUrl) {
-        AuroraPosterRequest(
-            primaryUrl = posterModelPair.primary as? String,
-            fallbackUrl = posterModelPair.fallback as? String,
-            refererUrl = refererUrl,
+    val posterCover = remember(
+        anime.id,
+        anime.source,
+        anime.favorite,
+        anime.thumbnailUrl,
+        anime.coverLastModified,
+        resolvedCoverUrl,
+        resolvedCoverUrlFallback,
+    ) {
+        anime.asAnimeCover().copy(
+            url = resolvedCoverUrl?.takeIf { it.isNotBlank() }
+                ?: resolvedCoverUrlFallback?.takeIf { it.isNotBlank() }
+                ?: anime.thumbnailUrl,
         )
     }
-    val posterModel = posterRequest.primaryUrl ?: posterRequest.fallbackUrl
+    val posterModel = posterCover.url
     val posterColorFilter = rememberAuroraPosterColorFilter()
 
     val hasScrolledAway = firstVisibleItemIndex > 0 || scrollOffset > 100
@@ -86,32 +94,46 @@ fun FullscreenPosterBackground(
     val containerWidthPx = with(density) { configuration.screenWidthDp.dp.roundToPx() }
     val containerHeightPx = with(density) { configuration.screenHeightDp.dp.roundToPx() }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .then(
+                if (onPosterLongPress != null) {
+                    Modifier.pointerInput(onPosterLongPress) {
+                        detectTapGestures(
+                            onLongPress = { onPosterLongPress() },
+                        )
+                    }
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
         val colors = AuroraTheme.colors
 
         if (posterModel != null) {
             val backgroundSpec = remember(
                 anime.id,
                 anime.coverLastModified,
-                posterRequest.hashCode(),
+                posterCover,
                 containerWidthPx,
                 containerHeightPx,
             ) {
                 auroraPosterBackgroundSpec(
-                    baseCacheKey = "anime-bg;${anime.id};${anime.coverLastModified};${posterRequest.hashCode()}",
+                    baseCacheKey = "anime-bg;${anime.id};${anime.coverLastModified};${posterCover.url.orEmpty()}",
                     containerWidthPx = containerWidthPx,
                     containerHeightPx = containerHeightPx,
                 )
             }
             val backgroundRequest = remember(
-                posterRequest,
+                posterCover,
                 backgroundSpec.memoryCacheKey,
                 containerWidthPx,
                 containerHeightPx,
             ) {
                 buildAuroraPosterBackgroundRequest(
                     context = context,
-                    data = posterRequest,
+                    data = posterCover,
                     spec = backgroundSpec,
                     containerWidthPx = containerWidthPx,
                     containerHeightPx = containerHeightPx,

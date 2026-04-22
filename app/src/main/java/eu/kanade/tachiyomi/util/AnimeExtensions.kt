@@ -103,7 +103,7 @@ suspend fun Anime.editCover(
     if (isLocal()) {
         coverManager.update(toSAnime(), stream)
         updateAnime.awaitUpdateCoverLastModified(id)
-    } else if (favorite) {
+    } else {
         coverCache.setCustomCoverToCache(this, stream)
         updateAnime.awaitUpdateCoverLastModified(id)
     }

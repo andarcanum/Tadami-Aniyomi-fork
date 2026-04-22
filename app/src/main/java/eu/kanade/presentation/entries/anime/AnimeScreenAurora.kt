@@ -89,6 +89,7 @@ import eu.kanade.presentation.entries.components.AuroraEntryHoldToRefresh
 import eu.kanade.presentation.entries.components.EntryBottomActionMenu
 import eu.kanade.presentation.entries.components.ResolvedCover
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionFab
+import eu.kanade.presentation.entries.components.aurora.auroraPosterLongPress
 import eu.kanade.presentation.entries.components.aurora.AuroraZIndex
 import eu.kanade.presentation.entries.components.normalizeAuroraGlobalSearchQuery
 import eu.kanade.presentation.entries.components.resolveExternalMetadataCover
@@ -147,6 +148,7 @@ fun AnimeScreenAuroraImpl(
     onContinueWatching: () -> Unit,
     onSearch: (query: String, global: Boolean) -> Unit,
     onCoverClicked: () -> Unit,
+    onPosterLongClicked: (() -> Unit)? = onCoverClicked,
     onShareClicked: (() -> Unit)?,
     onDownloadActionClicked: ((DownloadAction) -> Unit)?,
     onEditCategoryClicked: (() -> Unit)?,
@@ -385,16 +387,20 @@ fun AnimeScreenAuroraImpl(
         modifier = Modifier.fillMaxSize(),
         indicatorPadding = WindowInsets.statusBars.asPaddingValues(),
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .auroraPosterLongPress(onPosterLongClicked ?: onCoverClicked),
+            ) {
             // Fixed background poster
-            FullscreenPosterBackground(
-                anime = anime,
-                scrollOffset = scrollOffset,
-                firstVisibleItemIndex = firstVisibleItemIndex,
-                resolvedCoverUrl = resolvedCover.coverUrl,
-                resolvedCoverUrlFallback = resolvedCover.coverUrlFallback,
-                refererUrl = refererUrl,
-            )
+                FullscreenPosterBackground(
+                    anime = anime,
+                    scrollOffset = scrollOffset,
+                    firstVisibleItemIndex = firstVisibleItemIndex,
+                    resolvedCoverUrl = resolvedCover.coverUrl,
+                    resolvedCoverUrlFallback = resolvedCover.coverUrlFallback,
+                    refererUrl = refererUrl,
+                )
 
             if (useTwoPaneLayout) {
                 val topContentPadding = 96.dp

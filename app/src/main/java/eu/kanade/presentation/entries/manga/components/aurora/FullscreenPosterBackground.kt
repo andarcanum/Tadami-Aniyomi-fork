@@ -7,6 +7,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -17,6 +18,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
@@ -27,8 +29,8 @@ import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterBack
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraPosterScrimBrush
 import eu.kanade.presentation.theme.AuroraTheme
+import tachiyomi.domain.entries.manga.model.MangaCover
 import tachiyomi.domain.entries.manga.model.Manga
-import tachiyomi.domain.entries.manga.model.asMangaCover
 
 /**
  * Fixed fullscreen poster background with scroll-based dimming and blur effects.
@@ -48,15 +50,32 @@ fun FullscreenPosterBackground(
     resolvedCoverUrl: String? = null,
     resolvedCoverUrlFallback: String? = null,
     refererUrl: String? = null,
+    onPosterLongPress: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter(AuroraCoverPlaceholderVariant.Wide)
-    val mangaCover = remember(manga.id, manga.thumbnailUrl, manga.coverLastModified) {
-        manga.asMangaCover()
+    val posterCover = remember(
+        manga.id,
+        manga.source,
+        manga.favorite,
+        manga.thumbnailUrl,
+        manga.coverLastModified,
+        resolvedCoverUrl,
+        resolvedCoverUrlFallback,
+    ) {
+        MangaCover(
+            mangaId = manga.id,
+            sourceId = manga.source,
+            isMangaFavorite = manga.favorite,
+            url = resolvedCoverUrl?.takeIf { it.isNotBlank() }
+                ?: resolvedCoverUrlFallback?.takeIf { it.isNotBlank() }
+                ?: manga.thumbnailUrl,
+            lastModified = manga.coverLastModified,
+        )
     }
-    val posterModel = resolvedCoverUrl?.takeIf { it.isNotBlank() } ?: mangaCover.url
+    val posterModel = posterCover.url
     val posterColorFilter = rememberAuroraPosterColorFilter()
 
     val hasScrolledAway = firstVisibleItemIndex > 0 || scrollOffset > 100
@@ -97,19 +116,33 @@ fun FullscreenPosterBackground(
         )
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .then(
+                if (onPosterLongPress != null) {
+                    Modifier.pointerInput(onPosterLongPress) {
+                        detectTapGestures(
+                            onLongPress = { onPosterLongPress() },
+                        )
+                    }
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
         val colors = AuroraTheme.colors
 
         if (posterModel != null) {
             val backgroundRequest = remember(
-                posterModel,
+                posterCover,
                 backgroundSpec.memoryCacheKey,
                 containerWidthPx,
                 containerHeightPx,
             ) {
                 buildAuroraPosterBackgroundRequest(
                     context = context,
-                    data = posterModel ?: mangaCover,
+                    data = posterCover,
                     spec = backgroundSpec,
                     containerWidthPx = containerWidthPx,
                     containerHeightPx = containerHeightPx,

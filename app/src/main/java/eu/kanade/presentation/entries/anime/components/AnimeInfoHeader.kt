@@ -90,11 +90,11 @@ import eu.kanade.presentation.entries.components.DotSeparatorText
 import eu.kanade.presentation.entries.components.ItemCover
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.tachiyomi.animesource.model.SAnime
-import eu.kanade.tachiyomi.data.coil.AuroraPosterRequest
 import eu.kanade.tachiyomi.data.coil.staticBlur
 import eu.kanade.tachiyomi.data.coil.useBackground
 import eu.kanade.tachiyomi.util.system.copyToClipboard
 import tachiyomi.domain.entries.anime.model.Anime
+import tachiyomi.domain.entries.anime.model.asAnimeCover
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.DISABLED_ALPHA
 import tachiyomi.presentation.core.components.material.TextButton
@@ -131,17 +131,25 @@ fun AnimeInfoBox(
         )
         val blurRadiusPx = with(LocalDensity.current) { 4.dp.roundToPx() }
         val fallbackPainter = rememberThemeAwareCoverErrorPainter(variant = AuroraCoverPlaceholderVariant.Wide)
-        val posterRequest = remember(resolvedCoverUrl, resolvedCoverUrlFallback) {
-            AuroraPosterRequest(
-                primaryUrl = resolvedCoverUrl,
-                fallbackUrl = resolvedCoverUrlFallback,
+        val posterCover = remember(
+            anime.id,
+            anime.source,
+            anime.favorite,
+            anime.coverLastModified,
+            resolvedCoverUrl,
+            resolvedCoverUrlFallback,
+        ) {
+            anime.asAnimeCover().copy(
+                url = resolvedCoverUrl?.takeIf { it.isNotBlank() }
+                    ?: resolvedCoverUrlFallback?.takeIf { it.isNotBlank() }
+                    ?: anime.thumbnailUrl,
             )
         }
-        val posterModel = posterRequest.primaryUrl ?: posterRequest.fallbackUrl
+        val posterModel = posterCover.url
         if (posterModel != null) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
-                    .data(posterRequest)
+                    .data(posterCover)
                     .useBackground(true)
                     .crossfade(true)
                     .staticBlur(blurRadiusPx, intensityFactor = 0.6f)
@@ -415,10 +423,11 @@ private fun AnimeAndSourceTitlesLarge(
         if (coverUrl != null) {
             ItemCover.Book(
                 modifier = Modifier.fillMaxWidth(0.65f),
-                data = ImageRequest.Builder(LocalContext.current)
-                    .data(AuroraPosterRequest(coverUrl, coverUrlFallback, refererUrl))
-                    .crossfade(true)
-                    .build(),
+                data = anime.asAnimeCover().copy(
+                    url = coverUrl.takeIf { it.isNotBlank() }
+                        ?: coverUrlFallback?.takeIf { it.isNotBlank() }
+                        ?: anime.thumbnailUrl,
+                ),
                 contentDescription = stringResource(MR.strings.manga_cover),
                 onClick = onCoverClick,
             )
@@ -466,10 +475,11 @@ private fun AnimeAndSourceTitlesSmall(
                 modifier = Modifier
                     .sizeIn(maxWidth = 100.dp)
                     .align(Alignment.Top),
-                data = ImageRequest.Builder(LocalContext.current)
-                    .data(AuroraPosterRequest(coverUrl, coverUrlFallback, refererUrl))
-                    .crossfade(true)
-                    .build(),
+                data = anime.asAnimeCover().copy(
+                    url = coverUrl.takeIf { it.isNotBlank() }
+                        ?: coverUrlFallback?.takeIf { it.isNotBlank() }
+                        ?: anime.thumbnailUrl,
+                ),
                 contentDescription = stringResource(MR.strings.manga_cover),
                 onClick = onCoverClick,
             )

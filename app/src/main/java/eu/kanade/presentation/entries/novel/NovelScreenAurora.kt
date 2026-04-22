@@ -76,6 +76,7 @@ import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.AuroraEntryHoldToRefresh
 import eu.kanade.presentation.entries.components.EntryBottomActionMenu
+import eu.kanade.presentation.entries.components.aurora.auroraPosterLongPress
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionFab
 import eu.kanade.presentation.entries.components.aurora.AuroraZIndex
 import eu.kanade.presentation.entries.components.normalizeAuroraGlobalSearchQuery
@@ -131,6 +132,7 @@ fun NovelScreenAuroraImpl(
     onToggleFavorite: () -> Unit,
     onRefresh: () -> Unit,
     onSearch: (query: String, global: Boolean) -> Unit,
+    onPosterLongClicked: (() -> Unit)? = null,
     onShare: (() -> Unit)?,
     onWebView: (() -> Unit)?,
     onMigrateClicked: (() -> Unit)?,
@@ -173,6 +175,7 @@ fun NovelScreenAuroraImpl(
 ) {
     val novel = state.novel
     val globalSearchQuery = remember(novel.title) { normalizeAuroraGlobalSearchQuery(novel.title) }
+    val posterLongPressModifier = onPosterLongClicked?.let { Modifier.auroraPosterLongPress(it) } ?: Modifier
     val chapters = state.processedChapters
     val readChapterCount = remember(state.chapters) { state.chapters.count { it.read } }
     val groupedByChapter = false
@@ -340,12 +343,16 @@ fun NovelScreenAuroraImpl(
             modifier = Modifier.fillMaxSize(),
             indicatorPadding = WindowInsets.statusBars.asPaddingValues(),
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                FullscreenPosterBackground(
-                    novel = novel,
-                    scrollOffset = 0,
-                    firstVisibleItemIndex = 0,
-                )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(posterLongPressModifier),
+        ) {
+            FullscreenPosterBackground(
+                novel = novel,
+                scrollOffset = 0,
+                firstVisibleItemIndex = 0,
+            )
 
                 TwoPanelBox(
                     modifier = Modifier
@@ -864,12 +871,16 @@ fun NovelScreenAuroraImpl(
         modifier = Modifier.fillMaxSize(),
         indicatorPadding = WindowInsets.statusBars.asPaddingValues(),
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            FullscreenPosterBackground(
-                novel = novel,
-                scrollOffset = scrollOffset,
-                firstVisibleItemIndex = firstVisibleItemIndex,
-            )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .then(posterLongPressModifier),
+    ) {
+        FullscreenPosterBackground(
+            novel = novel,
+            scrollOffset = scrollOffset,
+            firstVisibleItemIndex = firstVisibleItemIndex,
+        )
 
             val density = LocalDensity.current
             val fastScrollBaseTopPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp

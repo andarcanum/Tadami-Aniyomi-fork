@@ -1872,6 +1872,7 @@ class NovelScreenModel(
     sealed interface Dialog {
         data object SettingsSheet : Dialog
         data object TrackSheet : Dialog
+        data object FullCover : Dialog
     }
 
     sealed interface State {
@@ -1957,6 +1958,10 @@ class NovelScreenModel(
 
     fun showTrackDialog() {
         updateSuccessState { it.copy(dialog = Dialog.TrackSheet) }
+    }
+
+    fun showCoverDialog() {
+        updateSuccessState { it.copy(dialog = Dialog.FullCover) }
     }
 
     fun saveScrollPosition(index: Int, offset: Int) {

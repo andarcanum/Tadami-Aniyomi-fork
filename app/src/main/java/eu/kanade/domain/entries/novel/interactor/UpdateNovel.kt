@@ -19,6 +19,15 @@ class UpdateNovel(
         return novelRepository.updateAllNovel(novelUpdates)
     }
 
+    suspend fun awaitUpdateCoverLastModified(novelId: Long): Boolean {
+        return await(
+            NovelUpdate(
+                id = novelId,
+                coverLastModified = Instant.now().toEpochMilli(),
+            ),
+        )
+    }
+
     suspend fun awaitUpdateFromSource(
         localNovel: Novel,
         remoteNovel: SNovel,
