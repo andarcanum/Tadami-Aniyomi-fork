@@ -9,6 +9,7 @@ import tachiyomi.domain.series.manga.model.LibraryMangaSeries
 import tachiyomi.domain.series.manga.model.MangaSeries
 import tachiyomi.domain.series.manga.model.MangaSeriesEntry
 import tachiyomi.domain.series.manga.repository.MangaSeriesRepository
+import tachiyomi.domain.series.model.SeriesCoverMode
 
 class MangaSeriesRepositoryImpl(
     private val handler: MangaDatabaseHandler,
@@ -74,6 +75,8 @@ class MangaSeriesRepositoryImpl(
                 dateAdded = series.dateAdded,
                 coverLastModified = series.coverLastModified,
                 pinned = series.pinned,
+                coverMode = series.coverMode.value,
+                coverEntryId = series.coverEntryId,
             )
             db.manga_seriesQueries.selectLastInsertedRowId()
         }
@@ -90,6 +93,8 @@ class MangaSeriesRepositoryImpl(
                 dateAdded = series.dateAdded,
                 coverLastModified = series.coverLastModified,
                 pinned = series.pinned,
+                coverMode = series.coverMode.value,
+                coverEntryId = series.coverEntryId,
             )
         }
     }
@@ -128,8 +133,8 @@ class MangaSeriesRepositoryImpl(
     }
 }
 
-private val mangaSeriesMapper: (Long, String, String?, Long, Long, Long, Long, Boolean) -> MangaSeries =
-    { id, title, description, categoryId, sortOrder, dateAdded, coverLastModified, pinned ->
+private val mangaSeriesMapper: (Long, String, String?, Long, Long, Long, Long, Boolean, Long, Long?) -> MangaSeries =
+    { id, title, description, categoryId, sortOrder, dateAdded, coverLastModified, pinned, coverMode, coverEntryId ->
         MangaSeries(
             id = id,
             title = title,
@@ -139,6 +144,8 @@ private val mangaSeriesMapper: (Long, String, String?, Long, Long, Long, Long, B
             dateAdded = dateAdded,
             coverLastModified = coverLastModified,
             pinned = pinned,
+            coverMode = SeriesCoverMode.from(coverMode),
+            coverEntryId = coverEntryId,
         )
     }
 

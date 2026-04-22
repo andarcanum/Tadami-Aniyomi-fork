@@ -86,12 +86,12 @@ fun FullscreenPosterBackground(
     val backgroundSpec = remember(
         manga.id,
         manga.coverLastModified,
-        mangaCover.url,
+        posterModel,
         containerWidthPx,
         containerHeightPx,
     ) {
         auroraPosterBackgroundSpec(
-            baseCacheKey = "manga-bg;${manga.id};${manga.coverLastModified};${mangaCover.url.orEmpty()}",
+            baseCacheKey = "manga-bg;${manga.id};${manga.coverLastModified};${posterModel.orEmpty()}",
             containerWidthPx = containerWidthPx,
             containerHeightPx = containerHeightPx,
         )
@@ -102,14 +102,14 @@ fun FullscreenPosterBackground(
 
         if (posterModel != null) {
             val backgroundRequest = remember(
-                mangaCover,
+                posterModel,
                 backgroundSpec.memoryCacheKey,
                 containerWidthPx,
                 containerHeightPx,
             ) {
                 buildAuroraPosterBackgroundRequest(
                     context = context,
-                    data = mangaCover,
+                    data = posterModel ?: mangaCover,
                     spec = backgroundSpec,
                     containerWidthPx = containerWidthPx,
                     containerHeightPx = containerHeightPx,

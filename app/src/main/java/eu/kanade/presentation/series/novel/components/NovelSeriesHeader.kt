@@ -33,6 +33,7 @@ import tachiyomi.presentation.core.util.plus
 @Composable
 fun NovelSeriesHeader(
     series: LibraryNovelSeries,
+    customCoverData: Any? = null,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
@@ -52,6 +53,7 @@ fun NovelSeriesHeader(
         ) {
             SeriesStackedCoverCard(
                 covers = series.coverNovels.map { it.asNovelCover() },
+                customCoverData = customCoverData,
                 isSelected = false,
             )
         }

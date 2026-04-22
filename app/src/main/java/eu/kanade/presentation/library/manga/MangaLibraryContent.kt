@@ -30,7 +30,7 @@ import kotlin.time.Duration.Companion.seconds
 fun MangaLibraryContent(
     categories: List<Category>,
     searchQuery: String?,
-    selection: List<LibraryManga>,
+    selection: List<MangaLibraryItem>,
     contentPadding: PaddingValues,
     currentPage: () -> Int,
     hasActiveFilters: Boolean,
@@ -39,8 +39,8 @@ fun MangaLibraryContent(
     onMangaClicked: (Long) -> Unit,
     onSeriesClicked: (Long) -> Unit,
     onContinueReadingClicked: ((LibraryManga) -> Unit)?,
-    onToggleSelection: (LibraryManga) -> Unit,
-    onToggleRangeSelection: (LibraryManga) -> Unit,
+    onToggleSelection: (MangaLibraryItem) -> Unit,
+    onToggleRangeSelection: (MangaLibraryItem) -> Unit,
     onTogglePinned: (MangaLibraryItem) -> Unit,
     onRefresh: (Category?) -> Boolean,
     onGlobalSearchClicked: () -> Unit,
@@ -76,11 +76,14 @@ fun MangaLibraryContent(
         }
 
         val notSelectionMode = selection.isEmpty()
-        val onClickManga = { manga: LibraryManga ->
+        val onClickItem = { item: MangaLibraryItem ->
             if (notSelectionMode) {
-                onMangaClicked(manga.manga.id)
+                when (item) {
+                    is MangaLibraryItem.Single -> onMangaClicked(item.libraryManga.manga.id)
+                    is MangaLibraryItem.Series -> onSeriesClicked(item.librarySeries.id)
+                }
             } else {
-                onToggleSelection(manga)
+                onToggleSelection(item)
             }
         }
 
@@ -102,15 +105,15 @@ fun MangaLibraryContent(
                 state = pagerState,
                 contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
                 hasActiveFilters = hasActiveFilters,
-                selectedManga = selection,
+                selectedItems = selection,
                 searchQuery = searchQuery,
                 onGlobalSearchClicked = onGlobalSearchClicked,
                 getDisplayMode = getDisplayMode,
                 getColumnsForOrientation = getColumnsForOrientation,
                 getLibraryForPage = getLibraryForPage,
-                onClickManga = onClickManga,
+                onClickItem = onClickItem,
                 onClickSeries = onSeriesClicked,
-                onLongClickManga = onToggleRangeSelection,
+                onLongClickItem = onToggleRangeSelection,
                 onTogglePinned = onTogglePinned,
                 onClickContinueReading = onContinueReadingClicked,
             )

@@ -8,6 +8,7 @@ import tachiyomi.domain.series.manga.model.LibraryMangaSeries
 import tachiyomi.domain.source.manga.service.MangaSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.io.File
 
 sealed interface MangaLibraryItem {
     val id: Long
@@ -78,6 +79,7 @@ sealed interface MangaLibraryItem {
 
     data class Series(
         val librarySeries: LibraryMangaSeries,
+        val customCoverFile: File? = null,
         val downloadCountValue: Long = 0,
         val isLocalValue: Boolean = false,
         val sourceLanguageValue: String = "",
@@ -97,7 +99,7 @@ sealed interface MangaLibraryItem {
         override val hasBookmarks = false
         override val dateAdded = librarySeries.series.dateAdded
         override val title = librarySeries.title
-        override val coverManga = librarySeries.coverMangas.firstOrNull()
+        override val coverManga = librarySeries.selectedCoverManga ?: librarySeries.coverMangas.firstOrNull()
         override val libraryManga = librarySeries.entries.first()
         val covers = librarySeries.coverMangas.map { it.asMangaCover() }
 

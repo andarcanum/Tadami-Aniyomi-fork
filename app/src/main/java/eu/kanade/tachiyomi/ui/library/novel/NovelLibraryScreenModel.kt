@@ -25,7 +25,7 @@ import eu.kanade.tachiyomi.source.novel.importer.ImportedEpubParser
 import eu.kanade.tachiyomi.source.novel.importer.ImportedEpubStorage
 import eu.kanade.tachiyomi.ui.entries.novel.NovelDownloadAction
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
-import eu.kanade.tachiyomi.ui.library.sortPinnedFirst
+import eu.kanade.tachiyomi.ui.library.sortPinnedSeriesFirst
 import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.PersistentList
@@ -302,15 +302,13 @@ class NovelLibraryScreenModel(
     }
 
     fun openChangeCategoryDialog() {
-        val novels = state.value.selection.mapNotNull {
-            (it as? NovelLibraryItem.Single)?.libraryNovel?.novel
-        }.distinctBy { it.id }
+        val novels = state.value.selection
+            .selectedNovelEntries()
+            .map { it.novel }
         openChangeCategoryDialog(novels)
     }
     fun openDeleteNovelsDialog() {
-        val novels = state.value.selection.mapNotNull {
-            (it as? NovelLibraryItem.Single)?.libraryNovel?.novel
-        }.distinctBy { it.id }
+        val novels = state.value.selection.selectedNovels()
         if (novels.isNotEmpty()) {
             mutableState.update { it.copy(dialog = Dialog.DeleteNovels(novels)) }
         }
@@ -342,9 +340,7 @@ class NovelLibraryScreenModel(
     }
 
     fun openDeleteNovelDialog() {
-        val novels = state.value.selection.mapNotNull {
-            (it as? NovelLibraryItem.Single)?.libraryNovel?.novel
-        }.distinctBy { it.id }
+        val novels = state.value.selection.selectedNovels()
         if (novels.isEmpty()) return
         mutableState.update { it.copy(dialog = Dialog.DeleteNovels(novels)) }
     }
@@ -368,9 +364,7 @@ class NovelLibraryScreenModel(
     }
 
     fun markReadSelection(read: Boolean) {
-        val selected = state.value.selection.mapNotNull {
-            (it as? NovelLibraryItem.Single)?.libraryNovel?.novel
-        }.distinctBy { it.id }
+        val selected = state.value.selection.selectedNovels()
         if (selected.isEmpty()) return
         screenModelScope.launchIO {
             selected.forEach { novel ->
@@ -422,9 +416,7 @@ class NovelLibraryScreenModel(
         action: NovelDownloadAction,
         amount: Int = 0,
     ): Int {
-        val selected = state.value.selection.mapNotNull {
-            (it as? NovelLibraryItem.Single)?.libraryNovel?.novel
-        }.distinctBy { it.id }
+        val selected = state.value.selection.selectedNovels()
         if (selected.isEmpty()) return 0
         var totalAdded = 0
         selected.forEach { novel ->
@@ -762,6 +754,7 @@ class NovelLibraryScreenModel(
                 is NovelLibraryItem.Series -> it.librarySeries.pinned
             }
         }
+        val isSeries: (NovelLibraryItem) -> Boolean = { it is NovelLibraryItem.Series }
 
         val comparator = Comparator<NovelLibraryItem> { left, right ->
             when (sort.type) {
@@ -805,8 +798,9 @@ class NovelLibraryScreenModel(
                 left.title.lowercase().compareToWithCollator(right.title.lowercase())
             }
 
-        return items.sortPinnedFirst(
+        return items.sortPinnedSeriesFirst(
             isPinned = isPinned,
+            isSeries = isSeries,
             comparator = comparator,
             randomSeed = if (sort.type == NovelLibrarySort.Type.Random) randomSortSeed else null,
         )
@@ -1009,4 +1003,20 @@ class NovelLibraryScreenModel(
         data object CreateSeries : Dialog
         data class AddToSeries(val series: List<NovelSeries>) : Dialog
     }
+}
+
+private fun List<NovelLibraryItem>.selectedNovelEntries(): List<tachiyomi.domain.library.novel.LibraryNovel> {
+    return asSequence()
+        .flatMap { item ->
+            when (item) {
+                is NovelLibraryItem.Single -> sequenceOf(item.libraryNovel)
+                is NovelLibraryItem.Series -> item.librarySeries.entries.asSequence()
+            }
+        }
+        .distinctBy { it.id }
+        .toList()
+}
+
+private fun List<NovelLibraryItem>.selectedNovels(): List<Novel> {
+    return selectedNovelEntries().map { it.novel }
 }

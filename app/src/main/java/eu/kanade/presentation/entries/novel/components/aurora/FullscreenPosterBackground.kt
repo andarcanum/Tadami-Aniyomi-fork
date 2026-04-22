@@ -45,12 +45,18 @@ fun FullscreenPosterBackground(
     minimumBlurOverlayAlpha: Float = 0f,
     posterScrimAlpha: Float? = null,
     modifier: Modifier = Modifier,
+    resolvedCoverUrl: String? = null,
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter(AuroraCoverPlaceholderVariant.Wide)
-    val posterModel = sourceAwareNovelCoverModel(novel).takeIf { !it.url.isNullOrBlank() }
+    val posterModel = resolvedCoverUrl?.takeIf { it.isNotBlank() } ?: sourceAwareNovelCoverModel(novel)
+    val isPosterLoadable = when (posterModel) {
+        is String -> posterModel.isNotBlank()
+        null -> false
+        else -> true
+    }
     val posterColorFilter = rememberAuroraPosterColorFilter()
 
     val hasScrolledAway = firstVisibleItemIndex > 0 || scrollOffset > 100
@@ -80,11 +86,12 @@ fun FullscreenPosterBackground(
     val backgroundSpec = remember(
         novel.id,
         novel.coverLastModified,
+        resolvedCoverUrl,
         containerWidthPx,
         containerHeightPx,
     ) {
         auroraPosterBackgroundSpec(
-            baseCacheKey = "novel-bg;${novel.id};${novel.coverLastModified}",
+            baseCacheKey = "novel-bg;${novel.id};${novel.coverLastModified};${resolvedCoverUrl.orEmpty()}",
             containerWidthPx = containerWidthPx,
             containerHeightPx = containerHeightPx,
         )
@@ -94,17 +101,16 @@ fun FullscreenPosterBackground(
         val colors = AuroraTheme.colors
         val scrimColor = if (colors.isDark) Color.Black else colors.background
 
-        if (posterModel != null) {
+        if (isPosterLoadable) {
             val backgroundRequest = remember(
-                novel.id,
-                novel.coverLastModified,
+                posterModel,
                 backgroundSpec.memoryCacheKey,
                 containerWidthPx,
                 containerHeightPx,
             ) {
                 buildAuroraPosterBackgroundRequest(
                     context = context,
-                    data = sourceAwareNovelCoverModel(novel),
+                    data = posterModel,
                     spec = backgroundSpec,
                     containerWidthPx = containerWidthPx,
                     containerHeightPx = containerHeightPx,

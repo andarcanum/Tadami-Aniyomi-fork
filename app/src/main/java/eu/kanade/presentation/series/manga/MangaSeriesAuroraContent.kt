@@ -25,6 +25,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -52,6 +54,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.entries.manga.components.aurora.FullscreenPosterBackground
+import eu.kanade.presentation.series.components.SeriesCategoryDialog
+import eu.kanade.presentation.series.components.SeriesCategoryOption
 import eu.kanade.presentation.entries.manga.components.aurora.MangaChapterCardCompact
 import eu.kanade.presentation.series.manga.components.MangaSeriesEntryCard
 import eu.kanade.presentation.series.manga.components.MangaSeriesHeader
@@ -66,6 +70,7 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.library.manga.LibraryManga
 import tachiyomi.domain.library.service.LibraryPreferences
+import tachiyomi.domain.series.model.SeriesCoverMode
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.ListGroupHeader
@@ -84,13 +89,17 @@ fun MangaSeriesAuroraContent(
     onMangaClicked: (LibraryManga) -> Unit,
     onChapterClicked: (LibraryManga, Chapter) -> Unit,
     onRenameClicked: (String) -> Unit,
+    onCoverClicked: () -> Unit,
+    categoryOptions: List<SeriesCategoryOption>,
+    onCategoryClicked: (Long, Boolean) -> Unit,
     onDeleteClicked: () -> Unit,
     onRemoveEntryClicked: (Long) -> Unit,
     onReorderEntries: (List<Long>) -> Unit,
 ) {
     val series = state.series ?: return
     val colors = AuroraTheme.colors
-    val heroManga = series.activeManga
+    val heroManga = series.selectedCoverManga ?: series.activeManga
+    val customCoverFile = state.customCoverFile.takeIf { series.series.coverMode == SeriesCoverMode.CUSTOM }
     val readingTarget = remember(series, state.chapters) {
         resolveMangaSeriesReadingTarget(
             series = series,
@@ -101,6 +110,7 @@ fun MangaSeriesAuroraContent(
     val lazyListState = rememberLazyListState()
 
     var showRenameDialog by remember { mutableStateOf(false) }
+    var showCategoryDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var isDraggingSeriesEntry by remember { mutableStateOf(false) }
     val dragDimAlpha by animateFloatAsState(
@@ -128,6 +138,7 @@ fun MangaSeriesAuroraContent(
                     firstVisibleItemIndex = lazyListState.firstVisibleItemIndex,
                     minimumBlurOverlayAlpha = 0.40f,
                     posterScrimAlpha = 0.40f,
+                    resolvedCoverUrl = customCoverFile?.absolutePath,
                 )
             }
         }
@@ -160,6 +171,22 @@ fun MangaSeriesAuroraContent(
                         icon = Icons.Default.Edit,
                         contentDescription = null,
                         onClick = { showRenameDialog = true },
+                    )
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    AuroraSeriesActionButton(
+                        icon = Icons.Default.Image,
+                        contentDescription = null,
+                        onClick = onCoverClicked,
+                    )
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    AuroraSeriesActionButton(
+                        icon = Icons.Default.Folder,
+                        contentDescription = null,
+                        onClick = { showCategoryDialog = true },
                     )
 
                     Spacer(modifier = Modifier.width(12.dp))
@@ -214,6 +241,7 @@ fun MangaSeriesAuroraContent(
                 item {
                     MangaSeriesHeader(
                         series = series,
+                        customCoverData = customCoverFile,
                         modifier = Modifier.padding(bottom = 32.dp, top = 24.dp),
                     )
                 }
@@ -350,6 +378,15 @@ fun MangaSeriesAuroraContent(
             },
             title = { Text(text = stringResource(AYMR.strings.manga_series_action_delete_series)) },
             text = { Text(text = stringResource(AYMR.strings.manga_series_confirm_delete_series)) },
+        )
+    }
+
+    if (showCategoryDialog) {
+        SeriesCategoryDialog(
+            categories = categoryOptions,
+            initialCategoryId = series.categoryId,
+            onDismissRequest = { showCategoryDialog = false },
+            onConfirm = onCategoryClicked,
         )
     }
 }

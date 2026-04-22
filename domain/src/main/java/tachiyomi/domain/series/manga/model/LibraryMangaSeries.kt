@@ -2,6 +2,7 @@ package tachiyomi.domain.series.manga.model
 
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.library.manga.LibraryManga
+import tachiyomi.domain.series.model.SeriesCoverMode
 
 data class LibraryMangaSeries(
     val series: MangaSeries,
@@ -45,8 +46,18 @@ data class LibraryMangaSeries(
             return entries.getOrNull(lastProgressedIndex + 1)?.manga ?: activeEntry.manga
         }
 
+    val selectedCoverManga: Manga?
+        get() {
+            if (series.coverMode != SeriesCoverMode.ENTRY) return null
+            return entries.firstOrNull { it.id == series.coverEntryId }?.manga
+        }
+
     val coverMangas: List<Manga>
-        get() = entries.take(3).map { it.manga }
+        get() {
+            val base = entries.take(3).map { it.manga }
+            val selected = selectedCoverManga ?: return base
+            return listOf(selected) + base.filterNot { it.id == selected.id }
+        }
 }
 
 data class LibraryMangaSeriesWithEntryIds(

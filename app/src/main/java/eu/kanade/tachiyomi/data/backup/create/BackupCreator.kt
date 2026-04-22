@@ -19,8 +19,10 @@ import eu.kanade.tachiyomi.data.backup.create.creators.MangaSourcesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.NovelBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.NovelCategoriesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.NovelExtensionRepoBackupCreator
+import eu.kanade.tachiyomi.data.backup.create.creators.NovelSeriesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.NovelSourcesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.PreferenceBackupCreator
+import eu.kanade.tachiyomi.data.backup.create.creators.MangaSeriesBackupCreator
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupAnime
 import eu.kanade.tachiyomi.data.backup.models.BackupAnimeSource
@@ -86,6 +88,8 @@ class BackupCreator(
     private val animeSourcesBackupCreator: AnimeSourcesBackupCreator = AnimeSourcesBackupCreator(),
     private val mangaSourcesBackupCreator: MangaSourcesBackupCreator = MangaSourcesBackupCreator(),
     private val novelSourcesBackupCreator: NovelSourcesBackupCreator = NovelSourcesBackupCreator(),
+    private val mangaSeriesBackupCreator: MangaSeriesBackupCreator = MangaSeriesBackupCreator(),
+    private val novelSeriesBackupCreator: NovelSeriesBackupCreator = NovelSeriesBackupCreator(),
     private val extensionsBackupCreator: ExtensionsBackupCreator = ExtensionsBackupCreator(context),
     private val achievementBackupCreator: AchievementBackupCreator = AchievementBackupCreator(),
     private val achievementHandler: AchievementHandler = Injekt.get(),
@@ -152,6 +156,8 @@ class BackupCreator(
             )
 
             val achievementData = achievementBackupCreator(options)
+            val backupMangaSeries = if (shouldBackupManga) mangaSeriesBackupCreator() else emptyList()
+            val backupNovelSeries = if (shouldBackupNovel) novelSeriesBackupCreator() else emptyList()
 
             val backup = Backup(
                 backupManga = backupManga,
@@ -176,6 +182,8 @@ class BackupCreator(
                 backupUserProfile = achievementData.userProfile,
                 backupActivityLog = achievementData.activityLog,
                 backupStats = achievementData.stats,
+                backupMangaSeries = backupMangaSeries,
+                backupNovelSeries = backupNovelSeries,
             )
 
             val byteArray = parser.encodeToByteArray(Backup.serializer(), backup)

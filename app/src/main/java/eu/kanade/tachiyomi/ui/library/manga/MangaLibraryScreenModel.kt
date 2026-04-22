@@ -26,7 +26,7 @@ import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.HttpSource
-import eu.kanade.tachiyomi.ui.library.sortPinnedFirst
+import eu.kanade.tachiyomi.ui.library.sortPinnedSeriesFirst
 import eu.kanade.tachiyomi.util.chapter.getNextUnread
 import eu.kanade.tachiyomi.util.removeCovers
 import kotlinx.collections.immutable.ImmutableList
@@ -314,6 +314,7 @@ class MangaLibraryScreenModel(
                 is MangaLibraryItem.Series -> it.librarySeries.pinned
             }
         }
+        val isSeries: (MangaLibraryItem) -> Boolean = { it is MangaLibraryItem.Series }
 
         val defaultTrackerScoreSortValue = -1.0
         val trackerMap = if (loggedInTrackerIds.isEmpty()) {
@@ -396,8 +397,9 @@ class MangaLibraryScreenModel(
 
         return mapValues { (key, value) ->
             if (key.sort.type == MangaLibrarySort.Type.Random) {
-                return@mapValues value.sortPinnedFirst(
+                return@mapValues value.sortPinnedSeriesFirst(
                     isPinned = isPinned,
+                    isSeries = isSeries,
                     comparator = sortAlphabetically,
                     randomSeed = libraryPreferences.randomMangaSortSeed().get(),
                 )
@@ -407,8 +409,9 @@ class MangaLibraryScreenModel(
                 .let { if (key.sort.isAscending) it else it.reversed() }
                 .thenComparator(sortAlphabetically)
 
-            value.sortPinnedFirst(
+            value.sortPinnedSeriesFirst(
                 isPinned = isPinned,
+                isSeries = isSeries,
                 comparator = comparator,
             )
         }
@@ -505,7 +508,7 @@ class MangaLibraryScreenModel(
                 }
 
             (singleItems + seriesItems)
-                .groupBy { it.libraryManga.category }
+                .groupBy { it.category }
         }
 
         return combine(getCategories.subscribe(), libraryMangasFlow) { categories, libraryManga ->
@@ -573,7 +576,7 @@ class MangaLibraryScreenModel(
 
     fun runDownloadActionSelection(action: DownloadAction) {
         val selection = state.value.selection
-        val mangas = selection.map { it.manga }.toList()
+        val mangas = selection.selectedMangaEntries().map { it.manga }
         when (action) {
             DownloadAction.NEXT_1_ITEM -> downloadUnreadChapters(mangas, 1)
             DownloadAction.NEXT_5_ITEMS -> downloadUnreadChapters(mangas, 5)
@@ -614,7 +617,7 @@ class MangaLibraryScreenModel(
      * Marks mangas' chapters read status.
      */
     fun markReadSelection(read: Boolean) {
-        val mangas = state.value.selection.toList()
+        val mangas = state.value.selection.selectedMangaEntries()
         screenModelScope.launchNonCancellable {
             mangas.forEach { manga ->
                 setReadStatus.await(
@@ -736,13 +739,13 @@ class MangaLibraryScreenModel(
         mutableState.update { it.copy(selection = persistentListOf()) }
     }
 
-    fun toggleSelection(manga: LibraryManga) {
+    fun toggleSelection(item: MangaLibraryItem) {
         mutableState.update { state ->
             val newSelection = state.selection.mutate { list ->
-                if (list.fastAny { it.id == manga.id }) {
-                    list.removeAll { it.id == manga.id }
+                if (list.fastAny { it.id == item.id }) {
+                    list.removeAll { it.id == item.id }
                 } else {
-                    list.add(manga)
+                    list.add(item)
                 }
             }
             state.copy(selection = newSelection)
@@ -753,12 +756,17 @@ class MangaLibraryScreenModel(
      * Selects all mangas between and including the given manga and the last pressed manga from the
      * same category as the given manga
      */
-    fun toggleRangeSelection(manga: LibraryManga) {
+    fun toggleRangeSelection(item: MangaLibraryItem) {
+        if (item is MangaLibraryItem.Series) {
+            toggleSelection(item)
+            return
+        }
+        val manga = item.libraryManga
         mutableState.update { state ->
             val newSelection = state.selection.mutate { list ->
-                val lastSelected = list.lastOrNull()
+                val lastSelected = list.lastOrNull { it is MangaLibraryItem.Single } as? MangaLibraryItem.Single
                 if (lastSelected?.category != manga.category) {
-                    list.add(manga)
+                    list.add(item)
                     return@mutate
                 }
 
@@ -766,7 +774,7 @@ class MangaLibraryScreenModel(
                     ?.filterIsInstance<MangaLibraryItem.Single>()
                     ?.fastMap { it.libraryManga }
                     .orEmpty()
-                val lastMangaIndex = items.indexOf(lastSelected)
+                val lastMangaIndex = items.indexOf(lastSelected?.libraryManga)
                 val curMangaIndex = items.indexOf(manga)
 
                 val selectedIds = list.fastMap { it.id }
@@ -777,7 +785,7 @@ class MangaLibraryScreenModel(
                     else -> return@mutate
                 }
                 val newSelections = selectionRange.mapNotNull { index ->
-                    items[index].takeUnless { it.id in selectedIds }
+                    MangaLibraryItem.Single(items[index], sourceManager = sourceManager).takeUnless { it.id in selectedIds }
                 }
                 list.addAll(newSelections)
             }
@@ -792,9 +800,7 @@ class MangaLibraryScreenModel(
                 val selectedIds = list.fastMap { it.id }
                 state.getLibraryItemsByCategoryId(categoryId)
                     ?.filterIsInstance<MangaLibraryItem.Single>()
-                    ?.fastMapNotNull { item ->
-                        item.libraryManga.takeUnless { it.id in selectedIds }
-                    }
+                    ?.fastMapNotNull { item -> item.takeUnless { it.id in selectedIds } }
                     ?.let { list.addAll(it) }
             }
             state.copy(selection = newSelection)
@@ -807,7 +813,6 @@ class MangaLibraryScreenModel(
                 val categoryId = state.categories[index].id
                 val items = state.getLibraryItemsByCategoryId(categoryId)
                     ?.filterIsInstance<MangaLibraryItem.Single>()
-                    ?.fastMap { it.libraryManga }
                     .orEmpty()
                 val selectedIds = list.fastMap { it.id }
                 val (toRemove, toAdd) = items.fastPartition { it.id in selectedIds }
@@ -826,7 +831,9 @@ class MangaLibraryScreenModel(
     fun openChangeCategoryDialog() {
         screenModelScope.launchIO {
             // Create a copy of selected manga
-            val mangaList = state.value.selection.map { it.manga }
+            val mangaList = state.value.selection
+                .selectedMangaEntries()
+                .map { it.manga }
 
             // Hide the default category because it has a different behavior than the ones from db.
             val categories = state.value.categories.filter { it.id != 0L }
@@ -849,7 +856,9 @@ class MangaLibraryScreenModel(
     }
 
     fun openDeleteMangaDialog() {
-        val mangaList = state.value.selection.map { it.manga }
+        val mangaList = state.value.selection
+            .selectedMangaEntries()
+            .map { it.manga }
         mutableState.update { it.copy(dialog = Dialog.DeleteManga(mangaList)) }
     }
 
@@ -858,7 +867,9 @@ class MangaLibraryScreenModel(
         if (selection.isEmpty()) return
 
         screenModelScope.launchIO {
-            val mangaIds = selection.map { it.manga.id }
+            val mangaIds = selection
+                .selectedMangaEntries()
+                .map { it.manga.id }
             if (mangaIds.isNotEmpty()) {
                 createMangaSeries.await(name, 0L, mangaIds)
             }
@@ -871,7 +882,9 @@ class MangaLibraryScreenModel(
         if (selection.isEmpty()) return
 
         screenModelScope.launchIO {
-            val mangaIds = selection.map { it.manga.id }
+            val mangaIds = selection
+                .selectedMangaEntries()
+                .map { it.manga.id }
             if (mangaIds.isNotEmpty()) {
                 addMangasToSeries.await(series.id, mangaIds)
             }
@@ -960,7 +973,7 @@ class MangaLibraryScreenModel(
         val isLoading: Boolean = true,
         val library: MangaLibraryMap = emptyMap(),
         val searchQuery: String? = null,
-        val selection: PersistentList<LibraryManga> = persistentListOf(),
+        val selection: PersistentList<MangaLibraryItem> = persistentListOf(),
         val hasActiveFilters: Boolean = false,
         val showCategoryTabs: Boolean = false,
         val showMangaCount: Boolean = false,
@@ -1012,4 +1025,16 @@ class MangaLibraryScreenModel(
             return LibraryToolbarTitle(title, count)
         }
     }
+}
+
+private fun List<MangaLibraryItem>.selectedMangaEntries(): List<LibraryManga> {
+    return asSequence()
+        .flatMap { item ->
+            when (item) {
+                is MangaLibraryItem.Single -> sequenceOf(item.libraryManga)
+                is MangaLibraryItem.Series -> item.librarySeries.entries.asSequence()
+            }
+        }
+        .distinctBy { it.id }
+        .toList()
 }
