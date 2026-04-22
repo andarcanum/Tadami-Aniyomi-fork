@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,7 +39,14 @@ data class MangaSeriesScreen(val seriesId: Long) : Screen {
             }
         }
 
-        if (state.isLoading || state.series == null) {
+        if (state.isLoading) {
+            LoadingScreen()
+            return
+        }
+        if (state.series == null) {
+            LaunchedEffect(Unit) {
+                navigator.pop()
+            }
             LoadingScreen()
             return
         }
