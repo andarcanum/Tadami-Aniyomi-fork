@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.series.manga
 
+import eu.kanade.tachiyomi.data.cache.SeriesCoverCache
 import io.mockk.coEvery
 import io.mockk.coJustRun
 import io.mockk.coVerify
@@ -14,6 +15,8 @@ import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.category.manga.interactor.GetVisibleMangaCategories
+import tachiyomi.domain.category.manga.interactor.SetMangaCategories
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.items.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.items.chapter.model.Chapter
@@ -40,6 +43,9 @@ class MangaSeriesScreenModelReorderTest {
     private val removeMangaFromSeries: RemoveMangaFromSeries = mockk(relaxed = true)
     private val reorderSeriesEntries: ReorderSeriesEntries = mockk()
     private val getChaptersByMangaId: GetChaptersByMangaId = mockk()
+    private val getVisibleMangaCategories: GetVisibleMangaCategories = mockk()
+    private val setMangaCategories: SetMangaCategories = mockk(relaxed = true)
+    private val seriesCoverCache: SeriesCoverCache = mockk(relaxed = true)
 
     @BeforeEach
     fun setup() {
@@ -70,6 +76,7 @@ class MangaSeriesScreenModelReorderTest {
         )
 
         every { getMangaSeriesWithEntries.subscribe(seriesId) } returns flowOf(wrapper)
+        every { getVisibleMangaCategories.subscribe() } returns flowOf(emptyList())
         coEvery { getChaptersByMangaId.await(any()) } returns emptyList()
         coJustRun { reorderSeriesEntries.await(any()) }
     }
@@ -93,6 +100,9 @@ class MangaSeriesScreenModelReorderTest {
             removeMangaFromSeries = removeMangaFromSeries,
             reorderSeriesEntries = reorderSeriesEntries,
             getChaptersByMangaId = getChaptersByMangaId,
+            getVisibleMangaCategories = getVisibleMangaCategories,
+            setMangaCategories = setMangaCategories,
+            seriesCoverCache = seriesCoverCache,
         ).also(activeScreenModels::add)
 
         testDispatcher.scheduler.advanceUntilIdle()
@@ -128,6 +138,9 @@ class MangaSeriesScreenModelReorderTest {
             removeMangaFromSeries = removeMangaFromSeries,
             reorderSeriesEntries = reorderSeriesEntries,
             getChaptersByMangaId = getChaptersByMangaId,
+            getVisibleMangaCategories = getVisibleMangaCategories,
+            setMangaCategories = setMangaCategories,
+            seriesCoverCache = seriesCoverCache,
         ).also(activeScreenModels::add)
 
         testDispatcher.scheduler.advanceUntilIdle()
@@ -153,6 +166,9 @@ class MangaSeriesScreenModelReorderTest {
             removeMangaFromSeries = removeMangaFromSeries,
             reorderSeriesEntries = reorderSeriesEntries,
             getChaptersByMangaId = getChaptersByMangaId,
+            getVisibleMangaCategories = getVisibleMangaCategories,
+            setMangaCategories = setMangaCategories,
+            seriesCoverCache = seriesCoverCache,
         ).also(activeScreenModels::add)
 
         testDispatcher.scheduler.advanceUntilIdle()

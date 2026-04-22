@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.series.novel
 
+import eu.kanade.tachiyomi.data.cache.SeriesCoverCache
 import io.mockk.coEvery
 import io.mockk.coJustRun
 import io.mockk.coVerify
@@ -14,6 +15,8 @@ import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.category.novel.interactor.GetNovelCategories
+import tachiyomi.domain.category.novel.interactor.SetNovelCategories
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.items.novelchapter.interactor.GetNovelChapters
 import tachiyomi.domain.library.novel.LibraryNovel
@@ -39,6 +42,9 @@ class NovelSeriesScreenModelReorderTest {
     private val removeNovelFromSeries: RemoveNovelFromSeries = mockk(relaxed = true)
     private val reorderSeriesEntries: ReorderSeriesEntries = mockk()
     private val getNovelChapters: GetNovelChapters = mockk()
+    private val getNovelCategories: GetNovelCategories = mockk()
+    private val setNovelCategories: SetNovelCategories = mockk(relaxed = true)
+    private val seriesCoverCache: SeriesCoverCache = mockk(relaxed = true)
 
     @BeforeEach
     fun setup() {
@@ -69,6 +75,7 @@ class NovelSeriesScreenModelReorderTest {
         )
 
         every { getNovelSeriesWithEntries.subscribe(seriesId) } returns flowOf(wrapper)
+        every { getNovelCategories.subscribe() } returns flowOf(emptyList())
         coEvery { getNovelChapters.await(any()) } returns emptyList()
         coJustRun { reorderSeriesEntries.await(any()) }
     }
@@ -92,6 +99,9 @@ class NovelSeriesScreenModelReorderTest {
             removeNovelFromSeries = removeNovelFromSeries,
             reorderSeriesEntries = reorderSeriesEntries,
             getNovelChapters = getNovelChapters,
+            getNovelCategories = getNovelCategories,
+            setNovelCategories = setNovelCategories,
+            seriesCoverCache = seriesCoverCache,
         ).also(activeScreenModels::add)
 
         testDispatcher.scheduler.advanceUntilIdle()

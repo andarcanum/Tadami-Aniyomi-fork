@@ -195,9 +195,25 @@ data object MangaLibraryTab : Tab {
                     onMarkAsViewedClicked = { screenModel.markReadSelection(true) },
                     onMarkAsUnviewedClicked = { screenModel.markReadSelection(false) },
                     onDownloadClicked = screenModel::runDownloadActionSelection
-                        .takeIf { state.selection.fastAll { !it.manga.isLocal() } },
+                        .takeIf {
+                            state.selection.fastAll { selected ->
+                                when (selected) {
+                                    is MangaLibraryItem.Single -> !selected.libraryManga.manga.isLocal()
+                                    is MangaLibraryItem.Series -> selected.librarySeries.entries.fastAll {
+                                        !it.manga.isLocal()
+                                    }
+                                }
+                            }
+                        },
                     onMigrateClicked = {
-                        val selectionIds = state.selection.map { it.manga.id }
+                        val selectionIds = state.selection
+                            .flatMap { selected ->
+                                when (selected) {
+                                    is MangaLibraryItem.Single -> listOf(selected.libraryManga.id)
+                                    is MangaLibraryItem.Series -> selected.librarySeries.entries.map { it.id }
+                                }
+                            }
+                            .distinct()
                         screenModel.clearSelection()
                         when (val route = resolveMangaLibraryMigrationRoute(selectionIds)) {
                             is MangaLibraryMigrationRoute.Config -> {

@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -13,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -28,7 +30,7 @@ import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColo
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraPosterScrimBrush
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.entries.manga.model.Manga
-import tachiyomi.domain.entries.manga.model.asMangaCover
+import tachiyomi.domain.entries.manga.model.MangaCover
 
 /**
  * Fixed fullscreen poster background with scroll-based dimming and blur effects.
@@ -48,15 +50,32 @@ fun FullscreenPosterBackground(
     resolvedCoverUrl: String? = null,
     resolvedCoverUrlFallback: String? = null,
     refererUrl: String? = null,
+    onPosterLongPress: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter(AuroraCoverPlaceholderVariant.Wide)
-    val mangaCover = remember(manga.id, manga.thumbnailUrl, manga.coverLastModified) {
-        manga.asMangaCover()
+    val posterCover = remember(
+        manga.id,
+        manga.source,
+        manga.favorite,
+        manga.thumbnailUrl,
+        manga.coverLastModified,
+        resolvedCoverUrl,
+        resolvedCoverUrlFallback,
+    ) {
+        MangaCover(
+            mangaId = manga.id,
+            sourceId = manga.source,
+            isMangaFavorite = manga.favorite,
+            url = resolvedCoverUrl?.takeIf { it.isNotBlank() }
+                ?: resolvedCoverUrlFallback?.takeIf { it.isNotBlank() }
+                ?: manga.thumbnailUrl,
+            lastModified = manga.coverLastModified,
+        )
     }
-    val posterModel = resolvedCoverUrl?.takeIf { it.isNotBlank() } ?: mangaCover.url
+    val posterModel = posterCover.url
     val posterColorFilter = rememberAuroraPosterColorFilter()
 
     val hasScrolledAway = firstVisibleItemIndex > 0 || scrollOffset > 100
@@ -86,30 +105,44 @@ fun FullscreenPosterBackground(
     val backgroundSpec = remember(
         manga.id,
         manga.coverLastModified,
-        mangaCover.url,
+        posterModel,
         containerWidthPx,
         containerHeightPx,
     ) {
         auroraPosterBackgroundSpec(
-            baseCacheKey = "manga-bg;${manga.id};${manga.coverLastModified};${mangaCover.url.orEmpty()}",
+            baseCacheKey = "manga-bg;${manga.id};${manga.coverLastModified};${posterModel.orEmpty()}",
             containerWidthPx = containerWidthPx,
             containerHeightPx = containerHeightPx,
         )
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .then(
+                if (onPosterLongPress != null) {
+                    Modifier.pointerInput(onPosterLongPress) {
+                        detectTapGestures(
+                            onLongPress = { onPosterLongPress() },
+                        )
+                    }
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
         val colors = AuroraTheme.colors
 
         if (posterModel != null) {
             val backgroundRequest = remember(
-                mangaCover,
+                posterCover,
                 backgroundSpec.memoryCacheKey,
                 containerWidthPx,
                 containerHeightPx,
             ) {
                 buildAuroraPosterBackgroundRequest(
                     context = context,
-                    data = mangaCover,
+                    data = posterCover,
                     spec = backgroundSpec,
                     containerWidthPx = containerWidthPx,
                     containerHeightPx = containerHeightPx,

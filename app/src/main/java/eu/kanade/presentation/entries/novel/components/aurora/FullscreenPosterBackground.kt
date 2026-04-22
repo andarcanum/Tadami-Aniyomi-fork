@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -13,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -45,12 +47,19 @@ fun FullscreenPosterBackground(
     minimumBlurOverlayAlpha: Float = 0f,
     posterScrimAlpha: Float? = null,
     modifier: Modifier = Modifier,
+    resolvedCoverUrl: String? = null,
+    onPosterLongPress: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter(AuroraCoverPlaceholderVariant.Wide)
-    val posterModel = sourceAwareNovelCoverModel(novel).takeIf { !it.url.isNullOrBlank() }
+    val posterModel = resolvedCoverUrl?.takeIf { it.isNotBlank() } ?: sourceAwareNovelCoverModel(novel)
+    val isPosterLoadable = when (posterModel) {
+        is String -> posterModel.isNotBlank()
+        null -> false
+        else -> true
+    }
     val posterColorFilter = rememberAuroraPosterColorFilter()
 
     val hasScrolledAway = firstVisibleItemIndex > 0 || scrollOffset > 100
@@ -80,31 +89,45 @@ fun FullscreenPosterBackground(
     val backgroundSpec = remember(
         novel.id,
         novel.coverLastModified,
+        resolvedCoverUrl,
         containerWidthPx,
         containerHeightPx,
     ) {
         auroraPosterBackgroundSpec(
-            baseCacheKey = "novel-bg;${novel.id};${novel.coverLastModified}",
+            baseCacheKey = "novel-bg;${novel.id};${novel.coverLastModified};${resolvedCoverUrl.orEmpty()}",
             containerWidthPx = containerWidthPx,
             containerHeightPx = containerHeightPx,
         )
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .then(
+                if (onPosterLongPress != null) {
+                    Modifier.pointerInput(onPosterLongPress) {
+                        detectTapGestures(
+                            onLongPress = { onPosterLongPress() },
+                        )
+                    }
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
         val colors = AuroraTheme.colors
         val scrimColor = if (colors.isDark) Color.Black else colors.background
 
-        if (posterModel != null) {
+        if (isPosterLoadable) {
             val backgroundRequest = remember(
-                novel.id,
-                novel.coverLastModified,
+                posterModel,
                 backgroundSpec.memoryCacheKey,
                 containerWidthPx,
                 containerHeightPx,
             ) {
                 buildAuroraPosterBackgroundRequest(
                     context = context,
-                    data = sourceAwareNovelCoverModel(novel),
+                    data = posterModel,
                     spec = backgroundSpec,
                     containerWidthPx = containerWidthPx,
                     containerHeightPx = containerHeightPx,

@@ -22,14 +22,17 @@ import eu.kanade.tachiyomi.data.backup.restore.restorers.ExtensionsRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.MangaCategoriesRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.MangaExtensionRepoRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.MangaRestorer
+import eu.kanade.tachiyomi.data.backup.restore.restorers.MangaSeriesRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.NovelCategoriesRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.NovelExtensionRepoRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.NovelRestorer
+import eu.kanade.tachiyomi.data.backup.restore.restorers.NovelSeriesRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.PreferenceRestorer
 import eu.kanade.tachiyomi.util.system.createFileInCacheDir
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.i18n.MR
@@ -55,6 +58,8 @@ class BackupRestorer(
     private val animeRestorer: AnimeRestorer = AnimeRestorer(),
     private val mangaRestorer: MangaRestorer = MangaRestorer(),
     private val novelRestorer: NovelRestorer = NovelRestorer(),
+    private val mangaSeriesRestorer: MangaSeriesRestorer = MangaSeriesRestorer(),
+    private val novelSeriesRestorer: NovelSeriesRestorer = NovelSeriesRestorer(),
     private val extensionsRestorer: ExtensionsRestorer = ExtensionsRestorer(context),
     private val achievementRestorer: AchievementRestorer = AchievementRestorer(),
 ) {
@@ -111,6 +116,8 @@ class BackupRestorer(
             if (options.restoreManga) restoreAmount += backup.backupManga.size
             if (options.restoreAnime) restoreAmount += backup.backupAnime.size
             if (options.restoreNovel) restoreAmount += backup.backupNovel.size
+            if (options.restoreManga) restoreAmount += backup.backupMangaSeries.size
+            if (options.restoreNovel) restoreAmount += backup.backupNovelSeries.size
         }
         if (options.categories) {
             if (shouldRestoreAnimeCategories) restoreAmount += 1
@@ -161,23 +168,31 @@ class BackupRestorer(
                 restoreSourcePreferences(backup.backupSourcePreferences)
             }
             if (options.libraryEntries) {
+                val libraryRestoreJobs = mutableListOf<kotlinx.coroutines.Job>()
                 if (shouldRestoreAnime) {
-                    restoreAnime(
+                    libraryRestoreJobs += restoreAnime(
                         backup.backupAnime,
                         if (shouldRestoreAnimeCategories) backup.backupAnimeCategories else emptyList(),
                     )
                 }
                 if (shouldRestoreManga) {
-                    restoreManga(
+                    libraryRestoreJobs += restoreManga(
                         backup.backupManga,
                         if (shouldRestoreMangaCategories) backup.backupCategories else emptyList(),
                     )
                 }
                 if (shouldRestoreNovel) {
-                    restoreNovel(
+                    libraryRestoreJobs += restoreNovel(
                         backup.backupNovel,
                         if (shouldRestoreNovelCategories) backup.backupNovelCategories else emptyList(),
                     )
+                }
+                libraryRestoreJobs.joinAll()
+                if (shouldRestoreManga) {
+                    restoreMangaSeries(backup.backupMangaSeries)
+                }
+                if (shouldRestoreNovel) {
+                    restoreNovelSeries(backup.backupNovelSeries)
                 }
             }
             if (options.extensionRepoSettings) {
@@ -316,6 +331,38 @@ class BackupRestorer(
             }
     }
 
+    private suspend fun restoreMangaSeries(
+        backupSeries: List<eu.kanade.tachiyomi.data.backup.models.BackupMangaSeries>,
+    ) {
+        backupSeries.forEach {
+            try {
+                mangaSeriesRestorer.restore(listOf(it))
+            } catch (e: Exception) {
+                errors.add(
+                    Date() to "Manga series '${it.title}': ${e.message}",
+                )
+            }
+            restoreProgress += 1
+            notifier.showRestoreProgress(it.title, restoreProgress, restoreAmount, isSync)
+        }
+    }
+
+    private suspend fun restoreNovelSeries(
+        backupSeries: List<eu.kanade.tachiyomi.data.backup.models.BackupNovelSeries>,
+    ) {
+        backupSeries.forEach {
+            try {
+                novelSeriesRestorer.restore(listOf(it))
+            } catch (e: Exception) {
+                errors.add(
+                    Date() to "Novel series '${it.title}': ${e.message}",
+                )
+            }
+            restoreProgress += 1
+            notifier.showRestoreProgress(it.title, restoreProgress, restoreAmount, isSync)
+        }
+    }
+
     private fun CoroutineScope.restoreAppPreferences(
         preferences: List<BackupPreference>,
         categories: List<BackupCategory>?,
@@ -360,7 +407,9 @@ class BackupRestorer(
                 try {
                     animeExtensionRepoRestorer(it)
                 } catch (e: Exception) {
-                    errors.add(Date() to "Error Adding Anime Repo: ${it.name} : ${e.message}")
+                    errors.add(
+                        Date() to "Error Adding Anime Repo: ${it.name} : ${e.message}",
+                    )
                 }
 
                 restoreProgress += 1
@@ -379,7 +428,9 @@ class BackupRestorer(
                 try {
                     mangaExtensionRepoRestorer(it)
                 } catch (e: Exception) {
-                    errors.add(Date() to "Error Adding Manga Repo: ${it.name} : ${e.message}")
+                    errors.add(
+                        Date() to "Error Adding Manga Repo: ${it.name} : ${e.message}",
+                    )
                 }
 
                 restoreProgress += 1
@@ -398,7 +449,9 @@ class BackupRestorer(
                 try {
                     novelExtensionRepoRestorer(it)
                 } catch (e: Exception) {
-                    errors.add(Date() to "Error Adding Novel Repo: ${it.name} : ${e.message}")
+                    errors.add(
+                        Date() to "Error Adding Novel Repo: ${it.name} : ${e.message}",
+                    )
                 }
 
                 restoreProgress += 1

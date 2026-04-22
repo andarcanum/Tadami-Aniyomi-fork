@@ -33,7 +33,7 @@ internal fun resolveAuroraHeroOverlayAlphaStops(isDark: Boolean): List<Pair<Floa
 }
 
 internal fun resolveAuroraHeroOverlayAlphaStops(colors: AuroraColors): List<Pair<Float, Float>> {
-    if (colors.isEInk) {
+    if (colors.isEInk && !colors.isDark) {
         return listOf(
             0.00f to 0.00f,
             0.60f to 0.02f,
@@ -44,17 +44,8 @@ internal fun resolveAuroraHeroOverlayAlphaStops(colors: AuroraColors): List<Pair
 }
 
 internal fun resolveAuroraHeroOverlayBrush(colors: AuroraColors): Brush {
-    if (colors.isEInk) {
-        return Brush.verticalGradient(
-            colorStops = arrayOf(
-                0.00f to Color.Transparent,
-                0.60f to Color.White.copy(alpha = 0.04f),
-                1.00f to Color.White.copy(alpha = 0.14f),
-            ),
-        )
-    }
     val overlayColor = if (colors.isDark) Color.Black else colors.background
-    val stops = resolveAuroraHeroOverlayAlphaStops(colors.isDark)
+    val stops = resolveAuroraHeroOverlayAlphaStops(colors)
         .map { (stop, alpha) -> stop to overlayColor.copy(alpha = alpha) }
         .toTypedArray()
     return Brush.verticalGradient(colorStops = stops)
@@ -84,14 +75,22 @@ internal fun resolveAuroraHeroPanelBorderColor(colors: AuroraColors): Color {
 
 internal fun resolveAuroraHeroTitleColor(colors: AuroraColors): Color {
     if (colors.isEInk) {
-        return Color(0xFF000000)
+        return if (colors.isDark) {
+            colors.textPrimary
+        } else {
+            Color(0xFF000000)
+        }
     }
     return if (colors.isDark) Color.White else colors.textPrimary
 }
 
 internal fun resolveAuroraHeroPrimaryMetaColor(colors: AuroraColors): Color {
     if (colors.isEInk) {
-        return Color(0xFF111111)
+        return if (colors.isDark) {
+            colors.textPrimary.copy(alpha = 0.85f)
+        } else {
+            Color(0xFF111111)
+        }
     }
     return if (colors.isDark) {
         Color.White.copy(alpha = 0.85f)
@@ -102,7 +101,11 @@ internal fun resolveAuroraHeroPrimaryMetaColor(colors: AuroraColors): Color {
 
 internal fun resolveAuroraHeroSecondaryMetaColor(colors: AuroraColors): Color {
     if (colors.isEInk) {
-        return Color(0xFF2F2F2F)
+        return if (colors.isDark) {
+            colors.textSecondary.copy(alpha = 0.68f)
+        } else {
+            Color(0xFF2F2F2F)
+        }
     }
     return if (colors.isDark) {
         Color.White.copy(alpha = 0.68f)

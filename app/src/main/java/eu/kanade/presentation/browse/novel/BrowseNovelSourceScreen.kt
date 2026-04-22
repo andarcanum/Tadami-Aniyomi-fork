@@ -15,7 +15,9 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -157,6 +159,18 @@ private fun NovelListContent(
     onNovelClick: (Novel) -> Unit,
     onNovelLongClick: ((Novel) -> Unit)?,
 ) {
+    val warmupTargets by remember(novels.itemCount) {
+        derivedStateOf {
+            buildList {
+                val upperBound = minOf(novels.itemCount, BROWSE_NOVEL_WARMUP_WINDOW)
+                for (index in 0 until upperBound) {
+                    add(novels[index]?.value?.thumbnailUrl)
+                }
+            }
+        }
+    }
+    NovelPluginImageWarmupEffect(urls = warmupTargets, key = warmupTargets)
+
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     LazyColumn(
         modifier = Modifier.auroraCenteredMaxWidth(
@@ -170,7 +184,6 @@ private fun NovelListContent(
         ) { index ->
             val novel by novels[index]?.collectAsState() ?: return@items
             val cover = novel.asBrowseNovelCover()
-            NovelPluginImageWarmupEffect(cover.url, cover.lastModified)
             EntryListItem(
                 title = novel.title,
                 coverData = cover,
@@ -191,6 +204,18 @@ private fun NovelComfortableGridContent(
     onNovelClick: (Novel) -> Unit,
     onNovelLongClick: ((Novel) -> Unit)?,
 ) {
+    val warmupTargets by remember(novels.itemCount) {
+        derivedStateOf {
+            buildList {
+                val upperBound = minOf(novels.itemCount, BROWSE_NOVEL_WARMUP_WINDOW)
+                for (index in 0 until upperBound) {
+                    add(novels[index]?.value?.thumbnailUrl)
+                }
+            }
+        }
+    }
+    NovelPluginImageWarmupEffect(urls = warmupTargets, key = warmupTargets)
+
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     LazyVerticalGrid(
         columns = columns,
@@ -213,7 +238,6 @@ private fun NovelComfortableGridContent(
         ) { index ->
             val novel by novels[index]?.collectAsState() ?: return@items
             val cover = novel.asBrowseNovelCover()
-            NovelPluginImageWarmupEffect(cover.url, cover.lastModified)
             EntryComfortableGridItem(
                 title = novel.title,
                 coverData = cover,
@@ -241,6 +265,18 @@ private fun NovelCompactGridContent(
     onNovelClick: (Novel) -> Unit,
     onNovelLongClick: ((Novel) -> Unit)?,
 ) {
+    val warmupTargets by remember(novels.itemCount) {
+        derivedStateOf {
+            buildList {
+                val upperBound = minOf(novels.itemCount, BROWSE_NOVEL_WARMUP_WINDOW)
+                for (index in 0 until upperBound) {
+                    add(novels[index]?.value?.thumbnailUrl)
+                }
+            }
+        }
+    }
+    NovelPluginImageWarmupEffect(urls = warmupTargets, key = warmupTargets)
+
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     LazyVerticalGrid(
         columns = columns,
@@ -263,7 +299,6 @@ private fun NovelCompactGridContent(
         ) { index ->
             val novel by novels[index]?.collectAsState() ?: return@items
             val cover = novel.asBrowseNovelCover()
-            NovelPluginImageWarmupEffect(cover.url, cover.lastModified)
             EntryCompactGridItem(
                 title = novel.title.takeIf { showTitle },
                 coverData = cover,
@@ -281,6 +316,8 @@ private fun NovelCompactGridContent(
         }
     }
 }
+
+private const val BROWSE_NOVEL_WARMUP_WINDOW = 12
 
 internal fun Novel.asBrowseNovelCover(): NovelCover {
     return NovelCover(

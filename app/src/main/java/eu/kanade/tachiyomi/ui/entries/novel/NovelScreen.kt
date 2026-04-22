@@ -69,9 +69,11 @@ import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.NavigatorAdaptiveSheet
+import eu.kanade.presentation.entries.EditCoverAction
 import eu.kanade.presentation.entries.novel.NovelChapterSettingsDialog
 import eu.kanade.presentation.entries.novel.NovelScreen
 import eu.kanade.presentation.entries.novel.TranslatedDownloadOptionsDialog
+import eu.kanade.presentation.entries.novel.components.NovelCoverDialog
 import eu.kanade.presentation.entries.novel.components.NovelTranslatedDownloadFormatSelector
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettings
@@ -357,6 +359,7 @@ class NovelScreen(
                     )
                 }
             },
+            onPosterLongClicked = screenModel::showCoverDialog,
             onToggleAllChaptersRead = screenModel::toggleAllChaptersRead,
             onShare = if (canOpenNovelWebView) {
                 {
@@ -688,6 +691,37 @@ class NovelScreen(
                     enableSwipeDismiss = { it.lastItem is MangaTrackInfoDialogHomeScreen },
                     onDismissRequest = screenModel::dismissDialog,
                 )
+            }
+            NovelScreenModel.Dialog.FullCover -> {
+                val sm = rememberScreenModel { NovelCoverScreenModel(successState.novel.id) }
+                val novel by sm.state.collectAsStateWithLifecycle()
+                val coverNovel = novel
+                if (coverNovel != null) {
+                    val getContent = rememberLauncherForActivityResult(
+                        ActivityResultContracts.GetContent(),
+                    ) {
+                        if (it == null) return@rememberLauncherForActivityResult
+                        sm.editCover(context, it)
+                    }
+                    NovelCoverDialog(
+                        novel = coverNovel,
+                        snackbarHostState = sm.snackbarHostState,
+                        isCustomCover = remember(coverNovel) {
+                            coverNovel.thumbnailUrl?.let { sm.coverCache.getCoverFile(it)?.exists() } == true
+                        },
+                        onShareClick = { sm.shareCover(context) },
+                        onSaveClick = { sm.saveCover(context) },
+                        onEditClick = {
+                            when (it) {
+                                EditCoverAction.EDIT -> getContent.launch("image/*")
+                                EditCoverAction.DELETE -> sm.deleteCustomCover(context)
+                            }
+                        },
+                        onDismissRequest = screenModel::dismissDialog,
+                    )
+                } else {
+                    LoadingScreen()
+                }
             }
         }
     }

@@ -24,10 +24,10 @@ internal fun MangaLibraryComfortableGrid(
     items: List<MangaLibraryItem>,
     columns: Int,
     contentPadding: PaddingValues,
-    selection: List<LibraryManga>,
-    onClick: (LibraryManga) -> Unit,
+    selection: List<MangaLibraryItem>,
+    onClick: (MangaLibraryItem) -> Unit,
     onSeriesClicked: (Long) -> Unit,
-    onLongClick: (LibraryManga) -> Unit,
+    onLongClick: (MangaLibraryItem) -> Unit,
     onTogglePinned: (MangaLibraryItem) -> Unit,
     onClickContinueReading: ((LibraryManga) -> Unit)?,
     searchQuery: String?,
@@ -48,8 +48,7 @@ internal fun MangaLibraryComfortableGrid(
             val isSeries = libraryItem is MangaLibraryItem.Series
             val notSelectionMode = selection.isEmpty()
             val title = if (isSeries) libraryItem.title else manga.title
-            val selectionManga = libraryItem.libraryManga
-            val isSelected = selection.fastAny { it.id == selectionManga.id }
+            val isSelected = selection.fastAny { it.id == libraryItem.id }
             val targetManga = if (isSeries) {
                 libraryItem.librarySeries.entries.firstOrNull {
                     it.manga.id == libraryItem.librarySeries.activeManga?.id
@@ -93,14 +92,12 @@ internal fun MangaLibraryComfortableGrid(
                     null
                 },
                 menuContent = null,
-                onLongClick = { onLongClick(selectionManga) },
+                onLongClick = { onLongClick(libraryItem) },
                 onClick = {
-                    if (isSeries) {
-                        if (notSelectionMode) {
-                            onSeriesClicked(libraryItem.librarySeries.id)
-                        }
+                    if (notSelectionMode && isSeries) {
+                        onSeriesClicked(libraryItem.librarySeries.id)
                     } else {
-                        onClick(libraryItem.libraryManga)
+                        onClick(libraryItem)
                     }
                 },
                 onClickContinueViewing = if (

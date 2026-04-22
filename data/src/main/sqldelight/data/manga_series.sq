@@ -8,7 +8,9 @@ CREATE TABLE manga_series (
     sort_order INTEGER NOT NULL DEFAULT 0,
     date_added INTEGER NOT NULL DEFAULT 0,
     cover_last_modified INTEGER NOT NULL DEFAULT 0,
-    pinned INTEGER AS Boolean NOT NULL DEFAULT 0
+    pinned INTEGER AS Boolean NOT NULL DEFAULT 0,
+    cover_mode INTEGER NOT NULL DEFAULT 0,
+    cover_entry_id INTEGER
 );
 
 CREATE INDEX manga_series_category_index ON manga_series(category_id);
@@ -23,8 +25,8 @@ getSeriesByCategory:
 SELECT * FROM manga_series WHERE category_id = :categoryId ORDER BY sort_order;
 
 insert:
-INSERT INTO manga_series(title, description, category_id, sort_order, date_added, cover_last_modified, pinned)
-VALUES (:title, :description, :categoryId, :sortOrder, :dateAdded, :coverLastModified, :pinned);
+INSERT INTO manga_series(title, description, category_id, sort_order, date_added, cover_last_modified, pinned, cover_mode, cover_entry_id)
+VALUES (:title, :description, :categoryId, :sortOrder, :dateAdded, :coverLastModified, :pinned, :coverMode, :coverEntryId);
 
 update:
 UPDATE manga_series
@@ -34,7 +36,9 @@ SET title = coalesce(:title, title),
     sort_order = coalesce(:sortOrder, sort_order),
     date_added = coalesce(:dateAdded, date_added),
     cover_last_modified = coalesce(:coverLastModified, cover_last_modified),
-    pinned = coalesce(:pinned, pinned)
+    pinned = coalesce(:pinned, pinned),
+    cover_mode = coalesce(:coverMode, cover_mode),
+    cover_entry_id = :coverEntryId
 WHERE _id = :id;
 
 delete:

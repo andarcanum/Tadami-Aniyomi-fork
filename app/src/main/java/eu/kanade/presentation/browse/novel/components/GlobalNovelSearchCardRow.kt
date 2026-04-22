@@ -11,7 +11,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.browse.InLibraryBadge
@@ -39,6 +41,16 @@ fun GlobalNovelSearchCardRow(
         return
     }
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
+    val warmupTargets by remember(titles) {
+        derivedStateOf {
+            titles
+                .asSequence()
+                .map { it.thumbnailUrl }
+                .take(GLOBAL_NOVEL_WARMUP_WINDOW)
+                .toList()
+        }
+    }
+    NovelPluginImageWarmupEffect(urls = warmupTargets, key = warmupTargets)
 
     LazyRow(
         modifier = Modifier.auroraCenteredMaxWidth(
@@ -83,6 +95,8 @@ private fun NovelItem(
         )
     }
 }
+
+private const val GLOBAL_NOVEL_WARMUP_WINDOW = 12
 
 @Composable
 private fun EmptyResultItem() {

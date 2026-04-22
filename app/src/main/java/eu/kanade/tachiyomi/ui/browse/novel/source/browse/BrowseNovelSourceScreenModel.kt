@@ -13,6 +13,7 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.core.preference.asState
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.entries.novel.model.toDomainNovel
+import eu.kanade.domain.entries.novel.model.toSNovel
 import eu.kanade.presentation.util.ioCoroutineScope
 import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
 import eu.kanade.tachiyomi.novelsource.model.NovelFilterList
@@ -48,6 +49,7 @@ import tachiyomi.domain.source.novel.service.NovelSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
 
 class BrowseNovelSourceScreenModel(
     private val sourceId: Long,
@@ -67,6 +69,7 @@ class BrowseNovelSourceScreenModel(
 ) : StateScreenModel<BrowseNovelSourceScreenModel.State>(State(Listing.valueOf(listingQuery))) {
 
     var displayMode by sourcePreferences.sourceDisplayMode().asState(screenModelScope)
+    private val novelDetailsInFlight = ConcurrentHashMap.newKeySet<Long>()
 
     val source = sourceManager.getOrStub(sourceId)
 
@@ -147,6 +150,7 @@ class BrowseNovelSourceScreenModel(
                     pagingData
                         .map { networkNovel ->
                             val localNovel = networkToLocalNovel.await(networkNovel.toDomainNovel(sourceId))
+                            maybeFetchMissingNovelDetails(localNovel)
                             resolveGetNovel()
                                 ?.subscribe(localNovel.url, localNovel.source)
                                 ?.filterNotNull()
@@ -158,6 +162,30 @@ class BrowseNovelSourceScreenModel(
                 .cachedIn(ioCoroutineScope)
         }
         .stateIn(ioCoroutineScope, SharingStarted.Lazily, emptyFlow())
+
+    private fun maybeFetchMissingNovelDetails(novel: Novel) {
+        if (novel.id <= 0L) return
+        if (novel.initialized) return
+        if (!novel.thumbnailUrl.isNullOrBlank()) return
+        if (source !is NovelCatalogueSource) return
+        if (!novelDetailsInFlight.add(novel.id)) return
+
+        screenModelScope.launch(ioCoroutineScope.coroutineContext) {
+            try {
+                val networkNovel = source.getNovelDetails(novel.toSNovel())
+                val updatePayload = NovelUpdate(
+                    id = novel.id,
+                    thumbnailUrl = networkNovel.thumbnail_url?.takeIf { it.isNotBlank() } ?: novel.thumbnailUrl,
+                    initialized = true,
+                )
+                resolveUpdateNovel()?.await(updatePayload)
+            } catch (_: Exception) {
+                // Best-effort background enrichment; keep browse flow resilient.
+            } finally {
+                novelDetailsInFlight.remove(novel.id)
+            }
+        }
+    }
 
     fun resetFilters() {
         if (source !is NovelCatalogueSource) return

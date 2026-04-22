@@ -18,6 +18,7 @@ import tachiyomi.domain.entries.manga.model.MangaCover
 @Composable
 fun SeriesStackedCoverCard(
     covers: List<MangaCover>,
+    customCoverData: Any? = null,
     modifier: Modifier = Modifier,
     isSelected: Boolean = false,
 ) {
@@ -55,7 +56,7 @@ fun SeriesStackedCoverCard(
             }
 
             ItemCover.Book(
-                data = covers.firstOrNull(),
+                data = customCoverData ?: covers.firstOrNull(),
                 modifier = Modifier
                     .fillMaxSize()
                     .shadow(4.dp, RoundedCornerShape(4.dp))

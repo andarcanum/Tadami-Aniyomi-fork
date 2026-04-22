@@ -6,6 +6,7 @@ import org.junit.jupiter.api.parallel.Execution
 import org.junit.jupiter.api.parallel.ExecutionMode
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.library.novel.LibraryNovel
+import tachiyomi.domain.series.model.SeriesCoverMode
 
 @Execution(ExecutionMode.CONCURRENT)
 class LibraryNovelSeriesTest {
@@ -165,6 +166,27 @@ class LibraryNovelSeriesTest {
         )
 
         series.pinned shouldBe true
+    }
+
+    @Test
+    fun `series exposes cover selection state`() {
+        val series = LibraryNovelSeries(
+            series = NovelSeries(
+                id = 1L,
+                title = "Series",
+                description = null,
+                categoryId = 0L,
+                sortOrder = 0L,
+                dateAdded = 0L,
+                coverLastModified = 0L,
+                coverMode = SeriesCoverMode.AUTO,
+                coverEntryId = null,
+            ),
+            entries = emptyList(),
+        )
+
+        series.series.coverMode shouldBe SeriesCoverMode.AUTO
+        series.series.coverEntryId shouldBe null
     }
 
     private fun libraryNovel(

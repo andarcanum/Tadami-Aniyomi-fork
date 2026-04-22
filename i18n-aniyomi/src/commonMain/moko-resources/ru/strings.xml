@@ -516,8 +516,8 @@
     <string name="novel_reader_gemini_prompt_mode_adult">18+ (оригинальный промпт)</string>
     <string name="novel_reader_gemini_prompt_modifiers">Модификаторы промпта</string>
     <string name="novel_reader_gemini_prompt_modifiers_hint">Дополнительные инструкции, добавляемые к системному промпту</string>
-    <string name="novel_reader_gemini_enabled">Включить Gemini переводчик</string>
-    <string name="novel_reader_gemini_enabled_summary">Показывает элементы Gemini в ридере ранобэ (AI меню и кнопку над слайдером)</string>
+    <string name="novel_reader_gemini_enabled">Включить AI переводчик</string>
+    <string name="novel_reader_gemini_enabled_summary">Показывает элементы AI в ридере ранобэ (AI меню и кнопку над слайдером)</string>
     <string name="novel_reader_gemini_button">AI</string>
     <string name="novel_reader_gemini_button_active">AI*</string>
     <string name="novel_reader_gemini_dialog_title">Gemini перевод</string>

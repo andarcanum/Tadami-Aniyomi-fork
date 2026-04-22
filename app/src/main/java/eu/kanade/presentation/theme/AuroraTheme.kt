@@ -241,7 +241,7 @@ data class AuroraColors(
             achievementGold = Color(0xFF4A4A4A),
         )
 
-        val EInkDark = EInk.copy(
+        val EInkDark = AuroraColors(
             accent = Color(0xFFFFFFFF),
             accentVariant = Color(0xFFE0E0E0),
             background = Color(0xFF000000),
@@ -256,6 +256,7 @@ data class AuroraColors(
             divider = Color(0xFFE0E0E0),
             eInkProfile = EInkProfile.MONOCHROME,
             isDark = true,
+            isEInk = true,
             progressCyan = Color(0xFFE0E0E0),
             glowEffect = Color(0xFFE0E0E0),
             gradientPurple = Color(0xFFB0B0B0),
@@ -290,7 +291,7 @@ data class AuroraColors(
             } else {
                 colorScheme.tertiary.copy(alpha = 0.10f).compositeOver(base.glass)
             }
-            return base.copy(
+            return AuroraColors(
                 accent = colorScheme.primary,
                 accentVariant = colorScheme.primaryContainer,
                 background = backgroundTint,
@@ -304,6 +305,8 @@ data class AuroraColors(
                 cardBackground = cardTint,
                 divider = colorScheme.outlineVariant,
                 eInkProfile = EInkProfile.COLOR,
+                isDark = isDark,
+                isEInk = true,
                 progressCyan = colorScheme.secondary,
                 glowEffect = colorScheme.primary,
                 gradientPurple = colorScheme.tertiary,

@@ -89,6 +89,8 @@ import eu.kanade.presentation.entries.components.AuroraEntryHoldToRefresh
 import eu.kanade.presentation.entries.components.EntryBottomActionMenu
 import eu.kanade.presentation.entries.components.ResolvedCover
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionFab
+import eu.kanade.presentation.entries.components.aurora.AuroraZIndex
+import eu.kanade.presentation.entries.components.aurora.auroraPosterLongPress
 import eu.kanade.presentation.entries.components.normalizeAuroraGlobalSearchQuery
 import eu.kanade.presentation.entries.components.resolveExternalMetadataCover
 import eu.kanade.presentation.entries.reduceTitleFastScrollOverlayAccumulator
@@ -146,6 +148,7 @@ fun AnimeScreenAuroraImpl(
     onContinueWatching: () -> Unit,
     onSearch: (query: String, global: Boolean) -> Unit,
     onCoverClicked: () -> Unit,
+    onPosterLongClicked: (() -> Unit)? = onCoverClicked,
     onShareClicked: (() -> Unit)?,
     onDownloadActionClicked: ((DownloadAction) -> Unit)?,
     onEditCategoryClicked: (() -> Unit)?,
@@ -384,7 +387,11 @@ fun AnimeScreenAuroraImpl(
         modifier = Modifier.fillMaxSize(),
         indicatorPadding = WindowInsets.statusBars.asPaddingValues(),
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .auroraPosterLongPress(onPosterLongClicked ?: onCoverClicked),
+        ) {
             // Fixed background poster
             FullscreenPosterBackground(
                 anime = anime,
@@ -418,7 +425,7 @@ fun AnimeScreenAuroraImpl(
                 TwoPanelBox(
                     modifier = Modifier
                         .fillMaxSize()
-                        .zIndex(2f),
+                        .zIndex(AuroraZIndex.HERO),
                     startContent = {
                         Column(
                             modifier = Modifier
@@ -498,7 +505,7 @@ fun AnimeScreenAuroraImpl(
                             thumbAllowed = { paneFastScrollSpec.thumbAllowed },
                             topContentPadding = with(paneDensity) { paneFastScrollSpec.topPaddingPx.toDp() },
                             endContentPadding = 12.dp,
-                            modifier = Modifier.zIndex(1f),
+                            modifier = Modifier.zIndex(AuroraZIndex.BASE),
                         ) {
                             LazyColumn(
                                 state = lazyListState,
@@ -663,7 +670,7 @@ fun AnimeScreenAuroraImpl(
                     thumbAllowed = { fastScrollSpec.thumbAllowed },
                     topContentPadding = with(density) { fastScrollSpec.topPaddingPx.toDp() },
                     bottomContentPadding = 100.dp,
-                    modifier = Modifier.zIndex(1f),
+                    modifier = Modifier.zIndex(AuroraZIndex.BASE),
                 ) {
                     LazyColumn(
                         state = lazyListState,
@@ -869,7 +876,7 @@ fun AnimeScreenAuroraImpl(
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .zIndex(2f)
+                        .zIndex(AuroraZIndex.HERO)
                         .padding(bottom = 0.dp),
                     contentAlignment = Alignment.BottomStart,
                 ) {
@@ -877,7 +884,7 @@ fun AnimeScreenAuroraImpl(
 
                     Box(
                         modifier = Modifier
-                            .zIndex(2f)
+                            .zIndex(AuroraZIndex.HERO)
                             .graphicsLayer { alpha = heroAlpha },
                     ) {
                         AnimeHeroContent(
@@ -902,7 +909,7 @@ fun AnimeScreenAuroraImpl(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .zIndex(2f)
+                        .zIndex(AuroraZIndex.HERO)
                         .padding(end = 20.dp, bottom = 20.dp),
                     contentAlignment = Alignment.BottomEnd,
                 ) {
@@ -924,7 +931,7 @@ fun AnimeScreenAuroraImpl(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .zIndex(2f)
+                    .zIndex(AuroraZIndex.HERO)
                     .graphicsLayer {
                         alpha = overlayChromeAlpha
                         translationY = overlayChromeOffsetY * size.height
@@ -1049,13 +1056,14 @@ fun AnimeScreenAuroraImpl(
                 alwaysUseExternalPlayer = alwaysUseExternalPlayer,
                 modifier = Modifier
                     .align(if (useTwoPaneLayout) Alignment.BottomEnd else Alignment.BottomCenter)
-                    .zIndex(AURORA_SELECTION_STACK_Z_INDEX)
+                    .zIndex(AuroraZIndex.SELECTION)
                     .padding(WindowInsets.systemBars.asPaddingValues()),
             )
             SnackbarHost(
                 hostState = snackbarHostState,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
+                    .zIndex(AuroraZIndex.SNACKBAR)
                     .padding(WindowInsets.systemBars.asPaddingValues()),
             )
         }
@@ -1228,8 +1236,6 @@ internal fun resolveAnimeAuroraFastScrollBlockStartIndex(
 
 private const val ANIME_AURORA_EPISODES_HEADER_KEY = "anime-aurora-episodes-header"
 private val ANIME_AURORA_FAST_SCROLL_ITEM_TOP_INSET = 6.dp
-private const val AURORA_SELECTION_STACK_Z_INDEX = 3f
-
 internal enum class AuroraEpisodeClickAction {
     OpenEpisode,
     SelectEpisode,

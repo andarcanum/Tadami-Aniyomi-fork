@@ -157,11 +157,64 @@ class MangaLibraryScreenModelSeriesTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         screenModel.state.value.library.values.single().shouldContainExactly(
-            MangaLibraryItem.Single(single, downloadCountValue = 0, sourceManager = sourceManager),
             MangaLibraryItem.Series(series, sourceManager = sourceManager),
+            MangaLibraryItem.Single(single, downloadCountValue = 0, sourceManager = sourceManager),
         )
-        screenModel.state.value.library.values.single()[1].id shouldBe -series.id
-        screenModel.state.value.library.values.single()[1].title shouldBe "Series"
+        screenModel.state.value.library.values.single()[0].id shouldBe -series.id
+        screenModel.state.value.library.values.single()[0].title shouldBe "Series"
+    }
+
+    @Test
+    fun `places series into its own category not first entry category`() = runTest(testDispatcher) {
+        val defaultCategory = category(id = 0L, name = "Default")
+        val seriesCategory = category(id = 2L, name = "Series category")
+        categoriesFlow.value = listOf(defaultCategory, seriesCategory)
+
+        val seriesManga = libraryManga(id = 2L, title = "Series Volume")
+        val series = librarySeries(
+            id = 7L,
+            title = "Series",
+            entries = listOf(seriesManga),
+            categoryId = 2L,
+        )
+        mangaFlow.value = listOf(seriesManga)
+        seriesFlow.value = listOf(series)
+        seriesIdsFlow.value = setOf(seriesManga.id)
+
+        val screenModel = MangaLibraryScreenModel(
+            getLibraryManga = getLibraryManga,
+            getLibraryMangaSeries = getLibraryMangaSeries,
+            getMangaIdsInAnySeries = getMangaIdsInAnySeries,
+            getCategories = getCategories,
+            getTracksPerManga = getTracksPerManga,
+            getNextChapters = mockk(relaxed = true),
+            getChaptersByMangaId = mockk(relaxed = true),
+            setReadStatus = mockk(relaxed = true),
+            updateManga = mockk(relaxed = true),
+            setMangaCategories = mockk(relaxed = true),
+            createMangaSeries = createMangaSeries,
+            addMangasToSeries = addMangasToSeries,
+            updateMangaSeries = updateMangaSeries,
+            preferences = basePreferences,
+            libraryPreferences = libraryPreferences,
+            coverCache = mockk(relaxed = true),
+            sourceManager = sourceManager,
+            downloadManager = mockk(relaxed = true),
+            downloadCache = downloadCache,
+            trackerManager = trackerManager,
+        )
+        activeScreenModels += screenModel
+
+        advanceTimeBy(SEARCH_DEBOUNCE_MILLIS + 1)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val seriesInDefault = screenModel.state.value.library[defaultCategory].orEmpty()
+            .filterIsInstance<MangaLibraryItem.Series>()
+        val seriesInSeriesCategory = screenModel.state.value.library[seriesCategory].orEmpty()
+            .filterIsInstance<MangaLibraryItem.Series>()
+
+        seriesInDefault shouldBe emptyList()
+        seriesInSeriesCategory.map { it.librarySeries.id } shouldContainExactly listOf(7L)
     }
 
     @Test
@@ -254,6 +307,54 @@ class MangaLibraryScreenModelSeriesTest {
         screenModel.selectAll(0)
 
         screenModel.state.value.selection.map { it.id }.shouldContainExactly(single.id)
+    }
+
+    @Test
+    fun `long pressing series selects series item`() = runTest(testDispatcher) {
+        val seriesManga = libraryManga(id = 2L, title = "Series Volume")
+        val series = librarySeries(
+            id = 7L,
+            title = "Series",
+            manga = seriesManga,
+        )
+        mangaFlow.value = listOf(seriesManga)
+        seriesFlow.value = listOf(series)
+        seriesIdsFlow.value = setOf(seriesManga.id)
+
+        val screenModel = MangaLibraryScreenModel(
+            getLibraryManga = getLibraryManga,
+            getLibraryMangaSeries = getLibraryMangaSeries,
+            getMangaIdsInAnySeries = getMangaIdsInAnySeries,
+            getCategories = getCategories,
+            getTracksPerManga = getTracksPerManga,
+            getNextChapters = mockk(relaxed = true),
+            getChaptersByMangaId = mockk(relaxed = true),
+            setReadStatus = mockk(relaxed = true),
+            updateManga = mockk(relaxed = true),
+            setMangaCategories = mockk(relaxed = true),
+            createMangaSeries = createMangaSeries,
+            addMangasToSeries = addMangasToSeries,
+            updateMangaSeries = updateMangaSeries,
+            preferences = basePreferences,
+            libraryPreferences = libraryPreferences,
+            coverCache = mockk(relaxed = true),
+            sourceManager = sourceManager,
+            downloadManager = mockk(relaxed = true),
+            downloadCache = downloadCache,
+            trackerManager = trackerManager,
+        )
+        activeScreenModels += screenModel
+
+        advanceTimeBy(SEARCH_DEBOUNCE_MILLIS + 1)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val seriesItem = screenModel.state.value.library.values.single()
+            .filterIsInstance<MangaLibraryItem.Series>()
+            .single()
+
+        screenModel.toggleRangeSelection(seriesItem)
+
+        screenModel.state.value.selection.map { it.id }.shouldContainExactly(seriesItem.id)
     }
 
     @Test
@@ -376,6 +477,7 @@ class MangaLibraryScreenModelSeriesTest {
         title: String,
         manga: LibraryManga? = null,
         entries: List<LibraryManga>? = null,
+        categoryId: Long = 0L,
     ): LibraryMangaSeries {
         val actualEntries = entries ?: listOfNotNull(manga)
         return LibraryMangaSeries(
@@ -383,7 +485,7 @@ class MangaLibraryScreenModelSeriesTest {
                 id = id,
                 title = title,
                 description = null,
-                categoryId = 0L,
+                categoryId = categoryId,
                 sortOrder = 0L,
                 dateAdded = 0L,
                 coverLastModified = 0L,
@@ -392,10 +494,10 @@ class MangaLibraryScreenModelSeriesTest {
         )
     }
 
-    private fun category(): Category {
+    private fun category(id: Long = 0L, name: String = "Default"): Category {
         return Category(
-            id = 0L,
-            name = "Default",
+            id = id,
+            name = name,
             order = 0,
             flags = 0,
             hidden = false,

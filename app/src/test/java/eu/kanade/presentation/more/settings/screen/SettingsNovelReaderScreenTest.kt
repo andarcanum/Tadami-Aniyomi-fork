@@ -11,7 +11,7 @@ class SettingsNovelReaderScreenTest {
         val geminiEnabledSettings = novelReaderDisplayTopSettingSpecs(
             geminiEnabled = true,
             googleTranslateEnabled = false,
-            geminiEnabledTitle = "Gemini translator",
+            geminiEnabledTitle = "AI translator",
             geminiPromptModeTitle = "Prompt mode",
             googleTranslateEnabledTitle = "Google translator",
             googleTranslateEnabledSubtitle = "Google subtitle",
@@ -19,7 +19,7 @@ class SettingsNovelReaderScreenTest {
         val googleEnabledSettings = novelReaderDisplayTopSettingSpecs(
             geminiEnabled = false,
             googleTranslateEnabled = true,
-            geminiEnabledTitle = "Gemini translator",
+            geminiEnabledTitle = "AI translator",
             geminiPromptModeTitle = "Prompt mode",
             googleTranslateEnabledTitle = "Google translator",
             googleTranslateEnabledSubtitle = "Google subtitle",

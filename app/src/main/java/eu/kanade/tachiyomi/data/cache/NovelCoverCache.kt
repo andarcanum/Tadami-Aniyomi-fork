@@ -4,6 +4,7 @@ import android.content.Context
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import tachiyomi.domain.entries.novel.model.Novel
 import java.io.File
+import java.io.InputStream
 
 class NovelCoverCache private constructor(
     private val cacheDir: File,
@@ -25,6 +26,12 @@ class NovelCoverCache private constructor(
     fun getCoverFile(novelThumbnailUrl: String?): File? {
         return novelThumbnailUrl?.let {
             File(cacheDir, DiskUtil.hashKeyForDisk(it))
+        }
+    }
+
+    fun setCustomCoverToCache(novel: Novel, inputStream: InputStream) {
+        getCoverFile(novel.thumbnailUrl)?.outputStream()?.use {
+            inputStream.copyTo(it)
         }
     }
 

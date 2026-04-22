@@ -23,6 +23,7 @@ import eu.kanade.tachiyomi.data.cache.AnimeCoverCache
 import eu.kanade.tachiyomi.data.cache.ChapterCache
 import eu.kanade.tachiyomi.data.cache.MangaCoverCache
 import eu.kanade.tachiyomi.data.cache.NovelCoverCache
+import eu.kanade.tachiyomi.data.cache.SeriesCoverCache
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadCache
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadProvider
@@ -368,6 +369,7 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory { AnimeCoverCache(app) }
         addSingletonFactory { AnimeBackgroundCache(app) }
         addSingletonFactory { NovelCoverCache(app) }
+        addSingletonFactory { SeriesCoverCache(app) }
 
         // Anime metadata caches
         addSingletonFactory { tachiyomi.data.shikimori.ShikimoriMetadataCache(get()) }

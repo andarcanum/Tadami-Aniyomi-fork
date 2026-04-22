@@ -10,6 +10,7 @@ import coil3.size.Precision
 import coil3.size.Scale
 import coil3.size.Size
 import eu.kanade.tachiyomi.data.cache.NovelCoverCache
+import eu.kanade.tachiyomi.source.novel.NovelPluginImagePayload
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import okhttp3.Call
@@ -28,6 +29,61 @@ class NovelCoverFetcherTest {
 
     @TempDir
     lateinit var tempDir: Path
+
+    @Test
+    fun `fetch resolves plugin image urls through plugin resolver`() {
+        runTest {
+            val context = mockk<android.content.Context>(relaxed = true)
+            val imageLoader = mockk<ImageLoader>(relaxed = true)
+            val data = NovelCover(
+                novelId = 5L,
+                sourceId = 101L,
+                isNovelFavorite = false,
+                url = "novelimg://plugin-a?ref=cover-a",
+                lastModified = 42L,
+            )
+            val options = Options(
+                context = context,
+                size = Size.ORIGINAL,
+                scale = Scale.FIT,
+                precision = Precision.EXACT,
+                diskCacheKey = "novel-plugin-image-test",
+                fileSystem = FileSystem.SYSTEM,
+                memoryCachePolicy = CachePolicy.ENABLED,
+                diskCachePolicy = CachePolicy.ENABLED,
+                networkCachePolicy = CachePolicy.ENABLED,
+                extras = Extras.EMPTY,
+            )
+
+            val result = NovelCoverFetcher(
+                data = data,
+                options = options,
+                sourceSiteUrlLazy = lazy { null },
+                coverFileLazy = lazy { null },
+                diskCacheKeyLazy = lazy { "novel-plugin-image-test" },
+                pluginHeadersProvider = { emptyMap() },
+                callFactoryLazy = lazy {
+                    object : Call.Factory {
+                        override fun newCall(request: Request): Call {
+                            error("network should not be called for plugin images")
+                        }
+                    }
+                },
+                imageLoader = imageLoader,
+                pluginImageResolver = { _ ->
+                    NovelPluginImagePayload(
+                        bytes = "fake-image".toByteArray(),
+                        mimeType = "image/png",
+                    )
+                },
+            ).fetch()
+
+            assertTrue(result is SourceFetchResult)
+            result as SourceFetchResult
+            assertEquals(DataSource.NETWORK, result.dataSource)
+            assertEquals("image/png", result.mimeType)
+        }
+    }
 
     @Test
     fun `fetch prefers dedicated library cover cache for favorite novels before network`() {

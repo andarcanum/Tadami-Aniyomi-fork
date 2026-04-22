@@ -76,6 +76,8 @@ class NovelSeriesRepositoryImpl(
                 dateAdded = series.dateAdded,
                 coverLastModified = series.coverLastModified,
                 pinned = series.pinned,
+                coverMode = series.coverMode.value,
+                coverEntryId = series.coverEntryId,
             )
             db.novel_seriesQueries.selectLastInsertedRowId()
         }
@@ -92,6 +94,8 @@ class NovelSeriesRepositoryImpl(
                 dateAdded = series.dateAdded,
                 coverLastModified = series.coverLastModified,
                 pinned = series.pinned,
+                coverMode = series.coverMode.value,
+                coverEntryId = series.coverEntryId,
             )
         }
     }

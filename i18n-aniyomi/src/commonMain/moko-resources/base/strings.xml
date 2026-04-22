@@ -750,8 +750,8 @@
     <string name="novel_reader_gemini_prompt_mode_adult">18+ (Original prompt)</string>
     <string name="novel_reader_gemini_prompt_modifiers">Prompt modifiers</string>
     <string name="novel_reader_gemini_prompt_modifiers_hint">Optional extra instructions appended to the system prompt</string>
-    <string name="novel_reader_gemini_enabled">Enable Gemini translator</string>
-    <string name="novel_reader_gemini_enabled_summary">Shows Gemini controls in novel reader (AI menu and quick button above seekbar)</string>
+    <string name="novel_reader_gemini_enabled">Enable AI translator</string>
+    <string name="novel_reader_gemini_enabled_summary">Shows AI controls in novel reader (AI menu and quick button above seekbar)</string>
     <string name="novel_reader_gemini_button">AI</string>
     <string name="novel_reader_gemini_button_active">AI*</string>
     <string name="novel_reader_gemini_dialog_title">Gemini Translation</string>

@@ -49,3 +49,10 @@ internal fun NovelPluginImageWarmupEffect(url: String?, lastModified: Long) {
         NovelPluginImageWarmup.warmup(listOf(url))
     }
 }
+
+@Composable
+internal fun NovelPluginImageWarmupEffect(urls: List<String?>, key: Any?) {
+    LaunchedEffect(key) {
+        NovelPluginImageWarmup.warmup(urls)
+    }
+}
