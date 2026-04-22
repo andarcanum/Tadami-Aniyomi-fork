@@ -75,8 +75,8 @@ import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.AuroraEntryHoldToRefresh
 import eu.kanade.presentation.entries.components.EntryBottomActionMenu
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionFab
-import eu.kanade.presentation.entries.components.aurora.auroraPosterLongPress
 import eu.kanade.presentation.entries.components.aurora.AuroraZIndex
+import eu.kanade.presentation.entries.components.aurora.auroraPosterLongPress
 import eu.kanade.presentation.entries.components.normalizeAuroraGlobalSearchQuery
 import eu.kanade.presentation.entries.components.resolveExternalMetadataCover
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadAction
@@ -383,7 +383,7 @@ fun MangaScreenAuroraImpl(
                 TwoPanelBox(
                     modifier = Modifier
                         .fillMaxSize()
-                        .zIndex(AuroraZIndex.Hero),
+                        .zIndex(AuroraZIndex.HERO),
                     startContent = {
                         Column(
                             modifier = Modifier
@@ -459,7 +459,7 @@ fun MangaScreenAuroraImpl(
                             thumbAllowed = { paneFastScrollSpec.thumbAllowed },
                             topContentPadding = with(paneDensity) { paneFastScrollSpec.topPaddingPx.toDp() },
                             endContentPadding = 12.dp,
-                            modifier = Modifier.zIndex(AuroraZIndex.Base),
+                            modifier = Modifier.zIndex(AuroraZIndex.BASE),
                         ) {
                             LazyColumn(
                                 state = lazyListState,
@@ -638,7 +638,7 @@ fun MangaScreenAuroraImpl(
                     thumbAllowed = { fastScrollSpec.thumbAllowed },
                     topContentPadding = with(density) { fastScrollSpec.topPaddingPx.toDp() },
                     bottomContentPadding = 100.dp,
-                    modifier = Modifier.zIndex(AuroraZIndex.Base),
+                    modifier = Modifier.zIndex(AuroraZIndex.BASE),
                 ) {
                     LazyColumn(
                         state = lazyListState,
@@ -855,7 +855,7 @@ fun MangaScreenAuroraImpl(
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .zIndex(AuroraZIndex.Hero)
+                        .zIndex(AuroraZIndex.HERO)
                         .padding(bottom = 0.dp),
                     contentAlignment = Alignment.BottomStart,
                 ) {
@@ -864,7 +864,7 @@ fun MangaScreenAuroraImpl(
 
                     Box(
                         modifier = Modifier
-                            .zIndex(AuroraZIndex.Hero)
+                            .zIndex(AuroraZIndex.HERO)
                             .graphicsLayer { alpha = heroAlpha },
                     ) {
                         MangaHeroContent(
@@ -885,7 +885,7 @@ fun MangaScreenAuroraImpl(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .zIndex(AuroraZIndex.Hero)
+                        .zIndex(AuroraZIndex.HERO)
                         .padding(end = 20.dp, bottom = 20.dp),
                     contentAlignment = Alignment.BottomEnd,
                 ) {
@@ -907,7 +907,7 @@ fun MangaScreenAuroraImpl(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .zIndex(AuroraZIndex.Hero)
+                    .zIndex(AuroraZIndex.HERO)
                     .graphicsLayer {
                         alpha = overlayChromeAlpha
                         translationY = overlayChromeOffsetY * size.height
@@ -1016,14 +1016,14 @@ fun MangaScreenAuroraImpl(
                 fillFraction = if (useTwoPaneLayout) 0.5f else 1f,
                 modifier = Modifier
                     .align(if (useTwoPaneLayout) Alignment.BottomEnd else Alignment.BottomCenter)
-                    .zIndex(AuroraZIndex.Selection)
+                    .zIndex(AuroraZIndex.SELECTION)
                     .padding(WindowInsets.systemBars.asPaddingValues()),
             )
             SnackbarHost(
                 hostState = snackbarHostState,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .zIndex(AuroraZIndex.Snackbar)
+                    .zIndex(AuroraZIndex.SNACKBAR)
                     .padding(WindowInsets.systemBars.asPaddingValues()),
             )
         }

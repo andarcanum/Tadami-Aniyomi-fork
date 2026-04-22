@@ -785,7 +785,10 @@ class MangaLibraryScreenModel(
                     else -> return@mutate
                 }
                 val newSelections = selectionRange.mapNotNull { index ->
-                    MangaLibraryItem.Single(items[index], sourceManager = sourceManager).takeUnless { it.id in selectedIds }
+                    MangaLibraryItem.Single(items[index], sourceManager = sourceManager).takeUnless {
+                        it.id in
+                            selectedIds
+                    }
                 }
                 list.addAll(newSelections)
             }

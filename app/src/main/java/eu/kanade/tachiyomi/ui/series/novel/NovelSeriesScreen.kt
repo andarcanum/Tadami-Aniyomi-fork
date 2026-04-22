@@ -14,9 +14,9 @@ import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.presentation.series.components.SeriesCategoryOption
 import eu.kanade.presentation.series.components.SeriesCoverDialog
 import eu.kanade.presentation.series.components.SeriesCoverEntryOption
-import eu.kanade.presentation.series.components.SeriesCategoryOption
 import eu.kanade.presentation.series.novel.NovelSeriesAuroraContent
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen

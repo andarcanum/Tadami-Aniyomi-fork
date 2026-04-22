@@ -2,26 +2,19 @@ package eu.kanade.presentation.entries.anime.components
 
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,8 +24,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
@@ -50,14 +41,11 @@ import eu.kanade.presentation.entries.components.aurora.AuroraPosterDialog
 import eu.kanade.presentation.entries.components.aurora.AuroraZoomablePoster
 import eu.kanade.tachiyomi.data.coil.useBackground
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
-import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.core.common.util.lang.launchUI
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
-import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
-import tachiyomi.presentation.core.util.clickableNoIndication
 
 @Composable
 fun AnimeImagesDialog(
@@ -163,47 +151,47 @@ fun AnimeImagesDialog(
             }
         },
     ) { contentPadding ->
-            val statusBarPaddingPx = with(LocalDensity.current) { contentPadding.calculateTopPadding().roundToPx() }
-            val bottomPaddingPx = with(LocalDensity.current) { contentPadding.calculateBottomPadding().roundToPx() }
+        val statusBarPaddingPx = with(LocalDensity.current) { contentPadding.calculateTopPadding().roundToPx() }
+        val bottomPaddingPx = with(LocalDensity.current) { contentPadding.calculateBottomPadding().roundToPx() }
 
-            AuroraZoomablePoster(onDismissRequest = onDismissRequest) {
-                HorizontalPager(
-                    state = pagerState,
-                ) { page ->
-                    AndroidView(
-                        factory = {
-                            ReaderPageImageView(it).apply {
-                                onViewClicked = onDismissRequest
-                                clipToPadding = false
-                                clipChildren = false
+        AuroraZoomablePoster(onDismissRequest = onDismissRequest) {
+            HorizontalPager(
+                state = pagerState,
+            ) { page ->
+                AndroidView(
+                    factory = {
+                        ReaderPageImageView(it).apply {
+                            onViewClicked = onDismissRequest
+                            clipToPadding = false
+                            clipChildren = false
+                        }
+                    },
+                    update = { view ->
+                        val context = view.context
+                        val request = ImageRequest.Builder(context)
+                            .data(anime)
+                            .useBackground(page == 1)
+                            .size(Size.ORIGINAL)
+                            .memoryCachePolicy(CachePolicy.DISABLED)
+                            .target { image ->
+                                val drawable = image.asDrawable(context.resources)
+                                // Copy bitmap in case it came from memory cache
+                                // Because SSIV needs to thoroughly read the image
+                                val copy = (drawable as? BitmapDrawable)?.let {
+                                    BitmapDrawable(
+                                        context.resources,
+                                        it.bitmap.copy(Bitmap.Config.HARDWARE, false),
+                                    )
+                                } ?: drawable
+                                view.setImage(copy, ReaderPageImageView.Config(zoomDuration = 500))
                             }
-                        },
-                        update = { view ->
-                            val context = view.context
-                            val request = ImageRequest.Builder(context)
-                                .data(anime)
-                                .useBackground(page == 1)
-                                .size(Size.ORIGINAL)
-                                .memoryCachePolicy(CachePolicy.DISABLED)
-                                .target { image ->
-                                    val drawable = image.asDrawable(context.resources)
-                                    // Copy bitmap in case it came from memory cache
-                                    // Because SSIV needs to thoroughly read the image
-                                    val copy = (drawable as? BitmapDrawable)?.let {
-                                        BitmapDrawable(
-                                            context.resources,
-                                            it.bitmap.copy(Bitmap.Config.HARDWARE, false),
-                                        )
-                                    } ?: drawable
-                                    view.setImage(copy, ReaderPageImageView.Config(zoomDuration = 500))
-                                }
-                                .build()
-                            context.imageLoader.enqueue(request)
-                            view.updatePadding(top = statusBarPaddingPx, bottom = bottomPaddingPx)
-                        },
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
+                            .build()
+                        context.imageLoader.enqueue(request)
+                        view.updatePadding(top = statusBarPaddingPx, bottom = bottomPaddingPx)
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
         }
+    }
 }

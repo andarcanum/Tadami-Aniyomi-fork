@@ -199,7 +199,9 @@ data object MangaLibraryTab : Tab {
                             state.selection.fastAll { selected ->
                                 when (selected) {
                                     is MangaLibraryItem.Single -> !selected.libraryManga.manga.isLocal()
-                                    is MangaLibraryItem.Series -> selected.librarySeries.entries.fastAll { !it.manga.isLocal() }
+                                    is MangaLibraryItem.Series -> selected.librarySeries.entries.fastAll {
+                                        !it.manga.isLocal()
+                                    }
                                 }
                             }
                         },

@@ -14,10 +14,10 @@ import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.presentation.series.components.SeriesCategoryOption
 import eu.kanade.presentation.series.components.SeriesCoverDialog
 import eu.kanade.presentation.series.components.SeriesCoverEntryOption
 import eu.kanade.presentation.series.manga.MangaSeriesAuroraContent
-import eu.kanade.presentation.series.components.SeriesCategoryOption
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreen
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import tachiyomi.presentation.core.screens.LoadingScreen

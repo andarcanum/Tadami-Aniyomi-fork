@@ -6,8 +6,8 @@ import androidx.compose.runtime.Immutable
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.tachiyomi.data.cache.SeriesCoverCache
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import tachiyomi.domain.category.novel.interactor.GetNovelCategories
@@ -16,6 +16,7 @@ import tachiyomi.domain.category.novel.model.NovelCategory
 import tachiyomi.domain.items.novelchapter.interactor.GetNovelChapters
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.library.novel.LibraryNovel
+import tachiyomi.domain.series.model.SeriesCoverMode
 import tachiyomi.domain.series.novel.interactor.AddNovelsToSeries
 import tachiyomi.domain.series.novel.interactor.DeleteNovelSeries
 import tachiyomi.domain.series.novel.interactor.GetNovelSeriesWithEntries
@@ -23,7 +24,6 @@ import tachiyomi.domain.series.novel.interactor.RemoveNovelFromSeries
 import tachiyomi.domain.series.novel.interactor.ReorderSeriesEntries
 import tachiyomi.domain.series.novel.interactor.UpdateNovelSeries
 import tachiyomi.domain.series.novel.model.LibraryNovelSeries
-import tachiyomi.domain.series.model.SeriesCoverMode
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File

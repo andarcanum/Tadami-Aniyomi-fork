@@ -76,9 +76,9 @@ import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.AuroraEntryHoldToRefresh
 import eu.kanade.presentation.entries.components.EntryBottomActionMenu
-import eu.kanade.presentation.entries.components.aurora.auroraPosterLongPress
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionFab
 import eu.kanade.presentation.entries.components.aurora.AuroraZIndex
+import eu.kanade.presentation.entries.components.aurora.auroraPosterLongPress
 import eu.kanade.presentation.entries.components.normalizeAuroraGlobalSearchQuery
 import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
 import eu.kanade.presentation.entries.novel.components.aurora.ChaptersHeader
@@ -343,21 +343,21 @@ fun NovelScreenAuroraImpl(
             modifier = Modifier.fillMaxSize(),
             indicatorPadding = WindowInsets.statusBars.asPaddingValues(),
         ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(posterLongPressModifier),
-        ) {
-            FullscreenPosterBackground(
-                novel = novel,
-                scrollOffset = 0,
-                firstVisibleItemIndex = 0,
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(posterLongPressModifier),
+            ) {
+                FullscreenPosterBackground(
+                    novel = novel,
+                    scrollOffset = 0,
+                    firstVisibleItemIndex = 0,
+                )
 
                 TwoPanelBox(
                     modifier = Modifier
                         .fillMaxSize()
-                        .zIndex(AuroraZIndex.Hero),
+                        .zIndex(AuroraZIndex.HERO),
                     startContent = {
                         Column(
                             modifier = Modifier
@@ -473,7 +473,7 @@ fun NovelScreenAuroraImpl(
                             thumbAllowed = { paneFastScrollSpec.thumbAllowed },
                             topContentPadding = with(paneDensity) { paneFastScrollSpec.topPaddingPx.toDp() },
                             endContentPadding = 12.dp,
-                            modifier = Modifier.zIndex(AuroraZIndex.Base),
+                            modifier = Modifier.zIndex(AuroraZIndex.BASE),
                         ) {
                             LazyColumn(
                                 state = chapterListState,
@@ -838,7 +838,7 @@ fun NovelScreenAuroraImpl(
                     fillFraction = 0.5f,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .zIndex(AuroraZIndex.Selection)
+                        .zIndex(AuroraZIndex.SELECTION)
                         .padding(WindowInsets.systemBars.asPaddingValues()),
                 )
 
@@ -854,11 +854,11 @@ fun NovelScreenAuroraImpl(
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
                         )
                     },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .zIndex(AuroraZIndex.Snackbar)
-                    .padding(horizontal = 16.dp, vertical = 20.dp),
-            )
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .zIndex(AuroraZIndex.SNACKBAR)
+                        .padding(horizontal = 16.dp, vertical = 20.dp),
+                )
             }
         }
         return
@@ -871,16 +871,16 @@ fun NovelScreenAuroraImpl(
         modifier = Modifier.fillMaxSize(),
         indicatorPadding = WindowInsets.statusBars.asPaddingValues(),
     ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .then(posterLongPressModifier),
-    ) {
-        FullscreenPosterBackground(
-            novel = novel,
-            scrollOffset = scrollOffset,
-            firstVisibleItemIndex = firstVisibleItemIndex,
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(posterLongPressModifier),
+        ) {
+            FullscreenPosterBackground(
+                novel = novel,
+                scrollOffset = scrollOffset,
+                firstVisibleItemIndex = firstVisibleItemIndex,
+            )
 
             val density = LocalDensity.current
             val fastScrollBaseTopPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp
@@ -919,7 +919,7 @@ fun NovelScreenAuroraImpl(
                 thumbAllowed = { fastScrollSpec.thumbAllowed },
                 topContentPadding = with(density) { fastScrollSpec.topPaddingPx.toDp() },
                 bottomContentPadding = 112.dp,
-                modifier = Modifier.zIndex(AuroraZIndex.Base),
+                modifier = Modifier.zIndex(AuroraZIndex.BASE),
             ) {
                 LazyColumn(
                     state = lazyListState,
@@ -1205,7 +1205,7 @@ fun NovelScreenAuroraImpl(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .zIndex(AuroraZIndex.Hero)
+                        .zIndex(AuroraZIndex.HERO)
                         .graphicsLayer { alpha = heroAlpha },
                     contentAlignment = Alignment.BottomStart,
                 ) {
@@ -1226,7 +1226,7 @@ fun NovelScreenAuroraImpl(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .zIndex(AuroraZIndex.Hero)
+                        .zIndex(AuroraZIndex.HERO)
                         .padding(end = 20.dp, bottom = 20.dp),
                     contentAlignment = Alignment.BottomEnd,
                 ) {
@@ -1248,7 +1248,7 @@ fun NovelScreenAuroraImpl(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .zIndex(AuroraZIndex.Hero)
+                    .zIndex(AuroraZIndex.HERO)
                     .graphicsLayer {
                         alpha = overlayChromeAlpha
                         translationY = overlayChromeOffsetY * size.height
@@ -1383,7 +1383,7 @@ fun NovelScreenAuroraImpl(
                 fillFraction = 1f,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .zIndex(AuroraZIndex.Selection)
+                    .zIndex(AuroraZIndex.SELECTION)
                     .padding(WindowInsets.systemBars.asPaddingValues()),
             )
 
@@ -1401,7 +1401,7 @@ fun NovelScreenAuroraImpl(
                 },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .zIndex(AuroraZIndex.Snackbar)
+                    .zIndex(AuroraZIndex.SNACKBAR)
                     .padding(horizontal = 16.dp, vertical = 20.dp),
             )
         }
@@ -1514,6 +1514,7 @@ internal fun shouldShowNovelAuroraHeroContent(
 private const val NOVEL_AURORA_COLLAPSED_PREVIEW_COUNT = 5
 private const val NOVEL_AURORA_CHAPTERS_HEADER_KEY = "novel-aurora-chapters-header"
 private val NOVEL_AURORA_FAST_SCROLL_ITEM_TOP_INSET = 4.dp
+
 @Composable
 private fun NovelAuroraTargetAutoScrollEffect(
     targetChapterIndex: Int,

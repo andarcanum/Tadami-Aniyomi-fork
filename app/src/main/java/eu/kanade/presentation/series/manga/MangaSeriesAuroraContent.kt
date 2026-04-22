@@ -54,9 +54,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.entries.manga.components.aurora.FullscreenPosterBackground
+import eu.kanade.presentation.entries.manga.components.aurora.MangaChapterCardCompact
 import eu.kanade.presentation.series.components.SeriesCategoryDialog
 import eu.kanade.presentation.series.components.SeriesCategoryOption
-import eu.kanade.presentation.entries.manga.components.aurora.MangaChapterCardCompact
 import eu.kanade.presentation.series.manga.components.MangaSeriesEntryCard
 import eu.kanade.presentation.series.manga.components.MangaSeriesHeader
 import eu.kanade.presentation.series.manga.components.MangaSeriesReadingActionRow

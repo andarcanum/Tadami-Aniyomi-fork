@@ -15,6 +15,7 @@ import eu.kanade.tachiyomi.data.backup.create.creators.ExtensionsBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.MangaBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.MangaCategoriesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.MangaExtensionRepoBackupCreator
+import eu.kanade.tachiyomi.data.backup.create.creators.MangaSeriesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.MangaSourcesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.NovelBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.NovelCategoriesBackupCreator
@@ -22,7 +23,6 @@ import eu.kanade.tachiyomi.data.backup.create.creators.NovelExtensionRepoBackupC
 import eu.kanade.tachiyomi.data.backup.create.creators.NovelSeriesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.NovelSourcesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.PreferenceBackupCreator
-import eu.kanade.tachiyomi.data.backup.create.creators.MangaSeriesBackupCreator
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupAnime
 import eu.kanade.tachiyomi.data.backup.models.BackupAnimeSource

@@ -87,7 +87,9 @@ class AuroraTitleReadabilityTokensTest {
             1.00f to 0.82f,
         )
         resolveAuroraHeroTitleColor(AuroraColors.EInkDark) shouldBe AuroraColors.EInkDark.textPrimary
-        resolveAuroraHeroPrimaryMetaColor(AuroraColors.EInkDark) shouldBe AuroraColors.EInkDark.textPrimary.copy(alpha = 0.85f)
-        resolveAuroraHeroSecondaryMetaColor(AuroraColors.EInkDark) shouldBe AuroraColors.EInkDark.textSecondary.copy(alpha = 0.68f)
+        resolveAuroraHeroPrimaryMetaColor(AuroraColors.EInkDark) shouldBe
+            AuroraColors.EInkDark.textPrimary.copy(alpha = 0.85f)
+        resolveAuroraHeroSecondaryMetaColor(AuroraColors.EInkDark) shouldBe
+            AuroraColors.EInkDark.textSecondary.copy(alpha = 0.68f)
     }
 }

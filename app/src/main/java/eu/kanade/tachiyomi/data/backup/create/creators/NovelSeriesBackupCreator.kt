@@ -17,7 +17,18 @@ class NovelSeriesBackupCreator(
 
     suspend operator fun invoke(): List<BackupNovelSeries> {
         val series = handler.awaitList { db ->
-            db.novel_seriesQueries.getAllSeries { id, title, description, categoryId, sortOrder, dateAdded, coverLastModified, pinned, coverMode, coverEntryId ->
+            db.novel_seriesQueries.getAllSeries {
+                    id,
+                    title,
+                    description,
+                    categoryId,
+                    sortOrder,
+                    dateAdded,
+                    coverLastModified,
+                    pinned,
+                    coverMode,
+                    coverEntryId,
+                ->
                 NovelSeriesRow(
                     id = id,
                     title = title,

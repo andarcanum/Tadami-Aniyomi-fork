@@ -3,13 +3,9 @@ package eu.kanade.presentation.entries.manga.components
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Share
@@ -118,46 +114,46 @@ fun MangaCoverDialog(
             }
         },
     ) { contentPadding ->
-            val statusBarPaddingPx = with(LocalDensity.current) { contentPadding.calculateTopPadding().roundToPx() }
-            val bottomPaddingPx = with(LocalDensity.current) { contentPadding.calculateBottomPadding().roundToPx() }
+        val statusBarPaddingPx = with(LocalDensity.current) { contentPadding.calculateTopPadding().roundToPx() }
+        val bottomPaddingPx = with(LocalDensity.current) { contentPadding.calculateBottomPadding().roundToPx() }
 
-            AuroraZoomablePoster(
-                onDismissRequest = onDismissRequest,
-                modifier = Modifier.padding(contentPadding),
-            ) {
-                AndroidView(
-                    factory = {
-                        ReaderPageImageView(it).apply {
-                            onViewClicked = onDismissRequest
-                            clipToPadding = false
-                            clipChildren = false
+        AuroraZoomablePoster(
+            onDismissRequest = onDismissRequest,
+            modifier = Modifier.padding(contentPadding),
+        ) {
+            AndroidView(
+                factory = {
+                    ReaderPageImageView(it).apply {
+                        onViewClicked = onDismissRequest
+                        clipToPadding = false
+                        clipChildren = false
+                    }
+                },
+                update = { view ->
+                    val request = ImageRequest.Builder(view.context)
+                        .data(manga)
+                        .size(Size.ORIGINAL)
+                        .memoryCachePolicy(CachePolicy.DISABLED)
+                        .target { image ->
+                            val drawable = image.asDrawable(view.context.resources)
+
+                            // Copy bitmap in case it came from memory cache
+                            // Because SSIV needs to thoroughly read the image
+                            val copy = (drawable as? BitmapDrawable)?.let {
+                                BitmapDrawable(
+                                    view.context.resources,
+                                    it.bitmap.copy(Bitmap.Config.HARDWARE, false),
+                                )
+                            } ?: drawable
+                            view.setImage(copy, ReaderPageImageView.Config(zoomDuration = 500))
                         }
-                    },
-                    update = { view ->
-                        val request = ImageRequest.Builder(view.context)
-                            .data(manga)
-                            .size(Size.ORIGINAL)
-                            .memoryCachePolicy(CachePolicy.DISABLED)
-                            .target { image ->
-                                val drawable = image.asDrawable(view.context.resources)
+                        .build()
+                    view.context.imageLoader.enqueue(request)
 
-                                // Copy bitmap in case it came from memory cache
-                                // Because SSIV needs to thoroughly read the image
-                                val copy = (drawable as? BitmapDrawable)?.let {
-                                    BitmapDrawable(
-                                        view.context.resources,
-                                        it.bitmap.copy(Bitmap.Config.HARDWARE, false),
-                                    )
-                                } ?: drawable
-                                view.setImage(copy, ReaderPageImageView.Config(zoomDuration = 500))
-                            }
-                            .build()
-                        view.context.imageLoader.enqueue(request)
-
-                        view.updatePadding(top = statusBarPaddingPx, bottom = bottomPaddingPx)
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
+                    view.updatePadding(top = statusBarPaddingPx, bottom = bottomPaddingPx)
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
         }
+    }
 }

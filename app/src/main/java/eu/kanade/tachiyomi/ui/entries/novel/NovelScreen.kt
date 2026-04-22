@@ -69,12 +69,12 @@ import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.NavigatorAdaptiveSheet
+import eu.kanade.presentation.entries.EditCoverAction
 import eu.kanade.presentation.entries.novel.NovelChapterSettingsDialog
 import eu.kanade.presentation.entries.novel.NovelScreen
 import eu.kanade.presentation.entries.novel.TranslatedDownloadOptionsDialog
-import eu.kanade.presentation.entries.novel.components.NovelTranslatedDownloadFormatSelector
 import eu.kanade.presentation.entries.novel.components.NovelCoverDialog
-import eu.kanade.presentation.entries.EditCoverAction
+import eu.kanade.presentation.entries.novel.components.NovelTranslatedDownloadFormatSelector
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettings
 import eu.kanade.tachiyomi.extension.novel.runtime.resolveUrl
