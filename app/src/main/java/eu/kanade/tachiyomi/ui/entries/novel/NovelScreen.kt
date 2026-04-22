@@ -76,6 +76,7 @@ import eu.kanade.presentation.entries.novel.TranslatedDownloadOptionsDialog
 import eu.kanade.presentation.entries.novel.components.NovelCoverDialog
 import eu.kanade.presentation.entries.novel.components.NovelTranslatedDownloadFormatSelector
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
+import eu.kanade.tachiyomi.data.export.novel.NovelEpubExportProgress
 import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettings
 import eu.kanade.tachiyomi.extension.novel.runtime.resolveUrl
 import eu.kanade.tachiyomi.novelsource.NovelSource
@@ -147,6 +148,7 @@ class NovelScreen(
         var showTranslatedOptionsDialog by remember { mutableStateOf(false) }
         var translatedOptionsChapterId by remember { mutableStateOf<Long?>(null) }
         var showEpubExportDialog by remember { mutableStateOf(false) }
+        var epubExportProgress by remember { mutableStateOf<NovelEpubExportProgress?>(null) }
         val epubExportPreferences = screenModel.getEpubExportPreferences()
         BackHandler(enabled = screenModel.isAnyChapterSelected) {
             screenModel.toggleAllSelection(false)
@@ -641,16 +643,25 @@ class NovelScreen(
                             includeCustomCss = includeCustomCss,
                             includeCustomJs = includeCustomJs,
                         )
-
-                        val exportFile = screenModel.exportAsEpub(
-                            downloadedOnly = downloadedOnly,
-                            startChapter = startChapter,
-                            endChapter = endChapter,
-                            destinationTreeUri = destinationTreeUri,
-                            applyReaderTheme = applyReaderTheme,
-                            includeCustomCss = includeCustomCss,
-                            includeCustomJs = includeCustomJs,
-                        )
+                        epubExportProgress = NovelEpubExportProgress.Preparing(successState.chapters.size)
+                        val exportFile = try {
+                            screenModel.exportAsEpub(
+                                downloadedOnly = downloadedOnly,
+                                startChapter = startChapter,
+                                endChapter = endChapter,
+                                destinationTreeUri = destinationTreeUri,
+                                applyReaderTheme = applyReaderTheme,
+                                includeCustomCss = includeCustomCss,
+                                includeCustomJs = includeCustomJs,
+                                onProgress = { progress ->
+                                    coroutineScope.launch {
+                                        epubExportProgress = progress
+                                    }
+                                },
+                            )
+                        } finally {
+                            epubExportProgress = null
+                        }
                         if (exportFile == null) {
                             context.toast(context.contextStringResource(AYMR.strings.novel_export_failed))
                             return@launch
@@ -662,6 +673,35 @@ class NovelScreen(
                         shareNovelFile(context, exportFile)
                     }
                 },
+            )
+        }
+
+        val activeEpubProgress = epubExportProgress
+        if (activeEpubProgress != null) {
+            AlertDialog(
+                onDismissRequest = {},
+                title = {
+                    Text(text = stringResource(AYMR.strings.novel_export_as_epub))
+                },
+                text = {
+                    Text(
+                        text = when (activeEpubProgress) {
+                            is NovelEpubExportProgress.Preparing -> {
+                                "Preparing export (${activeEpubProgress.totalChapters})"
+                            }
+                            is NovelEpubExportProgress.ChapterProcessed -> {
+                                "Processed ${activeEpubProgress.current}/${activeEpubProgress.total} chapters"
+                            }
+                            NovelEpubExportProgress.Finalizing -> {
+                                "Finalizing EPUB"
+                            }
+                            is NovelEpubExportProgress.Done -> {
+                                "Export complete"
+                            }
+                        },
+                    )
+                },
+                confirmButton = {},
             )
         }
 

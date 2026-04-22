@@ -13,6 +13,10 @@ import tachiyomi.domain.source.novel.service.NovelSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
+import java.net.URI
+import java.net.URL
+import java.net.URLConnection
+import java.security.MessageDigest
 import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -26,6 +30,19 @@ data class NovelEpubExportOptions(
     val javaScript: String? = null,
 )
 
+sealed interface NovelEpubExportProgress {
+    data class Preparing(val totalChapters: Int) : NovelEpubExportProgress
+
+    data class ChapterProcessed(
+        val current: Int,
+        val total: Int,
+    ) : NovelEpubExportProgress
+
+    data object Finalizing : NovelEpubExportProgress
+
+    data class Done(val file: File) : NovelEpubExportProgress
+}
+
 class NovelEpubExporter(
     private val application: Application? = runCatching { Injekt.get<Application>() }.getOrNull(),
     private val sourceManager: NovelSourceManager? = runCatching { Injekt.get<NovelSourceManager>() }.getOrNull(),
@@ -36,10 +53,12 @@ class NovelEpubExporter(
         novel: Novel,
         chapters: List<NovelChapter>,
         options: NovelEpubExportOptions = NovelEpubExportOptions(),
+        onProgress: (NovelEpubExportProgress) -> Unit = {},
     ): File? {
         val sorted = chapters.sortedBy { it.sourceOrder }
         val selected = applyRange(sorted, options.startChapter, options.endChapter)
         if (selected.isEmpty()) return null
+        onProgress(NovelEpubExportProgress.Preparing(totalChapters = selected.size))
 
         val chapterPayloads = selected.mapNotNull { chapter ->
             val html = loadChapterHtml(novel, chapter, options.downloadedOnly) ?: return@mapNotNull null
@@ -54,6 +73,7 @@ class NovelEpubExporter(
         exportDir.mkdirs()
         val filename = DiskUtil.buildValidFilename("${novel.title}_${System.currentTimeMillis()}.epub")
         val epubFile = File(exportDir, filename)
+        val epubLanguage = resolveLanguage(novel)
 
         ZipOutputStream(epubFile.outputStream().buffered()).use { zip ->
             writeStoredEntry(
@@ -75,29 +95,81 @@ class NovelEpubExporter(
                 """.trimIndent(),
             )
 
+            val manifestAssets = linkedMapOf<String, EpubAssetItem>()
+            val imageAssetsByHash = mutableMapOf<String, EpubAssetItem>()
+
+            val stylesheetPath = options.stylesheet
+                ?.takeIf { it.isNotBlank() }
+                ?.let { stylesheet ->
+                    val path = "styles/reader.css"
+                    writeEntry(
+                        zip = zip,
+                        path = "OEBPS/$path",
+                        content = stylesheet,
+                    )
+                    manifestAssets[path] = EpubAssetItem(
+                        id = "reader_css",
+                        href = path,
+                        mediaType = "text/css",
+                    )
+                    path
+                }
+
+            val scriptPath = options.javaScript
+                ?.takeIf { it.isNotBlank() }
+                ?.let { script ->
+                    val path = "scripts/reader.js"
+                    writeEntry(
+                        zip = zip,
+                        path = "OEBPS/$path",
+                        content = script,
+                    )
+                    manifestAssets[path] = EpubAssetItem(
+                        id = "reader_js",
+                        href = path,
+                        mediaType = "application/javascript",
+                    )
+                    path
+                }
+
+            val coverAsset = resolveCoverAsset(novel)?.let { cover ->
+                val path = "images/cover.${cover.extension}"
+                writeEntryBytes(
+                    zip = zip,
+                    path = "OEBPS/$path",
+                    bytes = cover.bytes,
+                )
+                EpubAssetItem(
+                    id = "cover_image",
+                    href = path,
+                    mediaType = cover.mediaType,
+                    properties = "cover-image",
+                ).also { manifestAssets[path] = it }
+            }
+
             val chapterItems = chapterPayloads.mapIndexed { index, payload ->
                 val fileName = "chapter_${index + 1}.xhtml"
                 val chapterId = "chapter_${index + 1}"
                 val chapterTitle = payload.chapter.name.ifBlank {
                     "Chapter ${index + 1}"
                 }
-                val chapterBody = Jsoup.parseBodyFragment(payload.html).body().html()
-                val styleBlock = options.stylesheet
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { "<style type=\"text/css\">\n$it\n</style>" }
-                    .orEmpty()
-                val scriptBlock = options.javaScript
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let {
-                        """
-                        <script type="text/javascript">
-                        //<![CDATA[
-                        $it
-                        //]]>
-                        </script>
-                        """.trimIndent()
-                    }
-                    .orEmpty()
+                val chapterDocument = Jsoup.parseBodyFragment(payload.html)
+                embedChapterImages(
+                    zip = zip,
+                    chapterDocument = chapterDocument,
+                    chapterIndex = index + 1,
+                    chapterUrl = payload.chapter.url,
+                    novelUrl = novel.url,
+                    manifestAssets = manifestAssets,
+                    imageAssetsByHash = imageAssetsByHash,
+                )
+                val chapterBody = chapterDocument.body().html()
+                val styleLink = stylesheetPath?.let { path ->
+                    """<link rel="stylesheet" href="$path" type="text/css"/>"""
+                }.orEmpty()
+                val scriptTag = scriptPath?.let { path ->
+                    """<script src="$path" type="text/javascript"></script>"""
+                }.orEmpty()
                 writeEntry(
                     zip = zip,
                     path = "OEBPS/$fileName",
@@ -107,23 +179,31 @@ class NovelEpubExporter(
                             <head>
                                 <title>${escapeXml(chapterTitle)}</title>
                                 <meta charset="UTF-8"/>
-                                $styleBlock
+                                $styleLink
                             </head>
                             <body>
                                 <h1>${escapeXml(chapterTitle)}</h1>
                                 $chapterBody
-                                $scriptBlock
+                                $scriptTag
                             </body>
                         </html>
                     """.trimIndent(),
                 )
-                EpubChapterItem(
+                val chapterItem = EpubChapterItem(
                     id = chapterId,
                     fileName = fileName,
                     title = chapterTitle,
                 )
+                onProgress(
+                    NovelEpubExportProgress.ChapterProcessed(
+                        current = index + 1,
+                        total = chapterPayloads.size,
+                    ),
+                )
+                chapterItem
             }
 
+            onProgress(NovelEpubExportProgress.Finalizing)
             writeEntry(
                 zip = zip,
                 path = "OEBPS/nav.xhtml",
@@ -137,7 +217,13 @@ class NovelEpubExporter(
             writeEntry(
                 zip = zip,
                 path = "OEBPS/content.opf",
-                content = buildPackageDocument(novel, chapterItems),
+                content = buildPackageDocument(
+                    novel = novel,
+                    chapterItems = chapterItems,
+                    language = epubLanguage,
+                    additionalAssets = manifestAssets.values.toList(),
+                    hasCover = coverAsset != null,
+                ),
             )
         }
 
@@ -150,6 +236,7 @@ class NovelEpubExporter(
             if (!copied) return null
         }
 
+        onProgress(NovelEpubExportProgress.Done(epubFile))
         return epubFile.takeIf { it.exists() }
     }
 
@@ -180,6 +267,9 @@ class NovelEpubExporter(
     private fun buildPackageDocument(
         novel: Novel,
         chapterItems: List<EpubChapterItem>,
+        language: String,
+        additionalAssets: List<EpubAssetItem>,
+        hasCover: Boolean,
     ): String {
         val manifestItems = buildString {
             appendLine("""<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>""")
@@ -187,6 +277,12 @@ class NovelEpubExporter(
             chapterItems.forEach { chapter ->
                 appendLine(
                     """<item id="${chapter.id}" href="${chapter.fileName}" media-type="application/xhtml+xml"/>""",
+                )
+            }
+            additionalAssets.forEach { asset ->
+                val propertiesAttr = asset.properties?.let { """ properties="$it"""" }.orEmpty()
+                appendLine(
+                    """<item id="${asset.id}" href="${asset.href}" media-type="${asset.mediaType}"$propertiesAttr/>""",
                 )
             }
         }.trim()
@@ -200,7 +296,8 @@ class NovelEpubExporter(
                 <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
                     <dc:identifier id="bookid">novel-${novel.id}</dc:identifier>
                     <dc:title>${escapeXml(novel.title)}</dc:title>
-                    <dc:language>ru</dc:language>
+                    <dc:language>$language</dc:language>
+                    ${if (hasCover) """<meta name="cover" content="cover_image"/>""" else ""}
                     ${novel.author?.takeIf {
             it.isNotBlank()
         }?.let { "<dc:creator>${escapeXml(it)}</dc:creator>" }.orEmpty()}
@@ -216,6 +313,138 @@ class NovelEpubExporter(
                 </spine>
             </package>
         """.trimIndent()
+    }
+
+    private fun resolveLanguage(novel: Novel): String {
+        val raw = sourceManager?.get(novel.source)?.lang?.trim().orEmpty()
+        if (raw.isBlank()) return "und"
+        if (raw.equals("all", ignoreCase = true)) return "und"
+        return raw.replace('_', '-')
+    }
+
+    private fun embedChapterImages(
+        zip: ZipOutputStream,
+        chapterDocument: org.jsoup.nodes.Document,
+        chapterIndex: Int,
+        chapterUrl: String?,
+        novelUrl: String?,
+        manifestAssets: MutableMap<String, EpubAssetItem>,
+        imageAssetsByHash: MutableMap<String, EpubAssetItem>,
+    ) {
+        val baseUrls = buildList {
+            chapterUrl?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
+            novelUrl?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
+        }
+        chapterDocument.select("img[src]").forEachIndexed { imageIndex, image ->
+            val src = image.attr("src").trim()
+            if (src.isBlank()) return@forEachIndexed
+            val resolved = resolveBinaryAsset(src, baseUrls) ?: return@forEachIndexed
+            val hash = sha256Hex(resolved.bytes)
+            val existing = imageAssetsByHash[hash]
+            if (existing != null) {
+                image.attr("src", existing.href)
+                return@forEachIndexed
+            }
+
+            val path = "images/ch${chapterIndex}_${imageIndex + 1}.${resolved.extension}"
+            writeEntryBytes(
+                zip = zip,
+                path = "OEBPS/$path",
+                bytes = resolved.bytes,
+            )
+            val asset = EpubAssetItem(
+                id = "img_${manifestAssets.size + 1}",
+                href = path,
+                mediaType = resolved.mediaType,
+            )
+            imageAssetsByHash[hash] = asset
+            manifestAssets[path] = asset
+            image.attr("src", path)
+        }
+    }
+
+    private fun resolveCoverAsset(novel: Novel): BinaryAsset? {
+        val src = novel.thumbnailUrl?.trim().orEmpty()
+        if (src.isBlank()) return null
+        return resolveBinaryAsset(src, emptyList())
+    }
+
+    private fun resolveBinaryAsset(
+        src: String,
+        baseUrls: List<String>,
+    ): BinaryAsset? {
+        val directUri = runCatching { URI(src) }.getOrNull()
+        val isAbsolute = directUri?.isAbsolute == true
+        val candidates = buildList {
+            if (isAbsolute) {
+                add(src)
+            } else {
+                baseUrls.forEach { base ->
+                    runCatching {
+                        val baseUri = URI(base)
+                        if (baseUri.isAbsolute) {
+                            add(baseUri.resolve(src).toString())
+                        }
+                    }
+                }
+            }
+        }.ifEmpty { listOf(src) }
+
+        candidates.forEach { candidate ->
+            resolveAbsoluteBinaryAsset(candidate)?.let { return it }
+        }
+        return null
+    }
+
+    private fun resolveAbsoluteBinaryAsset(src: String): BinaryAsset? {
+        val uri = runCatching { URI(src) }.getOrNull()
+        return when {
+            src.startsWith("http://", ignoreCase = true) || src.startsWith("https://", ignoreCase = true) -> {
+                runCatching {
+                    URL(src).openConnection().getInputStream().use { stream ->
+                        val bytes = stream.readBytes()
+                        if (bytes.isEmpty()) return@use null
+                        val mediaType = URLConnection.guessContentTypeFromStream(bytes.inputStream())
+                            ?: URLConnection.guessContentTypeFromName(src)
+                            ?: "image/jpeg"
+                        val ext = extensionFromMediaType(mediaType)
+                        BinaryAsset(bytes = bytes, mediaType = mediaType, extension = ext)
+                    }
+                }.getOrNull()
+            }
+            uri?.scheme.equals("file", ignoreCase = true) -> {
+                runCatching {
+                    val file = File(uri)
+                    if (!file.exists()) return@runCatching null
+                    val bytes = file.readBytes()
+                    if (bytes.isEmpty()) return@runCatching null
+                    val mediaType = URLConnection.guessContentTypeFromName(file.name) ?: "image/jpeg"
+                    val ext = extensionFromMediaType(mediaType, file.extension)
+                    BinaryAsset(bytes = bytes, mediaType = mediaType, extension = ext)
+                }.getOrNull()
+            }
+            else -> null
+        }
+    }
+
+    private fun extensionFromMediaType(
+        mediaType: String,
+        fallback: String? = null,
+    ): String {
+        return when (mediaType.substringBefore(';').trim().lowercase()) {
+            "image/jpeg", "image/jpg" -> "jpg"
+            "image/png" -> "png"
+            "image/gif" -> "gif"
+            "image/webp" -> "webp"
+            "image/svg+xml" -> "svg"
+            else -> fallback?.ifBlank { null } ?: "jpg"
+        }
+    }
+
+    private fun sha256Hex(bytes: ByteArray): String {
+        return MessageDigest.getInstance("SHA-256")
+            .digest(bytes)
+            .joinToString("") { b -> "%02x".format(b) }
     }
 
     private fun buildNavDocument(
@@ -281,7 +510,18 @@ class NovelEpubExporter(
         path: String,
         content: String,
     ) {
-        val bytes = content.toByteArray(Charsets.UTF_8)
+        writeEntryBytes(
+            zip = zip,
+            path = path,
+            bytes = content.toByteArray(Charsets.UTF_8),
+        )
+    }
+
+    private fun writeEntryBytes(
+        zip: ZipOutputStream,
+        path: String,
+        bytes: ByteArray,
+    ) {
         val entry = ZipEntry(path)
         zip.putNextEntry(entry)
         zip.write(bytes)
@@ -341,5 +581,18 @@ class NovelEpubExporter(
     private data class ChapterPayload(
         val chapter: NovelChapter,
         val html: String,
+    )
+
+    private data class EpubAssetItem(
+        val id: String,
+        val href: String,
+        val mediaType: String,
+        val properties: String? = null,
+    )
+
+    private data class BinaryAsset(
+        val bytes: ByteArray,
+        val mediaType: String,
+        val extension: String,
     )
 }
